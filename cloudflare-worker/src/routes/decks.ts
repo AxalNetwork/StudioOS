@@ -796,6 +796,60 @@ decks.put('/:id', async (c) => {
   }
   if (!slides.length) return c.json({ error: 'slides required' }, 400);
   const title = String(body?.title || row.title || 'Pitch deck').slice(0, 200);
+
+  // Task #2 — Spin-Out Demo Day deck: when the founder edits the
+  // Review-the-deal data-room URL or NDA flag inline on the slide,
+  // write back to the project columns so the project remains the
+  // single source of truth and the next deck version pre-fills. We
+  // only touch the project when the slide actually carries a new value
+  // (no clobber to null when the field is absent from the payload).
+  if (persistedMethod === 'axal_spinout_demoday') {
+    try {
+      // Slides carry `fields` as an array of {key,value,...} descriptors
+      // (see sanitizeFields). Build a key→value lookup across every slide
+      // so we don't depend on slide id/spec_id staying stable.
+      const fieldByKey: Record<string, any> = {};
+      for (const s of slides) {
+        if (!Array.isArray((s as any)?.fields)) continue;
+        for (const f of (s as any).fields) {
+          if (f && typeof f.key === 'string' && !(f.key in fieldByKey)) {
+            fieldByKey[f.key] = f.value;
+          }
+        }
+      }
+      let nextUrl: string | undefined;
+      let nextNda: boolean | undefined;
+      const urlVal = fieldByKey['contact_deal_access_url'];
+      if (typeof urlVal === 'string') nextUrl = urlVal.trim();
+      const ndaVal = fieldByKey['contact_deal_access_nda_required'];
+      if (typeof ndaVal === 'boolean') nextNda = ndaVal;
+      else if (ndaVal === 0 || ndaVal === 1) nextNda = !!ndaVal;
+      else if (ndaVal === 'true' || ndaVal === 'false') nextNda = ndaVal === 'true';
+      const daRaw = fieldByKey['contact_deal_access_json'];
+      let da: any = daRaw;
+      if (typeof daRaw === 'string' && daRaw.trim()) {
+        try { da = JSON.parse(daRaw); } catch { da = null; }
+      }
+      if (da && typeof da === 'object') {
+        if (typeof da.deal_room_url === 'string' && nextUrl === undefined) nextUrl = da.deal_room_url.trim();
+        if (typeof da.nda_required === 'boolean' && nextNda === undefined) nextNda = da.nda_required;
+      }
+      if (nextUrl !== undefined || nextNda !== undefined) {
+        const { ensureProjectDataRoomColumns } = await import('./projects');
+        await ensureProjectDataRoomColumns(c.env);
+        const sets: string[] = [];
+        const vals: any[] = [];
+        if (nextUrl !== undefined) { sets.push('data_room_url = ?'); vals.push(nextUrl || null); }
+        if (nextNda !== undefined) { sets.push('data_room_nda_required = ?'); vals.push(nextNda ? 1 : 0); }
+        vals.push(Number(row.project_id));
+        await c.env.DB.prepare(`UPDATE projects SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
+      }
+    } catch (e) {
+      // Best-effort: a writeback failure must not block the deck save.
+      console.error('[decks PUT] data_room writeback failed', (e as Error).message);
+    }
+  }
+
   const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null);
   return c.json(rowToDeck(await getDeckRow(c.env, newId)));
 });

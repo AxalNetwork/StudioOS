@@ -11,6 +11,58 @@
 > building it.
 
 
+## Feature — Task #2 · Project data-room URL is the single source of truth for the Demo Day "Review the deal" CTA
+
+The Spin-Out Demo Day deck's Review-the-deal slide previously stored
+the data-room URL + NDA flag in the deck-version JSON only — every new
+version started blank and the link couldn't be reused by any other
+surface. New columns on `projects` make the project the canonical
+home for both fields:
+
+- **`cloudflare-worker/sql/migrations/076_project_data_room_url.sql`**
+  — additive `ALTER TABLE projects ADD COLUMN data_room_url TEXT` +
+  `data_room_nda_required INTEGER NOT NULL DEFAULT 0`. Apply via
+  `wrangler d1 execute studioos-db --remote --env production
+  --file=cloudflare-worker/sql/migrations/076_project_data_room_url.sql`
+  when convenient.
+- **`cloudflare-worker/src/routes/projects.ts`** — exported
+  `ensureProjectDataRoomColumns(env)` (WeakMap-keyed per-DB lazy
+  bootstrap, mirroring `ensureDiscoveryValidationRatingColumns` from
+  Task #14). Called before SELECT * on `GET /:id` and on `PUT /:id` so
+  cold isolates self-heal. Both fields added to `baseFields` (owner-
+  editable; founders manage their own deal-room link). URL is trimmed
+  and empty-string coerces to NULL; NDA flag coerces boolean → 0/1.
+- **`cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`** —
+  `ProjectRow` type extended with `data_room_url` /
+  `data_room_nda_required`. `fillAxalSpinoutDemoDay()` now sources
+  `deal_access.deal_room_url` from `p.data_room_url` and respects
+  `p.data_room_nda_required` (with the legacy
+  `!doneMap.has('incorporation_completed')` heuristic as the fallback
+  when the column is NULL on older projects). `data_room_ready` flips
+  true whenever a URL exists.
+- **`cloudflare-worker/src/routes/decks.ts`** — `PUT /api/decks/:id`
+  scans the saved slides for the `axal_spinout_demoday` method's
+  Review-the-deal slide and, when the founder has edited the URL or
+  NDA flag inline (either via `contact_deal_access_url` /
+  `contact_deal_access_nda_required` flat fields OR the legacy
+  `contact_deal_access_json` blob), writes the changes back to
+  `projects.data_room_url` / `data_room_nda_required` before
+  inserting the new deck version. Best-effort: writeback failures
+  log + continue so a save can't be blocked by the side-write.
+  Absent fields are never clobbered to NULL.
+- **`frontend/src/pages/ProjectDetail.jsx`** — new `DataRoomSection`
+  component (rendered between the InfoCard grid and the Founder
+  card): URL input with http(s) validation, "NDA required" checkbox,
+  Save button (disabled until dirty + valid), "Open" external-link
+  shortcut. Uses the existing `api.updateProject(id, {...})` binding
+  + `useToast` for status feedback.
+
+No migration required to ship — the lazy bootstrap makes the hot
+path self-healing. Migration 076 is the canonical apply path for the
+metadata catalog.
+
+---
+
 ## Feature — Task #1 · Admin-managed mentor & partner network roster (replaces synthesised deck data)
 
 The Spin-Out Demo Day deck's Mentors & Network slide previously

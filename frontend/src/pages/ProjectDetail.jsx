@@ -232,6 +232,18 @@ export default function ProjectDetail() {
         <InfoCard label="Revenue" value={project.revenue ? `$${project.revenue.toLocaleString()}` : '—'} />
       </div>
 
+      {/* Task #2 — Data room section. URL + NDA toggle persist on the
+          project so the Spin-Out Demo Day deck's "Review the deal" CTA
+          pre-fills automatically across deck versions. */}
+      <DataRoomSection
+        project={project}
+        onSaved={(updated) => {
+          setProject((prev) => ({ ...prev, ...updated }));
+          showToast({ kind: 'success', msg: 'Data room saved' });
+        }}
+        onError={(msg) => showToast({ kind: 'error', msg })}
+      />
+
       {project.founder && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
           <h3 className="text-sm font-semibold text-gray-900 mb-2 dark:text-gray-100">Founder</h3>
@@ -582,6 +594,98 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
             </ul>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function DataRoomSection({ project, onSaved, onError }) {
+  const [url, setUrl] = useState(project.data_room_url || '');
+  const [ndaRequired, setNdaRequired] = useState(!!project.data_room_nda_required);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setUrl(project.data_room_url || '');
+    setNdaRequired(!!project.data_room_nda_required);
+    setDirty(false);
+  }, [project.id, project.data_room_url, project.data_room_nda_required]);
+
+  const valid = (() => {
+    const u = url.trim();
+    if (!u) return true;
+    try { const x = new URL(u); return x.protocol === 'http:' || x.protocol === 'https:'; }
+    catch { return false; }
+  })();
+
+  const save = async () => {
+    if (!valid || saving) return;
+    setSaving(true);
+    try {
+      const u = url.trim();
+      const updated = await api.updateProject(project.id, {
+        data_room_url: u || null,
+        data_room_nda_required: ndaRequired,
+      });
+      setDirty(false);
+      onSaved && onSaved(updated);
+    } catch (e) {
+      onError && onError(e?.message || 'Failed to save data room');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
+      <div className="flex items-center gap-2 mb-1">
+        <Database size={14} className="text-violet-600" />
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Data room</h3>
+      </div>
+      <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+        Link investors to your data room. This pre-fills the &quot;Review the deal&quot; button on the Spin-Out Demo Day deck.
+      </p>
+      <label className="block text-[11px] uppercase tracking-wider text-gray-600 dark:text-gray-400 mb-1">
+        Data-room URL
+      </label>
+      <input
+        type="url"
+        value={url}
+        onChange={(e) => { setUrl(e.target.value); setDirty(true); }}
+        placeholder="https://notion.so/your-data-room"
+        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100"
+      />
+      {!valid && (
+        <div className="text-xs text-red-600 mt-1">Enter a valid http(s) URL or leave it blank.</div>
+      )}
+      <label className="flex items-center gap-2 mt-3 text-sm text-gray-800 dark:text-gray-200 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={ndaRequired}
+          onChange={(e) => { setNdaRequired(e.target.checked); setDirty(true); }}
+          className="rounded border-gray-300 dark:border-gray-700"
+        />
+        NDA required before access
+      </label>
+      <div className="flex items-center gap-2 mt-4">
+        <button
+          type="button"
+          onClick={save}
+          disabled={!dirty || saving || !valid}
+          className="px-3 py-1.5 text-sm rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        {url.trim() && valid && (
+          <a
+            href={url.trim()}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+          >
+            Open <ExternalLink size={12} />
+          </a>
+        )}
       </div>
     </div>
   );

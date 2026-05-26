@@ -305,6 +305,13 @@ type ProjectRow = {
   funding_needed: number | null; use_of_funds: string | null;
   contact_email: string | null; traction_summary: string | null;
   growth_signals: string | null; gross_margin_pct: number | null;
+  // Task #2 — single source of truth for the "Review the deal" CTA on
+  // the Spin-Out Demo Day deck. Both columns are nullable on older
+  // projects; the deck adapter falls back to the deck-version override
+  // (if the founder edited it inline before this column existed) and
+  // then to defaults.
+  data_room_url: string | null;
+  data_room_nda_required: number | null;
 };
 type UserRow = {
   id: number; name: string | null; display_name: string | null; email: string | null;
@@ -778,11 +785,21 @@ export async function fillAxalSpinoutDemoDay(
   // old free-text vs the new curated source.
   void mentorBody; void networkSignals;
 
-  // ------ Task #14: deal-room access payload for Review-the-deal ------
+  // ------ Task #14 + Task #2: deal-room access payload --------------
+  // Task #2 — `data_room_url` + `data_room_nda_required` live on the
+  // project as the single source of truth (editable on Project detail
+  // and via the inline editor on the Review-the-deal slide, which
+  // writes back via decks PUT). When the founder hasn't set a URL yet
+  // we still render the CTA in "pending" state so the slide layout
+  // doesn't collapse.
+  const dataRoomUrl = (p.data_room_url || '').trim();
+  const dataRoomNdaRequired = p.data_room_nda_required != null
+    ? !!p.data_room_nda_required
+    : !doneMap.has('incorporation_completed');
   const dealAccess = {
-    deal_room_url: '',
-    nda_required: !doneMap.has('incorporation_completed'),
-    data_room_ready: doneMap.has('pitch_deck_v1') && doneMap.has('captable_seed'),
+    deal_room_url: dataRoomUrl,
+    nda_required: dataRoomNdaRequired,
+    data_room_ready: !!dataRoomUrl || (doneMap.has('pitch_deck_v1') && doneMap.has('captable_seed')),
     cta_label: 'Review the deal',
   };
 

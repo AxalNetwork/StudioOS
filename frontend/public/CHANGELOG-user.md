@@ -8,6 +8,22 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Data room — set the link once on your project, the Demo Day deck reuses it
+
+Your project page has a new "Data room" section. Paste in the URL
+to your investor data room (Notion, Dropbox Paper, Drive folder —
+whatever you use) and tick "NDA required" if investors need to sign
+one first. Save once, and the "Review the deal" button on your
+Spin-Out Demo Day deck automatically links there with the right NDA
+badge.
+
+If you edit the link directly on the deck slide instead, your change
+flows back to the project so the next version of the deck still
+pre-fills — no more re-typing your data-room URL every time you
+generate a fresh deck.
+
+---
+
 ## Mentors & Partners — curate the network that shows up on your Demo Day deck
 
 Axal admins can now manage the mentor and partner network directly,

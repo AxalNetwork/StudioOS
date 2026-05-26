@@ -8,6 +8,26 @@ import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '.
 
 const projects = new Hono<{ Bindings: Env }>();
 
+// Task #2 — lazy bootstrap for the `data_room_url` + `data_room_nda_required`
+// columns on `projects`. Mirrors the pattern used by Task #14's
+// `ensureDiscoveryValidationRatingColumns()` — migration 076 is the canonical
+// apply path, but on a cold D1 isolate where the migration hasn't been
+// applied yet (or on dev SQLite) we add the columns ourselves via ALTER and
+// swallow the duplicate-column error so subsequent reads/writes succeed.
+// Keyed per-DB via a WeakMap so reload-during-dev re-runs cleanly.
+const _dataRoomReady = new WeakMap<object, true>();
+export async function ensureProjectDataRoomColumns(env: Env): Promise<void> {
+  const db = env.DB as unknown as object;
+  if (_dataRoomReady.has(db)) return;
+  try {
+    await env.DB.exec(`ALTER TABLE projects ADD COLUMN data_room_url TEXT`);
+  } catch (_e) { /* duplicate column on re-run is fine */ }
+  try {
+    await env.DB.exec(`ALTER TABLE projects ADD COLUMN data_room_nda_required INTEGER NOT NULL DEFAULT 0`);
+  } catch (_e) { /* duplicate column on re-run is fine */ }
+  _dataRoomReady.set(db, true);
+}
+
 async function listProjectsHandler(c: any) {
   const user = await requireAuth(c);
   const status = c.req.query('status');
@@ -54,6 +74,9 @@ projects.get('', listProjectsHandler);
 projects.get('/:id', async (c) => {
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
+  // Task #2 — make sure the columns exist before SELECT * so older D1s
+  // don't omit them from the projection.
+  await ensureProjectDataRoomColumns(c.env);
   const sql = getSQL(c.env);
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
@@ -355,7 +378,21 @@ projects.put('/:id', async (c) => {
   }
 
   // Only admin/partner may change status, stage, or playbook week.
-  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds'];
+  // Task #2 — data_room_url + data_room_nda_required are owner-editable
+  // (founders manage their own deal-room link). Both are written by the
+  // editor on Project detail AND by the Spin-Out deck's "Review the deal"
+  // slide save-path so the project stays the single source of truth.
+  await ensureProjectDataRoomColumns(c.env);
+  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'data_room_url', 'data_room_nda_required'];
+  // Normalise: coerce boolean → 0/1 for the NDA flag, trim URL, allow
+  // explicit null to clear either field.
+  if (data.data_room_nda_required !== undefined) {
+    data.data_room_nda_required = data.data_room_nda_required ? 1 : 0;
+  }
+  if (data.data_room_url !== undefined && data.data_room_url !== null) {
+    const u = String(data.data_room_url || '').trim();
+    data.data_room_url = u || null;
+  }
   const privilegedFields = ['stage', 'status', 'playbook_week'];
   const fields = isPrivileged ? [...baseFields, ...privilegedFields] : baseFields;
   const updates: string[] = [];
