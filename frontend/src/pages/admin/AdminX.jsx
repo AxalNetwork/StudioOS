@@ -248,32 +248,40 @@ function AccountsTab({ accounts, configOk, dailyCap, onReload, toast }) {
       <div className="grid gap-3">
         {accounts.map((a) => (
           <div key={a.id} className="border border-gray-200 dark:border-gray-700 rounded p-4 bg-white dark:bg-gray-900">
-            <div className="flex items-start justify-between gap-3">
-              <div>
+            {/* Mobile-first: stack info column on top of action row so the
+                4 buttons get the full card width and don't get pushed off-
+                screen by the handle/status block on narrow viewports. On
+                sm+ we go back to the original side-by-side layout. */}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div className="min-w-0">
                 <div className="text-base font-semibold text-gray-900 dark:text-white">
                   @{a.handle} {a.display_name && <span className="text-gray-500 dark:text-gray-400 font-normal">— {a.display_name}</span>}
                 </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 space-x-3">
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
                   <span>{a.enabled ? 'enabled' : 'disabled'}</span>
                   {a.x_user_id && <span>id={a.x_user_id}</span>}
                   {a.expires_at && <span>token exp {new Date(a.expires_at).toLocaleString()}</span>}
                   {a.last_test_at && <span>tested {new Date(a.last_test_at).toLocaleString()}</span>}
                 </div>
                 {a.last_error && (
-                  <div className="text-xs text-red-600 dark:text-red-300 mt-1">last error: {a.last_error}</div>
+                  <div className="text-xs text-red-600 dark:text-red-300 mt-1 break-words">last error: {a.last_error}</div>
                 )}
               </div>
-              <div className="flex gap-2 flex-shrink-0">
-                <button onClick={() => authorise(a)} className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded flex items-center gap-1" title="OAuth PKCE">
+              {/* `flex-wrap` lets buttons drop to a 2nd row instead of
+                  getting clipped. `min-h-[44px]` + `px-3 py-2` enforces
+                  the iOS 44pt minimum tap target so taps reliably fire
+                  on mobile Safari. */}
+              <div className="flex flex-wrap gap-2 sm:flex-shrink-0">
+                <button onClick={() => authorise(a)} className="min-h-[44px] px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded flex items-center gap-1 active:bg-gray-100 dark:active:bg-gray-800" title="OAuth PKCE">
                   <Link2 size={12} /> Authorise
                 </button>
-                <button onClick={() => test(a)} className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded flex items-center gap-1" title="GET /users/me">
+                <button onClick={() => test(a)} className="min-h-[44px] px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded flex items-center gap-1 active:bg-gray-100 dark:active:bg-gray-800" title="GET /users/me">
                   <Wifi size={12} /> Test
                 </button>
-                <button onClick={() => toggle(a)} className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded">
+                <button onClick={() => toggle(a)} className="min-h-[44px] px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded active:bg-gray-100 dark:active:bg-gray-800">
                   {a.enabled ? 'Disable' : 'Enable'}
                 </button>
-                <button onClick={() => remove(a)} className="px-2 py-1 text-xs border border-red-300 dark:border-red-700 text-red-600 dark:text-red-300 rounded">
+                <button onClick={() => remove(a)} className="min-h-[44px] px-3 py-2 text-xs border border-red-300 dark:border-red-700 text-red-600 dark:text-red-300 rounded active:bg-red-50 dark:active:bg-red-950/40">
                   <Trash2 size={12} />
                 </button>
               </div>

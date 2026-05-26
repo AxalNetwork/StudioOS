@@ -8,6 +8,17 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## See exactly which Spin-Out deck slides will fill — before you click
+
+When you pick the Axal VC Spin-Out template and hit "Fill from project",
+you now see a grid of 14 small cards — one per slide. Each card shows a
+green or red dot, the part of the Lab the slide reads from, and a count
+like "3/5 interviews", "0 holders" or "score: ✓". Red cards point you
+straight at the Lab tool you still need to open before pitching; green
+cards tell you the slide will populate cleanly. The grid only appears
+for the Spin-Out template — every other deck template works exactly as
+before.
+
 ## Axal Spin-Out demo-day deck slides feel like a finished pitch from day one
 
 Every visual slide in the Spin-Out demo-day deck has been rebuilt with
