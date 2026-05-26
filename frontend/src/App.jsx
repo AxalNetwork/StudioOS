@@ -42,6 +42,7 @@ const PartnerOnboardPage = lazy(() => import('./pages/PartnerOnboardPage'));
 const AdminPartnerInvitations = lazy(() => import('./pages/admin/PartnerInvitations'));
 const AdminPublications = lazy(() => import('./pages/admin/Publications'));
 const AdminTeam = lazy(() => import('./pages/admin/AdminTeam'));
+const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
 const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'));
 const AdminX = lazy(() => import('./pages/admin/AdminX'));
 const AdminNewsQueue = lazy(() => import('./pages/admin/AdminNewsQueue'));
@@ -1060,6 +1061,7 @@ function AppInner() {
       <Route path="/admin/refer-earn" element={guard(['admin'], <AdminReferEarnPayouts />)} />
       <Route path="/admin/partners" element={guard(['admin'], <AdminPartnerInvitations />)} />
       <Route path="/admin/team" element={guard(['admin'], <AdminTeam />)} />
+      <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       <Route path="/admin/telegram" element={guard(['admin'], <AdminTelegram />)} />
       <Route path="/admin/x" element={guard(['admin'], <AdminX />)} />
       <Route path="/admin/news" element={guard(['admin'], <AdminNewsQueue />)} />

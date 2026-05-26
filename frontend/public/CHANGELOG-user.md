@@ -8,6 +8,28 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Mentors & Partners — curate the network that shows up on your Demo Day deck
+
+Axal admins can now manage the mentor and partner network directly,
+and the Spin-Out Demo Day deck's "Mentors & Network" slide reflects
+that real roster instead of fragments pulled from your advisor
+answers.
+
+Each profile carries a name, role, a short bio, a LinkedIn link, an
+optional square photo, and a set of skill tags chosen from a fixed
+12-axis catalog (Legal, Finance, GTM, Sales, Marketing, Product,
+Engineering, Design, Recruiting, Technical DD, Operations,
+Fundraising). The deck's skill radar and constellation tiles are
+generated from those tags, so the picture stays consistent across
+every founder's deck. Profiles can be reordered, temporarily hidden,
+or fully removed at any time, and changes show up on the next deck
+render.
+
+If you're an admin, you'll find the new editor under Admin →
+Mentor & partner network.
+
+---
+
 ## Customer Discovery — rate how well your solution fits each interview
 
 You can now record a 0–5 "fit" rating on every Customer Discovery

@@ -100,7 +100,17 @@ export type LabWeek = {
 export type ActivityLogDay = { date: string; count: number; kind: string };
 export type PainTheme = { theme: string; mentions: number };
 export type RevenueProof = { amount: string; label: string; signed: boolean } | null;
-export type MentorProfile = { name: string; role: string; bio: string; skills: string[] };
+export type MentorProfile = {
+  name: string;
+  role: string;
+  bio: string;
+  skills: string[];
+  // Task #1 — admin-managed roster fields (optional for back-compat
+  // with any cached decks emitted before the network_profiles swap).
+  photo_url?: string | null;
+  linkedin_url?: string | null;
+  kind?: string;
+};
 export type SkillAxis = { label: string; value: number };
 export type NetworkCategory = { category: string; count: number };
 export type DealAccess = {
@@ -2367,12 +2377,23 @@ const ProfileCard: React.FC<{ p: MentorProfile }> = ({ p }) => {
   const initials = (p.name || '').split(/\s+/).map((s) => s[0]).slice(0, 2).join('').toUpperCase();
   return (
     <div style={{ ...cardStyle(V), padding: 12, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-      <div style={{
-        width: 36, height: 36, borderRadius: 8,
-        background: `linear-gradient(135deg, ${V.accent} 0%, ${V.gold} 100%)`,
-        color: '#fff', fontFamily: V.display, fontWeight: 700, fontSize: 13,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      }}>{initials || '?'}</div>
+      {p.photo_url ? (
+        <img
+          src={p.photo_url}
+          alt={p.name}
+          style={{
+            width: 36, height: 36, borderRadius: 8, objectFit: 'cover',
+            flexShrink: 0, background: V.cardSoft,
+          }}
+        />
+      ) : (
+        <div style={{
+          width: 36, height: 36, borderRadius: 8,
+          background: `linear-gradient(135deg, ${V.accent} 0%, ${V.gold} 100%)`,
+          color: '#fff', fontFamily: V.display, fontWeight: 700, fontSize: 13,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>{initials || '?'}</div>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: V.ink, fontFamily: V.display, lineHeight: 1.2 }}>{p.name}</div>
         {p.role && <div style={{ fontSize: 10, marginTop: 2, color: V.accent, fontFamily: V.mono, letterSpacing: '0.1em' }}>{p.role}</div>}

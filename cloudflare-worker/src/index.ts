@@ -39,6 +39,8 @@ import adminPartners from './routes/admin_partners';
 import adminPublications from './routes/admin_publications';
 // Task #10 (LD) — Admin team roster + public team endpoint.
 import adminTeam from './routes/admin_team';
+import adminNetworkProfiles from './routes/admin_network_profiles';
+import networkPublic from './routes/network_public';
 // Task #3 — Admin Telegram channels + aggregator + post send.
 import adminTelegram from './routes/admin_telegram';
 import adminX from './routes/admin_x';
@@ -491,6 +493,9 @@ app.route('/api/admin/advisor-audit', adminAdvisorAudit);
 // Task #10 (LD) — Admin team roster CRUD + photo upload. Mounted BEFORE
 // the generic /api/admin router so the more-specific prefix wins.
 app.route('/api/admin/team', adminTeam);
+// Task #1 — Network profiles. Mounted BEFORE catch-all /api/admin so
+// /api/admin/network-profiles/* resolves here.
+app.route('/api/admin/network-profiles', adminNetworkProfiles);
 // Task #3 — mount Telegram BEFORE the catch-all `/api/admin` so the
 // nested `/api/admin/telegram/*` routes resolve here rather than 404ing
 // inside the generic admin router.
@@ -606,6 +611,9 @@ app.route('/api/public', publicRoutes);
 // marketing build (axalnetwork.github.io) curls /api/public/team into
 // _data/team.json before rendering /team on axal.vc.
 app.route('/api/public', teamPublic);
+// Task #1 — Public photo proxy for network_profiles (mentor/partner
+// roster). Mounted under /api/public so it bypasses CF-Access.
+app.route('/api/public', networkPublic);
 // Public contact form → GitHub Issues. No auth; honeypot + email validation
 // + global per-IP rate cap; returns 503 when GITHUB_ISSUES_TOKEN is unset.
 app.route('/api', contactRoutes);

@@ -38,6 +38,60 @@
  */
 import type { Env } from '../../types';
 import { ensureDiscoveryValidationRatingColumns } from '../discoveryInterviewSchema';
+import {
+  ensureNetworkProfilesSchema,
+  SKILL_CATALOG,
+} from '../networkProfilesSchema';
+
+/**
+ * Task #1 — Load admin-managed mentor/partner network profiles.
+ *
+ * Returns the active roster ordered by display_order so the Spin-Out
+ * deck's Mentors & Network slide reflects the real Axal network instead
+ * of synthesising rows from advisor_answers. Falls back to an empty
+ * array on schema/DB errors so the deck still renders.
+ *
+ * Shape matches the `NetworkProfile[]` contract consumed by the deck
+ * adapter (frontend/src/decks/templates/axal_spinout_demoday_app.tsx).
+ */
+export type NetworkProfileRow = {
+  name: string;
+  role: string;
+  bio: string;
+  skills: string[];
+  photo_url: string | null;
+  linkedin_url: string | null;
+  kind: string;
+};
+
+export async function loadNetworkProfiles(env: Env): Promise<NetworkProfileRow[]> {
+  try {
+    await ensureNetworkProfilesSchema(env);
+    const rows = (await env.DB.prepare(
+      `SELECT id, name, kind, role, bio, linkedin_url, photo_r2_key, skills_json
+         FROM network_profiles
+        WHERE is_active = 1
+        ORDER BY display_order ASC, name ASC`,
+    ).all<any>()).results || [];
+    return rows.map((r) => {
+      let skills: string[] = [];
+      try { const arr = JSON.parse(r.skills_json || '[]'); if (Array.isArray(arr)) skills = arr.map(String); }
+      catch { /* noop */ }
+      return {
+        name: String(r.name || ''),
+        role: String(r.role || ''),
+        bio: String(r.bio || ''),
+        skills,
+        photo_url: r.photo_r2_key ? `/api/public/network/${r.id}/photo` : null,
+        linkedin_url: r.linkedin_url || null,
+        kind: String(r.kind || 'mentor'),
+      };
+    });
+  } catch (err) {
+    console.warn('[axalSpinoutDemoDay] loadNetworkProfiles failed', err);
+    return [];
+  }
+}
 
 const DASH = '—';
 
@@ -366,6 +420,10 @@ export async function fillAxalSpinoutDemoDay(
   // columns here so the SELECT below doesn't throw and silently null out
   // every interview-derived deck section (quotes / pains / ratings).
   await ensureDiscoveryValidationRatingColumns(env);
+  // Task #1 — load admin-managed mentor/partner roster in parallel with
+  // the rest of the project reads; replaces the synthesised profiles
+  // path that derived names from advisor_answers free-text.
+  const networkProfilesPromise = loadNetworkProfiles(env);
   const DB = env.DB;
 
   const [
@@ -673,39 +731,49 @@ export async function fillAxalSpinoutDemoDay(
     };
   })();
 
-  // ------ Task #14: mentor profiles + skill coverage + network --------
-  // Profiles synthesise from `mentorBody` lines that look like
-  // "Name · Role · skill_a, skill_b". Falls back to plain mentor names.
-  const profiles = (() => {
-    const lines = (mentorBody || '').split(/\n+/).map((s) => s.trim()).filter(Boolean);
-    return lines.slice(0, 6).map((line) => {
-      const parts = line.split('·').map((s) => s.trim());
-      const name = parts[0] || DASH;
-      const role = parts[1] || '';
-      const skills = (parts[2] || '').split(/,/).map((s) => s.trim()).filter(Boolean);
-      return { name, role, bio: '', skills };
-    });
-  })();
-  // Skill coverage: aggregate across profiles + networkSignals categories.
+  // ------ Task #1: mentor profiles + skill coverage + network --------
+  // Real, admin-managed roster from network_profiles (loaded above).
+  // Falls back to an empty array if the table is empty so the slide
+  // renders its dashed-skeleton state rather than synthesised noise.
+  const networkRoster = await networkProfilesPromise;
+  const profiles = networkRoster.slice(0, 6).map((np) => ({
+    name: np.name || DASH,
+    role: np.role || '',
+    bio: np.bio || '',
+    skills: np.skills,
+    photo_url: np.photo_url,
+    linkedin_url: np.linkedin_url,
+    kind: np.kind,
+  }));
+  // Skill coverage spider: count of active profiles per axis, normalised
+  // 0..1 against the busiest axis so the radar stays well-shaped.
   const skillBag = new Map<string, number>();
-  const SKILL_AXES = ['Legal', 'Design', 'Recruiting', 'Technical DD', 'Finance', 'GTM'];
-  for (const ax of SKILL_AXES) skillBag.set(ax, 0);
-  for (const p2 of profiles) for (const s of p2.skills) {
-    const key = SKILL_AXES.find((a) => a.toLowerCase() === s.toLowerCase()) || s;
-    skillBag.set(key, (skillBag.get(key) || 0) + 1);
-  }
-  for (const sig of networkSignals) {
-    const key = SKILL_AXES.find((a) => a.toLowerCase() === sig.toLowerCase()) || sig;
-    skillBag.set(key, (skillBag.get(key) || 0) + 1);
+  for (const ax of SKILL_CATALOG) skillBag.set(ax, 0);
+  for (const np of networkRoster) for (const s of np.skills) {
+    const key = (SKILL_CATALOG as readonly string[]).find((a) => a.toLowerCase() === s.toLowerCase());
+    if (key) skillBag.set(key, (skillBag.get(key) || 0) + 1);
   }
   const maxSkill = Math.max(1, ...Array.from(skillBag.values()));
   const skillCoverage = Array.from(skillBag.entries())
-    .slice(0, 8)
     .map(([label, n]) => ({ label, value: maxSkill > 0 ? n / maxSkill : 0 }));
-  const networkBreakdown = SKILL_AXES.map((cat) => ({
-    category: cat,
-    count: skillBag.get(cat) || 0,
-  }));
+  // Network breakdown: counts grouped by profile kind (mentor/partner/
+  // advisor/investor) for the constellation rail. Falls back to the
+  // legacy SKILL_CATALOG-by-axis view if the roster is empty so older
+  // decks don't regress to an empty bar chart.
+  const kindCounts = new Map<string, number>();
+  for (const np of networkRoster) {
+    const k = np.kind || 'mentor';
+    kindCounts.set(k, (kindCounts.get(k) || 0) + 1);
+  }
+  const networkBreakdown = kindCounts.size > 0
+    ? Array.from(kindCounts.entries()).map(([category, count]) => ({
+        category: category.charAt(0).toUpperCase() + category.slice(1) + 's',
+        count,
+      }))
+    : (SKILL_CATALOG as readonly string[]).slice(0, 6).map((cat) => ({ category: cat, count: 0 }));
+  // networkSignals is still used downstream for the freeform "network
+  // signals" body text — keep referenced so it doesn't dead-code.
+  void networkSignals;
 
   // ------ Task #14: deal-room access payload for Review-the-deal ------
   const dealAccess = {

@@ -1953,6 +1953,18 @@ export const adminTeam = {
   reorder: (order) => request('/admin/team/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
 };
 
+// Task #1 — Admin mentor & partner network profiles (drives Spin-Out
+// Demo Day deck's Mentors & Network slide).
+export const adminNetworkProfiles = {
+  list: () => request('/admin/network-profiles'),
+  create: (payload) => request('/admin/network-profiles', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id, patch) => request(`/admin/network-profiles/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  remove: (id) => request(`/admin/network-profiles/${id}`, { method: 'DELETE' }),
+  uploadPhoto: (id, dataUri) =>
+    request(`/admin/network-profiles/${id}/photo`, { method: 'POST', body: JSON.stringify({ data_uri: dataUri }) }),
+  reorder: (order) => request('/admin/network-profiles/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
+};
+
 // Task #3 — Admin Telegram channels + posts + aggregator.
 export const adminTelegram = {
   // Channels

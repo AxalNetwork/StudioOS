@@ -11,6 +11,71 @@
 > building it.
 
 
+## Feature — Task #1 · Admin-managed mentor & partner network roster (replaces synthesised deck data)
+
+The Spin-Out Demo Day deck's Mentors & Network slide previously
+synthesised profiles from `advisor_answers` free-text — admins had no
+way to curate the real Axal network and the slide regularly rendered
+"Lead, Lead" / unparsed fragments. New admin-managed roster lives at
+`/admin/network-profiles`:
+
+- **`cloudflare-worker/sql/migrations/075_network_profiles.sql`** —
+  additive `network_profiles` table (`name`, `kind`,
+  `role`, `bio`, `linkedin_url`, `photo_r2_key`, `skills_json`,
+  `display_order`, `is_active`) plus
+  `idx_network_profiles_active_order`. IF NOT EXISTS only.
+- **`cloudflare-worker/src/services/networkProfilesSchema.ts`** —
+  `ensureNetworkProfilesSchema()` lazy bootstrap (mirrors
+  `ensureTeamMembersSchema` / `ensureTelegramSchema`), canonical
+  `NETWORK_KINDS = ['mentor','partner','advisor','investor']`, and
+  canonical 12-axis `SKILL_CATALOG` (`Legal`, `Finance`, `GTM`,
+  `Sales`, `Marketing`, `Product`, `Engineering`, `Design`,
+  `Recruiting`, `Technical DD`, `Operations`, `Fundraising`) — single
+  source of truth for both the admin picker and the SkillsSpider radar.
+- **`cloudflare-worker/src/routes/admin_network_profiles.ts`** — CRUD
+  + `POST /:id/photo` (≤2 MB JPG/PNG/WebP, magic-byte check, R2 keyed
+  `network/<uuid>.{ext}` on the `FILES` binding) + `POST /reorder`.
+  Every mutation writes an `activity_logs` row via the
+  `hashEmail`-based actor convention. Sanitisers reject unknown
+  `kind` values and silently drop unknown skill labels.
+- **`cloudflare-worker/src/routes/network_public.ts`** — public photo
+  proxy at `/api/public/network/:id/photo`; only serves rows where
+  `is_active = 1`. Mounted under `/api/public` so it bypasses the
+  CF-Access perimeter while the R2 bucket stays private.
+- **`cloudflare-worker/src/index.ts`** — mounts
+  `/api/admin/network-profiles` BEFORE the catch-all `/api/admin`
+  router (same precedence trick as `/api/admin/telegram` and
+  `/api/admin/team`), and mounts `networkPublic` on `/api/public`.
+- **`cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`** —
+  new exported `loadNetworkProfiles(env)` runs in parallel with the
+  rest of the deck reads. The old `profiles` / `skillBag` /
+  `SKILL_AXES` / `skillCoverage` / `networkBreakdown` synthesis block
+  is replaced: `profiles` comes straight from the active roster
+  (carrying `photo_url`, `linkedin_url`, `kind`), `skillCoverage`
+  counts per axis across the 12-axis catalog and normalises 0..1
+  against the busiest axis, and `networkBreakdown` is now grouped by
+  `kind` (Mentors / Partners / Advisors / Investors). Falls back to
+  the catalog-zero view when the roster is empty so older snapshots
+  don't break the slide.
+- **`frontend/src/decks/templates/axal_spinout_demoday_app.tsx`** —
+  `MentorProfile` extended with optional `photo_url` / `linkedin_url`
+  / `kind` (back-compat with cached decks). `ProfileCard` renders the
+  real photo when present, falling back to the existing initials tile.
+- **`frontend/src/pages/admin/AdminNetworkProfiles.jsx`** — admin
+  surface: kind dropdown, name/role/bio, LinkedIn URL, 12-axis skill
+  toggles (catalog mirrored from worker — keep in sync), photo
+  upload, active toggle, drag-to-reorder, hard delete with confirm.
+  Uses `useToast` + `useEscapeClose` per the in-house conventions.
+- **`frontend/src/lib/api.js`** — new `adminNetworkProfiles` export
+  (list/create/update/remove/uploadPhoto/reorder).
+- **`frontend/src/App.jsx`** — lazy-loaded `/admin/network-profiles`
+  route guarded by `['admin']`.
+
+Deploy notes: migration 075 is additive + `IF NOT EXISTS`; the
+worker's lazy bootstrap makes the hot path self-healing, so applying
+the SQL via `wrangler d1 execute` is preferred but not required to
+unblock the feature.
+
 ## Feature — Task #15 · Customer Discovery captures 0–5 solution-fit rating + free-text comment
 
 `frontend/src/pages/DiscoveryPage.jsx` — interview modal now carries
