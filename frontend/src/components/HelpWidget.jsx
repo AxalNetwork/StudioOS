@@ -16,7 +16,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  LifeBuoy, X, Search, Brain, Ticket, Mail, MessageSquare, Loader2, ArrowRight,
+  LifeBuoy, X, Search, Brain, Ticket, MessageSquare, Loader2, ArrowRight,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
@@ -209,16 +209,6 @@ export default function HelpWidget() {
                 <HelpRow icon={<Ticket size={16} />} title="Open a ticket" hint="Files a tracked support ticket." onClick={goTicket} />
               </section>
 
-              {/* Contextual mailto rows */}
-              <section>
-                <div className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Email a team</div>
-                <div className="space-y-1.5">
-                  <MailRow address="security@axal.vc" subject="Security report" body={mailtoBody} icon="security" />
-                  <MailRow address="legal@axal.vc"   subject="Legal question"   body={mailtoBody} icon="legal" />
-                  <MailRow address="billing@axal.vc" subject="Billing question" body={mailtoBody} icon="billing" />
-                </div>
-              </section>
-
               {!showChat && (
                 <section className="mt-2 text-[11px] text-gray-500 border-t border-gray-100 dark:border-gray-800 pt-3">
                   Live chat with the Axal team is included on the Studio, Institutional, and Partner plans.
@@ -252,18 +242,5 @@ function HelpRow({ icon, title, hint, onClick }) {
       </span>
       <ArrowRight size={14} className="text-gray-300" />
     </button>
-  );
-}
-
-function MailRow({ address, subject, body, icon }) {
-  return (
-    <a
-      href={`mailto:${address}?subject=${encodeURIComponent(subject)}&body=${body}`}
-      className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-    >
-      <Mail size={14} className="text-gray-400" />
-      <span className="font-medium">{address}</span>
-      <span className="text-xs text-gray-400 ml-auto">{icon}</span>
-    </a>
   );
 }
