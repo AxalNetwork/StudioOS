@@ -1,0 +1,24 @@
+#17 — Project data-room URL — store it on the project so every deck pre-fills it  Project data-room URL — persist deal_access.url outside the deck row
+What & Why
+The Spin-Out deck rebuild (separate task) introduces a "Review the deal" final slide with a primary "Open the data room →" button. In that task deal_access.url is edited inline on the slide and persists in the deck version JSON only. That's fine for v1 but it means every new deck version starts blank and the URL has to be re-typed; it also can't be reused by any other surface (investor share-link landing, dashboard, follow-up emails).
+This task adds a data_room_url column to projects, a small editor for it on the Project detail page, and threads it into the deck slide so the inline editor pre-fills from the project and saves back to it.
+Depends on
+* The Spin-Out deck rebuild task — that's the task that creates the Review-the-deal slide + deal_access shape; this task makes the URL field on that slide persist on projects instead of just on the deck row.
+Done looks like
+* New additive migration (next free number; likely 076_project_data_room_url.sql): ALTER TABLE projects ADD COLUMN data_room_url TEXT + ALTER TABLE projects ADD COLUMN data_room_nda_required INTEGER NOT NULL DEFAULT 0. Both IF NOT EXISTS (use the project's D1 pattern; lazy-bootstrap helper as a self-healing fallback).
+* Project detail editor (frontend/src/pages/ProjectDetail.jsx) exposes a "Data room" sub-section with a URL field + an "NDA required" toggle. Save round-trips both via api.updateProject(...).
+* Worker routes/projects.ts accepts and returns both fields on GET / PUT; existing PATCH paths preserve unspecified values.
+* Worker autofill for the Spin-Out deck (cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts) populates deal_access.url and deal_access.nda_required from projects.data_room_url / projects.data_room_nda_required on Fill-from-project. When the founder edits the URL inline on the slide, the deck's save path writes back to the project columns (single source of truth) — the deck row only stores transient overrides if the founder explicitly opts to differ for one version.
+* Two changelog entries — technical + plain-English ("Your data-room link is now stored on the project so every deck version pre-fills it").
+Out of scope
+* Access controls on the data room URL itself (this task just stores + surfaces it).
+* Auto-generating the data room (Notion, DropBox Paper, R2 bucket, etc.) — that's a much larger product decision.
+* Emailing the link to investors / triggering any workflow on edit.
+Relevant files
+* cloudflare-worker/sql/migrations/076_project_data_room_url.sql (new — number depends on what else has landed by then)
+* cloudflare-worker/src/routes/projects.ts
+* cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts
+* frontend/src/pages/ProjectDetail.jsx
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx (Review-the-deal slide save path)
+* frontend/src/lib/api.js
+* CHANGELOG.md + frontend/public/CHANGELOG-user.md

@@ -1,0 +1,26 @@
+#16 - Mentor & partner network profiles — table, admin UI, and deck reads real data
+What & Why
+The Spin-Out deck rebuild (separate task) introduces a Mentors & Network slide built on a new network[] shape — each entry is a NetworkProfile with photo_url, name, kind (mentor | partner | advisor | investor), and skills[] (a subset of the 12-axis skill catalog the SkillsSpider renders). That task synthesises the array from existing advisor_answers data as a stopgap — the spider chart is technically data-driven, but skill counts look thin and the profile cards lack photos / proper kind labels.
+This task replaces the synthesised data with a real, admin-managed table so the Mentors slide reflects the actual Axal network.
+Depends on
+* The Spin-Out deck rebuild task — it introduces network[] on AxalSpinoutData and the consuming SkillsSpider + ProfileCard components. This task swaps the data source underneath without changing the slide's rendering contract.
+Done looks like
+* New migration (next free number after the deck task — likely 075_network_profiles.sql, all additive, IF NOT EXISTS):
+    * network_profiles table with id, name, kind (mentor/partner/advisor/investor), photo_url, bio, linkedin_url, skills_json (TEXT — JSON array of skill ids from the deck's 12-axis catalog), display_order, is_active, created_at, updated_at.
+* Admin surface at /admin?tab=network-profiles (or similar) for CRUD on network_profiles rows — name + kind dropdown + photo upload (R2-backed, network/<uuid>.{ext}, ≤2 MB, jpg/png/webp)
+    * bio + LinkedIn + multi-select skills + display-order + active toggle. List view with reorder by drag or display-order number, plus the "Disable" toggle so we can hide past mentors without deleting their history. Admin-only via the existing requireAdmin perimeter.
+* Worker autofill (cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts) — buildNetworkFromAdvisor() is replaced by loadNetworkProfiles(env) reading network_profiles WHERE is_active = 1 ORDER BY display_order, name, mapping rows into the NetworkProfile[] shape the deck already consumes. No deck template changes needed — the rendering contract stays identical.
+* network_profiles lazy bootstrap helper (mirrors existing ensure*Schema() patterns) so the worker is self-healing where the new migration hasn't been applied yet.
+* Two changelog entries — technical + plain-English ("Admins can now manage the mentor & partner roster that shows up on Spin-Out decks").
+Out of scope
+* Founder-side selection of which profiles surface on their own deck — for v1 every active profile is candidate data and the deck picks the top N by display_order. A "favourite N profiles" per-project picker can be a follow-up.
+* Per-skill ratings on profiles (skills are presence/absence only; the spider count is N profiles with that skill).
+* Importing profiles from LinkedIn or any external source.
+Relevant files
+* cloudflare-worker/sql/migrations/075_network_profiles.sql (new)
+* cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts (loadNetworkProfiles() replaces buildNetworkFromAdvisor())
+* cloudflare-worker/src/routes/admin_network_profiles.ts (new)
+    * mount in cloudflare-worker/src/index.ts before the catch-all /api/admin route (same precedence rule as /api/admin/telegram / /api/admin/news)
+* frontend/src/pages/admin/AdminNetworkProfiles.jsx (new)
+* frontend/src/lib/api.js (admin bindings)
+* CHANGELOG.md + frontend/public/CHANGELOG-user.md
