@@ -11,6 +11,72 @@
 > building it.
 
 
+## Feature — Task #14 · Spin-Out Demo Day deck rebuild (13 slides)
+
+Rebuilt `Deck_axal_spinout_demoday` to the 13-slide layout per the Task #14
+spec. Seven changes land together:
+
+1. **Rename Axal → Axal VC** on the Cover eyebrow ("Axal VC · 30-Day
+   Spin-Out Lab · Demo Day") and surface copy.
+2. **Cover gains an `ActivityLog30Day`** — 30-cell strip rendered from
+   `cover.activity_log: ActivityLogDay[]` (`{date, count, kind}`) emitted
+   as `cover_activity_log_json` by the worker hydrator.
+3. **Problem slide gains `ThemeFrequencyBars`** driven by
+   `problem.pain_themes: PainTheme[]`, with new helpers `deckPainPoints()`
+   (falls back to raw signals for older payloads) and `shortenPain()`.
+4. **Validation slide gains `RatingDistribution` (0–5 histogram) +
+   `RevenueBadge`** from `validation.ratings: number[]`,
+   `validation.question: string`, `validation.revenue_proof: {amount,
+   label, signed} | null`. Founders' answers persist via new column
+   `discovery_interviews.validation_rating` (migration `074`).
+5. **Team + Venture Readiness merged** into single Slide_TeamReadiness
+   (slot 9) — keeps both `team_*` and `vr_*` field keys for backwards
+   compat with decks saved pre-merge.
+6. **Mentors & network gains `SkillsSpider` + `ProfileCard` stack** from
+   `mentor_network.profiles: MentorProfile[]`,
+   `mentor_network.skill_coverage: SkillAxis[]`, `mentor_network.network:
+   NetworkCategory[]`. Falls back to the existing `NetworkConstellation`
+   when fewer than 3 skill axes are present.
+7. **Drop Axal Signal slot 12**; **add Product Demo at slot 6**
+   (`product_demo_{eyebrow,headline,body,loop_url,screenshot_url,caption}`);
+   **rename Contact → Review the deal** with a new
+   `contact.deal_access: {deal_room_url, nda_required, data_room_ready,
+   cta_label}` CTA block. Lab-week milestones from the dropped slide are
+   still emitted as hidden payload on `review_the_deal` for share/PDF
+   compatibility.
+
+Touched:
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts` — extended
+  `SpinoutDemoDayData` type, `fillAxalSpinoutDemoDay()` builders,
+  `INTERVIEW_SELECT` (now reads `validation_rating`,
+  `validation_comment`, `interview_date`), 13-entry SLIDES registry, and
+  13-cell `buildAxalSpinoutCoverage()`.
+- `cloudflare-worker/src/services/discoveryInterviewSchema.ts` — added
+  `asValidationRating()` + `serializeInterview()` + the rating field on
+  the canonical interview row.
+- `cloudflare-worker/src/routes/progress.ts` — `ensureDiscoveryValidationRatingColumns()` lazy bootstrap (WeakMap-keyed per `DB`), GET/POST/PUT now round-trip `validation_rating`.
+- `cloudflare-worker/sql/migrations/074_discovery_validation_rating.sql`
+  — additive `ALTER TABLE discovery_interviews ADD COLUMN
+  validation_rating INTEGER NULL` (IF NOT EXISTS handled by the lazy
+  bootstrap so this stays apply-when-convenient).
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx` — new
+  exported types (`ActivityLogDay`, `PainTheme`, `RevenueProof`,
+  `MentorProfile`, `SkillAxis`, `NetworkCategory`, `DealAccess`), new
+  primitives (`ActivityLog30Day`, `ThemeFrequencyBars`,
+  `RatingDistribution`, `RevenueBadge`, `SkillsSpider`, `ProfileCard`),
+  new slides (`Slide_ProductDemo`, `Slide_TeamReadiness`,
+  `Slide_ReviewTheDeal`), Cover/Problem/Validation/MentorNetwork rewires,
+  13-entry SLIDES registry. Legacy `Slide_Team`, `Slide_VentureReadiness`,
+  `Slide_AxalSignal`, `Slide_Contact` retained (held by `void` refs) to
+  keep any in-flight code references intact during rollout.
+
+Both worker and frontend typecheck clean. Migration `074` is additive +
+lazy-bootstrapped — safe to apply whenever convenient via
+`wrangler d1 execute studioos-db --remote --env production
+--file=cloudflare-worker/sql/migrations/074_discovery_validation_rating.sql`.
+
+---
+
 ## Feature — Word-count guidance for Problem & Solution copy (editor + Spin-Out deck)
 
 New shared helper `frontend/src/lib/pitchCopyLength.js` exports

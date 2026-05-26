@@ -36,7 +36,10 @@ import type { Env, User } from '../types';
 import { requireAuth, canAccessFounderResource } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
-import { ensureDiscoveryInterviewFeaturedColumn } from '../services/discoveryInterviewSchema';
+import {
+  ensureDiscoveryInterviewFeaturedColumn,
+  ensureDiscoveryValidationRatingColumns,
+} from '../services/discoveryInterviewSchema';
 
 const progress = new Hono<{ Bindings: Env }>();
 
@@ -126,9 +129,26 @@ type InterviewRow = {
   hypotheses_json: string | null;
   pains_json: string | null;
   featured: number | null;
+  validation_rating: number | null;
+  validation_comment: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
+
+/**
+ * Task #14 — coerce an arbitrary validation_rating input into a 0–5
+ * integer or null. Any out-of-range / non-numeric / undefined value
+ * returns null so the column stays NULL rather than 0 (which would
+ * skew the RatingDistribution chart on the Demo Day deck).
+ */
+function asValidationRating(raw: unknown): number | null {
+  if (raw == null || raw === '') return null;
+  const n = typeof raw === 'number' ? raw : Number(String(raw).trim());
+  if (!isFinite(n)) return null;
+  const r = Math.round(n);
+  if (r < 0 || r > 5) return null;
+  return r;
+}
 
 const VALID_HYPOTHESIS_STATUSES = new Set(['validated', 'invalidated', 'inconclusive']);
 
@@ -162,6 +182,11 @@ function serializeInterview(r: InterviewRow) {
     hypotheses: safeJsonParseArray(r.hypotheses_json),
     pains: safeJsonParseArray(r.pains_json),
     featured: Number(r.featured ?? 0) === 1,
+    // Task #14 — 0–5 founder rating of "how well does our solution
+    // address the problem?" + free-text comment. Both null until the
+    // founder fills them in.
+    validation_rating: r.validation_rating == null ? null : Number(r.validation_rating),
+    validation_comment: r.validation_comment ?? null,
     created_at: r.created_at,
     updated_at: r.updated_at,
   };
@@ -169,7 +194,9 @@ function serializeInterview(r: InterviewRow) {
 
 const INTERVIEW_SELECT =
   `SELECT id, project_id, interviewee_name, interviewee_role, interview_date,
-          notes, hypotheses_json, pains_json, featured, created_at, updated_at
+          notes, hypotheses_json, pains_json, featured,
+          validation_rating, validation_comment,
+          created_at, updated_at
      FROM discovery_interviews`;
 
 function asFeaturedFlag(raw: unknown): number {
@@ -188,6 +215,7 @@ progress.get('/discovery/:projectId', async (c) => {
   ensureCanView(project, user);
 
   await ensureDiscoveryInterviewFeaturedColumn(c.env);
+  await ensureDiscoveryValidationRatingColumns(c.env);
   const { results } = await c.env.DB.prepare(
     `${INTERVIEW_SELECT}
       WHERE project_id = ?
@@ -234,18 +262,24 @@ progress.post('/discovery/:projectId', async (c) => {
   const hypotheses = normalizeHypotheses(body.hypotheses);
   const pains = normalizePains(body.pains);
   const featured = asFeaturedFlag(body.featured);
+  const validationRating = asValidationRating(body.validation_rating);
+  const validationComment = asStringOrNull(body.validation_comment);
   const nowIso = new Date().toISOString();
 
   await ensureDiscoveryInterviewFeaturedColumn(c.env);
+  await ensureDiscoveryValidationRatingColumns(c.env);
   const res = await c.env.DB.prepare(
     `INSERT INTO discovery_interviews
        (project_id, interviewee_name, interviewee_role, interview_date,
-        notes, hypotheses_json, pains_json, featured, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        notes, hypotheses_json, pains_json, featured,
+        validation_rating, validation_comment,
+        created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     projectId, intervieweeName, intervieweeRole, interviewDate,
     notes, JSON.stringify(hypotheses), JSON.stringify(pains),
-    featured, nowIso, nowIso,
+    featured, validationRating, validationComment,
+    nowIso, nowIso,
   ).run();
 
   const newId = lastInsertId(res);
@@ -302,17 +336,29 @@ progress.put('/discovery/interview/:id', async (c) => {
   const featured = Object.prototype.hasOwnProperty.call(body, 'featured')
     ? asFeaturedFlag(body.featured)
     : Number(existing.featured ?? 0);
+  // Task #14 — preserve existing rating / comment when fields omitted
+  // so partial saves (the legacy modal that pre-dates this column)
+  // don't wipe the founder's pulse on a re-save.
+  const validationRating = Object.prototype.hasOwnProperty.call(body, 'validation_rating')
+    ? asValidationRating(body.validation_rating)
+    : (existing.validation_rating == null ? null : Number(existing.validation_rating));
+  const validationComment = Object.prototype.hasOwnProperty.call(body, 'validation_comment')
+    ? asStringOrNull(body.validation_comment)
+    : (existing.validation_comment ?? null);
 
   await ensureDiscoveryInterviewFeaturedColumn(c.env);
+  await ensureDiscoveryValidationRatingColumns(c.env);
   await c.env.DB.prepare(
     `UPDATE discovery_interviews
         SET interviewee_name = ?, interviewee_role = ?, interview_date = ?,
-            notes = ?, hypotheses_json = ?, pains_json = ?, featured = ?, updated_at = ?
+            notes = ?, hypotheses_json = ?, pains_json = ?, featured = ?,
+            validation_rating = ?, validation_comment = ?, updated_at = ?
       WHERE id = ?`,
   ).bind(
     intervieweeName, intervieweeRole, interviewDate,
     notes, JSON.stringify(hypotheses), JSON.stringify(pains),
-    featured, new Date().toISOString(), id,
+    featured, validationRating, validationComment,
+    new Date().toISOString(), id,
   ).run();
 
   const row = await c.env.DB.prepare(`${INTERVIEW_SELECT} WHERE id = ?`)

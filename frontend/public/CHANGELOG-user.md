@@ -8,6 +8,39 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Spin-Out Demo Day deck — sharper, 13 slides, and a "Review the deal" call-to-action
+
+The Demo Day deck has had a refresh. Highlights:
+
+- **Branded as Axal VC** on the cover, so it matches the rest of the
+  brand.
+- **A 30-day activity strip** on the cover shows the rhythm of your
+  Lab work at a glance.
+- **Pain themes are now charted** on the Problem slide as a frequency
+  bar, alongside the raw quotes from interviews.
+- **Validation now shows a 0–5 rating histogram** for the validation
+  question we asked across your Discovery interviews — plus a badge
+  for any revenue proof or signed LOI.
+- **Team and Venture Readiness are now one slide** — your founders
+  and your readiness score side-by-side, instead of two separate
+  pages.
+- **Mentors & network now shows mentor profile cards and a skills
+  radar** so investors can see who's around the table and what
+  ground they cover.
+- **New "Product demo" slide** with room for a 30-second loop or a
+  screenshot.
+- **The "Contact" slide is now "Review the deal"** with a clear
+  call-to-action button that links to your deal room, plus NDA and
+  data-room status badges.
+- **The Axal Signal slide has been retired** — the milestones now
+  feed into "Review the deal" instead, so the story ends on the
+  ask.
+
+If you've already saved a deck, your previous content carries over —
+the new sections just light up as you add the underlying data.
+
+---
+
 ## Length guidance for Problem and Solution — no more wall-of-text slides
 
 When you edit a project's Problem Statement or Solution, you'll see a

@@ -11,6 +11,45 @@
 import type { Env } from '../types';
 
 const READY = new WeakMap<object, boolean>();
+const RATING_READY = new WeakMap<object, boolean>();
+
+/**
+ * Task #14 sibling: ensure `discovery_interviews.validation_rating`
+ * (INTEGER 0-5) and `validation_comment` (TEXT) exist. Canonical
+ * migration is `074_discovery_validation_rating.sql`; this helper
+ * keeps the worker self-healing on prod where 074 has not been applied
+ * yet so the Spin-Out Demo Day deck's RatingDistribution component
+ * renders without a 500.
+ */
+export async function ensureDiscoveryValidationRatingColumns(env: Env): Promise<void> {
+  const key = env.DB as unknown as object;
+  if (RATING_READY.get(key)) return;
+  try {
+    const info = await env.DB.prepare(`PRAGMA table_info(discovery_interviews)`).all<{ name: string }>();
+    const have = new Set((info.results || []).map((r) => r.name));
+    if (!have.has('validation_rating')) {
+      try {
+        await env.DB.prepare(
+          `ALTER TABLE discovery_interviews ADD COLUMN validation_rating INTEGER`,
+        ).run();
+      } catch (e) {
+        console.warn('[discoveryInterviewSchema] validation_rating ALTER failed', e);
+      }
+    }
+    if (!have.has('validation_comment')) {
+      try {
+        await env.DB.prepare(
+          `ALTER TABLE discovery_interviews ADD COLUMN validation_comment TEXT`,
+        ).run();
+      } catch (e) {
+        console.warn('[discoveryInterviewSchema] validation_comment ALTER failed', e);
+      }
+    }
+    RATING_READY.set(key, true);
+  } catch (e) {
+    console.warn('[discoveryInterviewSchema] rating bootstrap failed', e);
+  }
+}
 
 export async function ensureDiscoveryInterviewFeaturedColumn(env: Env): Promise<void> {
   const key = env.DB as unknown as object;

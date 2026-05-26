@@ -96,6 +96,20 @@ export type LabWeek = {
   milestones: { key: string; label: string; done: boolean }[];
 };
 
+// Task #14 — new structured payloads alongside the legacy text fields.
+export type ActivityLogDay = { date: string; count: number; kind: string };
+export type PainTheme = { theme: string; mentions: number };
+export type RevenueProof = { amount: string; label: string; signed: boolean } | null;
+export type MentorProfile = { name: string; role: string; bio: string; skills: string[] };
+export type SkillAxis = { label: string; value: number };
+export type NetworkCategory = { category: string; count: number };
+export type DealAccess = {
+  deal_room_url: string;
+  nda_required: boolean;
+  data_room_ready: boolean;
+  cta_label: string;
+};
+
 export type SpinoutDemoDayData = {
   meta: {
     project_name: string; sector: string;
@@ -104,11 +118,20 @@ export type SpinoutDemoDayData = {
     week: number; days_remaining: number; lab_active: boolean;
     is_sample: boolean;
   };
-  cover: { eyebrow: string; headline: string; sub: string; location: string };
-  problem: { eyebrow: string; headline: string; body: string; signals: string[] };
+  cover: {
+    eyebrow: string; headline: string; sub: string; location: string;
+    activity_log: ActivityLogDay[];
+  };
+  problem: {
+    eyebrow: string; headline: string; body: string; signals: string[];
+    pain_themes: PainTheme[];
+  };
   validation: {
     eyebrow: string; headline: string; body: string;
     metrics: Metric[]; quotes: { name: string; role: string; takeaway: string }[];
+    question: string;
+    ratings: number[];
+    revenue_proof: RevenueProof;
   };
   market: { eyebrow: string; headline: string; tam: string; sam: string; som: string; why_now: string[] };
   solution: { eyebrow: string; headline: string; body: string; capabilities: string[] };
@@ -129,6 +152,13 @@ export type SpinoutDemoDayData = {
   mentor_network: {
     eyebrow: string; headline: string; body: string;
     mentors: string[]; network_signals: string[];
+    profiles: MentorProfile[];
+    skill_coverage: SkillAxis[];
+    network: NetworkCategory[];
+  };
+  product_demo: {
+    eyebrow: string; headline: string; body: string;
+    loop_url: string; screenshot_url: string; caption: string;
   };
   cap_table: { eyebrow: string; headline: string; holders: Holder[]; note: string };
   ask: {
@@ -140,6 +170,7 @@ export type SpinoutDemoDayData = {
   contact: {
     eyebrow: string; headline: string; body: string;
     contact_email: string; signoff: string;
+    deal_access: DealAccess;
   };
 };
 
@@ -153,14 +184,15 @@ export const SAMPLE_DATA: SpinoutDemoDayData = {
     week: 1, days_remaining: 28, lab_active: false, is_sample: true,
   },
   cover: {
-    eyebrow: 'Axal · 30-Day Spin-Out Lab · Demo Day',
-    headline: 'Your story, in 14 slides.',
+    eyebrow: 'Axal VC · 30-Day Spin-Out Lab · Demo Day',
+    headline: 'Your story, in 13 slides.',
     sub: 'A pre-incorporation thesis, sharpened across 30 days of Discovery, OKRs, Scoring and Cap-Table prep.',
     location: 'Axal Network · Demo Day',
+    activity_log: [],
   },
   problem: {
     eyebrow: '01 · Problem', headline: 'Why this is broken today.',
-    body: DASH, signals: [],
+    body: DASH, signals: [], pain_themes: [],
   },
   validation: {
     eyebrow: '02 · Validation', headline: 'Discovery — what we heard.',
@@ -169,6 +201,9 @@ export const SAMPLE_DATA: SpinoutDemoDayData = {
       { label: 'Distinct pains', value: DASH, sub: 'tagged' },
       { label: 'Hypotheses validated', value: DASH, sub: 'evidence-backed' },
     ], quotes: [],
+    question: 'How well does our solution address the problem? (0–5)',
+    ratings: [],
+    revenue_proof: null,
   },
   market: {
     eyebrow: '03 · Market', headline: 'Sized for a real outcome.',
@@ -197,8 +232,14 @@ export const SAMPLE_DATA: SpinoutDemoDayData = {
     founders: [], team_intro: '',
   },
   mentor_network: {
-    eyebrow: '09 · Mentors & network', headline: 'Who is around the table.',
+    eyebrow: '10 · Mentors & network', headline: 'Who is around the table.',
     body: '', mentors: [], network_signals: [],
+    profiles: [], skill_coverage: [], network: [],
+  },
+  product_demo: {
+    eyebrow: '06 · Product demo', headline: 'See it in motion.',
+    body: DASH, loop_url: '', screenshot_url: '',
+    caption: 'A 30-second loop of the MVP — drop a video URL on the project to surface here.',
   },
   cap_table: {
     eyebrow: '10 · Cap table',
@@ -214,8 +255,12 @@ export const SAMPLE_DATA: SpinoutDemoDayData = {
     body: DASH, lab_weeks: [],
   },
   contact: {
-    eyebrow: '13 · Contact', headline: "Let's talk.",
+    eyebrow: '13 · Review the deal', headline: 'Review the deal.',
     body: DASH, contact_email: DASH, signoff: '— The founding team',
+    deal_access: {
+      deal_room_url: '', nda_required: true, data_room_ready: false,
+      cta_label: 'Review the deal',
+    },
   },
 };
 
@@ -449,12 +494,14 @@ function hydrate(raw: unknown): SpinoutDemoDayData {
       headline: asStr(d.cover_headline, base.cover.headline),
       sub: asStr(d.cover_sub, base.cover.sub),
       location: asStr(d.cover_location, base.cover.location),
+      activity_log: parseJsonField<ActivityLogDay[]>(d.cover_activity_log_json, []),
     },
     problem: {
       eyebrow: asStr(d.problem_eyebrow, base.problem.eyebrow),
       headline: asStr(d.problem_headline, base.problem.headline),
       body: asStr(d.problem_body, base.problem.body),
       signals: asArr(d.problem_signals),
+      pain_themes: parseJsonField<PainTheme[]>(d.problem_pain_themes_json, []),
     },
     validation: {
       eyebrow: asStr(d.validation_eyebrow, base.validation.eyebrow),
@@ -465,6 +512,13 @@ function hydrate(raw: unknown): SpinoutDemoDayData {
         return g.length > 0 ? g : base.validation.metrics;
       })(),
       quotes: readQuotes(),
+      question: asStr(d.validation_question, base.validation.question),
+      ratings: (() => {
+        const raw = parseJsonField<unknown[]>(d.validation_ratings_json, []);
+        return (Array.isArray(raw) ? raw : []).map((x) => Number(x))
+          .filter((n) => isFinite(n) && n >= 0 && n <= 5);
+      })(),
+      revenue_proof: parseJsonField<RevenueProof>(d.validation_revenue_proof_json, null),
     },
     market: {
       eyebrow: asStr(d.market_eyebrow, base.market.eyebrow),
@@ -518,6 +572,17 @@ function hydrate(raw: unknown): SpinoutDemoDayData {
       body: asStr(d.mn_body, base.mentor_network.body),
       mentors: asArr(d.mn_mentors),
       network_signals: asArr(d.mn_network_signals),
+      profiles: parseJsonField<MentorProfile[]>(d.mn_profiles_json, []),
+      skill_coverage: parseJsonField<SkillAxis[]>(d.mn_skill_coverage_json, []),
+      network: parseJsonField<NetworkCategory[]>(d.mn_network_json, []),
+    },
+    product_demo: {
+      eyebrow: asStr(d.product_demo_eyebrow, base.product_demo.eyebrow),
+      headline: asStr(d.product_demo_headline, base.product_demo.headline),
+      body: asStr(d.product_demo_body, base.product_demo.body),
+      loop_url: asStr(d.product_demo_loop_url, base.product_demo.loop_url),
+      screenshot_url: asStr(d.product_demo_screenshot_url, base.product_demo.screenshot_url),
+      caption: asStr(d.product_demo_caption, base.product_demo.caption),
     },
     cap_table: {
       eyebrow: asStr(d.ct_eyebrow, base.cap_table.eyebrow),
@@ -548,6 +613,7 @@ function hydrate(raw: unknown): SpinoutDemoDayData {
       body: asStr(d.contact_body, base.contact.body),
       contact_email: asStr(d.contact_email, base.contact.contact_email),
       signoff: asStr(d.contact_signoff, base.contact.signoff),
+      deal_access: parseJsonField<DealAccess>(d.contact_deal_access_json, base.contact.deal_access),
     },
   };
 }
@@ -1411,7 +1477,10 @@ const Slide_Cover: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 16 }}>
           <div style={{ ...cardStyle(V), padding: 16, overflow: 'hidden' }}>
-            <JourneyArc height={280} />
+            <JourneyArc height={240} />
+          </div>
+          <div style={{ ...cardStyle(V, true), padding: 14 }}>
+            <ActivityLog30Day log={cover.activity_log} />
           </div>
           <div>
             <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', marginBottom: 4, color: V.textMuted, fontFamily: V.mono }}>30 days · 4 milestones</div>
@@ -1431,6 +1500,9 @@ const Slide_Problem: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
   const V = useV();
   const p = d.problem;
   const signals = p.signals.filter((s) => !isUnfilled(s));
+  // Task #14 — prefer clustered pain themes; fall back to raw signals so
+  // the bars stay populated for older payloads that pre-date pain_themes.
+  const themes = deckPainPoints(p.pain_themes, signals);
   const slots = [0, 1, 2].map((i) => signals[i] || null);
   const lenStatus = isUnfilled(p.body)
     ? { status: 'empty' as const }
@@ -1484,12 +1556,18 @@ const Slide_Problem: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
           <div style={{ ...cardStyle(V, true), padding: 16, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <ProblemEcho />
           </div>
+          {themes.length > 0 && (
+            <div style={{ ...cardStyle(V, true), padding: 14 }}>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 10 }}>Pain themes · clustered</div>
+              <ThemeFrequencyBars themes={themes} />
+            </div>
+          )}
           <div style={{ ...cardStyle(V, true), padding: 16 }}>
             <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 10 }}>Evidence backing this</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, textAlign: 'center' }}>
               {[
-                { label: 'Themes', value: signals.length || DASH },
-                { label: 'Pain mentions', value: signals.length > 0 ? `${signals.length}+` : DASH },
+                { label: 'Themes', value: themes.length || DASH },
+                { label: 'Pain mentions', value: themes.length > 0 ? `${themes.reduce((s, t) => s + t.mentions, 0)}` : DASH },
                 { label: 'Interviews', value: d.validation.quotes.length || DASH },
               ].map((k, i) => (
                 <div key={i}>
@@ -1548,7 +1626,15 @@ const Slide_Validation: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
           })}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ ...cardStyle(V), padding: 12, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ ...cardStyle(V, true), padding: 14 }}>
+            <RatingDistribution ratings={v.ratings} question={v.question} />
+          </div>
+          {v.revenue_proof && (
+            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+              <RevenueBadge proof={v.revenue_proof} />
+            </div>
+          )}
+          <div style={{ ...cardStyle(V), padding: 12, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 120 }}>
             <VoicesBubbles />
           </div>
           <div style={{ ...cardStyle(V, true), padding: 16 }}>
@@ -1961,13 +2047,27 @@ const Slide_MentorNetwork: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
             </div>
           )}
         </div>
-        <div style={{ ...cardStyle(V), padding: 12, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <NetworkConstellation />
-          </div>
-          <div style={{ marginTop: 8, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', textAlign: 'center', color: V.textMuted, fontFamily: V.mono }}>
-            Axal network · {mentors.length || '—'} mentors
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {m.skill_coverage && m.skill_coverage.length >= 3 ? (
+            <div style={{ ...cardStyle(V), padding: 12, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 4, alignSelf: 'flex-start' }}>Skill coverage</div>
+              <SkillsSpider axes={m.skill_coverage} size={200} />
+            </div>
+          ) : (
+            <div style={{ ...cardStyle(V), padding: 12, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <NetworkConstellation />
+              </div>
+              <div style={{ marginTop: 8, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', textAlign: 'center', color: V.textMuted, fontFamily: V.mono }}>
+                Axal network · {mentors.length || '—'} mentors
+              </div>
+            </div>
+          )}
+          {m.profiles && m.profiles.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {m.profiles.slice(0, 3).map((p, i) => <ProfileCard key={i} p={p} />)}
+            </div>
+          )}
         </div>
       </div>
     </SlideShell>
@@ -2119,9 +2219,292 @@ const Slide_AxalSignal: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
   );
 };
 
-const Slide_Contact: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+/* ─────────────────────────── Task #14 new primitives ─────────────────────── */
+
+/** ActivityLog30Day — 30-cell dotted strip for the Cover slide. */
+const ActivityLog30Day: React.FC<{ log: ActivityLogDay[] }> = ({ log }) => {
+  const V = useV();
+  const max = Math.max(1, ...log.map((d) => d.count));
+  const days = log.length > 0 ? log : Array.from({ length: 30 }, (_, i) => ({
+    date: `d-${i}`, count: 0, kind: 'lab',
+  }));
+  return (
+    <div>
+      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', color: V.textMuted, fontFamily: V.mono, marginBottom: 6 }}>Last 30 days · Lab activity</div>
+      <div style={{ display: 'flex', gap: 3, alignItems: 'flex-end', height: 36 }}>
+        {days.map((d, i) => {
+          const h = d.count === 0 ? 4 : Math.max(6, (d.count / max) * 36);
+          const opacity = d.count === 0 ? 0.3 : 0.85;
+          return (
+            <div key={i} title={`${d.date} · ${d.count}`} style={{
+              width: 8, height: h, borderRadius: 2,
+              background: d.count > 0 ? V.accent : V.line,
+              opacity,
+            }} />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+/** ThemeFrequencyBars — horizontal frequency bars for clustered pain themes. */
+const ThemeFrequencyBars: React.FC<{ themes: PainTheme[] }> = ({ themes }) => {
+  const V = useV();
+  if (!themes || themes.length === 0) return null;
+  const max = Math.max(1, ...themes.map((t) => t.mentions));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {themes.slice(0, 5).map((t, i) => (
+        <div key={i}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
+            <span style={{ color: V.ink, fontFamily: V.sans, textTransform: 'capitalize' }}>{shortenPain(t.theme)}</span>
+            <span style={{ color: V.textMuted, fontFamily: V.mono }}>{t.mentions}</span>
+          </div>
+          <div style={{ height: 5, borderRadius: 3, background: V.cardSoft }}>
+            <div style={{ height: '100%', borderRadius: 3, width: `${(t.mentions / max) * 100}%`, background: V.accent }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/** RatingDistribution — 0–5 histogram for founder validation_rating values. */
+const RatingDistribution: React.FC<{ ratings: number[]; question?: string }> = ({ ratings, question }) => {
+  const V = useV();
+  const bins = [0, 0, 0, 0, 0, 0];
+  for (const r of ratings) {
+    const idx = Math.min(5, Math.max(0, Math.round(r)));
+    bins[idx]++;
+  }
+  const max = Math.max(1, ...bins);
+  const avg = ratings.length > 0
+    ? (ratings.reduce((s, x) => s + x, 0) / ratings.length).toFixed(1)
+    : DASH;
+  return (
+    <div>
+      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', color: V.accent, fontFamily: V.mono, marginBottom: 6 }}>Validation rating · 0–5</div>
+      {question && <div style={{ fontSize: 11, color: V.textSoft, marginBottom: 8, fontFamily: V.sans }}>{question}</div>}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height: 60 }}>
+        {bins.map((n, i) => (
+          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <div style={{
+              width: '100%', borderRadius: 3,
+              height: `${(n / max) * 50 + 4}px`,
+              background: n > 0 ? V.accent : V.line,
+              opacity: n > 0 ? 0.9 : 0.4,
+            }} />
+            <span style={{ fontSize: 10, color: V.textMuted, fontFamily: V.mono }}>{i}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 6, fontSize: 11, color: V.textMuted, fontFamily: V.mono }}>
+        avg {avg} · n={ratings.length}
+      </div>
+    </div>
+  );
+};
+
+/** RevenueBadge — single tone pill for a confirmed revenue/LOI signal. */
+const RevenueBadge: React.FC<{ proof: RevenueProof }> = ({ proof }) => {
+  const V = useV();
+  if (!proof) return null;
+  return (
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 8,
+      background: V.accentSoft, color: V.accent,
+      border: `1px solid ${V.accent}`, borderRadius: 999,
+      padding: '6px 14px', fontFamily: V.mono, fontSize: 11,
+      letterSpacing: '0.12em', textTransform: 'uppercase',
+    }}>
+      <span aria-hidden>{proof.signed ? '✓' : '•'}</span>
+      <span>{proof.amount} {proof.label}</span>
+    </div>
+  );
+};
+
+/** SkillsSpider — radar chart for mentor skill coverage axes. */
+const SkillsSpider: React.FC<{ axes: SkillAxis[]; size?: number }> = ({ axes, size = 220 }) => {
+  const V = useV();
+  const N = axes.length;
+  if (N < 3) return null;
+  const r = size / 2 - 28;
+  const cx = size / 2;
+  const cy = size / 2;
+  const pt = (i: number, val: number): [number, number] => {
+    const angle = -Math.PI / 2 + (i / N) * Math.PI * 2;
+    const rr = r * Math.max(0, Math.min(1, val));
+    return [cx + Math.cos(angle) * rr, cy + Math.sin(angle) * rr];
+  };
+  const ring = (frac: number) => Array.from({ length: N }).map((_, i) => {
+    const [x, y] = pt(i, frac);
+    return `${x},${y}`;
+  }).join(' ');
+  const polyPts = axes.map((a, i) => pt(i, a.value).join(',')).join(' ');
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} style={{ width: '100%', maxWidth: size, display: 'block' }}>
+      {[0.33, 0.66, 1].map((f, i) => (
+        <polygon key={i} points={ring(f)} fill="none" stroke={V.line} strokeOpacity={0.5} />
+      ))}
+      <polygon points={polyPts} fill={V.accent} fillOpacity={0.25} stroke={V.accent} strokeWidth={1.5} />
+      {axes.map((a, i) => {
+        const [lx, ly] = pt(i, 1.15);
+        return (
+          <text key={i} x={lx} y={ly} textAnchor="middle" fontFamily={V.mono}
+            fontSize="9" fill={V.textMuted} letterSpacing="0.12em">
+            {a.label}
+          </text>
+        );
+      })}
+    </svg>
+  );
+};
+
+/** ProfileCard — compact mentor card with name/role/skills. */
+const ProfileCard: React.FC<{ p: MentorProfile }> = ({ p }) => {
+  const V = useV();
+  const initials = (p.name || '').split(/\s+/).map((s) => s[0]).slice(0, 2).join('').toUpperCase();
+  return (
+    <div style={{ ...cardStyle(V), padding: 12, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: 8,
+        background: `linear-gradient(135deg, ${V.accent} 0%, ${V.gold} 100%)`,
+        color: '#fff', fontFamily: V.display, fontWeight: 700, fontSize: 13,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>{initials || '?'}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: V.ink, fontFamily: V.display, lineHeight: 1.2 }}>{p.name}</div>
+        {p.role && <div style={{ fontSize: 10, marginTop: 2, color: V.accent, fontFamily: V.mono, letterSpacing: '0.1em' }}>{p.role}</div>}
+        {p.skills && p.skills.length > 0 && (
+          <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {p.skills.slice(0, 4).map((s, i) => (
+              <span key={i} style={{
+                fontSize: 9, padding: '2px 6px', borderRadius: 999,
+                background: V.cardSoft, color: V.textSoft, fontFamily: V.mono,
+              }}>{s}</span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/** Pre-cluster pain text helpers. */
+const deckPainPoints = (themes: PainTheme[], signals: string[]): PainTheme[] => {
+  if (themes && themes.length > 0) return themes;
+  return signals.filter((s) => !isUnfilled(s)).slice(0, 5).map((s) => ({ theme: s, mentions: 1 }));
+};
+const shortenPain = (raw: string): string => {
+  const s = (raw || '').trim();
+  if (!s) return DASH;
+  return s.length > 56 ? s.slice(0, 53) + '…' : s;
+};
+
+/* ─────────────────────────── Task #14 new slides ─────────────────────────── */
+
+/** Slide 6 (new): Product Demo. */
+const Slide_ProductDemo: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const V = useV();
+  const pd = d.product_demo;
+  const hasLoop = !isUnfilled(pd.loop_url);
+  const hasShot = !isUnfilled(pd.screenshot_url);
+  return (
+    <SlideShell>
+      <Eyebrow>{pd.eyebrow}</Eyebrow>
+      <SlideHeading>{pd.headline}</SlideHeading>
+      <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 28, flex: 1, minHeight: 0 }}>
+        <div style={{ ...cardStyle(V), padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
+          {hasLoop ? (
+            <video src={pd.loop_url} autoPlay muted loop playsInline
+              style={{ width: '100%', maxHeight: 360, borderRadius: 8, background: '#000' }} />
+          ) : hasShot ? (
+            <img src={pd.screenshot_url} alt="Product demo" style={{ width: '100%', maxHeight: 360, borderRadius: 8, objectFit: 'contain' }} />
+          ) : (
+            <div style={{ textAlign: 'center', color: V.textMuted, fontFamily: V.mono, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+              <div style={{ fontSize: 56, marginBottom: 12, opacity: 0.4 }}>▷</div>
+              Demo loop pending
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, justifyContent: 'center' }}>
+          {!isUnfilled(pd.body) && (
+            <p style={{ fontSize: 14, lineHeight: 1.5, color: V.ink, fontFamily: V.vibe === 'serif' ? V.display : V.sans, margin: 0 }}>{pd.body}</p>
+          )}
+          <div style={{ ...cardStyle(V, true), padding: 14 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 8 }}>Caption</div>
+            <p style={{ fontSize: 12, lineHeight: 1.4, color: V.textSoft, fontFamily: V.sans, margin: 0 }}>{pd.caption}</p>
+          </div>
+        </div>
+      </div>
+    </SlideShell>
+  );
+};
+
+/** Slide 9 (merged): Team + Venture Readiness. */
+const Slide_TeamReadiness: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const V = useV();
+  const t = d.team;
+  const vr = d.venture_readiness;
+  const slots = [0, 1, 2].map((i) => t.founders[i] || null);
+  return (
+    <SlideShell>
+      <Eyebrow>{t.eyebrow} · {vr.eyebrow.split('·').pop()?.trim() || 'Readiness'}</Eyebrow>
+      <SlideHeading>Team & venture readiness.</SlideHeading>
+      <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: '6fr 6fr', gap: 24, flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', color: V.accent, fontFamily: V.mono }}>Founders</div>
+          {slots.map((m, i) => {
+            if (!m) return (
+              <div key={i} style={{ ...cardStyle(V, true), padding: 12, opacity: 0.6, fontSize: 11, color: V.textMuted, fontFamily: V.mono }}>
+                Founder {i + 1} pending
+              </div>
+            );
+            const initials = (m.name || '').split(/\s+/).map((s) => s[0]).slice(0, 2).join('').toUpperCase();
+            return (
+              <div key={i} style={{ ...cardStyle(V), padding: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 8,
+                  background: `linear-gradient(135deg, ${V.accent}, ${V.gold})`,
+                  color: '#fff', fontFamily: V.display, fontWeight: 700, fontSize: 13,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>{initials || '?'}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: V.ink, fontFamily: V.display }}>{m.name}</div>
+                  <div style={{ fontSize: 10, marginTop: 2, color: V.accent, fontFamily: V.mono, letterSpacing: '0.1em' }}>{m.role}</div>
+                </div>
+              </div>
+            );
+          })}
+          {!isUnfilled(t.team_intro) && (
+            <div style={{ ...cardStyle(V, true), padding: 12, marginTop: 4 }}>
+              <p style={{ fontSize: 12, lineHeight: 1.4, color: V.textSoft, fontFamily: V.sans, margin: 0 }}>{t.team_intro}</p>
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', color: V.accent, fontFamily: V.mono }}>Readiness · {vr.tier || DASH}</div>
+          <div style={{ ...cardStyle(V), padding: 16 }}>
+            <ScoreBars items={vr.breakdown} />
+          </div>
+          {!isUnfilled(vr.ai_notes) && (
+            <div style={{ ...cardStyle(V, true), padding: 12 }}>
+              <p style={{ fontSize: 12, lineHeight: 1.4, color: V.textSoft, fontFamily: V.sans, margin: 0 }}>{vr.ai_notes}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </SlideShell>
+  );
+};
+
+const Slide_ReviewTheDeal: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
   const c = d.contact;
+  const V = useV();
   const { pal, fonts } = useVariant();
+  const da = c.deal_access;
+  const hasRoom = !!da && !isUnfilled(da.deal_room_url);
   return (
     <SlideShell>
       <Eyebrow>{c.eyebrow}</Eyebrow>
@@ -2134,6 +2517,37 @@ const Slide_Contact: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
         <div style={{ marginTop: 24, maxWidth: 760 }}>
           {!isUnfilled(c.body) && <Body>{c.body}</Body>}
         </div>
+        {da && (
+          <div style={{ marginTop: 28, display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+            {hasRoom ? (
+              <a href={da.deal_room_url} target="_blank" rel="noreferrer noopener" style={{
+                display: 'inline-flex', alignItems: 'center', gap: 10,
+                background: V.accent, color: '#fff', textDecoration: 'none',
+                fontFamily: V.display, fontWeight: 700, fontSize: 15,
+                padding: '14px 24px', borderRadius: 10,
+              }}>
+                {da.cta_label || 'Review the deal'} <span aria-hidden>→</span>
+              </a>
+            ) : (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 10,
+                background: V.cardSoft, color: V.textMuted,
+                fontFamily: V.mono, fontSize: 12, letterSpacing: '0.16em', textTransform: 'uppercase',
+                padding: '12px 18px', borderRadius: 10, border: `1px dashed ${V.line}`,
+              }}>{da.cta_label || 'Review the deal'} · pending</span>
+            )}
+            <span style={{
+              fontSize: 10, padding: '6px 10px', borderRadius: 999,
+              background: V.cardSoft, color: V.textSoft, fontFamily: V.mono, letterSpacing: '0.12em',
+            }}>{da.nda_required ? 'NDA required' : 'No NDA'}</span>
+            <span style={{
+              fontSize: 10, padding: '6px 10px', borderRadius: 999,
+              background: da.data_room_ready ? V.accentSoft : V.cardSoft,
+              color: da.data_room_ready ? V.accent : V.textMuted,
+              fontFamily: V.mono, letterSpacing: '0.12em',
+            }}>{da.data_room_ready ? '✓ Data room ready' : '○ Data room pending'}</span>
+          </div>
+        )}
       </div>
       <div style={{ borderTop: `1px solid ${pal.rule}`, paddingTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <div style={{ fontFamily: fonts.mono, fontSize: 14, color: c.contact_email === DASH ? pal.muted : pal.ink }}>{c.contact_email}</div>
@@ -2146,26 +2560,32 @@ const Slide_Contact: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
 /* ─────────────────────────── slide registry ─────────────────────────── */
 
 type SlideEntry = { id: string; title: string; Component: React.FC<{ d: SpinoutDemoDayData }> };
+// Task #14 — 13 slides. Drops Axal Signal, adds Product Demo at slot 6,
+// merges Team + Venture Readiness into Team & readiness, renames Contact
+// → Review the deal. Legacy Slide_Team / Slide_VentureReadiness /
+// Slide_AxalSignal / Slide_Contact functions retained (unused) to keep
+// any in-flight code references intact during rollout.
 const SLIDES: SlideEntry[] = [
   { id: 'cover',             title: 'Cover',             Component: Slide_Cover },
   { id: 'problem',           title: 'Problem',           Component: Slide_Problem },
   { id: 'validation',        title: 'Validation',        Component: Slide_Validation },
   { id: 'market',            title: 'Market',            Component: Slide_Market },
   { id: 'solution',          title: 'Solution',          Component: Slide_Solution },
+  { id: 'product_demo',      title: 'Product demo',      Component: Slide_ProductDemo },
   { id: 'roadmap',           title: 'Roadmap',           Component: Slide_Roadmap },
   { id: 'brand',             title: 'Brand',             Component: Slide_Brand },
-  { id: 'venture_readiness', title: 'Venture readiness', Component: Slide_VentureReadiness },
-  { id: 'team',              title: 'Team',              Component: Slide_Team },
+  { id: 'team_readiness',    title: 'Team & readiness',  Component: Slide_TeamReadiness },
   { id: 'mentor_network',    title: 'Mentors & network', Component: Slide_MentorNetwork },
   { id: 'cap_table',         title: 'Cap table',         Component: Slide_CapTable },
   { id: 'ask',               title: 'Ask',               Component: Slide_Ask },
-  { id: 'axal_signal',       title: 'Axal signal',       Component: Slide_AxalSignal },
-  { id: 'contact',           title: 'Contact',           Component: Slide_Contact },
+  { id: 'review_the_deal',   title: 'Review the deal',   Component: Slide_ReviewTheDeal },
 ];
+// Silence unused-warnings for retained legacy slide components.
+void Slide_Team; void Slide_VentureReadiness; void Slide_AxalSignal; void Slide_Contact;
 
 /* ─────────────────────────── root deck ─────────────────────────── */
 
-// Renders all 14 Slide16x9 frames stacked — matches sequoia_classic /
+// Renders all 13 Slide16x9 frames stacked — matches sequoia_classic /
 // investor_appendix_app, so the picker thumbnail, modal preview, share
 // view and PDF export all work with a single scroll surface.
 const DeckRoot: React.FC<DeckProps> = (props) => {

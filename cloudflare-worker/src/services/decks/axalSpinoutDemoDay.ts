@@ -37,6 +37,7 @@
  * through sanitizeSlides → buildTemplateData unchanged.
  */
 import type { Env } from '../../types';
+import { ensureDiscoveryValidationRatingColumns } from '../discoveryInterviewSchema';
 
 const DASH = '—';
 
@@ -131,12 +132,27 @@ export type SpinoutDemoDayData = {
     week: number; days_remaining: number; lab_active: boolean;
     is_sample: boolean;
   };
-  cover: { eyebrow: string; headline: string; sub: string; location: string };
-  problem: { eyebrow: string; headline: string; body: string; signals: string[] };
+  cover: {
+    eyebrow: string; headline: string; sub: string; location: string;
+    // Task #14 — last-30-days activity log for the Cover ActivityLog30Day
+    // primitive. Each entry is one day with a 0–N event count + label.
+    activity_log: Array<{ date: string; count: number; kind: string }>;
+  };
+  problem: {
+    eyebrow: string; headline: string; body: string; signals: string[];
+    // Task #14 — clustered pain themes for ThemeFrequencyBars.
+    pain_themes: Array<{ theme: string; mentions: number }>;
+  };
   validation: {
     eyebrow: string; headline: string; body: string;
     metrics: Array<{ label: string; value: string; sub?: string }>;
     quotes: Array<{ name: string; role: string; takeaway: string }>;
+    // Task #14 — 0–5 distribution of founder validation_rating values
+    // for RatingDistribution. Plus the canonical question and any
+    // revenue-proof badge (e.g. "First LOI signed").
+    question: string;
+    ratings: number[];
+    revenue_proof: { amount: string; label: string; signed: boolean } | null;
   };
   market: {
     eyebrow: string; headline: string;
@@ -176,6 +192,14 @@ export type SpinoutDemoDayData = {
     body: string;
     mentors: string[];
     network_signals: string[];
+    // Task #14 — typed profile cards for the new Mentors slide layout.
+    profiles: Array<{ name: string; role: string; bio: string; skills: string[] }>;
+    // Task #14 — aggregated skill coverage for SkillsSpider (label → 0..1).
+    skill_coverage: Array<{ label: string; value: number }>;
+    // Task #14 — counted breakdown of network categories (legal / design /
+    // recruiting / …) so the "operating partners on call" panel renders
+    // honest counts rather than fixed pills.
+    network: Array<{ category: string; count: number }>;
   };
   cap_table: {
     eyebrow: string; headline: string;
@@ -200,6 +224,21 @@ export type SpinoutDemoDayData = {
   contact: {
     eyebrow: string; headline: string; body: string;
     contact_email: string; signoff: string;
+    // Task #14 — "Review the deal" CTA payload (renamed from Contact).
+    // `deal_access` carries the deal-room URL / NDA gate / data-room
+    // status so the slide can render a single canonical CTA.
+    deal_access: {
+      deal_room_url: string;
+      nda_required: boolean;
+      data_room_ready: boolean;
+      cta_label: string;
+    };
+  };
+  // Task #14 — new Slide 6: Product Demo. Carries a single short loop
+  // URL + caption. Falls back to a static screenshot when missing.
+  product_demo: {
+    eyebrow: string; headline: string; body: string;
+    loop_url: string; screenshot_url: string; caption: string;
   };
 };
 
@@ -222,6 +261,10 @@ type InterviewRow = {
   interviewee_name: string | null; interviewee_role: string | null;
   notes: string | null; pains_json: string | null; hypotheses_json: string | null;
   featured: number | null;
+  // Task #14 — 0–5 founder rating and free-text validation comment.
+  validation_rating: number | null;
+  validation_comment: string | null;
+  interview_date: string | null;
 };
 type ScoreRow = {
   total_score: number | null; tier: string | null; is_sandbox: number | null;
@@ -318,6 +361,11 @@ export async function fillAxalSpinoutDemoDay(
   projectId: number,
 ): Promise<SpinoutDemoDayData> {
   await ensureSpinoutDeckSchema(env);
+  // Task #14 — migration 074 adds discovery_interviews.validation_rating /
+  // validation_comment. Until it's applied in prod, lazy-bootstrap the
+  // columns here so the SELECT below doesn't throw and silently null out
+  // every interview-derived deck section (quotes / pains / ratings).
+  await ensureDiscoveryValidationRatingColumns(env);
   const DB = env.DB;
 
   const [
@@ -350,9 +398,12 @@ export async function fillAxalSpinoutDemoDay(
     `).bind(projectId, userId).all<HolderRow>().catch(() => ({ results: [] as HolderRow[] })),
     DB.prepare(`
       SELECT interviewee_name, interviewee_role, notes, pains_json, hypotheses_json,
-             COALESCE(featured, 0) AS featured
+             COALESCE(featured, 0) AS featured,
+             COALESCE(validation_rating, NULL) AS validation_rating,
+             COALESCE(validation_comment, NULL) AS validation_comment,
+             interview_date
       FROM discovery_interviews WHERE project_id = ?
-      ORDER BY COALESCE(featured, 0) DESC, id DESC LIMIT 6
+      ORDER BY COALESCE(featured, 0) DESC, id DESC LIMIT 50
     `).bind(projectId).all<InterviewRow>().catch(() => ({ results: [] as InterviewRow[] })),
     DB.prepare(`SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?`)
       .bind(projectId).first<{ n: number }>().catch(() => ({ n: 0 })),
@@ -556,7 +607,125 @@ export async function fillAxalSpinoutDemoDay(
       kind: (row.kind || '').trim() || DASH,
     }));
 
-  // ------ assemble all 14 sections ------------------------------------
+  // ------ Task #14: activity log (last 30 days of Lab events) ---------
+  // Aggregates milestones + interviews + advisor answers by day so the
+  // Cover ActivityLog30Day primitive can render an honest pulse. Dates
+  // outside the 30-day window are dropped. Empty days render as zero-
+  // count slots (skeleton dots) on the slide.
+  const activityLog: SpinoutDemoDayData['cover']['activity_log'] = (() => {
+    const now = Date.now();
+    const buckets = new Map<string, number>();
+    const note = (raw: string | null | undefined, _kind: string) => {
+      if (!raw) return;
+      const ms = Date.parse(raw.length === 10 ? `${raw}T00:00:00Z` : raw);
+      if (!isFinite(ms)) return;
+      const ageDays = Math.floor((now - ms) / 86_400_000);
+      if (ageDays < 0 || ageDays > 30) return;
+      const day = new Date(ms).toISOString().slice(0, 10);
+      buckets.set(day, (buckets.get(day) || 0) + 1);
+    };
+    for (const m of milestoneList) note(m.completed_at, 'milestone');
+    for (const it of interviewsList) note(it.interview_date, 'interview');
+    // Build 30 calendar days backwards from today; zero-fill missing.
+    const out: SpinoutDemoDayData['cover']['activity_log'] = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now - i * 86_400_000).toISOString().slice(0, 10);
+      out.push({ date: d, count: buckets.get(d) || 0, kind: 'lab' });
+    }
+    return out;
+  })();
+
+  // ------ Task #14: pain themes (clustered pains for bars) ------------
+  const painThemeMap = new Map<string, number>();
+  const normTheme = (s: string): string =>
+    s.toLowerCase().trim().replace(/[\s.,!?;:"'`]+/g, ' ').slice(0, 60);
+  for (const it of interviewsList) {
+    try {
+      const arr = JSON.parse(it.pains_json || '[]');
+      if (Array.isArray(arr)) for (const x of arr) {
+        const k = normTheme(String(x || ''));
+        if (k) painThemeMap.set(k, (painThemeMap.get(k) || 0) + 1);
+      }
+    } catch {}
+  }
+  const painThemes = Array.from(painThemeMap.entries())
+    .map(([theme, mentions]) => ({ theme, mentions }))
+    .sort((a, b) => b.mentions - a.mentions)
+    .slice(0, 6);
+
+  // ------ Task #14: ratings distribution + revenue proof --------------
+  const ratings = interviewsList
+    .map((it) => (it.validation_rating == null ? null : Number(it.validation_rating)))
+    .filter((n): n is number => n != null && isFinite(n) && n >= 0 && n <= 5);
+
+  // Revenue-proof badge — derived from project.traction_summary +
+  // funding_needed fields. Honest: no proof unless the founder logs
+  // a concrete LOI / contract / revenue line.
+  const revenueProof = (() => {
+    const t = (p.traction_summary || '').toLowerCase();
+    if (!t) return null;
+    const m = t.match(/\$?\s*([\d,.]+)\s*(k|m|b)?(?:\s*(loi|mrr|arr|contract|signed|pilot))/i);
+    if (!m) return null;
+    return {
+      amount: `$${m[1]}${(m[2] || '').toUpperCase()}`,
+      label: (m[3] || 'logged').toUpperCase(),
+      signed: /signed|contract|loi/i.test(t),
+    };
+  })();
+
+  // ------ Task #14: mentor profiles + skill coverage + network --------
+  // Profiles synthesise from `mentorBody` lines that look like
+  // "Name · Role · skill_a, skill_b". Falls back to plain mentor names.
+  const profiles = (() => {
+    const lines = (mentorBody || '').split(/\n+/).map((s) => s.trim()).filter(Boolean);
+    return lines.slice(0, 6).map((line) => {
+      const parts = line.split('·').map((s) => s.trim());
+      const name = parts[0] || DASH;
+      const role = parts[1] || '';
+      const skills = (parts[2] || '').split(/,/).map((s) => s.trim()).filter(Boolean);
+      return { name, role, bio: '', skills };
+    });
+  })();
+  // Skill coverage: aggregate across profiles + networkSignals categories.
+  const skillBag = new Map<string, number>();
+  const SKILL_AXES = ['Legal', 'Design', 'Recruiting', 'Technical DD', 'Finance', 'GTM'];
+  for (const ax of SKILL_AXES) skillBag.set(ax, 0);
+  for (const p2 of profiles) for (const s of p2.skills) {
+    const key = SKILL_AXES.find((a) => a.toLowerCase() === s.toLowerCase()) || s;
+    skillBag.set(key, (skillBag.get(key) || 0) + 1);
+  }
+  for (const sig of networkSignals) {
+    const key = SKILL_AXES.find((a) => a.toLowerCase() === sig.toLowerCase()) || sig;
+    skillBag.set(key, (skillBag.get(key) || 0) + 1);
+  }
+  const maxSkill = Math.max(1, ...Array.from(skillBag.values()));
+  const skillCoverage = Array.from(skillBag.entries())
+    .slice(0, 8)
+    .map(([label, n]) => ({ label, value: maxSkill > 0 ? n / maxSkill : 0 }));
+  const networkBreakdown = SKILL_AXES.map((cat) => ({
+    category: cat,
+    count: skillBag.get(cat) || 0,
+  }));
+
+  // ------ Task #14: deal-room access payload for Review-the-deal ------
+  const dealAccess = {
+    deal_room_url: '',
+    nda_required: !doneMap.has('incorporation_completed'),
+    data_room_ready: doneMap.has('pitch_deck_v1') && doneMap.has('captable_seed'),
+    cta_label: 'Review the deal',
+  };
+
+  // ------ Task #14: product demo (slot 6) -----------------------------
+  const productDemo = {
+    eyebrow: '06 · Product demo',
+    headline: 'See it in motion.',
+    body: orDash(p.description || p.solution),
+    loop_url: '',
+    screenshot_url: '',
+    caption: 'A 30-second loop of the MVP — drop a video URL on the project to surface here.',
+  };
+
+  // ------ assemble all sections ---------------------------------------
   return {
     meta: {
       project_name: projectName, sector,
@@ -567,12 +736,13 @@ export async function fillAxalSpinoutDemoDay(
     },
 
     cover: {
-      eyebrow: 'Axal · 30-Day Spin-Out Lab · Demo Day',
+      eyebrow: 'Axal VC · 30-Day Spin-Out Lab · Demo Day',
       headline: orDash(p.tagline) !== DASH ? String(p.tagline) : `${projectName} — Demo Day`,
       sub: orDash(p.vision) !== DASH
         ? String(p.vision)
         : 'A pre-incorporation thesis, sharpened across 30 days of Discovery, OKRs, Scoring and Cap-Table prep.',
       location: `Presented ${presentedOn} · Axal Network`,
+      activity_log: activityLog,
     },
 
     problem: {
@@ -580,6 +750,7 @@ export async function fillAxalSpinoutDemoDay(
       headline: 'Why this is broken today.',
       body: orDash(p.problem_statement),
       signals: signalsFromText(p.growth_signals || ''),
+      pain_themes: painThemes,
     },
 
     validation: {
@@ -594,6 +765,9 @@ export async function fillAxalSpinoutDemoDay(
         { label: 'Hypotheses validated', value: validatedHypotheses > 0 ? String(validatedHypotheses) : DASH, sub: 'evidence-backed' },
       ],
       quotes: interviewQuotes,
+      question: 'How well does our solution address the problem? (0–5)',
+      ratings,
+      revenue_proof: revenueProof,
     },
 
     market: {
@@ -658,11 +832,14 @@ export async function fillAxalSpinoutDemoDay(
     },
 
     mentor_network: {
-      eyebrow: '09 · Mentors & network',
+      eyebrow: '10 · Mentors & network',
       headline: 'Who is around the table.',
       body: mentorBody,
       mentors: signalsFromText(mentorBody, 6),
       network_signals: networkSignals,
+      profiles,
+      skill_coverage: skillCoverage,
+      network: networkBreakdown,
     },
 
     cap_table: {
@@ -697,12 +874,15 @@ export async function fillAxalSpinoutDemoDay(
     },
 
     contact: {
-      eyebrow: '13 · Contact',
-      headline: 'Let\'s talk.',
+      eyebrow: '13 · Review the deal',
+      headline: 'Review the deal.',
       body: orDash(p.traction_summary),
       contact_email: contactEmail,
       signoff: founderName !== DASH ? `— ${founderName}` : '— The founding team',
+      deal_access: dealAccess,
     },
+
+    product_demo: productDemo,
   };
 }
 
@@ -741,10 +921,13 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
     return JSON.stringify(Array.isArray(obj) ? [] : {});
   };
 
-  // trimDeep/encJson retained for the (rare) oversize defense — every
-  // emitted field is hard-capped at MAX_BYTES so a runaway Lab payload
-  // can't poison the slide write.
-  void trimDeep; void encJson;
+  // trimDeep retained for the (rare) oversize defense — every emitted
+  // field is hard-capped at MAX_BYTES so a runaway Lab payload can't
+  // poison the slide write. encJson is now actively used by Task #14
+  // for the new structured payloads (activity_log, pain_themes,
+  // ratings, revenue_proof, mentor profiles + skills + network,
+  // deal_access).
+  void trimDeep;
   const capStr = (s: string): string =>
     s.length > MAX_BYTES ? s.slice(0, MAX_BYTES - 1) + '…' : s;
   const para = (key: string, value: string) => ({ kind: 'paragraph', key, value: capStr(String(value ?? '')) });
@@ -767,6 +950,12 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
   const ask = data.ask;
   const as = data.axal_signal;
   const ctc = data.contact;
+  const pd = data.product_demo;
+  // Task #14 — JSON-encoded blobs for new structured payloads. Same
+  // _json paragraph round-trip as quotes / founders / holders so the
+  // editor can stay hand-edit-friendly without forcing typed schemas.
+  const jsonField = (key: string, value: unknown) =>
+    para(key, encJson(value ?? null));
 
   // Pads variable-length arrays to a fixed slot count so every Axal
   // deck — sample or hydrated — surfaces the same set of editable
@@ -816,6 +1005,7 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('cover_headline', c.headline),
         para('cover_sub', c.sub),
         para('cover_location', c.location),
+        jsonField('cover_activity_log_json', c.activity_log),
         // Deck-wide envelope (project name, founder, week) flattened
         // onto slide 0 so the editor surfaces every value as a real
         // input — never a JSON blob.
@@ -837,6 +1027,7 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('problem_headline', p.headline),
         para('problem_body', p.body),
         bullets('problem_signals', p.signals),
+        jsonField('problem_pain_themes_json', p.pain_themes),
       ],
     },
     {
@@ -845,6 +1036,9 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('validation_eyebrow', v.eyebrow),
         para('validation_headline', v.headline),
         para('validation_body', v.body),
+        para('validation_question', v.question),
+        jsonField('validation_ratings_json', v.ratings),
+        jsonField('validation_revenue_proof_json', v.revenue_proof),
         metrics('validation_metrics', v.metrics),
         para('validation_quote1_name', q1.name),
         para('validation_quote1_role', q1.role),
@@ -878,6 +1072,18 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
       ],
     },
     {
+      // Task #14 — new slot 6: Product Demo.
+      spec_id: 'product_demo', title: 'Product demo',
+      fields: [
+        para('product_demo_eyebrow', pd.eyebrow),
+        para('product_demo_headline', pd.headline),
+        para('product_demo_body', pd.body),
+        para('product_demo_loop_url', pd.loop_url),
+        para('product_demo_screenshot_url', pd.screenshot_url),
+        para('product_demo_caption', pd.caption),
+      ],
+    },
+    {
       spec_id: 'roadmap', title: 'Roadmap',
       fields: [
         para('roadmap_eyebrow', r.eyebrow),
@@ -901,8 +1107,12 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
       ],
     },
     {
-      spec_id: 'venture_readiness', title: 'Venture readiness',
+      // Task #14 — Team + Venture Readiness merged into one slide.
+      spec_id: 'team_readiness', title: 'Team & readiness',
       fields: [
+        para('team_eyebrow', t.eyebrow),
+        para('team_headline', t.headline),
+        para('team_intro', t.team_intro),
         para('vr_eyebrow', vr.eyebrow),
         para('vr_headline', vr.headline),
         para('vr_total_score', vr.total_score),
@@ -910,14 +1120,6 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('vr_sandbox', vr.is_sandbox ? 'true' : 'false'),
         metrics('vr_breakdown', vr.breakdown.map((x) => ({ label: x.label, value: x.value }))),
         para('vr_ai_notes', vr.ai_notes),
-      ],
-    },
-    {
-      spec_id: 'team', title: 'Team',
-      fields: [
-        para('team_eyebrow', t.eyebrow),
-        para('team_headline', t.headline),
-        para('team_intro', t.team_intro),
         para('team_founder1_name', f1.name),
         para('team_founder1_role', f1.role),
         para('team_founder1_bio', f1.bio ?? ''),
@@ -940,6 +1142,9 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('mn_body', mn.body),
         bullets('mn_mentors', mn.mentors),
         bullets('mn_network_signals', mn.network_signals),
+        jsonField('mn_profiles_json', mn.profiles),
+        jsonField('mn_skill_coverage_json', mn.skill_coverage),
+        jsonField('mn_network_json', mn.network),
       ],
     },
     {
@@ -963,37 +1168,32 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
       ],
     },
     {
-      spec_id: 'axal_signal', title: 'Axal signal',
-      fields: [
-        para('as_eyebrow', as.eyebrow),
-        para('as_headline', as.headline),
-        para('as_body', as.body),
-        para('as_week1_title', w1.title),
-        para('as_week1_caption', w1.caption),
-        para('as_week1_status', w1.status),
-        bullets('as_week1_milestones', milestonesAsBullets(w1.milestones)),
-        para('as_week2_title', w2.title),
-        para('as_week2_caption', w2.caption),
-        para('as_week2_status', w2.status),
-        bullets('as_week2_milestones', milestonesAsBullets(w2.milestones)),
-        para('as_week3_title', w3.title),
-        para('as_week3_caption', w3.caption),
-        para('as_week3_status', w3.status),
-        bullets('as_week3_milestones', milestonesAsBullets(w3.milestones)),
-        para('as_week4_title', w4.title),
-        para('as_week4_caption', w4.caption),
-        para('as_week4_status', w4.status),
-        bullets('as_week4_milestones', milestonesAsBullets(w4.milestones)),
-      ],
-    },
-    {
-      spec_id: 'contact', title: 'Contact',
+      // Task #14 — renamed from Contact → Review the deal. Keeps the
+      // legacy `contact_*` field keys for backwards compat with decks
+      // saved before the rename; adds `contact_deal_access_json` for
+      // the new CTA payload.
+      spec_id: 'review_the_deal', title: 'Review the deal',
       fields: [
         para('contact_eyebrow', ctc.eyebrow),
         para('contact_headline', ctc.headline),
         para('contact_body', ctc.body),
         para('contact_email', ctc.contact_email),
         para('contact_signoff', ctc.signoff),
+        jsonField('contact_deal_access_json', ctc.deal_access),
+        // Lab week milestones still emitted as hidden payload — kept
+        // out of the slide registry but useful for share/PDF previews
+        // that may still reference the old axal_signal section.
+        para('as_eyebrow', as.eyebrow),
+        para('as_headline', as.headline),
+        para('as_body', as.body),
+        para('as_week1_title', w1.title),
+        bullets('as_week1_milestones', milestonesAsBullets(w1.milestones)),
+        para('as_week2_title', w2.title),
+        bullets('as_week2_milestones', milestonesAsBullets(w2.milestones)),
+        para('as_week3_title', w3.title),
+        bullets('as_week3_milestones', milestonesAsBullets(w3.milestones)),
+        para('as_week4_title', w4.title),
+        bullets('as_week4_milestones', milestonesAsBullets(w4.milestones)),
       ],
     },
   ];
@@ -1107,6 +1307,12 @@ export function buildAxalSpinoutCoverage(data: SpinoutDemoDayData): AxalSpinoutC
         : 'solution: —',
     },
     {
+      spec_id: 'product_demo', title: 'Product demo',
+      source: 'projects.description',
+      has: isReal && (notDash(data.product_demo.loop_url) || notDash(data.product_demo.body)),
+      count_label: notDash(data.product_demo.loop_url) ? 'demo: ✓' : 'demo: —',
+    },
+    {
       spec_id: 'roadmap', title: 'Roadmap',
       source: 'roadmap_okrs',
       has: isReal && okrTotal > 0,
@@ -1119,18 +1325,10 @@ export function buildAxalSpinoutCoverage(data: SpinoutDemoDayData): AxalSpinoutC
       count_label: `${brandFilled}/3 stand-up checks`,
     },
     {
-      spec_id: 'venture_readiness', title: 'Venture readiness',
-      source: 'score_snapshots',
-      has: isReal && notDash(data.venture_readiness.tier),
-      count_label: notDash(data.venture_readiness.tier)
-        ? `score: ${data.venture_readiness.total_score} (${data.venture_readiness.tier})`
-        : 'score: —',
-    },
-    {
-      spec_id: 'team', title: 'Team',
-      source: 'cap_table_holders + advisor_answers',
-      has: isReal && (data.team.founders?.length || 0) > 0,
-      count_label: `${data.team.founders?.length || 0} founders`,
+      spec_id: 'team_readiness', title: 'Team & readiness',
+      source: 'cap_table_holders + advisor_answers + score_snapshots',
+      has: isReal && ((data.team.founders?.length || 0) > 0 || notDash(data.venture_readiness.tier)),
+      count_label: `${data.team.founders?.length || 0} founders · score ${notDash(data.venture_readiness.total_score) ? data.venture_readiness.total_score : '—'}`,
     },
     {
       spec_id: 'mentor_network', title: 'Mentors & network',
@@ -1155,16 +1353,12 @@ export function buildAxalSpinoutCoverage(data: SpinoutDemoDayData): AxalSpinoutC
       ].join(' · '),
     },
     {
-      spec_id: 'axal_signal', title: 'Axal signal',
-      source: 'spinout_lab_milestones',
-      has: isReal && doneMilestones > 0,
-      count_label: `${doneMilestones}/${totalMilestones} Lab milestones`,
-    },
-    {
-      spec_id: 'contact', title: 'Contact',
-      source: 'projects.contact_email',
+      spec_id: 'review_the_deal', title: 'Review the deal',
+      source: 'projects.contact_email + deal_access',
       has: isReal && notDash(data.contact.contact_email),
-      count_label: notDash(data.contact.contact_email) ? 'email: ✓' : 'email: —',
+      count_label: notDash(data.contact.contact_email)
+        ? `email: ✓ · ${doneMilestones}/${totalMilestones} milestones`
+        : 'email: —',
     },
   ];
   return cells;
