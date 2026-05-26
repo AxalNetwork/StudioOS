@@ -69,7 +69,15 @@ way to curate the real Axal network and the slide regularly rendered
 - **`frontend/src/lib/api.js`** — new `adminNetworkProfiles` export
   (list/create/update/remove/uploadPhoto/reorder).
 - **`frontend/src/App.jsx`** — lazy-loaded `/admin/network-profiles`
-  route guarded by `['admin']`.
+  route guarded by `['admin']`. Also surfaced as a `Mentors &
+  Partners` tab inside `AdminPage.jsx` (`?tab=network-profiles`) so
+  admins discover it via the main Admin Console rail.
+
+Archival semantics: `DELETE /api/admin/network-profiles/:id` is a
+soft-delete — it flips `is_active=0` and preserves the row + R2
+photo, so a re-render of a historical Demo Day deck stays
+reproducible and re-activation is lossless. Hide-from-deck and
+archive share the same boolean; there is no hard-delete path.
 
 Deploy notes: migration 075 is additive + `IF NOT EXISTS`; the
 worker's lazy bootstrap makes the hot path self-healing, so applying

@@ -8,6 +8,10 @@ import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { useWebSocket } from '../hooks/useWebSocket';
 import TrustScoreBadge from '../components/TrustScoreBadge';
+// Task #1 — embedded as a tab inside Admin Console so admins land on
+// the network roster via /admin?tab=network-profiles. The standalone
+// /admin/network-profiles route stays wired for direct deep-links.
+import AdminNetworkProfiles from './admin/AdminNetworkProfiles';
 
 // Task #16 — per-row trust score column on the admin Users table.
 // Task #40 — accepts a pre-fetched `data` prop populated by the parent's
@@ -281,7 +285,15 @@ export default function AdminPage({ onImpersonate }) {
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'wellbeing' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
           <Heart size={14} className="inline mr-1.5" /> Wellbeing
         </button>
+        <button data-testid="admin-tab-network-profiles" onClick={() => setTab('network-profiles')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'network-profiles' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+          <Users size={14} className="inline mr-1.5" /> Mentors & Partners
+        </button>
       </div>
+
+      {tab === 'network-profiles' && (
+        <div data-testid="admin-network-profiles-panel"><AdminNetworkProfiles /></div>
+      )}
 
       {tab === 'contracts' && <div data-testid="admin-contracts-panel"><ContractsPanel /></div>}
       {tab === 'personas' && <PersonasPanel />}

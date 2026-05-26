@@ -771,9 +771,12 @@ export async function fillAxalSpinoutDemoDay(
         count,
       }))
     : (SKILL_CATALOG as readonly string[]).slice(0, 6).map((cat) => ({ category: cat, count: 0 }));
-  // networkSignals is still used downstream for the freeform "network
-  // signals" body text — keep referenced so it doesn't dead-code.
-  void networkSignals;
+  // Task #1 — mentorBody / networkSignals were the legacy
+  // advisor_answers-derived inputs to the slide. The slide now reads
+  // from the admin-managed roster, but we keep the variables resolved
+  // (no dead-code lint) in case a future audit wants to compare the
+  // old free-text vs the new curated source.
+  void mentorBody; void networkSignals;
 
   // ------ Task #14: deal-room access payload for Review-the-deal ------
   const dealAccess = {
@@ -902,9 +905,17 @@ export async function fillAxalSpinoutDemoDay(
     mentor_network: {
       eyebrow: '10 · Mentors & network',
       headline: 'Who is around the table.',
-      body: mentorBody,
-      mentors: signalsFromText(mentorBody, 6),
-      network_signals: networkSignals,
+      // Task #1 — body now narrates the curated roster instead of
+      // echoing free-text advisor answers.
+      body: networkRoster.length > 0
+        ? `${networkRoster.length} mentors, partners, advisors, and investors in the Axal network.`
+        : DASH,
+      // mentors + network_signals are no longer derived from
+      // advisor_answers via signalsFromText — that produced the
+      // "Lead, Lead" fragment regression. They come from the
+      // admin-managed roster directly.
+      mentors: networkRoster.map((p) => p.name).filter(Boolean).slice(0, 8),
+      network_signals: networkBreakdown.map((b) => `${b.category}: ${b.count}`),
       profiles,
       skill_coverage: skillCoverage,
       network: networkBreakdown,

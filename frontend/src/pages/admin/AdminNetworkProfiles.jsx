@@ -9,7 +9,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Users, Plus, RefreshCw, Loader2, Trash2, Edit3, GripVertical,
+  Users, Plus, RefreshCw, Loader2, Archive, Edit3, GripVertical,
   X, Eye, EyeOff, Image as ImageIcon, AlertCircle, ExternalLink,
 } from 'lucide-react';
 import { adminNetworkProfiles as api } from '../../lib/api';
@@ -285,12 +285,15 @@ export default function AdminNetworkProfiles() {
   }, [editing, toast, load]);
 
   const remove = useCallback(async (p) => {
-    if (!window.confirm(`Delete profile for "${p.name}"? This cannot be undone.`)) return;
+    if (!window.confirm(
+      `Archive profile for "${p.name}"?\n\nIt will be hidden from the Demo Day deck immediately. ` +
+      `The record (including photo) is preserved so you can re-activate it later from this list.`,
+    )) return;
     try {
       await api.remove(p.id);
-      toast('Profile deleted', 'success');
+      toast('Profile archived', 'success');
       await load();
-    } catch (e) { toast(e?.message || 'Delete failed', 'error'); }
+    } catch (e) { toast(e?.message || 'Archive failed', 'error'); }
   }, [toast, load]);
 
   const toggleActive = useCallback(async (p) => {
@@ -419,8 +422,8 @@ export default function AdminNetworkProfiles() {
                 <button onClick={() => setEditing(p)} className="p-2 text-zinc-500 hover:text-violet-600 rounded" title="Edit">
                   <Edit3 className="w-4 h-4" />
                 </button>
-                <button onClick={() => remove(p)} className="p-2 text-zinc-500 hover:text-red-600 rounded" title="Delete">
-                  <Trash2 className="w-4 h-4" />
+                <button onClick={() => remove(p)} className="p-2 text-zinc-500 hover:text-red-600 rounded" title="Archive (hide from deck, keep history)">
+                  <Archive className="w-4 h-4" />
                 </button>
               </div>
             </div>

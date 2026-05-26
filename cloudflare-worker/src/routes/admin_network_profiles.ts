@@ -238,7 +238,13 @@ r.put('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
-// ---------------- DELETE ----------------
+// ---------------- ARCHIVE (soft delete) ----------------
+//
+// Task #1 acceptance: profiles can be disabled / archived but history
+// is preserved (so a Demo Day deck rendered last quarter still shows
+// the same roster if regenerated against an old snapshot). DELETE
+// flips `is_active=0` instead of dropping the row, and the R2 photo
+// stays in place so re-activation is lossless.
 
 r.delete('/:id', async (c) => {
   const admin = await requireAdmin(c);
@@ -247,19 +253,16 @@ r.delete('/:id', async (c) => {
   if (!Number.isFinite(id)) return c.json({ error: 'invalid_id' }, 400);
 
   const row: any = await c.env.DB.prepare(
-    `SELECT photo_r2_key, name FROM network_profiles WHERE id = ?`,
+    `SELECT name, is_active FROM network_profiles WHERE id = ?`,
   ).bind(id).first();
   if (!row) return c.json({ error: 'not_found' }, 404);
 
-  await c.env.DB.prepare(`DELETE FROM network_profiles WHERE id = ?`).bind(id).run();
+  await c.env.DB.prepare(
+    `UPDATE network_profiles SET is_active = 0, updated_at = datetime('now') WHERE id = ?`,
+  ).bind(id).run();
 
-  if (row.photo_r2_key && c.env.FILES && row.photo_r2_key.startsWith('network/')) {
-    try { await c.env.FILES.delete(row.photo_r2_key); }
-    catch (e) { console.warn('[admin_network_profiles] r2 delete failed', e); }
-  }
-
-  await logAdmin(c.env, admin.id, admin.email, 'network_profile_deleted', { id, name: row.name });
-  return c.json({ ok: true });
+  await logAdmin(c.env, admin.id, admin.email, 'network_profile_archived', { id, name: row.name });
+  return c.json({ ok: true, archived: true });
 });
 
 // ---------------- PHOTO UPLOAD ----------------
