@@ -893,7 +893,9 @@ function FieldEditor({ field, onChange }) {
 }
 
 // =====================================================================
-// Method picker modal — 12-template grid with locked badges.
+// Method picker modal — full template grid (count sourced from the
+// registry via loadTemplates(), see EXPECTED_TEMPLATE_COUNT) with
+// locked badges for tier-gated entries.
 //
 // Iterates the static TEMPLATE_LIST from the deck registry (single source
 // of truth), not the `/api/decks/methods` payload. Merges per-method
