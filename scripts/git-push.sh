@@ -20,20 +20,27 @@
 #   bash scripts/git-push.sh                # auto-detect, push to main
 #   bash scripts/git-push.sh --force-with-lease   # safe force push
 #   bash scripts/git-push.sh --dry-run      # show what would happen
+#   bash scripts/git-push.sh --use-token    # force GITHUB_TOKEN path even
+#                                           # for non-workflow commits;
+#                                           # use this when the Replit
+#                                           # OAuth push hangs / times out
 #
 # Exit codes:
 #   0  pushed (or nothing to push)
 #   1  generic error
-#   2  workflow commits present but GITHUB_TOKEN is not set
+#   2  workflow commits present (or --use-token passed) but GITHUB_TOKEN
+#      is not set
 #
 set -euo pipefail
 
 DRY_RUN=0
 FORCE_WITH_LEASE=0
+FORCE_TOKEN=0
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=1 ;;
     --force-with-lease) FORCE_WITH_LEASE=1 ;;
+    --use-token) FORCE_TOKEN=1 ;;
     -h|--help)
       sed -n '2,/^set -euo/p' "$0" | sed 's/^# \{0,1\}//'
       exit 0 ;;
@@ -79,16 +86,24 @@ fi
 
 # Pick credential path.
 remote_for_push="origin"
-if [ "$needs_workflow_scope" = "1" ]; then
+if [ "$needs_workflow_scope" = "1" ] || [ "$FORCE_TOKEN" = "1" ]; then
   if [ -z "${GITHUB_TOKEN:-}" ]; then
     echo
-    echo "✗ pending commits touch .github/workflows/ but GITHUB_TOKEN is not set." >&2
-    echo "  Set it as a Replit Secret with 'repo' + 'workflow' scopes, then retry." >&2
-    echo "  (Replit's built-in OAuth lacks the 'workflow' scope and will be rejected.)" >&2
+    if [ "$FORCE_TOKEN" = "1" ]; then
+      echo "✗ --use-token requires GITHUB_TOKEN to be set as a Replit Secret." >&2
+    else
+      echo "✗ pending commits touch .github/workflows/ but GITHUB_TOKEN is not set." >&2
+      echo "  Set it as a Replit Secret with 'repo' + 'workflow' scopes, then retry." >&2
+      echo "  (Replit's built-in OAuth lacks the 'workflow' scope and will be rejected.)" >&2
+    fi
     exit 2
   fi
   remote_for_push="https://x-access-token:${GITHUB_TOKEN}@github.com/${owner}/${repo}"
-  echo "→ using GITHUB_TOKEN (workflow scope) for this push"
+  if [ "$needs_workflow_scope" = "1" ]; then
+    echo "→ using GITHUB_TOKEN (workflow scope) for this push"
+  else
+    echo "→ using GITHUB_TOKEN (--use-token override; bypassing Replit OAuth path)"
+  fi
 else
   echo "→ using default 'origin' remote (Replit OAuth path)"
 fi
