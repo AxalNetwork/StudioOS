@@ -958,6 +958,36 @@ function loadTemplates() {
           console.warn('[decks/templates] dynamic import resolved with no templates', { namespaceKeys, innerKeys, tlType, tlIsArr, tlLen, tplType, tplKeyCount });
           const err = new Error(`templates_module_empty (${diag})`);
           err.diag = diag;
+          // Self-heal: if the registry resolves to empty on a user's
+          // device, the *deployed* chunk is provably non-empty, so the
+          // browser must be holding stale JS (Safari iOS memory cache
+          // or a stale SW). Unregister all SWs, clear all caches, and
+          // hard-reload — guarded by a sessionStorage flag so we can't
+          // loop. The user sees the diagnostic for ~250ms before reload.
+          try {
+            if (typeof window !== 'undefined' && !sessionStorage.getItem('deck_registry_recover')) {
+              sessionStorage.setItem('deck_registry_recover', String(Date.now()));
+              setTimeout(async () => {
+                try {
+                  if ('serviceWorker' in navigator) {
+                    const regs = await navigator.serviceWorker.getRegistrations();
+                    await Promise.all(regs.map((r) => r.unregister().catch(() => null)));
+                  }
+                  if (typeof caches !== 'undefined') {
+                    const keys = await caches.keys();
+                    await Promise.all(keys.map((k) => caches.delete(k).catch(() => null)));
+                  }
+                } finally {
+                  // Force a fresh navigation — appends a one-shot
+                  // cache-buster so any intermediary proxy can't serve
+                  // a stale index.html either.
+                  const u = new URL(window.location.href);
+                  u.searchParams.set('_reload', String(Date.now()));
+                  window.location.replace(u.toString());
+                }
+              }, 250);
+            }
+          } catch { /* sessionStorage may be unavailable in privacy mode */ }
           return { list: [], record: {}, error: err };
         }
         return { list, record };
