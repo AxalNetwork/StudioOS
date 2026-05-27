@@ -28,6 +28,26 @@ export async function ensureProjectDataRoomColumns(env: Env): Promise<void> {
   _dataRoomReady.set(db, true);
 }
 
+// Task #2 — lazy bootstrap for the structured revenue-proof columns
+// surfaced on the Spin-Out Demo Day's Validation slide. Additive +
+// idempotent (duplicate-column errors swallowed). Same WeakMap pattern
+// as ensureProjectDataRoomColumns above so reload-during-dev re-runs
+// cleanly without spamming PRAGMA.
+const _revenueProofReady = new WeakMap<object, true>();
+export async function ensureProjectRevenueProofColumns(env: Env): Promise<void> {
+  const db = env.DB as unknown as object;
+  if (_revenueProofReady.has(db)) return;
+  for (const ddl of [
+    `ALTER TABLE projects ADD COLUMN mrr REAL`,
+    `ALTER TABLE projects ADD COLUMN paying_customers INTEGER`,
+    `ALTER TABLE projects ADD COLUMN first_payment_date TEXT`,
+    `ALTER TABLE projects ADD COLUMN paid_pilot_status TEXT`,
+  ]) {
+    try { await env.DB.exec(ddl); } catch (_e) { /* duplicate column on re-run is fine */ }
+  }
+  _revenueProofReady.set(db, true);
+}
+
 async function listProjectsHandler(c: any) {
   const user = await requireAuth(c);
   const status = c.req.query('status');
@@ -77,6 +97,7 @@ projects.get('/:id', async (c) => {
   // Task #2 — make sure the columns exist before SELECT * so older D1s
   // don't omit them from the projection.
   await ensureProjectDataRoomColumns(c.env);
+  await ensureProjectRevenueProofColumns(c.env);
   const sql = getSQL(c.env);
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
@@ -383,7 +404,38 @@ projects.put('/:id', async (c) => {
   // editor on Project detail AND by the Spin-Out deck's "Review the deal"
   // slide save-path so the project stays the single source of truth.
   await ensureProjectDataRoomColumns(c.env);
-  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'data_room_url', 'data_room_nda_required'];
+  await ensureProjectRevenueProofColumns(c.env);
+  // Task #2 — coerce structured revenue-proof fields: numbers must be
+  // finite (or null to clear); paid_pilot_status is a closed enum; the
+  // first_payment_date is stored as an ISO date string and trimmed.
+  if (data.revenue !== undefined && data.revenue !== null && data.revenue !== '') {
+    const n = Number(data.revenue);
+    data.revenue = isFinite(n) && n >= 0 ? n : null;
+  } else if (data.revenue === '' || data.revenue === null) {
+    data.revenue = null;
+  }
+  if (data.mrr !== undefined && data.mrr !== null && data.mrr !== '') {
+    const n = Number(data.mrr);
+    data.mrr = isFinite(n) && n >= 0 ? n : null;
+  } else if (data.mrr === '' || data.mrr === null) {
+    data.mrr = null;
+  }
+  if (data.paying_customers !== undefined && data.paying_customers !== null && data.paying_customers !== '') {
+    const n = Number(data.paying_customers);
+    data.paying_customers = isFinite(n) && n >= 0 ? Math.floor(n) : null;
+  } else if (data.paying_customers === '' || data.paying_customers === null) {
+    data.paying_customers = null;
+  }
+  if (data.first_payment_date !== undefined) {
+    const s = data.first_payment_date == null ? '' : String(data.first_payment_date).trim();
+    data.first_payment_date = s || null;
+  }
+  if (data.paid_pilot_status !== undefined) {
+    const s = (data.paid_pilot_status == null ? '' : String(data.paid_pilot_status).trim().toLowerCase());
+    const allowed = new Set(['paid', 'pilot_paid', 'pilot_signed', 'pre_revenue']);
+    data.paid_pilot_status = allowed.has(s) ? s : null;
+  }
+  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status'];
   // Normalise: coerce boolean → 0/1 for the NDA flag, trim URL, allow
   // explicit null to clear either field.
   if (data.data_room_nda_required !== undefined) {

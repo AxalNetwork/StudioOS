@@ -99,7 +99,21 @@ export type LabWeek = {
 // Task #14 — new structured payloads alongside the legacy text fields.
 export type ActivityLogDay = { date: string; count: number; kind: string };
 export type PainTheme = { theme: string; mentions: number };
-export type RevenueProof = { amount: string; label: string; signed: boolean } | null;
+// Task #2 — structured revenue proof rendered by RevenueProofCard on the
+// Validation slide. `status` is always set so the card always has a
+// graceful state (incl. pre-revenue). Numeric fields are null when the
+// founder hasn't logged them. Legacy {amount,label,signed} pill fields
+// are kept optional for back-compat with older deck-version JSON.
+export type RevenueProof = {
+  status: 'paid' | 'pilot_paid' | 'pilot_signed' | 'pre_revenue';
+  total_revenue: number | null;
+  mrr: number | null;
+  paying_customers: number | null;
+  first_payment_date: string | null;
+  amount?: string;
+  label?: string;
+  signed?: boolean;
+} | null;
 export type MentorProfile = {
   name: string;
   role: string;
@@ -213,7 +227,13 @@ export const SAMPLE_DATA: SpinoutDemoDayData = {
     ], quotes: [],
     question: 'How well does our solution address the problem? (0–5)',
     ratings: [],
-    revenue_proof: null,
+    revenue_proof: {
+      status: 'pre_revenue',
+      total_revenue: null,
+      mrr: null,
+      paying_customers: null,
+      first_payment_date: null,
+    },
   },
   market: {
     eyebrow: '03 · Market', headline: 'Sized for a real outcome.',
@@ -1654,13 +1674,8 @@ const Slide_Validation: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
           <div style={{ ...cardStyle(V, true), padding: 14 }}>
             <RatingDistribution ratings={v.ratings} question={v.question} />
           </div>
-          {v.revenue_proof && (
-            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-              <RevenueBadge proof={v.revenue_proof} />
-            </div>
-          )}
-          <div style={{ ...cardStyle(V), padding: 12, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 120 }}>
-            <VoicesBubbles />
+          <div style={{ flex: 1, display: 'flex' }}>
+            <RevenueProofCard proof={v.revenue_proof} />
           </div>
           <div style={{ ...cardStyle(V, true), padding: 16 }}>
             <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 10 }}>Week-1 scoreboard</div>
@@ -2344,6 +2359,174 @@ const RatingDistribution: React.FC<{ ratings: number[]; question?: string }> = (
     </div>
   );
 };
+
+/**
+ * RevenueProofCard — Task #2. Replaces the decorative VoicesBubbles +
+ * standalone RevenueBadge pill on the Validation slide with a single
+ * premium card backed by structured project data (total revenue, MRR,
+ * paying customers, first-payment date, paid-pilot status). Always
+ * renders — pre-revenue state is intentional and on-brand.
+ */
+const fmtUSD = (n: number | null | undefined): string => {
+  if (n == null || !isFinite(n) || n <= 0) return DASH;
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}K`;
+  return `$${Math.round(n).toLocaleString()}`;
+};
+const fmtFirstPayment = (iso: string | null | undefined): string => {
+  if (!iso) return DASH;
+  const ms = Date.parse(iso);
+  if (!isFinite(ms)) return DASH;
+  return new Date(ms).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+};
+const RevenueProofCard: React.FC<{ proof: RevenueProof }> = ({ proof }) => {
+  const V = useV();
+  const p = proof || {
+    status: 'pre_revenue' as const,
+    total_revenue: null, mrr: null, paying_customers: null, first_payment_date: null,
+  };
+  const status = p.status || 'pre_revenue';
+  const isPaid = status === 'paid';
+  const isPilotPaid = status === 'pilot_paid';
+  const isPilotSigned = status === 'pilot_signed';
+  const isPreRev = status === 'pre_revenue';
+
+  // Hero metric: MRR > total_revenue > paying_customers > status copy.
+  let heroValue: string;
+  let heroLabel: string;
+  if (p.mrr && p.mrr > 0) { heroValue = fmtUSD(p.mrr); heroLabel = 'MRR'; }
+  else if (p.total_revenue && p.total_revenue > 0) { heroValue = fmtUSD(p.total_revenue); heroLabel = 'Revenue to date'; }
+  else if (p.paying_customers && p.paying_customers > 0) { heroValue = String(p.paying_customers); heroLabel = p.paying_customers === 1 ? 'Paying customer' : 'Paying customers'; }
+  else if (isPilotSigned) { heroValue = 'Pilot'; heroLabel = 'Contract signed'; }
+  else { heroValue = 'Pre-revenue'; heroLabel = 'Path to first dollar'; }
+
+  const statusLabel = isPaid ? 'Paid · live revenue'
+    : isPilotPaid ? 'Pilot · paying'
+    : isPilotSigned ? 'Pilot · signed'
+    : 'Pre-revenue';
+
+  // Tone: gold accent for any "money in" state, otherwise violet-only.
+  const moneyIn = isPaid || isPilotPaid;
+  const ringTone = moneyIn ? V.gold : V.accent;
+
+  return (
+    <div style={{
+      ...cardStyle(V),
+      position: 'relative', overflow: 'hidden',
+      padding: 16, flex: 1, display: 'flex', flexDirection: 'column',
+      background: `linear-gradient(135deg, ${V.card} 0%, ${V.cardSoft} 100%)`,
+      borderColor: moneyIn ? V.gold : V.accent,
+      borderWidth: 1, borderStyle: 'solid',
+    }}>
+      {/* Decorative concentric arcs — premium revenue motif. */}
+      <svg
+        viewBox="0 0 200 200"
+        preserveAspectRatio="xMidYMid slice"
+        style={{ position: 'absolute', right: -40, top: -40, width: 180, height: 180, opacity: 0.18, pointerEvents: 'none' }}
+        aria-hidden
+      >
+        <defs>
+          <linearGradient id="rp-arc" x1="0" x2="1">
+            <stop offset="0" stopColor={V.accent} stopOpacity={0.1} />
+            <stop offset="1" stopColor={ringTone} stopOpacity={1} />
+          </linearGradient>
+        </defs>
+        {[90, 70, 50, 32].map((r, i) => (
+          <circle
+            key={i}
+            cx={100} cy={100} r={r}
+            fill="none"
+            stroke={i === 0 ? 'url(#rp-arc)' : ringTone}
+            strokeOpacity={i === 0 ? 1 : 0.35 - i * 0.07}
+            strokeWidth={i === 0 ? 1.8 : 1}
+            strokeDasharray={isPreRev ? '3 4' : (i === 0 ? undefined : '2 3')}
+          />
+        ))}
+        {moneyIn && (
+          <g>
+            <circle cx={138} cy={62} r={5} fill={V.gold} />
+            <circle cx={138} cy={62} r={9} fill="none" stroke={V.gold} strokeOpacity={0.5} strokeWidth={1} />
+          </g>
+        )}
+      </svg>
+
+      {/* Status pill */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, position: 'relative' }}>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '3px 10px', borderRadius: 999,
+          background: moneyIn ? V.gold : (isPilotSigned ? V.accent : V.accentSoft),
+          color: moneyIn || isPilotSigned ? '#fff' : V.accent,
+          fontFamily: V.mono, fontSize: 9, fontWeight: 700,
+          letterSpacing: '0.18em', textTransform: 'uppercase',
+          border: `1px solid ${moneyIn ? V.gold : V.accent}`,
+        }}>
+          <span aria-hidden style={{ fontSize: 10, lineHeight: 1 }}>
+            {moneyIn ? '✓' : isPilotSigned ? '◆' : '○'}
+          </span>
+          <span>{statusLabel}</span>
+        </span>
+      </div>
+
+      {/* Hero metric */}
+      <div style={{ position: 'relative' }}>
+        <div style={{
+          fontFamily: V.display, fontWeight: 700,
+          fontSize: heroValue.length > 6 ? 30 : 38, lineHeight: 1.05,
+          color: isPreRev ? V.textSoft : V.ink,
+          letterSpacing: '-0.01em',
+        }}>{heroValue}</div>
+        <div style={{
+          marginTop: 4, fontFamily: V.mono, fontSize: 10,
+          textTransform: 'uppercase', letterSpacing: '0.18em',
+          color: V.textMuted,
+        }}>{heroLabel}</div>
+      </div>
+
+      {/* Supporting stats — only render rows with content; pre-revenue
+          shows a single forward-looking line so the card isn't empty. */}
+      <div style={{
+        marginTop: 12, paddingTop: 10, borderTop: `1px solid ${V.line}`,
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
+        position: 'relative',
+      }}>
+        {(p.total_revenue && p.total_revenue > 0 && heroLabel !== 'Revenue to date') ? (
+          <Stat V={V} label="Total to date" value={fmtUSD(p.total_revenue)} />
+        ) : null}
+        {(p.paying_customers && p.paying_customers > 0 && heroLabel !== 'Paying customer' && heroLabel !== 'Paying customers') ? (
+          <Stat V={V} label="Paying" value={String(p.paying_customers)} />
+        ) : null}
+        {p.first_payment_date ? (
+          <Stat V={V} label="First $" value={fmtFirstPayment(p.first_payment_date)} />
+        ) : null}
+        {isPreRev && !p.first_payment_date && !(p.paying_customers && p.paying_customers > 0) && (
+          <div style={{
+            gridColumn: '1 / -1',
+            fontSize: 11, lineHeight: 1.45,
+            color: V.textSoft, fontFamily: V.sans,
+          }}>
+            Pricing model in discovery. Founder is converting interview
+            interest into pilots — log first paid signal to graduate.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const Stat: React.FC<{ V: V; label: string; value: string }> = ({ V, label, value }) => (
+  <div>
+    <div style={{
+      fontFamily: V.mono, fontSize: 9,
+      textTransform: 'uppercase', letterSpacing: '0.16em',
+      color: V.textMuted, marginBottom: 2,
+    }}>{label}</div>
+    <div style={{
+      fontFamily: V.display, fontWeight: 600, fontSize: 14,
+      color: V.ink,
+    }}>{value}</div>
+  </div>
+);
 
 /** RevenueBadge — single tone pill for a confirmed revenue/LOI signal. */
 const RevenueBadge: React.FC<{ proof: RevenueProof }> = ({ proof }) => {

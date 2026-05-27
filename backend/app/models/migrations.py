@@ -124,6 +124,26 @@ def ensure_growth_track_columns() -> None:
         session.commit()
 
 
+def ensure_project_revenue_proof_columns() -> None:
+    """Task #2 — add structured revenue-proof columns to `projects` for the
+    Spin-Out Demo Day Validation slide. Idempotent (uses
+    `ADD COLUMN IF NOT EXISTS`)."""
+    with Session(engine) as session:
+        for col, ddl in (
+            ("mrr", "DOUBLE PRECISION"),
+            ("paying_customers", "INTEGER"),
+            ("first_payment_date", "VARCHAR"),
+            ("paid_pilot_status", "VARCHAR"),
+        ):
+            try:
+                session.exec(text(
+                    f"ALTER TABLE projects ADD COLUMN IF NOT EXISTS {col} {ddl}"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_project_revenue_proof_columns: %s ALTER failed: %s", col, exc)
+        session.commit()
+
+
 def ensure_user_access_level_column() -> None:
     """Idempotently add `users.access_level` for the limited-access feature.
 

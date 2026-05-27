@@ -206,7 +206,22 @@ export type SpinoutDemoDayData = {
     // revenue-proof badge (e.g. "First LOI signed").
     question: string;
     ratings: number[];
-    revenue_proof: { amount: string; label: string; signed: boolean } | null;
+    // Task #2 — structured revenue proof. `status` always set so the
+    // RevenueProofCard on the Validation slide always has something to
+    // render (incl. graceful pre-revenue state). Numeric fields are
+    // null when the founder hasn't logged them yet. The legacy
+    // {amount,label,signed} pill fields are kept optional for back-compat
+    // with older deck versions that still read them.
+    revenue_proof: {
+      status: 'paid' | 'pilot_paid' | 'pilot_signed' | 'pre_revenue';
+      total_revenue: number | null;
+      mrr: number | null;
+      paying_customers: number | null;
+      first_payment_date: string | null;
+      amount?: string;
+      label?: string;
+      signed?: boolean;
+    };
   };
   market: {
     eyebrow: string; headline: string;
@@ -312,6 +327,14 @@ type ProjectRow = {
   // then to defaults.
   data_room_url: string | null;
   data_room_nda_required: number | null;
+  // Task #2 — structured revenue-proof inputs surfaced on the Validation
+  // slide's RevenueProofCard. Editable from the project edit modal.
+  // `revenue` (legacy total) is the source for `total_revenue`.
+  revenue: number | null;
+  mrr: number | null;
+  paying_customers: number | null;
+  first_payment_date: string | null;
+  paid_pilot_status: string | null;
 };
 type UserRow = {
   id: number; name: string | null; display_name: string | null; email: string | null;
@@ -723,18 +746,45 @@ export async function fillAxalSpinoutDemoDay(
     .map((it) => (it.validation_rating == null ? null : Number(it.validation_rating)))
     .filter((n): n is number => n != null && isFinite(n) && n >= 0 && n <= 5);
 
-  // Revenue-proof badge — derived from project.traction_summary +
-  // funding_needed fields. Honest: no proof unless the founder logs
-  // a concrete LOI / contract / revenue line.
+  // Task #2 — structured revenue proof. Founder edits the four fields
+  // (total_revenue, mrr, paying_customers, first_payment_date) +
+  // paid_pilot_status from the project edit modal; the deck renders
+  // a RevenueProofCard with graceful pre-revenue fallback. We also
+  // derive a legacy {amount,label,signed} pill so older deck versions
+  // and the inline `RevenueBadge` keep working.
   const revenueProof = (() => {
-    const t = (p.traction_summary || '').toLowerCase();
-    if (!t) return null;
-    const m = t.match(/\$?\s*([\d,.]+)\s*(k|m|b)?(?:\s*(loi|mrr|arr|contract|signed|pilot))/i);
-    if (!m) return null;
+    const totalRevenue = typeof p.revenue === 'number' && isFinite(p.revenue) && p.revenue > 0 ? p.revenue : null;
+    const mrr = typeof p.mrr === 'number' && isFinite(p.mrr) && p.mrr > 0 ? p.mrr : null;
+    const payingCustomers = typeof p.paying_customers === 'number' && isFinite(p.paying_customers) && p.paying_customers > 0
+      ? Math.floor(p.paying_customers)
+      : null;
+    const firstPaymentDate = (typeof p.first_payment_date === 'string' && p.first_payment_date.trim()) || null;
+    const rawStatus = (p.paid_pilot_status || '').trim().toLowerCase();
+    const allowed = new Set(['paid', 'pilot_paid', 'pilot_signed', 'pre_revenue']);
+    let status: 'paid' | 'pilot_paid' | 'pilot_signed' | 'pre_revenue';
+    if (allowed.has(rawStatus)) {
+      status = rawStatus as 'paid' | 'pilot_paid' | 'pilot_signed' | 'pre_revenue';
+    } else if (totalRevenue || mrr) {
+      status = 'paid';
+    } else if (payingCustomers && payingCustomers > 0) {
+      status = 'pilot_paid';
+    } else {
+      status = 'pre_revenue';
+    }
+    // Legacy pill back-compat: only emit when we have a concrete number.
+    let amount: string | undefined;
+    let label: string | undefined;
+    let signed: boolean | undefined;
+    if (mrr) { amount = `${fmtMoney(mrr)}`; label = 'MRR'; signed = status === 'paid'; }
+    else if (totalRevenue) { amount = `${fmtMoney(totalRevenue)}`; label = 'REVENUE'; signed = status === 'paid'; }
+    else if (status === 'pilot_signed') { amount = '—'; label = 'PILOT SIGNED'; signed = true; }
     return {
-      amount: `$${m[1]}${(m[2] || '').toUpperCase()}`,
-      label: (m[3] || 'logged').toUpperCase(),
-      signed: /signed|contract|loi/i.test(t),
+      status,
+      total_revenue: totalRevenue,
+      mrr,
+      paying_customers: payingCustomers,
+      first_payment_date: firstPaymentDate,
+      ...(amount ? { amount, label, signed } : {}),
     };
   })();
 

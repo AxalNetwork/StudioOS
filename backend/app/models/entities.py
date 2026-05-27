@@ -218,6 +218,15 @@ class Project(SQLModel, table=True):
     sam: Optional[float] = None
     users_count: Optional[int] = None
     revenue: Optional[float] = None
+    # Task #2 — structured revenue proof surfaced on the Spin-Out Demo Day
+    # Validation slide. `revenue` (above) is the lifetime/total figure; the
+    # four columns below capture the rest of the proof set. `paid_pilot_status`
+    # is one of: paid | pilot_paid | pilot_signed | pre_revenue (validated
+    # server-side; stored as free text for forward-compat).
+    mrr: Optional[float] = None
+    paying_customers: Optional[int] = None
+    first_payment_date: Optional[str] = None
+    paid_pilot_status: Optional[str] = None
     growth_signals: Optional[str] = None
     cost_to_mvp: Optional[float] = None
     funding_needed: Optional[float] = None

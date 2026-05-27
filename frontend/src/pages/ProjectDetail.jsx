@@ -702,6 +702,31 @@ function InfoCard({ label, value }) {
 
 const PITCH_FIELD_TYPE = { problem_statement: 'problem', solution: 'solution' };
 
+// Task #2 — numeric input that allows blank (clears the field) and
+// strips non-numeric chars on entry. `integer` enforces whole numbers.
+function RevenueInput({ label, value, onChange, placeholder, integer }) {
+  const handle = (e) => {
+    const raw = e.target.value;
+    const cleaned = integer
+      ? raw.replace(/[^\d]/g, '')
+      : raw.replace(/[^\d.]/g, '').replace(/(\..*?)\..*/g, '$1');
+    onChange(cleaned);
+  };
+  return (
+    <div>
+      <label className="block text-xs text-gray-600 mb-1 dark:text-gray-400">{label}</label>
+      <input
+        type="text"
+        inputMode={integer ? 'numeric' : 'decimal'}
+        value={value}
+        onChange={handle}
+        placeholder={placeholder}
+        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+      />
+    </div>
+  );
+}
+
 function PitchCopyMeter({ status }) {
   if (!status) return null;
   const toneColors = {
@@ -735,6 +760,17 @@ const EDITABLE_FIELDS = [
   { key: 'solution', label: 'Solution', textarea: true },
 ];
 
+// Task #2 — paid-pilot status enum surfaced on the Spin-Out Demo Day
+// Validation slide. Mirrors the closed enum the worker validates
+// against in routes/projects.ts (PUT handler).
+const PAID_PILOT_STATUS_OPTIONS = [
+  { value: '', label: 'Auto-detect from numbers' },
+  { value: 'pre_revenue', label: 'Pre-revenue' },
+  { value: 'pilot_signed', label: 'Pilot signed' },
+  { value: 'pilot_paid', label: 'Pilot — paying' },
+  { value: 'paid', label: 'Paid — live revenue' },
+];
+
 function EditProjectModal({ project, onClose, onSaved, onError }) {
   const [form, setForm] = useState(() => ({
     name: project.name || '',
@@ -742,6 +778,16 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
     sector: project.sector || '',
     problem_statement: project.problem_statement || '',
     solution: project.solution || '',
+  }));
+  // Task #2 — structured revenue proof. Kept in its own state slot so
+  // founders can clear a numeric field back to "" without typing 0 (we
+  // map "" → null on submit).
+  const [revenue, setRevenue] = useState(() => ({
+    revenue: project.revenue != null ? String(project.revenue) : '',
+    mrr: project.mrr != null ? String(project.mrr) : '',
+    paying_customers: project.paying_customers != null ? String(project.paying_customers) : '',
+    first_payment_date: project.first_payment_date || '',
+    paid_pilot_status: project.paid_pilot_status || '',
   }));
   const [saving, setSaving] = useState(false);
 
@@ -755,9 +801,31 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
       onError('Project name is required');
       return;
     }
+    // Coerce blank string → null so the PUT clears the column rather
+    // than writing "" (which the worker would later coerce to null
+    // anyway, but doing it here keeps the wire payload honest).
+    const num = (s) => {
+      const t = (s || '').trim();
+      if (!t) return null;
+      const n = Number(t);
+      return isFinite(n) && n >= 0 ? n : null;
+    };
+    const revenuePayload = {
+      revenue: num(revenue.revenue),
+      mrr: num(revenue.mrr),
+      paying_customers: revenue.paying_customers.trim()
+        ? Math.max(0, Math.floor(Number(revenue.paying_customers)))
+        : null,
+      first_payment_date: revenue.first_payment_date.trim() || null,
+      paid_pilot_status: revenue.paid_pilot_status || null,
+    };
     setSaving(true);
     try {
-      const updated = await api.updateProject(project.id, { ...form, name: form.name.trim() });
+      const updated = await api.updateProject(project.id, {
+        ...form,
+        name: form.name.trim(),
+        ...revenuePayload,
+      });
       onSaved(updated);
     } catch (e) {
       onError(e?.message || 'Failed to update project');
@@ -809,6 +877,60 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
               )}
             </div>
           ))}
+
+          {/* Task #2 — Revenue proof section. Powers the RevenueProofCard
+              on the Spin-Out Demo Day Validation slide. All fields optional;
+              leave blank for graceful pre-revenue state. */}
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+            <div className="mb-3">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Revenue</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Drives the Validation slide of your Demo Day deck. Leave blank for pre-revenue.
+              </p>
+            </div>
+            <div className="grid md:grid-cols-2 gap-3">
+              <RevenueInput
+                label="Total revenue to date (USD)"
+                placeholder="e.g. 12500"
+                value={revenue.revenue}
+                onChange={(v) => setRevenue((s) => ({ ...s, revenue: v }))}
+              />
+              <RevenueInput
+                label="MRR (USD/month)"
+                placeholder="e.g. 2400"
+                value={revenue.mrr}
+                onChange={(v) => setRevenue((s) => ({ ...s, mrr: v }))}
+              />
+              <RevenueInput
+                label="Paying customers"
+                placeholder="e.g. 3"
+                value={revenue.paying_customers}
+                onChange={(v) => setRevenue((s) => ({ ...s, paying_customers: v }))}
+                integer
+              />
+              <div>
+                <label className="block text-xs text-gray-600 mb-1 dark:text-gray-400">First payment date</label>
+                <input
+                  type="date"
+                  value={revenue.first_payment_date}
+                  onChange={(e) => setRevenue((s) => ({ ...s, first_payment_date: e.target.value }))}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs text-gray-600 mb-1 dark:text-gray-400">Paid-pilot status</label>
+                <select
+                  value={revenue.paid_pilot_status}
+                  onChange={(e) => setRevenue((s) => ({ ...s, paid_pilot_status: e.target.value }))}
+                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+                >
+                  {PAID_PILOT_STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
         </div>
         <div className="flex gap-3 px-5 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl dark:border-gray-800">
           <button
