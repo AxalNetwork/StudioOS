@@ -93,3 +93,62 @@ export function trimPitchCopyToMax(text, fieldType) {
   if (words.length <= cfg.max) return text;
   return words.slice(0, cfg.max).join(' ') + '…';
 }
+
+// Editorial pitch-deck headline derivation.
+// Slides should render a short dominant phrase + smaller supporting body
+// copy instead of the entire paragraph at heading size. We treat the first
+// sentence as the headline, capped at HEADLINE_MAX_WORDS. When the first
+// sentence is longer than that we still split it cleanly so the slide
+// never grows unbounded, and surface `headlineTooLong: true` so the slide
+// can show a "shorten your headline" nudge.
+export const HEADLINE_MAX_WORDS = 12;
+
+// Common English abbreviations whose trailing period should NOT end the
+// first sentence. Lower-cased for case-insensitive match.
+const HEADLINE_ABBREVIATIONS = new Set([
+  'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'st',
+  'inc', 'ltd', 'co', 'corp', 'llc', 'vs', 'etc',
+  'e.g', 'i.e', 'u.s', 'u.k', 'a.i', 'no',
+]);
+
+export function extractPitchHeadline(text) {
+  if (!text || typeof text !== 'string') {
+    return { headline: '', remainder: '', headlineTooLong: false };
+  }
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return { headline: '', remainder: '', headlineTooLong: false };
+  }
+  // Find the first terminal punctuation followed by whitespace, but skip
+  // matches that look like a known abbreviation (so "Dr. Smith said..."
+  // doesn't get truncated to "Dr.").
+  const sentenceRe = /([.!?])\s+(?=\S)/g;
+  let firstSentence = trimmed;
+  let remainder = '';
+  let m;
+  while ((m = sentenceRe.exec(trimmed)) !== null) {
+    const endIdx = m.index + 1; // include the punctuation
+    const candidate = trimmed.slice(0, endIdx);
+    // Look at the token ending at the punctuation — strip the trailing
+    // period for the lookup.
+    const lastTokenMatch = candidate.match(/(\S+)[.!?]$/);
+    const lastToken = lastTokenMatch ? lastTokenMatch[1].toLowerCase() : '';
+    if (m[1] === '.' && HEADLINE_ABBREVIATIONS.has(lastToken)) {
+      continue;
+    }
+    firstSentence = candidate.trim();
+    remainder = trimmed.slice(endIdx).trim();
+    break;
+  }
+  const words = firstSentence.split(/\s+/).filter(Boolean);
+  const headlineTooLong = words.length > HEADLINE_MAX_WORDS;
+  let headline = firstSentence;
+  if (headlineTooLong) {
+    const head = words.slice(0, HEADLINE_MAX_WORDS).join(' ');
+    const tail = words.slice(HEADLINE_MAX_WORDS).join(' ');
+    headline = head + '…';
+    // Push the overflow back into body copy so no text is lost.
+    remainder = (tail + (remainder ? ' ' + remainder : '')).trim();
+  }
+  return { headline, remainder, headlineTooLong };
+}

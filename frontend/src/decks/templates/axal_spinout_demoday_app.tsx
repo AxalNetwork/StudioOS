@@ -37,7 +37,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { DeckProps } from '../DeckBase';
 import { Slide16x9 } from '../DeckBase';
-import { trimPitchCopyToMax, getPitchCopyLengthStatus } from '../../lib/pitchCopyLength';
+import { trimPitchCopyToMax, getPitchCopyLengthStatus, extractPitchHeadline, HEADLINE_MAX_WORDS } from '../../lib/pitchCopyLength';
 
 /* ─────────────────────────── variant tokens ─────────────────────────── */
 
@@ -679,15 +679,16 @@ const Eyebrow: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   );
 };
 
-const SlideHeading: React.FC<{ children: React.ReactNode; size?: 'xl' | '2xl' | '3xl' }>
+const SlideHeading: React.FC<{ children: React.ReactNode; size?: 'xl' | '2xl' | '3xl' | 'hero' }>
 = ({ children, size = '2xl' }) => {
   const { pal, fonts, variant } = useVariant();
-  const sizes = { xl: 36, '2xl': 48, '3xl': 64 };
+  const sizes = { xl: 36, '2xl': 48, '3xl': 64, hero: 56 };
   return (
     <h2 style={{
       color: pal.ink, fontFamily: fonts.display,
       fontSize: variant === 'manifesto' ? sizes[size] * 1.25 : sizes[size],
-      lineHeight: 1.05, letterSpacing: variant === 'editorial' ? '-0.01em' : '-0.02em',
+      lineHeight: size === 'hero' ? 1.1 : 1.05,
+      letterSpacing: variant === 'editorial' ? '-0.01em' : '-0.02em',
       fontWeight: variant === 'editorial' ? 500 : 700,
       margin: 0,
     }}>{children}</h2>
@@ -1518,14 +1519,23 @@ const Slide_Problem: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
     ? { status: 'empty' as const }
     : getPitchCopyLengthStatus(p.body, 'problem');
   const showPlaceholder = lenStatus.status === 'empty' || lenStatus.status === 'too_short';
+  const trimmedBody = showPlaceholder ? '' : trimPitchCopyToMax(p.body, 'problem');
+  const { headline, remainder, headlineTooLong } = extractPitchHeadline(trimmedBody);
   return (
     <SlideShell>
       <div style={{ display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 32, flex: 1, minHeight: 0 }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <Eyebrow>{p.eyebrow}</Eyebrow>
           {showPlaceholder
-            ? <h2 style={{ color: V.textMuted, fontStyle: 'italic', fontFamily: V.display, fontSize: 44, lineHeight: 1.1, margin: 0 }}>The pain we built the Lab to investigate.</h2>
-            : <SlideHeading size="xl">{trimPitchCopyToMax(p.body, 'problem')}</SlideHeading>}
+            ? <h2 style={{ color: V.textMuted, fontStyle: 'italic', fontFamily: V.display, fontSize: 56, lineHeight: 1.1, fontWeight: 500, margin: 0 }}>The pain we built the Lab to investigate.</h2>
+            : <SlideHeading size="hero">{headline}</SlideHeading>}
+          {!showPlaceholder && remainder && (
+            <p style={{
+              marginTop: 16, marginBottom: 0,
+              color: V.textSoft, fontFamily: V.vibe === 'serif' ? V.display : V.sans,
+              fontSize: 16, lineHeight: 1.55, maxWidth: 640, fontWeight: 400,
+            }}>{remainder}</p>
+          )}
           {showPlaceholder && (
             <div style={{ marginTop: 16 }}>
               <Nudge>{lenStatus.status === 'empty'
@@ -1533,7 +1543,12 @@ const Slide_Problem: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
                 : 'Problem statement is too short for a pitch slide — aim for 35–60 words on the project.'}</Nudge>
             </div>
           )}
-          {lenStatus.status === 'too_long' && (
+          {!showPlaceholder && headlineTooLong && (
+            <div style={{ marginTop: 10 }}>
+              <Nudge>Shorten your opening sentence to ≤{HEADLINE_MAX_WORDS} words — the first sentence is the slide headline.</Nudge>
+            </div>
+          )}
+          {!showPlaceholder && lenStatus.status === 'too_long' && (
             <div style={{ marginTop: 10, fontSize: 11, color: V.textMuted, fontFamily: V.mono }}>
               Trimmed to 75 words for the slide — edit the Problem Statement in Projects to refine.
             </div>
@@ -1724,14 +1739,23 @@ const Slide_Solution: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
     ? { status: 'empty' as const }
     : getPitchCopyLengthStatus(s.body, 'solution');
   const showPlaceholder = lenStatus.status === 'empty' || lenStatus.status === 'too_short';
+  const trimmedBody = showPlaceholder ? '' : trimPitchCopyToMax(s.body, 'solution');
+  const { headline, remainder, headlineTooLong } = extractPitchHeadline(trimmedBody);
   return (
     <SlideShell>
       <div style={{ display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 32, flex: 1, minHeight: 0 }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <Eyebrow>{s.eyebrow}</Eyebrow>
           {showPlaceholder
-            ? <h2 style={{ color: V.textMuted, fontStyle: 'italic', fontFamily: V.display, fontSize: 44, lineHeight: 1.1, margin: 0 }}>A first cut of what we will ship.</h2>
-            : <SlideHeading size="xl">{trimPitchCopyToMax(s.body, 'solution')}</SlideHeading>}
+            ? <h2 style={{ color: V.textMuted, fontStyle: 'italic', fontFamily: V.display, fontSize: 56, lineHeight: 1.1, fontWeight: 500, margin: 0 }}>A first cut of what we will ship.</h2>
+            : <SlideHeading size="hero">{headline}</SlideHeading>}
+          {!showPlaceholder && remainder && (
+            <p style={{
+              marginTop: 14, marginBottom: 0,
+              color: V.textSoft, fontFamily: V.vibe === 'serif' ? V.display : V.sans,
+              fontSize: 16, lineHeight: 1.55, maxWidth: 640, fontWeight: 400,
+            }}>{remainder}</p>
+          )}
           {showPlaceholder && (
             <div style={{ marginTop: 14 }}>
               <Nudge>{lenStatus.status === 'empty'
@@ -1739,7 +1763,12 @@ const Slide_Solution: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
                 : 'Solution copy is too short for a pitch slide — aim for 35–50 words on the project.'}</Nudge>
             </div>
           )}
-          {lenStatus.status === 'too_long' && (
+          {!showPlaceholder && headlineTooLong && (
+            <div style={{ marginTop: 10 }}>
+              <Nudge>Shorten your opening sentence to ≤{HEADLINE_MAX_WORDS} words — the first sentence is the slide headline.</Nudge>
+            </div>
+          )}
+          {!showPlaceholder && lenStatus.status === 'too_long' && (
             <div style={{ marginTop: 10, fontSize: 11, color: V.textMuted, fontFamily: V.mono }}>
               Trimmed to 70 words for the slide — edit Solution in Projects to refine.
             </div>
