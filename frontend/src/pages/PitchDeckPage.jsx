@@ -897,7 +897,29 @@ let _templatesPromise = null;
 function loadTemplates() {
   if (!_templatesPromise) {
     _templatesPromise = import('../decks/templates')
-      .then((m) => ({ list: m.TEMPLATE_LIST || [], record: m.TEMPLATES || {} }))
+      .then((m) => {
+        // Some bundler/interop combos wrap the namespace object so the
+        // named exports show up on `m.default` instead of `m`. Accept
+        // either shape rather than silently rendering "0 templates".
+        const ns = m && typeof m === 'object' ? (m.TEMPLATE_LIST || m.TEMPLATES ? m : (m.default || m)) : m;
+        const list = Array.isArray(ns?.TEMPLATE_LIST)
+          ? ns.TEMPLATE_LIST
+          : (ns?.TEMPLATES ? Object.values(ns.TEMPLATES) : []);
+        const record = ns?.TEMPLATES || (list.length
+          ? Object.fromEntries(list.map((t) => [t.key, t]))
+          : {});
+        if (!list.length) {
+          // Bubble up a real diagnostic so the empty state can show
+          // *why* instead of just "registry returned 0 entries".
+           
+          console.warn('[decks/templates] dynamic import resolved with no templates', {
+            namespaceKeys: m ? Object.keys(m) : [],
+            innerKeys: ns && ns !== m ? Object.keys(ns) : [],
+          });
+          return { list: [], record: {}, error: new Error('templates_module_empty') };
+        }
+        return { list, record };
+      })
       .catch((err) => {
         // Reset so a transient failure (e.g. network blip) can retry next open.
         _templatesPromise = null;
@@ -906,6 +928,11 @@ function loadTemplates() {
       });
   }
   return _templatesPromise;
+}
+
+function retryLoadTemplates() {
+  _templatesPromise = null;
+  return loadTemplates();
 }
 
 let _thumbnailModulePromise = null;
@@ -1165,9 +1192,17 @@ function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, bu
           <div className="p-10 text-center text-sm">
             <div className="font-medium text-red-600 mb-1">No templates registered</div>
             <div className="text-gray-500 dark:text-slate-400 text-xs">
-              Check <code>frontend/src/decks/templates/index.ts</code> — the registry returned 0 entries.
-              {registryError ? ' (load error — see console)' : ''}
+              {registryError
+                ? `Couldn't load the deck template registry: ${registryError?.message || 'unknown error'}. Open DevTools console for the full stack.`
+                : 'Check frontend/src/decks/templates/index.ts — the registry returned 0 entries.'}
             </div>
+            <button
+              onClick={() => {
+                setTemplates(null);
+                retryLoadTemplates().then((t) => setTemplates(t));
+              }}
+              className="mt-3 px-3 py-1.5 text-xs rounded bg-violet-600 text-white hover:bg-violet-700"
+            >Retry</button>
           </div>
         )}
 
