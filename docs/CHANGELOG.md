@@ -11,6 +11,64 @@
 > building it.
 
 
+## Fix — Pitch Deck template registry: explicit list, real header count, defensive loader, SW cache bump
+
+User report: "Pick a deck template" picker in the Pitch Deck Builder
+rendered "0 methods" and "No templates registered" in prod even though
+`frontend/src/decks/templates/index.ts` defines 13 templates. The
+hardcoded "12 templates" header copy disagreed with whatever the
+picker produced, which made it look like a stale-copy bug — it wasn't.
+
+Investigation: pulled the deployed `templates-BsP8zbeB.js` chunk from
+`app.axal.vc` and confirmed it is byte-identical to a fresh local
+build (98,939 bytes, 13 entries, correct `TEMPLATES` / `TEMPLATE_KEYS`
+/ `TEMPLATE_LIST` named exports via `Object.values(Q)`). Root cause
+in the wild was the service worker's cache-first rule for
+`/assets/*.js` (`frontend/public/sw.js` `RUNTIME_STATIC`) holding
+a stale chunk from an earlier deploy whose registry actually was
+broken — the bundle on disk has been correct for several deploys, but
+the SW cache pinned an older one for affected users.
+
+Changes:
+
+- **`frontend/src/decks/templates/index.ts`** — `TEMPLATE_LIST` is now
+  an explicit `readonly TemplateMeta[]` literal listing each
+  `TEMPLATES.<key>`, instead of `Object.values(TEMPLATES)`. TypeScript
+  now fails the build if any key is missing or any `Deck_*` import
+  resolves to undefined, instead of silently shipping a short list at
+  runtime. New `EXPECTED_TEMPLATE_COUNT = 13` exported alongside; the
+  inline integrity check now `console.error`s in **both** dev and
+  prod when length or `Component` binding drifts, so the picker's
+  empty-state diagnostic has something to surface.
+- **`frontend/src/pages/PitchDeckPage.jsx`** — header copy no longer
+  hardcodes "12 templates"; new `templateCount` state hydrates via the
+  same lazy `loadTemplates()` call the picker uses, falling back to
+  "Templates auto-fill from your project, financials, and cap table."
+  while pending or on error. Loader hardening from the previous turn
+  (default-export interop fallback, `templates_module_empty` diagnostic
+  with `namespaceKeys`/`innerKeys`, Retry button in the empty state)
+  ships alongside.
+- **`frontend/public/sw.js`** — bumped `VERSION` from `v4-2026-05-25`
+  to `v5-2026-05-27` so the next service-worker activate cycle drops
+  any stale `studioos-static-v4-*` caches that may still hold an
+  earlier templates chunk. Vite-fingerprinted asset URLs already
+  bypass on hash mismatch, but the bump catches edge cases where an
+  old SW survives a deploy.
+- **`scripts/check-deck-templates.mjs`** — already wired into
+  `npm run test:drift` from earlier work. Re-verified clean against
+  the new explicit list (`✓ 13 templates wired correctly`).
+
+Deploy: local `npm run build` passes; `npm run deploy` from this
+environment fails with Cloudflare auth (`code: 9109 Invalid access
+token`) — the deploy credentials are owned by the user. Run
+`npm run deploy` from a shell with `CLOUDFLARE_API_TOKEN` set
+(scoped to `Workers Scripts: Edit` on the `studioos` worker) to ship
+the new bundle. Once deployed, affected browsers pick up the SW
+version bump on next navigation, drop the stale cache on activate,
+and fetch the new hashed chunks. Anyone still stuck can hard-reload.
+
+---
+
 ## Feature — Task #2 · Project data-room URL is the single source of truth for the Demo Day "Review the deal" CTA
 
 The Spin-Out Demo Day deck's Review-the-deal slide previously stored

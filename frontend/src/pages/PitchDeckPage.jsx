@@ -921,21 +921,44 @@ function loadTemplates() {
         // named exports show up on `m.default` instead of `m`. Accept
         // either shape rather than silently rendering "0 templates".
         const ns = m && typeof m === 'object' ? (m.TEMPLATE_LIST || m.TEMPLATES ? m : (m.default || m)) : m;
-        const list = Array.isArray(ns?.TEMPLATE_LIST)
-          ? ns.TEMPLATE_LIST
-          : (ns?.TEMPLATES ? Object.values(ns.TEMPLATES) : []);
+        // Try three sources in order so any one of them surviving
+        // returns a non-empty list: explicit TEMPLATE_LIST, Object.values
+        // of the TEMPLATES record, or — as a last-ditch — any array
+        // valued export on the namespace whose entries look like
+        // template metas. The third path catches edge cases where the
+        // user's browser has a stale chunk with renamed exports.
+        let list = Array.isArray(ns?.TEMPLATE_LIST) ? ns.TEMPLATE_LIST.filter(Boolean) : [];
+        if (!list.length && ns?.TEMPLATES && typeof ns.TEMPLATES === 'object') {
+          list = Object.values(ns.TEMPLATES).filter(Boolean);
+        }
+        if (!list.length && ns && typeof ns === 'object') {
+          for (const v of Object.values(ns)) {
+            if (Array.isArray(v) && v.length && v[0]?.key && v[0]?.Component) {
+              list = v.filter(Boolean);
+              break;
+            }
+          }
+        }
         const record = ns?.TEMPLATES || (list.length
-          ? Object.fromEntries(list.map((t) => [t.key, t]))
+          ? Object.fromEntries(list.filter((t) => t?.key).map((t) => [t.key, t]))
           : {});
         if (!list.length) {
-          // Bubble up a real diagnostic so the empty state can show
-          // *why* instead of just "registry returned 0 entries".
-           
-          console.warn('[decks/templates] dynamic import resolved with no templates', {
-            namespaceKeys: m ? Object.keys(m) : [],
-            innerKeys: ns && ns !== m ? Object.keys(ns) : [],
-          });
-          return { list: [], record: {}, error: new Error('templates_module_empty') };
+          // Build a structured, human-readable diagnostic so the empty
+          // state can show *why* (and the user can paste it back to us
+          // without opening DevTools).
+          const namespaceKeys = m ? Object.keys(m) : [];
+          const innerKeys = ns && ns !== m ? Object.keys(ns) : [];
+          const tlType = typeof ns?.TEMPLATE_LIST;
+          const tlIsArr = Array.isArray(ns?.TEMPLATE_LIST);
+          const tlLen = tlIsArr ? ns.TEMPLATE_LIST.length : null;
+          const tplType = typeof ns?.TEMPLATES;
+          const tplKeyCount = ns?.TEMPLATES && typeof ns.TEMPLATES === 'object' ? Object.keys(ns.TEMPLATES).length : 0;
+          const diag = `ns_keys=[${namespaceKeys.join(',') || '∅'}] inner=[${innerKeys.join(',') || '—'}] TEMPLATE_LIST(type=${tlType},isArray=${tlIsArr},len=${tlLen}) TEMPLATES(type=${tplType},keys=${tplKeyCount})`;
+          // eslint-disable-next-line no-console
+          console.warn('[decks/templates] dynamic import resolved with no templates', { namespaceKeys, innerKeys, tlType, tlIsArr, tlLen, tplType, tplKeyCount });
+          const err = new Error(`templates_module_empty (${diag})`);
+          err.diag = diag;
+          return { list: [], record: {}, error: err };
         }
         return { list, record };
       })
