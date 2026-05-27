@@ -55,16 +55,40 @@ export const TEMPLATES: Record<string, TemplateMeta> = {
   axal_spinout_demoday: { key: 'axal_spinout_demoday', label: 'Axal VC Spin-Out', description: '14 slides · 4 variants (editorial / product-first / data-dense / manifesto) · binds to Lab data', slide_count: 14, required_tier: 'growth', category: 'event', Component: Deck_axal_spinout_demoday },
 };
 
-export const TEMPLATE_KEYS = Object.keys(TEMPLATES);
+// Explicit registry list — kept in the same order as the TEMPLATES map.
+// Listing each entry by hand (instead of `Object.values(TEMPLATES)`) means
+// TypeScript fails the build if a key is missing OR if the underlying
+// component import returns undefined, instead of silently producing a
+// short list at runtime.
+export const TEMPLATE_LIST: readonly TemplateMeta[] = [
+  TEMPLATES.yc_seed,
+  TEMPLATES.sequoia_classic,
+  TEMPLATES.kawasaki_10_20_30,
+  TEMPLATES.minimal_seed,
+  TEMPLATES.series_a_growth,
+  TEMPLATES.series_b_diligence,
+  TEMPLATES.demo_day,
+  TEMPLATES.sales_commercial,
+  TEMPLATES.partnership_bd,
+  TEMPLATES.one_pager_teaser,
+  TEMPLATES.investor_appendix,
+  TEMPLATES.narrative_brand,
+  TEMPLATES.axal_spinout_demoday,
+];
 
-export const TEMPLATE_LIST: TemplateMeta[] = Object.values(TEMPLATES);
+export const TEMPLATE_KEYS: readonly string[] = TEMPLATE_LIST.map((t) => t.key);
 
-if (typeof process === 'undefined' || process.env?.NODE_ENV !== 'production') {
-  if (TEMPLATE_LIST.length !== 13) {
-     
-    console.warn(
-      `[decks/templates] Expected 13 templates, found ${TEMPLATE_LIST.length}. ` +
-      `Check frontend/src/decks/templates/index.ts.`,
-    );
-  }
+export const EXPECTED_TEMPLATE_COUNT = 13;
+
+// Runtime sanity check fires in both dev AND prod — if the registry ever
+// resolves to fewer than the expected count, surface it loudly in the
+// console (the picker's empty state will then render the diagnostic).
+if (TEMPLATE_LIST.length !== EXPECTED_TEMPLATE_COUNT || TEMPLATE_LIST.some((t) => !t || !t.Component)) {
+  // eslint-disable-next-line no-console
+  console.error(
+    `[decks/templates] Registry integrity check failed — expected ${EXPECTED_TEMPLATE_COUNT} ` +
+    `entries with Component bound, found ${TEMPLATE_LIST.length} ` +
+    `(${TEMPLATE_LIST.filter((t) => t && t.Component).length} valid). ` +
+    `Check frontend/src/decks/templates/index.ts and the Deck_* imports it depends on.`,
+  );
 }

@@ -8,6 +8,23 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Fixed: Pitch Deck template picker now reliably shows every template
+
+The "Pick a deck template" window was sometimes opening empty — "0
+methods, no templates registered" — even though all 13 templates
+were there. This was a stale browser cache holding onto an older app
+bundle from before we fixed a related issue, not a missing template.
+
+The new release refreshes that cache the next time you open the app,
+hardens the picker so a partial load can't silently render as zero,
+and the header now reads the true number of templates (e.g. "13
+templates, auto-filled…") instead of a frozen "12 templates" line.
+If the picker ever does fail to load in the future, it now tells you
+the actual reason and shows a Retry button instead of a generic
+"check the source file" message.
+
+---
+
 ## Data room — set the link once on your project, the Demo Day deck reuses it
 
 Your project page has a new "Data room" section. Paste in the URL

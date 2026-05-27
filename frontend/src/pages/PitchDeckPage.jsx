@@ -61,7 +61,22 @@ export default function PitchDeckPage() {
   // axal_spinout_demoday apply-method / autofill branches. Drives the
   // green/red grid below "Fill from project"; null hides the grid.
   const [templateCoverage, setTemplateCoverage] = useState(null);
+  // Real template count (sourced from the registry) for the header label.
+  // Stays null until the registry resolves so we don't ship a stale number.
+  const [templateCount, setTemplateCount] = useState(null);
   const [error, setError] = useState('');
+
+  // Kick off the templates dynamic import eagerly so the header label can
+  // show the true registry size and so the picker opens instantly when
+  // clicked. Failure leaves templateCount null (header falls back to the
+  // generic copy); the picker itself still renders the detailed error.
+  useEffect(() => {
+    let alive = true;
+    loadTemplates().then((t) => {
+      if (alive) setTemplateCount(t?.list?.length ?? null);
+    });
+    return () => { alive = false; };
+  }, []);
 
   // Task #17 — Spin-Out Lab CTA deep-link. A `?method_id=<id>` query
   // param fires applyMethod(id) once after the picker's method catalog
@@ -379,7 +394,9 @@ export default function PitchDeckPage() {
               <Sparkles className="w-6 h-6 text-violet-600" /> Pitch Deck Builder
             </h1>
             <p className="text-sm text-gray-500 dark:text-slate-400">
-              12 templates, auto-filled from your project, financials, and cap table.
+              {templateCount != null
+                ? `${templateCount} templates, auto-filled from your project, financials, and cap table.`
+                : 'Templates auto-fill from your project, financials, and cap table.'}
             </p>
           </div>
           <PageExplainer page="pitch_deck" />
