@@ -1676,9 +1676,18 @@ export const api = {
 
   // Microsoft 365 / Outlook Calendar sync
   microsoftCalStatus: () => request('/calendar/microsoft/status'),
-  microsoftCalConnect: () => request('/calendar/microsoft/connect', { method: 'POST' }),
+  microsoftCalConnect: ({ return_to } = {}) =>
+    request(`/calendar/microsoft/connect${return_to ? `?return_to=${encodeURIComponent(return_to)}` : ''}`, { method: 'POST' }),
   microsoftCalDisconnect: () => request('/calendar/microsoft', { method: 'DELETE' }),
   microsoftCalSync: () => request('/calendar/microsoft/sync', { method: 'POST' }),
+
+  // Telegram channel join request — maps caller's role → canonical
+  // channel; backend pings the studio Slack inbox so an admin can
+  // issue the invite link manually (bots can't add users to invite-only
+  // channels without prior interaction).
+  telegramJoinChannels: () => request('/telegram/channels'),
+  telegramJoinRequest: (data) =>
+    request('/telegram/join-request', { method: 'POST', body: JSON.stringify(data || {}) }),
 
   // Task #52 — "Add to my external calendar" — pushes one already-booked
   // Axal session to whichever calendar(s) the caller has connected.

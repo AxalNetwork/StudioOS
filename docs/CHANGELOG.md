@@ -11,6 +11,243 @@
 > building it.
 
 
+## Feature — Task #2 · Project data-room URL is the single source of truth for the Demo Day "Review the deal" CTA
+
+The Spin-Out Demo Day deck's Review-the-deal slide previously stored
+the data-room URL + NDA flag in the deck-version JSON only — every new
+version started blank and the link couldn't be reused by any other
+surface. New columns on `projects` make the project the canonical
+home for both fields:
+
+- **`cloudflare-worker/sql/migrations/076_project_data_room_url.sql`**
+  — additive `ALTER TABLE projects ADD COLUMN data_room_url TEXT` +
+  `data_room_nda_required INTEGER NOT NULL DEFAULT 0`. Apply via
+  `wrangler d1 execute studioos-db --remote --env production
+  --file=cloudflare-worker/sql/migrations/076_project_data_room_url.sql`
+  when convenient.
+- **`cloudflare-worker/src/routes/projects.ts`** — exported
+  `ensureProjectDataRoomColumns(env)` (WeakMap-keyed per-DB lazy
+  bootstrap, mirroring `ensureDiscoveryValidationRatingColumns` from
+  Task #14). Called before SELECT * on `GET /:id` and on `PUT /:id` so
+  cold isolates self-heal. Both fields added to `baseFields` (owner-
+  editable; founders manage their own deal-room link). URL is trimmed
+  and empty-string coerces to NULL; NDA flag coerces boolean → 0/1.
+- **`cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`** —
+  `ProjectRow` type extended with `data_room_url` /
+  `data_room_nda_required`. `fillAxalSpinoutDemoDay()` now sources
+  `deal_access.deal_room_url` from `p.data_room_url` and respects
+  `p.data_room_nda_required` (with the legacy
+  `!doneMap.has('incorporation_completed')` heuristic as the fallback
+  when the column is NULL on older projects). `data_room_ready` flips
+  true whenever a URL exists.
+- **`cloudflare-worker/src/routes/decks.ts`** — `PUT /api/decks/:id`
+  scans the saved slides for the `axal_spinout_demoday` method's
+  Review-the-deal slide and, when the founder has edited the URL or
+  NDA flag inline (either via `contact_deal_access_url` /
+  `contact_deal_access_nda_required` flat fields OR the legacy
+  `contact_deal_access_json` blob), writes the changes back to
+  `projects.data_room_url` / `data_room_nda_required` before
+  inserting the new deck version. Best-effort: writeback failures
+  log + continue so a save can't be blocked by the side-write.
+  Absent fields are never clobbered to NULL.
+- **`frontend/src/pages/ProjectDetail.jsx`** — new `DataRoomSection`
+  component (rendered between the InfoCard grid and the Founder
+  card): URL input with http(s) validation, "NDA required" checkbox,
+  Save button (disabled until dirty + valid), "Open" external-link
+  shortcut. Uses the existing `api.updateProject(id, {...})` binding
+  + `useToast` for status feedback.
+
+No migration required to ship — the lazy bootstrap makes the hot
+path self-healing. Migration 076 is the canonical apply path for the
+metadata catalog.
+
+---
+
+## Feature — Task #1 · Admin-managed mentor & partner network roster (replaces synthesised deck data)
+
+The Spin-Out Demo Day deck's Mentors & Network slide previously
+synthesised profiles from `advisor_answers` free-text — admins had no
+way to curate the real Axal network and the slide regularly rendered
+"Lead, Lead" / unparsed fragments. New admin-managed roster lives at
+`/admin/network-profiles`:
+
+- **`cloudflare-worker/sql/migrations/075_network_profiles.sql`** —
+  additive `network_profiles` table (`name`, `kind`,
+  `role`, `bio`, `linkedin_url`, `photo_r2_key`, `skills_json`,
+  `display_order`, `is_active`) plus
+  `idx_network_profiles_active_order`. IF NOT EXISTS only.
+- **`cloudflare-worker/src/services/networkProfilesSchema.ts`** —
+  `ensureNetworkProfilesSchema()` lazy bootstrap (mirrors
+  `ensureTeamMembersSchema` / `ensureTelegramSchema`), canonical
+  `NETWORK_KINDS = ['mentor','partner','advisor','investor']`, and
+  canonical 12-axis `SKILL_CATALOG` (`Legal`, `Finance`, `GTM`,
+  `Sales`, `Marketing`, `Product`, `Engineering`, `Design`,
+  `Recruiting`, `Technical DD`, `Operations`, `Fundraising`) — single
+  source of truth for both the admin picker and the SkillsSpider radar.
+- **`cloudflare-worker/src/routes/admin_network_profiles.ts`** — CRUD
+  + `POST /:id/photo` (≤2 MB JPG/PNG/WebP, magic-byte check, R2 keyed
+  `network/<uuid>.{ext}` on the `FILES` binding) + `POST /reorder`.
+  Every mutation writes an `activity_logs` row via the
+  `hashEmail`-based actor convention. Sanitisers reject unknown
+  `kind` values and silently drop unknown skill labels.
+- **`cloudflare-worker/src/routes/network_public.ts`** — public photo
+  proxy at `/api/public/network/:id/photo`; only serves rows where
+  `is_active = 1`. Mounted under `/api/public` so it bypasses the
+  CF-Access perimeter while the R2 bucket stays private.
+- **`cloudflare-worker/src/index.ts`** — mounts
+  `/api/admin/network-profiles` BEFORE the catch-all `/api/admin`
+  router (same precedence trick as `/api/admin/telegram` and
+  `/api/admin/team`), and mounts `networkPublic` on `/api/public`.
+- **`cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`** —
+  new exported `loadNetworkProfiles(env)` runs in parallel with the
+  rest of the deck reads. The old `profiles` / `skillBag` /
+  `SKILL_AXES` / `skillCoverage` / `networkBreakdown` synthesis block
+  is replaced: `profiles` comes straight from the active roster
+  (carrying `photo_url`, `linkedin_url`, `kind`), `skillCoverage`
+  counts per axis across the 12-axis catalog and normalises 0..1
+  against the busiest axis, and `networkBreakdown` is now grouped by
+  `kind` (Mentors / Partners / Advisors / Investors). Falls back to
+  the catalog-zero view when the roster is empty so older snapshots
+  don't break the slide.
+- **`frontend/src/decks/templates/axal_spinout_demoday_app.tsx`** —
+  `MentorProfile` extended with optional `photo_url` / `linkedin_url`
+  / `kind` (back-compat with cached decks). `ProfileCard` renders the
+  real photo when present, falling back to the existing initials tile.
+- **`frontend/src/pages/admin/AdminNetworkProfiles.jsx`** — admin
+  surface: kind dropdown, name/role/bio, LinkedIn URL, 12-axis skill
+  toggles (catalog mirrored from worker — keep in sync), photo
+  upload, active toggle, drag-to-reorder, hard delete with confirm.
+  Uses `useToast` + `useEscapeClose` per the in-house conventions.
+- **`frontend/src/lib/api.js`** — new `adminNetworkProfiles` export
+  (list/create/update/remove/uploadPhoto/reorder).
+- **`frontend/src/App.jsx`** — lazy-loaded `/admin/network-profiles`
+  route guarded by `['admin']`. Also surfaced as a `Mentors &
+  Partners` tab inside `AdminPage.jsx` (`?tab=network-profiles`) so
+  admins discover it via the main Admin Console rail.
+
+Archival semantics: `DELETE /api/admin/network-profiles/:id` is a
+soft-delete — it flips `is_active=0` and preserves the row + R2
+photo, so a re-render of a historical Demo Day deck stays
+reproducible and re-activation is lossless. Hide-from-deck and
+archive share the same boolean; there is no hard-delete path.
+
+Deploy notes: migration 075 is additive + `IF NOT EXISTS`; the
+worker's lazy bootstrap makes the hot path self-healing, so applying
+the SQL via `wrangler d1 execute` is preferred but not required to
+unblock the feature.
+
+## Feature — Task #15 · Customer Discovery captures 0–5 solution-fit rating + free-text comment
+
+`frontend/src/pages/DiscoveryPage.jsx` — interview modal now carries
+two new fields:
+
+- **`validation_rating`** (integer 0–5 or null) — six-pip `RatingPicker`
+  with prompt "How well does this solution address the problem the
+  interviewee experiences?" Unrated state renders six **dashed
+  outlines** so it never visually reads as "0". Clicking the currently
+  selected pip clears back to null, and a small "clear" link sits
+  beside the row. `Number.isInteger(value)` guards the rated branch so
+  `null` and `0` are visually distinct end-to-end.
+- **`validation_comment`** (string ≤240 chars or null) — one-line text
+  input appears below the picker only when a rating is set; collapses
+  back to null when the rating is cleared.
+
+`emptyInterview()` now seeds `validation_rating: null,
+validation_comment: ''`. `handleSave()` clamps the wire payload:
+`null` when unrated, else `Math.max(0, Math.min(5,
+Math.round(Number(...))))`; empty comment trims to `null`. The worker
+also clamps via `asValidationRating()`, but normalising here keeps
+the wire payload tight and reproducible. `handleToggleFeatured()`
+omits both fields, which is safe — the PUT handler in
+`cloudflare-worker/src/routes/progress.ts` already preserves the
+existing rating + comment when the keys are absent from the body
+(`hasOwnProperty` checks landed with Task #14).
+
+Card-view summary: new `RatingBadge` renders a slim "Fit · • • • • ○ ○
+· 4 / 5 · 'quote'" row under the interview notes; hidden entirely
+when `validation_rating` is null. Card uses `bg-violet-600` for filled
+dots and `bg-gray-200 dark:bg-gray-700` for empties so the badge is
+legible in both themes.
+
+Worker / migration: no new work. The `validation_rating` /
+`validation_comment` columns + lazy-bootstrap helper
+`ensureDiscoveryValidationRatingColumns()` + `asValidationRating()` +
+`serializeInterview()` round-trip + "preserve when omitted" PUT
+semantics all landed with Task #14 (migration `074`). This task wires
+the UI that finally populates them.
+
+Net effect: once a project has ≥1 rated interview, the Demo Day deck's
+`RatingDistribution` chart on the Validation slide renders with real
+data the next time the founder hits "Fill from project".
+
+---
+
+## Feature — Task #14 · Spin-Out Demo Day deck rebuild (13 slides)
+
+Rebuilt `Deck_axal_spinout_demoday` to the 13-slide layout per the Task #14
+spec. Seven changes land together:
+
+1. **Rename Axal → Axal VC** on the Cover eyebrow ("Axal VC · 30-Day
+   Spin-Out Lab · Demo Day") and surface copy.
+2. **Cover gains an `ActivityLog30Day`** — 30-cell strip rendered from
+   `cover.activity_log: ActivityLogDay[]` (`{date, count, kind}`) emitted
+   as `cover_activity_log_json` by the worker hydrator.
+3. **Problem slide gains `ThemeFrequencyBars`** driven by
+   `problem.pain_themes: PainTheme[]`, with new helpers `deckPainPoints()`
+   (falls back to raw signals for older payloads) and `shortenPain()`.
+4. **Validation slide gains `RatingDistribution` (0–5 histogram) +
+   `RevenueBadge`** from `validation.ratings: number[]`,
+   `validation.question: string`, `validation.revenue_proof: {amount,
+   label, signed} | null`. Founders' answers persist via new column
+   `discovery_interviews.validation_rating` (migration `074`).
+5. **Team + Venture Readiness merged** into single Slide_TeamReadiness
+   (slot 9) — keeps both `team_*` and `vr_*` field keys for backwards
+   compat with decks saved pre-merge.
+6. **Mentors & network gains `SkillsSpider` + `ProfileCard` stack** from
+   `mentor_network.profiles: MentorProfile[]`,
+   `mentor_network.skill_coverage: SkillAxis[]`, `mentor_network.network:
+   NetworkCategory[]`. Falls back to the existing `NetworkConstellation`
+   when fewer than 3 skill axes are present.
+7. **Drop Axal Signal slot 12**; **add Product Demo at slot 6**
+   (`product_demo_{eyebrow,headline,body,loop_url,screenshot_url,caption}`);
+   **rename Contact → Review the deal** with a new
+   `contact.deal_access: {deal_room_url, nda_required, data_room_ready,
+   cta_label}` CTA block. Lab-week milestones from the dropped slide are
+   still emitted as hidden payload on `review_the_deal` for share/PDF
+   compatibility.
+
+Touched:
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts` — extended
+  `SpinoutDemoDayData` type, `fillAxalSpinoutDemoDay()` builders,
+  `INTERVIEW_SELECT` (now reads `validation_rating`,
+  `validation_comment`, `interview_date`), 13-entry SLIDES registry, and
+  13-cell `buildAxalSpinoutCoverage()`.
+- `cloudflare-worker/src/services/discoveryInterviewSchema.ts` — added
+  `asValidationRating()` + `serializeInterview()` + the rating field on
+  the canonical interview row.
+- `cloudflare-worker/src/routes/progress.ts` — `ensureDiscoveryValidationRatingColumns()` lazy bootstrap (WeakMap-keyed per `DB`), GET/POST/PUT now round-trip `validation_rating`.
+- `cloudflare-worker/sql/migrations/074_discovery_validation_rating.sql`
+  — additive `ALTER TABLE discovery_interviews ADD COLUMN
+  validation_rating INTEGER NULL` (IF NOT EXISTS handled by the lazy
+  bootstrap so this stays apply-when-convenient).
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx` — new
+  exported types (`ActivityLogDay`, `PainTheme`, `RevenueProof`,
+  `MentorProfile`, `SkillAxis`, `NetworkCategory`, `DealAccess`), new
+  primitives (`ActivityLog30Day`, `ThemeFrequencyBars`,
+  `RatingDistribution`, `RevenueBadge`, `SkillsSpider`, `ProfileCard`),
+  new slides (`Slide_ProductDemo`, `Slide_TeamReadiness`,
+  `Slide_ReviewTheDeal`), Cover/Problem/Validation/MentorNetwork rewires,
+  13-entry SLIDES registry. Legacy `Slide_Team`, `Slide_VentureReadiness`,
+  `Slide_AxalSignal`, `Slide_Contact` retained (held by `void` refs) to
+  keep any in-flight code references intact during rollout.
+
+Both worker and frontend typecheck clean. Migration `074` is additive +
+lazy-bootstrapped — safe to apply whenever convenient via
+`wrangler d1 execute studioos-db --remote --env production
+--file=cloudflare-worker/sql/migrations/074_discovery_validation_rating.sql`.
+
+---
+
 ## Feature — Word-count guidance for Problem & Solution copy (editor + Spin-Out deck)
 
 New shared helper `frontend/src/lib/pitchCopyLength.js` exports

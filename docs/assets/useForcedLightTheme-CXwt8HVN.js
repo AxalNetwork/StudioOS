@@ -1,1 +1,0 @@
-import{Vt as e,Wt as t}from"./index-gurt5gJA.js";var n=t(e(),1);function r(){(0,n.useLayoutEffect)(()=>{let e=document.documentElement,t=e.classList.contains(`dark`),n=e.dataset.theme;return e.classList.remove(`dark`),e.dataset.theme=`light`,()=>{t&&e.classList.add(`dark`),n===void 0?delete e.dataset.theme:e.dataset.theme=n}},[])}export{r as t};

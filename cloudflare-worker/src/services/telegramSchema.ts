@@ -49,6 +49,16 @@ export async function ensureTelegramSchema(env: Env): Promise<void> {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS user_promotion_consent (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, consented INTEGER NOT NULL DEFAULT 0, consented_at TEXT, source TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
     );
+    // Race-safe idempotency ledger for user-initiated channel join requests.
+    // UNIQUE(user_id, channel_slug, day_bucket) lets the route use
+    // INSERT OR IGNORE as an atomic compare-and-set so two concurrent
+    // requests can't both ping the studio Slack inbox.
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS telegram_join_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, channel_slug TEXT NOT NULL, day_bucket TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(user_id, channel_slug, day_bucket))",
+    );
+    await env.DB.exec(
+      "CREATE INDEX IF NOT EXISTS idx_telegram_join_requests_user ON telegram_join_requests(user_id, created_at DESC)",
+    );
     // Seed canonical channels — idempotent.
     await env.DB.exec(
       "INSERT OR IGNORE INTO telegram_channels (slug, label, audience, is_invite_only) VALUES " +

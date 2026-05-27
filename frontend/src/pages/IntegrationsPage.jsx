@@ -3,7 +3,7 @@ import {
   Plug, Plus, RefreshCw, Trash2, FileText, X, AlertCircle, Check,
   ExternalLink, Webhook, Database, Shield, Calendar, Cloud, PieChart,
   MessageSquare, PenTool, Network, Building2, Lock, Bell, Sparkles,
-  Mail,
+  Mail, Send,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
@@ -70,6 +70,17 @@ export default function IntegrationsPage() {
   // synthetic tiles instead of duplicating the providers contract.
   const [googleStatus, setGoogleStatus] = useState(null);
   const [linkedinStatus, setLinkedinStatus] = useState(null);
+  // Outlook / Microsoft 365 — wires to /api/calendar/microsoft/* via
+  // the same synthetic-tile pattern as Google. Backend has full
+  // OAuth + token store already; only the tile was missing.
+  const [microsoftStatus, setMicrosoftStatus] = useState(null);
+  const [microsoftTileError, setMicrosoftTileError] = useState(null);
+  // Telegram — there is no per-user connection state, just a request-
+  // to-join queue. We fetch the channels visible to the caller's role
+  // so the tile can say WHICH channel they'll be joining.
+  const [telegramChannels, setTelegramChannels] = useState(null);
+  const [telegramRequested, setTelegramRequested] = useState(false);
+  const [telegramTileError, setTelegramTileError] = useState(null);
   // One-shot return-flash from the OAuth round-trip cookie redirect.
   // Parsed from query params on mount, then the URL is cleaned so a
   // refresh doesn't keep replaying the banner.
@@ -107,20 +118,24 @@ export default function IntegrationsPage() {
     try {
       setError('');
       setLoadError('');
-      const [av, mine, wl, gs, ls] = await Promise.all([
+      const [av, mine, wl, gs, ls, ms, tg] = await Promise.all([
         api.integrationsAvailable(),
         api.integrationsList(),
         api.integrationsWaitlist().catch(() => ({ items: [] })),
-        // Google/LinkedIn status are best-effort — a missing/legacy
+        // Google/LinkedIn/Microsoft status are best-effort — a missing/legacy
         // worker must not collapse the marketplace into an error.
         api.googleCalStatus().catch(() => ({ configured: false, connected: false })),
         api.linkedinStatus().catch(() => ({ configured: false, connected: false })),
+        api.microsoftCalStatus().catch(() => ({ configured: false, connected: false })),
+        api.telegramJoinChannels().catch(() => ({ channels: [], default_slug: null })),
       ]);
       setProviders(av.providers || []);
       setItems(mine.items || []);
       setWaitlist(wl.items || []);
       setGoogleStatus(gs || null);
       setLinkedinStatus(ls || null);
+      setMicrosoftStatus(ms || null);
+      setTelegramChannels(tg || null);
     } catch (e) {
       const status = Number(e?.status) || 0;
       if (status >= 500 || status === 0) {
@@ -239,6 +254,42 @@ export default function IntegrationsPage() {
     try { await api.linkedinDisconnect(); await refresh(); showToast('LinkedIn disconnected.'); }
     catch (e) { setLinkedinTileError({ kind: 'error', text: e?.message || 'Could not disconnect LinkedIn.' }); }
   };
+
+  const connectMicrosoft = async () => {
+    setMicrosoftTileError(null);
+    try {
+      const res = await api.microsoftCalConnect({ return_to: 'integrations' });
+      const url = res?.redirect_url || res?.auth_url || res?.authorize_url;
+      if (!url) throw new Error(res?.error?.message || 'Could not start Microsoft connect.');
+      window.location.href = url;
+    } catch (e) { setMicrosoftTileError({ kind: 'error', text: e?.message || 'Could not start Microsoft connect.' }); }
+  };
+  const disconnectMicrosoft = async () => {
+    if (!confirm('Disconnect Microsoft 365? Outlook calendar sync will stop. You can reconnect at any time.')) return;
+    setMicrosoftTileError(null);
+    try { await api.microsoftCalDisconnect(); await refresh(); showToast('Microsoft 365 disconnected.'); }
+    catch (e) { setMicrosoftTileError({ kind: 'error', text: e?.message || 'Could not disconnect Microsoft 365.' }); }
+  };
+
+  const requestTelegramJoin = async () => {
+    setTelegramTileError(null);
+    const defaultSlug = telegramChannels?.default_slug;
+    if (!defaultSlug) {
+      setTelegramTileError({ kind: 'error', text: 'No Telegram channel is available for your role yet.' });
+      return;
+    }
+    try {
+      await api.telegramJoinRequest({ channel_slug: defaultSlug });
+      setTelegramRequested(true);
+      showToast('Request sent — an admin will message you the invite link.');
+    } catch (e) {
+      const msg = e?.message || 'Could not send the request.';
+      const friendly = /slack_webhook_unconfigured/i.test(msg)
+        ? 'The studio Slack inbox isn\'t configured on this deployment yet — please ping an admin directly.'
+        : msg;
+      setTelegramTileError({ kind: 'error', text: friendly });
+    }
+  };
   // Task #70 — hand-off after the CSV modal parses a file. We stash the
   // parsed rows in localStorage under a known key and navigate to /refer,
   // where the existing send-invites flow picks them up on mount. Keeping
@@ -333,10 +384,14 @@ export default function IntegrationsPage() {
     const coming = [];
     for (const p of providers) {
       if (p.status === 'coming_soon' || !p.has_implementation) coming.push(p);
-      else live.push(p);
+      // Skip providers the user has already connected — they render in
+      // the "Connected" section above, so listing them again in
+      // "Available" makes the same provider look like it's both
+      // connected AND unconnected (Calendly bug).
+      else if (!connectedByProvider[p.key]) live.push(p);
     }
     return { live, coming };
-  }, [providers]);
+  }, [providers, connectedByProvider]);
 
   if (loading) {
     return (
@@ -439,6 +494,27 @@ export default function IntegrationsPage() {
             onDismissError={() => setLinkedinTileError(null)}
             secondaryAction={{ label: 'Import contacts (CSV)', onClick: () => setCsvModalOpen(true) }}
           />
+          <ExternalProviderCard
+            testId="microsoft"
+            icon={Calendar}
+            title="Microsoft 365 — Outlook Calendar"
+            type="calendar"
+            description="Two-way sync with Outlook / Microsoft 365 Calendar so Axal sessions land on your work calendar."
+            capabilities={['Calendar', 'Two-way sync']}
+            status={microsoftStatus}
+            connectedLabel={microsoftStatus?.microsoft_email}
+            onConnect={connectMicrosoft}
+            onDisconnect={disconnectMicrosoft}
+            inlineError={microsoftTileError}
+            onDismissError={() => setMicrosoftTileError(null)}
+          />
+          <TelegramJoinCard
+            channels={telegramChannels}
+            requested={telegramRequested}
+            inlineError={telegramTileError}
+            onDismissError={() => setTelegramTileError(null)}
+            onRequest={requestTelegramJoin}
+          />
         </div>
       </section>
 
@@ -532,6 +608,15 @@ export default function IntegrationsPage() {
                     </div>
                   )}
                   <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                    {/* Update opens the ConnectModal in update-mode so users can
+                        rotate credentials / change config without disconnecting
+                        first. Required since the marketplace section below now
+                        excludes already-connected providers (dedupe fix). */}
+                    {desc && (
+                      <button onClick={() => setConnectFor(desc)} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center gap-1 px-2 py-1">
+                        <RefreshCw size={12} /> Update
+                      </button>
+                    )}
                     {it.provider_key === 'hubspot' && (
                       <button onClick={() => setConfigFor(it)} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center gap-1 px-2 py-1">
                         <PieChart size={12} /> Pipeline
@@ -817,6 +902,85 @@ function ExternalProviderCard({
   );
 }
 
+// Telegram channel-join tile. Telegram bots can't add users to invite-only
+// channels without prior interaction, so the only reliable path is a
+// human-in-the-loop request: the user clicks "Request to join", the
+// backend pings the studio Slack inbox, and an admin sends them the
+// invite link out-of-band. The tile shows WHICH channel they'll be
+// joining so the request is unambiguous.
+function TelegramJoinCard({ channels, requested, inlineError, onDismissError, onRequest }) {
+  const loading = channels === null || channels === undefined;
+  const defaultChannel = (channels?.channels || []).find(c => c.slug === channels?.default_slug)
+    || (channels?.channels || [])[0];
+  const hasChannel = !!defaultChannel;
+  return (
+    <div
+      data-testid="integration-external-card"
+      data-provider-key="telegram"
+      data-connected={requested ? '1' : '0'}
+      className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col"
+    >
+      <div className="flex items-start gap-3 mb-2">
+        <div className="w-10 h-10 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 flex items-center justify-center">
+          <Send size={18} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="font-medium text-gray-900 dark:text-gray-100">Telegram — Axal channels</div>
+            {requested && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">Requested</span>
+            )}
+          </div>
+          <div className="text-[11px] text-gray-500 uppercase tracking-wide">community / broadcasts</div>
+        </div>
+      </div>
+      <p className="text-xs text-gray-600 dark:text-gray-400 flex-1">
+        Get the invite link to your role's private Telegram channel for studio updates and broadcasts.
+        {hasChannel && (
+          <> You'll be requesting access to <span className="font-medium text-gray-900 dark:text-gray-100">{defaultChannel.label}</span>.</>
+        )}
+      </p>
+      {inlineError && (
+        <div
+          data-testid="integration-tile-error"
+          data-tile-error-kind={inlineError.kind}
+          className={`mt-2 text-[11px] rounded-md border px-2 py-1.5 flex items-start gap-1.5 ${
+            inlineError.kind === 'warn'
+              ? 'bg-amber-50 border-amber-200 text-amber-900'
+              : 'bg-red-50 border-red-200 text-red-700'
+          }`}
+        >
+          <AlertCircle size={12} className="mt-0.5 shrink-0" />
+          <span className="flex-1">{inlineError.text}</span>
+          {onDismissError && (
+            <button onClick={onDismissError} className="opacity-60 hover:opacity-100" aria-label="Dismiss"><X size={11} /></button>
+          )}
+        </div>
+      )}
+      <div className="flex items-center justify-end mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+        {requested ? (
+          <span className="text-xs text-emerald-700 flex items-center gap-1.5">
+            <Check size={12} /> An admin will message you the invite link.
+          </span>
+        ) : (
+          <button
+            onClick={onRequest}
+            disabled={loading || !hasChannel}
+            title={!hasChannel ? 'No Telegram channel is available for your role.' : undefined}
+            className={`text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${
+              loading || !hasChannel
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-violet-600 text-white hover:bg-violet-700'
+            }`}
+          >
+            <Send size={12} /> Request to join
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Task #70 — LinkedIn CSV import modal lives directly inside Settings →
 // Integrations so users can preview and import their Connections.csv in
 // place. After parsing we hand the rows off to /refer via
@@ -978,7 +1142,13 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
   const [configText, setConfigText] = useState(existing?.config ? JSON.stringify(existing.config, null, 2) : '');
   const [sfSandbox, setSfSandbox] = useState(false);
   const [err, setErr] = useState('');
+  // HubSpot OAuth is gated behind an "Advanced" disclosure because the
+  // public app is pending HubSpot Marketplace review — the PAT (Private
+  // App access token) path is the only one that works on non-test
+  // portals today. Defaults closed; clicking the link expands it.
+  const [showAdvancedOauth, setShowAdvancedOauth] = useState(false);
   const tierLocked = !bypassesTier && provider.tier_locked;
+  const isHubspotPatPrimary = provider.key === 'hubspot' && provider.auth_type === 'oauth2' && provider.supports_pat && !existing;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -1048,7 +1218,21 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
             <Field label="Display name">
               <input className={inputCls} value={displayName} onChange={e => setDisplayName(e.target.value)} />
             </Field>
-            {provider.auth_type === 'oauth2' && !existing && (
+            {/* HubSpot: PAT is the primary path (see disclosure below). OAuth
+                is moved into an "Advanced" toggle since the public app is
+                pending HubSpot Marketplace review and the redirect URI on
+                non-test portals fails. */}
+            {isHubspotPatPrimary && (
+              <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 text-xs text-violet-900">
+                <p className="font-medium mb-1">Recommended: Private App access token</p>
+                <p>
+                  Create one in HubSpot → <strong>Settings → Integrations → Private Apps → Create private app</strong>.
+                  Required scopes: <code className="bg-white px-1 rounded">crm.objects.deals.read/write</code>, <code className="bg-white px-1 rounded">crm.objects.contacts.read</code>.
+                  Paste the token in the field below.
+                </p>
+              </div>
+            )}
+            {provider.auth_type === 'oauth2' && !existing && !isHubspotPatPrimary && (
               <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-xs text-gray-700 dark:text-gray-300">
                 <p className="mb-2">{provider.display_name} uses OAuth — sign in to authorize StudioOS:</p>
                 {provider.key === 'salesforce' && (
@@ -1092,14 +1276,37 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
                   placeholder={provider.key === 'hubspot' ? 'pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' : 'cal_pat_...'}
                   autoComplete="off"
                 />
-                <p className="text-[11px] text-gray-500 mt-1">
-                  {provider.key === 'hubspot' ? (
-                    <>Create one in HubSpot → <strong>Settings → Integrations → Private Apps → Create private app</strong>. Required scopes: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">crm.objects.deals.read/write</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">crm.objects.contacts.read</code>.</>
-                  ) : (
-                    <>Generate one in {provider.display_name} → Integrations → API & Webhooks.</>
-                  )}
-                </p>
+                {provider.key !== 'hubspot' && (
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    Generate one in {provider.display_name} → Integrations → API & Webhooks.
+                  </p>
+                )}
               </Field>
+            )}
+            {isHubspotPatPrimary && (
+              <div className="text-xs">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedOauth(v => !v)}
+                  className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline underline-offset-2"
+                >
+                  {showAdvancedOauth ? 'Hide advanced (OAuth)' : 'Advanced: connect with OAuth instead'}
+                </button>
+                {showAdvancedOauth && (
+                  <div className="mt-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-xs text-gray-700 dark:text-gray-300">
+                    <p className="mb-2">
+                      HubSpot's public OAuth app is pending Marketplace review — connecting via OAuth currently fails on non-test portals with a redirect URI mismatch. Use the Private App token above unless your portal is whitelisted.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={startOauth}
+                      className="bg-gray-700 hover:bg-gray-800 text-white text-xs font-medium px-3 py-1.5 rounded inline-flex items-center gap-1.5"
+                    >
+                      <ExternalLink size={12} /> Try OAuth anyway
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
             <Field label="Webhook secret (optional)">
               <input type="password" className={inputCls} value={webhookSecret} onChange={e => setWebhookSecret(e.target.value)} placeholder={existing?.has_webhook_secret ? '••••••••' : ''} />

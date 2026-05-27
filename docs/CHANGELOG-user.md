@@ -8,6 +8,95 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Data room — set the link once on your project, the Demo Day deck reuses it
+
+Your project page has a new "Data room" section. Paste in the URL
+to your investor data room (Notion, Dropbox Paper, Drive folder —
+whatever you use) and tick "NDA required" if investors need to sign
+one first. Save once, and the "Review the deal" button on your
+Spin-Out Demo Day deck automatically links there with the right NDA
+badge.
+
+If you edit the link directly on the deck slide instead, your change
+flows back to the project so the next version of the deck still
+pre-fills — no more re-typing your data-room URL every time you
+generate a fresh deck.
+
+---
+
+## Mentors & Partners — curate the network that shows up on your Demo Day deck
+
+Axal admins can now manage the mentor and partner network directly,
+and the Spin-Out Demo Day deck's "Mentors & Network" slide reflects
+that real roster instead of fragments pulled from your advisor
+answers.
+
+Each profile carries a name, role, a short bio, a LinkedIn link, an
+optional square photo, and a set of skill tags chosen from a fixed
+12-axis catalog (Legal, Finance, GTM, Sales, Marketing, Product,
+Engineering, Design, Recruiting, Technical DD, Operations,
+Fundraising). The deck's skill radar and constellation tiles are
+generated from those tags, so the picture stays consistent across
+every founder's deck. Profiles can be reordered, temporarily hidden,
+or fully removed at any time, and changes show up on the next deck
+render.
+
+If you're an admin, you'll find the new editor under Admin →
+Mentor & partner network.
+
+---
+
+## Customer Discovery — rate how well your solution fits each interview
+
+You can now record a 0–5 "fit" rating on every Customer Discovery
+interview: how well your current solution addresses the problem the
+person you spoke with is actually experiencing. Click a pip, optionally
+jot a one-line note about what they said, and save.
+
+The rating shows as a small dot row on the interview card so you can
+scan your interview log at a glance. Leaving it blank is fine — the
+"unrated" state shows hollow outlines and is visually distinct from a
+real "0" answer, so we never invent a low score.
+
+Once at least one interview has a rating, the Demo Day deck's
+Validation slide automatically lights up its 0–5 histogram the next
+time you hit "Fill from project".
+
+---
+
+## Spin-Out Demo Day deck — sharper, 13 slides, and a "Review the deal" call-to-action
+
+The Demo Day deck has had a refresh. Highlights:
+
+- **Branded as Axal VC** on the cover, so it matches the rest of the
+  brand.
+- **A 30-day activity strip** on the cover shows the rhythm of your
+  Lab work at a glance.
+- **Pain themes are now charted** on the Problem slide as a frequency
+  bar, alongside the raw quotes from interviews.
+- **Validation now shows a 0–5 rating histogram** for the validation
+  question we asked across your Discovery interviews — plus a badge
+  for any revenue proof or signed LOI.
+- **Team and Venture Readiness are now one slide** — your founders
+  and your readiness score side-by-side, instead of two separate
+  pages.
+- **Mentors & network now shows mentor profile cards and a skills
+  radar** so investors can see who's around the table and what
+  ground they cover.
+- **New "Product demo" slide** with room for a 30-second loop or a
+  screenshot.
+- **The "Contact" slide is now "Review the deal"** with a clear
+  call-to-action button that links to your deal room, plus NDA and
+  data-room status badges.
+- **The Axal Signal slide has been retired** — the milestones now
+  feed into "Review the deal" instead, so the story ends on the
+  ask.
+
+If you've already saved a deck, your previous content carries over —
+the new sections just light up as you add the underlying data.
+
+---
+
 ## Length guidance for Problem and Solution — no more wall-of-text slides
 
 When you edit a project's Problem Statement or Solution, you'll see a

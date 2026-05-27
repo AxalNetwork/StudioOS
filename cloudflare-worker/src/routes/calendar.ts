@@ -1061,6 +1061,18 @@ calendar.get('/microsoft/status', safe('m_status', 'Could not load Microsoft sta
 async function startMicrosoftOAuth(c: any) {
   const user = await requireAuth(c);
   const { status, body } = await buildMicrosoftOAuthStartResponse(c.env, user.id);
+  // Parity with startGoogleOAuth — let the Integrations page hand-off
+  // remember its origin across the Microsoft round-trip via the same
+  // short-lived, scoped cookie. The /microsoft/callback handler already
+  // calls readReturnTo() so this is the only wiring needed.
+  const returnTo = String(c.req.query('return_to') || '').toLowerCase();
+  if (status === 200 && returnTo === 'integrations') {
+    c.header(
+      'Set-Cookie',
+      'studioos_cal_return=integrations; HttpOnly; Secure; SameSite=Lax; Path=/api/calendar; Max-Age=600',
+      { append: true },
+    );
+  }
   return c.json(body, status);
 }
 calendar.post('/microsoft/connect', safe('m_connect', 'Could not start Microsoft OAuth', startMicrosoftOAuth));

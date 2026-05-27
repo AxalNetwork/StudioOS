@@ -43,6 +43,7 @@ import adminNetworkProfiles from './routes/admin_network_profiles';
 import networkPublic from './routes/network_public';
 // Task #3 — Admin Telegram channels + aggregator + post send.
 import adminTelegram from './routes/admin_telegram';
+import telegramJoin from './routes/telegram_join';
 import adminX from './routes/admin_x';
 import adminSlack from './routes/admin_slack';
 // Task #2 — News with author proposals + admin queue.
@@ -500,6 +501,10 @@ app.route('/api/admin/network-profiles', adminNetworkProfiles);
 // nested `/api/admin/telegram/*` routes resolve here rather than 404ing
 // inside the generic admin router.
 app.route('/api/admin/telegram', adminTelegram);
+// User-facing Telegram channel join request — pings the studio Slack
+// inbox so an admin can issue the invite link manually. Mounted under
+// /api/telegram (not /api/admin) since any authenticated user can ask.
+app.route('/api/telegram', telegramJoin);
 // Task #4 — same mount-before-catch-all precedence as Telegram.
 app.route('/api/admin/x', adminX);
 // Slack bus (Phase 1, 2026-05-26) — org-wide channel poster status +
