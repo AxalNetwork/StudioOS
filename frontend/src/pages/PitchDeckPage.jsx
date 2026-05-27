@@ -912,6 +912,43 @@ function FieldEditor({ field, onChange }) {
 // The templates module is code-split via a one-shot dynamic import so it
 // only loads when the picker opens (keeps it out of the main bundle).
 // =====================================================================
+// Self-heal helper. Fires on either (a) the registry resolving with zero
+// templates or (b) the dynamic import itself throwing (typical when a
+// stale chunk has a top-level ReferenceError). Unregisters all SWs,
+// clears Cache Storage, and hard-reloads with a one-shot cache-buster.
+// Guarded by sessionStorage so it can fire at most once per session —
+// if the reload doesn't fix it (i.e. the bug is in the fresh chunk
+// too), the user sees the diagnostic instead of an infinite loop.
+function recoverFromStaleTemplatesChunk() {
+  try {
+    if (typeof window === 'undefined') return false;
+    if (sessionStorage.getItem('deck_registry_recover')) return false;
+    sessionStorage.setItem('deck_registry_recover', String(Date.now()));
+    setTimeout(async () => {
+      try {
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister().catch(() => null)));
+        }
+        if (typeof caches !== 'undefined') {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((k) => caches.delete(k).catch(() => null)));
+        }
+      } finally {
+        const u = new URL(window.location.href);
+        u.searchParams.set('_reload', String(Date.now()));
+        window.location.replace(u.toString());
+      }
+    }, 250);
+    return true;
+  } catch {
+    // Privacy/incognito mode can throw on sessionStorage access — skip
+    // self-heal silently so the user at least sees the diagnostic and
+    // can act on it manually.
+    return false;
+  }
+}
+
 let _templatesPromise = null;
 function loadTemplates() {
   if (!_templatesPromise) {
@@ -958,36 +995,8 @@ function loadTemplates() {
           console.warn('[decks/templates] dynamic import resolved with no templates', { namespaceKeys, innerKeys, tlType, tlIsArr, tlLen, tplType, tplKeyCount });
           const err = new Error(`templates_module_empty (${diag})`);
           err.diag = diag;
-          // Self-heal: if the registry resolves to empty on a user's
-          // device, the *deployed* chunk is provably non-empty, so the
-          // browser must be holding stale JS (Safari iOS memory cache
-          // or a stale SW). Unregister all SWs, clear all caches, and
-          // hard-reload — guarded by a sessionStorage flag so we can't
-          // loop. The user sees the diagnostic for ~250ms before reload.
-          try {
-            if (typeof window !== 'undefined' && !sessionStorage.getItem('deck_registry_recover')) {
-              sessionStorage.setItem('deck_registry_recover', String(Date.now()));
-              setTimeout(async () => {
-                try {
-                  if ('serviceWorker' in navigator) {
-                    const regs = await navigator.serviceWorker.getRegistrations();
-                    await Promise.all(regs.map((r) => r.unregister().catch(() => null)));
-                  }
-                  if (typeof caches !== 'undefined') {
-                    const keys = await caches.keys();
-                    await Promise.all(keys.map((k) => caches.delete(k).catch(() => null)));
-                  }
-                } finally {
-                  // Force a fresh navigation — appends a one-shot
-                  // cache-buster so any intermediary proxy can't serve
-                  // a stale index.html either.
-                  const u = new URL(window.location.href);
-                  u.searchParams.set('_reload', String(Date.now()));
-                  window.location.replace(u.toString());
-                }
-              }, 250);
-            }
-          } catch { /* sessionStorage may be unavailable in privacy mode */ }
+          const recovering = recoverFromStaleTemplatesChunk();
+          if (recovering) err.recovering = true;
           return { list: [], record: {}, error: err };
         }
         return { list, record };
@@ -996,6 +1005,15 @@ function loadTemplates() {
         // Reset so a transient failure (e.g. network blip) can retry next open.
         _templatesPromise = null;
         reportError(err);
+        // A module-eval throw (e.g. a top-level ReferenceError baked
+        // into a stale chunk) lands here, not in the empty-registry
+        // branch above. Same recovery path: if we're still serving
+        // stale JS, one SW/cache purge + hard reload picks up the
+        // fixed chunk. Guarded by the same sessionStorage flag.
+        const recovering = recoverFromStaleTemplatesChunk();
+        if (recovering) {
+          try { err.recovering = true; } catch { /* err may be frozen */ }
+        }
         return { list: [], record: {}, error: err };
       });
   }

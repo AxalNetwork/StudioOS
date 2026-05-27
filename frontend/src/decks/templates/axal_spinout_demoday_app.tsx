@@ -2584,8 +2584,8 @@ type SlideEntry = { id: string; title: string; Component: React.FC<{ d: SpinoutD
 // Task #14 — 13 slides. Drops Axal Signal, adds Product Demo at slot 6,
 // merges Team + Venture Readiness into Team & readiness, renames Contact
 // → Review the deal. Legacy Slide_Team / Slide_VentureReadiness /
-// Slide_AxalSignal / Slide_Contact functions retained (unused) to keep
-// any in-flight code references intact during rollout.
+// Slide_AxalSignal functions retained (unused) to keep any in-flight
+// code references intact during rollout. Slide_Contact was deleted.
 const SLIDES: SlideEntry[] = [
   { id: 'cover',             title: 'Cover',             Component: Slide_Cover },
   { id: 'problem',           title: 'Problem',           Component: Slide_Problem },
@@ -2602,7 +2602,7 @@ const SLIDES: SlideEntry[] = [
   { id: 'review_the_deal',   title: 'Review the deal',   Component: Slide_ReviewTheDeal },
 ];
 // Silence unused-warnings for retained legacy slide components.
-void Slide_Team; void Slide_VentureReadiness; void Slide_AxalSignal; void Slide_Contact;
+void Slide_Team; void Slide_VentureReadiness; void Slide_AxalSignal;
 
 /* ─────────────────────────── root deck ─────────────────────────── */
 
