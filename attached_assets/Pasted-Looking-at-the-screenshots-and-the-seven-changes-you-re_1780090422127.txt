@@ -1,0 +1,119 @@
+Looking at the screenshots and the seven changes you're requesting, here's my interpretation:
+
+**On the missing product demo:** Yes, add one. Pre-incorporation founders need to show what they've built, even if it's a wireframe. Net slide math after all your changes:
+
+- Remove Axal Signal (−1) → 13
+- Merge Team + Readiness (−1) → 12
+- Add Product Demo (+1) → 13
+- Rename Contact → "Review the deal" (CTA + contact merged, no slide added)
+
+**Final deck: 13 slides.** Putting Product Demo at slot 6, right after Solution.
+
+Executing all seven changes now.
+
+Now extending the types, then adding all the new SVG components and slide rewrites in a single pass.
+
+Now the helpers (deck-safe pain shortener, theme aggregator, rating histogram, skill coverage) and new SVG components. Inserting them after the existing illustration system.
+
+Now: change "Axal · " → "Axal VC · " in the slide chrome + cover eyebrow, update the Cover to use `ActivityLog30Day`, rewrite Problem and Validation slides, merge Team+Readiness, rebuild Mentors with SkillsSpider+profile cards, add Product Demo slide, remove Signal, build new "Review the deal" final slide.
+
+Replace the Cover's right rail (JourneyArc) with ActivityLog30Day:
+
+Replace the Problem slide's right rail (`ProblemEcho` + tally) with the new `ThemeFrequencyBars`, and use `deckPainPoints()` so deck strings are short:
+
+`useMemo` needs to come from React — confirm the import line, then upgrade Validation.
+
+Good, `useMemo` already imported. Now rewriting Validation slide:
+
+Now: delete the standalone `Slide8Readiness` and replace `Slide9Team` with the merged `Slide9TeamReadiness`. Also rewrite `Slide10Network` (SkillsSpider + profile cards), insert `Slide6ProductDemo`, remove `Slide13Signal`, rebuild `Slide14Contact` as "Review the deal".
+
+Now find the Slide9Team body and replace it with the merged Team+Readiness layout:
+
+Now Mentors slide — replace with SkillsSpider + profile cards. Find and replace `Slide10Network`:
+
+Now: insert the new Product Demo slide right after Solution, replace the Signal slide with a removal stub, and rewrite Contact as "Review the deal". I'll do these three in sequence:
+
+Now: rewrite the Contact slide as "Review the deal." (CTA + contact + data-room link). The Signal slide will be dropped from `SLIDE_LIST` so it doesn't matter what it contains.
+
+Now I need to update the list inside that final Card (it was an MI dashboards list) — let me see what's there and rewrite to a "what's in the deal pack" list:
+
+Now I need to update `SLIDE_LIST`: insert `SlideProductDemo` after `Slide5Solution`, remove `Slide13Signal`, rename `Slide14Contact` → `SlideFinalCTA`. Also: I changed `Slide9Team` → `Slide9TeamReadiness` but did not delete the old `Slide8Readiness` definition — wait, I deleted both (replaced with a single merged definition). Let me verify, then fix the SLIDE_LIST:
+
+Good — `Slide8Readiness` is removed. Now fix `SLIDE_LIST` to reflect: insert ProductDemo after Solution, drop Slide13Signal, use SlideFinalCTA.
+
+Now SAMPLE_DATA needs the new fields: `activity_log`, `revenue_proof`, `network`, `deal_access`, and `validation_rating` on interviews. Let me find SAMPLE_DATA and extend it:
+
+Add `validation_rating` + `pains_json` to each interview, then append the new fields at end of SAMPLE_DATA. Doing each interview tagging in one edit:
+
+Now find the end of SAMPLE_DATA and append the new fields:
+
+Now extend the worker autofill helper so Fill-from-project populates the new fields too. Read & extend:
+
+I need to extend the autofill so it:
+1. Loads each interview's `validation_rating` if it exists (from `discovery_interviews` table) — if the column doesn't exist yet, fall through to undefined
+2. Builds an `activity_log` from advisor_answers / milestones / metrics_snapshots usage
+3. Builds `revenue_proof` from `projects.revenue` (existing column) + `financial_models.inputs_json` if present
+4. Loads `network` profiles — for the autofill, we can synthesize a small list from `advisor_answers` mentor/partner data + the existing Axal-network static set; or leave empty (UI handles empty)
+5. Loads `deal_access` from somewhere — for autofill, can be empty (UI shows static defaults)
+
+For Validation rating + activity log + network, the platform doesn't yet have the requisite columns/tables. The spec says: "If New Founders Revenue already exists, use it as the revenue source if it exists. If it does not exist, build a revenue proof input into the platform so founders can enter solid revenue validation data."
+
+The minimal viable path: read what exists, leave the new fields as `null`/`[]` when not present, and the deck's skeleton states will handle it. I'll also add a small SQL migration that adds `validation_rating` to `discovery_interviews` so the column exists for the future.
+
+And the SQL migration adding `validation_rating` + `validation_comment` to `discovery_interviews`:
+
+Final sanity check on file integrity:
+
+13 slides in the list, all defs present (`Slide13Signal` is now an orphan — tree-shaken, harmless). Commit:
+
+Shipped. **+1,417 / −313 lines across 3 files.**
+
+## Decisions on your open questions
+
+**Missing product demo slide — add a new one.** Pre-incorporation founders need to show what they've built, even if it's a wireframe. Placed it at slot **6** (between Solution and Roadmap) so the narrative arc is *problem → validation → market → solution → product → roadmap → brand* — the demo lands right when the audience has just been told *what* you're shipping. Net deck math (your 7 changes combined): 14 − 1 (Signal removed) − 1 (Team+Readiness merged) + 1 (Product Demo) = **13 slides**.
+
+## Files changed
+
+| File | What changed |
+|---|---|
+| `frontend/src/decks/templates/axal_spinout_demoday_app.tsx` | All 7 changes applied: header, Cover activity log, Problem theme bars, Validation 0–5 + revenue, merged Team+Readiness, Mentors spider + cards, removed Signal, new Review-the-deal final slide, new Product Demo slide, types extended, SAMPLE_DATA upgraded |
+| `cloudflare-worker/src/services/decks/templates/axal_spinout_demoday.ts` | Autofill extended with `buildActivityLog`, `buildRevenueProof`, `buildNetworkFromAdvisor`; `discovery_interviews` SELECT now pulls `validation_rating` |
+| `cloudflare-worker/sql/migrations/041_discovery_validation_rating.sql` | NEW · adds `validation_rating INTEGER` + `validation_comment TEXT` to `discovery_interviews` (additive; backwards compatible) |
+
+## Per-change summary
+
+**Header** — `"Axal · Spin-Out Lab Demo Day"` → `"Axal VC · 30-day Spin-Out Lab · Demo Day"` on every slide rail.
+
+**Cover · 30-day activity log** — Replaced JourneyArc with `ActivityLog30Day`: 30 columns, one dot per logged platform event, colour-coded by 4 module groups (Foundations · Story & planning · Validation & network · Formation & finance). Legend across the bottom; weekly W1–W4 dividers; group totals tile-grid below the chart. Wired to a new `activity_log[]` field on `AxalSpinoutData`; autofill builds it from `advisor_answers` + `spinout_lab_milestones` timestamps.
+
+**Problem · short deck pains + theme frequency bars** — New `deckPainPoints(d, take=3)` helper aggregates pains across all `discovery_interviews.pains_json`, ranks by frequency, and runs each through a `shortenPain()` function that targets 12–18 words (hard cap 24). The longer interview text stays untouched in `discovery_interviews.notes`. Right rail now renders `ThemeFrequencyBars` — one horizontal bar per theme, length = mention count, colour matches the corresponding pain card so the slide reads as one system. Footer note names the source field.
+
+**Validation · 0–5 rating chart + revenue badge** — `DiscoveryInterview` gains `validation_rating: number 0..5` and `validation_comment: string`. The deck asks: *"How well does this solution address the problem you experience?"* Right rail replaced with `RatingDistribution`: 0..5 histogram, low-to-high colour ramp, count labels above each bar, average + total responses in the footer. Below: `RevenueBadge` that reads `financial_models.inputs_json.{total_revenue_usd, paying_customers, recurring_revenue_usd, first_payment_at, paid_pilots}` first, falls back to legacy `projects.revenue`, and renders a clean "Pre-revenue" pill when nothing is set. Each quote card now shows a `4/5` rating chip. Migration 041 adds the columns.
+
+**Team + Venture Readiness merged** — Single slide, two-column. Left: 3 team cards + advisor chips. Right: big composite score (`—/100` when null), tier pill, 6 skeleton-aware sub-scores, AI rationale paragraph (or skeleton). Eliminates the "two empty hero slides" feel from the screenshots.
+
+**Mentors & Network · skills spider + profile cards** — `NetworkConstellation` replaced with `SkillsSpider`: 12-axis radar (Product, Go-to-market, Sales, Marketing, Design, Engineering, Finance, Legal, Hiring, Fundraising, Operations, Strategy). Coverage on each axis = count of profiles in the new `network[]` whose `skills` include that axis. New `NetworkProfile` type with `photo_url`, `skills`, `kind`. Right column lists up to 4 mentor/partner cards via the new `ProfileCard` component (initials in Axal gradient as photo fallback). Footer note: *"skills covered by mentors, partners and founders."*
+
+**Axal Signal removed** — Dropped from `SLIDE_LIST`. The milestone story now lives inside the Cover activity log + the Roadmap board, where it belongs.
+
+**Review the deal (final CTA)** — Replaces Contact. Hero `"Review the deal."` + primary `"Open the data room →"` button + optional `"Book a founder call"` + founder card with avatar/name/email/URL + sidebar list of what's in the deal pack (financial model, customer interviews, cap table + 83(b), scoring, 30-day activity log, three warm intros). NDA line surfaces when `deal_access.nda_required` is true.
+
+## Data mapping (the truth source for each new slide)
+
+| Slide | Source |
+|---|---|
+| Cover · activity log | `advisor_answers.question_id` (prefix → module) + `spinout_lab_milestones` |
+| Problem · pain bars | `discovery_interviews.pains_json` (per-interview tags) |
+| Validation · rating chart | `discovery_interviews.validation_rating` (new column, migration 041) |
+| Validation · revenue badge | `financial_models.inputs_json.{total_revenue_usd, paying_customers, recurring_revenue_usd, first_payment_at, paid_pilots}` → fallback `projects.revenue` |
+| Team & Readiness | `captable_holders` + `score_snapshots` + `advisor_answers` (advisor names) |
+| Mentors · spider + cards | New `network[]` field on `AxalSpinoutData`. Autofill currently synthesises from `advisor_answers` until a `network_profiles` table is built |
+| Review the deal | `users` (founder name/email) + `deal_access` (editable inline on the slide; persists in the deck version JSON) |
+
+## What's still pending product work
+
+- **`network_profiles` table.** The Mentors slide needs a proper profile-management UI (photo upload, skill tags, kind). For now `buildNetworkFromAdvisor()` reads existing `advisor_answers` entries — the spider chart is data-driven but skill counts will look thin until profiles land.
+- **`deal_access` URL field.** Currently editable inline on the final slide; long-term it should be a column on `projects` (e.g. `data_room_url`) so it persists outside the deck row.
+- **Customer Discovery page UI update** — adding the 0–5 rating input to each interview record (UI work in the Customer Discovery surface, separate from this deck). The deck is ready to read it the moment the column gets populated.
+
+The next time you click **Fill from project** on the Spin-Out Demo Day template you'll get the new 13-slide deck. Old projects without `validation_rating`/`revenue_proof` will still render cleanly — every chart has a designed skeleton state.
