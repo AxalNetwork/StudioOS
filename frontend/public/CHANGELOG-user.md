@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: Guillaume Lauzier added to the Team page
+
+Guillaume Lauzier, Founding Managing Partner, now appears on the Team
+page with his photo. Clicking his photo opens his LinkedIn profile.
+
+
 ## New: Articles by Guillaume Lauzier are live, and the Articles section now loads
 
 Three new articles are published in the Articles section: "How AI is

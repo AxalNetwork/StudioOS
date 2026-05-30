@@ -71,13 +71,31 @@ export default function TeamPage() {
                 >
                   <div className="aspect-square bg-gradient-to-br from-violet-100 to-violet-50 dark:from-violet-900/30 dark:to-slate-800 flex items-center justify-center">
                     {m.photo_url ? (
-                      <img
-                        src={m.photo_url}
-                        alt={m.name}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                      />
+                      m.socials?.linkedin ? (
+                        <a
+                          href={m.socials.linkedin}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`${m.name} on LinkedIn`}
+                          className="w-full h-full block"
+                        >
+                          <img
+                            src={m.photo_url}
+                            alt={m.name}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          />
+                        </a>
+                      ) : (
+                        <img
+                          src={m.photo_url}
+                          alt={m.name}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      )
                     ) : (
                       <Users className="w-16 h-16 text-violet-400" />
                     )}

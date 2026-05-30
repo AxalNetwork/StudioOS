@@ -3,10 +3,23 @@
 A plain-English summary of recent changes to StudioOS, written for
 everyone using the platform. Newest changes are at the top.
 
-For the detailed engineering log (with task IDs and code references),
-see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/blob/main/CHANGELOG.md).
-
 ---
+
+## New: Articles by Guillaume Lauzier are live, and the Articles section now loads
+
+Three new articles are published in the Articles section: "How AI is
+changing startup investment and venture support," "Why I avoid consensus
+and invest early," and "Cybersecurity and zero-trust systems." Each is
+categorized so you can filter by topic. We also fixed an issue that
+prevented the Articles list and reader from loading at all.
+
+
+## Fix: Telegram admin page no longer flickers
+
+The Drafts, Compose, and History tabs on the Telegram page kept
+flickering as the content reloaded over and over. That's fixed — the
+tabs now load once and stay steady while you work.
+
 
 ## New: Spin-Out Demo Day deck now shows a real revenue proof on the Validation slide
 

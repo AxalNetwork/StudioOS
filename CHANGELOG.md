@@ -11,6 +11,24 @@
 > building it.
 
 
+## Team — add Guillaume Lauzier to the public roster
+
+Seeded the first `team_members` row in prod D1 (the table was empty;
+migration 066 stays unapplied, `ensureTeamMembersSchema()` bootstraps it):
+slug `guillaume-lauzier`, name "Guillaume Lauzier", title "Founding
+Managing Partner", `social_linkedin =
+https://www.linkedin.com/in/guillaumelauzier/`, `display_order=0`,
+`published=1`. Headshot uploaded to the FILES R2 bucket at
+`team/guillaume-lauzier/<uuid>.png` (served via the private photo proxy
+`/api/public/team/:slug/photo`). Both `/team` consumers (the Jekyll
+marketing build and the SPA `TeamPage`) read `/api/public/team`, so the
+roster now returns him. `TeamPage.jsx` now wraps the headshot in a
+LinkedIn anchor (target=_blank, rel=noopener) when `socials.linkedin` is
+present, so the photo itself is clickable. Note: the live `axal.vc/team`
+is Jekyll-served and reflects the new row on its next marketing-site
+build; the data + photo are already live on `/api/public/team`.
+
+
 ## Fix — `/api/articles` 500 in prod (selected nonexistent `users.handle`)
 
 The public + author + admin article surfaces (`routes/articles.ts` list,

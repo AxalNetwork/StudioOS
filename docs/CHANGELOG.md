@@ -11,6 +11,41 @@
 > building it.
 
 
+## Fix — `/api/articles` 500 in prod (selected nonexistent `users.handle`)
+
+The public + author + admin article surfaces (`routes/articles.ts` list,
+`/by-author/:user_id`, `/:slug`; `routes/admin_articles.ts` `loadArticle`)
+JOINed `users` and selected `u.handle AS author_handle`. Prod `users` has
+no `handle` column (it never shipped, and the table is at D1's
+ALTER-rewrite column limit so it can't be added), so every read threw
+`no such column: handle` → 500. The bug was latent because the `articles`
+table was empty; it surfaced the moment real rows existed. `/api/news`
+was unaffected because it never selected `handle`. Replaced the four
+`u.handle AS author_handle` references with `NULL AS author_handle`; the
+public/author response shapes already treat `author_handle` as nullable
+(`row.author_handle ?? null`) and profile deep-links use
+`/by-author/:user_id` (by id), so no behavior is lost. Also seeded three
+published articles authored by Guillaume Lauzier (`gl@axal.vc`, user 17):
+"How AI is changing startup investment and venture support" (sector `ai`),
+"Why I avoid consensus and invest early" (sector `other`), "Cybersecurity
+and zero-trust systems" (sector `infra`).
+
+
+## Fix — Telegram admin tabs no longer flicker (stable `useToast` identity)
+
+`useToast()` returned a fresh object literal every render. Callers
+(`AdminTelegram` `refresh`, `DraftsTab` `reload`, `ComposeTab`
+`loadDraft`, `HistoryTab` `load`) destructure `const toast = useToast()`
+and list `toast` in `useCallback`/`useEffect` deps. Each fetch's
+`setState` re-rendered the parent → new toast object → new callback
+identity → effect re-fired → fetched again: an infinite refetch loop that
+flickered the Drafts/Compose/History tab content. Wrapped the hook's
+return in `useMemo` (`frontend/src/components/useToast.js`) so the object
+identity is stable across renders, changing only when the toast value
+itself changes (all methods are already stable `useCallback`s). Fixes the
+flicker app-wide for any page using this pattern.
+
+
 ## Task #2 — Spin-Out Demo Day Validation slide: RevenueProofCard replaces decorative bubbles, structured revenue-proof fields
 
 Replaced the decorative `<VoicesBubbles />` quote-bubble graphic on the
