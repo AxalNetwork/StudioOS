@@ -2798,7 +2798,7 @@ type SlideEntry = { id: string; title: string; Component: React.FC<{ d: SpinoutD
 // → Review the deal. Legacy Slide_Team / Slide_VentureReadiness /
 // Slide_AxalSignal functions retained (unused) to keep any in-flight
 // code references intact during rollout. Slide_Contact was deleted.
-const SLIDES: SlideEntry[] = [
+export const SLIDES: SlideEntry[] = [
   { id: 'cover',             title: 'Cover',             Component: Slide_Cover },
   { id: 'problem',           title: 'Problem',           Component: Slide_Problem },
   { id: 'validation',        title: 'Validation',        Component: Slide_Validation },
