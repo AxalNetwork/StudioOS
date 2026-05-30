@@ -328,6 +328,27 @@ crons = [
   "0 9 * * 1",     # weekly digest emails (Monday)
 ]
 
+# ---------- Market-Intelligence free connectors ----------
+# Each registered source runs its deterministic stub by default and only
+# calls its real provider when flipped LIVE via `MI_FLAG_<KEY>=live` (see
+# registry.ts::isLive). Set these as plain vars or via `wrangler secret put`.
+# P0 (merged): MI_FLAG_OPENALEX, MI_FLAG_PATENT_USPTO, MI_FLAG_PATENT_EPO,
+#   MI_FLAG_NEWS_GDELT, MI_FLAG_PAPERSWITHCODE, MI_FLAG_STACK_EXCHANGE, …
+# P1 (this task — macro/research free sources):
+#   MI_FLAG_WORLD_BANK=live   # World Bank gross-capital-formation (keyless)
+#   MI_FLAG_OECD=live         # OECD MSTI GERD % GDP (keyless)
+#   MI_FLAG_EUROSTAT=live     # Eurostat EU27 GERD % GDP (keyless)
+#   MI_FLAG_CROSSREF=live     # Crossref publication velocity (keyless, send mailto)
+#   MI_FLAG_ARXIV=live        # arXiv preprint counts (keyless)
+#   MI_FLAG_BLS=live          # US BLS unemployment — needs BLS_API_KEY
+#   MI_FLAG_FRED=live         # FRED fed-funds rate — needs FRED_API_KEY
+# Optional: MI_CONTACT_EMAIL (polite-pool mailto/UA; defaults market-intel@axal.vc).
+# Key secrets (free keys; Worker secrets only — never .replit):
+#   wrangler secret put BLS_API_KEY  --env production
+#   wrangler secret put FRED_API_KEY --env production
+# When a key-required source is flipped live but its key is unset, it stays on
+# its stub (does NOT throw) — same graceful-degrade contract as the rest.
+
 # ---------- Observability ----------
 [observability]
 enabled            = true

@@ -9,6 +9,8 @@ import './world_bank';
 import './oecd';
 import './eurostat';
 import './bls';
+import './fred';
+import './crossref';
 import './patent_uspto';
 import './openalex';
 import './patent_epo';

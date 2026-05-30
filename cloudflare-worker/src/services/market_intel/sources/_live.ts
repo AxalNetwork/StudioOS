@@ -166,3 +166,36 @@ export async function buildLiveRows(opts: {
   }
   return rows;
 }
+
+/**
+ * Macro-backdrop builder for single-series providers (World Bank, OECD,
+ * Eurostat, BLS, FRED). These expose ONE national/global figure rather than
+ * a per-sector signal, so we fetch it once and replicate the same normalised
+ * value across every sector — an honest macro context that shifts the whole
+ * composite uniformly. Throws when `fetchOne` yields null so the caller
+ * degrades to the deterministic stub (same contract as `buildLiveRows`).
+ */
+export async function buildUniformRows(opts: {
+  sectors: string[];
+  key: string;
+  metric_key: string;
+  now?: Date;
+  unit?: CommonRow['unit'];
+  fetchOne: () => Promise<PerSectorResult | null>;
+}): Promise<CommonRow[]> {
+  const r = await opts.fetchOne();
+  if (!r) throw new Error('live_fetch_failed empty');
+  const ts = (opts.now ?? new Date()).toISOString();
+  return opts.sectors.map((sector) =>
+    row({
+      source_key: opts.key,
+      sector,
+      metric_key: opts.metric_key,
+      metric_value: r.value,
+      raw_value: r.raw,
+      unit: opts.unit ?? 'index',
+      ts,
+      citation_url: r.citation_url,
+    }),
+  );
+}
