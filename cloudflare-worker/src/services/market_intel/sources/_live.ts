@@ -92,6 +92,31 @@ export async function fetchJson<T = unknown>(
   }
 }
 
+/** fetch + text with a hard timeout; throws `http_<status>` on non-2xx.
+ * Used by providers that speak XML/Atom (e.g. arXiv) rather than JSON. */
+export async function fetchText(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = 8000,
+): Promise<string> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...init, signal: ctrl.signal });
+    if (!res.ok) throw new Error(`http_${res.status}`);
+    return await res.text();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** Clamp an already-0..1-ish value into the stub's 0.05..0.95 band so live
+ * and stub rows stay comparable in the composite. Non-finite → floor. */
+export function clamp01(v: number): number {
+  if (!isFinite(v)) return 0.05;
+  return Math.max(0.05, Math.min(0.95, v));
+}
+
 export interface PerSectorResult {
   /** Normalised 0..1 metric. */
   value: number;
