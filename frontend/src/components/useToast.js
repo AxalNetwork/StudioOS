@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
 // T19 + T21 — Shared toast hook.
 // - Auto-dismisses after `defaultMs` (default 4000).
@@ -48,5 +48,17 @@ export function useToast(defaultMs = 4000) {
 
   useEffect(() => clear, [clear]);
 
-  return { toast, showToast, dismissToast, success, error };
+  // Return a STABLE object reference. Callers destructure `const toast =
+  // useToast()` and put `toast` in useCallback/useEffect dependency arrays
+  // (refresh / reload / load / loadDraft on AdminTelegram, etc). A fresh
+  // object literal here changed identity on every render, so those effects
+  // re-fired every render — each fetch's setState re-rendered the parent,
+  // which produced a new toast object, which re-fired the effect: an
+  // infinite refetch loop that flickered the tab content. Memoising keeps
+  // the identity stable except when the toast value itself changes (all
+  // methods are already stable useCallbacks).
+  return useMemo(
+    () => ({ toast, showToast, dismissToast, success, error }),
+    [toast, showToast, dismissToast, success, error],
+  );
 }

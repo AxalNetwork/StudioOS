@@ -8,6 +8,13 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## Fix: Telegram admin page no longer flickers
+
+The Drafts, Compose, and History tabs on the Telegram page kept
+flickering as the content reloaded over and over. That's fixed — the
+tabs now load once and stay steady while you work.
+
+
 ## New: Spin-Out Demo Day deck now shows a real revenue proof on the Validation slide
 
 The Validation slide used to display a decorative quote-bubble graphic.

@@ -11,6 +11,21 @@
 > building it.
 
 
+## Fix — Telegram admin tabs no longer flicker (stable `useToast` identity)
+
+`useToast()` returned a fresh object literal every render. Callers
+(`AdminTelegram` `refresh`, `DraftsTab` `reload`, `ComposeTab`
+`loadDraft`, `HistoryTab` `load`) destructure `const toast = useToast()`
+and list `toast` in `useCallback`/`useEffect` deps. Each fetch's
+`setState` re-rendered the parent → new toast object → new callback
+identity → effect re-fired → fetched again: an infinite refetch loop that
+flickered the Drafts/Compose/History tab content. Wrapped the hook's
+return in `useMemo` (`frontend/src/components/useToast.js`) so the object
+identity is stable across renders, changing only when the toast value
+itself changes (all methods are already stable `useCallback`s). Fixes the
+flicker app-wide for any page using this pattern.
+
+
 ## Task #2 — Spin-Out Demo Day Validation slide: RevenueProofCard replaces decorative bubbles, structured revenue-proof fields
 
 Replaced the decorative `<VoicesBubbles />` quote-bubble graphic on the

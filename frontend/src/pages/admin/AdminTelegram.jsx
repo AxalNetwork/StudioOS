@@ -347,7 +347,7 @@ function DraftsTab({ channels, refresh, toast, onEdit }) {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast.error]);
 
   useEffect(() => { reload(); }, [reload]);
 
@@ -482,7 +482,7 @@ function ComposeTab({ channels, toast, editingId, setEditingId, onSent }) {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast.error]);
 
   useEffect(() => {
     if (editingId) loadDraft(editingId);
@@ -785,7 +785,7 @@ function HistoryTab({ toast }) {
     } finally {
       setLoading(false);
     }
-  }, [offset, toast]);
+  }, [offset, toast.error]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -853,7 +853,7 @@ export default function AdminTelegram() {
     } catch (e) {
       toast.error(e?.body?.message || 'Load failed');
     }
-  }, [toast]);
+  }, [toast.error]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
