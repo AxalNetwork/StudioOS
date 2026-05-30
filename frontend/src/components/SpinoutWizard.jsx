@@ -138,7 +138,7 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
                   <p className="text-xs text-emerald-700">IP License generated and signed (doc #{sub.ip_license_doc_id}).</p>
                 ) : (
                   <>
-                    <p className="text-xs text-gray-700 mb-3 dark:text-gray-300">Generates the IP Assignment & License Agreement transferring the project's IP from Axal Holding to the new subsidiary.</p>
+                    <p className="text-xs text-gray-700 mb-3 dark:text-gray-300">Generates the IP Assignment & License Agreement transferring the project's IP from Axal VC Holdings LLC to the new subsidiary.</p>
                     <button onClick={stepIp} disabled={busy} className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-3 py-2 rounded flex items-center gap-1">
                       {busy ? <Loader2 className="animate-spin" size={12} /> : <FileText size={12} />} Execute IP Transfer
                     </button>

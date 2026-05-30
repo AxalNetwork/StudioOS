@@ -173,7 +173,21 @@ interface AgreementTemplate {
 // these are placeholders that capture the intent and parties so the audit
 // trail is meaningful from day one.
 function buildTemplateBody(agreementType: string, recipientName: string, recipientEmail: string): AgreementTemplate {
-  const intro = `This Agreement is entered into between Axal Holding Co. ("Axal") and ${recipientName || recipientEmail} ("Counterparty"), effective on the date of electronic signature appearing below.\n\n`;
+  // Operating contracts (platform terms, partner, vendor, mentor, etc.) are
+  // signed by Axal VC Management LLC. Fund subscription documents (LPA,
+  // subscription booklets, side letters) substitute "Axal VC GP LLC, the
+  // general partner of Axal VC Fund I, LP" below — see the Subscription
+  // Booklet & LPA entry in the template library.
+  const fundEntityAgreements = new Set([
+    'Subscription Booklet & LPA',
+    'SPV Joinder Agreement',
+    'Co-Investment Side Letter',
+    'Strategic Side Letter / Focused SPV',
+  ]);
+  const axalSignerName = fundEntityAgreements.has(agreementType)
+    ? 'Axal VC GP LLC, as general partner of Axal VC Fund I, LP ("Axal")'
+    : 'Axal VC Management LLC ("Axal")';
+  const intro = `This Agreement is entered into between ${axalSignerName} and ${recipientName || recipientEmail} ("Counterparty"), effective on the date of electronic signature appearing below.\n\n`;
   const closer = `\n\n---\n\nBy signing electronically below, the parties acknowledge that they have read and agree to the terms set forth in this Agreement and that an electronic signature has the same legal effect as a handwritten signature under the U.S. Electronic Signatures in Global and National Commerce Act (E-SIGN, 15 U.S.C. § 7001 et seq.) and the Uniform Electronic Transactions Act (UETA).`;
   const lib: Record<string, AgreementTemplate> = {
     'Subscription Booklet & LPA': { title: 'Subscription Booklet & Limited Partnership Agreement', body: intro + 'Counterparty subscribes to limited partnership interests in the Axal venture fund subject to the terms of the Limited Partnership Agreement, including capital commitments, management fees, carried interest, distribution waterfall, and transfer restrictions.\n\nCounterparty represents that they qualify as an Accredited Investor under Regulation D and will provide such verification as Axal may reasonably require.' + closer },

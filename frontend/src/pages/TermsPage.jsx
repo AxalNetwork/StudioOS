@@ -14,14 +14,20 @@ export default function TermsPage() {
         </Link>
 
         <h1 className="text-4xl font-bold text-gray-900 mb-2">Terms of Service</h1>
-        <p className="text-gray-600 mb-8">Effective Date: March 31, 2026</p>
+        <p className="text-gray-600 mb-1">Effective Date: March 31, 2026</p>
+        <p className="text-gray-600 mb-8 text-sm">
+          Operated by <strong>Axal VC Management LLC</strong>, a Delaware limited liability company.
+          Platform IP and brand assets owned by <strong>Axal VC Holdings LLC</strong>.
+          Investments in <strong>Axal VC Fund I, LP</strong> are managed by <strong>Axal VC GP LLC</strong>
+          as its general partner.
+        </p>
 
         <div className="prose prose-sm max-w-none text-gray-700 space-y-6">
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mb-4">1. SCOPE OF SERVICE & NO ADVICE</h2>
             <ul className="list-disc list-inside space-y-2">
-              <li><strong>Platform Purpose:</strong> Axal.vc is a proprietary technology tool for venture capital operations, deal flow management, and investor relations.</li>
-              <li><strong>No Investment Advice:</strong> The Platform is for informational and administrative purposes only. Axal is not a registered broker-dealer or investment adviser. No content on the Platform constitutes a recommendation, solicitation, or offer to buy or sell any securities or financial instruments.</li>
+              <li><strong>Platform Purpose:</strong> The Axal StudioOS platform (the "Platform") is operated by Axal VC Management LLC and is a proprietary technology tool for venture capital operations, deal flow management, and investor relations.</li>
+              <li><strong>No Investment Advice:</strong> The Platform is for informational and administrative purposes only. Axal VC Management LLC is not a registered broker-dealer or investment adviser. No content on the Platform constitutes a recommendation, solicitation, or offer to buy or sell any securities or financial instruments. Offers to invest in Axal VC Fund I, LP are made only by Axal VC GP LLC through the Fund's separate subscription documents.</li>
               <li><strong>High Risk:</strong> You acknowledge that venture capital investments are highly illiquid and carry a risk of 100% loss of principal.</li>
             </ul>
           </section>
@@ -38,16 +44,16 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mb-4">3. PROPRIETARY RIGHTS & LICENSING</h2>
             <ul className="list-disc list-inside space-y-2">
-              <li><strong>Ownership:</strong> The Platform's software, design, and trademarks (including "Axal") are the exclusive property of Axal Holding Co. and are protected by intellectual property laws.</li>
-              <li><strong>License:</strong> We grant you a limited, revocable, non-transferable license to use the Platform for its intended professional purpose. You may not scrape, "deep-link," or reverse-engineer any portion of the Platform.</li>
+              <li><strong>Ownership:</strong> The Platform's software, design, copyrighted content, domain names (including <code>axal.vc</code>), and trademarks (including "Axal", "Axal VC", and "StudioOS") are the exclusive property of <strong>Axal VC Holdings LLC</strong> and are protected by intellectual property laws. Axal VC Holdings LLC licenses these assets to Axal VC Management LLC for operation of the Platform.</li>
+              <li><strong>License:</strong> Axal VC Management LLC grants you a limited, revocable, non-transferable license to use the Platform for its intended professional purpose. You may not scrape, "deep-link," or reverse-engineer any portion of the Platform.</li>
             </ul>
           </section>
 
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mb-4">4. CONFIDENTIALITY & DATA PRIVACY</h2>
             <ul className="list-disc list-inside space-y-2">
-              <li><strong>Non-Disclosure:</strong> You will have access to "Confidential Information" (e.g., startup pitch decks, cap tables, and fund performance data). You agree to keep this information strictly confidential and use it solely for evaluating potential investments through the Axal network.</li>
-              <li><strong>Data Handling:</strong> Our use of your data is governed by our <Link to="/privacy" className="text-violet-600 hover:underline">Privacy Policy</Link>. You consent to the processing of your data in accordance with the Amended Regulation S-P (2026) regarding financial data protection.</li>
+              <li><strong>Non-Disclosure:</strong> You will have access to "Confidential Information" (e.g., startup pitch decks, cap tables, and Axal VC Fund I, LP performance data). You agree to keep this information strictly confidential and use it solely for evaluating potential investments through the Axal network.</li>
+              <li><strong>Data Handling:</strong> Axal VC Management LLC's use of your data is governed by our <Link to="/privacy" className="text-violet-600 hover:underline">Privacy Policy</Link>. You consent to the processing of your data in accordance with the Amended Regulation S-P (2026) regarding financial data protection.</li>
             </ul>
           </section>
 
@@ -64,9 +70,19 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mb-4">6. LIMITATION OF LIABILITY & INDEMNITY</h2>
             <ul className="list-disc list-inside space-y-2">
-              <li><strong>"As-Is" Basis:</strong> The Platform is provided without warranties of any kind. Axal does not guarantee the accuracy of data provided by third-party founders or LPs.</li>
-              <li><strong>Liability Cap:</strong> To the maximum extent permitted by law, Axal's total liability for any claim shall not exceed the fees paid by you to Axal in the six (6) months preceding the claim.</li>
-              <li><strong>Indemnity:</strong> You agree to indemnify Axal Management, LLC and Axal Holding Co. against any losses arising from your breach of these Terms or misrepresentation of your investor status.</li>
+              <li><strong>"As-Is" Basis:</strong> The Platform is provided without warranties of any kind. Axal VC Management LLC does not guarantee the accuracy of data provided by third-party founders or LPs.</li>
+              <li><strong>Liability Cap:</strong> To the maximum extent permitted by law, the total liability of Axal VC Management LLC and its affiliates (Axal VC Holdings LLC and Axal VC GP LLC) for any claim shall not exceed the fees paid by you to Axal VC Management LLC in the six (6) months preceding the claim.</li>
+              <li><strong>Indemnity:</strong> You agree to indemnify <strong>Axal VC Management LLC</strong>, <strong>Axal VC Holdings LLC</strong>, and <strong>Axal VC GP LLC</strong> against any losses arising from your breach of these Terms or misrepresentation of your investor status.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">6A. LEGAL ENTITIES & ROLES</h2>
+            <p className="mb-2">The "Axal VC" platform is operated through three distinct Delaware limited liability companies, each with a specific role:</p>
+            <ul className="list-disc list-inside space-y-2">
+              <li><strong>Axal VC Holdings LLC</strong> — passive holding company. Owns the brand and platform intellectual property (trademarks, copyrights, domain names including <code>axal.vc</code>), holds equity interests in subsidiaries and SPVs, and holds treasury and long-term reserves. Licenses platform IP to Axal VC Management LLC.</li>
+              <li><strong>Axal VC Management LLC</strong> — operating company and your counterparty under these Terms. Operates the Platform, employs personnel and contractors, signs customer, vendor, and partner agreements, and is the data controller under the <Link to="/privacy" className="text-violet-600 hover:underline">Privacy Policy</Link>.</li>
+              <li><strong>Axal VC GP LLC</strong> — general partner of <strong>Axal VC Fund I, LP</strong>. Manages the Fund, makes investment decisions, approves exits, and owes fiduciary duties to the Fund's limited partners. Axal VC GP LLC is not a party to these Terms and does not operate the Platform.</li>
             </ul>
           </section>
 

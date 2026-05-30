@@ -56,7 +56,7 @@ async function ensureSchema(env: Env) {
     `CREATE TABLE IF NOT EXISTS subsidiaries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       deal_id INTEGER NOT NULL,
-      holding_company_id TEXT DEFAULT 'Axal_Holding_Delaware_CCorp',
+      holding_company_id TEXT DEFAULT 'Axal_VC_Holdings_LLC_Delaware',
       subsidiary_name TEXT NOT NULL,
       jurisdiction TEXT NOT NULL DEFAULT 'Delaware_CCorp',
       stripe_atlas_status TEXT DEFAULT 'pending',
@@ -219,19 +219,19 @@ Investor: {{investor_name}}  By: ____________________   Date: {{date}}`,
 
   IP_license: `INTELLECTUAL PROPERTY ASSIGNMENT & LICENSE AGREEMENT
 
-This IP Assignment and License Agreement ("Agreement") is entered into on {{date}} by and between Axal Holding Delaware C-Corp ("Holding") and {{company_name}} ("Subsidiary").
+This IP Assignment and License Agreement ("Agreement") is entered into on {{date}} by and between Axal VC Holdings LLC, a Delaware limited liability company ("Holdings"), and {{company_name}} ("Subsidiary").
 
-1. Assignment. Holding hereby irrevocably assigns to Subsidiary all right, title, and interest in and to the intellectual property described in Schedule A, including but not limited to: source code, trademarks, patents, trade secrets, and all related know-how (the "Assigned IP").
+1. Assignment. Holdings hereby irrevocably assigns to Subsidiary all right, title, and interest in and to the intellectual property described in Schedule A, including but not limited to: source code, trademarks, patents, trade secrets, and all related know-how (the "Assigned IP").
 
-2. License Back. Subsidiary grants to Holding a non-exclusive, perpetual, worldwide, royalty-free license to use the Assigned IP solely for Holding's portfolio operations.
+2. License Back. Subsidiary grants to Holdings a non-exclusive, perpetual, worldwide, royalty-free license to use the Assigned IP solely for Holdings' portfolio operations and for sublicensing to Axal VC Management LLC for platform operation.
 
-3. Equity Allocation. In consideration, Holding shall retain {{holding_equity_pct}}% of Subsidiary's fully-diluted equity, with the remaining {{founder_equity_pct}}% allocated to {{founder_names}} per the equity_allocation schedule.
+3. Equity Allocation. In consideration, Holdings shall retain {{holding_equity_pct}}% of Subsidiary's fully-diluted equity, with the remaining {{founder_equity_pct}}% allocated to {{founder_names}} per the equity_allocation schedule.
 
 4. Representations. Each party represents that it has full corporate authority to enter into this Agreement.
 
 Signed:
-Holding: Axal Holding Delaware C-Corp   By: ____________________
-Subsidiary: {{company_name}}             By: {{founder_names}}
+Holdings: Axal VC Holdings LLC          By: ____________________
+Subsidiary: {{company_name}}            By: {{founder_names}}
 Date: {{date}}`,
 
   equity_allocation: `EQUITY ALLOCATION SCHEDULE
@@ -242,7 +242,7 @@ Total Authorized Shares: 10,000,000 (Common Stock)
 
 | Shareholder              | Shares Allocated | Percentage | Vesting       |
 |--------------------------|------------------|------------|---------------|
-| Axal Holding (Parent)    | {{holding_shares}}      | {{holding_equity_pct}}%    | Immediate     |
+| Axal VC Holdings LLC     | {{holding_shares}}      | {{holding_equity_pct}}%    | Immediate     |
 | Founder Pool             | {{founder_shares}}      | {{founder_equity_pct}}%    | 4yr / 1yr cliff|
 | Employee Option Pool     | {{option_pool_shares}}  | {{option_pool_pct}}%       | Standard      |
 

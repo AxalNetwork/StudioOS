@@ -7,7 +7,8 @@
 **Version:** v1
 **Effective date:** {{effective_date}}
 **Mentor:** {{mentor_name}} ({{mentor_email}})
-**Counterparty:** Axal Holding Co. ("Axal")
+**Counterparty:** Axal VC Management LLC, a Delaware limited liability
+company ("Axal")
 
 ## 1. Purpose
 
@@ -40,5 +41,5 @@ This NDA expires 24 months after the Effective Date.
 
 ---
 
-Signed electronically by {{mentor_name}} and Axal Holding Co. on the
-date(s) appearing below.
+Signed electronically by {{mentor_name}} and Axal VC Management LLC
+on the date(s) appearing below.

@@ -131,7 +131,9 @@ export default function PublicFooter() {
         <div className="border-t border-gray-200 pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-xs text-gray-500">
-              © 2026 Axal Management, LLC. All rights reserved.
+              © 2026 Axal VC Management LLC. Platform operated by Axal VC Management LLC.
+              Brand and platform IP owned by Axal VC Holdings LLC.
+              Axal VC Fund I, LP managed by Axal VC GP LLC. All rights reserved.
             </p>
             <p className="text-xs text-gray-500 max-w-md text-right">
               <strong>Disclosure:</strong> Investment in startups involves a high degree of risk and may result in the loss of your entire investment.

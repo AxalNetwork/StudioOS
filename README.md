@@ -2,7 +2,12 @@
 
 **Global Venture Partner Network** operating system — the platform where founders, partners, LPs, and capital connect across borders. Includes **Spin-Out Lab**, a niche 30-day venture sprint product that takes a startup from intake → AI scoring → legal formation → fundraising → portfolio monitoring.
 
-Internal codename: Axal StudioOS. Operated by Axal Management, LLC.
+Internal codename: Axal StudioOS. Operated by **Axal VC Management LLC**
+(Delaware). Brand and platform IP owned by **Axal VC Holdings LLC**
+(Delaware). **Axal VC Fund I, LP** (Delaware) is managed by **Axal VC
+GP LLC** (Delaware) — the GP signs no platform contracts and is not the
+operating entity. See [`LEGAL_ENTITIES.md`](./LEGAL_ENTITIES.md) for the
+canonical entity map.
 
 > **Architecture in one sentence:** Production API runs on a Cloudflare Worker at `app.axal.vc/api/*` (`cloudflare-worker/`), the React SPA ships to Cloudflare Pages at `app.axal.vc` (`frontend/`), the `axal.vc` apex is GitHub Pages marketing (do NOT attach Cloudflare to the apex), D1 is the canonical user store, and the FastAPI in `backend/` exists only as a Replit dev convenience and is **never deployed**. Read [`CLAUDE.md`](./CLAUDE.md) before contributing. Cutover runbook for the `app.axal.vc` migration lives at [`MIGRATE_TO_CUSTOM_DOMAIN.md`](./MIGRATE_TO_CUSTOM_DOMAIN.md).
 
@@ -52,4 +57,5 @@ Full walkthrough + auth-error troubleshooting:
 
 ## License
 
-Proprietary — Axal Management, LLC.
+Proprietary — platform IP owned by Axal VC Holdings LLC and licensed
+to Axal VC Management LLC for operation.

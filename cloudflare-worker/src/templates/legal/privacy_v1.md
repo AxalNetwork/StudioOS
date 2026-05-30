@@ -6,6 +6,8 @@
 
 **Version:** v1
 **Effective date:** {{effective_date}}
+**Data Controller:** Axal VC Management LLC, a Delaware limited
+liability company ("Axal VC Management" or "we")
 **Counterparty:** {{counterparty_name}} ({{counterparty_email}})
 
 ## 1. Data we collect
@@ -26,7 +28,11 @@ obligations.
 We share data only with: (a) other Axal users you explicitly opt to
 share with (e.g. an investor you accept an intro from after a signed
 NDA), (b) service providers under written confidentiality, and (c)
-authorities when required by law.
+authorities when required by law. Where data is shared with our
+affiliates — including Axal VC Holdings LLC (IP and brand owner) or
+Axal VC GP LLC (general partner of Axal VC Fund I, LP) — sharing is
+limited to what is reasonably necessary to operate the Service and
+manage the fund relationship.
 
 ## 4. Encryption & retention
 
@@ -39,10 +45,11 @@ Settings → Account → Delete account.
 
 Subject to applicable law (including GDPR/CCPA where relevant), you
 may request access, correction, portability, or deletion of your data
-by contacting privacy@axal.vc.
+by contacting privacy@axal.vc (Axal VC Management LLC, attn: Privacy
+Officer).
 
 ---
 
 By signing electronically below, {{counterparty_name}} acknowledges
 having read this Privacy Notice and consents to the processing
-described herein.
+described herein by Axal VC Management LLC.

@@ -14,10 +14,23 @@ export default function PrivacyPage() {
         </Link>
 
         <h1 className="text-4xl font-bold text-gray-900 mb-2">Privacy Policy</h1>
-        <p className="text-gray-600 mb-8">Last Updated: March 31, 2026</p>
+        <p className="text-gray-600 mb-1">Last Updated: March 31, 2026</p>
+        <p className="text-gray-600 mb-8 text-sm">
+          Data Controller: <strong>Axal VC Management LLC</strong>, a Delaware limited liability company.
+        </p>
 
         <div className="prose prose-sm max-w-none text-gray-700 space-y-6">
-          <p>At Axal.vc, we recognize that our investors and founders entrust us with highly sensitive financial and personal information. This Privacy Policy explains how we collect, protect, and use your information in compliance with the Gramm-Leach-Bliley Act (GLBA), SEC Regulation S-P, and applicable state and international privacy laws (CCPA/GDPR).</p>
+          <p><strong>Axal VC Management LLC</strong> ("Axal VC Management", "we", or "us") is the operator of the Axal StudioOS platform and the data controller for personal information collected through <code>axal.vc</code>. We recognize that our investors and founders entrust us with highly sensitive financial and personal information. This Privacy Policy explains how we collect, protect, and use your information in compliance with the Gramm-Leach-Bliley Act (GLBA), SEC Regulation S-P, and applicable state and international privacy laws (CCPA/GDPR).</p>
+
+          <section>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">0. WHO WE ARE</h2>
+            <p>The Axal VC platform is operated through three Delaware limited liability companies, with the following privacy roles:</p>
+            <ul className="list-disc list-inside space-y-2">
+              <li><strong>Axal VC Management LLC</strong> — data controller. Operates the Platform and is responsible for the lawful processing of your personal information.</li>
+              <li><strong>Axal VC Holdings LLC</strong> — holding company. Owns brand and platform IP (including the <code>axal.vc</code> domain) but does not directly collect or process user personal data.</li>
+              <li><strong>Axal VC GP LLC</strong> — general partner of Axal VC Fund I, LP. Receives investor data only where necessary for fund administration (capital calls, distributions, K-1s).</li>
+            </ul>
+          </section>
 
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mb-4">1. INFORMATION WE COLLECT</h2>
@@ -42,9 +55,10 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">3. DISCLOSURE TO THIRD PARTIES</h2>
-            <p>We only share your information with non-affiliated third parties as permitted by law:</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">3. DISCLOSURE TO THIRD PARTIES AND AFFILIATES</h2>
+            <p>We only share your information with affiliates and non-affiliated third parties as permitted by law:</p>
             <ul className="list-disc list-inside space-y-2">
+              <li><strong>Affiliates:</strong> With <strong>Axal VC Holdings LLC</strong> only as necessary to administer brand/IP rights, and with <strong>Axal VC GP LLC</strong> only as necessary to operate Axal VC Fund I, LP (subscription processing, capital calls, distributions, regulatory filings).</li>
               <li><strong>Service Providers:</strong> Fund administrators, legal counsel, and KYC/AML verification vendors. These providers are contractually bound to maintain 2026 SEC-level data security standards.</li>
               <li><strong>Regulatory Bodies:</strong> When required by the SEC, FINRA, or other governmental authorities.</li>
               <li><strong>Target Companies:</strong> Basic identity info may be shared with companies in which you are actively seeking to invest (for their cap table management).</li>
@@ -79,7 +93,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mb-4">7. CONTACT US</h2>
             <p>For privacy requests or to report a suspected security issue:</p>
-            <p><strong>Privacy Officer</strong><br />Axal Management, LLC<br /><strong>Email:</strong> privacy@axal.vc</p>
+            <p><strong>Privacy Officer</strong><br />Axal VC Management LLC<br /><strong>Email:</strong> privacy@axal.vc</p>
           </section>
         </div>
       </main>

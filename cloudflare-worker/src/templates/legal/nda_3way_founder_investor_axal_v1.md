@@ -11,8 +11,9 @@
 
 - **Founder:** {{founder_name}} ({{founder_email}})
 - **Investor:** {{investor_name}} ({{investor_email}})
-- **Intermediary / Counter-signer:** Axal Holding Co.
-  (signed by {{axal_signer_email}})
+- **Intermediary / Counter-signer:** Axal VC Management LLC, a
+  Delaware limited liability company ("Axal"), as operator of the
+  Axal StudioOS platform (signed by {{axal_signer_email}})
 
 ## 1. Purpose
 
@@ -50,10 +51,14 @@ without Founder's prior written consent.
 
 ## 5. Role of Axal
 
-Axal acts as intermediary to facilitate the introduction. Axal does
-not warrant the accuracy of any information passed between Founder
-and Investor and is not party to any subsequent investment
-transaction except as separately agreed.
+Axal VC Management LLC acts as intermediary to facilitate the
+introduction in its capacity as platform operator. Axal does not
+warrant the accuracy of any information passed between Founder and
+Investor and is not party to any subsequent investment transaction
+except as separately agreed. Any investment in or through Axal VC
+Fund I, LP is governed exclusively by the Fund's subscription
+documents and is managed by Axal VC GP LLC (the Fund's general
+partner) — not by Axal VC Management LLC under this NDA.
 
 ## 6. Term
 

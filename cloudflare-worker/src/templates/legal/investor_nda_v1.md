@@ -7,20 +7,25 @@
 **Version:** v1
 **Effective date:** {{effective_date}}
 **Investor:** {{investor_name}} ({{investor_email}})
-**Counterparty:** Axal Holding Co. ("Axal")
+**Counterparty:** Axal VC Management LLC, a Delaware limited liability
+company ("Axal"), operating the Axal StudioOS platform on behalf of
+itself and its affiliates (including, where relevant, Axal VC GP LLC
+as general partner of Axal VC Fund I, LP)
 
 ## 1. Purpose
 
 To enable evaluation of investment opportunities surfaced through the
 Axal StudioOS platform, including but not limited to deal screening,
-diligence materials, capital-stack data, and pipeline reporting.
+diligence materials, capital-stack data, and pipeline reporting in
+respect of portfolio companies and Axal VC Fund I, LP.
 
 ## 2. Confidential Information
 
 "Confidential Information" means any non-public information disclosed
-by Axal or any of its portfolio companies in connection with the
-Purpose, including pitch materials, financial models, scoring outputs,
-deal terms, and capital-call schedules.
+by Axal, Axal VC GP LLC, Axal VC Fund I, LP, or any of their
+portfolio companies in connection with the Purpose, including pitch
+materials, financial models, scoring outputs, deal terms, and
+capital-call schedules.
 
 ## 3. Obligations
 
@@ -48,5 +53,5 @@ relief in addition to any other remedy.
 
 ---
 
-Signed electronically by {{investor_name}} and Axal Holding Co. on
-the date(s) appearing below.
+Signed electronically by {{investor_name}} and Axal VC Management LLC
+on the date(s) appearing below.
