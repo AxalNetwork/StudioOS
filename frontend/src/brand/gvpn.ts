@@ -1,10 +1,41 @@
 export const BRAND = {
   name: "Global Venture Partner Network",
   short: "GVPN",
-  parent: "Axal Management, LLC",
+  parent: "Axal VC Management LLC",
   tagline: "Where venture builders meet capital, globally.",
   subTagline: "One network. Five lanes — partners, capital, founders, mentors, coaches.",
   nicheProduct: { name: "Spin-Out Lab", duration: "30 days", parent: "GVPN" },
+} as const;
+
+export const LEGAL_ENTITIES = {
+  holdings: {
+    name: "Axal VC Holdings LLC",
+    short: "Holdings",
+    jurisdiction: "Delaware",
+    type: "LLC",
+    role: "Passive holding company. Owns brand/platform IP, domains (axal.vc), trademarks, copyrighted content, equity in subsidiaries and SPVs, and treasury/reserve assets. Licenses IP to Axal VC Management LLC.",
+  },
+  management: {
+    name: "Axal VC Management LLC",
+    short: "Management",
+    jurisdiction: "Delaware",
+    type: "LLC",
+    role: "Operating company. Operates the Axal StudioOS platform, employs personnel and contractors, signs customer/vendor/partner contracts, and is data controller under the privacy policy. Counterparty under Terms of Service and platform-level agreements.",
+  },
+  gp: {
+    name: "Axal VC GP LLC",
+    short: "GP",
+    jurisdiction: "Delaware",
+    type: "LLC",
+    role: "General Partner of Axal VC Fund I, LP. Manages the Fund, makes investment decisions, approves exits, owes fiduciary duties to LPs, and carries fund-level carry economics. Does not sign platform terms or customer contracts.",
+  },
+  fund: {
+    name: "Axal VC Fund I, LP",
+    short: "Fund I",
+    jurisdiction: "Delaware",
+    type: "LP",
+    role: "Limited partnership pooling LP capital. Managed exclusively by Axal VC GP LLC as general partner.",
+  },
 } as const;
 
 export const NETWORK_LAYERS = [

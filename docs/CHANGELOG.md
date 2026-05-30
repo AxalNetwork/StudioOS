@@ -11,6 +11,51 @@
 > building it.
 
 
+## Task #2 — Spin-Out Demo Day Validation slide: RevenueProofCard replaces decorative bubbles, structured revenue-proof fields
+
+Replaced the decorative `<VoicesBubbles />` quote-bubble graphic on the
+Validation slide of the Spin-Out Demo Day deck with a premium
+`RevenueProofCard` illustration backed by structured project data
+(`total_revenue` reuses `revenue`, plus new `mrr`, `paying_customers`,
+`first_payment_date`, `paid_pilot_status` enum
+`'paid'|'pilot_paid'|'pilot_signed'|'pre_revenue'`).
+
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx`:
+  extended `RevenueProof` type to always-non-null with `status`,
+  `total_revenue`, `mrr`, `paying_customers`, `first_payment_date`
+  (plus legacy `amount`/`label`/`signed` retained for back-compat);
+  updated `SAMPLE_DATA` to `status:'pre_revenue'`; replaced
+  Slide_Validation right-column composition (dropped `VoicesBubbles`
+  + standalone `RevenueBadge` pill) with `<RevenueProofCard
+  proof={v.revenue_proof} />`; added violet+gold concentric-arcs SVG
+  illustration with status pill, hero metric, supporting stats grid,
+  and graceful pre-revenue copy (`RevenueProofCard` + `Stat` helpers
+  + `fmtUSD`/`fmtFirstPayment` formatters ~line 2366).
+  `VoicesBubbles` + `RevenueBadge` kept in-file for back-compat with
+  other slides.
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`:
+  extended `ProjectRow` type with the 4 new columns; replaced
+  `validation.revenue_proof` shape with the structured form (always
+  non-null); rewrote `revenueProof` builder to derive `status` from
+  `paid_pilot_status` (or infer from numeric signals) and keep the
+  legacy pill `amount`/`label`/`signed` fields populated.
+- `cloudflare-worker/src/routes/projects.ts`: added
+  `ensureProjectRevenueProofColumns()` lazy-ALTER bootstrap (mirrors
+  `ensureTelegramSchema` pattern); wired into `GET /:id` and
+  `PUT /:id`; extended PUT allowlist with the 4 new fields +
+  `revenue`; added input coercion (numbers → null on `""`, enum
+  validation for `paid_pilot_status`).
+- `backend/app/models/entities.py`: added the 4 new optional fields to
+  the `Project` SQLModel (~line 223).
+- `backend/app/models/migrations.py` + `backend/app/main.py`: added
+  `ensure_project_revenue_proof_columns()` (additive
+  `ADD COLUMN IF NOT EXISTS`) and wired into boot — fixes dev
+  `demo_seed` `column projects.mrr does not exist` startup warning.
+- `frontend/src/pages/ProjectDetail.jsx`: added Revenue section to
+  `EditProjectModal` (numeric inputs via new local `RevenueInput`
+  helper + date picker + status select) with submit-time coercion;
+  added `PAID_PILOT_STATUS_OPTIONS` const.
+
 ## Fix — Pitch Deck template registry: explicit list, real header count, defensive loader, SW cache bump
 
 User report: "Pick a deck template" picker in the Pitch Deck Builder

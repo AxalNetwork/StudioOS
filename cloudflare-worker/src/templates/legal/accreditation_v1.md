@@ -28,11 +28,14 @@ jurisdiction). Investor selects **at least one** basis below:
 - [ ] An entity in which all equity owners are accredited investors.
 - [ ] Other (specify): {{accreditation_other}}
 
-Investor agrees to promptly notify Axal in writing if any of the
-foregoing ceases to be true. Axal is entitled to rely on this
+Investor agrees to promptly notify Axal VC Management LLC (as
+platform operator) and, where this certification is delivered in
+connection with an investment in Axal VC Fund I, LP, Axal VC GP LLC
+(as the Fund's general partner) in writing if any of the foregoing
+ceases to be true. Each such entity is entitled to rely on this
 certification and is under no obligation to independently verify
 Investor's status, except as required by Rule 506(c) (in which case
-Axal may request additional documentation).
+additional documentation may be requested).
 
 ---
 

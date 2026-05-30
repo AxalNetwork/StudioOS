@@ -9,26 +9,36 @@
 **Version:** v1
 **Effective date:** {{effective_date}}
 **Partner:** {{partner_name}} ({{partner_email}})
-**Counterparty:** Axal Holding Co. ("Axal")
+**Counterparty:** Axal VC Management LLC, a Delaware limited liability
+company ("Axal")
 
 ## 1. Scope
 
-This MSA governs the supply of services by Partner to Axal and/or
-Axal portfolio companies. Specific engagements are documented in
-Statements of Work ("SOWs") referencing this MSA.
+This MSA governs the supply of services by Partner to Axal VC
+Management LLC and/or portfolio companies of Axal VC Fund I, LP.
+Specific engagements are documented in Statements of Work ("SOWs")
+referencing this MSA.
 
 ## 2. Fees & Equity
 
 Compensation per engagement is set in the applicable SOW. Equity
 compensation, where offered, vests over the schedule defined in the
 SOW and is governed by the relevant company's equity plan documents.
+Where the SOW provides for equity in Axal VC Management LLC itself
+(e.g., venture-partner equity grants), that equity is issued under
+the operating agreement of Axal VC Management LLC. Equity in any
+portfolio company is issued by that portfolio company directly.
 
 ## 3. IP Ownership
 
 Unless explicitly assigned in the SOW, IP created by Partner during
 an engagement is owned by the engaging Axal entity (or portfolio
-company). Partner retains ownership of pre-existing tools and
-methodologies.
+company). For platform-level work product (i.e., contributions to
+the Axal StudioOS codebase, brand assets, or core platform IP),
+ownership vests in **Axal VC Holdings LLC** — the entity that holds
+the platform's intellectual property — and is licensed back to Axal
+VC Management LLC for operation of the Service. Partner retains
+ownership of pre-existing tools and methodologies.
 
 ## 4. Confidentiality
 
@@ -49,5 +59,5 @@ to their own terms.
 
 ---
 
-Signed electronically by {{partner_name}} and Axal Holding Co. on the
-date(s) appearing below.
+Signed electronically by {{partner_name}} and Axal VC Management LLC
+on the date(s) appearing below.

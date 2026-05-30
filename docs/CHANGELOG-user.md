@@ -8,6 +8,19 @@ see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/
 
 ---
 
+## New: Spin-Out Demo Day deck now shows a real revenue proof on the Validation slide
+
+The Validation slide used to display a decorative quote-bubble graphic.
+It now shows a premium "Revenue proof" card driven by your project's
+actual numbers — total revenue, MRR, paying customers, first payment
+date, and a status pill (Paid customers / Paid pilot / Pilot signed /
+Pre-revenue).
+
+You can fill these in from the project page: open Edit Project and use
+the new Revenue section. Before any paying revenue exists, the card
+shows a graceful "Pre-revenue" state with your earliest milestone
+instead of fake metrics — so the slide always looks intentional.
+
 ## Fixed: Pitch Deck template picker now reliably shows every template
 
 The "Pick a deck template" window was sometimes opening empty — "0

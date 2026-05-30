@@ -20,7 +20,8 @@ suggestion received from a Mentor.
 
 Mentor's participation does not create a fiduciary, agency, or
 employment relationship between Mentor and any founder, portfolio
-company, or Axal.
+company, Axal VC Management LLC, Axal VC Holdings LLC, Axal VC GP
+LLC, or Axal VC Fund I, LP.
 
 ## 3. No solicitation of securities
 

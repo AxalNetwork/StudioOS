@@ -7,7 +7,8 @@
 **Version:** v1
 **Effective date:** {{effective_date}}
 **Founder:** {{founder_name}} ({{founder_email}})
-**Counterparty:** Axal Holding Co. ("Axal")
+**Counterparty:** Axal VC Management LLC, a Delaware limited liability
+company ("Axal")
 
 ## 1. Purpose
 
@@ -50,5 +51,5 @@ further transaction.
 
 ---
 
-Signed electronically by {{founder_name}} and Axal Holding Co. on the
-date(s) appearing below.
+Signed electronically by {{founder_name}} and Axal VC Management LLC
+on the date(s) appearing below.

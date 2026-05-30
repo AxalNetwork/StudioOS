@@ -95,7 +95,7 @@ export function buildProposals(
         granted_tier_investor: 'professional',
         term_months: 24,
         contract_excerpt:
-          'EQUITY PARTNERSHIP AGREEMENT — Partner shall receive 0.5%–2.0% equity in Axal Management LLC, vesting over 48 months with a 12-month cliff. Partner shall provide ' +
+          'EQUITY PARTNERSHIP AGREEMENT — Partner shall receive 0.5%–2.0% equity in Axal VC Management LLC (the operating company; Axal VC Holdings LLC is the passive parent and holds platform IP), vesting over 48 months with a 12-month cliff. Partner shall provide ' +
           (profile.capacity_per_month || '5–10') + ' hours per month of venture-partner services. Either party may terminate for cause on 30 days written notice. Unvested equity reverts on termination.',
       });
     } else if (t === 'services_partnership') {

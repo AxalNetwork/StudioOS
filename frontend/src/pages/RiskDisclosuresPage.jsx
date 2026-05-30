@@ -57,10 +57,10 @@ export default function RiskDisclosuresPage() {
 
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mb-4 dark:text-gray-100">6. NO RELIANCE ON AXAL.VC DATA</h2>
-            <p>While Axal Management, LLC performs certain due diligence, we do not guarantee the accuracy or completeness of the information provided by the companies (the "Issuers").</p>
+            <p>While <strong>Axal VC Management LLC</strong> performs certain due diligence as platform operator and <strong>Axal VC GP LLC</strong> performs investment diligence as general partner of Axal VC Fund I, LP, neither entity guarantees the accuracy or completeness of the information provided by the companies (the "Issuers").</p>
             <ul className="list-disc list-inside space-y-2">
               <li><strong>Forward-Looking Statements:</strong> Pitch decks and financial projections are "forward-looking statements" and are inherently unreliable. Actual results may differ materially from those projected.</li>
-              <li><strong>Third-Party Info:</strong> Axal is not responsible for the truthfulness of information provided by founders or third-party data providers.</li>
+              <li><strong>Third-Party Info:</strong> No Axal VC entity is responsible for the truthfulness of information provided by founders or third-party data providers.</li>
             </ul>
           </section>
 
