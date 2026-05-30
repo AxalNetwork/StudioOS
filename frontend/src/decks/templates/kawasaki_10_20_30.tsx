@@ -708,17 +708,23 @@ const Slide10: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
   );
 };
 
-export const Deck_kawasaki_10_20_30: React.FC<DeckProps> = (props) => (
+export const Deck_kawasaki_10_20_30: React.FC<DeckProps> = (props) => {
+  // Normalise a null `data` prop to `{}` so the per-slide `data = {}`
+  // default (which only fires for `undefined`) can't be bypassed — a
+  // null payload otherwise throws on the first `data.problem_stat` read.
+  const safe = { ...props, data: props.data ?? {} };
+  return (
   <>
-    <Slide1 {...props} />
-    <Slide2 {...props} />
-    <Slide3 {...props} />
-    <Slide4 {...props} />
-    <Slide5 {...props} />
-    <Slide6 {...props} />
-    <Slide7 {...props} />
-    <Slide8 {...props} />
-    <Slide9 {...props} />
-    <Slide10 {...props} />
+    <Slide1 {...safe} />
+    <Slide2 {...safe} />
+    <Slide3 {...safe} />
+    <Slide4 {...safe} />
+    <Slide5 {...safe} />
+    <Slide6 {...safe} />
+    <Slide7 {...safe} />
+    <Slide8 {...safe} />
+    <Slide9 {...safe} />
+    <Slide10 {...safe} />
   </>
-);
+  );
+};
