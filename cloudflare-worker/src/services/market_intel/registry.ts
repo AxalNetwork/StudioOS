@@ -9,9 +9,9 @@
  *   - Every source ships with a synthetic `fetchStub` that returns
  *     plausible normalised rows so the aggregator pipeline is exercisable
  *     end-to-end before any contract is signed.
- *   - When `MI_FLAG_<KEY>=live`, `fetchLive` runs instead. Paid providers
- *     (PitchBook, CB Insights, ...) keep `fetchLive` as a TODO that throws
- *     so a deploy can't accidentally exercise an un-paid contract.
+ *   - When `MI_FLAG_<KEY>=live`, `fetchLive` runs instead. Every connector
+ *     here is a free public-data provider; the paid sources that previously
+ *     shipped a throwing `fetchLive` have been removed.
  */
 import type { Env } from '../../types';
 
@@ -46,7 +46,8 @@ export interface SourceDescriptor {
   dimensions: Dimension[];
   /** Aggregator weight (0..1). Higher = more influence on composite. */
   weight: number;
-  /** True when access requires a paid contract (PitchBook etc.). */
+  /** True when access requires a paid contract. Retained as inert plumbing —
+   * no source sets this anymore now that paid connectors have been removed. */
   paid?: boolean;
   /**
    * Lifecycle status. 'live' = fetchLive is wired to a real provider;
