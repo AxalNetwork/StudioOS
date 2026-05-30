@@ -3,9 +3,6 @@
 A plain-English summary of recent changes to StudioOS, written for
 everyone using the platform. Newest changes are at the top.
 
-For the detailed engineering log (with task IDs and code references),
-see the [technical changelog on GitHub](https://github.com/axalnetwork/StudioOS/blob/main/CHANGELOG.md).
-
 ---
 
 ## Fix: Telegram admin page no longer flickers

@@ -92,7 +92,7 @@ export default function ChangelogPage() {
               {e.url && (
                 <a href={e.url} target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 mt-2 text-sm text-violet-600 hover:text-violet-700">
-                  Read on GitHub <ExternalLink size={13} aria-hidden="true" />
+                  Read release details <ExternalLink size={13} aria-hidden="true" />
                 </a>
               )}
             </li>
