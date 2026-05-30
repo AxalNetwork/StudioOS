@@ -10,6 +10,7 @@ import './oecd';
 import './eurostat';
 import './bls';
 import './patent_uspto';
+import './openalex';
 import './patent_epo';
 import './news_gdelt';
 import './arxiv';

@@ -10,6 +10,7 @@
   import type { Env } from '../../../types';
   import { registerSource, type CommonRow } from '../registry';
   import { row, seededAround, doy } from './_helpers';
+  import { buildLiveRows, daysAgoUnix, fetchJson, saturate, UA } from './_live';
 
   const KEY = 'hackernews';
 
@@ -35,13 +36,25 @@
     dimensions: ['sentiment', 'demand'],
     weight: 0.45,
     daily_cap: 5000,
-    status: 'draft',
-    fetchLive: async (_env, { sectors }) => {
-      // TODO: wire real Hacker News story velocity client. Falls back to stub semantics
-      // until a contract / API token is in place — keeps the read pipeline
-      // exercisable without exposing a half-finished provider in prod.
-      return buildRows(sectors, new Date());
-    },
+    status: 'live',
+    fetchLive: async (_env, { sectors }) =>
+      buildLiveRows({
+        sectors,
+        key: KEY,
+        metric_key: 'sentiment',
+        perSector: async (_sector, query) => {
+          const url =
+            `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query)}` +
+            `&tags=story&numericFilters=${encodeURIComponent(`created_at_i>${daysAgoUnix(30)}`)}&hitsPerPage=1`;
+          const j = await fetchJson<{ nbHits?: number; hits?: Array<{ objectID?: string }> }>(url, {
+            headers: { 'User-Agent': UA, Accept: 'application/json' },
+          });
+          const count = j.nbHits ?? 0;
+          const id = j.hits?.[0]?.objectID;
+          if (!count || !id) return null;
+          return { value: saturate(count, 25), raw: count, citation_url: `https://news.ycombinator.com/item?id=${id}` };
+        },
+      }),
   fetchStub: ({ sectors, now }) => buildRows(sectors, now ?? new Date()),
   });
   

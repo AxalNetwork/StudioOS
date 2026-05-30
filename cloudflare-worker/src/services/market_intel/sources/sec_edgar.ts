@@ -10,6 +10,7 @@
   import type { Env } from '../../../types';
   import { registerSource, type CommonRow } from '../registry';
   import { row, seededAround, doy } from './_helpers';
+  import { buildLiveRows, contactEmail, daysAgoISO, fetchJson, saturate, UA } from './_live';
 
   const KEY = 'sec_edgar';
 
@@ -35,13 +36,34 @@
     dimensions: ['capital', 'supply'],
     weight: 0.8,
     daily_cap: 5000,
-    status: 'draft',
-    fetchLive: async (_env, { sectors }) => {
-      // TODO: wire real SEC EDGAR S-1 / 10-K filings client. Falls back to stub semantics
-      // until a contract / API token is in place — keeps the read pipeline
-      // exercisable without exposing a half-finished provider in prod.
-      return buildRows(sectors, new Date());
-    },
+    status: 'live',
+    fetchLive: async (env, { sectors }) =>
+      buildLiveRows({
+        sectors,
+        key: KEY,
+        metric_key: 'capital',
+        perSector: async (_sector, query) => {
+          const url =
+            `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(`"${query}"`)}` +
+            `&forms=S-1,10-K&startdt=${daysAgoISO(90)}&enddt=${daysAgoISO(0)}`;
+          const j = await fetchJson<{
+            hits?: {
+              total?: { value?: number };
+              hits?: Array<{ _id?: string; _source?: { ciks?: string[] } }>;
+            };
+          }>(url, {
+            headers: { 'User-Agent': `${UA} ${contactEmail(env)}`, Accept: 'application/json' },
+          });
+          const count = j.hits?.total?.value ?? 0;
+          const top = j.hits?.hits?.[0];
+          if (!count || !top?._id) return null;
+          const [accession, file] = top._id.split(':');
+          const cik = top._source?.ciks?.[0];
+          if (!accession || !cik) return null;
+          const citation_url = `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accession.replace(/-/g, '')}/${file ?? ''}`;
+          return { value: saturate(count, 8), raw: count, citation_url };
+        },
+      }),
   fetchStub: ({ sectors, now }) => buildRows(sectors, now ?? new Date()),
   });
   
