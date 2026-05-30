@@ -5,6 +5,15 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: Articles by Guillaume Lauzier are live, and the Articles section now loads
+
+Three new articles are published in the Articles section: "How AI is
+changing startup investment and venture support," "Why I avoid consensus
+and invest early," and "Cybersecurity and zero-trust systems." Each is
+categorized so you can filter by topic. We also fixed an issue that
+prevented the Articles list and reader from loading at all.
+
+
 ## Fix: Telegram admin page no longer flickers
 
 The Drafts, Compose, and History tabs on the Telegram page kept

@@ -18,7 +18,7 @@ const adminArticles = new Hono<{ Bindings: Env }>();
 
 async function loadArticle(env: Env, id: number) {
   return env.DB.prepare(
-    `SELECT a.*, u.name AS author_name, u.email AS author_email, u.handle AS author_handle, u.role AS author_role
+    `SELECT a.*, u.name AS author_name, u.email AS author_email, NULL AS author_handle, u.role AS author_role
        FROM articles a LEFT JOIN users u ON u.id = a.author_user_id
       WHERE a.id = ? LIMIT 1`,
   ).bind(id).first<any>();

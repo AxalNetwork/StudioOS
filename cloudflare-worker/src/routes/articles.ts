@@ -181,7 +181,7 @@ articles.get('/', async (c) => {
   const sql = `SELECT a.id, a.slug, a.title, a.subtitle, a.sector, a.tags,
                       a.cover_r2_key, a.published_at, a.word_count, a.read_minutes,
                       a.author_user_id,
-                      u.name AS author_name, u.handle AS author_handle, u.role AS author_role
+                      u.name AS author_name, NULL AS author_handle, u.role AS author_role
                  FROM articles a
                  LEFT JOIN users u ON u.id = a.author_user_id
                 WHERE ${where.join(' AND ')}
@@ -208,7 +208,7 @@ articles.get('/by-author/:user_id', async (c) => {
     `SELECT a.id, a.slug, a.title, a.subtitle, a.sector, a.tags,
             a.cover_r2_key, a.published_at, a.word_count, a.read_minutes,
             a.author_user_id,
-            u.name AS author_name, u.handle AS author_handle, u.role AS author_role
+            u.name AS author_name, NULL AS author_handle, u.role AS author_role
        FROM articles a
        LEFT JOIN users u ON u.id = a.author_user_id
       WHERE a.author_user_id = ? AND a.status = 'published'
@@ -249,7 +249,7 @@ articles.get('/:slug', async (c) => {
   const cached = await cacheLookup(c);
   if (cached) return cached;
   const row: any = await c.env.DB.prepare(
-    `SELECT a.*, u.name AS author_name, u.handle AS author_handle, u.role AS author_role
+    `SELECT a.*, u.name AS author_name, NULL AS author_handle, u.role AS author_role
        FROM articles a LEFT JOIN users u ON u.id = a.author_user_id
       WHERE a.slug = ? AND a.status = 'published' LIMIT 1`,
   ).bind(slug).first();
