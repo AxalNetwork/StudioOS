@@ -177,6 +177,16 @@ export default function PitchDeckPage() {
     [methods, activeMethodId],
   );
 
+  // The Axal VC Spin-Out deck is a fixed-structure template — adding or
+  // deleting slides is disabled for it (the +/trash controls are hidden).
+  // Detected from the deck's persisted method_id (top-level or per-slide).
+  const isSpinoutDeck = useMemo(
+    () =>
+      deck?.method_id === 'axal_spinout_demoday' ||
+      slides.some((s) => s?.method_id === 'axal_spinout_demoday'),
+    [deck, slides],
+  );
+
   // ---------------- save (debounced) ----------------
   const scheduleSave = (nextSlides, nextTitle) => {
     if (!deck?.id) return;
@@ -524,11 +534,13 @@ export default function PitchDeckPage() {
               <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Slides</span>
-                  <button
-                    onClick={addSlide}
-                    className="p-1 text-gray-500 hover:text-violet-600"
-                    title="Add slide"
-                  ><Plus className="w-4 h-4" /></button>
+                  {!isSpinoutDeck && (
+                    <button
+                      onClick={addSlide}
+                      className="p-1 text-gray-500 hover:text-violet-600"
+                      title="Add slide"
+                    ><Plus className="w-4 h-4" /></button>
+                  )}
                 </div>
                 <div className="space-y-1 max-h-[60vh] overflow-y-auto">
                   {slides.map((s, i) => (
@@ -573,10 +585,12 @@ export default function PitchDeckPage() {
                         />
                       )}
                       {s.appendix && <span className="text-[10px] text-gray-400">apx</span>}
-                      <Trash2
-                        className="w-3 h-3 text-gray-300 hover:text-red-500"
-                        onClick={(e) => { e.stopPropagation(); removeSlide(i); }}
-                      />
+                      {!isSpinoutDeck && (
+                        <Trash2
+                          className="w-3 h-3 text-gray-300 hover:text-red-500"
+                          onClick={(e) => { e.stopPropagation(); removeSlide(i); }}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
