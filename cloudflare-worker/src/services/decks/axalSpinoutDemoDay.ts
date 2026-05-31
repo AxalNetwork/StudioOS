@@ -1076,7 +1076,8 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
   void trimDeep;
   const capStr = (s: string): string =>
     s.length > MAX_BYTES ? s.slice(0, MAX_BYTES - 1) + '…' : s;
-  const para = (key: string, value: string) => ({ kind: 'paragraph', key, value: capStr(String(value ?? '')) });
+  const para = (key: string, value: string, label?: string) =>
+    ({ kind: 'paragraph', key, value: capStr(String(value ?? '')), ...(label ? { label } : {}) });
   const bullets = (key: string, value: string[]) => ({ kind: 'bullets', key, value: (value || []).map((x) => capStr(String(x ?? ''))) });
   const metrics = (key: string, value: Array<{ label: string; value: string; sub?: string }>) =>
     ({ kind: 'metric_grid', key, value });
@@ -1224,7 +1225,7 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('product_demo_eyebrow', pd.eyebrow),
         para('product_demo_headline', pd.headline),
         para('product_demo_body', pd.body),
-        para('product_demo_loop_url', pd.loop_url),
+        para('product_demo_loop_url', pd.loop_url, 'Demo video URL (YouTube, Vimeo, or direct .mp4/.webm link)'),
         para('product_demo_screenshot_url', pd.screenshot_url),
         para('product_demo_caption', pd.caption),
       ],

@@ -2637,11 +2637,37 @@ const shortenPain = (raw: string): string => {
 
 /* ─────────────────────────── Task #14 new slides ─────────────────────────── */
 
+/**
+ * Task #20 — classify a demo video URL so the Product Demo slide can pick
+ * the right player. YouTube / Vimeo links need an <iframe> embed; direct
+ * media files (.mp4/.webm/…) play via the autoplay/looping <video> tag.
+ * Returns `none` for empty / placeholder values so the caller can fall
+ * back to the screenshot, then the "Demo loop pending" placeholder.
+ */
+type DemoVideoKind = 'youtube' | 'vimeo' | 'file' | 'none';
+const classifyDemoVideo = (raw: string): { kind: DemoVideoKind; embedUrl: string } => {
+  const url = (raw || '').trim();
+  if (isUnfilled(url)) return { kind: 'none', embedUrl: '' };
+  // YouTube: watch?v=, youtu.be/, already-/embed/, /shorts/, /live/.
+  const yt = url.match(
+    /(?:youtube(?:-nocookie)?\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/i,
+  );
+  if (yt && yt[1]) return { kind: 'youtube', embedUrl: `https://www.youtube.com/embed/${yt[1]}` };
+  // Vimeo: vimeo.com/<id>, player.vimeo.com/video/<id>, channel/group forms.
+  const vm = url.match(/vimeo\.com\/(?:video\/|channels\/[^/]+\/|groups\/[^/]+\/videos\/)?(\d+)/i);
+  if (vm && vm[1]) return { kind: 'vimeo', embedUrl: `https://player.vimeo.com/video/${vm[1]}` };
+  // Anything else is treated as a direct media file (current behavior) so
+  // existing .mp4/.webm links keep playing through the <video> element.
+  return { kind: 'file', embedUrl: url };
+};
+
 /** Slide 6 (new): Product Demo. */
 const Slide_ProductDemo: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
   const V = useV();
   const pd = d.product_demo;
-  const hasLoop = !isUnfilled(pd.loop_url);
+  const video = classifyDemoVideo(pd.loop_url);
+  const isEmbed = video.kind === 'youtube' || video.kind === 'vimeo';
+  const hasFile = video.kind === 'file';
   const hasShot = !isUnfilled(pd.screenshot_url);
   return (
     <SlideShell>
@@ -2649,8 +2675,15 @@ const Slide_ProductDemo: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
       <SlideHeading>{pd.headline}</SlideHeading>
       <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 28, flex: 1, minHeight: 0 }}>
         <div style={{ ...cardStyle(V), padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
-          {hasLoop ? (
-            <video src={pd.loop_url} autoPlay muted loop playsInline
+          {isEmbed ? (
+            <div style={{ width: '100%', aspectRatio: '16 / 9', maxHeight: 360, borderRadius: 8, overflow: 'hidden', background: '#000' }}>
+              <iframe src={video.embedUrl} title="Product demo"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                style={{ width: '100%', height: '100%', border: 0, display: 'block' }} />
+            </div>
+          ) : hasFile ? (
+            <video src={video.embedUrl} autoPlay muted loop playsInline
               style={{ width: '100%', maxHeight: 360, borderRadius: 8, background: '#000' }} />
           ) : hasShot ? (
             <img src={pd.screenshot_url} alt="Product demo" style={{ width: '100%', maxHeight: 360, borderRadius: 8, objectFit: 'contain' }} />

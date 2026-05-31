@@ -142,6 +142,43 @@ test('Product Demo — screenshot URL renders an <img> (no placeholder)', () => 
   assert.ok(html.includes('https://cdn.axal.vc/demo/screenshot.png'), 'screenshot src missing');
 });
 
+test('Product Demo — YouTube link renders an <iframe> embed', () => {
+  for (const u of [
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    'https://youtu.be/dQw4w9WgXcQ',
+    'https://www.youtube.com/embed/dQw4w9WgXcQ',
+  ]) {
+    const html = render({ product_demo_loop_url: u });
+    assert.ok(
+      html.includes('src="https://www.youtube.com/embed/dQw4w9WgXcQ"'),
+      `expected YouTube embed iframe for ${u}`,
+    );
+    assert.ok(!html.includes('Demo loop pending'), `should not show placeholder for ${u}`);
+    assert.ok(!html.includes('<video'), `YouTube link must not use a <video> element (${u})`);
+  }
+});
+
+test('Product Demo — Vimeo link renders an <iframe> embed', () => {
+  for (const u of [
+    'https://vimeo.com/123456789',
+    'https://player.vimeo.com/video/123456789',
+  ]) {
+    const html = render({ product_demo_loop_url: u });
+    assert.ok(
+      html.includes('src="https://player.vimeo.com/video/123456789"'),
+      `expected Vimeo embed iframe for ${u}`,
+    );
+    assert.ok(!html.includes('Demo loop pending'), `should not show placeholder for ${u}`);
+  }
+});
+
+test('Product Demo — direct video file still plays via <video>', () => {
+  const html = render({ product_demo_loop_url: 'https://cdn.axal.vc/demo/loop.mp4' });
+  assert.ok(html.includes('<video'), 'direct file should render a <video> element');
+  assert.ok(html.includes('https://cdn.axal.vc/demo/loop.mp4'), 'video src missing');
+  assert.ok(!html.includes('<iframe'), 'direct file must not use an <iframe>');
+});
+
 test('Review-the-deal — no deal_room_url shows the "pending" badge, not a link', () => {
   const html = render(EMPTY);
   assert.ok(html.includes('· pending'), 'pending CTA badge missing');
