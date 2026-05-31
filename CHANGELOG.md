@@ -11,6 +11,39 @@
 > building it.
 
 
+## Spin-Out deck — Cover Lab-activity strip is auto-filled + colour-coded by module
+
+Task #3. The Cover slide's "LAST 30 DAYS · LAB ACTIVITY" strip
+(`cover_activity_log_json`) is no longer a hand-editable JSON textarea and
+each day's bar is now segmented by the source module.
+
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts` — the
+  activity-log aggregation now buckets per module (`milestone` /
+  `interview` / `advisor`) instead of collapsing everything into a single
+  `count` with `kind:'lab'`. Advisor answers are dated via the new
+  `created_at` column in the `advisor_answers` SELECT (`AdvisorAnswerRow`
+  gains `created_at`). Each day carries `{ date, count, modules }` where
+  `count` is the per-day total (height scaling) and `modules` is the
+  per-module breakdown; the 30-day zero-filled window + 30-day age cutoff
+  are preserved. The Cover field is now emitted via a new `autoJsonField()`
+  helper (`kind:'auto'`, `source:'auto'`, `readonly:true`) instead of
+  `jsonField()`, so the value still round-trips through `buildTemplateData`
+  but the editor renders it read-only.
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx` —
+  `ActivityLogDay` gains an optional `modules` map (and `ActivityModule`
+  type); `kind` made optional for back-compat. `ActivityLog30Day` now
+  stacks each day's bar into per-module segments (milestone → accent,
+  interview → emerald, advisor → gold) with a compact legend listing only
+  the modules present in the window. Empty days still render the faint
+  skeleton dot. Decks persisted before the breakdown (no `modules`) fall
+  back to a single accent bar.
+- `frontend/src/pages/PitchDeckPage.jsx` — `FieldEditor` renders
+  `readonly`/`kind:'auto'`/`source:'auto'` fields read-only with an "Auto"
+  badge and a short "auto-filled from your Lab activity" summary, no input.
+- Export parity is automatic: the print/PDF/PPT path
+  (`PitchDeckPrintPage.jsx`) renders the same `Template` from the same
+  `buildTemplateData` output.
+
 ## Spin-Out deck — deal CTA moves onto the "Review the deal" slide
 
 Task #23. For the Axal VC Spin-Out deck (`methodId === 'axal_spinout_demoday'`)

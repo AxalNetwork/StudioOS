@@ -794,11 +794,18 @@ function legacyToFields(s) {
 }
 
 function FieldEditor({ field, onChange }) {
-  const sourceBadge = field.source === 'ai'
-    ? <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">AI</span>
-    : field.source === 'placeholder'
-      ? <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">Fill in</span>
-      : null;
+  // Belt-and-braces: also pin the Cover activity strip read-only by key so
+  // decks persisted before the auto/readonly flags existed can't reappear
+  // as an editable JSON blob.
+  const isAuto = field.readonly === true || field.kind === 'auto' || field.source === 'auto'
+    || field.key === 'cover_activity_log_json';
+  const sourceBadge = isAuto
+    ? <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">Auto</span>
+    : field.source === 'ai'
+      ? <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">AI</span>
+      : field.source === 'placeholder'
+        ? <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">Fill in</span>
+        : null;
 
   const label = (
     <div className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center">
@@ -806,6 +813,30 @@ function FieldEditor({ field, onChange }) {
       {sourceBadge}
     </div>
   );
+
+  // Auto-computed fields (e.g. the Cover Lab-activity strip) are pulled
+  // from the founder's live Lab data and rendered read-only — there is no
+  // hand-editable input. The value still persists in the slide so the
+  // deck renders.
+  if (isAuto) {
+    let summary = 'Auto-filled from your Lab activity.';
+    try {
+      const parsed = JSON.parse(field.value);
+      if (Array.isArray(parsed)) {
+        const total = parsed.reduce((s, d) => s + (Number(d?.count) || 0), 0);
+        const active = parsed.filter((d) => (Number(d?.count) || 0) > 0).length;
+        summary = `Auto-filled from your Lab activity — ${total} event${total === 1 ? '' : 's'} across ${active} active day${active === 1 ? '' : 's'} (last 30 days).`;
+      }
+    } catch { /* keep default summary */ }
+    return (
+      <div>
+        {label}
+        <div className="w-full border border-dashed rounded px-3 py-2 bg-gray-50 dark:bg-slate-900/40 dark:border-slate-700 text-sm text-gray-500 dark:text-slate-400 italic">
+          {summary}
+        </div>
+      </div>
+    );
+  }
 
   if (field.kind === 'bullets') {
     const arr = Array.isArray(field.value) ? field.value : (field.value ? [field.value] : []);

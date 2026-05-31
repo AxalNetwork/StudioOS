@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Improved: Cover slide's 30-day activity strip is automatic and colour-coded
+
+On the Spin-Out Demo Day deck, the "Last 30 days · Lab activity" strip on
+the Cover slide is now filled in automatically from your Lab activity — you
+no longer edit it by hand. Each day's bar is split by source, with its own
+colour and a small legend: milestones, interviews, and advisor answers.
+Quiet days still show as faint dots, and exported PDF and PowerPoint decks
+match what you see on screen.
+
+
 ## Improved: "Join & open the deal" now lives on the Review the deal slide
 
 When you view a shared Spin-Out deck, the option to join and open the deal

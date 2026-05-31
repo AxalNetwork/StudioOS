@@ -371,7 +371,10 @@ function sanitizeSlides(input: any[]): any[] {
   });
 }
 
-const ALLOWED_FIELD_KINDS = new Set(['title', 'subtitle', 'paragraph', 'bullets', 'image', 'metric_grid', 'quote']);
+// `auto` = computed, non-editable field (e.g. the Cover Lab-activity strip);
+// the editor renders it read-only. Must round-trip through persistence or a
+// saved deck would silently revert it to an editable paragraph.
+const ALLOWED_FIELD_KINDS = new Set(['title', 'subtitle', 'paragraph', 'bullets', 'image', 'metric_grid', 'quote', 'auto']);
 function sanitizeFields(input: any[]): any[] {
   // Cap raised from 16 → 32 so per-slide flat-field templates (e.g. the
   // Axal axal_signal slide carries 19 fields after the JSON-blob removal)
@@ -380,7 +383,7 @@ function sanitizeFields(input: any[]): any[] {
     const kind = ALLOWED_FIELD_KINDS.has(f?.kind) ? f.kind : 'paragraph';
     const key = String(f?.key || '').slice(0, 64) || 'field';
     const label = String(f?.label || '').slice(0, 80);
-    const source = ['data', 'ai', 'placeholder'].includes(f?.source) ? f.source : 'data';
+    const source = ['data', 'ai', 'placeholder', 'auto'].includes(f?.source) ? f.source : 'data';
     let value: any;
     if (kind === 'bullets') {
       value = Array.isArray(f?.value)
@@ -405,6 +408,9 @@ function sanitizeFields(input: any[]): any[] {
     }
     const out: any = { key, label, kind, value, source };
     if (f?.edited) out.edited = true;
+    // Preserve the read-only flag so auto-computed fields stay non-editable
+    // after a save/reload round-trip.
+    if (f?.readonly) out.readonly = true;
     return out;
   });
 }

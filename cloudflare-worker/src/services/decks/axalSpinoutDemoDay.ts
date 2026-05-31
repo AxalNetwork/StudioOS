@@ -188,9 +188,11 @@ export type SpinoutDemoDayData = {
   };
   cover: {
     eyebrow: string; headline: string; sub: string; location: string;
-    // Task #14 — last-30-days activity log for the Cover ActivityLog30Day
-    // primitive. Each entry is one day with a 0–N event count + label.
-    activity_log: Array<{ date: string; count: number; kind: string }>;
+    // Last-30-days activity log for the Cover ActivityLog30Day primitive.
+    // Each entry is one day; `count` is the total (for height scaling) and
+    // `modules` carries the per-module breakdown (milestone / interview /
+    // advisor) so the strip can colour each source distinctly.
+    activity_log: Array<{ date: string; count: number; modules: Record<string, number> }>;
   };
   problem: {
     eyebrow: string; headline: string; body: string; signals: string[];
@@ -368,7 +370,7 @@ type OKRRow = {
   quarter: string | null; key_results_json: string | null;
 };
 type MilestoneRow = { milestone_key: string; week: number; completed_at: string };
-type AdvisorAnswerRow = { question_id: string; raw_value: string | null };
+type AdvisorAnswerRow = { question_id: string; raw_value: string | null; created_at: string };
 
 const daysRemaining = (startedAt: string | null | undefined): number => {
   if (!startedAt) return 28;
@@ -505,7 +507,7 @@ export async function fillAxalSpinoutDemoDay(
       WHERE user_id = ? ORDER BY week ASC
     `).bind(userId).all<MilestoneRow>().catch(() => ({ results: [] as MilestoneRow[] })),
     DB.prepare(`
-      SELECT question_id, raw_value FROM advisor_answers
+      SELECT question_id, raw_value, created_at FROM advisor_answers
       WHERE user_id = ? AND raw_value IS NOT NULL AND TRIM(raw_value) <> ''
       ORDER BY id DESC LIMIT 200
     `).bind(userId).all<AdvisorAnswerRow>().catch(() => ({ results: [] as AdvisorAnswerRow[] })),
@@ -702,23 +704,31 @@ export async function fillAxalSpinoutDemoDay(
   // count slots (skeleton dots) on the slide.
   const activityLog: SpinoutDemoDayData['cover']['activity_log'] = (() => {
     const now = Date.now();
-    const buckets = new Map<string, number>();
-    const note = (raw: string | null | undefined, _kind: string) => {
+    // Per-day, per-module event counts. Each module (milestone, interview,
+    // advisor) is coloured separately on the Cover strip; `count` keeps the
+    // per-day total for height scaling.
+    const buckets = new Map<string, Record<string, number>>();
+    const note = (raw: string | null | undefined, module: string) => {
       if (!raw) return;
       const ms = Date.parse(raw.length === 10 ? `${raw}T00:00:00Z` : raw);
       if (!isFinite(ms)) return;
       const ageDays = Math.floor((now - ms) / 86_400_000);
       if (ageDays < 0 || ageDays > 30) return;
       const day = new Date(ms).toISOString().slice(0, 10);
-      buckets.set(day, (buckets.get(day) || 0) + 1);
+      const cur = buckets.get(day) || {};
+      cur[module] = (cur[module] || 0) + 1;
+      buckets.set(day, cur);
     };
     for (const m of milestoneList) note(m.completed_at, 'milestone');
     for (const it of interviewsList) note(it.interview_date, 'interview');
+    for (const a of advisorList) note(a.created_at, 'advisor');
     // Build 30 calendar days backwards from today; zero-fill missing.
     const out: SpinoutDemoDayData['cover']['activity_log'] = [];
     for (let i = 29; i >= 0; i--) {
       const d = new Date(now - i * 86_400_000).toISOString().slice(0, 10);
-      out.push({ date: d, count: buckets.get(d) || 0, kind: 'lab' });
+      const modules = buckets.get(d) || {};
+      const count = Object.values(modules).reduce((s, n) => s + n, 0);
+      out.push({ date: d, count, modules });
     }
     return out;
   })();
@@ -1103,6 +1113,12 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
   // editor can stay hand-edit-friendly without forcing typed schemas.
   const jsonField = (key: string, value: unknown) =>
     para(key, encJson(value ?? null));
+  // Auto-computed, non-editable field. The editor renders it read-only
+  // (with an "Auto" indicator) rather than as a hand-editable input, but
+  // the JSON value still round-trips through buildTemplateData so the
+  // slide renders. Used for the Cover Lab-activity strip.
+  const autoJsonField = (key: string, value: unknown, label?: string) =>
+    ({ kind: 'auto', key, value: encJson(value ?? null), source: 'auto', readonly: true, ...(label ? { label } : {}) });
 
   // Pads variable-length arrays to a fixed slot count so every Axal
   // deck — sample or hydrated — surfaces the same set of editable
@@ -1152,7 +1168,7 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('cover_headline', c.headline),
         para('cover_sub', c.sub),
         para('cover_location', c.location),
-        jsonField('cover_activity_log_json', c.activity_log),
+        autoJsonField('cover_activity_log_json', c.activity_log, 'Last 30 days · Lab activity'),
         // Deck-wide envelope (project name, founder, week) flattened
         // onto slide 0 so the editor surfaces every value as a real
         // input — never a JSON blob.

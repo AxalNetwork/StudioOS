@@ -195,7 +195,12 @@ export type LabWeek = {
 };
 
 // Task #14 — new structured payloads alongside the legacy text fields.
-export type ActivityLogDay = { date: string; count: number; kind: string };
+// Activity modules coloured distinctly on the Cover strip.
+export type ActivityModule = 'milestone' | 'interview' | 'advisor';
+// `count` is the per-day total (height scaling); `modules` carries the
+// per-module breakdown. `kind` kept optional for back-compat with decks
+// persisted before the per-module breakdown landed.
+export type ActivityLogDay = { date: string; count: number; modules?: Record<string, number>; kind?: string };
 export type PainTheme = { theme: string; mentions: number };
 // Task #2 — structured revenue proof rendered by RevenueProofCard on the
 // Validation slide. `status` is always set so the card always has a
@@ -2301,29 +2306,63 @@ const Slide_AxalSignal: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
 
 /* ─────────────────────────── Task #14 new primitives ─────────────────────── */
 
-/** ActivityLog30Day — 30-cell dotted strip for the Cover slide. */
+/** ActivityLog30Day — 30-cell strip for the Cover slide, each day's bar
+ *  segmented + coloured by module (milestone / interview / advisor) with a
+ *  small legend. Empty days render as the faint skeleton dot. */
 const ActivityLog30Day: React.FC<{ log: ActivityLogDay[] }> = ({ log }) => {
   const V = useV();
+  const MODULES: { key: ActivityModule; label: string; color: string }[] = [
+    { key: 'milestone', label: 'Milestones', color: V.accent },
+    { key: 'interview', label: 'Interviews', color: V.emerald },
+    { key: 'advisor', label: 'Advisor', color: V.gold },
+  ];
   const max = Math.max(1, ...log.map((d) => d.count));
   const days = log.length > 0 ? log : Array.from({ length: 30 }, (_, i) => ({
-    date: `d-${i}`, count: 0, kind: 'lab',
+    date: `d-${i}`, count: 0, modules: {} as Record<string, number>,
   }));
+  // Legend only lists modules that actually have events in the window.
+  const present = MODULES.filter((m) => days.some((d) => (d.modules?.[m.key] || 0) > 0));
   return (
     <div>
       <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', color: V.textMuted, fontFamily: V.mono, marginBottom: 6 }}>Last 30 days · Lab activity</div>
       <div style={{ display: 'flex', gap: 3, alignItems: 'flex-end', height: 36 }}>
         {days.map((d, i) => {
-          const h = d.count === 0 ? 4 : Math.max(6, (d.count / max) * 36);
-          const opacity = d.count === 0 ? 0.3 : 0.85;
+          if (d.count === 0) {
+            return <div key={i} title={`${d.date} · 0`} style={{ width: 8, height: 4, borderRadius: 2, background: V.line, opacity: 0.3 }} />;
+          }
+          const h = Math.max(6, (d.count / max) * 36);
+          // Per-module segments when present; otherwise a single accent bar
+          // (back-compat with decks persisted before the breakdown).
+          const segs = d.modules && Object.keys(d.modules).length
+            ? MODULES.filter((m) => (d.modules![m.key] || 0) > 0)
+            : null;
+          const tip = segs
+            ? `${d.date} · ${segs.map((m) => `${m.label.toLowerCase()} ${d.modules![m.key]}`).join(', ')}`
+            : `${d.date} · ${d.count}`;
           return (
-            <div key={i} title={`${d.date} · ${d.count}`} style={{
-              width: 8, height: h, borderRadius: 2,
-              background: d.count > 0 ? V.accent : V.line,
-              opacity,
-            }} />
+            <div key={i} title={tip} style={{
+              width: 8, height: h, borderRadius: 2, overflow: 'hidden', opacity: 0.9,
+              display: 'flex', flexDirection: 'column-reverse',
+            }}>
+              {segs
+                ? segs.map((m) => (
+                    <div key={m.key} style={{ height: `${((d.modules![m.key] || 0) / d.count) * 100}%`, background: m.color }} />
+                  ))
+                : <div style={{ height: '100%', background: V.accent }} />}
+            </div>
           );
         })}
       </div>
+      {present.length > 0 && (
+        <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+          {present.map((m) => (
+            <div key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: m.color, display: 'inline-block' }} />
+              <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.14em', color: V.textMuted, fontFamily: V.mono }}>{m.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
