@@ -75,6 +75,21 @@ deck renders as a default-active "My brand kit" variant when a kit exists, with
   text colour pickers and a typography-pairing `<select>`; draft state + load
   carry `palette_bg` / `palette_ink` / `font_pairing`.
 
+## Articles — sector filter is now a compact dropdown; added Robotics, Cybersecurity, Defense, Bio sectors
+
+Task #8. The public Articles page's wrapping row of sector pills is replaced
+by a single `<select>` dropdown sitting next to the "All authors" dropdown,
+identical on desktop and mobile, defaulting to "All sectors".
+
+- `frontend/src/pages/ArticlesPage.jsx` — pill button row removed; sector
+  `<select>` populated from the fetched sectors list, wired to existing
+  `sector` state (filtering/pagination unchanged), styled to match the author
+  dropdown incl. dark-mode classes.
+- `cloudflare-worker/src/data/sectors.ts` — added `robotics`, `cybersecurity`,
+  `defense`, `bio` to the canonical `SECTORS` taxonomy (additive only; feeds
+  `GET /api/articles/sectors` + server-side validation).
+
+
 ## Spin-Out deck — Cover Lab-activity strip is auto-filled + colour-coded by module; Team & Mentors merged into one People slide; cap-table crash fixed
 
 Task #3. The Cover slide's "LAST 30 DAYS · LAB ACTIVITY" strip

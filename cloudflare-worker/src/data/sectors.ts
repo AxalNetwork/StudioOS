@@ -26,6 +26,10 @@ export const SECTORS: SectorDef[] = [
   { key: 'saas',        label: 'SaaS' },
   { key: 'consumer',    label: 'Consumer' },
   { key: 'deeptech',    label: 'Deep tech' },
+  { key: 'robotics',    label: 'Robotics' },
+  { key: 'cybersecurity', label: 'Cybersecurity' },
+  { key: 'defense',     label: 'Defense' },
+  { key: 'bio',         label: 'Bio' },
   { key: 'other',       label: 'Other' },
 ];
 

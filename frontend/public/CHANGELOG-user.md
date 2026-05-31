@@ -28,6 +28,14 @@ still switch to one of four ready-made presets, and if a colour choice would be
 hard to read the deck quietly falls back to its clean editorial style. Set it
 all up in the Brand Builder under Tune.
 
+## Improved: Articles sector filter is now a single dropdown, with more sectors
+
+On the Articles page, the long row of sector chips is now a single, tidy
+"All sectors" dropdown that sits right next to the authors dropdown and works
+the same on phone and desktop. We also added a few sectors you can filter by:
+Robotics, Cybersecurity, Defense, and Bio.
+
+
 ---
 
 ## Improved: Cover slide's 30-day activity strip is automatic; one combined People slide

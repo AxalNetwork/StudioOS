@@ -5,6 +5,36 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Improved: Articles sector filter is now a single dropdown, with more sectors
+
+On the Articles page, the long row of sector chips is now a single, tidy
+"All sectors" dropdown that sits right next to the authors dropdown and works
+the same on phone and desktop. We also added a few sectors you can filter by:
+Robotics, Cybersecurity, Defense, and Bio.
+
+---
+
+## Improved: Cover slide's 30-day activity strip is automatic; one combined People slide
+
+On the Spin-Out Demo Day deck, the "Last 30 days · Lab activity" strip on
+the Cover slide is now filled in automatically from your Lab activity — you
+no longer edit it by hand. Each day's bar is split by source, with its own
+colour and a small legend: milestones, interviews, and advisor answers.
+Quiet days still show as faint dots, and exported PDF and PowerPoint decks
+match what you see on screen.
+
+Your Spin-Out Demo Day deck now shows your team and your mentor network on a
+single People slide instead of two. It leads with profile cards for your
+founders, operating partners, advisors, and mentors — each showing their name,
+role, and company — and still includes your readiness bars, skill-coverage
+chart, mentor sessions, and operating partners, all in one place.
+
+You can now add a company or affiliation to each person: founders set theirs
+when editing their project, and the team can set them for everyone on the
+network roster. These show up on the People slide automatically. We also fixed
+an issue that could stop the deck from loading.
+
+
 ## Improved: "Join & open the deal" now lives on the Review the deal slide
 
 When you view a shared Spin-Out deck, the option to join and open the deal
