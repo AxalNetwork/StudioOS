@@ -11,7 +11,7 @@
 > building it.
 
 
-## Spin-Out deck — Cover Lab-activity strip is auto-filled + colour-coded by module
+## Spin-Out deck — Cover Lab-activity strip is auto-filled + colour-coded by module; Team & Mentors merged into one People slide; cap-table crash fixed
 
 Task #3. The Cover slide's "LAST 30 DAYS · LAB ACTIVITY" strip
 (`cover_activity_log_json`) is no longer a hand-editable JSON textarea and
@@ -43,6 +43,55 @@ each day's bar is now segmented by the source module.
 - Export parity is automatic: the print/PDF/PPT path
   (`PitchDeckPrintPage.jsx`) renders the same `Template` from the same
   `buildTemplateData` output.
+
+Task #1. The two adjacent people slides of the Axal Spin-Out Demo Day deck
+(`methodId === 'axal_spinout_demoday'`) — "Team & venture readiness" and
+"Mentors & network" — are collapsed into a single `team_network` slide led by
+profile cards (founders + operating partners + advisors + mentors), each card
+showing name + role + company, grouped by kind. The slide keeps the READINESS
+score bars + SKILL-coverage radar and renders Mentor Sessions + Operating
+Partners compactly. The standalone `brand` slide is dropped from the worker
+emit + `methods.ts`; its `incorporated` flag is relocated to the `cap_table`
+slide. After rebasing onto main (which merged the standalone Product Demo
+slide's media into the Solution slide), the canonical **rendered** slide list
+is now **10**: cover · problem · validation · market · solution · roadmap ·
+team_network · cap_table · ask · review_the_deal. The product-demo media
+renders on the Solution slide; its fields remain an editable editor group in
+the worker emit + `methods.ts` (so `slide_count` is 10 while the editor still
+exposes a Product demo field group).
+
+- **Editable company / affiliation, end-to-end.**
+  - Network roster: `network_profiles.company` (migration `077_network_profile_company.sql`,
+    additive `IF NOT EXISTS`, mirrored in `ensureNetworkProfilesSchema`). Wired
+    through `routes/admin_network_profiles.ts` (sanitise ≤200 chars, POST/PUT,
+    GET shape + SELECT) and `AdminNetworkProfiles.jsx` (form input after role,
+    payload, `role · company` list display).
+  - Founders: `founders.company` (migration `078_founder_company.sql`) with a
+    lazy `ensureFounderCompanyColumn()` (WeakMap-guarded `ALTER`) in
+    `routes/projects.ts`. PUT accepts `founder_company` → `UPDATE founders SET
+    company WHERE id = project.founder_id`; PUT response now includes the linked
+    `founder`. `ProjectDetail.jsx` `EditProjectModal` gains a Company /
+    affiliation input initialised from `project.founder?.company`.
+- **Deck data layer carries company end-to-end.** Worker shaper looks up the
+  linked founder's company (name-match → that card, else sole founder),
+  founders + network profiles carry `company`; emit adds
+  `team_founderN_company` + `mn_*` company fields and `ct_incorporated`.
+  Frontend `Founder` + `MentorProfile` types, hydrate, and `SAMPLE_DATA` add
+  `company`; `cap_table` type/hydrate/SAMPLE add `incorporated`.
+- **Cap-table crash fixed.** `Slide_CapTable` previously read
+  `d.brand.incorporated` — now-removed brand object — and crashed, blocking the
+  whole deck render. It now reads `c.incorporated` off the cap-table block.
+- **Graceful degradation.** Founder company lookup is try/catch wrapped and
+  degrades to no company if the column/table is missing; empty people states
+  preserved.
+- **Tests.** `frontend/test/spinout_demoday_deck.test.mjs` updated: 11 slides /
+  11 frames, asserts `team_network` present and `team_readiness` /
+  `mentor_network` / `brand` absent.
+
+> Migrations `077`/`078` not yet applied to prod — the lazy
+> `ensureNetworkProfilesSchema` / `ensureFounderCompanyColumn` bootstraps cover
+> dev and prod first-hit. Apply with the Node-22 `wrangler d1 execute` path when
+> convenient.
 
 ## Spin-Out deck — deal CTA moves onto the "Review the deal" slide
 

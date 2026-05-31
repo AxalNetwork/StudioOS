@@ -784,16 +784,20 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     label: 'Axal VC Spin-Out',
     prompt_hint: 'Demo Day deck for pre-incorporation founders graduating the 30-day Spin-Out Lab.',
     best_for: 'Founders in or graduating the Axal Spin-Out Lab. Audience: Axal-network investors and partners.',
-    slide_count: 14,
+    slide_count: 10,
     premium: true,
     category: 'event',
     fields_from_project: ['name', 'sector', 'tagline', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'contact_email', 'vision', 'traction_summary'],
     fields_from_financials: ['runway_months', 'use_of_funds'],
     fields_from_captable: ['founders', 'all_holders'],
     ai_fill_hint: 'Honesty over polish. If a number is missing, leave the em-dash placeholder so the founder sees what to fill in.',
-    // Spec-required 14-slide sequence: Cover · Problem · Validation ·
-    // Market · Solution · Roadmap · Brand · Venture Readiness · Team ·
-    // Mentor+Network · Cap Table · Ask · Axal Signal · Contact.
+    // Canonical 10-slide rendered sequence: Cover · Problem · Validation ·
+    // Market · Solution · Roadmap · Team & network · Cap table · Ask ·
+    // Review the deal. The product-demo media renders on the Solution slide
+    // (no standalone Product Demo slide), but its fields stay an editable
+    // editor group below. The former Brand, Venture readiness, Team,
+    // Mentors & network and Axal signal slides were dropped/merged;
+    // `incorporated` moved onto Cap table.
     // Field keys mirror buildAxalSpinoutDemoDaySlides() so the editor
     // renders real text/bullet/metric-grid inputs (not raw JSON).
     slides: [
@@ -848,6 +852,14 @@ export const DECK_METHODS: DeckMethodSpec[] = [
         f.para('solution_body', 'Solution body', []),
         f.bullets('solution_capabilities', 'Capabilities', []),
       ] },
+      { id: 'product_demo', title: 'Product demo', fields: [
+        f.para('product_demo_eyebrow', 'Eyebrow', []),
+        f.para('product_demo_headline', 'Headline', []),
+        f.para('product_demo_body', 'Body', []),
+        f.para('product_demo_loop_url', 'Demo video URL', []),
+        f.para('product_demo_screenshot_url', 'Screenshot URL', []),
+        f.para('product_demo_caption', 'Caption', []),
+      ] },
       { id: 'roadmap', title: 'Roadmap', fields: [
         f.para('roadmap_eyebrow', 'Eyebrow', []),
         f.para('roadmap_headline', 'Headline', []),
@@ -856,45 +868,39 @@ export const DECK_METHODS: DeckMethodSpec[] = [
         f.bullets('roadmap_next', 'Next', []),
         f.bullets('roadmap_later', 'Later', []),
       ] },
-      { id: 'brand', title: 'Brand', fields: [
-        f.para('brand_eyebrow', 'Eyebrow', []),
-        f.para('brand_headline', 'Headline', []),
-        f.para('brand_tagline', 'Tagline', []),
-        f.para('brand_vision', 'Vision', []),
-        f.para('brand_kit_ready', 'Brand kit ready (true / false)', []),
-        f.para('brand_pitch_deck_ready', 'Pitch deck v1 ready (true / false)', []),
-        f.para('brand_incorporated', 'Incorporated (true / false)', []),
-      ] },
-      { id: 'venture_readiness', title: 'Venture readiness', fields: [
-        f.para('vr_eyebrow', 'Eyebrow', []),
-        f.para('vr_headline', 'Headline', []),
+      // Task #1 — Team & venture readiness + Mentors & network collapsed
+      // into one people slide. Founders carry an editable company /
+      // affiliation alongside name + role.
+      { id: 'team_network', title: 'Team & network', fields: [
+        f.para('team_eyebrow', 'Eyebrow', []),
+        f.para('team_headline', 'Headline', []),
+        f.para('team_intro', 'Team intro', []),
+        f.para('vr_eyebrow', 'Readiness — eyebrow', []),
+        f.para('vr_headline', 'Readiness — headline', []),
         f.para('vr_total_score', 'Total score', []),
         f.para('vr_tier', 'Tier', []),
         f.para('vr_sandbox', 'Sandbox flag (true / false)', []),
         f.metrics('vr_breakdown', 'Sub-scores', []),
         f.para('vr_ai_notes', 'AI notes', []),
-      ] },
-      { id: 'team', title: 'Team', fields: [
-        f.para('team_eyebrow', 'Eyebrow', []),
-        f.para('team_headline', 'Headline', []),
-        f.para('team_intro', 'Team intro', []),
         f.para('team_founder1_name', 'Founder 1 — name', []),
         f.para('team_founder1_role', 'Founder 1 — role', []),
+        f.para('team_founder1_company', 'Founder 1 — company / affiliation', []),
         f.para('team_founder1_bio', 'Founder 1 — bio', []),
         f.para('team_founder2_name', 'Founder 2 — name', []),
         f.para('team_founder2_role', 'Founder 2 — role', []),
+        f.para('team_founder2_company', 'Founder 2 — company / affiliation', []),
         f.para('team_founder2_bio', 'Founder 2 — bio', []),
         f.para('team_founder3_name', 'Founder 3 — name', []),
         f.para('team_founder3_role', 'Founder 3 — role', []),
+        f.para('team_founder3_company', 'Founder 3 — company / affiliation', []),
         f.para('team_founder3_bio', 'Founder 3 — bio', []),
         f.para('team_founder4_name', 'Founder 4 — name', []),
         f.para('team_founder4_role', 'Founder 4 — role', []),
+        f.para('team_founder4_company', 'Founder 4 — company / affiliation', []),
         f.para('team_founder4_bio', 'Founder 4 — bio', []),
-      ] },
-      { id: 'mentor_network', title: 'Mentors & network', fields: [
-        f.para('mn_eyebrow', 'Eyebrow', []),
+        f.para('mn_eyebrow', 'Network — eyebrow', []),
         f.title('mn_headline', []),
-        f.para('mn_body', 'Body', []),
+        f.para('mn_body', 'Network — body', []),
         f.bullets('mn_mentors', 'Mentors', []),
         f.bullets('mn_network_signals', 'Network signals', []),
       ] },
@@ -902,6 +908,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
         f.para('ct_eyebrow', 'Eyebrow', []),
         f.para('ct_headline', 'Headline', []),
         f.para('ct_note', 'Footnote', []),
+        f.para('ct_incorporated', 'Incorporated (true / false)', []),
         // metric_grid: label=name, value=ownership %, sub="security · kind".
         f.metrics('ct_holders', 'Holders (name · % · security · kind)', []),
       ] },
@@ -913,29 +920,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
         f.metrics('ask_use_of_funds', 'Use of funds', []),
         f.bullets('ask_next_milestones', 'Next milestones', []),
       ] },
-      { id: 'axal_signal', title: 'Axal signal', fields: [
-        f.para('as_eyebrow', 'Eyebrow', []),
-        f.para('as_headline', 'Headline', []),
-        f.para('as_body', 'Body', []),
-        // Per-week breakdown — milestones use "[x] Done" / "[ ] Pending" bullets.
-        f.para('as_week1_title', 'Week 1 — title', []),
-        f.para('as_week1_caption', 'Week 1 — caption', []),
-        f.para('as_week1_status', 'Week 1 — status (complete / in_progress / upcoming)', []),
-        f.bullets('as_week1_milestones', 'Week 1 — milestones', []),
-        f.para('as_week2_title', 'Week 2 — title', []),
-        f.para('as_week2_caption', 'Week 2 — caption', []),
-        f.para('as_week2_status', 'Week 2 — status', []),
-        f.bullets('as_week2_milestones', 'Week 2 — milestones', []),
-        f.para('as_week3_title', 'Week 3 — title', []),
-        f.para('as_week3_caption', 'Week 3 — caption', []),
-        f.para('as_week3_status', 'Week 3 — status', []),
-        f.bullets('as_week3_milestones', 'Week 3 — milestones', []),
-        f.para('as_week4_title', 'Week 4 — title', []),
-        f.para('as_week4_caption', 'Week 4 — caption', []),
-        f.para('as_week4_status', 'Week 4 — status', []),
-        f.bullets('as_week4_milestones', 'Week 4 — milestones', []),
-      ] },
-      { id: 'contact', title: 'Contact', fields: [
+      { id: 'review_the_deal', title: 'Review the deal', fields: [
         f.para('contact_eyebrow', 'Eyebrow', []),
         f.para('contact_headline', 'Headline', []),
         f.para('contact_body', 'Body', []),

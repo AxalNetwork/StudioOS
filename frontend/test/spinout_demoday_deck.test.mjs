@@ -192,12 +192,18 @@ test('Review-the-deal — deal_room_url renders the CTA link + ready badge', () 
   assert.ok(html.includes('Data room ready'), 'data-room-ready badge missing');
 });
 
-test('SLIDES registry — 11 slides, Axal Signal + Product Demo dropped, Review last', () => {
-  assert.equal(SLIDES.length, 11, 'expected exactly 11 slides');
+test('SLIDES registry — 10 slides, Axal Signal + Product Demo dropped, people merged into team_network, Review last', () => {
+  assert.equal(SLIDES.length, 10, 'expected exactly 10 slides');
   const ids = SLIDES.map((s) => s.id);
   assert.ok(!ids.includes('axal_signal'), 'Axal Signal slide must be absent');
   assert.ok(!ids.includes('product_demo'), 'standalone Product Demo slide must be absent (merged into Solution)');
+  // Task #1 — the two people slides are merged into one combined slide and
+  // the standalone brand slide is dropped.
+  assert.ok(ids.includes('team_network'), 'merged team_network slide must be present');
+  assert.ok(!ids.includes('team_readiness'), 'standalone team_readiness slide must be absent (merged)');
+  assert.ok(!ids.includes('mentor_network'), 'standalone mentor_network slide must be absent (merged)');
+  assert.ok(!ids.includes('brand'), 'standalone brand slide must be absent (dropped)');
   assert.equal(SLIDES[SLIDES.length - 1].id, 'review_the_deal', 'Review-the-deal must be the last slide');
   // And the rendered deck emits one frame per slide.
-  assert.equal(countFrames(render(EMPTY)), 11, 'rendered deck should emit 11 slide frames');
+  assert.equal(countFrames(render(EMPTY)), 10, 'rendered deck should emit 10 slide frames');
 });

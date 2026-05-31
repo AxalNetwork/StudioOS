@@ -45,6 +45,7 @@ export async function ensureNetworkProfilesSchema(env: Env): Promise<void> {
         name           TEXT NOT NULL,
         kind           TEXT NOT NULL DEFAULT 'mentor',
         role           TEXT,
+        company        TEXT,
         bio            TEXT,
         linkedin_url   TEXT,
         photo_r2_key   TEXT,
@@ -57,6 +58,11 @@ export async function ensureNetworkProfilesSchema(env: Env): Promise<void> {
       env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_network_profiles_active_order
         ON network_profiles (is_active, display_order)`),
     ]);
+    // Task #1 — additive company column for tables created before the
+    // roster gained an affiliation field (migration 077). Idempotent:
+    // duplicate-column errors on re-run are swallowed.
+    try { await env.DB.exec(`ALTER TABLE network_profiles ADD COLUMN company TEXT`); }
+    catch (_e) { /* column already exists */ }
     _ready = true;
   } catch (err) {
      

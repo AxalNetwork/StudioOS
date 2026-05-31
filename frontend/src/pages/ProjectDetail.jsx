@@ -779,6 +779,9 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
     problem_statement: project.problem_statement || '',
     solution: project.solution || '',
   }));
+  // Task #1 — founder company / affiliation lives on the linked founder
+  // row; surfaced on the Spin-Out deck's merged Team & network slide.
+  const [founderCompany, setFounderCompany] = useState(() => project.founder?.company || '');
   // Task #2 — structured revenue proof. Kept in its own state slot so
   // founders can clear a numeric field back to "" without typing 0 (we
   // map "" → null on submit).
@@ -824,6 +827,7 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
       const updated = await api.updateProject(project.id, {
         ...form,
         name: form.name.trim(),
+        founder_company: founderCompany.trim(),
         ...revenuePayload,
       });
       onSaved(updated);
@@ -877,6 +881,20 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
               )}
             </div>
           ))}
+
+          {/* Task #1 — Founder company / affiliation. Surfaces on the
+              Spin-Out Demo Day's merged Team & network slide. */}
+          <div>
+            <label className="block text-xs text-gray-600 mb-1 dark:text-gray-400">Company / affiliation</label>
+            <input
+              type="text"
+              value={founderCompany}
+              maxLength={200}
+              placeholder="e.g. Acme Labs"
+              onChange={(e) => setFounderCompany(e.target.value)}
+              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+            />
+          </div>
 
           {/* Task #2 — Revenue proof section. Powers the RevenueProofCard
               on the Spin-Out Demo Day Validation slide. All fields optional;

@@ -58,6 +58,7 @@ export type NetworkProfileRow = {
   name: string;
   role: string;
   bio: string;
+  company: string;
   skills: string[];
   photo_url: string | null;
   linkedin_url: string | null;
@@ -68,7 +69,7 @@ export async function loadNetworkProfiles(env: Env): Promise<NetworkProfileRow[]
   try {
     await ensureNetworkProfilesSchema(env);
     const rows = (await env.DB.prepare(
-      `SELECT id, name, kind, role, bio, linkedin_url, photo_r2_key, skills_json
+      `SELECT id, name, kind, role, company, bio, linkedin_url, photo_r2_key, skills_json
          FROM network_profiles
         WHERE is_active = 1
         ORDER BY display_order ASC, name ASC`,
@@ -81,6 +82,7 @@ export async function loadNetworkProfiles(env: Env): Promise<NetworkProfileRow[]
         name: String(r.name || ''),
         role: String(r.role || ''),
         bio: String(r.bio || ''),
+        company: String(r.company || ''),
         skills,
         photo_url: r.photo_r2_key ? `/api/public/network/${r.id}/photo` : null,
         linkedin_url: r.linkedin_url || null,
@@ -255,7 +257,7 @@ export type SpinoutDemoDayData = {
   };
   team: {
     eyebrow: string; headline: string;
-    founders: Array<{ name: string; role: string; bio?: string }>;
+    founders: Array<{ name: string; role: string; bio?: string; company?: string }>;
     team_intro: string;
   };
   mentor_network: {
@@ -264,7 +266,8 @@ export type SpinoutDemoDayData = {
     mentors: string[];
     network_signals: string[];
     // Task #14 — typed profile cards for the new Mentors slide layout.
-    profiles: Array<{ name: string; role: string; bio: string; skills: string[] }>;
+    // Task #1 — `company` carries the admin-managed affiliation.
+    profiles: Array<{ name: string; role: string; bio: string; skills: string[]; company?: string }>;
     // Task #14 — aggregated skill coverage for SkillsSpider (label → 0..1).
     skill_coverage: Array<{ label: string; value: number }>;
     // Task #14 — counted breakdown of network categories (legal / design /
@@ -526,6 +529,22 @@ export async function fillAxalSpinoutDemoDay(
   const week = Math.max(1, Math.min(4, Number(u.spinout_lab_week ?? 1)));
   const remaining = daysRemaining(u.spinout_lab_started_at ?? null);
 
+  // Task #1 — the linked founder's editable company / affiliation, used
+  // to label the merged people slide's founder cards. Sourced from the
+  // founders table via projects.founder_id; matched onto the cap-table-
+  // derived founder cards by name (falls back to the sole founder).
+  // Degrades to no company if the column/table is missing.
+  let founderCompany = '';
+  let founderRowName = '';
+  if (p.founder_id != null) {
+    try {
+      const fr = await DB.prepare(`SELECT name, company FROM founders WHERE id = ?`)
+        .bind(p.founder_id).first<{ name: string | null; company: string | null }>();
+      founderCompany = String(fr?.company || '').trim();
+      founderRowName = String(fr?.name || '').trim();
+    } catch (_e) { /* column/table missing — degrade gracefully */ }
+  }
+
   const projectName = orDash(p.name);
   const sector = orDash(p.sector);
   const founderName = orDash(u.display_name || u.name);
@@ -684,8 +703,20 @@ export async function fillAxalSpinoutDemoDay(
         ? `Founder · ${Math.round(pct * 10) / 10}%`
         : 'Founder',
       bio: undefined as string | undefined,
+      company: '' as string,
     }))
     .filter((f) => f.name !== DASH);
+
+  // Attach the linked founder's affiliation to the matching card (by
+  // name, case-insensitive) or to the sole founder when there's exactly
+  // one — the cap-table holder name may differ from the founder record.
+  if (founderCompany && founders.length > 0) {
+    const target = founderRowName
+      ? founders.find((f) => f.name.toLowerCase() === founderRowName.toLowerCase())
+      : undefined;
+    if (target) target.company = founderCompany;
+    else if (founders.length === 1) founders[0].company = founderCompany;
+  }
 
   const allHolders = holdersWithPct
     .filter(({ row, pct }) => row.name && (pct ?? 0) > 0)
@@ -807,6 +838,7 @@ export async function fillAxalSpinoutDemoDay(
     name: np.name || DASH,
     role: np.role || '',
     bio: np.bio || '',
+    company: np.company || '',
     skills: np.skills,
     photo_url: np.photo_url,
     linkedin_url: np.linkedin_url,
@@ -1129,7 +1161,7 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
     [a[0] ?? empty, a[1] ?? empty, a[2] ?? empty, a[3] ?? empty];
 
   const emptyQuote = { name: '', role: '', takeaway: '' };
-  const emptyFounder = { name: '', role: '', bio: '' };
+  const emptyFounder = { name: '', role: '', bio: '', company: '' };
   const emptyWeek: SpinoutDemoDayData['axal_signal']['lab_weeks'][number] = {
     week: 0, title: '', caption: '', status: 'upcoming', milestones: [],
   };
@@ -1258,20 +1290,11 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
       ],
     },
     {
-      spec_id: 'brand', title: 'Brand',
-      fields: [
-        para('brand_eyebrow', b.eyebrow),
-        para('brand_headline', b.headline),
-        para('brand_tagline', b.tagline),
-        para('brand_vision', b.vision),
-        para('brand_kit_ready', b.brand_kit_ready ? 'true' : 'false'),
-        para('brand_pitch_deck_ready', b.pitch_deck_ready ? 'true' : 'false'),
-        para('brand_incorporated', b.incorporated ? 'true' : 'false'),
-      ],
-    },
-    {
-      // Task #14 — Team + Venture Readiness merged into one slide.
-      spec_id: 'team_readiness', title: 'Team & readiness',
+      // Task #1 — Team & readiness + Mentors & network collapsed into a
+      // single people slide: founder cards + network roster + readiness
+      // bars + skill radar. Carries every team_*, vr_* and mn_* flat key
+      // so the editor surfaces real inputs (never JSON blobs).
+      spec_id: 'team_network', title: 'Team & network',
       fields: [
         para('team_eyebrow', t.eyebrow),
         para('team_headline', t.headline),
@@ -1285,21 +1308,20 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('vr_ai_notes', vr.ai_notes),
         para('team_founder1_name', f1.name),
         para('team_founder1_role', f1.role),
+        para('team_founder1_company', f1.company ?? ''),
         para('team_founder1_bio', f1.bio ?? ''),
         para('team_founder2_name', f2.name),
         para('team_founder2_role', f2.role),
+        para('team_founder2_company', f2.company ?? ''),
         para('team_founder2_bio', f2.bio ?? ''),
         para('team_founder3_name', f3.name),
         para('team_founder3_role', f3.role),
+        para('team_founder3_company', f3.company ?? ''),
         para('team_founder3_bio', f3.bio ?? ''),
         para('team_founder4_name', f4.name),
         para('team_founder4_role', f4.role),
+        para('team_founder4_company', f4.company ?? ''),
         para('team_founder4_bio', f4.bio ?? ''),
-      ],
-    },
-    {
-      spec_id: 'mentor_network', title: 'Mentors & network',
-      fields: [
         para('mn_eyebrow', mn.eyebrow),
         para('mn_headline', mn.headline),
         para('mn_body', mn.body),
@@ -1316,6 +1338,9 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('ct_eyebrow', ct.eyebrow),
         para('ct_headline', ct.headline),
         para('ct_note', ct.note),
+        // Task #1 — incorporation status relocated here from the dropped
+        // Brand slide; powers the cap-table status pills + doc checklist.
+        para('ct_incorporated', b.incorporated ? 'true' : 'false'),
         metrics('ct_holders', holdersAsGrid(ct.holders)),
       ],
     },
@@ -1430,12 +1455,6 @@ export function buildAxalSpinoutCoverage(data: SpinoutDemoDayData): AxalSpinoutC
     (notDash(data.market.sam) ? 1 : 0) +
     (notDash(data.market.som) ? 1 : 0);
 
-  // ── brand: count of brand_kit / pitch_deck / incorporated checks ──
-  const brandFilled =
-    (data.brand.brand_kit_ready ? 1 : 0) +
-    (data.brand.pitch_deck_ready ? 1 : 0) +
-    (data.brand.incorporated ? 1 : 0);
-
   const cells: AxalSpinoutCoverageCell[] = [
     {
       spec_id: 'cover', title: 'Cover',
@@ -1482,22 +1501,18 @@ export function buildAxalSpinoutCoverage(data: SpinoutDemoDayData): AxalSpinoutC
       count_label: `${okrTotal} OKRs (${data.roadmap.now?.length || 0} now)`,
     },
     {
-      spec_id: 'brand', title: 'Brand',
-      source: 'projects.tagline + spinout_lab_milestones',
-      has: isReal && (notDash(data.brand.tagline) || brandFilled > 0),
-      count_label: `${brandFilled}/3 stand-up checks`,
-    },
-    {
-      spec_id: 'team_readiness', title: 'Team & readiness',
-      source: 'cap_table_holders + advisor_answers + score_snapshots',
-      has: isReal && ((data.team.founders?.length || 0) > 0 || notDash(data.venture_readiness.tier)),
-      count_label: `${data.team.founders?.length || 0} founders · score ${notDash(data.venture_readiness.total_score) ? data.venture_readiness.total_score : '—'}`,
-    },
-    {
-      spec_id: 'mentor_network', title: 'Mentors & network',
-      source: 'advisor_answers',
-      has: isReal && (notDash(data.mentor_network.body) || (data.mentor_network.mentors?.length || 0) > 0),
-      count_label: `${data.mentor_network.mentors?.length || 0} mentors`,
+      // Task #1 — Team & readiness + Mentors & network merged into one
+      // people slide. Coverage reflects founders + roster + score in a
+      // single cell.
+      spec_id: 'team_network', title: 'Team & network',
+      source: 'cap_table_holders + network_profiles + score_snapshots',
+      has: isReal && (
+        (data.team.founders?.length || 0) > 0 ||
+        notDash(data.venture_readiness.tier) ||
+        (data.mentor_network.profiles?.length || 0) > 0 ||
+        (data.mentor_network.mentors?.length || 0) > 0
+      ),
+      count_label: `${data.team.founders?.length || 0} founders · ${data.mentor_network.profiles?.length || 0} network · score ${notDash(data.venture_readiness.total_score) ? data.venture_readiness.total_score : '—'}`,
     },
     {
       spec_id: 'cap_table', title: 'Cap table',

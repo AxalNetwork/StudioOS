@@ -117,6 +117,7 @@ function shape(row: any) {
     name: row.name,
     kind: row.kind,
     role: row.role || null,
+    company: row.company || null,
     bio: row.bio || null,
     linkedin_url: row.linkedin_url || null,
     photo_r2_key: row.photo_r2_key || null,
@@ -136,7 +137,7 @@ r.get('/', async (c) => {
   await requireAdmin(c);
   await ensureNetworkProfilesSchema(c.env);
   const rows = (await c.env.DB.prepare(
-    `SELECT id, name, kind, role, bio, linkedin_url, photo_r2_key,
+    `SELECT id, name, kind, role, company, bio, linkedin_url, photo_r2_key,
             skills_json, display_order, is_active, created_at, updated_at
        FROM network_profiles
        ORDER BY is_active DESC, display_order ASC, name ASC`,
@@ -159,6 +160,7 @@ r.post('/', async (c) => {
   if (!name) return c.json({ error: 'name_required' }, 400);
   const kind = sanitizeKind(body.kind) || 'mentor';
   const role = String(body.role || '').trim().slice(0, 200) || null;
+  const company = String(body.company || '').trim().slice(0, 200) || null;
   const bio = String(body.bio || '').trim().slice(0, 2000) || null;
   const linkedin = sanitizeOptUrl(body.linkedin_url);
   const skills = sanitizeSkills(body.skills);
@@ -170,11 +172,11 @@ r.post('/', async (c) => {
   try {
     const row: any = await c.env.DB.prepare(
       `INSERT INTO network_profiles
-         (name, kind, role, bio, linkedin_url, skills_json, display_order, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         (name, kind, role, company, bio, linkedin_url, skills_json, display_order, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING id`,
     ).bind(
-      name, kind, role, bio, linkedin,
+      name, kind, role, company, bio, linkedin,
       JSON.stringify(skills),
       Number(next?.next ?? 0),
       body.is_active === false ? 0 : 1,
@@ -216,6 +218,7 @@ r.put('/:id', async (c) => {
     sets.push('kind = ?'); args.push(k);
   }
   if ('role' in body)         { sets.push('role = ?');         args.push(String(body.role || '').trim().slice(0, 200) || null); }
+  if ('company' in body)      { sets.push('company = ?');      args.push(String(body.company || '').trim().slice(0, 200) || null); }
   if ('bio' in body)          { sets.push('bio = ?');          args.push(String(body.bio || '').trim().slice(0, 2000) || null); }
   if ('linkedin_url' in body) { sets.push('linkedin_url = ?'); args.push(sanitizeOptUrl(body.linkedin_url)); }
   if ('skills' in body)       { sets.push('skills_json = ?');  args.push(JSON.stringify(sanitizeSkills(body.skills))); }

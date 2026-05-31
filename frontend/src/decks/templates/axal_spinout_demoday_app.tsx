@@ -1,17 +1,17 @@
 /**
  * axal_spinout_demoday_app.tsx — Task #15
  *
- * Axal 30-day Spin-Out Lab — Demo Day deck (11 slides, 4 variants).
+ * Axal 30-day Spin-Out Lab — Demo Day deck (10 slides, 4 variants).
  *
  * Self-contained React + TS + Tailwind + Framer Motion adapter rendering
- * 11 fixed slides in the spec-required order:
+ * 10 fixed slides in the spec-required order:
  *
  *   Cover · Problem · Validation · Market · Solution · Roadmap ·
- *   Team & readiness · Mentors & Network · Cap Table · Ask ·
- *   Review the deal
+ *   Team & network · Cap Table · Ask · Review the deal
  *
  * The Solution slide carries the product-demo media (loop/screenshot);
- * there is no standalone Product Demo slide.
+ * there is no standalone Product Demo slide. Team & venture readiness and
+ * Mentors & network are merged into one Team & network people slide.
  *
  * Four visual variants — `editorial`, `product_first`, `data_dense`,
  * `manifesto` — switchable in the author surface; choice is persisted
@@ -22,7 +22,7 @@
  * routes short-circuit for `method_id === 'axal_spinout_demoday'`,
  * call `fillAxalSpinoutDemoDay()` in
  * `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`, and
- * write the result as 11 slides where each slide carries one
+ * write the result as 10 slides where each slide carries one
  * JSON-encoded paragraph field keyed `axal_spinout_section_<name>`
  * (slide 0 also carries `meta`). `buildTemplateData()` in
  * `PitchDeckPrintPage.jsx` flattens these into the `data` prop this
@@ -185,7 +185,7 @@ const DASH = '—';
 /* ─────────────────────────── data types ─────────────────────────── */
 
 export type Metric = { label: string; value: string; sub?: string };
-export type Founder = { name: string; role: string; bio?: string };
+export type Founder = { name: string; role: string; bio?: string; company?: string };
 export type FundUse = { label: string; pct: number };
 export type Holder = { name: string; role: string; ownership_pct: string; kind: string };
 export type LabWeek = {
@@ -227,6 +227,7 @@ export type MentorProfile = {
   photo_url?: string | null;
   linkedin_url?: string | null;
   kind?: string;
+  company?: string;
 };
 export type SkillAxis = { label: string; value: number };
 export type NetworkCategory = { category: string; count: number };
@@ -284,7 +285,7 @@ export type SpinoutDemoDayData = {
     eyebrow: string; headline: string; body: string;
     loop_url: string; screenshot_url: string; caption: string;
   };
-  cap_table: { eyebrow: string; headline: string; holders: Holder[]; note: string };
+  cap_table: { eyebrow: string; headline: string; holders: Holder[]; note: string; incorporated: boolean };
   ask: {
     eyebrow: string; headline: string;
     raise_amount: string; runway: string;
@@ -309,7 +310,7 @@ export const SAMPLE_DATA: SpinoutDemoDayData = {
   },
   cover: {
     eyebrow: 'Axal VC · 30-Day Spin-Out Lab · Demo Day',
-    headline: 'Your story, in 11 slides.',
+    headline: 'Your story, in 10 slides.',
     sub: 'A pre-incorporation thesis, sharpened across 30 days of Discovery, OKRs, Scoring and Cap-Table prep.',
     location: 'Axal Network · Demo Day',
     activity_log: [],
@@ -371,6 +372,7 @@ export const SAMPLE_DATA: SpinoutDemoDayData = {
     eyebrow: '10 · Cap table',
     headline: 'Cap table — to be seeded in Week 3.',
     holders: [], note: 'Pre-incorporation — entity stands up in Week 4.',
+    incorporated: false,
   },
   ask: {
     eyebrow: '11 · Ask', headline: 'What we are raising — and what it buys.',
@@ -542,14 +544,16 @@ function hydrate(raw: unknown): SpinoutDemoDayData {
     return rows.filter((r) => r.takeaway);
   };
 
-  // {name, role, bio?} × 4 — drop rows whose name is empty.
+  // {name, role, bio?, company?} × 4 — drop rows whose name is empty.
   const readFounders = (): Founder[] => {
     const rows = [1, 2, 3, 4].map((i) => {
       const bio = asStr(d[`team_founder${i}_bio`], '');
+      const company = asStr(d[`team_founder${i}_company`], '');
       return {
         name: asStr(d[`team_founder${i}_name`], ''),
         role: asStr(d[`team_founder${i}_role`], ''),
         bio: bio ? bio : undefined,
+        company: company ? company : undefined,
       };
     });
     return rows.filter((r) => r.name);
@@ -713,6 +717,7 @@ function hydrate(raw: unknown): SpinoutDemoDayData {
       headline: asStr(d.ct_headline, base.cap_table.headline),
       holders: readHolders(),
       note: asStr(d.ct_note, base.cap_table.note),
+      incorporated: d.ct_incorporated != null ? asBool(d.ct_incorporated) : base.cap_table.incorporated,
     },
     ask: {
       eyebrow: asStr(d.ask_eyebrow, base.ask.eyebrow),
@@ -1467,7 +1472,7 @@ export const ProblemEcho: React.FC = () => {
   );
 };
 
-/* ─────────────────────────── 11 slides ─────────────────────────── */
+/* ─────────────────────────── 10 slides ─────────────────────────── */
 
 // 1920×1080 sibling frame — same primitive as sequoia_classic /
 // investor_appendix_app so the print/share/export pipelines (which
@@ -2162,7 +2167,7 @@ const Slide_MentorNetwork: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
 const Slide_CapTable: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
   const V = useV();
   const c = d.cap_table;
-  const incorporated = d.brand.incorporated;
+  const incorporated = c.incorporated;
   return (
     <SlideShell>
       <Eyebrow>{c.eyebrow}</Eyebrow>
@@ -2673,7 +2678,11 @@ const ProfileCard: React.FC<{ p: MentorProfile }> = ({ p }) => {
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: V.ink, fontFamily: V.display, lineHeight: 1.2 }}>{p.name}</div>
-        {p.role && <div style={{ fontSize: 10, marginTop: 2, color: V.accent, fontFamily: V.mono, letterSpacing: '0.1em' }}>{p.role}</div>}
+        {(p.role || p.company) && (
+          <div style={{ fontSize: 10, marginTop: 2, color: V.accent, fontFamily: V.mono, letterSpacing: '0.1em' }}>
+            {[p.role, p.company].filter(Boolean).join(' · ')}
+          </div>
+        )}
         {p.skills && p.skills.length > 0 && (
           <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {p.skills.slice(0, 4).map((s, i) => (
@@ -2783,6 +2792,146 @@ const Slide_TeamReadiness: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
   );
 };
 
+/**
+ * Slide 8 (merged): Team & network — Task #1.
+ * Collapses the former "Team & venture readiness" and "Mentors & network"
+ * slides into one people-led slide: profile cards (founders + partners +
+ * advisors + mentors, each name + company, grouped by kind) lead, with the
+ * readiness ScoreBars + skill-coverage SkillsSpider retained and the Mentor
+ * Sessions / Operating Partners panels rendered compactly. Degrades
+ * gracefully to ghost states when any group is empty.
+ */
+const Slide_TeamNetwork: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
+  const V = useV();
+  const t = d.team;
+  const vr = d.venture_readiness;
+  const m = d.mentor_network;
+
+  const founders = (t.founders || []).filter((f) => !isUnfilled(f.name));
+  const profiles = (m.profiles || []).filter((p) => !isUnfilled(p.name));
+  const mentors = (m.mentors || []).filter((x) => !isUnfilled(x));
+  const signals = (m.network_signals || []).filter((x) => !isUnfilled(x));
+
+  // Group the admin-managed roster by kind so partners / advisors / mentors
+  // each get a labelled cluster. Unknown kinds fall into "Network".
+  const KIND_GROUPS: { key: string; label: string; match: (k: string) => boolean }[] = [
+    { key: 'partner', label: 'Operating partners', match: (k) => k.includes('partner') },
+    { key: 'advisor', label: 'Advisors', match: (k) => k.includes('advisor') },
+    { key: 'mentor', label: 'Mentors', match: (k) => k.includes('mentor') },
+  ];
+  const grouped = KIND_GROUPS.map((g) => ({
+    ...g,
+    people: profiles.filter((p) => g.match(String(p.kind || '').toLowerCase())),
+  })).filter((g) => g.people.length > 0);
+  const ungrouped = profiles.filter(
+    (p) => !KIND_GROUPS.some((g) => g.match(String(p.kind || '').toLowerCase())),
+  );
+  if (ungrouped.length > 0) grouped.push({ key: 'network', label: 'Network', match: () => true, people: ungrouped });
+
+  // Founders rendered through ProfileCard for visual parity with the roster.
+  const founderCards: MentorProfile[] = founders.map((f) => ({
+    name: f.name, role: f.role, bio: f.bio || '', skills: [], company: f.company,
+  }));
+
+  const GroupLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 2 }}>{children}</div>
+  );
+
+  return (
+    <SlideShell>
+      <Eyebrow>{t.eyebrow} · {m.eyebrow.split('·').pop()?.trim() || 'Network'}</Eyebrow>
+      <SlideHeading>Team & network.</SlideHeading>
+      <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 24, flex: 1, minHeight: 0 }}>
+        {/* Left — people cards grouped by kind */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <GroupLabel>Founders</GroupLabel>
+            {founderCards.length === 0 ? (
+              <div style={{ ...cardStyle(V, true), padding: 12, opacity: 0.6, fontSize: 11, color: V.textMuted, fontFamily: V.mono }}>
+                Founders pending — seed the cap table to surface here
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                {founderCards.slice(0, 4).map((p, i) => <ProfileCard key={i} p={p} />)}
+              </div>
+            )}
+          </div>
+          {grouped.length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <GroupLabel>Network</GroupLabel>
+              <div style={{ ...cardStyle(V, true), padding: 12, opacity: 0.6, fontSize: 11, color: V.textMuted, fontFamily: V.mono }}>
+                Partners, advisors & mentors appear here once the roster is set in Admin
+              </div>
+            </div>
+          ) : grouped.map((g) => (
+            <div key={g.key} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <GroupLabel>{g.label}</GroupLabel>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                {g.people.slice(0, 4).map((p, i) => <ProfileCard key={i} p={p} />)}
+              </div>
+            </div>
+          ))}
+          {!isUnfilled(t.team_intro) && (
+            <div style={{ ...cardStyle(V, true), padding: 12 }}>
+              <p style={{ fontSize: 12, lineHeight: 1.4, color: V.textSoft, fontFamily: V.sans, margin: 0 }}>{t.team_intro}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Right — readiness bars, skill radar, compact mentor/partner panels */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
+          <div style={{ ...cardStyle(V), padding: 14 }}>
+            <GroupLabel>Readiness · {vr.tier || DASH}</GroupLabel>
+            <ScoreBars items={vr.breakdown} />
+          </div>
+          {m.skill_coverage && m.skill_coverage.length >= 3 ? (
+            <div style={{ ...cardStyle(V), padding: 12, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <GroupLabel>Skill coverage</GroupLabel>
+              <SkillsSpider axes={m.skill_coverage} size={170} />
+            </div>
+          ) : (
+            <div style={{ ...cardStyle(V), padding: 12, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <NetworkConstellation />
+              </div>
+              <div style={{ marginTop: 8, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', textAlign: 'center', color: V.textMuted, fontFamily: V.mono }}>
+                Axal network · {mentors.length || '—'} mentors
+              </div>
+            </div>
+          )}
+          <div style={{ ...cardStyle(V, true), padding: 12 }}>
+            <GroupLabel>Mentor sessions</GroupLabel>
+            {mentors.length === 0 ? (
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.16em', color: V.textMuted, fontFamily: V.mono }}>
+                Book your first session in Office Hours
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {mentors.slice(0, 6).map((name, i) => (
+                  <span key={i} style={{ fontSize: 11, color: V.ink, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ color: V.emerald }}>✓</span>{name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={{ ...cardStyle(V), padding: 12 }}>
+            <GroupLabel>Operating partners on call</GroupLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+              {(signals.length > 0 ? signals.slice(0, 6) : ['Legal', 'Design', 'Recruiting', 'Technical DD', 'Finance', 'GTM']).map((cat, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 5, height: 5, borderRadius: 999, background: V.accent, flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: V.ink, fontFamily: V.display, fontWeight: 600 }}>{cat}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </SlideShell>
+  );
+};
+
 const Slide_ReviewTheDeal: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
   const c = d.contact;
   const V = useV();
@@ -2850,12 +2999,13 @@ const Slide_ReviewTheDeal: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
 /* ─────────────────────────── slide registry ─────────────────────────── */
 
 type SlideEntry = { id: string; title: string; Component: React.FC<{ d: SpinoutDemoDayData }> };
-// 11 slides. Drops Axal Signal; product-demo media now lives on the
-// Solution slide (no standalone Product Demo slide); merges Team +
-// Venture Readiness into Team & readiness; renames Contact → Review the
-// deal. Legacy Slide_Team / Slide_VentureReadiness / Slide_AxalSignal
-// functions retained (unused) to keep any in-flight code references
-// intact during rollout. Slide_Contact was deleted.
+// 10 slides. Drops Axal Signal; product-demo media now lives on the
+// Solution slide (no standalone Product Demo slide); merges Team & venture
+// readiness + Mentors & network into one Team & network people slide;
+// renames Contact → Review the deal. Legacy Slide_Team /
+// Slide_VentureReadiness / Slide_AxalSignal / Slide_TeamReadiness /
+// Slide_MentorNetwork functions retained (unused) to keep any in-flight
+// code references intact during rollout. Slide_Contact was deleted.
 export const SLIDES: SlideEntry[] = [
   { id: 'cover',             title: 'Cover',             Component: Slide_Cover },
   { id: 'problem',           title: 'Problem',           Component: Slide_Problem },
@@ -2863,18 +3013,18 @@ export const SLIDES: SlideEntry[] = [
   { id: 'market',            title: 'Market',            Component: Slide_Market },
   { id: 'solution',          title: 'Solution',          Component: Slide_Solution },
   { id: 'roadmap',           title: 'Roadmap',           Component: Slide_Roadmap },
-  { id: 'team_readiness',    title: 'Team & readiness',  Component: Slide_TeamReadiness },
-  { id: 'mentor_network',    title: 'Mentors & network', Component: Slide_MentorNetwork },
+  { id: 'team_network',      title: 'Team & network',    Component: Slide_TeamNetwork },
   { id: 'cap_table',         title: 'Cap table',         Component: Slide_CapTable },
   { id: 'ask',               title: 'Ask',               Component: Slide_Ask },
   { id: 'review_the_deal',   title: 'Review the deal',   Component: Slide_ReviewTheDeal },
 ];
 // Silence unused-warnings for retained legacy slide components.
 void Slide_Team; void Slide_VentureReadiness; void Slide_AxalSignal;
+void Slide_TeamReadiness; void Slide_MentorNetwork;
 
 /* ─────────────────────────── root deck ─────────────────────────── */
 
-// Renders all 11 Slide16x9 frames stacked — matches sequoia_classic /
+// Renders all 10 Slide16x9 frames stacked — matches sequoia_classic /
 // investor_appendix_app, so the picker thumbnail, modal preview, share
 // view and PDF export all work with a single scroll surface.
 const DeckRoot: React.FC<DeckProps> = (props) => {

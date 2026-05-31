@@ -24,7 +24,7 @@ const SKILL_CATALOG = [
 const NETWORK_KINDS = ['mentor', 'partner', 'advisor', 'investor'];
 
 const EMPTY = {
-  name: '', kind: 'mentor', role: '', bio: '',
+  name: '', kind: 'mentor', role: '', company: '', bio: '',
   linkedin_url: '', skills: [], is_active: true,
 };
 
@@ -169,6 +169,17 @@ function EditorModal({ initial, onClose, onSave, onPhoto, busy }) {
           </label>
 
           <label className="block">
+            <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">Company / affiliation</div>
+            <input
+              value={form.company || ''}
+              onChange={(e) => set('company', e.target.value)}
+              className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+              maxLength={200}
+              placeholder="Acme Capital"
+            />
+          </label>
+
+          <label className="block">
             <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">Bio</div>
             <textarea
               value={form.bio || ''}
@@ -251,6 +262,7 @@ export default function AdminNetworkProfiles() {
         name: form.name,
         kind: form.kind,
         role: form.role || null,
+        company: form.company || null,
         bio: form.bio || null,
         linkedin_url: form.linkedin_url || null,
         skills: form.skills || [],
@@ -398,7 +410,11 @@ export default function AdminNetworkProfiles() {
                   <div className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">{p.name}</div>
                   <span className="text-[10px] uppercase tracking-wider text-violet-600 dark:text-violet-400">{p.kind}</span>
                 </div>
-                {p.role && <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{p.role}</div>}
+                {(p.role || p.company) && (
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
+                    {[p.role, p.company].filter(Boolean).join(' · ')}
+                  </div>
+                )}
                 {p.skills?.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1">
                     {p.skills.slice(0, 6).map((s) => (

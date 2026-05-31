@@ -48,6 +48,19 @@ export async function ensureProjectRevenueProofColumns(env: Env): Promise<void> 
   _revenueProofReady.set(db, true);
 }
 
+// Task #1 — lazy bootstrap for the founder's editable company / affiliation,
+// surfaced on the Spin-Out Demo Day's merged Team & network slide. Additive
+// + idempotent; same WeakMap pattern as above. The `founders` table is not
+// at D1's ALTER-rewrite limit, so a plain ADD COLUMN is fine here.
+const _founderCompanyReady = new WeakMap<object, true>();
+export async function ensureFounderCompanyColumn(env: Env): Promise<void> {
+  const db = env.DB as unknown as object;
+  if (_founderCompanyReady.has(db)) return;
+  try { await env.DB.exec(`ALTER TABLE founders ADD COLUMN company TEXT`); }
+  catch (_e) { /* duplicate column on re-run is fine */ }
+  _founderCompanyReady.set(db, true);
+}
+
 async function listProjectsHandler(c: any) {
   const user = await requireAuth(c);
   const status = c.req.query('status');
@@ -98,6 +111,7 @@ projects.get('/:id', async (c) => {
   // don't omit them from the projection.
   await ensureProjectDataRoomColumns(c.env);
   await ensureProjectRevenueProofColumns(c.env);
+  await ensureFounderCompanyColumn(c.env);
   const sql = getSQL(c.env);
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
@@ -405,6 +419,7 @@ projects.put('/:id', async (c) => {
   // slide save-path so the project stays the single source of truth.
   await ensureProjectDataRoomColumns(c.env);
   await ensureProjectRevenueProofColumns(c.env);
+  await ensureFounderCompanyColumn(c.env);
   // Task #2 — coerce structured revenue-proof fields: numbers must be
   // finite (or null to clear); paid_pilot_status is a closed enum; the
   // first_payment_date is stored as an ISO date string and trimmed.
@@ -457,10 +472,25 @@ projects.put('/:id', async (c) => {
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
     await sql.unsafe(`UPDATE projects SET ${updates.join(', ')} WHERE id = ?`, [...values, id]);
   }
+  // Task #1 — the editable founder company / affiliation lives on the
+  // linked `founders` row (not `projects`). Owner + privileged editors may
+  // set it; explicit '' clears it. Skipped silently when the project has
+  // no linked founder.
+  if (data.founder_company !== undefined && project.founder_id) {
+    const company = data.founder_company == null
+      ? null
+      : String(data.founder_company).trim().slice(0, 200) || null;
+    await sql.unsafe(`UPDATE founders SET company = ? WHERE id = ?`, [company, project.founder_id]);
+  }
   const [updated] = await sql`SELECT * FROM projects WHERE id = ${id}`;
+  let updatedFounder = null;
+  if (updated?.founder_id) {
+    const fr = await sql`SELECT * FROM founders WHERE id = ${updated.founder_id}`;
+    if (fr.length > 0) updatedFounder = fr[0];
+  }
   await sql.end();
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'project', id }); } catch {}
-  return c.json(updated);
+  return c.json({ ...updated, founder: updatedFounder });
 });
 
 projects.delete('/:id', async (c) => {
