@@ -68,19 +68,113 @@ const PALETTES = {
   },
 } as const;
 
-export type VariantId = keyof typeof PALETTES;
-const VARIANTS: VariantId[] = ['editorial', 'product_first', 'data_dense', 'manifesto'];
+type Vibe = 'serif' | 'sans' | 'mono' | 'cinematic';
+type PresetVariantId = keyof typeof PALETTES;
+// Task #22 — `brand_kit` is a synthetic 5th look derived at runtime from
+// the founder's saved Brand Builder kit; it is NOT a key of PALETTES/FONTS.
+export type VariantId = PresetVariantId | 'brand_kit';
+const VARIANTS: PresetVariantId[] = ['editorial', 'product_first', 'data_dense', 'manifesto'];
 const VARIANT_LABEL: Record<VariantId, string> = {
   editorial: 'Editorial', product_first: 'Product-first',
-  data_dense: 'Data-dense', manifesto: 'Manifesto',
+  data_dense: 'Data-dense', manifesto: 'Manifesto', brand_kit: 'My brand kit',
 };
 
-const FONTS: Record<VariantId, { display: string; body: string; mono: string }> = {
-  editorial:     { display: '"Playfair Display","GT Sectra",Georgia,serif', body: '"Source Serif Pro",Georgia,serif',          mono: '"JetBrains Mono",ui-monospace,Menlo,monospace' },
-  product_first: { display: '"Inter","Helvetica Neue",system-ui,sans-serif', body: '"Inter","Helvetica Neue",system-ui,sans-serif', mono: '"JetBrains Mono",ui-monospace,Menlo,monospace' },
-  data_dense:    { display: '"Inter","Helvetica Neue",system-ui,sans-serif', body: '"Inter","Helvetica Neue",system-ui,sans-serif', mono: '"JetBrains Mono",ui-monospace,Menlo,monospace' },
-  manifesto:     { display: '"Inter","Helvetica Neue",system-ui,sans-serif', body: '"Inter","Helvetica Neue",system-ui,sans-serif', mono: '"JetBrains Mono",ui-monospace,Menlo,monospace' },
+type FontSet = { display: string; body: string; mono: string };
+const MONO_STACK = '"JetBrains Mono",ui-monospace,Menlo,monospace';
+const FONTS: Record<PresetVariantId, FontSet> = {
+  editorial:     { display: '"Playfair Display","GT Sectra",Georgia,serif', body: '"Source Serif Pro",Georgia,serif',          mono: MONO_STACK },
+  product_first: { display: '"Inter","Helvetica Neue",system-ui,sans-serif', body: '"Inter","Helvetica Neue",system-ui,sans-serif', mono: MONO_STACK },
+  data_dense:    { display: '"Inter","Helvetica Neue",system-ui,sans-serif', body: '"Inter","Helvetica Neue",system-ui,sans-serif', mono: MONO_STACK },
+  manifesto:     { display: '"Inter","Helvetica Neue",system-ui,sans-serif', body: '"Inter","Helvetica Neue",system-ui,sans-serif', mono: MONO_STACK },
 };
+
+/* ─────────────────────────── brand-kit theming (Task #22) ─────────────────────────── */
+// Curated font pairings the founder can pick in Brand Builder. Restricted
+// to fonts the app already loads so the deck never renders a missing face.
+// `FONT_PAIRING_OPTIONS` is the single source of truth the Brand Builder
+// <select> imports — keep ids stable (they persist to landing_pages).
+type FontPairingId = 'editorial' | 'modern' | 'humanist' | 'classic';
+const FONT_PAIRINGS: Record<FontPairingId, { label: string; display: string; body: string; mono: string; vibe: Vibe }> = {
+  editorial: { label: 'Editorial · Serif',       display: '"Playfair Display",Georgia,serif', body: '"Source Serif Pro",Georgia,serif', mono: MONO_STACK, vibe: 'serif' },
+  modern:    { label: 'Modern · Sans',           display: '"Inter",system-ui,sans-serif',     body: '"Inter",system-ui,sans-serif',     mono: MONO_STACK, vibe: 'sans'  },
+  humanist:  { label: 'Humanist · Serif + Sans', display: '"Playfair Display",Georgia,serif', body: '"Inter",system-ui,sans-serif',       mono: MONO_STACK, vibe: 'serif' },
+  classic:   { label: 'Classic · Serif + Sans',  display: '"Source Serif Pro",Georgia,serif', body: '"Inter",system-ui,sans-serif',       mono: MONO_STACK, vibe: 'sans'  },
+};
+export const FONT_PAIRING_OPTIONS: Array<{ value: FontPairingId; label: string }> =
+  (Object.keys(FONT_PAIRINGS) as FontPairingId[]).map((k) => ({ value: k, label: FONT_PAIRINGS[k].label }));
+
+type Palette = {
+  bg: string; surface: string; ink: string; inkSoft: string;
+  muted: string; accent: string; accentSoft: string; rule: string;
+  chip: string; good: string; warn: string;
+};
+
+const HEX_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+const normHex = (h: string): string => {
+  let s = h.trim().toLowerCase();
+  if (s.length === 4) s = '#' + s[1] + s[1] + s[2] + s[2] + s[3] + s[3];
+  return s;
+};
+const sanitizeHex = (v: unknown, fallback: string): string =>
+  (typeof v === 'string' && HEX_RE.test(v.trim())) ? normHex(v) : fallback;
+const hexToRgb = (h: string): [number, number, number] => {
+  const s = normHex(h);
+  return [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)];
+};
+const toHex2 = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+const rgbToHex = (r: number, g: number, b: number) => `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
+const mix = (a: string, b: string, t: number): string => {
+  const [ar, ag, ab] = hexToRgb(a); const [br, bg, bb] = hexToRgb(b);
+  return rgbToHex(ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t);
+};
+const relLum = (h: string): number => {
+  const f = (c: number) => { const x = c / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); };
+  const [r, g, b] = hexToRgb(h);
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+};
+const contrast = (a: string, b: string): number => {
+  const la = relLum(a), lb = relLum(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+};
+
+type BrandKitData = { present: boolean; bg: string; accent: string; ink: string; fonts: string };
+
+// Build a full Palette + FontSet from the founder's saved brand kit (bg +
+// accent + ink + font pairing). Returns null when no kit is saved so the
+// deck falls back to the editorial preset. Every derived colour is
+// contrast-checked: an ink or accent that fails against the chosen
+// background is replaced with a safe value so text never disappears.
+const EDITORIAL = PALETTES.editorial;
+function buildBrandKitTheme(kit: BrandKitData | undefined | null):
+  { pal: Palette; fonts: FontSet; isDark: boolean; vibe: Vibe } | null {
+  if (!kit || !kit.present) return null;
+  const bg = sanitizeHex(kit.bg, EDITORIAL.bg);
+  const isDark = relLum(bg) < 0.4;
+  const safeInk = isDark ? '#F7F4FF' : '#15102A';
+  let ink = sanitizeHex(kit.ink, safeInk);
+  if (contrast(ink, bg) < 4.5) ink = safeInk;
+  let accent = sanitizeHex(kit.accent, EDITORIAL.accent);
+  if (contrast(accent, bg) < 3) {
+    accent = isDark ? mix(accent, '#ffffff', 0.45) : mix(accent, '#000000', 0.2);
+    if (contrast(accent, bg) < 3) accent = isDark ? '#C4B5FD' : EDITORIAL.accent;
+  }
+  const pal: Palette = {
+    bg,
+    surface: mix(bg, isDark ? '#ffffff' : '#000000', 0.04),
+    ink,
+    inkSoft: mix(ink, bg, 0.26),
+    muted: mix(ink, bg, 0.5),
+    accent,
+    accentSoft: mix(accent, bg, isDark ? 0.8 : 0.86),
+    rule: mix(ink, bg, isDark ? 0.8 : 0.86),
+    chip: mix(accent, bg, isDark ? 0.84 : 0.9),
+    good: isDark ? '#7EC596' : '#3F6650',
+    warn: isDark ? '#F0C36A' : '#B68A2E',
+  };
+  const pairKey: FontPairingId = (kit.fonts && kit.fonts in FONT_PAIRINGS ? kit.fonts : 'editorial') as FontPairingId;
+  const pair = FONT_PAIRINGS[pairKey];
+  return { pal, fonts: { display: pair.display, body: pair.body, mono: pair.mono }, isDark, vibe: pair.vibe };
+}
 
 const VARIANT_KEY = 'axal:deck:axal_spinout_demoday:variant';
 const DASH = '—';
@@ -164,10 +258,7 @@ export type SpinoutDemoDayData = {
     eyebrow: string; headline: string; quarter: string;
     now: string[]; next: string[]; later: string[];
   };
-  brand: {
-    eyebrow: string; headline: string; tagline: string; vision: string;
-    brand_kit_ready: boolean; pitch_deck_ready: boolean; incorporated: boolean;
-  };
+  brand_kit: { present: boolean; bg: string; accent: string; ink: string; fonts: string };
   venture_readiness: {
     eyebrow: string; headline: string;
     total_score: string; tier: string; is_sandbox: boolean;
@@ -248,11 +339,7 @@ export const SAMPLE_DATA: SpinoutDemoDayData = {
     eyebrow: '05 · Roadmap', headline: 'What we ship next.',
     quarter: DASH, now: [], next: [], later: [],
   },
-  brand: {
-    eyebrow: '06 · Brand', headline: 'How we show up.',
-    tagline: DASH, vision: DASH,
-    brand_kit_ready: false, pitch_deck_ready: false, incorporated: false,
-  },
+  brand_kit: { present: false, bg: '', accent: '', ink: '', fonts: '' },
   venture_readiness: {
     eyebrow: '07 · Venture readiness', headline: 'Axal score — to be run in Week 2.',
     total_score: DASH, tier: DASH, is_sandbox: false,
@@ -573,14 +660,12 @@ function hydrate(raw: unknown): SpinoutDemoDayData {
       next: asArr(d.roadmap_next),
       later: asArr(d.roadmap_later),
     },
-    brand: {
-      eyebrow: asStr(d.brand_eyebrow, base.brand.eyebrow),
-      headline: asStr(d.brand_headline, base.brand.headline),
-      tagline: asStr(d.brand_tagline, base.brand.tagline),
-      vision: asStr(d.brand_vision, base.brand.vision),
-      brand_kit_ready: asBool(d.brand_kit_ready),
-      pitch_deck_ready: asBool(d.brand_pitch_deck_ready),
-      incorporated: asBool(d.brand_incorporated),
+    brand_kit: {
+      present: asBool(d.brandkit_present),
+      bg: asStr(d.brandkit_bg, ''),
+      accent: asStr(d.brandkit_accent, ''),
+      ink: asStr(d.brandkit_ink, ''),
+      fonts: asStr(d.brandkit_fonts, ''),
     },
     venture_readiness: {
       eyebrow: asStr(d.vr_eyebrow, base.venture_readiness.eyebrow),
@@ -654,8 +739,11 @@ function hydrate(raw: unknown): SpinoutDemoDayData {
 type VariantCtx = {
   variant: VariantId;
   setVariant: (v: VariantId) => void;
-  pal: typeof PALETTES[VariantId];
-  fonts: typeof FONTS[VariantId];
+  pal: Palette;
+  fonts: FontSet;
+  isDark: boolean;
+  vibe: Vibe;
+  hasBrandKit: boolean;
   editable: boolean;
 };
 const VariantContext = React.createContext<VariantCtx | null>(null);
@@ -761,7 +849,8 @@ const MetricCard: React.FC<{ m: Metric }> = ({ m }) => {
 /* ─────────────────────────── variant switcher ─────────────────────────── */
 
 const VariantSwitcher: React.FC = () => {
-  const { variant, setVariant, pal, fonts } = useVariant();
+  const { variant, setVariant, pal, fonts, hasBrandKit } = useVariant();
+  const opts: VariantId[] = hasBrandKit ? ['brand_kit', ...VARIANTS] : [...VARIANTS];
   return (
     <div style={{
       position: 'absolute', top: 16, right: 16, zIndex: 10,
@@ -771,7 +860,7 @@ const VariantSwitcher: React.FC = () => {
       fontFamily: fonts.mono, fontSize: 11, letterSpacing: '0.08em',
     }}>
       <span style={{ color: pal.muted, padding: '0 6px' }}>VARIANT</span>
-      {VARIANTS.map((v) => (
+      {opts.map((v) => (
         <button
           key={v}
           type="button"
@@ -815,7 +904,7 @@ type V = {
 };
 
 const useV = (): V => {
-  const { pal, fonts, variant } = useVariant();
+  const { pal, fonts, isDark, vibe } = useVariant();
   return {
     accent: pal.accent,
     accentSoft: pal.accentSoft,
@@ -831,11 +920,8 @@ const useV = (): V => {
     display: fonts.display,
     sans: fonts.body,
     mono: fonts.mono,
-    isDark: variant === 'product_first' || variant === 'manifesto',
-    vibe: variant === 'editorial' ? 'serif'
-        : variant === 'data_dense' ? 'mono'
-        : variant === 'manifesto' ? 'cinematic'
-        : 'sans',
+    isDark,
+    vibe,
   };
 };
 
@@ -1373,29 +1459,6 @@ export const RocketTrajectory: React.FC = () => {
   );
 };
 
-/** Brand palette specimen — three swatches + type sample. */
-export const BrandPaletteIllustration: React.FC = () => {
-  const V = useV();
-  return (
-    <svg viewBox="0 0 320 240" style={{ width: '100%', display: 'block' }} preserveAspectRatio="xMidYMid meet">
-      <rect x="0" y="0" width="320" height="240" fill={V.cardSoft} rx="6" />
-      <rect x="24" y="36" width="200" height="168" fill={V.card} stroke={V.line} rx="6" />
-      <text x="40" y="84" fontFamily={V.display} fontWeight={700} fontSize="36" fill={V.ink}>Aa</text>
-      <text x="40" y="120" fontFamily={V.display} fontWeight={600} fontSize="13" fill={V.ink}>Display · serif</text>
-      <text x="40" y="138" fontFamily={V.sans} fontSize="11" fill={V.textSoft}>Body · sans-serif</text>
-      <text x="40" y="158" fontFamily={V.mono} fontSize="10" fill={V.textMuted}>MONO · CODE / LABELS</text>
-      <line x1="40" y1="178" x2="200" y2="178" stroke={V.line} />
-      <text x="40" y="194" fontFamily={V.mono} fontSize="9" fill={V.textMuted} letterSpacing="0.18em">VOICE · CALM · CLEAR</text>
-      {[V.accent, V.gold, V.ink].map((c, i) => (
-        <g key={i}>
-          <rect x="244" y={36 + i * 56} width="52" height="48" fill={c} rx="4" />
-          <text x="270" y={66 + i * 56} textAnchor="middle" fontFamily={V.mono} fontSize="8" fontWeight={700} fill="#fff" letterSpacing="0.14em">{['ACCENT', 'GOLD', 'INK'][i]}</text>
-        </g>
-      ))}
-    </svg>
-  );
-};
-
 /** Problem-space illustration — tangled lines resolving to one insight node. */
 export const ProblemEcho: React.FC = () => {
   const V = useV();
@@ -1871,45 +1934,6 @@ const Slide_Roadmap: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
               ))}
             </div>
           </div>
-        </div>
-      </div>
-    </SlideShell>
-  );
-};
-
-const Slide_Brand: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
-  const V = useV();
-  const b = d.brand;
-  return (
-    <SlideShell>
-      <div style={{ display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 32, flex: 1, minHeight: 0 }}>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <Eyebrow>{b.eyebrow}</Eyebrow>
-          {isUnfilled(b.tagline)
-            ? <h2 style={{ color: V.textMuted, fontStyle: 'italic', fontFamily: V.display, fontSize: 44, lineHeight: 1.1, margin: 0 }}>The one-liner we will lead with.</h2>
-            : <SlideHeading size="xl">{b.tagline}</SlideHeading>}
-          {isUnfilled(b.tagline) && <div style={{ marginTop: 14 }}><Nudge>Define the brand one-liner in Brand Builder (Week 2) or via the Personal Advisor's brand questions.</Nudge></div>}
-          <div style={{ marginTop: 20, ...cardStyle(V), padding: 18, flex: 1 }}>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 10 }}>Vision</div>
-            {!isUnfilled(b.vision) ? (
-              <p style={{ fontSize: 14.5, lineHeight: 1.4, color: V.ink, fontFamily: V.vibe === 'serif' ? V.display : V.sans, margin: 0 }}>{b.vision}</p>
-            ) : (
-              <>
-                <div style={{ height: 8, borderRadius: 4, background: V.line, width: '88%' }} />
-                <div style={{ height: 8, borderRadius: 4, background: V.line, width: '72%', opacity: 0.7, marginTop: 6 }} />
-                <div style={{ height: 8, borderRadius: 4, background: V.line, width: '48%', opacity: 0.5, marginTop: 6 }} />
-                <div style={{ marginTop: 10, fontSize: 11, color: V.textMuted, fontFamily: V.mono }}>Set a brand vision in Brand Builder.</div>
-              </>
-            )}
-          </div>
-          <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <Pill tone={b.brand_kit_ready ? 'emerald' : 'neutral'}>{b.brand_kit_ready ? '✓ Brand kit ready' : 'Brand kit pending'}</Pill>
-            <Pill tone={b.pitch_deck_ready ? 'emerald' : 'neutral'}>{b.pitch_deck_ready ? '✓ Pitch deck v1' : 'Deck v1 pending'}</Pill>
-            <Pill tone={b.incorporated ? 'emerald' : 'neutral'}>{b.incorporated ? '✓ Incorporated' : 'Pre-incorporation'}</Pill>
-          </div>
-        </div>
-        <div style={{ ...cardStyle(V), padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <BrandPaletteIllustration />
         </div>
       </div>
     </SlideShell>
@@ -2846,7 +2870,6 @@ export const SLIDES: SlideEntry[] = [
   { id: 'solution',          title: 'Solution',          Component: Slide_Solution },
   { id: 'product_demo',      title: 'Product demo',      Component: Slide_ProductDemo },
   { id: 'roadmap',           title: 'Roadmap',           Component: Slide_Roadmap },
-  { id: 'brand',             title: 'Brand',             Component: Slide_Brand },
   { id: 'team_readiness',    title: 'Team & readiness',  Component: Slide_TeamReadiness },
   { id: 'mentor_network',    title: 'Mentors & network', Component: Slide_MentorNetwork },
   { id: 'cap_table',         title: 'Cap table',         Component: Slide_CapTable },
