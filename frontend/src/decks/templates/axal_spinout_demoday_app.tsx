@@ -1,14 +1,17 @@
 /**
  * axal_spinout_demoday_app.tsx — Task #15
  *
- * Axal 30-day Spin-Out Lab — Demo Day deck (14 slides, 4 variants).
+ * Axal 30-day Spin-Out Lab — Demo Day deck (11 slides, 4 variants).
  *
  * Self-contained React + TS + Tailwind + Framer Motion adapter rendering
- * 14 fixed slides in the spec-required order:
+ * 11 fixed slides in the spec-required order:
  *
  *   Cover · Problem · Validation · Market · Solution · Roadmap ·
- *   Brand · Venture Readiness · Team · Mentors & Network · Cap Table ·
- *   Ask · Axal Signal · Contact
+ *   Team & readiness · Mentors & Network · Cap Table · Ask ·
+ *   Review the deal
+ *
+ * The Solution slide carries the product-demo media (loop/screenshot);
+ * there is no standalone Product Demo slide.
  *
  * Four visual variants — `editorial`, `product_first`, `data_dense`,
  * `manifesto` — switchable in the author surface; choice is persisted
@@ -19,7 +22,7 @@
  * routes short-circuit for `method_id === 'axal_spinout_demoday'`,
  * call `fillAxalSpinoutDemoDay()` in
  * `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`, and
- * write the result as 14 slides where each slide carries one
+ * write the result as 11 slides where each slide carries one
  * JSON-encoded paragraph field keyed `axal_spinout_section_<name>`
  * (slide 0 also carries `meta`). `buildTemplateData()` in
  * `PitchDeckPrintPage.jsx` flattens these into the `data` prop this
@@ -301,7 +304,7 @@ export const SAMPLE_DATA: SpinoutDemoDayData = {
   },
   cover: {
     eyebrow: 'Axal VC · 30-Day Spin-Out Lab · Demo Day',
-    headline: 'Your story, in 13 slides.',
+    headline: 'Your story, in 11 slides.',
     sub: 'A pre-incorporation thesis, sharpened across 30 days of Discovery, OKRs, Scoring and Cap-Table prep.',
     location: 'Axal Network · Demo Day',
     activity_log: [],
@@ -1334,30 +1337,6 @@ export const FourWeekTicks: React.FC<{ activeWeek?: number; height?: number }> =
   );
 };
 
-/** MVP blueprint motif — layered construction lines (Solution slide). */
-export const MvpBlueprint: React.FC = () => {
-  const V = useV();
-  return (
-    <svg viewBox="0 0 360 280" style={{ width: '100%', display: 'block' }} preserveAspectRatio="xMidYMid meet">
-      <rect x="0" y="0" width="360" height="280" fill={V.cardSoft} rx="8" />
-      {Array.from({ length: 12 }).map((_, i) => (
-        <line key={`v${i}`} x1={i * 30} y1="0" x2={i * 30} y2="280" stroke={V.line} strokeWidth={0.5} strokeOpacity={0.5} />
-      ))}
-      {Array.from({ length: 10 }).map((_, i) => (
-        <line key={`h${i}`} x1="0" y1={i * 28} x2="360" y2={i * 28} stroke={V.line} strokeWidth={0.5} strokeOpacity={0.5} />
-      ))}
-      <rect x="60" y="60" width="240" height="60" fill={V.card} stroke={V.accent} strokeWidth={2} rx="6" />
-      <text x="180" y="96" textAnchor="middle" fontFamily={V.mono} fontSize="11" fontWeight={700} fill={V.accent} letterSpacing="0.18em">EXPERIENCE</text>
-      <rect x="80" y="135" width="200" height="40" fill={V.card} stroke={V.accent} strokeOpacity={0.7} strokeWidth={1.5} rx="6" />
-      <text x="180" y="160" textAnchor="middle" fontFamily={V.mono} fontSize="10" fontWeight={600} fill={V.textSoft} letterSpacing="0.18em">WORKFLOW</text>
-      <rect x="100" y="188" width="160" height="40" fill={V.card} stroke={V.gold} strokeOpacity={0.7} strokeWidth={1.5} rx="6" />
-      <text x="180" y="213" textAnchor="middle" fontFamily={V.mono} fontSize="10" fontWeight={600} fill={V.gold} letterSpacing="0.18em">DATA · AI</text>
-      <line x1="180" y1="120" x2="180" y2="135" stroke={V.accent} strokeWidth={1.5} strokeDasharray="2 2" />
-      <line x1="180" y1="175" x2="180" y2="188" stroke={V.accent} strokeWidth={1.5} strokeDasharray="2 2" />
-    </svg>
-  );
-};
-
 /** Voices motif — speech bubbles for the Validation slide. */
 export const VoicesBubbles: React.FC = () => {
   const V = useV();
@@ -1483,7 +1462,7 @@ export const ProblemEcho: React.FC = () => {
   );
 };
 
-/* ─────────────────────────── 14 slides ─────────────────────────── */
+/* ─────────────────────────── 11 slides ─────────────────────────── */
 
 // 1920×1080 sibling frame — same primitive as sequoia_classic /
 // investor_appendix_app so the print/share/export pipelines (which
@@ -1814,6 +1793,11 @@ const Slide_Market: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
 const Slide_Solution: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
   const V = useV();
   const s = d.solution;
+  const pd = d.product_demo;
+  const video = classifyDemoVideo(pd.loop_url);
+  const isEmbed = video.kind === 'youtube' || video.kind === 'vimeo';
+  const hasFile = video.kind === 'file';
+  const hasShot = !isUnfilled(pd.screenshot_url);
   const lenStatus = isUnfilled(s.body)
     ? { status: 'empty' as const }
     : getPitchCopyLengthStatus(s.body, 'solution');
@@ -1883,11 +1867,28 @@ const Slide_Solution: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
           </div>
         </div>
         <div style={{ ...cardStyle(V), padding: 12, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <MvpBlueprint />
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0 }}>
+            {isEmbed ? (
+              <div style={{ width: '100%', aspectRatio: '16 / 9', borderRadius: 8, overflow: 'hidden', background: '#000' }}>
+                <iframe src={video.embedUrl} title="Product demo"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                  style={{ width: '100%', height: '100%', border: 0, display: 'block' }} />
+              </div>
+            ) : hasFile ? (
+              <video src={video.embedUrl} autoPlay muted loop playsInline
+                style={{ width: '100%', maxHeight: '100%', borderRadius: 8, background: '#000' }} />
+            ) : hasShot ? (
+              <img src={pd.screenshot_url} alt="Product demo" style={{ width: '100%', maxHeight: '100%', borderRadius: 8, objectFit: 'contain' }} />
+            ) : (
+              <div style={{ textAlign: 'center', color: V.textMuted, fontFamily: V.mono, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+                <div style={{ fontSize: 56, marginBottom: 12, opacity: 0.4 }}>▷</div>
+                Demo loop pending
+              </div>
+            )}
           </div>
           <div style={{ marginTop: 8, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', textAlign: 'center', color: V.textMuted, fontFamily: V.mono }}>
-            Architecture · MVP blueprint
+            Product demo
           </div>
         </div>
       </div>
@@ -2686,53 +2687,6 @@ const classifyDemoVideo = (raw: string): { kind: DemoVideoKind; embedUrl: string
   return { kind: 'file', embedUrl: url };
 };
 
-/** Slide 6 (new): Product Demo. */
-const Slide_ProductDemo: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
-  const V = useV();
-  const pd = d.product_demo;
-  const video = classifyDemoVideo(pd.loop_url);
-  const isEmbed = video.kind === 'youtube' || video.kind === 'vimeo';
-  const hasFile = video.kind === 'file';
-  const hasShot = !isUnfilled(pd.screenshot_url);
-  return (
-    <SlideShell>
-      <Eyebrow>{pd.eyebrow}</Eyebrow>
-      <SlideHeading>{pd.headline}</SlideHeading>
-      <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 28, flex: 1, minHeight: 0 }}>
-        <div style={{ ...cardStyle(V), padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
-          {isEmbed ? (
-            <div style={{ width: '100%', aspectRatio: '16 / 9', maxHeight: 360, borderRadius: 8, overflow: 'hidden', background: '#000' }}>
-              <iframe src={video.embedUrl} title="Product demo"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-                style={{ width: '100%', height: '100%', border: 0, display: 'block' }} />
-            </div>
-          ) : hasFile ? (
-            <video src={video.embedUrl} autoPlay muted loop playsInline
-              style={{ width: '100%', maxHeight: 360, borderRadius: 8, background: '#000' }} />
-          ) : hasShot ? (
-            <img src={pd.screenshot_url} alt="Product demo" style={{ width: '100%', maxHeight: 360, borderRadius: 8, objectFit: 'contain' }} />
-          ) : (
-            <div style={{ textAlign: 'center', color: V.textMuted, fontFamily: V.mono, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
-              <div style={{ fontSize: 56, marginBottom: 12, opacity: 0.4 }}>▷</div>
-              Demo loop pending
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, justifyContent: 'center' }}>
-          {!isUnfilled(pd.body) && (
-            <p style={{ fontSize: 14, lineHeight: 1.5, color: V.ink, fontFamily: V.vibe === 'serif' ? V.display : V.sans, margin: 0 }}>{pd.body}</p>
-          )}
-          <div style={{ ...cardStyle(V, true), padding: 14 }}>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 8 }}>Caption</div>
-            <p style={{ fontSize: 12, lineHeight: 1.4, color: V.textSoft, fontFamily: V.sans, margin: 0 }}>{pd.caption}</p>
-          </div>
-        </div>
-      </div>
-    </SlideShell>
-  );
-};
-
 /** Slide 9 (merged): Team + Venture Readiness. */
 const Slide_TeamReadiness: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
   const V = useV();
@@ -2857,18 +2811,18 @@ const Slide_ReviewTheDeal: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
 /* ─────────────────────────── slide registry ─────────────────────────── */
 
 type SlideEntry = { id: string; title: string; Component: React.FC<{ d: SpinoutDemoDayData }> };
-// Task #14 — 13 slides. Drops Axal Signal, adds Product Demo at slot 6,
-// merges Team + Venture Readiness into Team & readiness, renames Contact
-// → Review the deal. Legacy Slide_Team / Slide_VentureReadiness /
-// Slide_AxalSignal functions retained (unused) to keep any in-flight
-// code references intact during rollout. Slide_Contact was deleted.
+// 11 slides. Drops Axal Signal; product-demo media now lives on the
+// Solution slide (no standalone Product Demo slide); merges Team +
+// Venture Readiness into Team & readiness; renames Contact → Review the
+// deal. Legacy Slide_Team / Slide_VentureReadiness / Slide_AxalSignal
+// functions retained (unused) to keep any in-flight code references
+// intact during rollout. Slide_Contact was deleted.
 export const SLIDES: SlideEntry[] = [
   { id: 'cover',             title: 'Cover',             Component: Slide_Cover },
   { id: 'problem',           title: 'Problem',           Component: Slide_Problem },
   { id: 'validation',        title: 'Validation',        Component: Slide_Validation },
   { id: 'market',            title: 'Market',            Component: Slide_Market },
   { id: 'solution',          title: 'Solution',          Component: Slide_Solution },
-  { id: 'product_demo',      title: 'Product demo',      Component: Slide_ProductDemo },
   { id: 'roadmap',           title: 'Roadmap',           Component: Slide_Roadmap },
   { id: 'team_readiness',    title: 'Team & readiness',  Component: Slide_TeamReadiness },
   { id: 'mentor_network',    title: 'Mentors & network', Component: Slide_MentorNetwork },
@@ -2881,7 +2835,7 @@ void Slide_Team; void Slide_VentureReadiness; void Slide_AxalSignal;
 
 /* ─────────────────────────── root deck ─────────────────────────── */
 
-// Renders all 13 Slide16x9 frames stacked — matches sequoia_classic /
+// Renders all 11 Slide16x9 frames stacked — matches sequoia_classic /
 // investor_appendix_app, so the picker thumbnail, modal preview, share
 // view and PDF export all work with a single scroll surface.
 const DeckRoot: React.FC<DeckProps> = (props) => {
