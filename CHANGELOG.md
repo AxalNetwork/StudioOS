@@ -11,6 +11,39 @@
 > building it.
 
 
+## Spin-Out deck — Brand Kit branding; deck auto-themes from the founder's saved kit
+
+Task #4. The Spin-Out Demo Day deck now auto-themes from the founder's brand
+kit. The Brand Builder's kit is extended from a single accent colour to a full
+palette (background + accent/theme + ink) plus a typography pairing, and the
+deck renders as a default-active "My brand kit" variant when a kit exists, with
+4 selectable presets and a contrast-safe fallback to the editorial theme. The
+06·BRAND slide was already removed everywhere by the merged Task #1.
+
+- `cloudflare-worker/sql/migrations/079_landing_page_brand_kit.sql` — additive
+  ALTERs add `palette_bg` / `palette_ink` / `font_pairing` to `landing_pages`.
+- `cloudflare-worker/src/services/landingPageSchema.ts` (new) —
+  `ensureLandingPageBrandKitColumns(env)` lazy-bootstraps the three columns so
+  prod self-heals regardless of whether the migration is applied (same pattern
+  as the other `ensure*Schema` helpers).
+- `cloudflare-worker/src/routes/brand.ts` — CREATE TABLE + `ensureSchema` call
+  the helper; `rowToLanding` returns the three new fields; PUT validates
+  (`HEX_RE` for colours via `cleanHex`, `FONT_PAIRING_IDS` via
+  `cleanFontPairing`) and persists on both UPDATE and INSERT.
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts` —
+  `SpinoutDemoDayData` gains a `brand_kit` object; the builder SELECTs
+  `theme_color, palette_bg, palette_ink, font_pairing` from the landing page,
+  builds `brand_kit` (`present = !!landingPage`), and the Cover slide emits the
+  flat `brandkit_present/bg/accent/ink/fonts` fields the renderer hydrates.
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx` — `PRESET_VIBE`
+  map + `FONT_PAIRING_OPTIONS` export; `DeckRoot` computes
+  `brandKit = buildBrandKitTheme(data.brand_kit)`, defaults the variant to
+  `brand_kit` when a kit is present and untouched, restores the stored
+  `brand_kit` selection, and falls back to editorial when no kit exists.
+- `frontend/src/pages/BrandBuilderPage.jsx` — Tune section gains background /
+  text colour pickers and a typography-pairing `<select>`; draft state + load
+  carry `palette_bg` / `palette_ink` / `font_pairing`.
+
 ## Spin-Out deck — Cover Lab-activity strip is auto-filled + colour-coded by module; Team & Mentors merged into one People slide; cap-table crash fixed
 
 Task #3. The Cover slide's "LAST 30 DAYS · LAB ACTIVITY" strip

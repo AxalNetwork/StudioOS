@@ -38,6 +38,7 @@
  */
 import type { Env } from '../../types';
 import { ensureDiscoveryValidationRatingColumns } from '../discoveryInterviewSchema';
+import { ensureLandingPageBrandKitColumns } from '../landingPageSchema';
 import {
   ensureNetworkProfilesSchema,
   SKILL_CATALOG,
@@ -196,6 +197,11 @@ export type SpinoutDemoDayData = {
     // advisor) so the strip can colour each source distinctly.
     activity_log: Array<{ date: string; count: number; modules: Record<string, number> }>;
   };
+  // Task #4 — founder's saved Brand Builder kit, used by the deck to render
+  // a "My brand kit" look (palette + typography). `present` is false when
+  // the founder has no landing_pages row, in which case the deck falls back
+  // to the editorial preset.
+  brand_kit: { present: boolean; bg: string; accent: string; ink: string; fonts: string };
   problem: {
     eyebrow: string; headline: string; body: string; signals: string[];
     // Task #14 — clustered pain themes for ThemeFrequencyBars.
@@ -455,6 +461,9 @@ export async function fillAxalSpinoutDemoDay(
   // columns here so the SELECT below doesn't throw and silently null out
   // every interview-derived deck section (quotes / pains / ratings).
   await ensureDiscoveryValidationRatingColumns(env);
+  // Task #4 — brand-kit columns on landing_pages may be un-applied on prod;
+  // self-heal so the brand_kit SELECT below doesn't throw.
+  await ensureLandingPageBrandKitColumns(env);
   // Task #1 — load admin-managed mentor/partner roster in parallel with
   // the rest of the project reads; replaces the synthesised profiles
   // path that derived names from advisor_answers free-text.
@@ -464,6 +473,7 @@ export async function fillAxalSpinoutDemoDay(
   const [
     proj, user, score, financial, holders,
     interviews, interviewCount, okrs, milestones, advisorAnswers,
+    landingPage,
   ] = await Promise.all([
     DB.prepare(`SELECT * FROM projects WHERE id = ?`).bind(projectId).first<ProjectRow>(),
     DB.prepare(`
@@ -514,6 +524,13 @@ export async function fillAxalSpinoutDemoDay(
       WHERE user_id = ? AND raw_value IS NOT NULL AND TRIM(raw_value) <> ''
       ORDER BY id DESC LIMIT 200
     `).bind(userId).all<AdvisorAnswerRow>().catch(() => ({ results: [] as AdvisorAnswerRow[] })),
+    DB.prepare(`
+      SELECT theme_color, palette_bg, palette_ink, font_pairing
+      FROM landing_pages WHERE project_id = ?
+    `).bind(projectId).first<{
+      theme_color: string | null; palette_bg: string | null;
+      palette_ink: string | null; font_pairing: string | null;
+    }>().catch(() => null),
   ]);
 
   const p = (proj || {}) as Partial<ProjectRow>;
@@ -925,6 +942,17 @@ export async function fillAxalSpinoutDemoDay(
       activity_log: activityLog,
     },
 
+    // Task #4 — founder's saved Brand Builder kit. `present` true whenever a
+    // landing_pages row exists; the deck's buildBrandKitTheme sanitises any
+    // empty / invalid colour to a contrast-safe fallback.
+    brand_kit: {
+      present: !!landingPage,
+      bg: landingPage?.palette_bg || '',
+      accent: landingPage?.theme_color || '',
+      ink: landingPage?.palette_ink || '',
+      fonts: landingPage?.font_pairing || '',
+    },
+
     problem: {
       eyebrow: '01 · Problem',
       headline: 'Why this is broken today.',
@@ -1132,6 +1160,7 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
   const s = data.solution;
   const r = data.roadmap;
   const b = data.brand;
+  const bk = data.brand_kit;
   const vr = data.venture_readiness;
   const t = data.team;
   const mn = data.mentor_network;
@@ -1213,6 +1242,14 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('meta_days_remaining', String(m.days_remaining)),
         para('meta_lab_active', m.lab_active ? 'true' : 'false'),
         para('meta_is_sample', m.is_sample ? 'true' : 'false'),
+        // Task #4 — founder's brand kit flattened onto the cover so the deck
+        // can auto-theme as "My brand kit". Empty / invalid values are made
+        // contrast-safe on the render side (buildBrandKitTheme).
+        para('brandkit_present', bk.present ? 'true' : 'false'),
+        para('brandkit_bg', bk.bg),
+        para('brandkit_accent', bk.accent),
+        para('brandkit_ink', bk.ink),
+        para('brandkit_fonts', bk.fonts),
       ],
     },
     {

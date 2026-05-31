@@ -18,6 +18,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
+import { ensureLandingPageBrandKitColumns } from '../services/landingPageSchema';
 import { requireAuth } from '../auth';
 
 const brand = new Hono<{ Bindings: Env }>();
@@ -38,6 +39,9 @@ async function ensureSchema(env: Env): Promise<void> {
        logo_url TEXT,
        logo_svg TEXT,
        theme_color TEXT DEFAULT '#7c3aed',
+       palette_bg TEXT,
+       palette_ink TEXT,
+       font_pairing TEXT,
        published INTEGER DEFAULT 0,
        views_count INTEGER DEFAULT 0,
        created_at TEXT DEFAULT (datetime('now')),
@@ -60,6 +64,8 @@ async function ensureSchema(env: Env): Promise<void> {
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('brand schema:', e?.message); }
   }
+  // Brand-kit columns on pre-existing tables (CREATE above only covers fresh DBs).
+  await ensureLandingPageBrandKitColumns(env);
   _migrated = true;
 }
 
@@ -208,10 +214,20 @@ function rowToLanding(row: any) {
     logo_url: row.logo_url,
     logo_svg: row.logo_svg,
     theme_color: row.theme_color || '#7c3aed',
+    palette_bg: row.palette_bg || null,
+    palette_ink: row.palette_ink || null,
+    font_pairing: row.font_pairing || null,
     published: !!row.published,
     views_count: row.views_count || 0,
   };
 }
+
+const HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+const FONT_PAIRING_IDS = new Set(['editorial', 'modern', 'humanist', 'classic']);
+const cleanHex = (v: unknown): string | null =>
+  (typeof v === 'string' && HEX_RE.test(v.trim())) ? v.trim().toLowerCase() : null;
+const cleanFontPairing = (v: unknown): string | null =>
+  (typeof v === 'string' && FONT_PAIRING_IDS.has(v.trim())) ? v.trim() : null;
 
 brand.post('/suggest', async (c) => {
   await requireAuth(c);
@@ -263,22 +279,29 @@ brand.put('/landing/by-project/:pid', async (c) => {
   const existing = await c.env.DB.prepare('SELECT id, slug FROM landing_pages WHERE project_id = ?').bind(pid).first<any>();
   const cta = String(body?.cta_text || 'Join the waitlist');
   const color = String(body?.theme_color || '#7c3aed');
+  const paletteBg = cleanHex(body?.palette_bg);
+  const paletteInk = cleanHex(body?.palette_ink);
+  const fontPairing = cleanFontPairing(body?.font_pairing);
   if (existing) {
     await c.env.DB.prepare(
       `UPDATE landing_pages SET name=?, tagline=?, headline=?, subheadline=?, cta_text=?,
-       logo_url=?, logo_svg=?, theme_color=?, updated_at=datetime('now') WHERE project_id=?`
+       logo_url=?, logo_svg=?, theme_color=?, palette_bg=?, palette_ink=?, font_pairing=?,
+       updated_at=datetime('now') WHERE project_id=?`
     ).bind(
       name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
-      body?.logo_url || null, sanitizeSvg(body?.logo_svg) || null, color, pid,
+      body?.logo_url || null, sanitizeSvg(body?.logo_svg) || null, color,
+      paletteBg, paletteInk, fontPairing, pid,
     ).run();
   } else {
     const slug = slugify(name);
     await c.env.DB.prepare(
       `INSERT INTO landing_pages (project_id, slug, name, tagline, headline, subheadline, cta_text,
-       logo_url, logo_svg, theme_color) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       logo_url, logo_svg, theme_color, palette_bg, palette_ink, font_pairing)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       pid, slug, name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
       body?.logo_url || null, sanitizeSvg(body?.logo_svg) || null, color,
+      paletteBg, paletteInk, fontPairing,
     ).run();
   }
   const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE project_id = ?').bind(pid).first<any>();

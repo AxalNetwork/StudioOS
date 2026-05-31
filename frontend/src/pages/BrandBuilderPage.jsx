@@ -5,6 +5,7 @@ import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe } from '
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
+import { FONT_PAIRING_OPTIONS } from '../decks/templates/axal_spinout_demoday_app';
 
 // Task #24 — Brand & landing page generator.
 // Single-page wizard: pick project → AI suggestions → choose name/logo →
@@ -25,6 +26,7 @@ export default function BrandBuilderPage() {
   const [draft, setDraft] = useState({
     name: '', tagline: '', headline: '', subheadline: '',
     cta_text: 'Join the waitlist', logo_url: null, logo_svg: null, theme_color: '#7c3aed',
+    palette_bg: '#faf7ff', palette_ink: '#1b1430', font_pairing: 'editorial',
   });
   const [signups, setSignups] = useState([]);
 
@@ -59,6 +61,9 @@ export default function BrandBuilderPage() {
             logo_url: lp.logo_url || null,
             logo_svg: lp.logo_svg || null,
             theme_color: lp.theme_color || '#7c3aed',
+            palette_bg: lp.palette_bg || '#faf7ff',
+            palette_ink: lp.palette_ink || '#1b1430',
+            font_pairing: lp.font_pairing || 'editorial',
           });
         } else {
           setLanding(null);
@@ -259,14 +264,47 @@ export default function BrandBuilderPage() {
               >
                 <RefreshCw size={12} /> Regenerate logo
               </button>
-              <div className="mt-3 flex items-center gap-2">
-                <span className="text-xs text-gray-600">Theme</span>
-                <input
-                  type="color" value={draft.theme_color}
-                  onChange={(e) => setDraft({ ...draft, theme_color: e.target.value })}
-                  className="h-8 w-12 border border-gray-200 rounded cursor-pointer dark:border-gray-800"
-                />
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400">Accent</span>
+                  <input
+                    type="color" value={draft.theme_color}
+                    onChange={(e) => setDraft({ ...draft, theme_color: e.target.value })}
+                    className="h-8 w-full border border-gray-200 rounded cursor-pointer dark:border-gray-800"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400">Background</span>
+                  <input
+                    type="color" value={draft.palette_bg}
+                    onChange={(e) => setDraft({ ...draft, palette_bg: e.target.value })}
+                    className="h-8 w-full border border-gray-200 rounded cursor-pointer dark:border-gray-800"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400">Text</span>
+                  <input
+                    type="color" value={draft.palette_ink}
+                    onChange={(e) => setDraft({ ...draft, palette_ink: e.target.value })}
+                    className="h-8 w-full border border-gray-200 rounded cursor-pointer dark:border-gray-800"
+                  />
+                </label>
               </div>
+              <label className="mt-3 flex flex-col gap-1">
+                <span className="text-[11px] text-gray-600 dark:text-gray-400">Typography</span>
+                <select
+                  value={draft.font_pairing}
+                  onChange={(e) => setDraft({ ...draft, font_pairing: e.target.value })}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100"
+                >
+                  {FONT_PAIRING_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </label>
+              <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+                Your Spin-Out deck auto-themes from this brand kit.
+              </p>
             </div>
             <div className="sm:col-span-2 space-y-3">
               <input

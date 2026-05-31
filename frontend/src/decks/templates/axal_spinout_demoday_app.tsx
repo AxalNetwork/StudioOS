@@ -81,6 +81,13 @@ const VARIANT_LABEL: Record<VariantId, string> = {
   editorial: 'Editorial', product_first: 'Product-first',
   data_dense: 'Data-dense', manifesto: 'Manifesto', brand_kit: 'My brand kit',
 };
+// Vibe per preset — only `editorial` ships a serif body pairing; the other
+// three are Inter-based. Drives the `vibe === 'serif'` body-font switch in
+// the slide bodies. `brand_kit` derives its vibe at runtime from the chosen
+// font pairing (see buildBrandKitTheme), so it is not listed here.
+const PRESET_VIBE: Record<PresetVariantId, Vibe> = {
+  editorial: 'serif', product_first: 'sans', data_dense: 'sans', manifesto: 'sans',
+};
 
 type FontSet = { display: string; body: string; mono: string };
 const MONO_STACK = '"JetBrains Mono",ui-monospace,Menlo,monospace';
@@ -3031,23 +3038,54 @@ const DeckRoot: React.FC<DeckProps> = (props) => {
   const data = useMemo(() => hydrate(props.data), [props.data]);
   const editable = !!(props as unknown as { editable?: boolean }).editable;
 
+  // Synthetic "My brand kit" look derived from the founder's saved palette
+  // + typography. Returns null when no kit is set so we fall back cleanly.
+  const brandKit = useMemo(() => buildBrandKitTheme(data.brand_kit), [data.brand_kit]);
+  const hasBrandKit = !!brandKit;
+
   const [variant, setVariantState] = useState<VariantId>('editorial');
+  const [variantTouched, setVariantTouched] = useState(false);
   useEffect(() => {
     try {
       const stored = typeof window !== 'undefined' ? window.localStorage?.getItem(VARIANT_KEY) : null;
-      if (stored && (VARIANTS as readonly string[]).includes(stored)) {
+      if (stored && (stored === 'brand_kit' || (VARIANTS as readonly string[]).includes(stored))) {
         setVariantState(stored as VariantId);
+        setVariantTouched(true);
       }
     } catch { /* SSR / quota / private-mode — silent */ }
   }, []);
+  // When a brand kit exists and the founder hasn't explicitly chosen a look,
+  // default the Spin-Out deck to their own brand kit.
+  useEffect(() => {
+    if (!variantTouched && hasBrandKit) setVariantState('brand_kit');
+  }, [variantTouched, hasBrandKit]);
   const setVariant = (v: VariantId) => {
     setVariantState(v);
+    setVariantTouched(true);
     try { window.localStorage?.setItem(VARIANT_KEY, v); } catch { /* swallow */ }
   };
 
-  const pal = PALETTES[variant];
-  const fonts = FONTS[variant];
-  const ctx: VariantCtx = { variant, setVariant, pal, fonts, editable };
+  // Resolve the active theme. `brand_kit` is synthetic (not a PALETTES key);
+  // if it's selected but no kit is present we fall back to the editorial
+  // preset so the deck never renders an undefined palette / unreadable text.
+  const effectiveVariant: VariantId =
+    variant === 'brand_kit' && !hasBrandKit ? 'editorial' : variant;
+  let pal: Palette;
+  let fonts: FontSet;
+  let isDark: boolean;
+  let vibe: Vibe;
+  if (effectiveVariant === 'brand_kit' && brandKit) {
+    ({ pal, fonts, isDark, vibe } = brandKit);
+  } else {
+    const pv = effectiveVariant as PresetVariantId;
+    pal = PALETTES[pv];
+    fonts = FONTS[pv];
+    isDark = relLum(pal.bg) < 0.4;
+    vibe = PRESET_VIBE[pv];
+  }
+  const ctx: VariantCtx = {
+    variant: effectiveVariant, setVariant, pal, fonts, isDark, vibe, hasBrandKit, editable,
+  };
 
   return (
     <VariantContext.Provider value={ctx}>

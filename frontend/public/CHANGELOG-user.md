@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: Your Spin-Out deck now matches your brand
+
+Your Brand Builder kit now holds a full look — a background colour, an accent
+colour, a text colour, and a font pairing — not just a single accent. Your
+Spin-Out Demo Day deck picks this up automatically and styles itself as your
+"My brand kit" theme the moment you have a kit. Prefer a different look? You can
+still switch to one of four ready-made presets, and if a colour choice would be
+hard to read the deck quietly falls back to its clean editorial style. Set it
+all up in the Brand Builder under Tune.
+
+---
+
 ## Improved: Cover slide's 30-day activity strip is automatic; one combined People slide
 
 On the Spin-Out Demo Day deck, the "Last 30 days · Lab activity" strip on
