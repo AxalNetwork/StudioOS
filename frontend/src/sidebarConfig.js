@@ -21,7 +21,7 @@ import {
   Globe, Brain, Activity, Shield, Code, ShieldCheck, Share2, Wallet,
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
-  BookOpen, Settings as SettingsIcon, PieChart as PieIcon,
+  BookOpen, Settings as SettingsIcon, PieChart as PieIcon, PenLine,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -125,6 +125,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
+      { to: '/articles/draft', icon: PenLine, label: 'Write an Article' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -181,6 +182,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
+      { to: '/articles/draft', icon: PenLine, label: 'Write an Article' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -230,6 +232,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
+      { to: '/articles/draft', icon: PenLine, label: 'Write an Article' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -273,6 +276,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
+      { to: '/articles/draft', icon: PenLine, label: 'Write an Article' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -292,6 +296,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
+      { to: '/articles/draft', icon: PenLine, label: 'Write an Article' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
       { to: '/settings', icon: SettingsIcon, label: 'Settings' },

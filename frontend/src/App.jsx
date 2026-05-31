@@ -999,6 +999,9 @@ function AppInner() {
     </RequireAuth>
   );
 
+  // Task #9 — authoring is open to any authenticated user (no role gate).
+  const authOnly = (component) => <RequireAuth {...authProps}>{component}</RequireAuth>;
+
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
 <RouteErrorBoundary>
@@ -1068,8 +1071,8 @@ function AppInner() {
       <Route path="/news" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <NewsAuthorPage />)} />
       {/* Task #1 — Articles. Reader pages are public (no guard); author + admin gated. */}
       <Route path="/articles" element={<ArticlesPage />} />
-      <Route path="/articles/draft" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor', 'coach'], <ArticleAuthorPage />)} />
-      <Route path="/articles/edit/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor', 'coach'], <ArticleAuthorPage />)} />
+      <Route path="/articles/draft" element={authOnly(<ArticleAuthorPage />)} />
+      <Route path="/articles/edit/:id" element={authOnly(<ArticleAuthorPage />)} />
       <Route path="/admin/articles" element={guard(['admin'], <ArticlesQueuePage />)} />
       <Route path="/articles/:slug" element={<ArticleReaderPage />} />
       <Route path="/admin/publications" element={guard(['admin'], <AdminPublications />)} />

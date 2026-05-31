@@ -120,13 +120,17 @@ export function renderMarkdown(md: string): string {
     }
     // Blank line.
     if (!line.trim()) { i++; continue; }
-    // Paragraph: gather consecutive non-empty lines.
+    // Paragraph: gather consecutive non-empty lines. Authors commonly
+    // separate paragraphs with a single newline (no blank line) when typing
+    // in a textarea; join the gathered lines with <br> so that intent is
+    // preserved as visible line breaks instead of collapsing into one run-on
+    // block. Blank lines still start a fresh <p>.
     const buf: string[] = [];
     while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|>\s?|\s*[-*]\s+|\s*\d+\.\s+|```)/.test(lines[i])) {
       buf.push(lines[i]);
       i++;
     }
-    if (buf.length > 0) out.push(`<p>${inline(buf.join(' '))}</p>`);
+    if (buf.length > 0) out.push(`<p>${buf.map((l) => inline(l)).join('<br>')}</p>`);
   }
   return out.join('\n');
 }

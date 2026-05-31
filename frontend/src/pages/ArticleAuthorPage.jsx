@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   FileText, Plus, RefreshCw, Loader2, Save, Send, ArrowLeft, ImageIcon,
-  AlertTriangle, CheckCircle2, Trash2, Eye, MessageSquare, ShieldAlert,
+  CheckCircle2, Trash2, Eye, MessageSquare,
 } from 'lucide-react';
 import { articles as api } from '../lib/api';
 import { useToast } from '../components/useToast';
@@ -71,7 +71,7 @@ function renderPreview(md) {
     if (!line.trim()) { i++; continue; }
     const buf = [];
     while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|>\s?|\s*[-*]\s+|```)/.test(lines[i])) { buf.push(lines[i]); i++; }
-    if (buf.length) out.push(`<p class="my-2 leading-relaxed">${inline(buf.join(' '))}</p>`);
+    if (buf.length) out.push(`<p class="my-2 leading-relaxed">${buf.map(inline).join('<br>')}</p>`);
   }
   return out.join('\n');
 }
@@ -122,8 +122,6 @@ export default function ArticleAuthorPage() {
     success: (m) => showToast({ kind: 'success', msg: m }),
   };
   const [sectors, setSectors] = useState([]);
-  const [trust, setTrust] = useState(null);
-  const [trustLoading, setTrustLoading] = useState(true);
   const [items, setItems] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedId, setSelectedIdState] = useState(routeId ? Number(routeId) : null);
@@ -157,13 +155,10 @@ export default function ArticleAuthorPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [t, s] = await Promise.all([api.trustMe(), api.sectors()]);
-        setTrust(t);
+        const s = await api.sectors();
         setSectors(s.sectors || []);
       } catch (e) {
         reportError('ArticleAuthor:boot', e);
-      } finally {
-        setTrustLoading(false);
       }
     })();
     refresh();
@@ -190,21 +185,13 @@ export default function ArticleAuthorPage() {
   useEffect(() => { if (selectedId) loadOne(selectedId); }, [selectedId, loadOne]);
 
   const onNew = async () => {
-    if (!trust || trust.score < trust.min_required) {
-      toast.error(`You need a trust score of ${trust?.min_required ?? 70} to author articles. Current: ${trust?.score ?? '?'}`);
-      return;
-    }
     try {
       const r = await api.createDraft({ title: 'Untitled draft', body_markdown: '' });
       setItems((prev) => [r.article, ...prev]);
       setSelectedId(r.article.id);
     } catch (e) {
-      if (e?.body?.error === 'trust_too_low') {
-        toast.error('Trust score too low for authoring.');
-      } else {
-        reportError('ArticleAuthor:create', e);
-        toast.error('Failed to create draft');
-      }
+      reportError('ArticleAuthor:create', e);
+      toast.error('Failed to create draft');
     }
   };
 
@@ -298,8 +285,6 @@ export default function ArticleAuthorPage() {
 
   const isLocked = article && ['in_review', 'submitted', 'approved', 'published'].includes(article.status);
   const isEditable = !isLocked;
-  const trustOk = trust && trust.score >= trust.min_required;
-
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3">
@@ -309,23 +294,8 @@ export default function ArticleAuthorPage() {
             <h1 className="font-semibold">Article authoring</h1>
             <Link to="/articles" className="text-xs text-slate-500 hover:text-violet-700 underline">View public feed</Link>
           </div>
-          {trustLoading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <div className={`text-sm flex items-center gap-2 px-3 py-1 rounded ${trustOk ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'}`}>
-              <ShieldAlert className="w-4 h-4" />
-              Trust {trust?.score ?? 0} / {trust?.min_required ?? 70}
-            </div>
-          )}
         </div>
       </header>
-
-      {!trustOk && !trustLoading && (
-        <div className="mx-6 mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-sm text-amber-800 dark:text-amber-200 flex gap-2">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          Your trust score is below the minimum required to author articles. Complete KYC + email verification, KYB, or sign a partner deal to qualify.
-        </div>
-      )}
 
       <div className="flex" style={{ height: 'calc(100vh - 56px)' }}>
         <ArticleList
@@ -366,7 +336,7 @@ export default function ArticleAuthorPage() {
                     </button>
                   )}
                   {isEditable && (
-                    <button onClick={submit} disabled={submitting || !trustOk} className="text-sm px-3 py-1.5 bg-violet-600 text-white rounded hover:bg-violet-700 flex items-center gap-1 disabled:opacity-50">
+                    <button onClick={submit} disabled={submitting} className="text-sm px-3 py-1.5 bg-violet-600 text-white rounded hover:bg-violet-700 flex items-center gap-1 disabled:opacity-50">
                       {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Submit
                     </button>
                   )}

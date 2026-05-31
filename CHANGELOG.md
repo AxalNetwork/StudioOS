@@ -11,6 +11,37 @@
 > building it.
 
 
+## Articles — publication-style reader, social sharing, recommended reading, open authoring
+
+Task #9. The public Articles reader now reads like a real publication and
+authoring is open to every signed-in user (no trust-score gate).
+
+- `cloudflare-worker/src/services/authorWebsites.ts` (new) — `ensureAuthorWebsites()`
+  bootstraps a side table `author_websites(user_id PK, website_url, ...)` (the
+  `users` table is at D1's ALTER-column limit) and seeds Guillaume Lauzier
+  (resolved by `gl@axal.vc` / name) → `https://guillaumelauzier.com`.
+- `cloudflare-worker/src/routes/articles.ts` — LEFT JOIN `author_websites` into
+  the list / by-author / slug queries, expose `author_website` in
+  `publicArticleShape`, and call `ensureAuthorWebsites()` on those reads. Slug
+  read re-renders from `body_markdown` (fallback to stored `body_html`) and
+  fire-and-forget refreshes a stale stored `body_html` via
+  `c.executionCtx.waitUntil`. Removed the `canAuthor()` trust gate from POST
+  `/draft` and POST `/:id/submit`; PII linter + weekly cap retained.
+- `cloudflare-worker/src/services/newsRender.ts` — `renderMarkdown` joins
+  single-newline paragraph lines with `<br>` (was a space) so soft line breaks
+  survive; mirrored in the FE preview renderer.
+- `frontend/src/pages/ArticleReaderPage.jsx` — rewritten: `PublicNav` +
+  `PublicFooter` (pt-16), linked author byline (opens `author_website` in a new
+  tab), Share bar (X / LinkedIn / Facebook / Email), and a Recommended-reading
+  strip (same sector first, then most recent, current excluded). Removed the
+  "Write an article" affordance from the reader.
+- `frontend/src/pages/ArticleAuthorPage.jsx` — removed the trust badge, banner,
+  `trustOk` gate, and `trustMe()` boot fetch; Submit is no longer trust-gated.
+- `frontend/src/App.jsx` — `/articles/draft` + `/articles/edit/:id` now use a
+  new `authOnly()` wrapper (any authenticated user) instead of the role guard.
+- `frontend/src/sidebarConfig.js` — "Write an Article" (`/articles/draft`,
+  PenLine icon) added to every role's Account group.
+
 ## Spin-Out deck — Brand Kit branding; deck auto-themes from the founder's saved kit
 
 Task #4. The Spin-Out Demo Day deck now auto-themes from the founder's brand

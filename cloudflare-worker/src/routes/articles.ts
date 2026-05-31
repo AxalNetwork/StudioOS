@@ -14,8 +14,8 @@
  *     FE can deep-link from cards into public profiles.
  *
  * Public reads are CORS-open for the Jekyll marketing site and edge-cached
- * for 60 days; author writes go through `canAuthor()` (trust >= 70) and
- * the same PII linter + weekly rate cap as /api/news.
+ * for 60 days; author writes are open to any authenticated user (Task #9)
+ * but still pass the same PII linter + weekly rate cap as /api/news.
  */
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -27,7 +27,8 @@ import {
   SUBMISSIONS_PER_WEEK,
   TRUST_AUTHOR_MIN,
 } from '../services/newsSchema';
-import { canAuthor, computeAuthorTrust } from '../services/newsTrust';
+import { ensureAuthorWebsites } from '../services/authorWebsites';
+import { computeAuthorTrust } from '../services/newsTrust';
 import { lintForSend } from '../services/telegramRedactCheck';
 import { notifyArticle } from '../services/articleNotify';
 import { renderMarkdown, slugify, snapshotRevision, wordsAndMinutes } from '../services/newsRender';
@@ -84,6 +85,7 @@ function publicArticleShape(row: any) {
     author_user_id: row.author_user_id ?? null,
     author_handle: row.author_handle ?? null,
     author_role: row.author_role ?? null,
+    author_website: row.author_website ?? null,
   };
 }
 
@@ -148,6 +150,7 @@ articles.get('/sectors', async (c) => {
 
 articles.get('/', async (c) => {
   await ensureNewsSchema(c.env);
+  await ensureAuthorWebsites(c.env);
   const cached = await cacheLookup(c);
   if (cached) return cached;
   const url = new URL(c.req.url);
@@ -181,9 +184,11 @@ articles.get('/', async (c) => {
   const sql = `SELECT a.id, a.slug, a.title, a.subtitle, a.sector, a.tags,
                       a.cover_r2_key, a.published_at, a.word_count, a.read_minutes,
                       a.author_user_id,
-                      u.name AS author_name, NULL AS author_handle, u.role AS author_role
+                      u.name AS author_name, NULL AS author_handle, u.role AS author_role,
+                      aw.website_url AS author_website
                  FROM articles a
                  LEFT JOIN users u ON u.id = a.author_user_id
+                 LEFT JOIN author_websites aw ON aw.user_id = a.author_user_id
                 WHERE ${where.join(' AND ')}
              ORDER BY ${order}
                 LIMIT ? OFFSET ?`;
@@ -199,6 +204,7 @@ articles.get('/', async (c) => {
 
 articles.get('/by-author/:user_id', async (c) => {
   await ensureNewsSchema(c.env);
+  await ensureAuthorWebsites(c.env);
   const userId = Number(c.req.param('user_id'));
   if (!Number.isInteger(userId) || userId <= 0) return c.json({ error: 'invalid' }, 400);
   const url = new URL(c.req.url);
@@ -208,9 +214,11 @@ articles.get('/by-author/:user_id', async (c) => {
     `SELECT a.id, a.slug, a.title, a.subtitle, a.sector, a.tags,
             a.cover_r2_key, a.published_at, a.word_count, a.read_minutes,
             a.author_user_id,
-            u.name AS author_name, NULL AS author_handle, u.role AS author_role
+            u.name AS author_name, NULL AS author_handle, u.role AS author_role,
+            aw.website_url AS author_website
        FROM articles a
        LEFT JOIN users u ON u.id = a.author_user_id
+       LEFT JOIN author_websites aw ON aw.user_id = a.author_user_id
       WHERE a.author_user_id = ? AND a.status = 'published'
       ORDER BY a.published_at DESC
       LIMIT ? OFFSET ?`,
@@ -246,15 +254,32 @@ articles.get('/:slug', async (c) => {
     return c.json({ error: 'not_found' }, 404);
   }
   await ensureNewsSchema(c.env);
+  await ensureAuthorWebsites(c.env);
   const cached = await cacheLookup(c);
   if (cached) return cached;
   const row: any = await c.env.DB.prepare(
-    `SELECT a.*, u.name AS author_name, NULL AS author_handle, u.role AS author_role
-       FROM articles a LEFT JOIN users u ON u.id = a.author_user_id
+    `SELECT a.*, u.name AS author_name, NULL AS author_handle, u.role AS author_role,
+            aw.website_url AS author_website
+       FROM articles a
+       LEFT JOIN users u ON u.id = a.author_user_id
+       LEFT JOIN author_websites aw ON aw.user_id = a.author_user_id
       WHERE a.slug = ? AND a.status = 'published' LIMIT 1`,
   ).bind(slug).first();
   if (!row) return c.json({ error: 'not_found' }, 404);
-  const html = row.body_html || renderMarkdown(row.body_markdown || '');
+  // Re-render from the markdown source on read rather than trusting a stored
+  // `body_html`: older rows were rendered before the renderer learned about
+  // headings/lists, so their cached HTML leaks raw `##` markup. Markdown is
+  // the source of truth; fall back to stored HTML only when markdown is empty.
+  const html = row.body_markdown ? renderMarkdown(row.body_markdown) : (row.body_html || '');
+  // Best-effort refresh of the stored HTML so non-reader consumers and the
+  // fallback path also get the corrected markup. Fire-and-forget — never
+  // blocks or fails the read.
+  if (html && html !== row.body_html) {
+    c.executionCtx?.waitUntil?.(
+      c.env.DB.prepare(`UPDATE articles SET body_html = ? WHERE id = ?`)
+        .bind(html, row.id).run().catch(() => {}),
+    );
+  }
   const body = {
     ...publicArticleShape(row),
     body_html: html,
@@ -307,11 +332,10 @@ articles.get('/draft/:id', async (c) => {
 });
 
 articles.post('/draft', async (c) => {
+  // Task #9 — authoring is open to any authenticated user. The trust-score
+  // gate was removed; the PII linter + weekly submission cap on /submit stay.
   const user = await requireAuth(c);
   await ensureNewsSchema(c.env);
-  if (!(await canAuthor(c.env, user.id))) {
-    return c.json({ error: 'trust_too_low', min_required: TRUST_AUTHOR_MIN }, 403);
-  }
   const body: any = await c.req.json().catch(() => ({}));
   const title = String(body.title || 'Untitled draft').slice(0, 280).trim() || 'Untitled draft';
   const subtitle = body.subtitle ? String(body.subtitle).slice(0, 500) : null;
@@ -385,9 +409,6 @@ articles.post('/:id/submit', async (c) => {
   const id = Number(c.req.param('id'));
   const row = await loadOwned(c.env, id, user.id, user.role);
   if (!row) return c.json({ error: 'not_found_or_forbidden' }, 404);
-  if (!(await canAuthor(c.env, user.id))) {
-    return c.json({ error: 'trust_too_low', min_required: TRUST_AUTHOR_MIN }, 403);
-  }
   if (!['draft', 'changes_requested', 'rejected'].includes(row.status)) {
     return c.json({ error: 'invalid_status', status: row.status }, 409);
   }

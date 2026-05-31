@@ -5,6 +5,19 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: Articles read like a real magazine — and anyone can write one
+
+Article pages now have the full site header and footer, so you can browse the
+rest of the platform without losing your place. Every article shows its author's
+name, linked to their website where we have one, plus buttons to share the piece
+on X, LinkedIn, Facebook, or by email. At the bottom you'll find a "Recommended
+reading" strip with more articles to explore — from the same topic where we can,
+otherwise the latest. And writing is now open to everyone: just sign in and use
+"Write an Article" in the sidebar to draft and submit your own. Your drafts still
+get a quick automated privacy check before they go live.
+
+---
+
 ## New: Your Spin-Out deck now matches your brand
 
 Your Brand Builder kit now holds a full look — a background colour, an accent
