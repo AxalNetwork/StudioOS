@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useParams, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { ChevronLeft, ChevronRight, Download, Loader2, Maximize2, Minimize2, Printer, X } from 'lucide-react';
@@ -6,6 +7,7 @@ import { api } from '../lib/api';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 import { downloadRasterDeckPdf } from '../lib/deckRasterPdf';
 import ShareDeckCTA from '../components/ShareDeckCTA';
+import { ReviewDealSlotContext } from '../decks/templates/reviewDealSlot';
 
 // Task #25 — public viewer for an investor share link, plus an authenticated
 // preview at /deck/:id/print. Task #6 expanded the advanced (live React
@@ -502,8 +504,16 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
 
   const exportPdf = async () => {
     if (!deck) return;
-    setExporting(true);
-    setExportProgress(null);
+    // Task #23 — commit `exporting` synchronously so the embedded Spin-Out
+    // "Review the deal" CTA (rendered only when `!exporting`) is removed
+    // from the DOM BEFORE downloadRasterDeckPdf snapshots [data-slide-frame],
+    // rather than on a later React tick. Without flushSync the removal would
+    // race the html2canvas capture and the interactive button could bake
+    // into the exported slide.
+    flushSync(() => {
+      setExporting(true);
+      setExportProgress(null);
+    });
     try {
       // Task #11 — Advanced templates now rasterise each
       // `[data-slide-frame]` at native 1920×1080 via html2canvas and
@@ -635,21 +645,29 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
 
   // CTA card (share mode only — never on the authenticated /deck/:id/print).
   const ctaCategory = templateMeta?.category || null;
-  const cta = (shareMode && ctaCategory && deck) ? (
-    <ShareDeckCTA
-      category={ctaCategory}
-      shareToken={token}
-      deckId={deck.id}
-      viewId={viewIdRef.current}
-      projectId={deck.project_id || null}
-      projectName={deck.project_name || deck.title || 'this project'}
-      methodId={methodId}
-      slides={Array.isArray(deck.slides) ? deck.slides.map((s, i) => ({
-        index: i,
-        title: s?.title || s?.subtitle || `Slide ${i + 1}`,
-      })) : []}
-    />
-  ) : null;
+  const shareCtaProps = (shareMode && ctaCategory && deck) ? {
+    category: ctaCategory,
+    shareToken: token,
+    deckId: deck.id,
+    viewId: viewIdRef.current,
+    projectId: deck.project_id || null,
+    projectName: deck.project_name || deck.title || 'this project',
+    methodId,
+    slides: Array.isArray(deck.slides) ? deck.slides.map((s, i) => ({
+      index: i,
+      title: s?.title || s?.subtitle || `Slide ${i + 1}`,
+    })) : [],
+  } : null;
+  // Task #23 — the Axal VC Spin-Out deck surfaces the CTA *inside* its
+  // "Review the deal" slide (via reviewDealSlot below) instead of as a
+  // trailing page. Every other deck keeps the trailing card.
+  const isSpinout = methodId === 'axal_spinout_demoday';
+  const cta = (shareCtaProps && !isSpinout) ? <ShareDeckCTA {...shareCtaProps} /> : null;
+  // Injected into the Spin-Out "Review the deal" slide. Suppressed while
+  // exporting so the interactive button never rasterises into the PDF.
+  const reviewDealSlot = (shareCtaProps && isSpinout && !exporting)
+    ? <ShareDeckCTA {...shareCtaProps} embedded />
+    : null;
 
   const Header = (
     <div className="deck-print-chrome sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
@@ -714,6 +732,7 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
           isFullscreen={isFullscreen}
           currentIdx={currentIdx}
           onSlideCount={setSlideCount}
+          reviewSlot={reviewDealSlot}
         />
         {!isFullscreen && cta && <div className="deck-print-cta">{cta}</div>}
         {isFullscreen && slideCount > 0 && (
@@ -870,7 +889,7 @@ function SingleSlideStage({ Template, data, slideIdx }) {
 // the slide-track (`.deck-print-frames`) pages between slides, and
 // the outer viewport clips with `overflow: hidden` so neighbouring
 // slides never peek through.
-function PrintStage({ Template, data, isFullscreen, currentIdx, onSlideCount }) {
+function PrintStage({ Template, data, isFullscreen, currentIdx, onSlideCount, reviewSlot = null }) {
   const outerRef = useRef(null);
   const innerRef = useRef(null);
   const [scale, setScale] = useState(0.5);
@@ -955,7 +974,9 @@ function PrintStage({ Template, data, isFullscreen, currentIdx, onSlideCount }) 
                   willChange: 'transform',
                 }}
               >
-                <Template data={data || {}} editable={false} />
+                <ReviewDealSlotContext.Provider value={reviewSlot}>
+                  <Template data={data || {}} editable={false} />
+                </ReviewDealSlotContext.Provider>
               </div>
             </div>
           </div>
@@ -984,7 +1005,9 @@ function PrintStage({ Template, data, isFullscreen, currentIdx, onSlideCount }) 
           }}
         >
           <div className="deck-print-frames" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <Template data={data || {}} editable={false} />
+            <ReviewDealSlotContext.Provider value={reviewSlot}>
+              <Template data={data || {}} editable={false} />
+            </ReviewDealSlotContext.Provider>
           </div>
         </div>
       </div>

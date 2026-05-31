@@ -5,6 +5,15 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Improved: "Join & open the deal" now lives on the Review the deal slide
+
+When you view a shared Spin-Out deck, the option to join and open the deal
+now appears right on the "Review the deal." slide instead of on a separate
+page after the deck. The button still opens the same join and NDA flow,
+shown full-size and centered. Other decks are unchanged, and the button is
+left out of PDF exports.
+
+
 ## New: Guillaume Lauzier added to the Team page
 
 Guillaume Lauzier, Founding Managing Partner, now appears on the Team

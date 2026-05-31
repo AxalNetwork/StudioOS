@@ -12,7 +12,7 @@ import ShareViewerSignupModal from './ShareViewerSignupModal';
 // in ShareViewerSignupModal so it can be opened from anywhere later.
 export default function ShareDeckCTA({
   category, shareToken, deckId, viewId, projectId, projectName, methodId,
-  slides,
+  slides, embedded = false,
 }) {
   const [open, setOpen] = useState(false);
   if (!category) return null;
@@ -34,8 +34,8 @@ export default function ShareDeckCTA({
     : 'bg-violet-600 hover:bg-violet-700';
 
   return (
-    <div className="max-w-4xl mx-auto py-10 px-4">
-      <div className={`bg-gradient-to-br ${accent} border rounded-2xl shadow-sm p-8 sm:p-10`}>
+    <div className={embedded ? 'w-full' : 'max-w-4xl mx-auto py-10 px-4'}>
+      <div className={`bg-gradient-to-br ${accent} border rounded-2xl shadow-sm ${embedded ? 'p-6' : 'p-8 sm:p-10'}`}>
         <div className="flex items-start gap-4">
           <div className="rounded-xl bg-white/70 p-3 border border-white">
             <Icon size={22} />

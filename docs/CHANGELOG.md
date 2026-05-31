@@ -11,6 +11,35 @@
 > building it.
 
 
+## Spin-Out deck — deal CTA moves onto the "Review the deal" slide
+
+Task #23. For the Axal VC Spin-Out deck (`methodId === 'axal_spinout_demoday'`)
+viewed via a share link, the interactive "Want to review the deal?" card
+(the "Join & open the deal" button that starts the join/NDA/deal-pack flow)
+no longer renders as a trailing page after the deck — it now renders inside
+slide 13 ("Review the deal.").
+
+- `frontend/src/decks/templates/reviewDealSlot.ts` (new) — a tiny React
+  context (`ReviewDealSlotContext` + `useReviewDealSlot()`) used to inject
+  the share-only card into the otherwise self-contained deck template
+  without eagerly bundling the lazy template into the print page.
+- `PitchDeckPrintPage.jsx` — builds `shareCtaProps` once; trailing `cta`
+  now renders only for non-Spin-Out decks; `reviewDealSlot` (the embedded
+  `<ShareDeckCTA embedded />`) is built only in share mode + Spin-Out +
+  `!exporting`, and is passed to `PrintStage`, which wraps both the
+  fullscreen and normal `<Template>` renders in `ReviewDealSlotContext.Provider`.
+- `axal_spinout_demoday_app.tsx` — `Slide_ReviewTheDeal` consumes
+  `useReviewDealSlot()` and renders the node below its existing status
+  chips (NDA / data-room chips untouched).
+- `ShareDeckCTA.jsx` — new `embedded` prop drops the page padding/max-width
+  so the card fits inside the slide body.
+- `ShareViewerSignupModal.jsx` — modal root now renders via
+  `createPortal(..., document.body)` so the fixed overlay escapes the deck's
+  CSS-scaled stage (otherwise it would be shrunk/clipped to the scaled stage).
+- Export: `reviewDealSlot` is gated on `!exporting`, so the html2canvas/jsPDF
+  rasteriser never bakes the interactive button into the exported slide.
+
+
 ## Team — add Guillaume Lauzier to the public roster
 
 Seeded the first `team_members` row in prod D1 (the table was empty;

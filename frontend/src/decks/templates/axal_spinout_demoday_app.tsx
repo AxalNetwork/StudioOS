@@ -37,6 +37,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { DeckProps } from '../DeckBase';
 import { Slide16x9 } from '../DeckBase';
+import { useReviewDealSlot } from './reviewDealSlot';
 import { trimPitchCopyToMax, getPitchCopyLengthStatus, extractPitchHeadline, HEADLINE_MAX_WORDS } from '../../lib/pitchCopyLength';
 
 /* ─────────────────────────── variant tokens ─────────────────────────── */
@@ -2771,6 +2772,9 @@ const Slide_ReviewTheDeal: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
   const { pal, fonts } = useVariant();
   const da = c.deal_access;
   const hasRoom = !!da && !isUnfilled(da.deal_room_url);
+  // Task #23 — share-mode interactive "Join & open the deal" card,
+  // injected from the viewer layer. Null in editor/thumbnail/export.
+  const dealSlot = useReviewDealSlot();
   return (
     <SlideShell>
       <Eyebrow>{c.eyebrow}</Eyebrow>
@@ -2813,6 +2817,9 @@ const Slide_ReviewTheDeal: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
               fontFamily: V.mono, letterSpacing: '0.12em',
             }}>{da.data_room_ready ? '✓ Data room ready' : '○ Data room pending'}</span>
           </div>
+        )}
+        {dealSlot && (
+          <div style={{ marginTop: 28, width: '100%', maxWidth: 760 }}>{dealSlot}</div>
         )}
       </div>
       <div style={{ borderTop: `1px solid ${pal.rule}`, paddingTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>

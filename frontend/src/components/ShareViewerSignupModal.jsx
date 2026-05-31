@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, CheckCircle2, Loader2, ArrowRight, FileSignature, MessageSquare } from 'lucide-react';
 import { useEscapeClose } from './useEscapeClose';
 import { api } from '../lib/api';
@@ -122,7 +123,11 @@ export default function ShareViewerSignupModal({
     } finally { setBusy(false); }
   }
 
-  return (
+  // Portal to <body> so the overlay escapes any CSS-transformed ancestor
+  // (the deck stage is rendered inside a `scale()` container — a plain
+  // `fixed` child would be positioned/scaled relative to that transform
+  // instead of the viewport). Task #23.
+  return createPortal(
     <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between border-b dark:border-slate-700 px-6 py-4 sticky top-0 bg-white dark:bg-slate-900 z-10">
@@ -346,6 +351,7 @@ export default function ShareViewerSignupModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
