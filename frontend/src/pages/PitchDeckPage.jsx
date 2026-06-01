@@ -546,30 +546,34 @@ export default function PitchDeckPage() {
                   {slides.map((s, i) => (
                     <div
                       key={i}
-                      draggable
-                      onDragStart={(e) => {
+                      // The Spin-Out deck is a fixed-structure template — slide
+                      // order is canonical, so drag-to-reorder is disabled for it.
+                      draggable={!isSpinoutDeck}
+                      onDragStart={isSpinoutDeck ? undefined : (e) => {
                         e.dataTransfer.effectAllowed = 'move';
                         e.dataTransfer.setData('text/plain', String(i));
                         setDragIdx(i);
                       }}
-                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverIdx(i); }}
-                      onDragLeave={() => setDragOverIdx((v) => (v === i ? null : v))}
-                      onDrop={(e) => {
+                      onDragOver={isSpinoutDeck ? undefined : (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverIdx(i); }}
+                      onDragLeave={isSpinoutDeck ? undefined : () => setDragOverIdx((v) => (v === i ? null : v))}
+                      onDrop={isSpinoutDeck ? undefined : (e) => {
                         e.preventDefault();
                         const from = Number(e.dataTransfer.getData('text/plain'));
                         moveSlide(from, i);
                         setDragIdx(null); setDragOverIdx(null);
                       }}
-                      onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
+                      onDragEnd={isSpinoutDeck ? undefined : () => { setDragIdx(null); setDragOverIdx(null); }}
                       onClick={() => setActiveIdx(i)}
-                      className={`group cursor-grab active:cursor-grabbing w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-2 select-none ${
+                      className={`group w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-2 select-none ${
+                        isSpinoutDeck ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'
+                      } ${
                         i === activeIdx
                           ? 'bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300'
                           : 'hover:bg-gray-100 dark:hover:bg-slate-800'
                       } ${dragIdx === i ? 'opacity-40' : ''} ${dragOverIdx === i && dragIdx !== i ? 'ring-2 ring-violet-400' : ''}`}
-                      title="Drag to reorder"
+                      title={isSpinoutDeck ? undefined : 'Drag to reorder'}
                     >
-                      <GripVertical className="w-3 h-3 text-gray-300 group-hover:text-gray-500 shrink-0" />
+                      {!isSpinoutDeck && <GripVertical className="w-3 h-3 text-gray-300 group-hover:text-gray-500 shrink-0" />}
                       <span className="w-5 text-gray-400">{i + 1}</span>
                       <span className="flex-1 truncate">{s.title || 'Untitled'}</span>
                       {/* Task #14 — coverage dot. Green ≥70%, amber 30-69%,
