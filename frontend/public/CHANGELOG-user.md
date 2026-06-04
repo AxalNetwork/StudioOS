@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Improved: Brand Builder now creates real AI names, taglines and logos
+
+The Brand & Landing Page builder now uses our own built-in AI to suggest brand
+names, taglines, and logos — no setup or API key needed. Generate five brand
+directions from a short description of your idea, then pick one and we'll craft a
+matching logo automatically. If the AI is ever unavailable, you'll still get
+solid starter options so the wizard always works.
+
+---
+
 ## New: Articles read like a real magazine — and anyone can write one
 
 Article pages now have the full site header and footer, so you can browse the

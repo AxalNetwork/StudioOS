@@ -11,6 +11,38 @@
 > building it.
 
 
+## Brand Builder — names, taglines & logos on Workers AI (OpenAI dropped)
+
+Task #16. The founder Brand & Landing Page wizard now generates brand
+names/taglines AND logos via Cloudflare Workers AI (first-party, no external
+key). The amber "Using deterministic fallback (no OPENAI_API_KEY configured)"
+warning is gone.
+
+- `cloudflare-worker/src/services/aiRouter.ts` — new `brand_suggest` TaskClass
+  in the union + exhaustive ROUTE record (MID_LLAMA primary → SMALL_LLAMA
+  fallback, mirroring `publication`).
+- `cloudflare-worker/src/routes/brand.ts` — `aiBrand()` now routes through
+  `aiRouterRun({ task: 'brand_suggest', ... })` (per-user budget, model
+  fallback, usage logging) instead of an OpenAI `chat/completions` fetch; new
+  `extractJsonObject()` robustly parses small-LLM JSON and each entry is
+  normalised/guarded. `aiLogo()` now calls
+  `env.AI.run('@cf/black-forest-labs/flux-1-schnell')` behind a 30s
+  `Promise.race` timeout and returns a base64 `data:` URL, falling back to the
+  inline `svgLogo()` on any failure. `/suggest` passes `user.id`; `/logo`
+  `source` label changed `dalle` → `workers-ai`. `heuristicBrand()` retained as
+  the deterministic fallback; the `ai_generated` flag is preserved.
+- `frontend/src/pages/BrandBuilderPage.jsx` — replaced the amber OpenAI-key
+  warning with a neutral gray "Showing starter options" notice (with `dark:`
+  variants).
+- `backend/app/api/routes/brand.py` (dev FastAPI, never deployed) — removed the
+  `_ai_brand`/`_ai_logo` OpenAI calls; `/suggest` + `/logo` now return the
+  deterministic heuristic / inline SVG directly (dev has no Workers AI binding).
+  Dropped the now-unused `os`/`json` imports.
+
+`OPENAI_API_KEY` is no longer read by any brand code; the binding stays in
+`types.ts` for other callers.
+
+
 ## Articles — publication-style reader, social sharing, recommended reading, open authoring
 
 Task #9. The public Articles reader now reads like a real publication and

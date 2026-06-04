@@ -7,7 +7,7 @@
  * lives outside /api/*.
  *
  *   POST /api/brand/suggest                         AI brand suggestions
- *   POST /api/brand/logo                            DALL-E or SVG fallback
+ *   POST /api/brand/logo                            Workers AI or SVG fallback
  *   GET  /api/brand/landing/by-project/:pid         owner read
  *   PUT  /api/brand/landing/by-project/:pid         owner upsert
  *   POST /api/brand/landing/by-project/:pid/publish toggle published
@@ -20,6 +20,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { ensureLandingPageBrandKitColumns } from '../services/landingPageSchema';
 import { requireAuth } from '../auth';
+import { run as aiRouterRun } from '../services/aiRouter';
 
 const brand = new Hono<{ Bindings: Env }>();
 
@@ -141,52 +142,77 @@ function heuristicBrand(description: string, sector: string | null): any[] {
   });
 }
 
-async function aiBrand(env: Env, description: string, sector: string | null): Promise<any[] | null> {
-  const key = (env as any).OPENAI_API_KEY;
-  if (!key) return null;
+// Pull the first balanced {...} JSON object out of a model response. Small
+// LLMs sometimes wrap JSON in prose or ```json fences; this is more robust
+// than JSON.parse on the raw string.
+function extractJsonObject(text: string): any | null {
+  if (!text) return null;
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1] : text;
+  const start = candidate.indexOf('{');
+  const end = candidate.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) return null;
   try {
-    const prompt = `You are helping a startup founder pick a brand. Sector: ${sector || 'unspecified'}.\nIdea: ${description.trim()}\n\nReturn ONLY valid JSON of the form: {"suggestions": [{"name":..., "tagline":..., "logo_prompt":...}, ...]}\nRules: 5 suggestions, name 1-3 words, tagline <=8 words, logo_prompt is a short image prompt suitable for DALL-E.`;
-    // T7 — 30s timeout; without this a hung OpenAI call can pin a Worker
-    // isolate up to its 30s CPU cap with no error path.
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'You are a concise brand strategist. Always return valid JSON.' },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.8,
-        max_tokens: 500,
-        response_format: { type: 'json_object' },
-      }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!r.ok) return null;
-    const j: any = await r.json();
-    const parsed = JSON.parse(j?.choices?.[0]?.message?.content || '{}');
-    const sug = Array.isArray(parsed?.suggestions) ? parsed.suggestions : null;
-    return sug ? sug.slice(0, 5) : null;
+    return JSON.parse(candidate.slice(start, end + 1));
   } catch {
     return null;
   }
 }
 
-async function aiLogo(env: Env, prompt: string): Promise<string | null> {
-  const key = (env as any).OPENAI_API_KEY;
-  if (!key) return null;
+// Brand name/tagline suggestions via Workers AI (routed through aiRouter so
+// per-user budget checks, model fallback, and usage logging all apply).
+// Returns null on any failure/refusal so the caller falls back to the
+// deterministic heuristic.
+async function aiBrand(env: Env, userId: number, description: string, sector: string | null): Promise<any[] | null> {
   try {
-    // T7 — 60s timeout (image gen is slower than chat).
-    const r = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ model: 'dall-e-3', prompt, n: 1, size: '1024x1024' }),
-      signal: AbortSignal.timeout(60_000),
+    const systemPrompt = 'You are a concise brand strategist. Always return ONLY valid minified JSON, no prose, no markdown fences.';
+    const userPrompt = `Help a startup founder pick a brand. Sector: ${sector || 'unspecified'}.\nIdea: ${description.trim()}\n\nReturn JSON of the exact form: {"suggestions":[{"name":"","tagline":"","logo_prompt":""}]}\nRules: exactly 5 suggestions; name 1-3 words; tagline <=8 words; logo_prompt is a short text-to-image prompt for a minimalist vector logo.`;
+    const res = await aiRouterRun(env, {
+      task: 'brand_suggest',
+      userId: userId || 0,
+      systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+      temperature: 0.8,
+      maxTokens: 500,
     });
-    if (!r.ok) return null;
-    const j: any = await r.json();
-    return j?.data?.[0]?.url || null;
+    if (!res.ok || !res.output) return null;
+    const parsed = extractJsonObject(res.output);
+    const sug = Array.isArray(parsed?.suggestions) ? parsed.suggestions : null;
+    if (!sug) return null;
+    // Normalise + guard each entry so a partial model response can't break
+    // the UI; drop anything missing a name.
+    const clean = sug
+      .map((s: any) => ({
+        name: String(s?.name || '').trim().slice(0, 60),
+        tagline: String(s?.tagline || '').trim().slice(0, 120),
+        logo_prompt: String(s?.logo_prompt || '').trim().slice(0, 200)
+          || `minimalist geometric logo, ${String(s?.name || 'brand').toLowerCase()} mark, violet and white, vector, flat`,
+      }))
+      .filter((s: any) => s.name.length > 0);
+    return clean.length ? clean.slice(0, 5) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Logo via Workers AI text-to-image (flux schnell). Returns a self-contained
+// data URL (base64) so it slots into the existing logo_url handling with no
+// storage plumbing. Returns null on any failure so the caller falls back to
+// the inline SVG. Wrapped in a hard timeout so a slow image gen can't pin the
+// isolate to its CPU cap.
+async function aiLogo(env: Env, prompt: string): Promise<string | null> {
+  const ai = (env as any).AI;
+  if (!ai || typeof ai.run !== 'function') return null;
+  const fullPrompt = `${prompt}. Flat minimalist vector logo, single centered mark, solid background, no text, no lettering, high contrast.`;
+  try {
+    const raw: any = await Promise.race([
+      ai.run('@cf/black-forest-labs/flux-1-schnell', { prompt: fullPrompt.slice(0, 2048) }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('logo_timeout')), 30_000)),
+    ]);
+    // flux schnell returns { image: "<base64 jpeg>" }.
+    const b64 = typeof raw?.image === 'string' ? raw.image : null;
+    if (!b64) return null;
+    return `data:image/jpeg;base64,${b64}`;
   } catch {
     return null;
   }
@@ -230,12 +256,12 @@ const cleanFontPairing = (v: unknown): string | null =>
   (typeof v === 'string' && FONT_PAIRING_IDS.has(v.trim())) ? v.trim() : null;
 
 brand.post('/suggest', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
   const description = String(body?.description || '').trim();
   if (description.length < 4) return c.json({ error: 'description too short' }, 400);
   const sector = body?.sector ? String(body.sector) : null;
-  const ai = await aiBrand(c.env, description, sector);
+  const ai = await aiBrand(c.env, user.id, description, sector);
   if (ai) return c.json({ suggestions: ai, ai_generated: true });
   return c.json({ suggestions: heuristicBrand(description, sector), ai_generated: false });
 });
@@ -246,7 +272,7 @@ brand.post('/logo', async (c) => {
   const prompt = String(body?.prompt || '').trim();
   if (prompt.length < 4) return c.json({ error: 'prompt too short' }, 400);
   const url = await aiLogo(c.env, prompt);
-  if (url) return c.json({ url, svg: null, source: 'dalle' });
+  if (url) return c.json({ url, svg: null, source: 'workers-ai' });
   return c.json({ url: null, svg: svgLogo(body?.name || 'A', body?.color || '#7c3aed'), source: 'svg' });
 });
 

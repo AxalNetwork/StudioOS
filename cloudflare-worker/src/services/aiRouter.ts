@@ -40,7 +40,8 @@ export type TaskClass =
   | 'embed'
   | 'paraphrase'
   | 'publication'
-  | 'dd_synthesis';
+  | 'dd_synthesis'
+  | 'brand_suggest';
 
 export type RefusalReason =
   | 'budget_user_day'
@@ -162,6 +163,11 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // the existing admin AI usage dashboard.
   publication:  { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   dd_synthesis: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  // Founder Brand & Landing Page name/tagline generator (routes/brand.ts).
+  // Creative short-form JSON; MID_LLAMA primary → SMALL_LLAMA fallback.
+  // A total chain failure falls back to the deterministic heuristic in
+  // the route, so the wizard is always usable.
+  brand_suggest: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
 };
 
 // Latency budget per primary attempt before we fall back.

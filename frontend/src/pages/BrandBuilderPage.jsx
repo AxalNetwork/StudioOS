@@ -194,8 +194,8 @@ export default function BrandBuilderPage() {
           Generate 5 brand options
         </button>
         {!aiUsed && suggestions.length > 0 && (
-          <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-2 inline-block">
-            Using deterministic fallback (no OPENAI_API_KEY configured).
+          <div className="text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded-md px-2 py-1 mt-2 inline-block dark:text-gray-300 dark:bg-gray-800 dark:border-gray-700">
+            Showing starter options — try regenerating for AI-crafted ideas.
           </div>
         )}
       </section>

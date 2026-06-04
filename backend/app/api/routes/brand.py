@@ -16,8 +16,6 @@ page at /landing/:slug for un-authenticated viewers.
 from __future__ import annotations
 
 import hashlib
-import json
-import os
 import re
 import secrets
 from datetime import datetime
@@ -113,9 +111,9 @@ def _project_owned(session: Session, project_id: int, user: User) -> Project:
 
 
 def _heuristic_brand(description: str, sector: Optional[str]) -> List[Dict[str, Any]]:
-    """Deterministic fallback used when OPENAI_API_KEY is missing or the
-    call fails. Produces 5 plausible (name, tagline, logo_prompt)
-    triplets so the wizard is always usable in dev."""
+    """Deterministic brand options for the dev backend (prod generates these
+    via Workers AI on the Worker). Produces 5 plausible (name, tagline,
+    logo_prompt) triplets so the wizard is always usable in dev."""
     seeds = ["Lumen", "Axon", "Forge", "Vela", "Quanta", "Helio", "Nimbus", "Stratus", "Orbit", "Beacon"]
     suffixes = ["AI", "Labs", "Works", "Cloud", "Stack", "OS", "Sense", "Engine"]
     h = int(hashlib.sha1((description or "x").encode()).hexdigest(), 16)
@@ -141,49 +139,10 @@ def _heuristic_brand(description: str, sector: Optional[str]) -> List[Dict[str, 
     return out
 
 
-def _ai_brand(description: str, sector: Optional[str]) -> Optional[List[Dict[str, Any]]]:
-    key = os.environ.get("OPENAI_API_KEY")
-    if not key:
-        return None
-    try:
-        import openai
-        client = openai.OpenAI(api_key=key)
-        prompt = (
-            f"You are helping a startup founder pick a brand. Sector: {sector or 'unspecified'}.\n"
-            f"Idea: {description.strip()}\n\n"
-            "Return ONLY valid JSON of the form: {\"suggestions\": [{\"name\":..., \"tagline\":..., \"logo_prompt\":...}, ...]}\n"
-            "Rules: 5 suggestions, name 1-3 words, tagline <=8 words, logo_prompt is a short image prompt suitable for DALL-E."
-        )
-        r = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a concise brand strategist. Always return valid JSON."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.8,
-            max_tokens=500,
-            response_format={"type": "json_object"},
-        )
-        parsed = json.loads(r.choices[0].message.content)
-        sug = parsed.get("suggestions") or []
-        if isinstance(sug, list) and len(sug) >= 1:
-            return sug[:5]
-    except Exception:
-        return None
-    return None
-
-
-def _ai_logo(prompt: str) -> Optional[str]:
-    key = os.environ.get("OPENAI_API_KEY")
-    if not key:
-        return None
-    try:
-        import openai
-        client = openai.OpenAI(api_key=key)
-        r = client.images.generate(model="dall-e-3", prompt=prompt, n=1, size="1024x1024")
-        return r.data[0].url
-    except Exception:
-        return None
+# NOTE: The dev FastAPI backend is never deployed (prod is the Cloudflare
+# Worker, which generates brand names/taglines and logos via Workers AI). Dev
+# has no Workers AI binding, so it serves the deterministic heuristic + inline
+# SVG directly — no external AI key is read here.
 
 
 def _svg_logo(name: str, color: str = "#7c3aed") -> str:
@@ -296,17 +255,15 @@ def _sanitize_svg(svg: Optional[str]) -> Optional[str]:
 
 @router.post("/suggest")
 def suggest(payload: SuggestPayload, user: User = Depends(get_current_user)):
-    ai = _ai_brand(payload.description, payload.sector)
-    if ai:
-        return {"suggestions": ai, "ai_generated": True}
+    # Dev backend has no Workers AI binding — serve the deterministic heuristic.
+    # Prod (the Worker) routes this through Workers AI.
     return {"suggestions": _heuristic_brand(payload.description, payload.sector), "ai_generated": False}
 
 
 @router.post("/logo")
 def logo(payload: LogoPayload, user: User = Depends(get_current_user)):
-    url = _ai_logo(payload.prompt)
-    if url:
-        return {"url": url, "svg": None, "source": "dalle"}
+    # Dev backend has no Workers AI binding — serve the inline SVG fallback.
+    # Prod (the Worker) generates logos via Workers AI text-to-image.
     return {"url": None, "svg": _svg_logo(payload.name or "A", payload.color or "#7c3aed"), "source": "svg"}
 
 
