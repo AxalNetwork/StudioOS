@@ -37,6 +37,7 @@ const LANES = [
     href: '/register?lane=partner',
     btn: 'bg-violet-600 hover:bg-violet-700',
     tint: 'bg-violet-50/40 border-violet-200',
+    color: '#c790e4',
     icon: Handshake,
   },
   {
@@ -52,6 +53,7 @@ const LANES = [
     href: '/register?lane=lp',
     btn: 'bg-purple-700 hover:bg-purple-800',
     tint: 'bg-purple-50/40 border-purple-200',
+    color: '#b771e4',
     icon: Banknote,
   },
   {
@@ -67,6 +69,7 @@ const LANES = [
     href: '/register?lane=founder',
     btn: 'bg-indigo-600 hover:bg-indigo-700',
     tint: 'bg-indigo-50/40 border-indigo-200',
+    color: '#a66fd2',
     icon: Rocket,
   },
   {
@@ -82,6 +85,7 @@ const LANES = [
     href: '/register?lane=mentor',
     btn: 'bg-teal-600 hover:bg-teal-700',
     tint: 'bg-teal-50/40 border-teal-200',
+    color: '#926dc0',
     icon: GraduationCap,
   },
   {
@@ -97,6 +101,7 @@ const LANES = [
     href: '/register?lane=coach',
     btn: 'bg-rose-600 hover:bg-rose-700',
     tint: 'bg-rose-50/40 border-rose-200',
+    color: '#7596b5',
     icon: HeartHandshake,
   },
 ];
@@ -481,7 +486,7 @@ export default function LandingPage() {
             {LANES.map((lane) => {
               const Icon = lane.icon;
               return (
-                <div key={lane.id} className={`rounded-2xl border ${lane.tint} p-6 flex flex-col bg-white`}>
+                <div key={lane.id} className={`rounded-2xl border ${lane.tint} p-6 flex flex-col bg-white`} style={{ borderColor: lane.color }}>
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center">
                       <Icon size={18} className="text-violet-700" />
@@ -498,7 +503,8 @@ export default function LandingPage() {
                   </ul>
                   <Link
                     to={lane.href}
-                    className={`inline-flex items-center justify-center gap-2 ${lane.btn} text-white text-sm font-medium rounded-xl px-4 py-2.5 transition-colors`}
+                    className="inline-flex items-center justify-center gap-2 text-white text-sm font-medium rounded-xl px-4 py-2.5 transition-opacity hover:opacity-90"
+                    style={{ backgroundColor: lane.color }}
                   >
                     {lane.cta} <ArrowRight size={14} />
                   </Link>
