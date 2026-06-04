@@ -11,6 +11,22 @@
 > building it.
 
 
+## Contact form: Turnstile bot protection + drop the mailto fallback
+
+- **`frontend/src/pages/ContactPage.jsx`** — removed the "Or email hello@axal.vc
+  directly." line + mailto link. Added a Cloudflare Turnstile widget (mirrors the
+  RegisterPage/LoginPage lifecycle: bounded ~10s poll for `window.turnstile`,
+  `render`/`remove`/`reset`, `theme:'auto'`). Submit now blocks until the token is
+  present, passes `turnstileToken` in the POST body, resets the widget on failure,
+  and maps the worker's `turnstile_failed` code to a friendly message. Widget only
+  renders when `VITE_TURNSTILE_SITE_KEY` is set (prod), so dev is unaffected.
+- **`cloudflare-worker/src/routes/contact.ts`** — `POST /api/contact` now calls
+  `verifyTurnstile(env, turnstileToken, CF-Connecting-IP)` after field validation,
+  returning 403 `{error:'turnstile_failed'}` on failure. Reuses the existing
+  `services/turnstile.ts` helper (fails CLOSED in prod when `TURNSTILE_SECRET_KEY`
+  is unset, fails OPEN in dev). No new secret — the site key is already in
+  `frontend/.env.production`.
+
 ## Articles reader: fix unreadable bodies + unblock the deploy
 
 The public Articles pages now read like a real publication. Two fixes:

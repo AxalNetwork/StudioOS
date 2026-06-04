@@ -5,6 +5,14 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Updated: Contact form now has spam protection
+
+The Contact form includes a quick "I'm not a robot" check before sending, so
+real messages reach us without the spam. We've also removed the separate
+"email us directly" link — just use the form and we'll get back to you.
+
+---
+
 ## Fixed: Articles now read like a real publication
 
 Article pages are properly formatted again — real headings, paragraphs, lists and

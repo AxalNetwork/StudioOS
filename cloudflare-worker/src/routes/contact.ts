@@ -1,9 +1,12 @@
 /**
  * Public contact form → GitHub Issues.
  *
- * POST /api/contact   { name, email, subject, message, kind?, hp? }
+ * POST /api/contact   { name, email, subject, message, kind?, hp?, turnstileToken? }
  *   - kind ∈ {'contact','support'} (default 'contact')
  *   - hp is a honeypot field — non-empty submissions are silently dropped
+ *   - turnstileToken is verified via verifyTurnstile() before any issue is
+ *     created — 403 {code:'turnstile_failed'} on failure (fail-closed in prod,
+ *     fail-open in dev when TURNSTILE_SECRET_KEY is unset)
  *   - Creates a GitHub Issue in GITHUB_REPO_OWNER/GITHUB_REPO_NAME
  *   - Returns 503 {code:'github_token_missing'} when the secret is unset
  *
@@ -15,6 +18,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
+import { verifyTurnstile } from '../services/turnstile';
 
 const contact = new Hono<{ Bindings: Env }>();
 
@@ -54,6 +58,15 @@ contact.post('/contact', async (c) => {
   }
   if (message.length < 10) {
     return c.json({ error: 'message_too_short' }, 400);
+  }
+
+  // Bot protection — Cloudflare Turnstile. Fails CLOSED in production when the
+  // secret is unset, fails OPEN in dev/preview (see services/turnstile.ts).
+  const turnstileToken = sanitize(body.turnstileToken, 4096);
+  const clientIp = c.req.header('CF-Connecting-IP') || undefined;
+  const turnstileOk = await verifyTurnstile(c.env, turnstileToken, clientIp);
+  if (!turnstileOk) {
+    return c.json({ error: 'turnstile_failed', code: 'turnstile_failed' }, 403);
   }
 
   const token = c.env.GITHUB_ISSUES_TOKEN;

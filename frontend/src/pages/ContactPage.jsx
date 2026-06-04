@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Mail, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
 import { request } from '../lib/api';
+
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
 const KINDS = [
   { id: 'contact', label: 'General enquiry' },
@@ -12,19 +14,82 @@ const KINDS = [
 export default function ContactPage() {
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '', kind: 'contact', hp: '' });
   const [status, setStatus] = useState({ state: 'idle', error: '', issueUrl: '' });
+  const [turnstileToken, setTurnstileToken] = useState('');
+
+  const turnstileRef = useRef(null);
+  const turnstileWidgetId = useRef(null);
 
   const update = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  // ---- Cloudflare Turnstile widget lifecycle (mirrors RegisterPage) ----
+  const formVisible = status.state !== 'sent';
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || !formVisible) return;
+    let cancelled = false;
+    let interval;
+
+    const renderTurnstile = () => {
+      if (cancelled || !turnstileRef.current) return;
+      if (turnstileWidgetId.current !== null) {
+        try { window.turnstile.remove(turnstileWidgetId.current); } catch {}
+      }
+      turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: (token) => setTurnstileToken(token),
+        'expired-callback': () => setTurnstileToken(''),
+        theme: 'auto',
+      });
+    };
+
+    if (typeof window.turnstile === 'undefined') {
+      // Cap polling at 50 attempts (~10s) so a blocked Turnstile script
+      // (ad blocker, offline) doesn't leak an interval per mount.
+      let attempts = 0;
+      interval = setInterval(() => {
+        attempts += 1;
+        if (typeof window.turnstile !== 'undefined' && turnstileRef.current) {
+          clearInterval(interval);
+          renderTurnstile();
+        } else if (attempts >= 50) {
+          clearInterval(interval);
+        }
+      }, 200);
+    } else {
+      renderTurnstile();
+    }
+
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+      if (turnstileWidgetId.current !== null) {
+        try { window.turnstile.remove(turnstileWidgetId.current); } catch {}
+        turnstileWidgetId.current = null;
+      }
+    };
+  }, [formVisible]);
+
   const submit = async (e) => {
     e.preventDefault();
+    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+      setStatus({ state: 'error', error: 'Please complete the verification challenge.', issueUrl: '' });
+      return;
+    }
     setStatus({ state: 'sending', error: '', issueUrl: '' });
     try {
-      const res = await request('/contact', { method: 'POST', body: JSON.stringify(form) });
+      const res = await request('/contact', { method: 'POST', body: JSON.stringify({ ...form, turnstileToken }) });
       setStatus({ state: 'sent', error: '', issueUrl: res?.issue_url || '' });
       setForm({ name: '', email: '', subject: '', message: '', kind: form.kind, hp: '' });
+      setTurnstileToken('');
     } catch (err) {
-      const msg = err?.message || 'Something went wrong. Please email hello@axal.vc instead.';
+      const raw = err?.message || '';
+      const msg = raw === 'turnstile_failed'
+        ? 'Verification failed — please complete the challenge again.'
+        : (raw || 'Something went wrong. Please try again.');
       setStatus({ state: 'error', error: msg, issueUrl: '' });
+      if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {
+        try { window.turnstile.reset(turnstileWidgetId.current); } catch {}
+        setTurnstileToken('');
+      }
     }
   };
 
@@ -144,13 +209,14 @@ export default function ContactPage() {
                 </div>
               )}
 
-              <div className="flex items-center justify-between gap-4 pt-2">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Or email <a href="mailto:hello@axal.vc" className="text-violet-700 dark:text-violet-300 hover:underline">hello@axal.vc</a> directly.
-                </p>
+              {TURNSTILE_SITE_KEY && (
+                <div ref={turnstileRef} className="flex justify-start" />
+              )}
+
+              <div className="flex items-center justify-end gap-4 pt-2">
                 <button
                   type="submit"
-                  disabled={status.state === 'sending'}
+                  disabled={status.state === 'sending' || (TURNSTILE_SITE_KEY && !turnstileToken)}
                   className="inline-flex items-center gap-2 px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {status.state === 'sending' ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> : 'Send message'}
