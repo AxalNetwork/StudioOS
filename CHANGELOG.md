@@ -11,6 +11,44 @@
 > building it.
 
 
+## Task #3 — Brand Kit Expansion: logo upload, AI palette, tagline iterator
+
+- **`cloudflare-worker/sql/migrations/080_brand_kit_expansion.sql`** — additive migration
+  adding `palette_secondary`, `palette_accent`, `logo_asset_id` to `landing_pages`.
+- **`cloudflare-worker/src/services/landingPageSchema.ts`** — lazy bootstrap updated with
+  3 new ALTERs so the columns self-heal on prod even if the migration is unapplied.
+- **`cloudflare-worker/src/services/aiRouter.ts`** — added `brand_palette` and
+  `brand_taglines` to `TaskClass` enum + `ROUTE` map (MID_LLAMA → SMALL_LLAMA fallback,
+  mirroring `brand_suggest`). Workers-AI only; deterministic heuristic fallback lives in
+  the route layer.
+- **`cloudflare-worker/src/routes/brand.ts`** — 3 new POST routes:
+  - `/logo/upload` — Turnstile-verified, ≤512 KB PNG/JPG/SVG; stores in R2 when `FILES` binding
+    is present, else inline base64 data URL. SVG sanitised via `sanitizeSvg()`.
+  - `/palette/suggest` — AI palette (5 colours) or deterministic 12-bank heuristic keyed by
+    description hash; WCAG AA contrast ratio warnings (background↔ink ≥4.5:1,
+    primary↔background ≥3:1).
+  - `/tagline/suggest` — AI tagline iterator (6 candidates) or deterministic template bank
+    keyed by tone (bold/warm/technical/playful/authoritative); requires audience + tone +
+    market_angle.
+  - PUT `/landing/by-project/:pid` updated to persist `palette_secondary`, `palette_accent`,
+    `logo_asset_id` alongside existing columns.
+  - `rowToLanding` now includes `logo_asset_id`, `palette_secondary`, `palette_accent`.
+- **`backend/app/api/routes/brand.py`** — dev FastAPI mirror of all 3 new routes:
+  `logo_upload` (inline only), `palette_suggest` (heuristic + WCAG warnings),
+  `tagline_suggest` (heuristic templates). `LandingUpsert` schema extended; `ensure_schema`
+  updated with new columns in CREATE TABLE + ALTER fallback; `upsert_landing` writes all 5
+  palette columns + `logo_asset_id`. `base64` import added.
+- **`frontend/src/lib/api.js`** — 3 new helpers: `brandUploadLogo`, `brandSuggestPalette`,
+  `brandSuggestTaglines`.
+- **`frontend/src/pages/BrandBuilderPage.jsx`** — UI additions:
+  - Upload logo button (hidden file input, ≤512 KB PNG/JPG/SVG, inline/R2 toggle).
+  - 5-colour palette grid (Primary / Background / Ink / Secondary / Accent) with color
+    pickers.
+  - "Suggest AI palette" button (runs `brandSuggestPalette` with seed from current primary
+    colour; WCAA warnings surfaced inline).
+  - Tagline iterator section with audience/tone/market-angle inputs → 6 candidate buttons;
+  - selecting one sets the draft tagline.
+
 ## About page: updated copy, image + name linked to LinkedIn
 
 - **`frontend/src/pages/TeamPage.jsx`** — replaced the About paragraph with the

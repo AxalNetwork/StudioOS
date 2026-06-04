@@ -15,6 +15,7 @@ page at /landing/:slug for un-authenticated viewers.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import re
 import secrets
@@ -53,13 +54,25 @@ def _ensure_schema(session: Session) -> None:
             cta_text TEXT DEFAULT 'Join the waitlist',
             logo_url TEXT,
             logo_svg TEXT,
+            logo_asset_id TEXT,
             theme_color TEXT DEFAULT '#7c3aed',
+            palette_bg TEXT,
+            palette_ink TEXT,
+            palette_secondary TEXT,
+            palette_accent TEXT,
+            font_pairing TEXT,
             published BOOLEAN DEFAULT FALSE,
             views_count INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """,
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS logo_asset_id TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS palette_bg TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS palette_ink TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS palette_secondary TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS palette_accent TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS font_pairing TEXT",
         """
         CREATE TABLE IF NOT EXISTS waitlist_signups (
             id BIGSERIAL PRIMARY KEY,
@@ -156,6 +169,104 @@ def _svg_logo(name: str, color: str = "#7c3aed") -> str:
     )
 
 
+# --- heuristic helpers (Task #3 Brand Kit Expansion) ---
+
+_HEX_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+_PALETTES = [
+    {"primary": "#7c3aed", "background": "#faf7ff", "ink": "#1b1430", "secondary": "#c4b5fd", "accent": "#f59e0b"},
+    {"primary": "#2563eb", "background": "#eff6ff", "ink": "#0f172a", "secondary": "#93c5fd", "accent": "#10b981"},
+    {"primary": "#dc2626", "background": "#fef2f2", "ink": "#1a0a0a", "secondary": "#fca5a5", "accent": "#f59e0b"},
+    {"primary": "#059669", "background": "#ecfdf5", "ink": "#0a1f15", "secondary": "#6ee7b7", "accent": "#3b82f6"},
+    {"primary": "#0891b2", "background": "#ecfeff", "ink": "#0a1a1f", "secondary": "#67e8f9", "accent": "#f43f5e"},
+    {"primary": "#4f46e5", "background": "#eef2ff", "ink": "#0f0a1a", "secondary": "#a5b4fc", "accent": "#f59e0b"},
+    {"primary": "#7c3aed", "background": "#f5f3ff", "ink": "#1a1025", "secondary": "#d8b4fe", "accent": "#10b981"},
+    {"primary": "#be185d", "background": "#fdf2f8", "ink": "#1a0a12", "secondary": "#fbcfe8", "accent": "#6366f1"},
+    {"primary": "#ea580c", "background": "#fff7ed", "ink": "#1a0f05", "secondary": "#fdba74", "accent": "#10b981"},
+    {"primary": "#4338ca", "background": "#e0e7ff", "ink": "#0a0a1f", "secondary": "#818cf8", "accent": "#f59e0b"},
+    {"primary": "#065f46", "background": "#ecfdf5", "ink": "#0a1a14", "secondary": "#6ee7b7", "accent": "#f59e0b"},
+    {"primary": "#b91c1c", "background": "#fef2f2", "ink": "#1a0a0a", "secondary": "#fca5a5", "accent": "#3b82f6"},
+]
+
+
+def _luminance(hex: str) -> float:
+    v = hex.lstrip("#")
+    rgb = [int(v[i:i+2], 16) for i in (0, 2, 4)] if len(v) == 6 else [int(v[i]+v[i], 16) for i in range(3)]
+    a = []
+    for c in rgb:
+        c /= 255.0
+        a.append(c / 12.92 if c <= 0.03928 else pow((c + 0.055) / 1.055, 2.4))
+    return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2]
+
+
+def _contrast_ratio(a: str, b: str) -> float:
+    l1 = _luminance(a) + 0.05
+    l2 = _luminance(b) + 0.05
+    return max(l1, l2) / min(l1, l2)
+
+
+def _heuristic_palette(description: str, seed_color: Optional[str] = None) -> Dict[str, str]:
+    h = 0
+    for ch in (description or "x"):
+        h = (h * 31 + ord(ch)) & 0xFFFFFFFF
+    base = _PALETTES[h % len(_PALETTES)].copy()
+    if seed_color and _HEX_RE.match(seed_color):
+        base["primary"] = seed_color.lower()
+    return base
+
+
+def _heuristic_taglines(
+    name: str, description: str, audience: str, tone: str, market_angle: str
+) -> List[str]:
+    a = (audience or "founders").strip()
+    t = (tone or "bold").strip().lower()
+    m = (market_angle or "innovation").strip()
+    templates: Dict[str, List[str]] = {
+        "bold": [
+            f"{name}: the {m} platform {a} have been waiting for.",
+            f"Built for {a} who refuse to settle. {name} is here.",
+            f"{name} — where {m} meets execution.",
+            f"The fastest way for {a} to win. Period.",
+            f"Stop guessing. Start scaling with {name}.",
+            f"{name} turns {a} into {m} leaders.",
+        ],
+        "warm": [
+            f"{name}: made with care for {a} who dream big.",
+            f"A gentle {m} toolkit for {a} ready to grow.",
+            f"{name} helps {a} build something meaningful.",
+            f"For {a} who believe {m} should feel human.",
+            f"{name} — your partner from first idea to launch.",
+            f"Every {a} deserves a tool like {name}.",
+        ],
+        "technical": [
+            f"{name}: {m} infrastructure for {a} at scale.",
+            f"Engineered for {a} who demand {m} performance.",
+            f"{name} — the {m} stack {a} actually want to use.",
+            f"Composable {m} primitives for modern {a}.",
+            f"API-first {m} tools for {a} who ship daily.",
+            f"{name} reduces {a} operational complexity by design.",
+        ],
+        "playful": [
+            f"{name}: {m} magic for {a} who like to play.",
+            f"The {m} sidekick every {a} deserves.",
+            f"{name} makes {m} feel like a game — and you win.",
+            f"For {a} who think {m} should be fun.",
+            f"{name}: serious {m}, zero boredom.",
+            f"Unleash your {a} superpowers with {name}.",
+        ],
+        "authoritative": [
+            f"{name}: the {m} standard for {a}.",
+            f"Trusted by {a} who set the {m} agenda.",
+            f"{name} — {m} proven at scale.",
+            f"The {a} platform {m} teams rely on.",
+            f"{name} delivers {m} outcomes, not promises.",
+            f"The benchmark for {m} among {a}.",
+        ],
+    }
+    bank = templates.get(t) or templates["bold"]
+    return bank[:6]
+
+
 def _row_to_landing(row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -168,7 +279,13 @@ def _row_to_landing(row) -> Dict[str, Any]:
         "cta_text": row["cta_text"] or "Join the waitlist",
         "logo_url": row["logo_url"],
         "logo_svg": row["logo_svg"],
+        "logo_asset_id": row.get("logo_asset_id") or None,
         "theme_color": row["theme_color"] or "#7c3aed",
+        "palette_bg": row.get("palette_bg") or None,
+        "palette_ink": row.get("palette_ink") or None,
+        "palette_secondary": row.get("palette_secondary") or None,
+        "palette_accent": row.get("palette_accent") or None,
+        "font_pairing": row.get("font_pairing") or None,
         "published": bool(row["published"]),
         "views_count": row["views_count"] or 0,
     }
@@ -197,6 +314,26 @@ class LandingUpsert(BaseModel):
     logo_url: Optional[str] = None
     logo_svg: Optional[str] = None
     theme_color: Optional[str] = "#7c3aed"
+    palette_bg: Optional[str] = None
+    palette_ink: Optional[str] = None
+    palette_secondary: Optional[str] = None
+    palette_accent: Optional[str] = None
+    font_pairing: Optional[str] = None
+    logo_asset_id: Optional[str] = None
+
+
+class PalettePayload(BaseModel):
+    description: str = Field(..., min_length=4, max_length=2000)
+    sector: Optional[str] = None
+    seed_color: Optional[str] = None
+
+
+class TaglinePayload(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    description: Optional[str] = None
+    audience: str = Field(..., min_length=1)
+    tone: str = Field(..., min_length=1)
+    market_angle: str = Field(..., min_length=1)
 
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -300,13 +437,22 @@ def upsert_landing(
         "cta": payload.cta_text or "Join the waitlist",
         "logo_url": payload.logo_url,
         "logo_svg": _sanitize_svg(payload.logo_svg),
+        "logo_asset_id": payload.logo_asset_id or None,
         "color": payload.theme_color or "#7c3aed",
+        "palette_bg": payload.palette_bg or None,
+        "palette_ink": payload.palette_ink or None,
+        "palette_secondary": payload.palette_secondary or None,
+        "palette_accent": payload.palette_accent or None,
+        "font_pairing": payload.font_pairing or None,
     }
     if existing:
         session.exec(text(
             "UPDATE landing_pages SET name=:name, tagline=:tagline, headline=:headline, "
             "subheadline=:subheadline, cta_text=:cta, logo_url=:logo_url, logo_svg=:logo_svg, "
-            "theme_color=:color, updated_at=CURRENT_TIMESTAMP WHERE project_id=:pid"
+            "logo_asset_id=:logo_asset_id, theme_color=:color, palette_bg=:palette_bg, "
+            "palette_ink=:palette_ink, palette_secondary=:palette_secondary, "
+            "palette_accent=:palette_accent, font_pairing=:font_pairing, "
+            "updated_at=CURRENT_TIMESTAMP WHERE project_id=:pid"
         ), params=params)
         slug = existing["slug"]
     else:
@@ -314,14 +460,68 @@ def upsert_landing(
         params["slug"] = slug
         session.exec(text(
             "INSERT INTO landing_pages (project_id, slug, name, tagline, headline, subheadline, "
-            "cta_text, logo_url, logo_svg, theme_color) VALUES (:pid, :slug, :name, :tagline, "
-            ":headline, :subheadline, :cta, :logo_url, :logo_svg, :color)"
+            "cta_text, logo_url, logo_svg, logo_asset_id, theme_color, palette_bg, palette_ink, "
+            "palette_secondary, palette_accent, font_pairing) "
+            "VALUES (:pid, :slug, :name, :tagline, :headline, :subheadline, :cta, :logo_url, "
+            ":logo_svg, :logo_asset_id, :color, :palette_bg, :palette_ink, "
+            ":palette_secondary, :palette_accent, :font_pairing)"
         ), params=params)
     session.commit()
     row = session.exec(text(
         "SELECT * FROM landing_pages WHERE project_id = :pid"
     ), params={"pid": project_id}).mappings().first()
     return _row_to_landing(row)
+
+
+@router.post("/logo/upload")
+def logo_upload(payload: Dict[str, Any] = None, user: User = Depends(get_current_user)):
+    # Dev backend has no R2 binding — inline small images only.
+    # Prod (Worker) routes this to R2 with the FILES binding.
+    payload = payload or {}
+    mime = (payload.get("mime") or "").strip()
+    data = (payload.get("data") or "").strip()
+    if mime not in {"image/png", "image/jpeg", "image/svg+xml"}:
+        raise HTTPException(status_code=400, detail="invalid mime type")
+    raw = base64.b64decode(data) if data else None
+    if not raw:
+        raise HTTPException(status_code=400, detail="empty data")
+    if len(raw) > 512 * 1024:
+        raise HTTPException(status_code=400, detail="file too large")
+    if mime == "image/svg+xml":
+        svg = _sanitize_svg(raw.decode("utf-8", "replace"))
+        if not svg:
+            raise HTTPException(status_code=400, detail="svg failed sanitization")
+        raw = svg.encode("utf-8")
+    if len(raw) > 200 * 1024:
+        raise HTTPException(status_code=400, detail="file too large for inline")
+    b64 = base64.b64encode(raw).decode("ascii")
+    data_url = f"data:{mime};base64,{b64}"
+    return {"asset_id": data_url, "url": data_url, "mime": mime, "size": len(raw), "source": "inline"}
+
+
+@router.post("/palette/suggest")
+def palette_suggest(payload: PalettePayload, user: User = Depends(get_current_user)):
+    # Dev backend has no Workers AI binding — serve deterministic heuristic.
+    palette = _heuristic_palette(payload.description, payload.seed_color)
+    warnings = []
+    if _contrast_ratio(palette["background"], palette["ink"]) < 4.5:
+        warnings.append("background\u2194ink contrast below WCAG AA (4.5:1).")
+    if _contrast_ratio(palette["primary"], palette["background"]) < 3.0:
+        warnings.append("primary\u2194background contrast below WCAG AA for large text (3:1).")
+    return {"palette": palette, "warnings": warnings, "ai_generated": False}
+
+
+@router.post("/tagline/suggest")
+def tagline_suggest(payload: TaglinePayload, user: User = Depends(get_current_user)):
+    # Dev backend has no Workers AI binding — serve deterministic heuristic.
+    taglines = _heuristic_taglines(
+        payload.name,
+        payload.description or "",
+        payload.audience,
+        payload.tone,
+        payload.market_angle,
+    )
+    return {"taglines": taglines[:6], "ai_generated": False}
 
 
 @router.post("/landing/by-project/{project_id}/publish")

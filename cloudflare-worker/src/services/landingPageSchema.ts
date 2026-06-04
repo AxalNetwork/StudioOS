@@ -18,6 +18,9 @@ export async function ensureLandingPageBrandKitColumns(env: Env): Promise<void> 
     `ALTER TABLE landing_pages ADD COLUMN palette_bg TEXT`,
     `ALTER TABLE landing_pages ADD COLUMN palette_ink TEXT`,
     `ALTER TABLE landing_pages ADD COLUMN font_pairing TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN palette_secondary TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN palette_accent TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN logo_asset_id TEXT`,
   ];
   for (const s of alters) {
     try { await env.DB.prepare(s).run(); } catch { /* column exists / table absent */ }

@@ -239,9 +239,12 @@ function rowToLanding(row: any) {
     cta_text: row.cta_text || 'Join the waitlist',
     logo_url: row.logo_url,
     logo_svg: row.logo_svg,
+    logo_asset_id: row.logo_asset_id || null,
     theme_color: row.theme_color || '#7c3aed',
     palette_bg: row.palette_bg || null,
     palette_ink: row.palette_ink || null,
+    palette_secondary: row.palette_secondary || null,
+    palette_accent: row.palette_accent || null,
     font_pairing: row.font_pairing || null,
     published: !!row.published,
     views_count: row.views_count || 0,
@@ -254,6 +257,173 @@ const cleanHex = (v: unknown): string | null =>
   (typeof v === 'string' && HEX_RE.test(v.trim())) ? v.trim().toLowerCase() : null;
 const cleanFontPairing = (v: unknown): string | null =>
   (typeof v === 'string' && FONT_PAIRING_IDS.has(v.trim())) ? v.trim() : null;
+
+const ALLOWED_LOGO_MIME = new Set(['image/png', 'image/jpeg', 'image/svg+xml']);
+const LOGO_MAX_BYTES = 512 * 1024;
+const LOGO_INLINE_MAX_BYTES = 200 * 1024;
+
+// WCAG relative luminance for a hex color (sRGB, 8-bit).
+function luminance(hex: string): number {
+  const v = hex.replace('#', '');
+  const rgb = v.length === 3
+    ? [parseInt(v[0] + v[0], 16), parseInt(v[1] + v[1], 16), parseInt(v[2] + v[2], 16)]
+    : [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
+  const a = rgb.map((c) => {
+    c /= 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+}
+
+// WCAG contrast ratio between two hex colors.
+function contrastRatio(a: string, b: string): number {
+  const l1 = luminance(a) + 0.05;
+  const l2 = luminance(b) + 0.05;
+  return Math.max(l1, l2) / Math.min(l1, l2);
+}
+
+// Returns a curated 5-color palette from a hash of the description.
+function heuristicPalette(description: string, seedColor?: string | null): Record<string, string> {
+  const palettes = [
+    { primary: '#7c3aed', background: '#faf7ff', ink: '#1b1430', secondary: '#c4b5fd', accent: '#f59e0b' },
+    { primary: '#2563eb', background: '#eff6ff', ink: '#0f172a', secondary: '#93c5fd', accent: '#10b981' },
+    { primary: '#dc2626', background: '#fef2f2', ink: '#1a0a0a', secondary: '#fca5a5', accent: '#f59e0b' },
+    { primary: '#059669', background: '#ecfdf5', ink: '#0a1f15', secondary: '#6ee7b7', accent: '#3b82f6' },
+    { primary: '#0891b2', background: '#ecfeff', ink: '#0a1a1f', secondary: '#67e8f9', accent: '#f43f5e' },
+    { primary: '#4f46e5', background: '#eef2ff', ink: '#0f0a1a', secondary: '#a5b4fc', accent: '#f59e0b' },
+    { primary: '#7c3aed', background: '#f5f3ff', ink: '#1a1025', secondary: '#d8b4fe', accent: '#10b981' },
+    { primary: '#be185d', background: '#fdf2f8', ink: '#1a0a12', secondary: '#fbcfe8', accent: '#6366f1' },
+    { primary: '#ea580c', background: '#fff7ed', ink: '#1a0f05', secondary: '#fdba74', accent: '#10b981' },
+    { primary: '#4338ca', background: '#e0e7ff', ink: '#0a0a1f', secondary: '#818cf8', accent: '#f59e0b' },
+    { primary: '#065f46', background: '#ecfdf5', ink: '#0a1a14', secondary: '#6ee7b7', accent: '#f59e0b' },
+    { primary: '#b91c1c', background: '#fef2f2', ink: '#1a0a0a', secondary: '#fca5a5', accent: '#3b82f6' },
+  ];
+  let h = 0;
+  for (const ch of description || 'x') h = (h * 31 + ch.charCodeAt(0)) | 0;
+  h = Math.abs(h);
+  const base = palettes[h % palettes.length];
+  if (seedColor && HEX_RE.test(seedColor)) {
+    base.primary = seedColor.toLowerCase();
+  }
+  return base;
+}
+
+// Deterministic tagline templates based on audience + tone + market angle.
+function heuristicTaglines(name: string, description: string, audience: string, tone: string, marketAngle: string): string[] {
+  const a = (audience || 'founders').trim();
+  const t = (tone || 'bold').trim().toLowerCase();
+  const m = (marketAngle || 'innovation').trim();
+  const d = (description || '').trim().slice(0, 80);
+  const templates: Record<string, string[]> = {
+    bold: [
+      `${name}: the ${m} platform ${a} have been waiting for.`,
+      `Built for ${a} who refuse to settle. ${name} is here.`,
+      `${name} — where ${m} meets execution.`,
+      `The fastest way for ${a} to win. Period.`,
+      `Stop guessing. Start scaling with ${name}.`,
+      `${name} turns ${a} into ${m} leaders.`,
+    ],
+    warm: [
+      `${name}: made with care for ${a} who dream big.`,
+      `A gentle ${m} toolkit for ${a} ready to grow.`,
+      `${name} helps ${a} build something meaningful.`,
+      `For ${a} who believe ${m} should feel human.`,
+      `${name} — your partner from first idea to launch.`,
+      `Every ${a} deserves a tool like ${name}.`,
+    ],
+    technical: [
+      `${name}: ${m} infrastructure for ${a} at scale.`,
+      `Engineered for ${a} who demand ${m} performance.`,
+      `${name} — the ${m} stack ${a} actually want to use.`,
+      `Composable ${m} primitives for modern ${a}.`,
+      `API-first ${m} tools for ${a} who ship daily.`,
+      `${name} reduces ${a} operational complexity by design.`,
+    ],
+    playful: [
+      `${name}: ${m} magic for ${a} who like to play.`,
+      `The ${m} sidekick every ${a} deserves.`,
+      `${name} makes ${m} feel like a game — and you win.`,
+      `For ${a} who think ${m} should be fun.`,
+      `${name}: serious ${m}, zero boredom.`,
+      `Unleash your ${a} superpowers with ${name}.`,
+    ],
+    authoritative: [
+      `${name}: the ${m} standard for ${a}.`,
+      `Trusted by ${a} who set the ${m} agenda.`,
+      `${name} — ${m} proven at scale.`,
+      `The ${a} platform ${m} teams rely on.`,
+      `${name} delivers ${m} outcomes, not promises.`,
+      `The benchmark for ${m} among ${a}.`,
+    ],
+  };
+  const bank = templates[t] || templates.bold;
+  return bank.map((s) => s.replace(/\$\{name\}/g, name).replace(/\$\{description\}/g, d));
+}
+
+async function aiPalette(env: Env, userId: number, description: string, sector: string | null, seedColor?: string | null): Promise<Record<string, string> | null> {
+  try {
+    const systemPrompt = 'You are a colour strategist. Always return ONLY valid minified JSON, no prose, no markdown fences.';
+    const userPrompt = `Suggest a 5-colour palette for a startup.
+Sector: ${sector || 'unspecified'}.
+Idea: ${description.trim()}
+${seedColor ? `Seed colour: ${seedColor}` : ''}
+
+Return JSON of the exact form: {"primary":"#RRGGBB","background":"#RRGGBB","ink":"#RRGGBB","secondary":"#RRGGBB","accent":"#RRGGBB"}
+Rules: all values must be hex; background must be light enough for dark text; ink must be dark enough for light backgrounds; secondary should complement primary; accent should be a contrasting warm or cool colour.`;
+    const res = await aiRouterRun(env, {
+      task: 'brand_palette',
+      userId: userId || 0,
+      systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+      temperature: 0.8,
+      maxTokens: 300,
+    });
+    if (!res.ok || !res.output) return null;
+    const parsed = extractJsonObject(res.output);
+    const p = parsed || {};
+    const out: Record<string, string> = {};
+    for (const key of ['primary', 'background', 'ink', 'secondary', 'accent']) {
+      const v = String(p[key] || '').trim();
+      if (HEX_RE.test(v)) out[key] = v.toLowerCase();
+    }
+    return Object.keys(out).length === 5 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+async function aiTaglines(env: Env, userId: number, name: string, description: string, audience: string, tone: string, marketAngle: string): Promise<string[] | null> {
+  try {
+    const systemPrompt = 'You are a startup copywriter. Always return ONLY valid minified JSON, no prose, no markdown fences.';
+    const userPrompt = `Write 6 tagline candidates for a startup.
+Name: ${name}
+Description: ${description.trim()}
+Audience: ${audience}
+Tone: ${tone}
+Market angle: ${marketAngle}
+
+Return JSON of the exact form: {"taglines":["","","","","",""]}
+Rules: each tagline <= 12 words; varied angles; no emojis.`;
+    const res = await aiRouterRun(env, {
+      task: 'brand_taglines',
+      userId: userId || 0,
+      systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+      temperature: 0.9,
+      maxTokens: 400,
+    });
+    if (!res.ok || !res.output) return null;
+    const parsed = extractJsonObject(res.output);
+    const arr = Array.isArray(parsed?.taglines) ? parsed.taglines : null;
+    if (!arr) return null;
+    const clean = arr
+      .map((s: any) => String(s || '').trim().slice(0, 160))
+      .filter((s: string) => s.length > 0);
+    return clean.length ? clean.slice(0, 6) : null;
+  } catch {
+    return null;
+  }
+}
 
 brand.post('/suggest', async (c) => {
   const user = await requireAuth(c);
@@ -274,6 +444,121 @@ brand.post('/logo', async (c) => {
   const url = await aiLogo(c.env, prompt);
   if (url) return c.json({ url, svg: null, source: 'workers-ai' });
   return c.json({ url: null, svg: svgLogo(body?.name || 'A', body?.color || '#7c3aed'), source: 'svg' });
+});
+
+brand.post('/logo/upload', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+
+  const mime = String(body?.mime || '').trim();
+  const base64 = String(body?.data || '').trim();
+  if (!ALLOWED_LOGO_MIME.has(mime)) return c.json({ error: 'invalid mime type' }, 400);
+  // Workers runtime — no Node.js Buffer; use atob + Uint8Array.
+  let raw: Uint8Array | null = null;
+  if (base64.length) {
+    try {
+      const bin = atob(base64);
+      raw = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) raw[i] = bin.charCodeAt(i);
+    } catch { /* invalid base64 */ }
+  }
+  if (!raw || raw.length === 0) return c.json({ error: 'empty data' }, 400);
+  if (raw.length > LOGO_MAX_BYTES) return c.json({ error: 'file too large' }, 400);
+
+  // Sanitise SVG before any storage path. For non-SVG uploads the raw bytes
+  // are kept as-is; for SVG we overwrite with the sanitised text so that
+  // stored bytes never carry a script payload.
+  let logoBytes: Uint8Array = raw;
+  if (mime === 'image/svg+xml') {
+    const text = new TextDecoder().decode(raw);
+    const svgSanitized = sanitizeSvg(text);
+    if (!svgSanitized) return c.json({ error: 'svg failed sanitization' }, 400);
+    logoBytes = new TextEncoder().encode(svgSanitized);
+  }
+
+  // Safe base64 without spreading potentially large Uint8Arrays (avoids
+  // "Maximum call stack size exceeded" on engines with small argument limits).
+  function bytesToBase64(bytes: Uint8Array): string {
+    const chunk = 65536;
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+  }
+
+  const files = c.env.FILES;
+  if (files) {
+    const key = `brand-logos/${user.id}/${crypto.randomUUID()}.${mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : 'svg'}`;
+    try {
+      await files.put(key, logoBytes, {
+        httpMetadata: { contentType: mime },
+        customMetadata: { userId: String(user.id), uploadedAt: new Date().toISOString() },
+      });
+    } catch {
+      return c.json({ error: 'upload failed' }, 500);
+    }
+    // asset_id is the R2 key; the frontend can resolve it via a future
+    // signed-URL route. For now, inline the logo for immediate preview.
+    let previewUrl: string | null = null;
+    try {
+      const b64 = bytesToBase64(logoBytes);
+      previewUrl = `data:${mime};base64,${b64}`;
+    } catch {
+      // preview encoding failure is non-fatal; asset is still stored.
+    }
+    return c.json({ asset_id: key, url: previewUrl, mime, size: logoBytes.length, source: 'r2' });
+  }
+
+  // No FILES binding — inline small images only.
+  if (logoBytes.length > LOGO_INLINE_MAX_BYTES) return c.json({ error: 'file too large for inline' }, 400);
+  const b64 = bytesToBase64(logoBytes);
+  const dataUrl = `data:${mime};base64,${b64}`;
+  return c.json({ asset_id: dataUrl, url: dataUrl, mime, size: logoBytes.length, source: 'inline' });
+});
+
+brand.post('/palette/suggest', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const description = String(body?.description || '').trim();
+  if (description.length < 4) return c.json({ error: 'description too short' }, 400);
+  const sector = body?.sector ? String(body.sector) : null;
+  const seed = cleanHex(body?.seed_color);
+  const ai = await aiPalette(c.env, user.id, description, sector, seed);
+  const palette = ai || heuristicPalette(description, seed);
+  const warnings: string[] = [];
+  if (contrastRatio(palette.background, palette.ink) < 4.5) {
+    warnings.push('background↔ink contrast below WCAG AA (4.5:1).');
+  }
+  if (contrastRatio(palette.primary, palette.background) < 3.0) {
+    warnings.push('primary↔background contrast below WCAG AA for large text (3:1).');
+  }
+  return c.json({
+    palette: {
+      primary: palette.primary,
+      background: palette.background,
+      ink: palette.ink,
+      secondary: palette.secondary,
+      accent: palette.accent,
+    },
+    warnings,
+    ai_generated: !!ai,
+  });
+});
+
+brand.post('/tagline/suggest', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const name = String(body?.name || '').trim();
+  if (!name) return c.json({ error: 'name required' }, 400);
+  const description = String(body?.description || '').trim();
+  const audience = String(body?.audience || '').trim();
+  const tone = String(body?.tone || '').trim();
+  const marketAngle = String(body?.market_angle || '').trim();
+  if (!audience || !tone || !marketAngle) return c.json({ error: 'audience, tone, and market_angle required' }, 400);
+  const ai = await aiTaglines(c.env, user.id, name, description, audience, tone, marketAngle);
+  const taglines = ai || heuristicTaglines(name, description, audience, tone, marketAngle);
+  return c.json({ taglines: taglines.slice(0, 6), ai_generated: !!ai });
 });
 
 brand.get('/landing/by-project/:pid', async (c) => {
@@ -307,27 +592,31 @@ brand.put('/landing/by-project/:pid', async (c) => {
   const color = String(body?.theme_color || '#7c3aed');
   const paletteBg = cleanHex(body?.palette_bg);
   const paletteInk = cleanHex(body?.palette_ink);
+  const paletteSecondary = cleanHex(body?.palette_secondary);
+  const paletteAccent = cleanHex(body?.palette_accent);
   const fontPairing = cleanFontPairing(body?.font_pairing);
+  const logoAssetId = String(body?.logo_asset_id || '').trim() || null;
   if (existing) {
     await c.env.DB.prepare(
       `UPDATE landing_pages SET name=?, tagline=?, headline=?, subheadline=?, cta_text=?,
-       logo_url=?, logo_svg=?, theme_color=?, palette_bg=?, palette_ink=?, font_pairing=?,
+       logo_url=?, logo_svg=?, logo_asset_id=?, theme_color=?, palette_bg=?, palette_ink=?,
+       palette_secondary=?, palette_accent=?, font_pairing=?,
        updated_at=datetime('now') WHERE project_id=?`
     ).bind(
       name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
-      body?.logo_url || null, sanitizeSvg(body?.logo_svg) || null, color,
-      paletteBg, paletteInk, fontPairing, pid,
+      body?.logo_url || null, sanitizeSvg(body?.logo_svg) || null, logoAssetId, color,
+      paletteBg, paletteInk, paletteSecondary, paletteAccent, fontPairing, pid,
     ).run();
   } else {
     const slug = slugify(name);
     await c.env.DB.prepare(
       `INSERT INTO landing_pages (project_id, slug, name, tagline, headline, subheadline, cta_text,
-       logo_url, logo_svg, theme_color, palette_bg, palette_ink, font_pairing)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       logo_url, logo_svg, logo_asset_id, theme_color, palette_bg, palette_ink, palette_secondary, palette_accent, font_pairing)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       pid, slug, name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
-      body?.logo_url || null, sanitizeSvg(body?.logo_svg) || null, color,
-      paletteBg, paletteInk, fontPairing,
+      body?.logo_url || null, sanitizeSvg(body?.logo_svg) || null, logoAssetId, color,
+      paletteBg, paletteInk, paletteSecondary, paletteAccent, fontPairing,
     ).run();
   }
   const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE project_id = ?').bind(pid).first<any>();

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { Link } from 'react-router-dom';
-import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe } from 'lucide-react';
+import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe, Upload, Palette, PenLine } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
@@ -25,10 +25,20 @@ export default function BrandBuilderPage() {
   const [landing, setLanding] = useState(null); // server row
   const [draft, setDraft] = useState({
     name: '', tagline: '', headline: '', subheadline: '',
-    cta_text: 'Join the waitlist', logo_url: null, logo_svg: null, theme_color: '#7c3aed',
-    palette_bg: '#faf7ff', palette_ink: '#1b1430', font_pairing: 'editorial',
+    cta_text: 'Join the waitlist', logo_url: null, logo_svg: null, logo_asset_id: null, theme_color: '#7c3aed',
+    palette_bg: '#faf7ff', palette_ink: '#1b1430', palette_secondary: '#c4b5fd', palette_accent: '#f59e0b',
+    font_pairing: 'editorial',
   });
   const [signups, setSignups] = useState([]);
+  // Task #3 — Brand Kit Expansion UI state
+  const [showPaletteSuggest, setShowPaletteSuggest] = useState(false);
+  const [paletteBusy, setPaletteBusy] = useState(false);
+  const [paletteWarnings, setPaletteWarnings] = useState([]);
+  const [showTaglineIterator, setShowTaglineIterator] = useState(false);
+  const [taglineBusy, setTaglineBusy] = useState(false);
+  const [taglineCandidates, setTaglineCandidates] = useState([]);
+  const [taglineInputs, setTaglineInputs] = useState({ audience: '', tone: 'bold', marketAngle: 'innovation' });
+  const [uploadBusy, setUploadBusy] = useState(false);
 
   useEffect(() => {
     api.listProjects().then((r) => {
@@ -60,9 +70,12 @@ export default function BrandBuilderPage() {
             cta_text: lp.cta_text || 'Join the waitlist',
             logo_url: lp.logo_url || null,
             logo_svg: lp.logo_svg || null,
+            logo_asset_id: lp.logo_asset_id || null,
             theme_color: lp.theme_color || '#7c3aed',
             palette_bg: lp.palette_bg || '#faf7ff',
             palette_ink: lp.palette_ink || '#1b1430',
+            palette_secondary: lp.palette_secondary || '#c4b5fd',
+            palette_accent: lp.palette_accent || '#f59e0b',
             font_pairing: lp.font_pairing || 'editorial',
           });
         } else {
@@ -127,6 +140,75 @@ export default function BrandBuilderPage() {
       }
     } catch (e) { setError(e?.message || 'Save failed'); }
     finally { setBusy(false); }
+  };
+
+  const uploadLogo = async (file) => {
+    if (!file) return;
+    const mime = file.type;
+    if (!['image/png', 'image/jpeg', 'image/svg+xml'].includes(mime)) {
+      setError('Only PNG, JPG, or SVG logos allowed.'); return;
+    }
+    if (file.size > 512 * 1024) { setError('Logo must be ≤ 512 KB.'); return; }
+    setUploadBusy(true); setError('');
+    try {
+      const data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result?.split(',')[1] || '');
+        reader.onerror = () => reject(new Error('read failed'));
+        reader.readAsDataURL(file);
+      });
+      const r = await api.brandUploadLogo({ mime, data });
+      const assetId = r?.asset_id || null;
+      const url = r?.url || null;
+      setDraft((d) => ({
+        ...d,
+        logo_asset_id: assetId,
+        logo_url: url,
+        logo_svg: null,
+      }));
+    } catch (e) { setError(e?.message || 'Upload failed'); }
+    finally { setUploadBusy(false); }
+  };
+
+  const suggestPalette = async () => {
+    if (!projectId) return;
+    setPaletteBusy(true); setError(''); setPaletteWarnings([]);
+    try {
+      const r = await api.brandSuggestPalette({
+        description: description.trim(),
+        sector: sector || null,
+        seed_color: draft.theme_color,
+      });
+      const p = r?.palette;
+      if (p) {
+        setDraft((d) => ({
+          ...d,
+          theme_color: p.primary || d.theme_color,
+          palette_bg: p.background || d.palette_bg,
+          palette_ink: p.ink || d.palette_ink,
+          palette_secondary: p.secondary || d.palette_secondary,
+          palette_accent: p.accent || d.palette_accent,
+        }));
+      }
+      setPaletteWarnings(r?.warnings || []);
+    } catch (e) { setError(e?.message || 'Palette failed'); }
+    finally { setPaletteBusy(false); }
+  };
+
+  const suggestTaglines = async () => {
+    if (!draft.name.trim()) { setError('Set a name first.'); return; }
+    setTaglineBusy(true); setError('');
+    try {
+      const r = await api.brandSuggestTaglines({
+        name: draft.name.trim(),
+        description: description.trim(),
+        audience: taglineInputs.audience,
+        tone: taglineInputs.tone,
+        market_angle: taglineInputs.marketAngle,
+      });
+      setTaglineCandidates(r?.taglines || []);
+    } catch (e) { setError(e?.message || 'Taglines failed'); }
+    finally { setTaglineBusy(false); }
   };
 
   const togglePublish = async () => {
@@ -264,9 +346,21 @@ export default function BrandBuilderPage() {
               >
                 <RefreshCw size={12} /> Regenerate logo
               </button>
-              <div className="mt-3 grid grid-cols-3 gap-2">
+              {/* Upload logo toggle */}
+              <label className="mt-2 block">
+                <input
+                  type="file" accept="image/png,image/jpeg,image/svg+xml"
+                  onChange={(e) => { uploadLogo(e.target.files?.[0]); e.target.value = ''; }}
+                  className="hidden"
+                />
+                <span className="w-full inline-flex items-center justify-center gap-1 text-xs text-violet-700 hover:text-violet-800 cursor-pointer border border-gray-200 rounded-lg px-3 py-1.5 dark:border-gray-800">
+                  {uploadBusy ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                  Upload logo
+                </span>
+              </label>
+              <div className="mt-3 grid grid-cols-5 gap-2">
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] text-gray-600 dark:text-gray-400">Accent</span>
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400">Primary</span>
                   <input
                     type="color" value={draft.theme_color}
                     onChange={(e) => setDraft({ ...draft, theme_color: e.target.value })}
@@ -274,7 +368,7 @@ export default function BrandBuilderPage() {
                   />
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] text-gray-600 dark:text-gray-400">Background</span>
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400">Bg</span>
                   <input
                     type="color" value={draft.palette_bg}
                     onChange={(e) => setDraft({ ...draft, palette_bg: e.target.value })}
@@ -282,15 +376,44 @@ export default function BrandBuilderPage() {
                   />
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] text-gray-600 dark:text-gray-400">Text</span>
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400">Ink</span>
                   <input
                     type="color" value={draft.palette_ink}
                     onChange={(e) => setDraft({ ...draft, palette_ink: e.target.value })}
                     className="h-8 w-full border border-gray-200 rounded cursor-pointer dark:border-gray-800"
                   />
                 </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400">2nd</span>
+                  <input
+                    type="color" value={draft.palette_secondary}
+                    onChange={(e) => setDraft({ ...draft, palette_secondary: e.target.value })}
+                    className="h-8 w-full border border-gray-200 rounded cursor-pointer dark:border-gray-800"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400">Accent</span>
+                  <input
+                    type="color" value={draft.palette_accent}
+                    onChange={(e) => setDraft({ ...draft, palette_accent: e.target.value })}
+                    className="h-8 w-full border border-gray-200 rounded cursor-pointer dark:border-gray-800"
+                  />
+                </label>
               </div>
-              <label className="mt-3 flex flex-col gap-1">
+              <button
+                onClick={() => { setShowPaletteSuggest((v) => !v); if (!showPaletteSuggest) suggestPalette(); }}
+                disabled={paletteBusy}
+                className="mt-1 w-full inline-flex items-center justify-center gap-1 text-xs text-violet-700 hover:text-violet-800 disabled:opacity-50"
+              >
+                {paletteBusy ? <Loader2 size={12} className="animate-spin" /> : <Palette size={12} />}
+                {showPaletteSuggest ? 'Palette suggested' : 'Suggest AI palette'}
+              </button>
+              {paletteWarnings.length > 0 && (
+                <div className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 dark:text-amber-300 dark:bg-amber-900/20 dark:border-amber-800">
+                  {paletteWarnings.join(' ')}
+                </div>
+              )}
+              <label className="mt-2 flex flex-col gap-1">
                 <span className="text-[11px] text-gray-600 dark:text-gray-400">Typography</span>
                 <select
                   value={draft.font_pairing}
@@ -322,6 +445,69 @@ export default function BrandBuilderPage() {
                 rows={2} placeholder="Subheadline"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
               />
+              {/* Tagline iterator */}
+              <div className="border border-gray-200 rounded-lg p-3 dark:border-gray-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Tagline iterator</span>
+                  <button
+                    onClick={() => { setShowTaglineIterator((v) => !v); if (!showTaglineIterator) suggestTaglines(); }}
+                    disabled={taglineBusy}
+                    className="inline-flex items-center gap-1 text-xs text-violet-700 hover:text-violet-800 disabled:opacity-50"
+                  >
+                    {taglineBusy ? <Loader2 size={12} className="animate-spin" /> : <PenLine size={12} />}
+                    {showTaglineIterator ? 'Hide' : 'Iterate'}
+                  </button>
+                </div>
+                {showTaglineIterator && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        value={taglineInputs.audience}
+                        onChange={(e) => setTaglineInputs({ ...taglineInputs, audience: e.target.value })}
+                        placeholder="Audience (e.g. founders)"
+                        className="border border-gray-200 rounded px-2 py-1 text-sm dark:border-gray-800"
+                      />
+                      <select
+                        value={taglineInputs.tone}
+                        onChange={(e) => setTaglineInputs({ ...taglineInputs, tone: e.target.value })}
+                        className="border border-gray-200 rounded px-2 py-1 text-sm dark:border-gray-800"
+                      >
+                        <option value="bold">Bold</option>
+                        <option value="warm">Warm</option>
+                        <option value="technical">Technical</option>
+                        <option value="playful">Playful</option>
+                        <option value="authoritative">Authoritative</option>
+                      </select>
+                      <input
+                        value={taglineInputs.marketAngle}
+                        onChange={(e) => setTaglineInputs({ ...taglineInputs, marketAngle: e.target.value })}
+                        placeholder="Angle (e.g. AI)"
+                        className="border border-gray-200 rounded px-2 py-1 text-sm dark:border-gray-800"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      {taglineCandidates.map((t, i) => (
+                        <button
+                          key={i} type="button"
+                          onClick={() => setDraft({ ...draft, tagline: t })}
+                          className={`text-left text-sm px-3 py-2 rounded border transition ${
+                            draft.tagline === t ? 'border-violet-400 bg-violet-50/30' : 'border-gray-200 hover:border-violet-300'
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={suggestTaglines}
+                      disabled={taglineBusy}
+                      className="text-xs text-violet-700 hover:text-violet-800 disabled:opacity-50"
+                    >
+                      {taglineBusy ? <Loader2 size={12} className="animate-spin inline" /> : 'Regenerate'}
+                    </button>
+                  </div>
+                )}
+              </div>
               <input
                 value={draft.cta_text} onChange={(e) => setDraft({ ...draft, cta_text: e.target.value })}
                 placeholder="CTA button text"

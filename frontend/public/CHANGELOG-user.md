@@ -5,6 +5,15 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: Brand Builder expansion — upload logo, AI palette, and tagline ideas
+
+The Brand Builder now has three powerful upgrades:
+- **Upload your own logo** — drop a PNG, JPG, or SVG file straight onto the page.
+- **AI colour palette** — one click generates a curated 5-colour scheme for your brand, with a warning if contrast doesn't meet accessibility standards.
+- **Tagline iterator** — enter your audience, tone, and market angle, and get 6 different tagline suggestions to pick from.
+
+---
+
 ## Updated: About page text and LinkedIn link
 
 The About page now includes the latest story copy and the team photo is linked

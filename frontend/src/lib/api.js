@@ -1020,6 +1020,9 @@ export const api = {
   // Task #24 — Brand & landing page generator.
   brandSuggest: (payload) => request('/brand/suggest', { method: 'POST', body: JSON.stringify(payload) }),
   brandLogo: (payload) => request('/brand/logo', { method: 'POST', body: JSON.stringify(payload) }),
+  brandUploadLogo: (payload) => request('/brand/logo/upload', { method: 'POST', body: JSON.stringify(payload) }),
+  brandSuggestPalette: (payload) => request('/brand/palette/suggest', { method: 'POST', body: JSON.stringify(payload) }),
+  brandSuggestTaglines: (payload) => request('/brand/tagline/suggest', { method: 'POST', body: JSON.stringify(payload) }),
   brandGetLanding: (projectId) => request(`/brand/landing/by-project/${projectId}`),
   brandSaveLanding: (projectId, payload) => request(`/brand/landing/by-project/${projectId}`, { method: 'PUT', body: JSON.stringify(payload) }),
   brandPublishLanding: (projectId, published) => request(`/brand/landing/by-project/${projectId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),

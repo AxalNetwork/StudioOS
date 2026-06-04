@@ -41,7 +41,9 @@ export type TaskClass =
   | 'paraphrase'
   | 'publication'
   | 'dd_synthesis'
-  | 'brand_suggest';
+  | 'brand_suggest'
+  | 'brand_palette'
+  | 'brand_taglines';
 
 export type RefusalReason =
   | 'budget_user_day'
@@ -168,6 +170,14 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // A total chain failure falls back to the deterministic heuristic in
   // the route, so the wizard is always usable.
   brand_suggest: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  // Task #3 (Brand Kit Expansion) — AI palette suggester. Creative short-form
+  // JSON; MID_LLAMA primary → SMALL_LLAMA fallback. Fallback chain failure
+  // returns null to the route, which lands on the deterministic heuristic bank.
+  brand_palette: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  // Task #3 (Brand Kit Expansion) — AI tagline iterator. 6 JSON taglines;
+  // MID_LLAMA primary → SMALL_LLAMA fallback. Fallback chain failure returns
+  // null to the route, which lands on the deterministic template bank.
+  brand_taglines: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
 };
 
 // Latency budget per primary attempt before we fall back.
