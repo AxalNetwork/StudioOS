@@ -343,10 +343,64 @@ export default function BrandBuilderPage() {
         </section>
       )}
 
-      {/* Step 3 — edit + publish */}
+      {/* Step 2b — pick a template */}
       {draft.name && (
         <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">3. Tune your landing page</h2>
+          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">3. Pick a template</h2>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {templates.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setDraft({ ...draft, template: t.key })}
+                className={`text-left border rounded-lg p-4 transition ${
+                  draft.template === t.key
+                    ? 'border-violet-400 ring-2 ring-violet-100 bg-violet-50/30'
+                    : 'border-gray-200 hover:border-violet-300'
+                }`}
+              >
+                <div className="h-24 bg-gray-100 border border-gray-200 rounded-md mb-3 flex items-center justify-center text-gray-400 text-xs dark:bg-gray-800 dark:border-gray-700">
+                  {t.thumbnailPlaceholder}
+                </div>
+                <div className="font-semibold text-gray-900 text-sm dark:text-gray-100">{t.label}</div>
+                <div className="text-xs text-gray-500 mt-0.5">{t.description}</div>
+                {draft.template === t.key && (
+                  <div className="mt-2 text-xs font-medium text-violet-600 flex items-center gap-1">
+                    <Check size={12} /> Selected
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+          {(templates.find((t) => t.key === draft.template)?.usesHero || draft.hero_media_url) && (
+            <label className="mt-3 block">
+              <span className="text-[11px] text-gray-600 dark:text-gray-400">Hero media URL</span>
+              <input
+                value={draft.hero_media_url || ''}
+                onChange={(e) => setDraft({ ...draft, hero_media_url: e.target.value })}
+                placeholder="https://..."
+                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
+              />
+            </label>
+          )}
+          {(templates.find((t) => t.key === draft.template)?.usesProduct || draft.product_screenshot_url) && (
+            <label className="mt-2 block">
+              <span className="text-[11px] text-gray-600 dark:text-gray-400">Product screenshot URL</span>
+              <input
+                value={draft.product_screenshot_url || ''}
+                onChange={(e) => setDraft({ ...draft, product_screenshot_url: e.target.value })}
+                placeholder="https://..."
+                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
+              />
+            </label>
+          )}
+        </section>
+      )}
+
+      {/* Step 4 — edit + publish */}
+      {draft.name && (
+        <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
+          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">5. Tune your landing page</h2>
           <div className="grid sm:grid-cols-3 gap-4">
             <div className="sm:col-span-1">
               <div className="aspect-square bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center overflow-hidden dark:border-gray-800">
@@ -546,64 +600,6 @@ export default function BrandBuilderPage() {
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
               />
 
-              {/* Task #5 — Template picker */}
-              <div className="border border-gray-200 rounded-lg p-3 dark:border-gray-800">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Layout</span>
-                  <button
-                    onClick={() => setTemplatePickerOpen((v) => !v)}
-                    className="inline-flex items-center gap-1 text-xs text-violet-700 hover:text-violet-800"
-                  >
-                    {templatePickerOpen ? 'Close' : 'Change'}
-                  </button>
-                </div>
-                <div className="text-sm text-gray-900 dark:text-gray-100">
-                  {templates.find((t) => t.key === draft.template)?.label || 'Minimal'}
-                </div>
-                {templatePickerOpen && (
-                  <div className="grid gap-2 mt-2">
-                    {templates.map((t) => (
-                      <button
-                        key={t.key}
-                        type="button"
-                        onClick={() => {
-                          setDraft({ ...draft, template: t.key });
-                          setTemplatePickerOpen(false);
-                        }}
-                        className={`text-left text-sm px-3 py-2 rounded border transition ${
-                          draft.template === t.key ? 'border-violet-400 bg-violet-50/30' : 'border-gray-200 hover:border-violet-300'
-                        }`}
-                      >
-                        <div className="font-medium">{t.label}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">{t.description}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {(templates.find((t) => t.key === draft.template)?.usesHero || draft.hero_media_url) && (
-                  <label className="mt-2 block">
-                    <span className="text-[11px] text-gray-600 dark:text-gray-400">Hero media URL</span>
-                    <input
-                      value={draft.hero_media_url || ''}
-                      onChange={(e) => setDraft({ ...draft, hero_media_url: e.target.value })}
-                      placeholder="https://..."
-                      className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
-                    />
-                  </label>
-                )}
-                {(templates.find((t) => t.key === draft.template)?.usesProduct || draft.product_screenshot_url) && (
-                  <label className="mt-2 block">
-                    <span className="text-[11px] text-gray-600 dark:text-gray-400">Product screenshot URL</span>
-                    <input
-                      value={draft.product_screenshot_url || ''}
-                      onChange={(e) => setDraft({ ...draft, product_screenshot_url: e.target.value })}
-                      placeholder="https://..."
-                      className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
-                    />
-                  </label>
-                )}
-              </div>
-
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <button
                   onClick={saveDraft} disabled={busy}
@@ -630,10 +626,10 @@ export default function BrandBuilderPage() {
         </section>
       )}
 
-      {/* Step 3b — Audience copy */}
+      {/* Step 4 — Audience copy */}
       {draft.name && (
         <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">3b. Audience copy</h2>
+          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">4. Audience copy</h2>
           <div className="flex gap-2 mb-3">
             {['customer', 'partner', 'investor'].map((a) => (
               <button
@@ -681,10 +677,10 @@ export default function BrandBuilderPage() {
         </section>
       )}
 
-      {/* Step 4 — share */}
+      {/* Step 5 — share */}
       {landing && (
         <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">4. Share your page</h2>
+          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">5. Share your page</h2>
           {landing.published && (
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <code className="bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 text-sm break-all dark:border-gray-800">{landingUrl}</code>

@@ -163,7 +163,7 @@ function fontStack(pairing: string): string {
 }
 
 // Shared tab markup for audience switching.
-function tabMarkup(aud: Record<string, { h: string; b: string; c: string }>, color: string): string {
+function tabMarkup(aud: Record<string, { h: string; b: string; c: string }>, color: string, secondary: string, accent: string): string {
   return `
     <div class="tabs" role="tablist" aria-label="Audience">
       <button class="tab active" role="tab" aria-selected="true" aria-controls="p-customer" data-a="customer" onclick="switchTab('customer')">Customer<span class="badge badge-customer">Discovery</span></button>
@@ -199,7 +199,13 @@ function tabMarkup(aud: Record<string, { h: string; b: string; c: string }>, col
         <button type="submit">${aud.investor.c}</button>
       </form>
       <div id="msg-investor" aria-live="polite"></div>
-    </div>`;
+    </div>
+    <style>
+      .badge { display:inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-left: 8px; }
+      .badge-customer { background: ${color}18; color: ${color}; }
+      .badge-partner { background: ${secondary}18; color: ${secondary}; }
+      .badge-investor { background: ${accent}18; color: ${accent}; }
+    </style>`;
 }
 
 function waitlistScript(apiWaitlist: string, nonce?: string): string {
@@ -237,7 +243,7 @@ function switchTab(aud){
 
 // ── Template: Minimal (the original layout) ──────────────────────
 function renderMinimal(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, fontPairing, logoMarkup, name } = bk;
+  const { color, bgColor, inkColor, secondary, accent, fontPairing, logoMarkup, name } = bk;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -259,18 +265,14 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .panel { display:none; }
   .panel.active { display:block; }
   form { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width: 480px; margin: 0 auto; }
-  input { flex:1 1 240px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 15px; outline:none; }
+  input { flex:1 1 240px; padding: 12px 14px; border: 1px solid ${inkColor}22; border-radius: 10px; font-size: 15px; outline:none; background: ${bgColor}; color: ${inkColor}; }
   input:focus { border-color: ${color}; box-shadow: 0 0 0 3px ${color}22; }
   button { padding: 12px 18px; background: ${color}; color: #fff; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }
   button[disabled] { opacity: .6; cursor: not-allowed; }
   .ok, .err { margin-top: 16px; font-size: 14px; }
-  .ok { color: #059669; }
-  .err { color: #dc2626; }
-  .badge { display:inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-left: 8px; }
-  .badge-customer { background: ${color}18; color: ${color}; }
-  .badge-partner { background: #6366f118; color: #6366f1; }
-  .badge-investor { background: #10b98118; color: #10b981; }
-  footer { margin-top: 64px; font-size: 12px; color: #94a3b8; }
+  .ok { color: ${accent}; }
+  .err { color: ${color}; opacity: .85; }
+  footer { margin-top: 64px; font-size: 12px; color: ${inkColor}55; }
   footer a { color: inherit; }
   .sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
   @media (max-width: 480px) { .tabs { flex-wrap: wrap; } }
@@ -279,7 +281,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
 <body>
   <div class="wrap">
     <div class="logo">${logoMarkup}</div>
-${tabMarkup(aud, color)}
+${tabMarkup(aud, color, secondary, accent)}
     <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
   </div>
 ${waitlistScript(bk.apiWaitlist, bk.nonce)}
@@ -289,7 +291,7 @@ ${waitlistScript(bk.apiWaitlist, bk.nonce)}
 
 // ── Template: Bold Hero ──────────────────────────────────────────
 function renderBoldHero(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, fontPairing, logoMarkup, name, heroMediaUrl } = bk;
+  const { color, bgColor, inkColor, secondary, accent, fontPairing, logoMarkup, name, heroMediaUrl } = bk;
   const heroBg = heroMediaUrl ? `url(${escapeHtml(heroMediaUrl)})` : bgColor;
   const heroText = heroMediaUrl ? '#fff' : inkColor;
   return `<!doctype html>
@@ -316,18 +318,14 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .panel.active { display:block; }
   .body { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; text-align: center; }
   form { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width: 480px; margin: 0 auto; }
-  input { flex:1 1 240px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 15px; outline:none; }
+  input { flex:1 1 240px; padding: 12px 14px; border: 1px solid ${inkColor}22; border-radius: 10px; font-size: 15px; outline:none; background: ${bgColor}; color: ${inkColor}; }
   input:focus { border-color: ${color}; box-shadow: 0 0 0 3px ${color}22; }
   button { padding: 12px 18px; background: ${color}; color: #fff; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }
   button[disabled] { opacity: .6; cursor: not-allowed; }
   .ok, .err { margin-top: 16px; font-size: 14px; }
-  .ok { color: #059669; }
-  .err { color: #dc2626; }
-  .badge { display:inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-left: 8px; }
-  .badge-customer { background: ${color}18; color: ${color}; }
-  .badge-partner { background: #6366f118; color: #6366f1; }
-  .badge-investor { background: #10b98118; color: #10b981; }
-  footer { font-size: 12px; color: #94a3b8; padding: 24px; text-align: center; }
+  .ok { color: ${accent}; }
+  .err { color: ${color}; opacity: .85; }
+  footer { font-size: 12px; color: ${inkColor}55; padding: 24px; text-align: center; }
   footer a { color: inherit; }
   .sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
   @media (max-width: 480px) { .tabs { flex-wrap: wrap; } }
@@ -341,7 +339,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <p class="sub">${aud.customer.b}</p>
   </div>
   <div class="body">
-    ${tabMarkup(aud, color).replace(/h1>/g, 'h2>').replace(/h2>/, 'h1>')}
+    ${tabMarkup(aud, color, secondary, accent).replace(/h1>/g, 'h2>').replace(/h2>/, 'h1>')}
     <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
   </div>
 ${waitlistScript(bk.apiWaitlist, bk.nonce)}
@@ -351,7 +349,7 @@ ${waitlistScript(bk.apiWaitlist, bk.nonce)}
 
 // ── Template: Video First ───────────────────────────────────────
 function renderVideoFirst(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, fontPairing, logoMarkup, name, heroMediaUrl } = bk;
+  const { color, bgColor, inkColor, secondary, accent, fontPairing, logoMarkup, name, heroMediaUrl } = bk;
   const isVideo = heroMediaUrl && /\.(mp4|webm|mov)(\?|$)/i.test(heroMediaUrl);
   const heroEl = isVideo
     ? `<video autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0;"><source src="${escapeHtml(heroMediaUrl)}" /></video>`
@@ -382,18 +380,14 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .panel { display:none; }
   .panel.active { display:block; }
   form { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width: 480px; margin: 0 auto; }
-  input { flex:1 1 240px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 15px; outline:none; }
+  input { flex:1 1 240px; padding: 12px 14px; border: 1px solid ${inkColor}22; border-radius: 10px; font-size: 15px; outline:none; background: ${bgColor}; color: ${inkColor}; }
   input:focus { border-color: ${color}; box-shadow: 0 0 0 3px ${color}22; }
   button { padding: 12px 18px; background: ${color}; color: #fff; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }
   button[disabled] { opacity: .6; cursor: not-allowed; }
   .ok, .err { margin-top: 16px; font-size: 14px; }
-  .ok { color: #059669; }
-  .err { color: #dc2626; }
-  .badge { display:inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-left: 8px; }
-  .badge-customer { background: ${color}18; color: ${color}; }
-  .badge-partner { background: #6366f118; color: #6366f1; }
-  .badge-investor { background: #10b98118; color: #10b981; }
-  footer { font-size: 12px; color: #94a3b8; padding: 24px; text-align: center; }
+  .ok { color: ${accent}; }
+  .err { color: ${color}; opacity: .85; }
+  footer { font-size: 12px; color: ${inkColor}55; padding: 24px; text-align: center; }
   footer a { color: inherit; }
   .sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
   @media (max-width: 480px) { .tabs { flex-wrap: wrap; } }
@@ -410,7 +404,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     </div>
   </div>
   <div class="body">
-    ${tabMarkup(aud, color)}
+    ${tabMarkup(aud, color, secondary, accent)}
     <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
   </div>
 ${waitlistScript(bk.apiWaitlist, bk.nonce)}
@@ -420,7 +414,7 @@ ${waitlistScript(bk.apiWaitlist, bk.nonce)}
 
 // ── Template: Editorial ──────────────────────────────────────────
 function renderEditorial(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, fontPairing, logoMarkup, name } = bk;
+  const { color, bgColor, inkColor, secondary, accent, fontPairing, logoMarkup, name } = bk;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -444,19 +438,15 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .panel h2 { font-size: 28px; margin: 0 0 8px; }
   .panel p { font-size: 17px; margin: 0 0 24px; }
   form { display:flex; gap:8px; flex-wrap:wrap; max-width: 480px; margin: 24px 0 0; }
-  input { flex:1 1 240px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 15px; outline:none; }
+  input { flex:1 1 240px; padding: 12px 14px; border: 1px solid ${inkColor}22; border-radius: 10px; font-size: 15px; outline:none; background: ${bgColor}; color: ${inkColor}; }
   input:focus { border-color: ${color}; box-shadow: 0 0 0 3px ${color}22; }
   button { padding: 12px 18px; background: ${color}; color: #fff; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }
   button[disabled] { opacity: .6; cursor: not-allowed; }
   .ok, .err { margin-top: 12px; font-size: 14px; }
-  .ok { color: #059669; }
-  .err { color: #dc2626; }
-  .badge { display:inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-left: 8px; }
-  .badge-customer { background: ${color}18; color: ${color}; }
-  .badge-partner { background: #6366f118; color: #6366f1; }
-  .badge-investor { background: #10b98118; color: #10b981; }
+  .ok { color: ${accent}; }
+  .err { color: ${color}; opacity: .85; }
   .rule { border:0; border-top:1px solid ${secondary}; margin: 40px 0; }
-  footer { margin-top: 64px; font-size: 12px; color: #94a3b8; }
+  footer { margin-top: 64px; font-size: 12px; color: ${inkColor}55; }
   footer a { color: inherit; }
   .sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
   @media (max-width: 480px) { .tabs { flex-wrap: wrap; } }
@@ -468,7 +458,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <h1>${aud.customer.h}</h1>
     <p class="lede">${aud.customer.b}</p>
     <hr class="rule" />
-    ${tabMarkup(aud, color)}
+    ${tabMarkup(aud, color, secondary, accent)}
     <hr class="rule" />
     <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
   </div>
@@ -479,7 +469,7 @@ ${waitlistScript(bk.apiWaitlist, bk.nonce)}
 
 // ── Template: Product Mock ───────────────────────────────────────
 function renderProductMock(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, fontPairing, logoMarkup, name, productScreenshotUrl } = bk;
+  const { color, bgColor, inkColor, secondary, accent, fontPairing, logoMarkup, name, productScreenshotUrl } = bk;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -505,18 +495,14 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .panel.active { display:block; }
   .panel-content { text-align: center; }
   form { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width: 480px; margin: 0 auto; }
-  input { flex:1 1 240px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 15px; outline:none; }
+  input { flex:1 1 240px; padding: 12px 14px; border: 1px solid ${inkColor}22; border-radius: 10px; font-size: 15px; outline:none; background: ${bgColor}; color: ${inkColor}; }
   input:focus { border-color: ${color}; box-shadow: 0 0 0 3px ${color}22; }
   button { padding: 12px 18px; background: ${color}; color: #fff; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }
   button[disabled] { opacity: .6; cursor: not-allowed; }
   .ok, .err { margin-top: 16px; font-size: 14px; }
-  .ok { color: #059669; }
-  .err { color: #dc2626; }
-  .badge { display:inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-left: 8px; }
-  .badge-customer { background: ${color}18; color: ${color}; }
-  .badge-partner { background: #6366f118; color: #6366f1; }
-  .badge-investor { background: #10b98118; color: #10b981; }
-  footer { margin-top: 64px; font-size: 12px; color: #94a3b8; text-align: center; }
+  .ok { color: ${accent}; }
+  .err { color: ${color}; opacity: .85; }
+  footer { margin-top: 64px; font-size: 12px; color: ${inkColor}55; text-align: center; }
   footer a { color: inherit; }
   .sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
   @media (max-width: 480px) { .header { flex-direction: column; text-align: center; } .tabs { flex-wrap: wrap; } }
@@ -533,7 +519,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     </div>
     ${productScreenshotUrl ? `<img src="${escapeHtml(productScreenshotUrl)}" alt="${name} product" class="screenshot" />` : ''}
     <div class="panel-content">
-      ${tabMarkup(aud, color)}
+      ${tabMarkup(aud, color, secondary, accent)}
     </div>
     <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
   </div>

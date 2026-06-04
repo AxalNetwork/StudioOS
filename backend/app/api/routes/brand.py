@@ -127,6 +127,24 @@ def _ensure_schema(session: Session) -> None:
 _SLUG_RE = re.compile(r"[^a-z0-9-]+")
 
 
+def _sanitize_url(url: Optional[str]) -> Optional[str]:
+    """Allow only same-origin paths or https:// for externally-hosted images.
+    Reject javascript:, data:text/html, and any other non-https scheme.
+    """
+    if not url:
+        return None
+    u = str(url).strip()
+    if u.startswith("/"):
+        return u
+    try:
+        parsed = urlparse(u)
+        if parsed.scheme == "https":
+            return u
+    except Exception:
+        pass
+    return None
+
+
 def _slugify(name: str) -> str:
     base = _SLUG_RE.sub("-", (name or "").lower()).strip("-")[:48] or "page"
     return f"{base}-{secrets.token_hex(3)}"
@@ -325,6 +343,7 @@ def _row_to_landing(row) -> Dict[str, Any]:
         "template": row.get("template") or "minimal",
         "hero_media_url": row.get("hero_media_url") or None,
         "product_screenshot_url": row.get("product_screenshot_url") or None,
+        "logo_url": row.get("logo_url") or None,
     }
 
 
@@ -670,7 +689,7 @@ def upsert_landing(
         "headline": payload.headline,
         "subheadline": payload.subheadline,
         "cta": payload.cta_text or "Join the waitlist",
-        "logo_url": payload.logo_url,
+        "logo_url": _sanitize_url(payload.logo_url),
         "logo_svg": _sanitize_svg(payload.logo_svg),
         "logo_asset_id": payload.logo_asset_id or None,
         "color": payload.theme_color or "#7c3aed",
@@ -693,8 +712,8 @@ def upsert_landing(
         preview_token = existing.get("preview_token") or secrets.token_hex(16)
         params["preview_token"] = preview_token
         params["template"] = payload.template or "minimal"
-        params["hero_media_url"] = payload.hero_media_url or None
-        params["product_screenshot_url"] = payload.product_screenshot_url or None
+        params["hero_media_url"] = _sanitize_url(payload.hero_media_url)
+        params["product_screenshot_url"] = _sanitize_url(payload.product_screenshot_url)
         session.exec(text(
             "UPDATE landing_pages SET name=:name, tagline=:tagline, headline=:headline, "
             "subheadline=:subheadline, cta_text=:cta, logo_url=:logo_url, logo_svg=:logo_svg, "
@@ -714,8 +733,8 @@ def upsert_landing(
         params["slug"] = slug
         params["preview_token"] = preview_token
         params["template"] = payload.template or "minimal"
-        params["hero_media_url"] = payload.hero_media_url or None
-        params["product_screenshot_url"] = payload.product_screenshot_url or None
+        params["hero_media_url"] = _sanitize_url(payload.hero_media_url)
+        params["product_screenshot_url"] = _sanitize_url(payload.product_screenshot_url)
         session.exec(text(
             "INSERT INTO landing_pages (project_id, slug, preview_token, name, tagline, headline, subheadline, "
             "cta_text, logo_url, logo_svg, logo_asset_id, theme_color, palette_bg, palette_ink, "

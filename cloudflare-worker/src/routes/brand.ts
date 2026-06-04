@@ -109,6 +109,19 @@ function sanitizeSvg(svg: string | null | undefined): string | null {
   return s.slice(0, 8000);
 }
 
+// Allow only same-origin paths (/...) or https:// for externally-hosted images.
+// Reject javascript:, data:text/html, and any other non-https scheme.
+function sanitizeUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const u = String(url).trim();
+  if (u.startsWith('/')) return u;
+  try {
+    const parsed = new URL(u);
+    if (parsed.protocol === 'https:') return u;
+  } catch { /* invalid URL */ }
+  return null;
+}
+
 function svgLogo(name: string, color = '#7c3aed'): string {
   const initial = (name || 'A').trim().slice(0, 1).toUpperCase();
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="200" height="200">`
@@ -626,8 +639,9 @@ brand.put('/landing/by-project/:pid', async (c) => {
   const audInvestorBody = String(body?.audience_investor_body || '').trim() || null;
   const audInvestorCta = String(body?.audience_investor_cta || '').trim() || null;
   const template = String(body?.template || '').trim() || 'minimal';
-  const heroMediaUrl = String(body?.hero_media_url || '').trim() || null;
-  const productScreenshotUrl = String(body?.product_screenshot_url || '').trim() || null;
+  const heroMediaUrl = sanitizeUrl(String(body?.hero_media_url || '').trim());
+  const productScreenshotUrl = sanitizeUrl(String(body?.product_screenshot_url || '').trim());
+  const logoUrl = sanitizeUrl(String(body?.logo_url || '').trim());
   if (existing) {
     const previewToken = existing.preview_token || Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, '0')).join('');
     await c.env.DB.prepare(
@@ -641,7 +655,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
        preview_token=?, updated_at=datetime('now') WHERE project_id=?`
     ).bind(
       name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
-      body?.logo_url || null, sanitizeSvg(body?.logo_svg) || null, logoAssetId, color,
+      logoUrl, sanitizeSvg(body?.logo_svg) || null, logoAssetId, color,
       paletteBg, paletteInk, paletteSecondary, paletteAccent, fontPairing,
       audCustomerHeadline, audCustomerBody, audCustomerCta,
       audPartnerHeadline, audPartnerBody, audPartnerCta,
@@ -663,7 +677,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       pid, slug, previewToken, name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
-      body?.logo_url || null, sanitizeSvg(body?.logo_svg) || null, logoAssetId, color,
+      logoUrl, sanitizeSvg(body?.logo_svg) || null, logoAssetId, color,
       paletteBg, paletteInk, paletteSecondary, paletteAccent, fontPairing,
       audCustomerHeadline, audCustomerBody, audCustomerCta,
       audPartnerHeadline, audPartnerBody, audPartnerCta,
