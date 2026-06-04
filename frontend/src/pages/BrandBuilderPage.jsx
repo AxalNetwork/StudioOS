@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { Link } from 'react-router-dom';
-import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe, Upload, Palette, PenLine } from 'lucide-react';
+import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe, Upload, Palette, PenLine, Eye } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
@@ -28,8 +28,13 @@ export default function BrandBuilderPage() {
     cta_text: 'Join the waitlist', logo_url: null, logo_svg: null, logo_asset_id: null, theme_color: '#7c3aed',
     palette_bg: '#faf7ff', palette_ink: '#1b1430', palette_secondary: '#c4b5fd', palette_accent: '#f59e0b',
     font_pairing: 'editorial',
+    audience_customer_headline: '', audience_customer_body: '', audience_customer_cta: '',
+    audience_partner_headline: '', audience_partner_body: '', audience_partner_cta: '',
+    audience_investor_headline: '', audience_investor_body: '', audience_investor_cta: '',
   });
   const [signups, setSignups] = useState([]);
+  const [waitlistAudienceFilter, setWaitlistAudienceFilter] = useState('');
+  const [previewUrl, setPreviewUrl] = useState(null);
   // Task #3 — Brand Kit Expansion UI state
   const [showPaletteSuggest, setShowPaletteSuggest] = useState(false);
   const [paletteBusy, setPaletteBusy] = useState(false);
@@ -39,6 +44,10 @@ export default function BrandBuilderPage() {
   const [taglineCandidates, setTaglineCandidates] = useState([]);
   const [taglineInputs, setTaglineInputs] = useState({ audience: '', tone: 'bold', marketAngle: 'innovation' });
   const [uploadBusy, setUploadBusy] = useState(false);
+  // Task #4 — Audience copy
+  const [activeAudienceTab, setActiveAudienceTab] = useState('customer');
+  const AUDIENCE_LABELS = { customer: 'Customer discovery', partner: 'Partner', investor: 'Investor' };
+  const AUDIENCE_COLORS = { customer: 'bg-violet-100 text-violet-700', partner: 'bg-indigo-100 text-indigo-700', investor: 'bg-emerald-100 text-emerald-700' };
 
   useEffect(() => {
     api.listProjects().then((r) => {
@@ -77,17 +86,30 @@ export default function BrandBuilderPage() {
             palette_secondary: lp.palette_secondary || '#c4b5fd',
             palette_accent: lp.palette_accent || '#f59e0b',
             font_pairing: lp.font_pairing || 'editorial',
+            audience_customer_headline: lp.audience_customer_headline || '',
+            audience_customer_body: lp.audience_customer_body || '',
+            audience_customer_cta: lp.audience_customer_cta || '',
+            audience_partner_headline: lp.audience_partner_headline || '',
+            audience_partner_body: lp.audience_partner_body || '',
+            audience_partner_cta: lp.audience_partner_cta || '',
+            audience_investor_headline: lp.audience_investor_headline || '',
+            audience_investor_body: lp.audience_investor_body || '',
+            audience_investor_cta: lp.audience_investor_cta || '',
           });
         } else {
           setLanding(null);
         }
       } catch {}
       try {
-        const w = await api.brandListWaitlist(projectId);
+        const w = await api.brandListWaitlist(projectId, { audience: waitlistAudienceFilter || undefined });
         setSignups(w?.signups || []);
       } catch {}
+      try {
+        const pu = await api.brandGetPreviewUrl(projectId);
+        setPreviewUrl(pu?.url || null);
+      } catch { setPreviewUrl(null); }
     })();
-  }, [projectId, projects]);
+  }, [projectId, projects, waitlistAudienceFilter]);
 
   const generate = async () => {
     if (description.trim().length < 4) { setError('Add a short description first.'); return; }
@@ -535,25 +557,96 @@ export default function BrandBuilderPage() {
         </section>
       )}
 
+      {/* Step 3b — Audience copy */}
+      {draft.name && (
+        <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
+          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">3b. Audience copy</h2>
+          <div className="flex gap-2 mb-3">
+            {['customer', 'partner', 'investor'].map((a) => (
+              <button
+                key={a}
+                type="button"
+                onClick={() => setActiveAudienceTab(a)}
+                className={`px-3 py-1.5 text-xs rounded-lg border transition ${
+                  activeAudienceTab === a
+                    ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300'
+                    : 'border-gray-200 text-gray-600 hover:border-gray-300 dark:border-gray-800 dark:text-gray-400'
+                }`}
+              >
+                {AUDIENCE_LABELS[a]}
+              </button>
+            ))}
+          </div>
+          {['customer', 'partner', 'investor'].map((a) => (
+            <div key={a} className={activeAudienceTab === a ? 'block' : 'hidden'}>
+              <div className="space-y-2">
+                <input
+                  value={draft[`audience_${a}_headline`] || ''}
+                  onChange={(e) => setDraft({ ...draft, [`audience_${a}_headline`]: e.target.value })}
+                  placeholder={`${AUDIENCE_LABELS[a]} headline`}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
+                />
+                <textarea
+                  value={draft[`audience_${a}_body`] || ''}
+                  onChange={(e) => setDraft({ ...draft, [`audience_${a}_body`]: e.target.value })}
+                  rows={2}
+                  placeholder={`${AUDIENCE_LABELS[a]} body`}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
+                />
+                <input
+                  value={draft[`audience_${a}_cta`] || ''}
+                  onChange={(e) => setDraft({ ...draft, [`audience_${a}_cta`]: e.target.value })}
+                  placeholder={`${AUDIENCE_LABELS[a]} CTA`}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
+                />
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                  Defaults to your main headline / subheadline / CTA if left blank.
+                </p>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
       {/* Step 4 — share */}
-      {landing && landing.published && (
+      {landing && (
         <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
           <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">4. Share your page</h2>
-          <div className="flex flex-wrap items-center gap-2">
-            <code className="bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 text-sm break-all dark:border-gray-800">{landingUrl}</code>
-            <button
-              onClick={() => navigator.clipboard.writeText(landingUrl)}
-              className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-violet-700 dark:text-gray-300"
-            >
-              <Copy size={14} /> Copy
-            </button>
-            <a
-              href={landingUrl} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm text-violet-700 hover:text-violet-800"
-            >
-              <ExternalLink size={14} /> Open
-            </a>
-          </div>
+          {landing.published && (
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <code className="bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 text-sm break-all dark:border-gray-800">{landingUrl}</code>
+              <button
+                onClick={() => navigator.clipboard.writeText(landingUrl)}
+                className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-violet-700 dark:text-gray-300"
+              >
+                <Copy size={14} /> Copy
+              </button>
+              <a
+                href={landingUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-violet-700 hover:text-violet-800"
+              >
+                <ExternalLink size={14} /> Open
+              </a>
+            </div>
+          )}
+          {previewUrl && (
+            <div className="flex flex-wrap items-center gap-2">
+              <code className="bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5 text-sm break-all dark:border-amber-800 dark:bg-amber-900/20">{window.location.origin}{previewUrl}</code>
+              <button
+                onClick={() => navigator.clipboard.writeText(window.location.origin + previewUrl)}
+                className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-violet-700 dark:text-gray-300"
+              >
+                <Copy size={14} /> Copy
+              </button>
+              <a
+                href={previewUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-violet-700 hover:text-violet-800"
+              >
+                <Eye size={14} /> Preview
+              </a>
+              <span className="text-[11px] text-amber-600 dark:text-amber-400">Private — share for feedback only</span>
+            </div>
+          )}
           <div className="text-xs text-gray-500 mt-2">
             {landing.views_count || 0} pageviews · {signups.length} signup{signups.length === 1 ? '' : 's'}
           </div>
@@ -563,12 +656,31 @@ export default function BrandBuilderPage() {
       {/* Waitlist preview */}
       {signups.length > 0 && (
         <section className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Waitlist signups</h2>
-          <ul className="divide-y divide-gray-100">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Waitlist signups</h2>
+            <select
+              value={waitlistAudienceFilter}
+              onChange={(e) => setWaitlistAudienceFilter(e.target.value)}
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1 dark:border-gray-800 dark:text-gray-100"
+            >
+              <option value="">All</option>
+              <option value="customer">Customer</option>
+              <option value="partner">Partner</option>
+              <option value="investor">Investor</option>
+            </select>
+          </div>
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {signups.slice(0, 25).map((s) => (
               <li key={s.id} className="py-2 flex items-center justify-between text-sm">
                 <span className="text-gray-900 dark:text-gray-100">{s.email}</span>
-                <span className="text-xs text-gray-500">{(s.created_at || '').slice(0, 19).replace('T', ' ')}</span>
+                <div className="flex items-center gap-2">
+                  {s.audience && (
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${AUDIENCE_COLORS[s.audience] || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}>
+                      {AUDIENCE_LABELS[s.audience]}
+                    </span>
+                  )}
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{(s.created_at || '').slice(0, 19).replace('T', ' ')}</span>
+                </div>
               </li>
             ))}
           </ul>
@@ -576,7 +688,7 @@ export default function BrandBuilderPage() {
       )}
 
       {error && (
-        <div className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</div>
+        <div className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2 dark:bg-red-900/20 dark:border-red-900 dark:text-red-300">{error}</div>
       )}
 
       <div className="mt-6 text-xs text-gray-500">

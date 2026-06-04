@@ -5,6 +5,43 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: Audience-segmented waitlist + private preview URL
+
+Your landing page now speaks to three audiences:
+- **Customer discovery** — a dedicated tab for people interested in your product.
+- **Partner** — for potential partners, distributors, or collaborators.
+- **Investor** — for investors scouting your deal.
+
+Each tab has its own headline, body, and CTA, so you can tailor the message. If you leave them blank, the page falls back to your main headline and subheadline so nothing breaks.
+
+Waitlist signups now carry an audience tag, and your founder dashboard shows a filter so you can see exactly who signed up for what.
+
+You can also save a draft without publishing, copy a **private preview URL**, and share it with advisors or teammates for feedback before going live. The preview URL is marked *noindex* so it won't appear in search engines.
+
+## New: Brand Builder expansion — upload logo, AI palette, and tagline ideas
+
+The Brand Builder now has three powerful upgrades:
+- **Upload your own logo** — drop a PNG, JPG, or SVG file straight onto the page.
+- **AI colour palette** — one click generates a curated 5-colour scheme for your brand, with a warning if contrast doesn't meet accessibility standards.
+- **Tagline iterator** — enter your audience, tone, and market angle, and get 6 different tagline suggestions to pick from.
+
+---
+
+## Updated: About page text and LinkedIn link
+
+The About page now includes the latest story copy and the team photo is linked
+directly to Guillaume Lauzier's LinkedIn profile.
+
+---
+
+## Updated: Contact form now has spam protection
+
+The Contact form includes a quick "I'm not a robot" check before sending, so
+real messages reach us without the spam. We've also removed the separate
+"email us directly" link — just use the form and we'll get back to you.
+
+---
+
 ## Fixed: Articles now read like a real publication
 
 Article pages are properly formatted again — real headings, paragraphs, lists and

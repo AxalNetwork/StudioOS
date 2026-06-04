@@ -11,6 +11,25 @@
 > building it.
 
 
+## Task #4 — Waitlist audience segmentation + private preview URL
+
+- **`cloudflare-worker/sql/migrations/081_waitlist_audience.sql`** — additive migration adding `audience` to `waitlist_signups`, nine `audience_*` copy columns + `preview_token` to `landing_pages`, plus indexes.
+- **`cloudflare-worker/src/services/landingPageSchema.ts`** — lazy bootstrap updated with Task #4 ALTERs (audience columns + preview_token + waitlist audience index).
+- **`cloudflare-worker/src/routes/brand.ts`** —
+  - `PUT /landing/by-project/:pid` now accepts and persists all nine `audience_*` fields; auto-generates a 16-byte hex `preview_token` on first insert.
+  - `GET /landing/by-project/:pid/waitlist` now returns `audience` and supports `?audience=` filter.
+  - `POST /landing/:slug/waitlist` now reads and validates `body.audience`.
+  - `GET /landing/by-project/:pid/preview-url` added.
+  - `renderLandingHtml()` refactored into `buildLandingPageHtml()` shared with `renderLandingPreview()`; HTML now renders three audience tabs (Customer/Partner/Investor) with segmented copy and sends the selected audience back to the waitlist API.
+  - `renderLandingPreview()` added — renders unpublished rows by `preview_token`, emits `noindex`.
+- **`cloudflare-worker/src/index.ts`** — added `GET /landing/preview/:token` mount alongside existing `/landing/:slug`.
+- **`backend/app/api/routes/brand.py`** — mirrored all worker changes (schema bootstrap, `LandingUpsert` + `WaitlistPayload` payloads, audience persistence, preview token generation, `preview-url` route, waitlist list filter).
+- **`frontend/src/lib/api.js`** — `brandListWaitlist` now forwards `?audience=` filter; added `brandGetPreviewUrl`.
+- **`frontend/src/pages/BrandBuilderPage.jsx`** —
+  - Added "Audience copy" section (Step 3b) with three tabs (Customer/Partner/Investor), each with headline/body/CTA fields seeded from defaults.
+  - Share section (Step 4) now shows preview URL alongside public URL with a "Private — share for feedback only" label.
+  - Waitlist preview now includes an audience filter dropdown and an audience badge next to each email.
+
 ## Task #3 — Brand Kit Expansion: logo upload, AI palette, tagline iterator
 
 - **`cloudflare-worker/sql/migrations/080_brand_kit_expansion.sql`** — additive migration

@@ -1227,7 +1227,7 @@ function ConnectModal({ provider, existing, bypassesTier, onClose, onSubmit, bus
                 <p className="font-medium mb-1">Recommended: Private App access token</p>
                 <p>
                   Create one in HubSpot → <strong>Settings → Integrations → Private Apps → Create private app</strong>.
-                  Required scopes: <code className="bg-white px-1 rounded">crm.objects.deals.read/write</code>, <code className="bg-white px-1 rounded">crm.objects.contacts.read</code>.
+                  Required scopes: <code className="bg-white px-1 rounded dark:bg-gray-900">crm.objects.deals.read/write</code>, <code className="bg-white px-1 rounded dark:bg-gray-900">crm.objects.contacts.read</code>.
                   Paste the token in the field below.
                 </p>
               </div>

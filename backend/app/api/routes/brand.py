@@ -95,6 +95,27 @@ def _ensure_schema(session: Session) -> None:
             session.commit()
         except Exception:
             session.rollback()
+    # Task #4 — audience segmentation + preview token (additive, IF NOT EXISTS)
+    for s in [
+        "ALTER TABLE waitlist_signups ADD COLUMN IF NOT EXISTS audience TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS preview_token TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_customer_headline TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_customer_body TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_customer_cta TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_partner_headline TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_partner_body TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_partner_cta TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_investor_headline TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_investor_body TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_investor_cta TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_landing_preview_token ON landing_pages(preview_token)",
+        "CREATE INDEX IF NOT EXISTS idx_waitlist_audience ON waitlist_signups(project_id, audience)",
+    ]:
+        try:
+            session.exec(text(s))
+            session.commit()
+        except Exception:
+            session.rollback()
     _migrated = True
 
 
@@ -272,6 +293,7 @@ def _row_to_landing(row) -> Dict[str, Any]:
         "id": row["id"],
         "project_id": row["project_id"],
         "slug": row["slug"],
+        "preview_token": row.get("preview_token") or None,
         "name": row["name"],
         "tagline": row["tagline"],
         "headline": row["headline"],
@@ -288,6 +310,15 @@ def _row_to_landing(row) -> Dict[str, Any]:
         "font_pairing": row.get("font_pairing") or None,
         "published": bool(row["published"]),
         "views_count": row["views_count"] or 0,
+        "audience_customer_headline": row.get("audience_customer_headline") or None,
+        "audience_customer_body": row.get("audience_customer_body") or None,
+        "audience_customer_cta": row.get("audience_customer_cta") or None,
+        "audience_partner_headline": row.get("audience_partner_headline") or None,
+        "audience_partner_body": row.get("audience_partner_body") or None,
+        "audience_partner_cta": row.get("audience_partner_cta") or None,
+        "audience_investor_headline": row.get("audience_investor_headline") or None,
+        "audience_investor_body": row.get("audience_investor_body") or None,
+        "audience_investor_cta": row.get("audience_investor_cta") or None,
     }
 
 
@@ -320,6 +351,15 @@ class LandingUpsert(BaseModel):
     palette_accent: Optional[str] = None
     font_pairing: Optional[str] = None
     logo_asset_id: Optional[str] = None
+    audience_customer_headline: Optional[str] = None
+    audience_customer_body: Optional[str] = None
+    audience_customer_cta: Optional[str] = None
+    audience_partner_headline: Optional[str] = None
+    audience_partner_body: Optional[str] = None
+    audience_partner_cta: Optional[str] = None
+    audience_investor_headline: Optional[str] = None
+    audience_investor_body: Optional[str] = None
+    audience_investor_cta: Optional[str] = None
 
 
 class PalettePayload(BaseModel):
@@ -346,6 +386,7 @@ class WaitlistPayload(BaseModel):
     email: str = Field(..., max_length=320)
     name: Optional[str] = Field(default=None, max_length=120)
     source: Optional[str] = Field(default=None, max_length=64)
+    audience: Optional[str] = Field(default=None, max_length=20)
 
 
 # Stored-XSS guard for logo_svg: founders can save a custom SVG that we
@@ -444,6 +485,15 @@ def upsert_landing(
         "palette_secondary": payload.palette_secondary or None,
         "palette_accent": payload.palette_accent or None,
         "font_pairing": payload.font_pairing or None,
+        "ac_h": payload.audience_customer_headline or None,
+        "ac_b": payload.audience_customer_body or None,
+        "ac_c": payload.audience_customer_cta or None,
+        "ap_h": payload.audience_partner_headline or None,
+        "ap_b": payload.audience_partner_body or None,
+        "ap_c": payload.audience_partner_cta or None,
+        "ai_h": payload.audience_investor_headline or None,
+        "ai_b": payload.audience_investor_body or None,
+        "ai_c": payload.audience_investor_cta or None,
     }
     if existing:
         session.exec(text(
@@ -452,19 +502,28 @@ def upsert_landing(
             "logo_asset_id=:logo_asset_id, theme_color=:color, palette_bg=:palette_bg, "
             "palette_ink=:palette_ink, palette_secondary=:palette_secondary, "
             "palette_accent=:palette_accent, font_pairing=:font_pairing, "
+            "audience_customer_headline=:ac_h, audience_customer_body=:ac_b, audience_customer_cta=:ac_c, "
+            "audience_partner_headline=:ap_h, audience_partner_body=:ap_b, audience_partner_cta=:ap_c, "
+            "audience_investor_headline=:ai_h, audience_investor_body=:ai_b, audience_investor_cta=:ai_c, "
             "updated_at=CURRENT_TIMESTAMP WHERE project_id=:pid"
         ), params=params)
         slug = existing["slug"]
     else:
         slug = _slugify(payload.name)
+        preview_token = secrets.token_hex(16)
         params["slug"] = slug
+        params["preview_token"] = preview_token
         session.exec(text(
-            "INSERT INTO landing_pages (project_id, slug, name, tagline, headline, subheadline, "
+            "INSERT INTO landing_pages (project_id, slug, preview_token, name, tagline, headline, subheadline, "
             "cta_text, logo_url, logo_svg, logo_asset_id, theme_color, palette_bg, palette_ink, "
-            "palette_secondary, palette_accent, font_pairing) "
-            "VALUES (:pid, :slug, :name, :tagline, :headline, :subheadline, :cta, :logo_url, "
+            "palette_secondary, palette_accent, font_pairing, "
+            "audience_customer_headline, audience_customer_body, audience_customer_cta, "
+            "audience_partner_headline, audience_partner_body, audience_partner_cta, "
+            "audience_investor_headline, audience_investor_body, audience_investor_cta) "
+            "VALUES (:pid, :slug, :preview_token, :name, :tagline, :headline, :subheadline, :cta, :logo_url, "
             ":logo_svg, :logo_asset_id, :color, :palette_bg, :palette_ink, "
-            ":palette_secondary, :palette_accent, :font_pairing)"
+            ":palette_secondary, :palette_accent, :font_pairing, "
+            ":ac_h, :ac_b, :ac_c, :ap_h, :ap_b, :ap_c, :ai_h, :ai_b, :ai_c)"
         ), params=params)
     session.commit()
     row = session.exec(text(
@@ -562,6 +621,12 @@ def public_landing(slug: str, session: Session = Depends(get_session)):
     return _row_to_landing(row)
 
 
+def _valid_audience(v: Optional[str]) -> Optional[str]:
+    if v in {"customer", "partner", "investor"}:
+        return v
+    return None
+
+
 @router.post("/landing/{slug}/waitlist")
 def waitlist(slug: str, payload: WaitlistPayload, request: Request, session: Session = Depends(get_session)):
     email = (payload.email or "").strip().lower()
@@ -576,13 +641,14 @@ def waitlist(slug: str, payload: WaitlistPayload, request: Request, session: Ses
     # Hash IP so we can de-dupe without storing PII.
     ip = (request.client.host if request.client else "") or ""
     ip_hash = hashlib.sha256(ip.encode()).hexdigest()[:32] if ip else None
+    audience = _valid_audience(payload.audience)
     session.exec(text(
-        "INSERT INTO waitlist_signups (project_id, landing_page_id, email, name, source, ip_hash) "
-        "VALUES (:pid, :lid, :email, :name, :source, :iph)"
+        "INSERT INTO waitlist_signups (project_id, landing_page_id, email, name, source, audience, ip_hash) "
+        "VALUES (:pid, :lid, :email, :name, :source, :audience, :iph)"
     ), params={
         "pid": row["project_id"], "lid": row["id"],
         "email": email, "name": payload.name,
-        "source": payload.source or "landing", "iph": ip_hash,
+        "source": payload.source or "landing", "audience": audience, "iph": ip_hash,
     })
     session.commit()
     return {"ok": True}
@@ -599,18 +665,43 @@ def view_ping(slug: str, session: Session = Depends(get_session)):
 
 
 @router.get("/landing/by-project/{project_id}/waitlist")
-def list_waitlist(project_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+def list_waitlist(
+    project_id: int,
+    audience: Optional[str] = None,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
     _project_owned(session, project_id, user)
     _ensure_schema(session)
-    rows = session.exec(text(
-        "SELECT id, email, name, source, created_at FROM waitlist_signups "
-        "WHERE project_id = :pid ORDER BY created_at DESC LIMIT 500"
-    ), params={"pid": project_id}).mappings().all()
+    aud = _valid_audience(audience)
+    if aud:
+        rows = session.exec(text(
+            "SELECT id, email, name, source, audience, created_at FROM waitlist_signups "
+            "WHERE project_id = :pid AND audience = :audience ORDER BY created_at DESC LIMIT 500"
+        ), params={"pid": project_id, "audience": aud}).mappings().all()
+    else:
+        rows = session.exec(text(
+            "SELECT id, email, name, source, audience, created_at FROM waitlist_signups "
+            "WHERE project_id = :pid ORDER BY created_at DESC LIMIT 500"
+        ), params={"pid": project_id}).mappings().all()
     return {
         "signups": [
             {"id": r["id"], "email": r["email"], "name": r["name"], "source": r["source"],
+             "audience": r.get("audience") or None,
              "created_at": (r["created_at"].isoformat() if isinstance(r["created_at"], datetime) else str(r["created_at"]))}
             for r in rows
         ],
         "count": len(rows),
     }
+
+
+@router.get("/landing/by-project/{project_id}/preview-url")
+def preview_url(project_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    _project_owned(session, project_id, user)
+    _ensure_schema(session)
+    row = session.exec(text(
+        "SELECT preview_token FROM landing_pages WHERE project_id = :pid"
+    ), params={"pid": project_id}).mappings().first()
+    if not row or not row.get("preview_token"):
+        raise HTTPException(status_code=404, detail="no preview token")
+    return {"url": f"/landing/preview/{row['preview_token']}"}

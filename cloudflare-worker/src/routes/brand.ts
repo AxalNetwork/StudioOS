@@ -227,11 +227,15 @@ async function projectOwned(env: Env, user: any, projectId: number): Promise<any
   throw new Error('Forbidden');
 }
 
+const AUDIENCE_SET = new Set(['customer', 'partner', 'investor']);
+const VALID_AUDIENCE = (v: unknown): string | null => (typeof v === 'string' && AUDIENCE_SET.has(v.trim())) ? v.trim() : null;
+
 function rowToLanding(row: any) {
   return {
     id: row.id,
     project_id: row.project_id,
     slug: row.slug,
+    preview_token: row.preview_token || null,
     name: row.name,
     tagline: row.tagline,
     headline: row.headline,
@@ -248,6 +252,15 @@ function rowToLanding(row: any) {
     font_pairing: row.font_pairing || null,
     published: !!row.published,
     views_count: row.views_count || 0,
+    audience_customer_headline: row.audience_customer_headline || null,
+    audience_customer_body: row.audience_customer_body || null,
+    audience_customer_cta: row.audience_customer_cta || null,
+    audience_partner_headline: row.audience_partner_headline || null,
+    audience_partner_body: row.audience_partner_body || null,
+    audience_partner_cta: row.audience_partner_cta || null,
+    audience_investor_headline: row.audience_investor_headline || null,
+    audience_investor_body: row.audience_investor_body || null,
+    audience_investor_cta: row.audience_investor_cta || null,
   };
 }
 
@@ -590,7 +603,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
   const name = String(body?.name || '').trim();
   if (!name) return c.json({ error: 'name required' }, 400);
   await ensureSchema(c.env);
-  const existing = await c.env.DB.prepare('SELECT id, slug FROM landing_pages WHERE project_id = ?').bind(pid).first<any>();
+  const existing = await c.env.DB.prepare('SELECT id, slug, preview_token FROM landing_pages WHERE project_id = ?').bind(pid).first<any>();
   const cta = String(body?.cta_text || 'Join the waitlist');
   const color = String(body?.theme_color || '#7c3aed');
   const paletteBg = cleanHex(body?.palette_bg);
@@ -599,27 +612,51 @@ brand.put('/landing/by-project/:pid', async (c) => {
   const paletteAccent = cleanHex(body?.palette_accent);
   const fontPairing = cleanFontPairing(body?.font_pairing);
   const logoAssetId = String(body?.logo_asset_id || '').trim() || null;
+  const audCustomerHeadline = String(body?.audience_customer_headline || '').trim() || null;
+  const audCustomerBody = String(body?.audience_customer_body || '').trim() || null;
+  const audCustomerCta = String(body?.audience_customer_cta || '').trim() || null;
+  const audPartnerHeadline = String(body?.audience_partner_headline || '').trim() || null;
+  const audPartnerBody = String(body?.audience_partner_body || '').trim() || null;
+  const audPartnerCta = String(body?.audience_partner_cta || '').trim() || null;
+  const audInvestorHeadline = String(body?.audience_investor_headline || '').trim() || null;
+  const audInvestorBody = String(body?.audience_investor_body || '').trim() || null;
+  const audInvestorCta = String(body?.audience_investor_cta || '').trim() || null;
   if (existing) {
     await c.env.DB.prepare(
       `UPDATE landing_pages SET name=?, tagline=?, headline=?, subheadline=?, cta_text=?,
        logo_url=?, logo_svg=?, logo_asset_id=?, theme_color=?, palette_bg=?, palette_ink=?,
        palette_secondary=?, palette_accent=?, font_pairing=?,
+       audience_customer_headline=?, audience_customer_body=?, audience_customer_cta=?,
+       audience_partner_headline=?, audience_partner_body=?, audience_partner_cta=?,
+       audience_investor_headline=?, audience_investor_body=?, audience_investor_cta=?,
        updated_at=datetime('now') WHERE project_id=?`
     ).bind(
       name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
       body?.logo_url || null, sanitizeSvg(body?.logo_svg) || null, logoAssetId, color,
-      paletteBg, paletteInk, paletteSecondary, paletteAccent, fontPairing, pid,
+      paletteBg, paletteInk, paletteSecondary, paletteAccent, fontPairing,
+      audCustomerHeadline, audCustomerBody, audCustomerCta,
+      audPartnerHeadline, audPartnerBody, audPartnerCta,
+      audInvestorHeadline, audInvestorBody, audInvestorCta,
+      pid,
     ).run();
   } else {
     const slug = slugify(name);
+    const previewToken = Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, '0')).join('');
     await c.env.DB.prepare(
-      `INSERT INTO landing_pages (project_id, slug, name, tagline, headline, subheadline, cta_text,
-       logo_url, logo_svg, logo_asset_id, theme_color, palette_bg, palette_ink, palette_secondary, palette_accent, font_pairing)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO landing_pages (project_id, slug, preview_token, name, tagline, headline, subheadline, cta_text,
+       logo_url, logo_svg, logo_asset_id, theme_color, palette_bg, palette_ink, palette_secondary, palette_accent, font_pairing,
+       audience_customer_headline, audience_customer_body, audience_customer_cta,
+       audience_partner_headline, audience_partner_body, audience_partner_cta,
+       audience_investor_headline, audience_investor_body, audience_investor_cta)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
-      pid, slug, name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
+      pid, slug, previewToken, name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
       body?.logo_url || null, sanitizeSvg(body?.logo_svg) || null, logoAssetId, color,
       paletteBg, paletteInk, paletteSecondary, paletteAccent, fontPairing,
+      audCustomerHeadline, audCustomerBody, audCustomerCta,
+      audPartnerHeadline, audPartnerBody, audPartnerCta,
+      audInvestorHeadline, audInvestorBody, audInvestorCta,
     ).run();
   }
   const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE project_id = ?').bind(pid).first<any>();
@@ -646,11 +683,27 @@ brand.get('/landing/by-project/:pid/waitlist', async (c) => {
   try { await projectOwned(c.env, user, pid); }
   catch (e: any) { return c.json({ error: 'forbidden' }, 403); }
   await ensureSchema(c.env);
-  const rows = await c.env.DB.prepare(
-    `SELECT id, email, name, source, created_at FROM waitlist_signups WHERE project_id = ? ORDER BY created_at DESC LIMIT 500`
-  ).bind(pid).all<any>();
-  const list = (rows.results ?? []) as any[];
+  const audienceFilter = VALID_AUDIENCE(c.req.query('audience'));
+  const sql = audienceFilter
+    ? `SELECT id, email, name, source, audience, created_at FROM waitlist_signups WHERE project_id = ? AND audience = ? ORDER BY created_at DESC LIMIT 500`
+    : `SELECT id, email, name, source, audience, created_at FROM waitlist_signups WHERE project_id = ? ORDER BY created_at DESC LIMIT 500`;
+  const stmt = c.env.DB.prepare(sql);
+  const rows = audienceFilter
+    ? stmt.bind(pid, audienceFilter).all<any>()
+    : stmt.bind(pid).all<any>();
+  const list = ((await rows).results ?? []) as any[];
   return c.json({ signups: list, count: list.length });
+});
+
+brand.get('/landing/by-project/:pid/preview-url', async (c) => {
+  const user = await requireAuth(c);
+  const pid = parseInt(c.req.param('pid'));
+  try { await projectOwned(c.env, user, pid); }
+  catch (e: any) { return c.json({ error: 'forbidden' }, 403); }
+  await ensureSchema(c.env);
+  const row = await c.env.DB.prepare('SELECT preview_token FROM landing_pages WHERE project_id = ?').bind(pid).first<any>();
+  if (!row || !row.preview_token) return c.json({ error: 'no preview token' }, 404);
+  return c.json({ url: `/landing/preview/${row.preview_token}` });
 });
 
 brand.get('/landing/:slug', async (c) => {
@@ -672,6 +725,7 @@ brand.post('/landing/:slug/waitlist', async (c) => {
     `SELECT id, project_id FROM landing_pages WHERE slug = ? AND published = 1`
   ).bind(slug).first<any>();
   if (!lp) return c.json({ error: 'landing page not found' }, 404);
+  const audience = VALID_AUDIENCE(body?.audience);
   const ip = c.req.header('CF-Connecting-IP') || c.req.header('x-forwarded-for') || '';
   let ipHash: string | null = null;
   if (ip) {
@@ -679,9 +733,9 @@ brand.post('/landing/:slug/waitlist', async (c) => {
     ipHash = Array.from(new Uint8Array(buf)).slice(0, 16).map((b) => b.toString(16).padStart(2, '0')).join('');
   }
   await c.env.DB.prepare(
-    `INSERT INTO waitlist_signups (project_id, landing_page_id, email, name, source, ip_hash)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).bind(lp.project_id, lp.id, email, body?.name || null, body?.source || 'landing', ipHash).run();
+    `INSERT INTO waitlist_signups (project_id, landing_page_id, email, name, source, audience, ip_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).bind(lp.project_id, lp.id, email, body?.name || null, body?.source || 'landing', audience, ipHash).run();
   return c.json({ ok: true });
 });
 
@@ -702,6 +756,160 @@ function escapeHtml(s: string | null | undefined): string {
   ));
 }
 
+function buildLandingPageHtml(
+  row: any,
+  opts: { slug?: string; token?: string; noindex?: boolean } = {},
+): Response {
+  const name = escapeHtml(row.name);
+  const color = /^#[0-9a-fA-F]{6}$/.test(row.theme_color || '') ? row.theme_color : '#7c3aed';
+  const bgColor = /^#[0-9a-fA-F]{6}$/.test(row.palette_bg || '') ? row.palette_bg : '#fafafa';
+  const inkColor = /^#[0-9a-fA-F]{6}$/.test(row.palette_ink || '') ? row.palette_ink : '#0f172a';
+  const logoMarkup = row.logo_url
+    ? `<img src="${escapeHtml(row.logo_url)}" alt="${name}" style="width:96px;height:96px;border-radius:24px;object-fit:cover" />`
+    : (row.logo_svg || svgLogo(row.name, color));
+
+  // Audience defaults: fall back to the main headline/subheadline/CTA so a
+  // founder who never edits the audience tabs still ships a coherent page.
+  const aud = {
+    customer: {
+      h: escapeHtml(row.audience_customer_headline || row.headline || row.tagline || row.name),
+      b: escapeHtml(row.audience_customer_body || row.subheadline || row.tagline || ''),
+      c: escapeHtml(row.audience_customer_cta || row.cta_text || 'Join the waitlist'),
+    },
+    partner: {
+      h: escapeHtml(row.audience_partner_headline || row.headline || row.tagline || row.name),
+      b: escapeHtml(row.audience_partner_body || row.subheadline || row.tagline || ''),
+      c: escapeHtml(row.audience_partner_cta || row.cta_text || 'Join the waitlist'),
+    },
+    investor: {
+      h: escapeHtml(row.audience_investor_headline || row.headline || row.tagline || row.name),
+      b: escapeHtml(row.audience_investor_body || row.subheadline || row.tagline || ''),
+      c: escapeHtml(row.audience_investor_cta || row.cta_text || 'Join the waitlist'),
+    },
+  };
+
+  const basePath = opts.slug ? `/landing/${encodeURIComponent(opts.slug)}` : `/landing/preview/${encodeURIComponent(opts.token || '')}`;
+  const apiWaitlist = opts.slug ? `/api/brand/landing/${encodeURIComponent(opts.slug)}/waitlist` : '';
+
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${opts.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${aud.customer.b}" />
+${opts.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+<style>
+  :root { color-scheme: light; }
+  body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif; background: ${bgColor}; color: ${inkColor}; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 64px 24px 96px; text-align: center; }
+  .logo { display:flex; justify-content:center; margin-bottom: 28px; }
+  h1 { font-size: clamp(32px, 5vw, 52px); margin: 0 0 12px; line-height: 1.1; letter-spacing: -0.02em; }
+  p.sub { font-size: 18px; color: ${inkColor}; opacity: .7; margin: 0 0 36px; }
+  .tabs { display:flex; gap: 6px; justify-content:center; margin-bottom: 28px; }
+  .tab { cursor:pointer; padding: 8px 16px; border-radius: 8px; border: 1px solid transparent; font-size: 14px; background: transparent; color: ${inkColor}; opacity: .6; }
+  .tab.active { opacity: 1; background: ${color}18; border-color: ${color}44; }
+  .panel { display:none; }
+  .panel.active { display:block; }
+  form { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width: 480px; margin: 0 auto; }
+  input { flex:1 1 240px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 15px; outline:none; }
+  input:focus { border-color: ${color}; box-shadow: 0 0 0 3px ${color}22; }
+  button { padding: 12px 18px; background: ${color}; color: #fff; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }
+  button[disabled] { opacity: .6; cursor: not-allowed; }
+  .ok, .err { margin-top: 16px; font-size: 14px; }
+  .ok { color: #059669; }
+  .err { color: #dc2626; }
+  .badge { display:inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-left: 8px; }
+  .badge-customer { background: ${color}18; color: ${color}; }
+  .badge-partner { background: #6366f118; color: #6366f1; }
+  .badge-investor { background: #10b98118; color: #10b981; }
+  footer { margin-top: 64px; font-size: 12px; color: #94a3b8; }
+  footer a { color: inherit; }
+  .sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  @media (max-width: 480px) { .tabs { flex-wrap: wrap; } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo">${logoMarkup}</div>
+    <div class="tabs" role="tablist" aria-label="Audience">
+      <button class="tab active" role="tab" aria-selected="true" aria-controls="p-customer" data-a="customer" onclick="switchTab('customer')">Customer<span class="badge badge-customer">Discovery</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="p-partner" data-a="partner" onclick="switchTab('partner')">Partner</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="p-investor" data-a="investor" onclick="switchTab('investor')">Investor</button>
+    </div>
+    <div class="panel active" id="p-customer" role="tabpanel" data-a="customer">
+      <h1>${aud.customer.h}</h1>
+      ${aud.customer.b ? `<p class="sub">${aud.customer.b}</p>` : ''}
+      <form id="wl-customer">
+        <label for="email-customer" class="sr">Email</label>
+        <input id="email-customer" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit">${aud.customer.c}</button>
+      </form>
+      <div id="msg-customer" aria-live="polite"></div>
+    </div>
+    <div class="panel" id="p-partner" role="tabpanel" data-a="partner">
+      <h1>${aud.partner.h}</h1>
+      ${aud.partner.b ? `<p class="sub">${aud.partner.b}</p>` : ''}
+      <form id="wl-partner">
+        <label for="email-partner" class="sr">Email</label>
+        <input id="email-partner" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit">${aud.partner.c}</button>
+      </form>
+      <div id="msg-partner" aria-live="polite"></div>
+    </div>
+    <div class="panel" id="p-investor" role="tabpanel" data-a="investor">
+      <h1>${aud.investor.h}</h1>
+      ${aud.investor.b ? `<p class="sub">${aud.investor.b}</p>` : ''}
+      <form id="wl-investor">
+        <label for="email-investor" class="sr">Email</label>
+        <input id="email-investor" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit">${aud.investor.c}</button>
+      </form>
+      <div id="msg-investor" aria-live="polite"></div>
+    </div>
+    <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
+  </div>
+<script>
+function switchTab(aud){
+  document.querySelectorAll('.tab').forEach(function(t){
+    var on = t.dataset.a===aud;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', String(on));
+  });
+  document.querySelectorAll('.panel').forEach(function(p){ p.classList.toggle('active', p.dataset.a===aud); });
+}
+(function(){
+  var api=${JSON.stringify(apiWaitlist)};
+  if(!api) return;
+  ['customer','partner','investor'].forEach(function(aud){
+    var f=document.getElementById('wl-'+aud), m=document.getElementById('msg-'+aud);
+    f.addEventListener('submit',function(e){
+      e.preventDefault();
+      var email=f.email.value.trim(); if(!email) return;
+      var btn=f.querySelector('button'); btn.disabled=true;
+      fetch(api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,source:'landing',audience:aud})})
+        .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
+        .then(function(x){
+          if(x.ok){ m.className='ok'; m.textContent="You're on the list. We'll be in touch."; f.reset(); }
+          else { m.className='err'; m.textContent=(x.j&&x.j.error)||'Something went wrong.'; }
+        })
+        .catch(function(){ m.className='err'; m.textContent='Network error. Please try again.'; })
+        .finally(function(){ btn.disabled=false; });
+    });
+  });
+})();
+</script>
+</body>
+</html>`;
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': opts.noindex ? 'private, no-store' : 'public, max-age=60',
+      'X-Robots-Tag': opts.noindex ? 'noindex, nofollow' : 'index, follow',
+    },
+  });
+}
+
 export async function renderLandingHtml(env: Env, slug: string): Promise<Response> {
   await ensureSchema(env);
   const row = await env.DB.prepare(
@@ -714,81 +922,18 @@ export async function renderLandingHtml(env: Env, slug: string): Promise<Respons
   env.DB.prepare(
     `UPDATE landing_pages SET views_count = COALESCE(views_count, 0) + 1 WHERE slug = ?`
   ).bind(slug).run().catch(() => {});
+  return buildLandingPageHtml(row, { slug, noindex: false });
+}
 
-  const name = escapeHtml(row.name);
-  const headline = escapeHtml(row.headline || row.tagline || row.name);
-  const sub = escapeHtml(row.subheadline || row.tagline || '');
-  const cta = escapeHtml(row.cta_text || 'Join the waitlist');
-  const color = /^#[0-9a-fA-F]{6}$/.test(row.theme_color || '') ? row.theme_color : '#7c3aed';
-  const logoMarkup = row.logo_url
-    ? `<img src="${escapeHtml(row.logo_url)}" alt="${name}" style="width:96px;height:96px;border-radius:24px;object-fit:cover" />`
-    : (row.logo_svg || svgLogo(row.name, color));
-
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${name}</title>
-<meta name="description" content="${sub}" />
-<style>
-  :root { color-scheme: light; }
-  body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif; background: #fafafa; color: #0f172a; }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 64px 24px 96px; text-align: center; }
-  .logo { display:flex; justify-content:center; margin-bottom: 28px; }
-  h1 { font-size: clamp(32px, 5vw, 52px); margin: 0 0 12px; line-height: 1.1; letter-spacing: -0.02em; }
-  p.sub { font-size: 18px; color: #475569; margin: 0 0 36px; }
-  form { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width: 480px; margin: 0 auto; }
-  input { flex:1 1 240px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 15px; outline:none; }
-  input:focus { border-color: ${color}; box-shadow: 0 0 0 3px ${color}22; }
-  button { padding: 12px 18px; background: ${color}; color: #fff; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }
-  button[disabled] { opacity: .6; cursor: not-allowed; }
-  .ok, .err { margin-top: 16px; font-size: 14px; }
-  .ok { color: #059669; }
-  .err { color: #dc2626; }
-  footer { margin-top: 64px; font-size: 12px; color: #94a3b8; }
-  footer a { color: inherit; }
-</style>
-</head>
-<body>
-  <div class="wrap">
-    <div class="logo">${logoMarkup}</div>
-    <h1>${headline}</h1>
-    ${sub ? `<p class="sub">${sub}</p>` : ''}
-    <form id="wl">
-      <input type="email" name="email" placeholder="you@email.com" required />
-      <button type="submit">${cta}</button>
-    </form>
-    <div id="msg"></div>
-    <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
-  </div>
-<script>
-(function(){
-  var f=document.getElementById('wl'),m=document.getElementById('msg');
-  f.addEventListener('submit',function(e){
-    e.preventDefault();
-    var email=f.email.value.trim(); if(!email) return;
-    var btn=f.querySelector('button'); btn.disabled=true;
-    fetch('/api/brand/landing/${encodeURIComponent(slug)}/waitlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,source:'landing'})})
-      .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
-      .then(function(x){
-        if(x.ok){ m.className='ok'; m.textContent="You're on the list. We'll be in touch."; f.reset(); }
-        else { m.className='err'; m.textContent=(x.j&&x.j.error)||'Something went wrong.'; }
-      })
-      .catch(function(){ m.className='err'; m.textContent='Network error. Please try again.'; })
-      .finally(function(){ btn.disabled=false; });
-  });
-})();
-</script>
-</body>
-</html>`;
-  return new Response(html, {
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'public, max-age=60',
-      'X-Robots-Tag': 'index, follow',
-    },
-  });
+export async function renderLandingPreview(env: Env, token: string): Promise<Response> {
+  await ensureSchema(env);
+  const row = await env.DB.prepare(
+    `SELECT * FROM landing_pages WHERE preview_token = ?`
+  ).bind(token).first<any>();
+  if (!row) {
+    return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain' } });
+  }
+  return buildLandingPageHtml(row, { token, noindex: true });
 }
 
 export default brand;

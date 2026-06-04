@@ -131,7 +131,7 @@ import customerChat from './routes/customer_chat';
 // Task #8 (IH) — Data import + migration tools (Carta/AngelList CSV/Deck
 // PDF+PPTX/Investor portfolio/HubSpot pipeline/Universal CSV).
 import importsRoutes from './routes/imports';
-import brand, { renderLandingHtml } from './routes/brand';
+import brand, { renderLandingHtml, renderLandingPreview } from './routes/brand';
 import decks from './routes/decks';
 // Task #6 — share-link viewer onboarding (signup/NDA/feedback/deal-pack)
 // + conversion tracking. MUST be mounted BEFORE the `/api/decks`
@@ -556,6 +556,8 @@ app.route('/api/decks', decks);
 // authenticated /api/brand/landing/by-project/:pid/publish endpoint;
 // this route renders the page for un-authenticated visitors.
 app.get('/landing/:slug', async (c) => renderLandingHtml(c.env, c.req.param('slug')));
+// Task #4 — private preview URL for unpublished drafts (noindex).
+app.get('/landing/preview/:token', async (c) => renderLandingPreview(c.env, c.req.param('token')));
 app.route('/api/kyc', kyc);
 // Task #3 (Y-1) — Trust Center: per-role obligations + 3-way NDA flow.
 app.route('/api/trust', trust);

@@ -5,6 +5,19 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: Audience-segmented waitlist + private preview URL
+
+Your landing page now speaks to three audiences:
+- **Customer discovery** — a dedicated tab for people interested in your product.
+- **Partner** — for potential partners, distributors, or collaborators.
+- **Investor** — for investors scouting your deal.
+
+Each tab has its own headline, body, and CTA, so you can tailor the message. If you leave them blank, the page falls back to your main headline and subheadline so nothing breaks.
+
+Waitlist signups now carry an audience tag, and your founder dashboard shows a filter so you can see exactly who signed up for what.
+
+You can also save a draft without publishing, copy a **private preview URL**, and share it with advisors or teammates for feedback before going live. The preview URL is marked *noindex* so it won't appear in search engines.
+
 ## New: Brand Builder expansion — upload logo, AI palette, and tagline ideas
 
 The Brand Builder now has three powerful upgrades:

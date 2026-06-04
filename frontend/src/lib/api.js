@@ -1026,7 +1026,13 @@ export const api = {
   brandGetLanding: (projectId) => request(`/brand/landing/by-project/${projectId}`),
   brandSaveLanding: (projectId, payload) => request(`/brand/landing/by-project/${projectId}`, { method: 'PUT', body: JSON.stringify(payload) }),
   brandPublishLanding: (projectId, published) => request(`/brand/landing/by-project/${projectId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
-  brandListWaitlist: (projectId) => request(`/brand/landing/by-project/${projectId}/waitlist`),
+  brandListWaitlist: (projectId, opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.audience) q.set('audience', opts.audience);
+    const qs = q.toString();
+    return request(`/brand/landing/by-project/${projectId}/waitlist${qs ? `?${qs}` : ''}`);
+  },
+  brandGetPreviewUrl: (projectId) => request(`/brand/landing/by-project/${projectId}/preview-url`),
 
   // Task #25 — Pitch deck builder.
   deckGenerate: (projectId) => request('/decks/generate', { method: 'POST', body: JSON.stringify({ project_id: projectId }) }),

@@ -11,6 +11,96 @@
 > building it.
 
 
+## Task #4 — Waitlist audience segmentation + private preview URL
+
+- **`cloudflare-worker/sql/migrations/081_waitlist_audience.sql`** — additive migration adding `audience` to `waitlist_signups`, nine `audience_*` copy columns + `preview_token` to `landing_pages`, plus indexes.
+- **`cloudflare-worker/src/services/landingPageSchema.ts`** — lazy bootstrap updated with Task #4 ALTERs (audience columns + preview_token + waitlist audience index).
+- **`cloudflare-worker/src/routes/brand.ts`** —
+  - `PUT /landing/by-project/:pid` now accepts and persists all nine `audience_*` fields; auto-generates a 16-byte hex `preview_token` on first insert.
+  - `GET /landing/by-project/:pid/waitlist` now returns `audience` and supports `?audience=` filter.
+  - `POST /landing/:slug/waitlist` now reads and validates `body.audience`.
+  - `GET /landing/by-project/:pid/preview-url` added.
+  - `renderLandingHtml()` refactored into `buildLandingPageHtml()` shared with `renderLandingPreview()`; HTML now renders three audience tabs (Customer/Partner/Investor) with segmented copy and sends the selected audience back to the waitlist API.
+  - `renderLandingPreview()` added — renders unpublished rows by `preview_token`, emits `noindex`.
+- **`cloudflare-worker/src/index.ts`** — added `GET /landing/preview/:token` mount alongside existing `/landing/:slug`.
+- **`backend/app/api/routes/brand.py`** — mirrored all worker changes (schema bootstrap, `LandingUpsert` + `WaitlistPayload` payloads, audience persistence, preview token generation, `preview-url` route, waitlist list filter).
+- **`frontend/src/lib/api.js`** — `brandListWaitlist` now forwards `?audience=` filter; added `brandGetPreviewUrl`.
+- **`frontend/src/pages/BrandBuilderPage.jsx`** —
+  - Added "Audience copy" section (Step 3b) with three tabs (Customer/Partner/Investor), each with headline/body/CTA fields seeded from defaults.
+  - Share section (Step 4) now shows preview URL alongside public URL with a "Private — share for feedback only" label.
+  - Waitlist preview now includes an audience filter dropdown and an audience badge next to each email.
+
+## Task #3 — Brand Kit Expansion: logo upload, AI palette, tagline iterator
+
+- **`cloudflare-worker/sql/migrations/080_brand_kit_expansion.sql`** — additive migration
+  adding `palette_secondary`, `palette_accent`, `logo_asset_id` to `landing_pages`.
+- **`cloudflare-worker/src/services/landingPageSchema.ts`** — lazy bootstrap updated with
+  3 new ALTERs so the columns self-heal on prod even if the migration is unapplied.
+- **`cloudflare-worker/src/services/aiRouter.ts`** — added `brand_palette` and
+  `brand_taglines` to `TaskClass` enum + `ROUTE` map (MID_LLAMA → SMALL_LLAMA fallback,
+  mirroring `brand_suggest`). Workers-AI only; deterministic heuristic fallback lives in
+  the route layer.
+- **`cloudflare-worker/src/routes/brand.ts`** — 3 new POST routes:
+  - `/logo/upload` — multipart/FormData, ≤512 KB PNG/JPG/SVG; stores in R2 when `FILES` binding
+    is present, else inline base64 data URL. SVG sanitised via `sanitizeSvg()` before storage.
+  - `/palette/suggest` — AI palette (5 colours) or deterministic 12-bank heuristic keyed by
+    description hash; WCAG AA contrast ratio warnings (text-on-background ≥4.5:1,
+    text-on-primary ≥3:1, primary↔background ≥3:1).
+  - `/tagline/suggest` — AI tagline iterator (6 candidates) or deterministic template bank
+    keyed by tone (bold/warm/technical/playful/authoritative); requires audience + tone +
+    market_angle.
+  - PUT `/landing/by-project/:pid` updated to persist `palette_secondary`, `palette_accent`,
+    `logo_asset_id` alongside existing columns.
+  - `rowToLanding` now includes `logo_asset_id`, `palette_secondary`, `palette_accent`.
+- **`backend/app/api/routes/brand.py`** — dev FastAPI mirror of all 3 new routes:
+  `logo_upload` (inline only), `palette_suggest` (heuristic + WCAG warnings),
+  `tagline_suggest` (heuristic templates). `LandingUpsert` schema extended; `ensure_schema`
+  updated with new columns in CREATE TABLE + ALTER fallback; `upsert_landing` writes all 5
+  palette columns + `logo_asset_id`. `base64` import added.
+- **`frontend/src/lib/api.js`** — 3 new helpers: `brandUploadLogo`, `brandSuggestPalette`,
+  `brandSuggestTaglines`.
+- **`frontend/src/lib/api.js`** — `brandUploadLogo` now accepts a `FormData` body (multipart
+  upload) so the browser natively reads the file without base64 client-side encoding.
+  `brandSuggestPalette` / `brandSuggestTaglines` remain JSON POST.
+- **`frontend/src/pages/BrandBuilderPage.jsx`** — UI additions:
+  - Upload logo button (hidden file input, ≤512 KB PNG/JPG/SVG, multipart upload via
+    `FormData`).
+  - 5-colour palette grid (Primary / Background / Ink / Secondary / Accent) with color
+    pickers.
+  - "Suggest AI palette" button (runs `brandSuggestPalette` with seed from current primary
+    colour; WCAA warnings surfaced inline).
+  - Tagline iterator section with audience/tone/market-angle inputs → 6 candidate buttons;
+  - selecting one sets both `draft.tagline` and `draft.headline`.
+
+## About page: updated copy, image + name linked to LinkedIn
+
+- **`frontend/src/pages/TeamPage.jsx`** — replaced the About paragraph with the
+  new copy (AI acceleration + freeing founders sentence). Wrapped the photo
+  and the name in `target="_blank" rel="noopener noreferrer"` links to
+  `https://www.linkedin.com/in/guillaumelauzier/`. Removed the `User` icon
+  fallback (no icons per request). `photoFailed` still degrades to an empty
+  gradient placeholder.
+
+## Contact form: Turnstile bot protection + drop the mailto fallback
+
+- **`frontend/src/pages/ContactPage.jsx`** — removed the "Or email hello@axal.vc
+  directly." line + mailto link. Added a Cloudflare Turnstile widget (mirrors the
+  RegisterPage/LoginPage lifecycle: bounded ~10s poll for `window.turnstile`,
+  `render`/`remove`/`reset`, `theme:'auto'`). Submit now blocks until the token is
+  present, passes `turnstileToken` in the POST body, resets the widget on failure,
+  and maps the worker's `turnstile_failed` code to a friendly message. Widget only
+  renders when `VITE_TURNSTILE_SITE_KEY` is set (prod), so dev is unaffected.
+- **`cloudflare-worker/src/routes/contact.ts`** — `POST /api/contact` now calls
+  `verifyTurnstile(env, turnstileToken, CF-Connecting-IP)` after field validation,
+  returning 403 `{error:'turnstile_failed'}` on failure. Reuses the existing
+  `services/turnstile.ts` helper (fails CLOSED in prod when `TURNSTILE_SECRET_KEY`
+  is unset, fails OPEN in dev). No new secret — the site key is already in
+  `frontend/.env.production`.
+
+## Deps: resolve Dependabot PRs #61–#67 (consolidated bump)
+
+- Brought all four manifests to target versions: frontend/worker npm (react/react-dom 19.2.7, react-router-dom 7.16.0, vite 8.0.16, fuse.js 7.4.1, lucide-react 1.17.0, react-is 19.2.7, @cloudflare/workers-types 4.20260604.1, wrangler 4.96.0) and backend `requirements.txt` (idna 3.17, starlette 1.2.1). Lockfiles regenerated; `npm run build`, worker `tsc --noEmit`, and `npm audit --omit=dev --audit-level=high` (frontend + worker) all green; OSV check of bumped Python pins clean. Closes Dependabot PRs #61–#67.
+
 ## Articles reader: fix unreadable bodies + unblock the deploy
 
 The public Articles pages now read like a real publication. Two fixes:
