@@ -1,0 +1,40 @@
+#2 - Beta Readiness Re-audit 2026-06-03
+
+What & Why
+
+GitHub issue #68 (the scheduled 14-day re-audit fired by .github/workflows/beta-readiness-reaudit.yml) asks for a fresh pass over the previous beta-readiness audit. Re-grade every row of BETA_READINESS_AUDIT_2026-05-20.md against the current state of the code and the live system, produce a dated successor doc, refresh the punch list, and identify which beta-blocker / beta-nice issues have shipped and can be closed. This keeps the beta-readiness ground truth current as the IB–II beta PRs land.
+
+Done looks like
+
+A new BETA_READINESS_AUDIT_2026-06-03.md exists at the repo root, mirroring the structure of the 2026-05-20 audit (same section order: AUTH, 500s, ADVISOR, CONTRACTS/TRUST, INTEGRATIONS, MARKETING/PUBLIC, ADMIN UX, PAYMENTS, SETTINGS, SECURITY HEADERS, OPS, ICP walkthroughs, Punch list).
+Every row from the previous audit is re-graded 🟢 green / 🟡 partial / 🔴 red with fresh evidence (live check result and/or current code reference). Rows that changed status since 2026-05-20 are called out.
+The punch list (grouped by owning PR IB–II, plus the Advisor and Trust/Sec/Misc tracks) is rebuilt to reflect what is now done vs still open.
+A clear list of which BLOCK-* / NICE-* issues have shipped and are eligible to close, with one-line justification each.
+The new doc records the same method/legend header (auditor, method, no production writes) and a pointer to the next re-audit cadence.
+Out of scope
+
+Fixing any red/partial rows — this is an audit only, no feature work.
+Any production writes (read-only curl / code inspection / read-only D1 SELECT only, matching the original playbook).
+Filing new GitHub issues for newly-discovered gaps beyond noting them in the doc.
+Constraints / notes for the executor
+
+Follow Task #1's playbook (the method block at the top of BETA_READINESS_AUDIT_2026-05-20.md): live curl against the production Worker (https://axal.vc/api/*) and the dev FastAPI (http://localhost:8000), plus code inspection of cloudflare-worker/src/ and backend/app/. No production writes. Reuse the same 🟢/🟡/🔴 legend.
+GitHub write access is not connected in this environment (the original audit notes this; listConnections('github') returns nothing usable and the available PAT returns 403 on the Issues API). So the two final steps in the issue — "attach the new doc to this issue and close" and physically closing shipped BLOCK-/NICE- issues — cannot be completed from code here. The executor should instead: (a) produce the doc, and (b) include a ready-to-run closing section (issue refs + gh commands) in the doc for the user to run.
+Keep both changelogs in sync only if this introduces a user-facing change — an internal audit doc normally does not, so likely no changelog entry is needed.
+Steps
+
+Re-run the live checks — repeat the curl probes from the 2026-05-20 audit against prod Worker + dev FastAPI, capturing current HTTP status / body for each row. Note any route that changed (e.g. 404 → 200/401).
+Re-inspect the code — for every code-evidence row, re-grep / re-read the current source under cloudflare-worker/src/ and backend/app/ to confirm whether the cited path still exists and whether the gap is closed (e.g. magic-link route now mounted, refund endpoint added, traces flipped on, ADMIN_BANK expanded, dynamic-question generator present, DLQ admin surface added).
+Re-grade every row — assign fresh 🟢/🟡/🔴 with updated Observed + Next action columns. Preserve the original BLOCK-/NICE- issue ids so the punch list stays traceable.
+Rebuild the punch list — regroup remaining red/partial rows under their owning PR (IB–II) and the Advisor / Trust/Sec/Misc tracks; drop rows that are now green.
+Compile the close list — list every BLOCK-/NICE- that is now fully shipped (green) with a one-line justification, plus the paste-ready gh commands to close them and to attach the new doc to issue #68.
+Write BETA_READINESS_AUDIT_2026-06-03.md at the repo root with the full re-graded tables, the rebuilt punch list, the close list, and the standard header/legend/re-audit-schedule footer.
+Relevant files
+
+BETA_READINESS_AUDIT_2026-05-20.md
+BETA_READINESS_ISSUES_2026-05-20.md
+BETA_IB_IMPLEMENTATION_NOTES.md
+.github/workflows/beta-readiness-reaudit.yml
+cloudflare-worker/src
+backend/app
+frontend/src
