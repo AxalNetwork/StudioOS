@@ -680,7 +680,7 @@ export default function BrandBuilderPage() {
       {/* Step 5 — share */}
       {landing && (
         <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">5. Share your page</h2>
+          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">6. Share your page</h2>
           {landing.published && (
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <code className="bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 text-sm break-all dark:border-gray-800">{landingUrl}</code>

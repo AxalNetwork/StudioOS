@@ -122,6 +122,16 @@ function sanitizeUrl(url: string | null | undefined): string | null {
   return null;
 }
 
+// Logos may also be data:image/svg+xml or data:image/png (AI-generated / SVG fallback).
+// data:image/* is safe in <img> (rendered as image, never executed), so we allow it.
+function sanitizeLogoUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const u = String(url).trim();
+  if (u.startsWith('/')) return u;
+  if (u.startsWith('data:image/')) return u;
+  return sanitizeUrl(url);
+}
+
 function svgLogo(name: string, color = '#7c3aed'): string {
   const initial = (name || 'A').trim().slice(0, 1).toUpperCase();
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="200" height="200">`
@@ -641,7 +651,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
   const template = String(body?.template || '').trim() || 'minimal';
   const heroMediaUrl = sanitizeUrl(String(body?.hero_media_url || '').trim());
   const productScreenshotUrl = sanitizeUrl(String(body?.product_screenshot_url || '').trim());
-  const logoUrl = sanitizeUrl(String(body?.logo_url || '').trim());
+  const logoUrl = sanitizeLogoUrl(String(body?.logo_url || '').trim());
   if (existing) {
     const previewToken = existing.preview_token || Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, '0')).join('');
     await c.env.DB.prepare(

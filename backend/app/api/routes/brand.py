@@ -21,6 +21,7 @@ import re
 import secrets
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
@@ -143,6 +144,18 @@ def _sanitize_url(url: Optional[str]) -> Optional[str]:
     except Exception:
         pass
     return None
+
+
+def _sanitize_logo_url(url: Optional[str]) -> Optional[str]:
+    """Same as _sanitize_url but also allows data:image/* (generated SVG / PNG logos)."""
+    if not url:
+        return None
+    u = str(url).strip()
+    if u.startswith("/"):
+        return u
+    if u.startswith("data:image/"):
+        return u
+    return _sanitize_url(url)
 
 
 def _slugify(name: str) -> str:
@@ -689,7 +702,7 @@ def upsert_landing(
         "headline": payload.headline,
         "subheadline": payload.subheadline,
         "cta": payload.cta_text or "Join the waitlist",
-        "logo_url": _sanitize_url(payload.logo_url),
+        "logo_url": _sanitize_logo_url(payload.logo_url),
         "logo_svg": _sanitize_svg(payload.logo_svg),
         "logo_asset_id": payload.logo_asset_id or None,
         "color": payload.theme_color or "#7c3aed",

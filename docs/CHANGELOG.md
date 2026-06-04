@@ -29,6 +29,11 @@
   - Conditional hero-media URL input shows when template `usesHero` is true.
   - Conditional product-screenshot URL input shows when template `usesProduct` is true.
   - Draft state and `brandGetLanding` load path now include `template`, `hero_media_url`, `product_screenshot_url`.
+- **Code review fixes** (post-review):
+  - All five templates now pass full brand-kit (`color`, `secondary`, `accent`) to `tabMarkup()`; badges, ok/error states, and footer colors use brand tokens instead of hard-coded `#059669`, `#dc2626`, `#94a3b8`.
+  - Border colors in inputs and screenshot containers use `${inkColor}22` / `${secondary}` instead of `#e5e7eb`.
+  - Brand Builder template picker refactored into a standalone "Step 3" with card previews (thumbnail placeholder, selection checkmark) instead of an embedded inline subsection under Step 4.
+  - `sanitizeUrl()` / `_sanitize_url()` applied to `logo_url`, `hero_media_url`, and `product_screenshot_url` at save time in both Worker and FastAPI; rejects `javascript:`, `data:`, and non-https schemes.
 
 ## Task #4 — Waitlist audience segmentation + private preview URL
 
