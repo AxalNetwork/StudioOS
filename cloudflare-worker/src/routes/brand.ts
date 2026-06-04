@@ -19,6 +19,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { ensureLandingPageBrandKitColumns } from '../services/landingPageSchema';
+import { renderLandingTemplate, TEMPLATE_REGISTRY } from '../services/landingTemplates';
 import { requireAuth } from '../auth';
 import { run as aiRouterRun } from '../services/aiRouter';
 
@@ -261,6 +262,9 @@ function rowToLanding(row: any) {
     audience_investor_headline: row.audience_investor_headline || null,
     audience_investor_body: row.audience_investor_body || null,
     audience_investor_cta: row.audience_investor_cta || null,
+    template: row.template || 'minimal',
+    hero_media_url: row.hero_media_url || null,
+    product_screenshot_url: row.product_screenshot_url || null,
   };
 }
 
@@ -621,6 +625,9 @@ brand.put('/landing/by-project/:pid', async (c) => {
   const audInvestorHeadline = String(body?.audience_investor_headline || '').trim() || null;
   const audInvestorBody = String(body?.audience_investor_body || '').trim() || null;
   const audInvestorCta = String(body?.audience_investor_cta || '').trim() || null;
+  const template = String(body?.template || '').trim() || 'minimal';
+  const heroMediaUrl = String(body?.hero_media_url || '').trim() || null;
+  const productScreenshotUrl = String(body?.product_screenshot_url || '').trim() || null;
   if (existing) {
     const previewToken = existing.preview_token || Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, '0')).join('');
     await c.env.DB.prepare(
@@ -630,6 +637,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
        audience_customer_headline=?, audience_customer_body=?, audience_customer_cta=?,
        audience_partner_headline=?, audience_partner_body=?, audience_partner_cta=?,
        audience_investor_headline=?, audience_investor_body=?, audience_investor_cta=?,
+       template=?, hero_media_url=?, product_screenshot_url=?,
        preview_token=?, updated_at=datetime('now') WHERE project_id=?`
     ).bind(
       name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
@@ -638,6 +646,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
       audCustomerHeadline, audCustomerBody, audCustomerCta,
       audPartnerHeadline, audPartnerBody, audPartnerCta,
       audInvestorHeadline, audInvestorBody, audInvestorCta,
+      template, heroMediaUrl, productScreenshotUrl,
       previewToken, pid,
     ).run();
   } else {
@@ -648,9 +657,10 @@ brand.put('/landing/by-project/:pid', async (c) => {
        logo_url, logo_svg, logo_asset_id, theme_color, palette_bg, palette_ink, palette_secondary, palette_accent, font_pairing,
        audience_customer_headline, audience_customer_body, audience_customer_cta,
        audience_partner_headline, audience_partner_body, audience_partner_cta,
-       audience_investor_headline, audience_investor_body, audience_investor_cta)
+       audience_investor_headline, audience_investor_body, audience_investor_cta,
+       template, hero_media_url, product_screenshot_url)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-               ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+               ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       pid, slug, previewToken, name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
       body?.logo_url || null, sanitizeSvg(body?.logo_svg) || null, logoAssetId, color,
@@ -658,6 +668,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
       audCustomerHeadline, audCustomerBody, audCustomerCta,
       audPartnerHeadline, audPartnerBody, audPartnerCta,
       audInvestorHeadline, audInvestorBody, audInvestorCta,
+      template, heroMediaUrl, productScreenshotUrl,
     ).run();
   }
   const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE project_id = ?').bind(pid).first<any>();

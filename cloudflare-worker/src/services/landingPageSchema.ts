@@ -33,6 +33,10 @@ export async function ensureLandingPageBrandKitColumns(env: Env): Promise<void> 
     `ALTER TABLE landing_pages ADD COLUMN audience_investor_body TEXT`,
     `ALTER TABLE landing_pages ADD COLUMN audience_investor_cta TEXT`,
     `ALTER TABLE waitlist_signups ADD COLUMN audience TEXT`,
+    // Task #5 — landing page template library
+    `ALTER TABLE landing_pages ADD COLUMN template TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN hero_media_url TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN product_screenshot_url TEXT`,
   ];
   for (const s of alters) {
     try { await env.DB.prepare(s).run(); } catch { /* column exists / table absent */ }
