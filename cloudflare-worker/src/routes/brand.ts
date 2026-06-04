@@ -448,21 +448,21 @@ brand.post('/logo', async (c) => {
 
 brand.post('/logo/upload', async (c) => {
   const user = await requireAuth(c);
-  const body = await c.req.json().catch(() => ({} as any));
-
-  const mime = String(body?.mime || '').trim();
-  const base64 = String(body?.data || '').trim();
-  if (!ALLOWED_LOGO_MIME.has(mime)) return c.json({ error: 'invalid mime type' }, 400);
-  // Workers runtime — no Node.js Buffer; use atob + Uint8Array.
-  let raw: Uint8Array | null = null;
-  if (base64.length) {
-    try {
-      const bin = atob(base64);
-      raw = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) raw[i] = bin.charCodeAt(i);
-    } catch { /* invalid base64 */ }
+  const ctype = (c.req.header('content-type') || '').toLowerCase();
+  if (!ctype.includes('multipart/form-data')) {
+    return c.json({ error: 'expected_multipart' }, 400);
   }
-  if (!raw || raw.length === 0) return c.json({ error: 'empty data' }, 400);
+  const form = await c.req.formData();
+  const file = form.get('file');
+  if (!file || typeof (file as unknown as { arrayBuffer?: unknown }).arrayBuffer !== 'function') {
+    return c.json({ error: 'no_file' }, 400);
+  }
+  const f = file as unknown as { name?: string; type?: string; arrayBuffer(): Promise<ArrayBuffer> };
+  const mime = String(f.type || '').trim();
+  if (!ALLOWED_LOGO_MIME.has(mime)) return c.json({ error: 'invalid mime type' }, 400);
+
+  const raw = new Uint8Array(await f.arrayBuffer());
+  if (raw.length === 0) return c.json({ error: 'empty data' }, 400);
   if (raw.length > LOGO_MAX_BYTES) return c.json({ error: 'file too large' }, 400);
 
   // Sanitise SVG before any storage path. For non-SVG uploads the raw bytes
@@ -527,8 +527,11 @@ brand.post('/palette/suggest', async (c) => {
   const ai = await aiPalette(c.env, user.id, description, sector, seed);
   const palette = ai || heuristicPalette(description, seed);
   const warnings: string[] = [];
-  if (contrastRatio(palette.background, palette.ink) < 4.5) {
-    warnings.push('background↔ink contrast below WCAG AA (4.5:1).');
+  if (contrastRatio(palette.ink, palette.background) < 4.5) {
+    warnings.push('text-on-background contrast below WCAG AA (4.5:1).');
+  }
+  if (contrastRatio(palette.ink, palette.primary) < 3.0) {
+    warnings.push('text-on-primary contrast below WCAG AA for large text (3:1).');
   }
   if (contrastRatio(palette.primary, palette.background) < 3.0) {
     warnings.push('primary↔background contrast below WCAG AA for large text (3:1).');

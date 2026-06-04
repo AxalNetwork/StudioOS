@@ -151,13 +151,9 @@ export default function BrandBuilderPage() {
     if (file.size > 512 * 1024) { setError('Logo must be ≤ 512 KB.'); return; }
     setUploadBusy(true); setError('');
     try {
-      const data = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result?.split(',')[1] || '');
-        reader.onerror = () => reject(new Error('read failed'));
-        reader.readAsDataURL(file);
-      });
-      const r = await api.brandUploadLogo({ mime, data });
+      const formData = new FormData();
+      formData.append('file', file);
+      const r = await api.brandUploadLogo(formData);
       const assetId = r?.asset_id || null;
       const url = r?.url || null;
       setDraft((d) => ({
@@ -489,7 +485,7 @@ export default function BrandBuilderPage() {
                       {taglineCandidates.map((t, i) => (
                         <button
                           key={i} type="button"
-                          onClick={() => setDraft({ ...draft, tagline: t })}
+                          onClick={() => setDraft({ ...draft, tagline: t, headline: t })}
                           className={`text-left text-sm px-3 py-2 rounded border transition ${
                             draft.tagline === t ? 'border-violet-400 bg-violet-50/30' : 'border-gray-200 hover:border-violet-300'
                           }`}

@@ -22,11 +22,11 @@
   mirroring `brand_suggest`). Workers-AI only; deterministic heuristic fallback lives in
   the route layer.
 - **`cloudflare-worker/src/routes/brand.ts`** — 3 new POST routes:
-  - `/logo/upload` — Turnstile-verified, ≤512 KB PNG/JPG/SVG; stores in R2 when `FILES` binding
-    is present, else inline base64 data URL. SVG sanitised via `sanitizeSvg()`.
+  - `/logo/upload` — multipart/FormData, ≤512 KB PNG/JPG/SVG; stores in R2 when `FILES` binding
+    is present, else inline base64 data URL. SVG sanitised via `sanitizeSvg()` before storage.
   - `/palette/suggest` — AI palette (5 colours) or deterministic 12-bank heuristic keyed by
-    description hash; WCAG AA contrast ratio warnings (background↔ink ≥4.5:1,
-    primary↔background ≥3:1).
+    description hash; WCAG AA contrast ratio warnings (text-on-background ≥4.5:1,
+    text-on-primary ≥3:1, primary↔background ≥3:1).
   - `/tagline/suggest` — AI tagline iterator (6 candidates) or deterministic template bank
     keyed by tone (bold/warm/technical/playful/authoritative); requires audience + tone +
     market_angle.
@@ -40,14 +40,18 @@
   palette columns + `logo_asset_id`. `base64` import added.
 - **`frontend/src/lib/api.js`** — 3 new helpers: `brandUploadLogo`, `brandSuggestPalette`,
   `brandSuggestTaglines`.
+- **`frontend/src/lib/api.js`** — `brandUploadLogo` now accepts a `FormData` body (multipart
+  upload) so the browser natively reads the file without base64 client-side encoding.
+  `brandSuggestPalette` / `brandSuggestTaglines` remain JSON POST.
 - **`frontend/src/pages/BrandBuilderPage.jsx`** — UI additions:
-  - Upload logo button (hidden file input, ≤512 KB PNG/JPG/SVG, inline/R2 toggle).
+  - Upload logo button (hidden file input, ≤512 KB PNG/JPG/SVG, multipart upload via
+    `FormData`).
   - 5-colour palette grid (Primary / Background / Ink / Secondary / Accent) with color
     pickers.
   - "Suggest AI palette" button (runs `brandSuggestPalette` with seed from current primary
     colour; WCAA warnings surfaced inline).
   - Tagline iterator section with audience/tone/market-angle inputs → 6 candidate buttons;
-  - selecting one sets the draft tagline.
+  - selecting one sets both `draft.tagline` and `draft.headline`.
 
 ## About page: updated copy, image + name linked to LinkedIn
 

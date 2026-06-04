@@ -473,16 +473,21 @@ def upsert_landing(
     return _row_to_landing(row)
 
 
+from fastapi import UploadFile
+
 @router.post("/logo/upload")
-def logo_upload(payload: Dict[str, Any] = None, user: User = Depends(get_current_user)):
+async def logo_upload(
+    file: UploadFile = None,
+    user: User = Depends(get_current_user),
+):
     # Dev backend has no R2 binding — inline small images only.
     # Prod (Worker) routes this to R2 with the FILES binding.
-    payload = payload or {}
-    mime = (payload.get("mime") or "").strip()
-    data = (payload.get("data") or "").strip()
+    if not file:
+        raise HTTPException(status_code=400, detail="file required (multipart field 'file')")
+    mime = (file.content_type or "").strip()
     if mime not in {"image/png", "image/jpeg", "image/svg+xml"}:
         raise HTTPException(status_code=400, detail="invalid mime type")
-    raw = base64.b64decode(data) if data else None
+    raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="empty data")
     if len(raw) > 512 * 1024:
@@ -504,8 +509,10 @@ def palette_suggest(payload: PalettePayload, user: User = Depends(get_current_us
     # Dev backend has no Workers AI binding — serve deterministic heuristic.
     palette = _heuristic_palette(payload.description, payload.seed_color)
     warnings = []
-    if _contrast_ratio(palette["background"], palette["ink"]) < 4.5:
-        warnings.append("background\u2194ink contrast below WCAG AA (4.5:1).")
+    if _contrast_ratio(palette["ink"], palette["background"]) < 4.5:
+        warnings.append("text-on-background contrast below WCAG AA (4.5:1).")
+    if _contrast_ratio(palette["ink"], palette["primary"]) < 3.0:
+        warnings.append("text-on-primary contrast below WCAG AA for large text (3:1).")
     if _contrast_ratio(palette["primary"], palette["background"]) < 3.0:
         warnings.append("primary\u2194background contrast below WCAG AA for large text (3:1).")
     return {"palette": palette, "warnings": warnings, "ai_generated": False}
