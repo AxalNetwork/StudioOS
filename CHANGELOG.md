@@ -78,6 +78,10 @@
   is unset, fails OPEN in dev). No new secret — the site key is already in
   `frontend/.env.production`.
 
+## Deps: resolve Dependabot PRs #61–#67 (consolidated bump)
+
+- Brought all four manifests to target versions: frontend/worker npm (react/react-dom 19.2.7, react-router-dom 7.16.0, vite 8.0.16, fuse.js 7.4.1, lucide-react 1.17.0, react-is 19.2.7, @cloudflare/workers-types 4.20260604.1, wrangler 4.96.0) and backend `requirements.txt` (idna 3.17, starlette 1.2.1). Lockfiles regenerated; `npm run build`, worker `tsc --noEmit`, and `npm audit --omit=dev --audit-level=high` (frontend + worker) all green; OSV check of bumped Python pins clean. Closes Dependabot PRs #61–#67.
+
 ## Articles reader: fix unreadable bodies + unblock the deploy
 
 The public Articles pages now read like a real publication. Two fixes:
