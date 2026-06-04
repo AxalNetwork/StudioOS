@@ -11,6 +11,15 @@
 > building it.
 
 
+## About page: updated copy, image + name linked to LinkedIn
+
+- **`frontend/src/pages/TeamPage.jsx`** — replaced the About paragraph with the
+  new copy (AI acceleration + freeing founders sentence). Wrapped the photo
+  and the name in `target="_blank" rel="noopener noreferrer"` links to
+  `https://www.linkedin.com/in/guillaumelauzier/`. Removed the `User` icon
+  fallback (no icons per request). `photoFailed` still degrades to an empty
+  gradient placeholder.
+
 ## Contact form: Turnstile bot protection + drop the mailto fallback
 
 - **`frontend/src/pages/ContactPage.jsx`** — removed the "Or email hello@axal.vc

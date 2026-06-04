@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, User } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
 import { reportError } from '../lib/log';
 
 const API_BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 
+const LINKEDIN_URL = 'https://www.linkedin.com/in/guillaumelauzier/';
+
 const ABOUT_TEXT =
-  'Over the past two decades, I\u2019ve built companies and seen how challenging it is to turn ideas into businesses while balancing operations, people, uncertainty, and growth. Axal VC was created to help founders bridge that gap with a global network of partners, operators, and experts who bring capital, insight, and hands-on support. The aim is simple: structure ideas into action and surround founders with the right ecosystem to build with clarity, speed, and conviction.';
+  'Over the past two decades, I\u2019ve built companies and seen how challenging it is to turn ideas into businesses while balancing operations, people, uncertainty, and growth. In the age of AI, everything is moving faster, execution cycles are shorter, and the right tools can change what is possible, while also freeing founders to focus more on customers and what truly matters. Axal VC was created to help founders bridge that gap with a global network of partners, operators, and experts who bring capital, insight, and hands-on support. The aim is simple: structure ideas into action and surround founders with the right ecosystem to build with clarity, speed, and conviction.';
 
 export default function TeamPage() {
   const [member, setMember] = useState(null);
@@ -56,7 +58,12 @@ export default function TeamPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-10 items-start">
               <div className="shrink-0">
-                <div className="aspect-square w-full max-w-[280px] mx-auto md:mx-0 rounded-2xl overflow-hidden bg-gradient-to-br from-violet-100 to-violet-50 dark:from-violet-900/30 dark:to-slate-800 flex items-center justify-center">
+                <a
+                  href={LINKEDIN_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block aspect-square w-full max-w-[280px] mx-auto md:mx-0 rounded-2xl overflow-hidden bg-gradient-to-br from-violet-100 to-violet-50 dark:from-violet-900/30 dark:to-slate-800"
+                >
                   {member?.photo_url && !photoFailed ? (
                     <img
                       src={member.photo_url}
@@ -66,11 +73,20 @@ export default function TeamPage() {
                       onError={() => setPhotoFailed(true)}
                     />
                   ) : (
-                    <User className="w-16 h-16 text-violet-400" />
+                    <div className="w-full h-full flex items-center justify-center" />
                   )}
-                </div>
+                </a>
                 {member?.name && (
-                  <h2 className="mt-4 text-xl font-bold">{member.name}</h2>
+                  <h2 className="mt-4 text-xl font-bold">
+                    <a
+                      href={LINKEDIN_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:underline"
+                    >
+                      {member.name}
+                    </a>
+                  </h2>
                 )}
                 <p className="text-sm text-violet-700 dark:text-violet-300 font-medium">
                   Managing Partner

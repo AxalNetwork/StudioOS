@@ -5,6 +5,13 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Updated: About page text and LinkedIn link
+
+The About page now includes the latest story copy and the team photo is linked
+directly to Guillaume Lauzier's LinkedIn profile.
+
+---
+
 ## Updated: Contact form now has spam protection
 
 The Contact form includes a quick "I'm not a robot" check before sending, so
