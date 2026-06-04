@@ -2697,6 +2697,7 @@ export const Deck_series_b_diligence_app: React.FC<RegistryDeckProps> = ({ data,
 );
 
 const Deck_series_b_diligence_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
+  const { accent: brandAccent } = useBrandContext();
   const merged = useMemo(
     () => mergeShape(SAMPLE_DATA, data || {}) as SeriesBData,
     [data],

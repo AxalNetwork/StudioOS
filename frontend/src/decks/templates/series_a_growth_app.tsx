@@ -2076,6 +2076,7 @@ export const Deck_series_a_growth_app: React.FC<RegistryDeckProps> = ({ data, ed
 );
 
 const Deck_series_a_growth_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
+  const { accent: brandAccent } = useBrandContext();
   const seed: SeriesAData = (data && Object.keys(data).length > 0)
     ? mergeShape(SAMPLE_DATA, data as Record<string, any>)
     : SAMPLE_DATA;

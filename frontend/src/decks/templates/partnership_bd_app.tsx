@@ -2007,6 +2007,8 @@ export const Deck_partnership_bd_app: React.FC<RegistryDeckProps> = ({ data, edi
 );
 
 const Deck_partnership_bd_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
+  const { accent: brandAccent } = useBrandContext();
+  const ac = brandAccent || C.accent;
   const merged = useMemo(
     () => mergeShape(SAMPLE_DATA, data || {}) as PartnershipData,
     [data],

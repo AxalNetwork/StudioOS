@@ -2906,6 +2906,8 @@ export const Deck_investor_appendix_app: React.FC<RegistryDeckProps> = ({ data, 
 );
 
 const Deck_investor_appendix_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
+  const { accent: brandAccent } = useBrandContext();
+  const ac = brandAccent || C.accent;
   const merged = useMemo(
     () => mergeShape(SAMPLE_DATA, data || {}) as InvestorData,
     [data],

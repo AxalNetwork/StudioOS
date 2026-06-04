@@ -1328,6 +1328,8 @@ export const Deck_narrative_brand_app: React.FC<RegistryDeckProps> = ({ data, ed
 );
 
 const Deck_narrative_brand_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
+  const { accent: brandAccent } = useBrandContext();
+  const ac = brandAccent || C.accent;
   const merged = useMemo(
     () => mergeShape(SAMPLE_DATA, data || {}) as NarrativeData,
     [data],

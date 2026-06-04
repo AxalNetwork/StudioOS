@@ -1819,6 +1819,7 @@ export const Deck_demo_day_app: React.FC<RegistryDeckProps> = ({ data, editable,
 );
 
 const Deck_demo_day_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
+  const { accent: brandAccent } = useBrandContext();
   const merged = useMemo(
     () => mergeShape(SAMPLE_DATA, data || {}) as DemoDayData,
     [data],
@@ -1832,6 +1833,9 @@ const Deck_demo_day_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, 
     },
     [editable, onEdit],
   );
+  // Task #6 — brand accent override for accent_only templates
+  const brandAccentOrDefault = brandAccent || C.accent;
+  const ac = brandAccentOrDefault;
 
   const total = 12;
   const slides: React.ReactNode[] = [

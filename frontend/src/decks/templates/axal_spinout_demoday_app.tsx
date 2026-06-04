@@ -3035,12 +3035,18 @@ void Slide_TeamReadiness; void Slide_MentorNetwork;
 // investor_appendix_app, so the picker thumbnail, modal preview, share
 // view and PDF export all work with a single scroll surface.
 const DeckRoot: React.FC<DeckProps> = (props) => {
+  const { accent: brandAccent } = useBrandContext();
   const data = useMemo(() => hydrate(props.data), [props.data]);
   const editable = !!(props as unknown as { editable?: boolean }).editable;
 
   // Synthetic "My brand kit" look derived from the founder's saved palette
   // + typography. Returns null when no kit is set so we fall back cleanly.
   const brandKit = useMemo(() => buildBrandKitTheme(data.brand_kit), [data.brand_kit]);
+  // Task #6 — use context accent override when available
+  const enrichedBrandKit = useMemo(() => {
+    if (!brandKit || !brandAccent) return brandKit;
+    return { ...brandKit, pal: { ...brandKit.pal, accent: brandAccent } };
+  }, [brandKit, brandAccent]);
   const hasBrandKit = !!brandKit;
 
   const [variant, setVariantState] = useState<VariantId>('editorial');

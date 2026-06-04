@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Slide16x9, Editable, DeckProps, DeckData, v, fmtUSD, fmtPct, fmtNum, BrandProvider, useBrandContext } from '../DeckBase';
 
 // ─────────────────────────────────────────────────────────────────
@@ -957,13 +957,22 @@ const SLIDES: Array<React.FC<DeckProps>> = [
   Slide9Traction, Slide10Flywheel, Slide11Team, Slide12Vision,
 ];
 
-export const Deck_sequoia_classic: React.FC<DeckProps> = ({ data, editable, onEdit }) => (
-  <BrandProvider data={data || {}} fallbackAccent={ACCENT}>
+const Deck_sequoia_classic_inner: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const { logoUrl, logoSvg } = useBrandContext();
+  // Task #6 — brandTheme: 'off' keeps the editorial palette; logo only
+  const enriched = useMemo(() => ({ ...data, brandkit_logo_url: logoUrl, brandkit_logo_svg: logoSvg }), [data, logoUrl, logoSvg]);
+  return (
     <>
       {SLIDES.map((S, i) => (
-        <S key={i} data={data} editable={editable} onEdit={onEdit} />
+        <S key={i} data={enriched} editable={editable} onEdit={onEdit} />
       ))}
     </>
+  );
+};
+
+export const Deck_sequoia_classic: React.FC<DeckProps> = (props) => (
+  <BrandProvider data={props.data || {}} fallbackAccent={ACCENT}>
+    <Deck_sequoia_classic_inner {...props} />
   </BrandProvider>
 );
 

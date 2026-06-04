@@ -2251,6 +2251,8 @@ export const Deck_sales_commercial_app: React.FC<RegistryDeckProps> = ({ data, e
 );
 
 const Deck_sales_commercial_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
+  const { accent: brandAccent } = useBrandContext();
+  const ac = brandAccent || C.accent;
   const merged = useMemo(
     () => mergeShape(SAMPLE_DATA, data || {}) as SalesData,
     [data],
