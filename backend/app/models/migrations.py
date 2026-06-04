@@ -1869,10 +1869,11 @@ def ensure_task46_tables() -> None:
 
 
 def ensure_brand_landing_columns() -> None:
-    """Task #4 — Waitlist audience segmentation + preview token.
+    """Task #4 / #5 — Waitlist audience segmentation + preview token + landing templates.
 
     Idempotent. Adds audience columns to landing_pages and waitlist_signups,
-    plus preview_token and indexes. Postgres supports ADD COLUMN IF NOT EXISTS.
+    plus preview_token, template, hero_media_url, product_screenshot_url
+    and indexes. Postgres supports ADD COLUMN IF NOT EXISTS.
     """
     with Session(engine) as session:
         cols = [
@@ -1886,6 +1887,9 @@ def ensure_brand_landing_columns() -> None:
             ("landing_pages", "audience_investor_headline", "TEXT"),
             ("landing_pages", "audience_investor_body", "TEXT"),
             ("landing_pages", "audience_investor_cta", "TEXT"),
+            ("landing_pages", "template", "TEXT"),
+            ("landing_pages", "hero_media_url", "TEXT"),
+            ("landing_pages", "product_screenshot_url", "TEXT"),
             ("waitlist_signups", "audience", "TEXT"),
         ]
         for table, col, ddl in cols:

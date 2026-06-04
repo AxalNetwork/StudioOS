@@ -1033,6 +1033,7 @@ export const api = {
     return request(`/brand/landing/by-project/${projectId}/waitlist${qs ? `?${qs}` : ''}`);
   },
   brandGetPreviewUrl: (projectId) => request(`/brand/landing/by-project/${projectId}/preview-url`),
+  brandListTemplates: () => request('/brand/templates'),
 
   // Task #25 — Pitch deck builder.
   deckGenerate: (projectId) => request('/decks/generate', { method: 'POST', body: JSON.stringify({ project_id: projectId }) }),

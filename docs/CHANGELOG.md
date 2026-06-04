@@ -11,6 +11,25 @@
 > building it.
 
 
+## Task #5 — Landing page template library
+
+- **`cloudflare-worker/sql/migrations/082_landing_templates.sql`** — additive migration adding `template`, `hero_media_url`, `product_screenshot_url` to `landing_pages`.
+- **`cloudflare-worker/src/services/landingTemplates.ts`** — new module. Five complete server-rendered templates (`minimal`, `bold-hero`, `video-first`, `editorial`, `product-mock`) with shared helpers (`escapeHtml`, `audienceTabMarkup`, `waitlistScript`, `svgLogo`, `FontStack`). `renderLandingTemplate()` dispatcher selects the template from the row key and injects the brand kit + audience data into the HTML.
+- **`cloudflare-worker/src/routes/brand.ts`** —
+  - `GET /brand/templates` returns the five-template registry with metadata (label, description, usesHero, usesProduct) for the UI picker.
+  - `PUT /landing/by-project/:pid` upsert now accepts `template`, `hero_media_url`, `product_screenshot_url`; defaults `template` to `"minimal"` for backwards compatibility.
+  - `rowToLanding()` includes the three new fields.
+  - `buildLandingPageHtml()` replaced with `renderLandingTemplate(row, nonce)` dispatch; five templates reuse the same audience tab + waitlist form + CSP nonce logic.
+- **`cloudflare-worker/src/services/landingPageSchema.ts`** — lazy bootstrap updated with `template`, `hero_media_url`, `product_screenshot_url` ALTERs.
+- **`backend/app/api/routes/brand.py`** — mirrored schema bootstrap (`ensureLandingTables`), `LandingUpsert` payload, upsert SQL, `rowToLanding` fields, and `GET /brand/templates` endpoint.
+- **`backend/app/models/migrations.py`** — `ensure_brand_landing_columns()` extended with `template`, `hero_media_url`, `product_screenshot_url` columns.
+- **`frontend/src/lib/api.js`** — added `brandListTemplates` helper.
+- **`frontend/src/pages/BrandBuilderPage.jsx`** —
+  - Added template picker UI in Step 3 (Layout card) with "Change" toggle that opens a list of 5 templates; selecting updates `draft.template`.
+  - Conditional hero-media URL input shows when template `usesHero` is true.
+  - Conditional product-screenshot URL input shows when template `usesProduct` is true.
+  - Draft state and `brandGetLanding` load path now include `template`, `hero_media_url`, `product_screenshot_url`.
+
 ## Task #4 — Waitlist audience segmentation + private preview URL
 
 - **`cloudflare-worker/sql/migrations/081_waitlist_audience.sql`** — additive migration adding `audience` to `waitlist_signups`, nine `audience_*` copy columns + `preview_token` to `landing_pages`, plus indexes.

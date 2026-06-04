@@ -108,6 +108,9 @@ def _ensure_schema(session: Session) -> None:
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_investor_headline TEXT",
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_investor_body TEXT",
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_investor_cta TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS template TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS hero_media_url TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS product_screenshot_url TEXT",
         "CREATE INDEX IF NOT EXISTS idx_landing_preview_token ON landing_pages(preview_token)",
         "CREATE INDEX IF NOT EXISTS idx_waitlist_audience ON waitlist_signups(project_id, audience)",
     ]:
@@ -319,6 +322,9 @@ def _row_to_landing(row) -> Dict[str, Any]:
         "audience_investor_headline": row.get("audience_investor_headline") or None,
         "audience_investor_body": row.get("audience_investor_body") or None,
         "audience_investor_cta": row.get("audience_investor_cta") or None,
+        "template": row.get("template") or "minimal",
+        "hero_media_url": row.get("hero_media_url") or None,
+        "product_screenshot_url": row.get("product_screenshot_url") or None,
     }
 
 
@@ -360,6 +366,9 @@ class LandingUpsert(BaseModel):
     audience_investor_headline: Optional[str] = None
     audience_investor_body: Optional[str] = None
     audience_investor_cta: Optional[str] = None
+    template: Optional[str] = None
+    hero_media_url: Optional[str] = None
+    product_screenshot_url: Optional[str] = None
 
 
 class PalettePayload(BaseModel):
@@ -683,6 +692,9 @@ def upsert_landing(
     if existing:
         preview_token = existing.get("preview_token") or secrets.token_hex(16)
         params["preview_token"] = preview_token
+        params["template"] = payload.template or "minimal"
+        params["hero_media_url"] = payload.hero_media_url or None
+        params["product_screenshot_url"] = payload.product_screenshot_url or None
         session.exec(text(
             "UPDATE landing_pages SET name=:name, tagline=:tagline, headline=:headline, "
             "subheadline=:subheadline, cta_text=:cta, logo_url=:logo_url, logo_svg=:logo_svg, "
@@ -692,6 +704,7 @@ def upsert_landing(
             "audience_customer_headline=:ac_h, audience_customer_body=:ac_b, audience_customer_cta=:ac_c, "
             "audience_partner_headline=:ap_h, audience_partner_body=:ap_b, audience_partner_cta=:ap_c, "
             "audience_investor_headline=:ai_h, audience_investor_body=:ai_b, audience_investor_cta=:ai_c, "
+            "template=:template, hero_media_url=:hero_media_url, product_screenshot_url=:product_screenshot_url, "
             "preview_token=:preview_token, updated_at=CURRENT_TIMESTAMP WHERE project_id=:pid"
         ), params=params)
         slug = existing["slug"]
@@ -700,17 +713,22 @@ def upsert_landing(
         preview_token = secrets.token_hex(16)
         params["slug"] = slug
         params["preview_token"] = preview_token
+        params["template"] = payload.template or "minimal"
+        params["hero_media_url"] = payload.hero_media_url or None
+        params["product_screenshot_url"] = payload.product_screenshot_url or None
         session.exec(text(
             "INSERT INTO landing_pages (project_id, slug, preview_token, name, tagline, headline, subheadline, "
             "cta_text, logo_url, logo_svg, logo_asset_id, theme_color, palette_bg, palette_ink, "
             "palette_secondary, palette_accent, font_pairing, "
             "audience_customer_headline, audience_customer_body, audience_customer_cta, "
             "audience_partner_headline, audience_partner_body, audience_partner_cta, "
-            "audience_investor_headline, audience_investor_body, audience_investor_cta) "
+            "audience_investor_headline, audience_investor_body, audience_investor_cta, "
+            "template, hero_media_url, product_screenshot_url) "
             "VALUES (:pid, :slug, :preview_token, :name, :tagline, :headline, :subheadline, :cta, :logo_url, "
             ":logo_svg, :logo_asset_id, :color, :palette_bg, :palette_ink, "
             ":palette_secondary, :palette_accent, :font_pairing, "
-            ":ac_h, :ac_b, :ac_c, :ap_h, :ap_b, :ap_c, :ai_h, :ai_b, :ai_c)"
+            ":ac_h, :ac_b, :ac_c, :ap_h, :ap_b, :ap_c, :ai_h, :ai_b, :ai_c, "
+            ":template, :hero_media_url, :product_screenshot_url)"
         ), params=params)
     session.commit()
     row = session.exec(text(
@@ -792,6 +810,23 @@ def publish(
     ), params={"pid": project_id, "p": flag})
     session.commit()
     return {"ok": True, "published": flag}
+
+
+def _template_list():
+    return {
+        "templates": [
+            {"key": "minimal", "label": "Minimal", "description": "Clean, centered layout with the essentials.", "thumbnailPlaceholder": "minimal", "usesHero": False, "usesProduct": False},
+            {"key": "bold-hero", "label": "Bold Hero", "description": "A striking, high-contrast headline with full-width background.", "thumbnailPlaceholder": "bold-hero", "usesHero": True, "usesProduct": False},
+            {"key": "video-first", "label": "Video First", "description": "Hero media dominates above the fold.", "thumbnailPlaceholder": "video-first", "usesHero": True, "usesProduct": False},
+            {"key": "editorial", "label": "Editorial", "description": "Long-form, narrative style with typographic hierarchy.", "thumbnailPlaceholder": "editorial", "usesHero": False, "usesProduct": False},
+            {"key": "product-mock", "label": "Product Mock", "description": "Show your product front and centre with a screenshot.", "thumbnailPlaceholder": "product-mock", "usesHero": False, "usesProduct": True},
+        ]
+    }
+
+
+@router.get("/templates")
+def list_templates():
+    return _template_list()
 
 
 @router.get("/landing/{slug}")

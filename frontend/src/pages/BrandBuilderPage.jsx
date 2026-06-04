@@ -31,6 +31,7 @@ export default function BrandBuilderPage() {
     audience_customer_headline: '', audience_customer_body: '', audience_customer_cta: '',
     audience_partner_headline: '', audience_partner_body: '', audience_partner_cta: '',
     audience_investor_headline: '', audience_investor_body: '', audience_investor_cta: '',
+    template: 'minimal', hero_media_url: '', product_screenshot_url: '',
   });
   const [signups, setSignups] = useState([]);
   const [waitlistAudienceFilter, setWaitlistAudienceFilter] = useState('');
@@ -48,6 +49,9 @@ export default function BrandBuilderPage() {
   const [activeAudienceTab, setActiveAudienceTab] = useState('customer');
   const AUDIENCE_LABELS = { customer: 'Customer discovery', partner: 'Partner', investor: 'Investor' };
   const AUDIENCE_COLORS = { customer: 'bg-violet-100 text-violet-700', partner: 'bg-indigo-100 text-indigo-700', investor: 'bg-emerald-100 text-emerald-700' };
+  // Task #5 — Template picker
+  const [templates, setTemplates] = useState([]);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
 
   useEffect(() => {
     api.listProjects().then((r) => {
@@ -95,6 +99,9 @@ export default function BrandBuilderPage() {
             audience_investor_headline: lp.audience_investor_headline || '',
             audience_investor_body: lp.audience_investor_body || '',
             audience_investor_cta: lp.audience_investor_cta || '',
+            template: lp.template || 'minimal',
+            hero_media_url: lp.hero_media_url || '',
+            product_screenshot_url: lp.product_screenshot_url || '',
           });
         } else {
           setLanding(null);
@@ -108,6 +115,13 @@ export default function BrandBuilderPage() {
         const pu = await api.brandGetPreviewUrl(projectId);
         setPreviewUrl(pu?.url || null);
       } catch { setPreviewUrl(null); }
+    })();
+    // Task #5 — load template registry
+    (async () => {
+      try {
+        const r = await api.brandListTemplates();
+        setTemplates(r?.templates || []);
+      } catch {}
     })();
   }, [projectId, projects, waitlistAudienceFilter]);
 
@@ -531,6 +545,65 @@ export default function BrandBuilderPage() {
                 placeholder="CTA button text"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
               />
+
+              {/* Task #5 — Template picker */}
+              <div className="border border-gray-200 rounded-lg p-3 dark:border-gray-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Layout</span>
+                  <button
+                    onClick={() => setTemplatePickerOpen((v) => !v)}
+                    className="inline-flex items-center gap-1 text-xs text-violet-700 hover:text-violet-800"
+                  >
+                    {templatePickerOpen ? 'Close' : 'Change'}
+                  </button>
+                </div>
+                <div className="text-sm text-gray-900 dark:text-gray-100">
+                  {templates.find((t) => t.key === draft.template)?.label || 'Minimal'}
+                </div>
+                {templatePickerOpen && (
+                  <div className="grid gap-2 mt-2">
+                    {templates.map((t) => (
+                      <button
+                        key={t.key}
+                        type="button"
+                        onClick={() => {
+                          setDraft({ ...draft, template: t.key });
+                          setTemplatePickerOpen(false);
+                        }}
+                        className={`text-left text-sm px-3 py-2 rounded border transition ${
+                          draft.template === t.key ? 'border-violet-400 bg-violet-50/30' : 'border-gray-200 hover:border-violet-300'
+                        }`}
+                      >
+                        <div className="font-medium">{t.label}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">{t.description}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {(templates.find((t) => t.key === draft.template)?.usesHero || draft.hero_media_url) && (
+                  <label className="mt-2 block">
+                    <span className="text-[11px] text-gray-600 dark:text-gray-400">Hero media URL</span>
+                    <input
+                      value={draft.hero_media_url || ''}
+                      onChange={(e) => setDraft({ ...draft, hero_media_url: e.target.value })}
+                      placeholder="https://..."
+                      className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
+                    />
+                  </label>
+                )}
+                {(templates.find((t) => t.key === draft.template)?.usesProduct || draft.product_screenshot_url) && (
+                  <label className="mt-2 block">
+                    <span className="text-[11px] text-gray-600 dark:text-gray-400">Product screenshot URL</span>
+                    <input
+                      value={draft.product_screenshot_url || ''}
+                      onChange={(e) => setDraft({ ...draft, product_screenshot_url: e.target.value })}
+                      placeholder="https://..."
+                      className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
+                    />
+                  </label>
+                )}
+              </div>
+
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <button
                   onClick={saveDraft} disabled={busy}

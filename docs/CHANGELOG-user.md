@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: Landing page templates
+
+Your landing page now has five layout options:
+- **Minimal** — the clean, centred look you already know.
+- **Bold Hero** — a striking, high-contrast headline that grabs attention instantly.
+- **Video First** — put a hero image or video front and centre.
+- **Editorial** — a long-form, narrative style for storytelling.
+- **Product Mock** — show your product screenshot right on the page.
+
+Pick a template in the Brand Builder, and the page auto-rebuilds with the same brand kit, colours, and audience tabs you have already set. Video-first and product-mock templates ask for an image URL so you can point to any hosted image or video.
+
 ## New: Audience-segmented waitlist + private preview URL
 
 Your landing page now speaks to three audiences:

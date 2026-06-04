@@ -732,6 +732,11 @@ brand.get('/landing/:slug', async (c) => {
   return c.json(rowToLanding(row));
 });
 
+brand.get('/templates', async (c) => {
+  await ensureSchema(c.env);
+  return c.json({ templates: TEMPLATE_REGISTRY });
+});
+
 brand.post('/landing/:slug/waitlist', async (c) => {
   await ensureSchema(c.env);
   const slug = c.req.param('slug');
@@ -777,147 +782,7 @@ function buildLandingPageHtml(
   row: any,
   opts: { slug?: string; token?: string; noindex?: boolean; nonce?: string } = {},
 ): Response {
-  const name = escapeHtml(row.name);
-  const color = /^#[0-9a-fA-F]{6}$/.test(row.theme_color || '') ? row.theme_color : '#7c3aed';
-  const bgColor = /^#[0-9a-fA-F]{6}$/.test(row.palette_bg || '') ? row.palette_bg : '#fafafa';
-  const inkColor = /^#[0-9a-fA-F]{6}$/.test(row.palette_ink || '') ? row.palette_ink : '#0f172a';
-  const logoMarkup = row.logo_url
-    ? `<img src="${escapeHtml(row.logo_url)}" alt="${name}" style="width:96px;height:96px;border-radius:24px;object-fit:cover" />`
-    : (row.logo_svg || svgLogo(row.name, color));
-
-  // Audience defaults: fall back to the main headline/subheadline/CTA so a
-  // founder who never edits the audience tabs still ships a coherent page.
-  const aud = {
-    customer: {
-      h: escapeHtml(row.audience_customer_headline || row.headline || row.tagline || row.name),
-      b: escapeHtml(row.audience_customer_body || row.subheadline || row.tagline || ''),
-      c: escapeHtml(row.audience_customer_cta || row.cta_text || 'Join the waitlist'),
-    },
-    partner: {
-      h: escapeHtml(row.audience_partner_headline || row.headline || row.tagline || row.name),
-      b: escapeHtml(row.audience_partner_body || row.subheadline || row.tagline || ''),
-      c: escapeHtml(row.audience_partner_cta || row.cta_text || 'Join the waitlist'),
-    },
-    investor: {
-      h: escapeHtml(row.audience_investor_headline || row.headline || row.tagline || row.name),
-      b: escapeHtml(row.audience_investor_body || row.subheadline || row.tagline || ''),
-      c: escapeHtml(row.audience_investor_cta || row.cta_text || 'Join the waitlist'),
-    },
-  };
-
-  const basePath = opts.slug ? `/landing/${encodeURIComponent(opts.slug)}` : `/landing/preview/${encodeURIComponent(opts.token || '')}`;
-  const apiWaitlist = opts.slug ? `/api/brand/landing/${encodeURIComponent(opts.slug)}/waitlist` : '';
-
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${name}${opts.noindex ? ' (Preview)' : ''}</title>
-<meta name="description" content="${aud.customer.b}" />
-${opts.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
-<style>
-  :root { color-scheme: light; }
-  body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif; background: ${bgColor}; color: ${inkColor}; }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 64px 24px 96px; text-align: center; }
-  .logo { display:flex; justify-content:center; margin-bottom: 28px; }
-  h1 { font-size: clamp(32px, 5vw, 52px); margin: 0 0 12px; line-height: 1.1; letter-spacing: -0.02em; }
-  p.sub { font-size: 18px; color: ${inkColor}; opacity: .7; margin: 0 0 36px; }
-  .tabs { display:flex; gap: 6px; justify-content:center; margin-bottom: 28px; }
-  .tab { cursor:pointer; padding: 8px 16px; border-radius: 8px; border: 1px solid transparent; font-size: 14px; background: transparent; color: ${inkColor}; opacity: .6; }
-  .tab.active { opacity: 1; background: ${color}18; border-color: ${color}44; }
-  .panel { display:none; }
-  .panel.active { display:block; }
-  form { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width: 480px; margin: 0 auto; }
-  input { flex:1 1 240px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 15px; outline:none; }
-  input:focus { border-color: ${color}; box-shadow: 0 0 0 3px ${color}22; }
-  button { padding: 12px 18px; background: ${color}; color: #fff; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }
-  button[disabled] { opacity: .6; cursor: not-allowed; }
-  .ok, .err { margin-top: 16px; font-size: 14px; }
-  .ok { color: #059669; }
-  .err { color: #dc2626; }
-  .badge { display:inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-left: 8px; }
-  .badge-customer { background: ${color}18; color: ${color}; }
-  .badge-partner { background: #6366f118; color: #6366f1; }
-  .badge-investor { background: #10b98118; color: #10b981; }
-  footer { margin-top: 64px; font-size: 12px; color: #94a3b8; }
-  footer a { color: inherit; }
-  .sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-  @media (max-width: 480px) { .tabs { flex-wrap: wrap; } }
-</style>
-</head>
-<body>
-  <div class="wrap">
-    <div class="logo">${logoMarkup}</div>
-    <div class="tabs" role="tablist" aria-label="Audience">
-      <button class="tab active" role="tab" aria-selected="true" aria-controls="p-customer" data-a="customer" onclick="switchTab('customer')">Customer<span class="badge badge-customer">Discovery</span></button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="p-partner" data-a="partner" onclick="switchTab('partner')">Partner</button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="p-investor" data-a="investor" onclick="switchTab('investor')">Investor</button>
-    </div>
-    <div class="panel active" id="p-customer" role="tabpanel" data-a="customer">
-      <h1>${aud.customer.h}</h1>
-      ${aud.customer.b ? `<p class="sub">${aud.customer.b}</p>` : ''}
-      <form id="wl-customer">
-        <label for="email-customer" class="sr">Email</label>
-        <input id="email-customer" type="email" name="email" placeholder="you@email.com" required />
-        <button type="submit">${aud.customer.c}</button>
-      </form>
-      <div id="msg-customer" aria-live="polite"></div>
-    </div>
-    <div class="panel" id="p-partner" role="tabpanel" data-a="partner">
-      <h1>${aud.partner.h}</h1>
-      ${aud.partner.b ? `<p class="sub">${aud.partner.b}</p>` : ''}
-      <form id="wl-partner">
-        <label for="email-partner" class="sr">Email</label>
-        <input id="email-partner" type="email" name="email" placeholder="you@email.com" required />
-        <button type="submit">${aud.partner.c}</button>
-      </form>
-      <div id="msg-partner" aria-live="polite"></div>
-    </div>
-    <div class="panel" id="p-investor" role="tabpanel" data-a="investor">
-      <h1>${aud.investor.h}</h1>
-      ${aud.investor.b ? `<p class="sub">${aud.investor.b}</p>` : ''}
-      <form id="wl-investor">
-        <label for="email-investor" class="sr">Email</label>
-        <input id="email-investor" type="email" name="email" placeholder="you@email.com" required />
-        <button type="submit">${aud.investor.c}</button>
-      </form>
-      <div id="msg-investor" aria-live="polite"></div>
-    </div>
-    <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
-  </div>
-<script${opts.nonce ? ` nonce="${opts.nonce}"` : ''}>
-function switchTab(aud){
-  document.querySelectorAll('.tab').forEach(function(t){
-    var on = t.dataset.a===aud;
-    t.classList.toggle('active', on);
-    t.setAttribute('aria-selected', String(on));
-  });
-  document.querySelectorAll('.panel').forEach(function(p){ p.classList.toggle('active', p.dataset.a===aud); });
-}
-(function(){
-  var api=${JSON.stringify(apiWaitlist)};
-  if(!api) return;
-  ['customer','partner','investor'].forEach(function(aud){
-    var f=document.getElementById('wl-'+aud), m=document.getElementById('msg-'+aud);
-    f.addEventListener('submit',function(e){
-      e.preventDefault();
-      var email=f.email.value.trim(); if(!email) return;
-      var btn=f.querySelector('button'); btn.disabled=true;
-      fetch(api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,source:'landing',audience:aud})})
-        .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
-        .then(function(x){
-          if(x.ok){ m.className='ok'; m.textContent="You're on the list. We'll be in touch."; f.reset(); }
-          else { m.className='err'; m.textContent=(x.j&&x.j.error)||'Something went wrong.'; }
-        })
-        .catch(function(){ m.className='err'; m.textContent='Network error. Please try again.'; })
-        .finally(function(){ btn.disabled=false; });
-    });
-  });
-})();
-</script>
-</body>
-</html>`;
+  const html = renderLandingTemplate(row, opts);
   return new Response(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
