@@ -4,8 +4,11 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse
 from fastapi.exceptions import RequestValidationError
+from sqlalchemy import text
+from sqlmodel import Session
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -76,6 +79,7 @@ async def lifespan(app: FastAPI):
     try:
         from backend.app.models.migrations import (
             consolidate_capital_tables,
+            ensure_brand_landing_columns,
             ensure_growth_track_columns,
             ensure_project_revenue_proof_columns,
             ensure_document_file_columns,
@@ -103,6 +107,8 @@ async def lifespan(app: FastAPI):
             ensure_wellbeing_tables,
             ensure_user_handle_column,
         )
+        ensure_brand_landing_columns()
+        logger.info("StudioOS migrations: brand landing columns ensured")
         ensure_growth_track_columns()
         logger.info("StudioOS migrations: growth track columns ensured")
         ensure_project_revenue_proof_columns()
@@ -442,8 +448,39 @@ from backend.app.api.routes import search as _search  # noqa: E402
 app.include_router(_search.router, prefix="/api")
 from backend.app.api.routes import onboarding as _onboarding  # noqa: E402
 app.include_router(_onboarding.router, prefix="/api")
+from backend.app.database import get_session  # noqa: E402
 from backend.app.api.routes import brand as _brand  # noqa: E402
 app.include_router(_brand.router, prefix="/api")
+
+# --- Public landing page HTML (Task #4 parity) ----------------------------
+# The dev backend serves HTML directly for /landing/:slug and
+# /landing/preview/:token so the preview URL works in local dev.
+@app.get("/landing/{slug}", response_class=HTMLResponse)
+def _landing_html(slug: str, request: Request, session: Session = Depends(get_session)):
+    """Public HTML render for a published landing page."""
+    from backend.app.api.routes.brand import _ensure_schema, _render_landing_html
+    _ensure_schema(session)
+    row = session.exec(text(
+        "SELECT * FROM landing_pages WHERE slug = :slug AND published = TRUE"
+    ), params={"slug": slug}).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="not found")
+    nonce = getattr(request.state, "csp_nonce", "")
+    return _render_landing_html(row, noindex=False, csp_nonce=nonce)
+
+@app.get("/landing/preview/{token}", response_class=HTMLResponse)
+def _landing_preview(token: str, request: Request, session: Session = Depends(get_session)):
+    """Public HTML render for an unpublished draft via preview token."""
+    from backend.app.api.routes.brand import _ensure_schema, _render_landing_html
+    _ensure_schema(session)
+    row = session.exec(text(
+        "SELECT * FROM landing_pages WHERE preview_token = :token"
+    ), params={"token": token}).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="not found")
+    nonce = getattr(request.state, "csp_nonce", "")
+    return _render_landing_html(row, noindex=True, csp_nonce=nonce)
+
 from backend.app.api.routes import decks as _decks  # noqa: E402
 app.include_router(_decks.router, prefix="/api")
 app.include_router(personas.router, prefix="/api")

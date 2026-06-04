@@ -1866,3 +1866,42 @@ def ensure_task46_tables() -> None:
         except Exception as exc:  # noqa: BLE001
             logger.warning("ensure_task46_tables: fund_scenarios: %s", exc)
             session.rollback()
+
+
+def ensure_brand_landing_columns() -> None:
+    """Task #4 — Waitlist audience segmentation + preview token.
+
+    Idempotent. Adds audience columns to landing_pages and waitlist_signups,
+    plus preview_token and indexes. Postgres supports ADD COLUMN IF NOT EXISTS.
+    """
+    with Session(engine) as session:
+        cols = [
+            ("landing_pages", "preview_token", "TEXT"),
+            ("landing_pages", "audience_customer_headline", "TEXT"),
+            ("landing_pages", "audience_customer_body", "TEXT"),
+            ("landing_pages", "audience_customer_cta", "TEXT"),
+            ("landing_pages", "audience_partner_headline", "TEXT"),
+            ("landing_pages", "audience_partner_body", "TEXT"),
+            ("landing_pages", "audience_partner_cta", "TEXT"),
+            ("landing_pages", "audience_investor_headline", "TEXT"),
+            ("landing_pages", "audience_investor_body", "TEXT"),
+            ("landing_pages", "audience_investor_cta", "TEXT"),
+            ("waitlist_signups", "audience", "TEXT"),
+        ]
+        for table, col, ddl in cols:
+            try:
+                session.exec(text(
+                    f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {ddl}"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_brand_landing_columns: %s.%s: %s", table, col, exc)
+        indexes = [
+            ("idx_landing_preview_token", "landing_pages(preview_token)"),
+            ("idx_waitlist_audience", "waitlist_signups(project_id, audience)"),
+        ]
+        for name, expr in indexes:
+            try:
+                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON {expr}"))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_brand_landing_columns: index %s: %s", name, exc)
+        session.commit()

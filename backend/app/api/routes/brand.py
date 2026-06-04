@@ -415,10 +415,15 @@ def _sanitize_svg(svg: Optional[str]) -> Optional[str]:
     s = str(svg).strip()
     if not s.lower().startswith("<svg"):
         return None
-    s = _SVG_DANGER_TAG_BLOCK.sub("", s)
-    s = _SVG_DANGER_TAG_VOID.sub("", s)
-    s = _SVG_EVENT_ATTR.sub("", s)
-    s = _SVG_ANY_HREF.sub("", s)
+    # Loop to fixed point so a single pass can't leave a fresh forbidden
+    # token (e.g. <scr<script>ipt> -> <script> after one pass).
+    prev = None
+    while prev != s:
+        prev = s
+        s = _SVG_DANGER_TAG_BLOCK.sub("", s)
+        s = _SVG_DANGER_TAG_VOID.sub("", s)
+        s = _SVG_EVENT_ATTR.sub("", s)
+        s = _SVG_ANY_HREF.sub("", s)
     # Belt-and-suspenders: if anything dangerous still slipped through
     # (e.g. obfuscated entities), drop the SVG entirely so the renderer
     # falls back to the generated initial badge.
@@ -426,6 +431,186 @@ def _sanitize_svg(svg: Optional[str]) -> Optional[str]:
     if "javascript:" in lower or "<script" in lower or "onload" in lower or "onerror" in lower:
         return None
     return s[:8000]
+
+
+def _render_landing_html(row, noindex: bool = False, csp_nonce: Optional[str] = None) -> str:
+    """Render a public landing page HTML string (dev-backend parity).
+
+    Mirrors the worker's buildLandingPageHtml with the same audience-tab
+    layout, accessibility markup, and XSS-safe escaping.
+    """
+    import html
+
+    def esc(s: Optional[str]) -> str:
+        return html.escape(s or "")
+
+    def _hex(v: Optional[str]) -> str:
+        return v if v and re.match(r"^#[0-9a-fA-F]{6}$", v) else "#7c3aed"
+
+    def _hex_bg(v: Optional[str]) -> str:
+        return v if v and re.match(r"^#[0-9a-fA-F]{6}$", v) else "#fafafa"
+
+    def _hex_ink(v: Optional[str]) -> str:
+        return v if v and re.match(r"^#[0-9a-fA-F]{6}$", v) else "#0f172a"
+
+    name = esc(row["name"])
+    color = _hex(row["theme_color"])
+    bg_color = _hex_bg(row["palette_bg"])
+    ink_color = _hex_ink(row["palette_ink"])
+    logo_markup = ""
+    if row["logo_url"]:
+        logo_markup = (
+            f'<img src="{esc(row["logo_url"])}" alt="{name}" '
+            f'style="width:96px;height:96px;border-radius:24px;object-fit:cover" />'
+        )
+    else:
+        svg = _sanitize_svg(row.get("logo_svg"))
+        if svg:
+            logo_markup = svg
+        else:
+            initial = esc(row["name"][:1].upper() or "A")
+            logo_markup = (
+                f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="200" height="200">'
+                f'<circle cx="50" cy="50" r="46" fill="{color}"/>'
+                f'<text x="50" y="62" text-anchor="middle" font-family="Inter,system-ui,sans-serif" '
+                f'font-size="44" font-weight="700" fill="#fff">{initial}</text></svg>'
+            )
+
+    aud = {
+        "customer": {
+            "h": esc(row["audience_customer_headline"] or row["headline"] or row["tagline"] or row["name"]),
+            "b": esc(row["audience_customer_body"] or row["subheadline"] or row["tagline"] or ""),
+            "c": esc(row["audience_customer_cta"] or row["cta_text"] or "Join the waitlist"),
+        },
+        "partner": {
+            "h": esc(row["audience_partner_headline"] or row["headline"] or row["tagline"] or row["name"]),
+            "b": esc(row["audience_partner_body"] or row["subheadline"] or row["tagline"] or ""),
+            "c": esc(row["audience_partner_cta"] or row["cta_text"] or "Join the waitlist"),
+        },
+        "investor": {
+            "h": esc(row["audience_investor_headline"] or row["headline"] or row["tagline"] or row["name"]),
+            "b": esc(row["audience_investor_body"] or row["subheadline"] or row["tagline"] or ""),
+            "c": esc(row["audience_investor_cta"] or row["cta_text"] or "Join the waitlist"),
+        },
+    }
+
+    slug = esc(row["slug"])
+    api_waitlist = f"/api/brand/landing/{slug}/waitlist"
+    noindex_meta = '<meta name="robots" content="noindex, nofollow" />' if noindex else ""
+    title_suffix = " (Preview)" if noindex else ""
+    tab_badge = '<span class="badge badge-customer">Discovery</span>'
+
+    html_str = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{name}{title_suffix}</title>
+<meta name="description" content="{aud['customer']['b']}" />
+{noindex_meta}
+<style>
+  :root {{ color-scheme: light; }}
+  body {{ margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif; background: {bg_color}; color: {ink_color}; }}
+  .wrap {{ max-width: 760px; margin: 0 auto; padding: 64px 24px 96px; text-align: center; }}
+  .logo {{ display:flex; justify-content:center; margin-bottom: 28px; }}
+  h1 {{ font-size: clamp(32px, 5vw, 52px); margin: 0 0 12px; line-height: 1.1; letter-spacing: -0.02em; }}
+  p.sub {{ font-size: 18px; color: {ink_color}; opacity: .7; margin: 0 0 36px; }}
+  .tabs {{ display:flex; gap: 6px; justify-content:center; margin-bottom: 28px; }}
+  .tab {{ cursor:pointer; padding: 8px 16px; border-radius: 8px; border: 1px solid transparent; font-size: 14px; background: transparent; color: {ink_color}; opacity: .6; }}
+  .tab.active {{ opacity: 1; background: {color}18; border-color: {color}44; }}
+  .panel {{ display:none; }}
+  .panel.active {{ display:block; }}
+  form {{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width: 480px; margin: 0 auto; }}
+  input {{ flex:1 1 240px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 15px; outline:none; }}
+  input:focus {{ border-color: {color}; box-shadow: 0 0 0 3px {color}22; }}
+  button {{ padding: 12px 18px; background: {color}; color: #fff; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }}
+  button[disabled] {{ opacity: .6; cursor: not-allowed; }}
+  .ok, .err {{ margin-top: 16px; font-size: 14px; }}
+  .ok {{ color: #059669; }}
+  .err {{ color: #dc2626; }}
+  .badge {{ display:inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-left: 8px; }}
+  .badge-customer {{ background: {color}18; color: {color}; }}
+  .badge-partner {{ background: #6366f118; color: #6366f1; }}
+  .badge-investor {{ background: #10b98118; color: #10b981; }}
+  footer {{ margin-top: 64px; font-size: 12px; color: #94a3b8; }}
+  footer a {{ color: inherit; }}
+  .sr {{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }}
+  @media (max-width: 480px) {{ .tabs {{ flex-wrap: wrap; }} }}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo">{logo_markup}</div>
+    <div class="tabs" role="tablist" aria-label="Audience">
+      <button class="tab active" role="tab" aria-selected="true" aria-controls="p-customer" data-a="customer" onclick="switchTab('customer')">Customer{tab_badge}</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="p-partner" data-a="partner" onclick="switchTab('partner')">Partner</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="p-investor" data-a="investor" onclick="switchTab('investor')">Investor</button>
+    </div>
+    <div class="panel active" id="p-customer" role="tabpanel" data-a="customer">
+      <h1>{aud['customer']['h']}</h1>
+      {f'<p class="sub">{aud["customer"]["b"]}</p>' if aud['customer']['b'] else ''}
+      <form id="wl-customer">
+        <label for="email-customer" class="sr">Email</label>
+        <input id="email-customer" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit">{aud['customer']['c']}</button>
+      </form>
+      <div id="msg-customer" aria-live="polite"></div>
+    </div>
+    <div class="panel" id="p-partner" role="tabpanel" data-a="partner">
+      <h1>{aud['partner']['h']}</h1>
+      {f'<p class="sub">{aud["partner"]["b"]}</p>' if aud['partner']['b'] else ''}
+      <form id="wl-partner">
+        <label for="email-partner" class="sr">Email</label>
+        <input id="email-partner" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit">{aud['partner']['c']}</button>
+      </form>
+      <div id="msg-partner" aria-live="polite"></div>
+    </div>
+    <div class="panel" id="p-investor" role="tabpanel" data-a="investor">
+      <h1>{aud['investor']['h']}</h1>
+      {f'<p class="sub">{aud["investor"]["b"]}</p>' if aud['investor']['b'] else ''}
+      <form id="wl-investor">
+        <label for="email-investor" class="sr">Email</label>
+        <input id="email-investor" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit">{aud['investor']['c']}</button>
+      </form>
+      <div id="msg-investor" aria-live="polite"></div>
+    </div>
+    <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
+  </div>
+<script{csp_nonce and f' nonce="{html.escape(csp_nonce)}"' or ''}>
+function switchTab(aud){{
+  document.querySelectorAll('.tab').forEach(function(t){{
+    var on = t.dataset.a===aud;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', String(on));
+  }});
+  document.querySelectorAll('.panel').forEach(function(p){{ p.classList.toggle('active', p.dataset.a===aud); }});
+}}
+(function(){{
+  var api="{api_waitlist}";
+  if(!api) return;
+  ['customer','partner','investor'].forEach(function(aud){{
+    var f=document.getElementById('wl-'+aud), m=document.getElementById('msg-'+aud);
+    f.addEventListener('submit',function(e){{
+      e.preventDefault();
+      var email=f.email.value.trim(); if(!email) return;
+      var btn=f.querySelector('button'); btn.disabled=true;
+      fetch(api,{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{email:email,source:'landing',audience:aud}})}})
+        .then(function(r){{return r.json().then(function(j){{return {{ok:r.ok,j:j}}}})}})
+        .then(function(x){{
+          if(x.ok){{ m.className='ok'; m.textContent="You're on the list. We'll be in touch."; f.reset(); }}
+          else {{ m.className='err'; m.textContent=(x.j&&x.j.error)||'Something went wrong.'; }}
+        }})
+        .catch(function(){{ m.className='err'; m.textContent='Network error. Please try again.'; }})
+        .finally(function(){{ btn.disabled=false; }});
+    }});
+  }});
+}})();
+</script>
+</body>
+</html>"""
+    return html_str
 
 
 # --- routes ----------------------------------------------------------------

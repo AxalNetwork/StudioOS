@@ -1,5 +1,7 @@
 -- Task #4 — Waitlist audience segmentation + private preview URL
--- Additive-only, IF NOT EXISTS per project conventions.
+-- Additive-only. D1/SQLite lacks ALTER TABLE … ADD COLUMN IF NOT EXISTS,
+-- so replay-safety is guaranteed by the worker lazy bootstrap in
+-- landingPageSchema.ts (ensureLandingPageSchema).
 
 ALTER TABLE waitlist_signups ADD COLUMN audience TEXT CHECK (audience IN ('customer', 'partner', 'investor'));
 
