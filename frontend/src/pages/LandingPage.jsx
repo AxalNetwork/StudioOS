@@ -577,7 +577,7 @@ export default function LandingPage() {
       <section className="py-20 px-6 bg-gray-900 text-white">
         <div className="max-w-5xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            Building in <span className="text-violet-400">AI</span>, <span className="text-violet-400">Blockchain</span>, <span className="text-violet-400">Quantum</span>, <span className="text-violet-400">Digital Infrastructure</span>, or <span className="text-violet-400">Frontier Software</span>?
+            Building the <span className="text-violet-400">Future of Digital Transformation</span>?
           </h2>
           <p className="text-gray-300 max-w-2xl mx-auto mb-8 leading-relaxed">
             Whether you're a partner sourcing the next thesis-aligned company, an LP looking for
