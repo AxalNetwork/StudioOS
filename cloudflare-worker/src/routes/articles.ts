@@ -28,6 +28,7 @@ import {
   TRUST_AUTHOR_MIN,
 } from '../services/newsSchema';
 import { ensureAuthorWebsites } from '../services/authorWebsites';
+import { ensureArticleCovers } from '../services/articleCovers';
 import { computeAuthorTrust } from '../services/newsTrust';
 import { lintForSend } from '../services/telegramRedactCheck';
 import { notifyArticle } from '../services/articleNotify';
@@ -151,7 +152,8 @@ articles.get('/sectors', async (c) => {
 articles.get('/', async (c) => {
   await ensureNewsSchema(c.env);
   await ensureAuthorWebsites(c.env);
-  const cached = await cacheLookup(c);
+  const seededCover = await ensureArticleCovers(c.env);
+  const cached = seededCover ? null : await cacheLookup(c);
   if (cached) return cached;
   const url = new URL(c.req.url);
   const limit = clampLimit(url.searchParams.get('limit'), 20, 100);
@@ -205,6 +207,7 @@ articles.get('/', async (c) => {
 articles.get('/by-author/:user_id', async (c) => {
   await ensureNewsSchema(c.env);
   await ensureAuthorWebsites(c.env);
+  await ensureArticleCovers(c.env);
   const userId = Number(c.req.param('user_id'));
   if (!Number.isInteger(userId) || userId <= 0) return c.json({ error: 'invalid' }, 400);
   const url = new URL(c.req.url);
@@ -255,7 +258,8 @@ articles.get('/:slug', async (c) => {
   }
   await ensureNewsSchema(c.env);
   await ensureAuthorWebsites(c.env);
-  const cached = await cacheLookup(c);
+  const seededCover = await ensureArticleCovers(c.env);
+  const cached = seededCover ? null : await cacheLookup(c);
   if (cached) return cached;
   const row: any = await c.env.DB.prepare(
     `SELECT a.*, u.name AS author_name, NULL AS author_handle, u.role AS author_role,
