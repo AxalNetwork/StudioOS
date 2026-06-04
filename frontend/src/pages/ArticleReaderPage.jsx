@@ -1,10 +1,35 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, FileText, Linkedin, Twitter, Facebook, Mail } from 'lucide-react';
+import { ArrowLeft, Loader2, FileText, Mail } from 'lucide-react';
 import { articles as api } from '../lib/api';
 import { reportError } from '../lib/log';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
+
+// Brand glyphs as inline SVGs — lucide-react dropped its brand icons
+// (Twitter/Facebook/Linkedin) in v1, so we carry the marks locally to keep
+// the share bar recognisable. Mirrors the SVGs already in PublicFooter.
+function XIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
+  );
+}
+function LinkedinIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
+      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+    </svg>
+  );
+}
+function FacebookIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
+      <path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.513c-1.491 0-1.956.93-1.956 1.884v2.25h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z" />
+    </svg>
+  );
+}
 
 // Task #9 — Public article reader. Reads like a real publication: shared
 // public header/footer, a linked author byline, social sharing, and a
@@ -16,9 +41,9 @@ function ShareBar({ title }) {
   const u = encodeURIComponent(url);
   const t = encodeURIComponent(title || 'Axal article');
   const targets = [
-    { key: 'x', label: 'Share on X', Icon: Twitter, href: `https://twitter.com/intent/tweet?url=${u}&text=${t}` },
-    { key: 'linkedin', label: 'Share on LinkedIn', Icon: Linkedin, href: `https://www.linkedin.com/sharing/share-offsite/?url=${u}` },
-    { key: 'facebook', label: 'Share on Facebook', Icon: Facebook, href: `https://www.facebook.com/sharer/sharer.php?u=${u}` },
+    { key: 'x', label: 'Share on X', Icon: XIcon, href: `https://twitter.com/intent/tweet?url=${u}&text=${t}` },
+    { key: 'linkedin', label: 'Share on LinkedIn', Icon: LinkedinIcon, href: `https://www.linkedin.com/sharing/share-offsite/?url=${u}` },
+    { key: 'facebook', label: 'Share on Facebook', Icon: FacebookIcon, href: `https://www.facebook.com/sharer/sharer.php?u=${u}` },
     { key: 'email', label: 'Share by email', Icon: Mail, href: `mailto:?subject=${t}&body=${t}%0A%0A${u}` },
   ];
   return (

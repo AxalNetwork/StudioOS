@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Fixed: Articles now read like a real publication
+
+Article pages are properly formatted again — real headings, paragraphs, lists and
+quotes instead of stray symbols and run-on text. Each article also shows the site
+header and footer, social share buttons (X, LinkedIn, Facebook, email), the
+author's name (linked to their site when available), and a "Recommended reading"
+strip with related articles at the end.
+
+---
+
 ## Updated: Our Team page is now an About page
 
 The "Team" link in the footer is now called "About". The page keeps the photo

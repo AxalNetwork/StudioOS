@@ -68,11 +68,12 @@ export function renderMarkdown(md: string): string {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
-    // Fenced code block.
-    if (/^```/.test(line)) {
+    // Fenced code block. Tolerate leading indentation on the fence — article
+    // bodies are often written with a uniform leading indent per line.
+    if (/^\s*```/.test(line)) {
       const buf: string[] = [];
       i++;
-      while (i < lines.length && !/^```/.test(lines[i])) {
+      while (i < lines.length && !/^\s*```/.test(lines[i])) {
         buf.push(lines[i]);
         i++;
       }
@@ -80,19 +81,22 @@ export function renderMarkdown(md: string): string {
       out.push(`<pre><code>${buf.join('\n')}</code></pre>`);
       continue;
     }
-    // Heading.
-    const h = line.match(/^(#{1,6})\s+(.+)$/);
+    // Heading. Leading whitespace is tolerated so indented `## ...` lines are
+    // recognised as headings rather than leaking as literal text.
+    const h = line.match(/^\s*(#{1,6})\s+(.+)$/);
     if (h) {
       const level = Math.min(6, h[1].length);
-      out.push(`<h${level}>${inline(h[2])}</h${level}>`);
+      out.push(`<h${level}>${inline(h[2].trim())}</h${level}>`);
       i++;
       continue;
     }
-    // Blockquote (consecutive lines starting with ">").
-    if (/^>\s?/.test(line)) {
+    // Blockquote (consecutive lines starting with ">", leading indent allowed).
+    // NB: input is HTML-escaped before tokenisation, so the ">" marker is
+    // "&gt;" by the time we get here — match that, not a literal ">".
+    if (/^\s*&gt;\s?/.test(line)) {
       const buf: string[] = [];
-      while (i < lines.length && /^>\s?/.test(lines[i])) {
-        buf.push(lines[i].replace(/^>\s?/, ''));
+      while (i < lines.length && /^\s*&gt;\s?/.test(lines[i])) {
+        buf.push(lines[i].replace(/^\s*&gt;\s?/, ''));
         i++;
       }
       out.push(`<blockquote>${inline(buf.join(' '))}</blockquote>`);
@@ -126,8 +130,8 @@ export function renderMarkdown(md: string): string {
     // preserved as visible line breaks instead of collapsing into one run-on
     // block. Blank lines still start a fresh <p>.
     const buf: string[] = [];
-    while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|>\s?|\s*[-*]\s+|\s*\d+\.\s+|```)/.test(lines[i])) {
-      buf.push(lines[i]);
+    while (i < lines.length && lines[i].trim() && !/^\s*(#{1,6}\s|&gt;\s?|[-*]\s+|\d+\.\s+|```)/.test(lines[i])) {
+      buf.push(lines[i].trim());
       i++;
     }
     if (buf.length > 0) out.push(`<p>${buf.map((l) => inline(l)).join('<br>')}</p>`);

@@ -5,12 +5,54 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Updated: Our Team page is now an About page
+
+The "Team" link in the footer is now called "About". The page keeps the photo
+and introduces Axal VC's Managing Partner, with a short note on why Axal exists
+and how it helps founders turn ideas into businesses.
+
+---
+
+## Improved: Brand Builder now creates real AI names, taglines and logos
+
+The Brand & Landing Page builder now uses our own built-in AI to suggest brand
+names, taglines, and logos — no setup or API key needed. Generate five brand
+directions from a short description of your idea, then pick one and we'll craft a
+matching logo automatically. If the AI is ever unavailable, you'll still get
+solid starter options so the wizard always works.
+
+---
+
+## New: Articles read like a real magazine — and anyone can write one
+
+Article pages now have the full site header and footer, so you can browse the
+rest of the platform without losing your place. Every article shows its author's
+name, linked to their website where we have one, plus buttons to share the piece
+on X, LinkedIn, Facebook, or by email. At the bottom you'll find a "Recommended
+reading" strip with more articles to explore — from the same topic where we can,
+otherwise the latest. And writing is now open to everyone: just sign in and use
+"Write an Article" in the sidebar to draft and submit your own. Your drafts still
+get a quick automated privacy check before they go live.
+
+---
+
+## New: Your Spin-Out deck now matches your brand
+
+Your Brand Builder kit now holds a full look — a background colour, an accent
+colour, a text colour, and a font pairing — not just a single accent. Your
+Spin-Out Demo Day deck picks this up automatically and styles itself as your
+"My brand kit" theme the moment you have a kit. Prefer a different look? You can
+still switch to one of four ready-made presets, and if a colour choice would be
+hard to read the deck quietly falls back to its clean editorial style. Set it
+all up in the Brand Builder under Tune.
+
 ## Improved: Articles sector filter is now a single dropdown, with more sectors
 
 On the Articles page, the long row of sector chips is now a single, tidy
 "All sectors" dropdown that sits right next to the authors dropdown and works
 the same on phone and desktop. We also added a few sectors you can filter by:
 Robotics, Cybersecurity, Defense, and Bio.
+
 
 ---
 

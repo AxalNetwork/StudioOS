@@ -1,0 +1,1 @@
+import{Kt as e,Ut as t}from"./index-DtFgM8fZ.js";var n=e(t(),1),r=(0,n.createContext)(null),i=()=>(0,n.useContext)(r);export{i as n,r as t};

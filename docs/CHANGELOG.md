@@ -11,6 +11,117 @@
 > building it.
 
 
+## Team page → About page
+
+The public `/team` page is now an "About" page. It keeps the photo, sets the
+title to "Managing Partner", and shows a founder statement about why Axal VC
+exists. The footer "Company" link label is renamed Team → About (route stays
+`/team`).
+
+- `frontend/src/pages/TeamPage.jsx` — rewritten from a team-member grid to a
+  single-person About layout. Still fetches `/api/public/team` for the photo
+  (first member) and name; title hard-coded to "Managing Partner"; About copy
+  inlined as `ABOUT_TEXT`. Graceful fallback (User icon) when no photo.
+- `frontend/src/components/PublicFooter.jsx` — Company list link relabelled
+  Team → About; `to="/team"` unchanged.
+
+
+## Brand Builder — names, taglines & logos on Workers AI (OpenAI dropped)
+
+Task #16. The founder Brand & Landing Page wizard now generates brand
+names/taglines AND logos via Cloudflare Workers AI (first-party, no external
+key). The amber "Using deterministic fallback (no OPENAI_API_KEY configured)"
+warning is gone.
+
+- `cloudflare-worker/src/services/aiRouter.ts` — new `brand_suggest` TaskClass
+  in the union + exhaustive ROUTE record (MID_LLAMA primary → SMALL_LLAMA
+  fallback, mirroring `publication`).
+- `cloudflare-worker/src/routes/brand.ts` — `aiBrand()` now routes through
+  `aiRouterRun({ task: 'brand_suggest', ... })` (per-user budget, model
+  fallback, usage logging) instead of an OpenAI `chat/completions` fetch; new
+  `extractJsonObject()` robustly parses small-LLM JSON and each entry is
+  normalised/guarded. `aiLogo()` now calls
+  `env.AI.run('@cf/black-forest-labs/flux-1-schnell')` behind a 30s
+  `Promise.race` timeout and returns a base64 `data:` URL, falling back to the
+  inline `svgLogo()` on any failure. `/suggest` passes `user.id`; `/logo`
+  `source` label changed `dalle` → `workers-ai`. `heuristicBrand()` retained as
+  the deterministic fallback; the `ai_generated` flag is preserved.
+- `frontend/src/pages/BrandBuilderPage.jsx` — replaced the amber OpenAI-key
+  warning with a neutral gray "Showing starter options" notice (with `dark:`
+  variants).
+- `backend/app/api/routes/brand.py` (dev FastAPI, never deployed) — removed the
+  `_ai_brand`/`_ai_logo` OpenAI calls; `/suggest` + `/logo` now return the
+  deterministic heuristic / inline SVG directly (dev has no Workers AI binding).
+  Dropped the now-unused `os`/`json` imports.
+
+`OPENAI_API_KEY` is no longer read by any brand code; the binding stays in
+`types.ts` for other callers.
+
+
+## Articles — publication-style reader, social sharing, recommended reading, open authoring
+
+Task #9. The public Articles reader now reads like a real publication and
+authoring is open to every signed-in user (no trust-score gate).
+
+- `cloudflare-worker/src/services/authorWebsites.ts` (new) — `ensureAuthorWebsites()`
+  bootstraps a side table `author_websites(user_id PK, website_url, ...)` (the
+  `users` table is at D1's ALTER-column limit) and seeds Guillaume Lauzier
+  (resolved by `gl@axal.vc` / name) → `https://guillaumelauzier.com`.
+- `cloudflare-worker/src/routes/articles.ts` — LEFT JOIN `author_websites` into
+  the list / by-author / slug queries, expose `author_website` in
+  `publicArticleShape`, and call `ensureAuthorWebsites()` on those reads. Slug
+  read re-renders from `body_markdown` (fallback to stored `body_html`) and
+  fire-and-forget refreshes a stale stored `body_html` via
+  `c.executionCtx.waitUntil`. Removed the `canAuthor()` trust gate from POST
+  `/draft` and POST `/:id/submit`; PII linter + weekly cap retained.
+- `cloudflare-worker/src/services/newsRender.ts` — `renderMarkdown` joins
+  single-newline paragraph lines with `<br>` (was a space) so soft line breaks
+  survive; mirrored in the FE preview renderer.
+- `frontend/src/pages/ArticleReaderPage.jsx` — rewritten: `PublicNav` +
+  `PublicFooter` (pt-16), linked author byline (opens `author_website` in a new
+  tab), Share bar (X / LinkedIn / Facebook / Email), and a Recommended-reading
+  strip (same sector first, then most recent, current excluded). Removed the
+  "Write an article" affordance from the reader.
+- `frontend/src/pages/ArticleAuthorPage.jsx` — removed the trust badge, banner,
+  `trustOk` gate, and `trustMe()` boot fetch; Submit is no longer trust-gated.
+- `frontend/src/App.jsx` — `/articles/draft` + `/articles/edit/:id` now use a
+  new `authOnly()` wrapper (any authenticated user) instead of the role guard.
+- `frontend/src/sidebarConfig.js` — "Write an Article" (`/articles/draft`,
+  PenLine icon) added to every role's Account group.
+
+## Spin-Out deck — Brand Kit branding; deck auto-themes from the founder's saved kit
+
+Task #4. The Spin-Out Demo Day deck now auto-themes from the founder's brand
+kit. The Brand Builder's kit is extended from a single accent colour to a full
+palette (background + accent/theme + ink) plus a typography pairing, and the
+deck renders as a default-active "My brand kit" variant when a kit exists, with
+4 selectable presets and a contrast-safe fallback to the editorial theme. The
+06·BRAND slide was already removed everywhere by the merged Task #1.
+
+- `cloudflare-worker/sql/migrations/079_landing_page_brand_kit.sql` — additive
+  ALTERs add `palette_bg` / `palette_ink` / `font_pairing` to `landing_pages`.
+- `cloudflare-worker/src/services/landingPageSchema.ts` (new) —
+  `ensureLandingPageBrandKitColumns(env)` lazy-bootstraps the three columns so
+  prod self-heals regardless of whether the migration is applied (same pattern
+  as the other `ensure*Schema` helpers).
+- `cloudflare-worker/src/routes/brand.ts` — CREATE TABLE + `ensureSchema` call
+  the helper; `rowToLanding` returns the three new fields; PUT validates
+  (`HEX_RE` for colours via `cleanHex`, `FONT_PAIRING_IDS` via
+  `cleanFontPairing`) and persists on both UPDATE and INSERT.
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts` —
+  `SpinoutDemoDayData` gains a `brand_kit` object; the builder SELECTs
+  `theme_color, palette_bg, palette_ink, font_pairing` from the landing page,
+  builds `brand_kit` (`present = !!landingPage`), and the Cover slide emits the
+  flat `brandkit_present/bg/accent/ink/fonts` fields the renderer hydrates.
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx` — `PRESET_VIBE`
+  map + `FONT_PAIRING_OPTIONS` export; `DeckRoot` computes
+  `brandKit = buildBrandKitTheme(data.brand_kit)`, defaults the variant to
+  `brand_kit` when a kit is present and untouched, restores the stored
+  `brand_kit` selection, and falls back to editorial when no kit exists.
+- `frontend/src/pages/BrandBuilderPage.jsx` — Tune section gains background /
+  text colour pickers and a typography-pairing `<select>`; draft state + load
+  carry `palette_bg` / `palette_ink` / `font_pairing`.
+
 ## Articles — sector filter is now a compact dropdown; added Robotics, Cybersecurity, Defense, Bio sectors
 
 Task #8. The public Articles page's wrapping row of sector pills is replaced
