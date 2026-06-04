@@ -555,9 +555,9 @@ app.route('/api/decks', decks);
 // Public landing page HTML (no /api prefix). Founders publish via the
 // authenticated /api/brand/landing/by-project/:pid/publish endpoint;
 // this route renders the page for un-authenticated visitors.
-app.get('/landing/:slug', async (c) => renderLandingHtml(c.env, c.req.param('slug')));
+app.get('/landing/:slug', async (c) => renderLandingHtml(c.env, c.req.param('slug'), c.get('cspNonce' as never)));
 // Task #4 — private preview URL for unpublished drafts (noindex).
-app.get('/landing/preview/:token', async (c) => renderLandingPreview(c.env, c.req.param('token')));
+app.get('/landing/preview/:token', async (c) => renderLandingPreview(c.env, c.req.param('token'), c.get('cspNonce' as never)));
 app.route('/api/kyc', kyc);
 // Task #3 (Y-1) — Trust Center: per-role obligations + 3-way NDA flow.
 app.route('/api/trust', trust);

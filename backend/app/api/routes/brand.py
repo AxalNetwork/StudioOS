@@ -652,7 +652,7 @@ def upsert_landing(
     _project_owned(session, project_id, user)
     _ensure_schema(session)
     existing = session.exec(text(
-        "SELECT id, slug FROM landing_pages WHERE project_id = :pid"
+        "SELECT id, slug, preview_token FROM landing_pages WHERE project_id = :pid"
     ), params={"pid": project_id}).mappings().first()
     params = {
         "pid": project_id,
@@ -681,6 +681,8 @@ def upsert_landing(
         "ai_c": payload.audience_investor_cta or None,
     }
     if existing:
+        preview_token = existing.get("preview_token") or secrets.token_hex(16)
+        params["preview_token"] = preview_token
         session.exec(text(
             "UPDATE landing_pages SET name=:name, tagline=:tagline, headline=:headline, "
             "subheadline=:subheadline, cta_text=:cta, logo_url=:logo_url, logo_svg=:logo_svg, "
@@ -690,7 +692,7 @@ def upsert_landing(
             "audience_customer_headline=:ac_h, audience_customer_body=:ac_b, audience_customer_cta=:ac_c, "
             "audience_partner_headline=:ap_h, audience_partner_body=:ap_b, audience_partner_cta=:ap_c, "
             "audience_investor_headline=:ai_h, audience_investor_body=:ai_b, audience_investor_cta=:ai_c, "
-            "updated_at=CURRENT_TIMESTAMP WHERE project_id=:pid"
+            "preview_token=:preview_token, updated_at=CURRENT_TIMESTAMP WHERE project_id=:pid"
         ), params=params)
         slug = existing["slug"]
     else:
@@ -887,6 +889,13 @@ def preview_url(project_id: int, user: User = Depends(get_current_user), session
     row = session.exec(text(
         "SELECT preview_token FROM landing_pages WHERE project_id = :pid"
     ), params={"pid": project_id}).mappings().first()
-    if not row or not row.get("preview_token"):
+    if not row:
         raise HTTPException(status_code=404, detail="no preview token")
-    return {"url": f"/landing/preview/{row['preview_token']}"}
+    token = row.get("preview_token")
+    if not token:
+        token = secrets.token_hex(16)
+        session.exec(text(
+            "UPDATE landing_pages SET preview_token = :token WHERE project_id = :pid"
+        ), params={"token": token, "pid": project_id})
+        session.commit()
+    return {"url": f"/landing/preview/{token}"}

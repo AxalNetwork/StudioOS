@@ -622,6 +622,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
   const audInvestorBody = String(body?.audience_investor_body || '').trim() || null;
   const audInvestorCta = String(body?.audience_investor_cta || '').trim() || null;
   if (existing) {
+    const previewToken = existing.preview_token || Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, '0')).join('');
     await c.env.DB.prepare(
       `UPDATE landing_pages SET name=?, tagline=?, headline=?, subheadline=?, cta_text=?,
        logo_url=?, logo_svg=?, logo_asset_id=?, theme_color=?, palette_bg=?, palette_ink=?,
@@ -629,7 +630,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
        audience_customer_headline=?, audience_customer_body=?, audience_customer_cta=?,
        audience_partner_headline=?, audience_partner_body=?, audience_partner_cta=?,
        audience_investor_headline=?, audience_investor_body=?, audience_investor_cta=?,
-       updated_at=datetime('now') WHERE project_id=?`
+       preview_token=?, updated_at=datetime('now') WHERE project_id=?`
     ).bind(
       name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
       body?.logo_url || null, sanitizeSvg(body?.logo_svg) || null, logoAssetId, color,
@@ -637,7 +638,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
       audCustomerHeadline, audCustomerBody, audCustomerCta,
       audPartnerHeadline, audPartnerBody, audPartnerCta,
       audInvestorHeadline, audInvestorBody, audInvestorCta,
-      pid,
+      previewToken, pid,
     ).run();
   } else {
     const slug = slugify(name);
@@ -702,8 +703,13 @@ brand.get('/landing/by-project/:pid/preview-url', async (c) => {
   catch (e: any) { return c.json({ error: 'forbidden' }, 403); }
   await ensureSchema(c.env);
   const row = await c.env.DB.prepare('SELECT preview_token FROM landing_pages WHERE project_id = ?').bind(pid).first<any>();
-  if (!row || !row.preview_token) return c.json({ error: 'no preview token' }, 404);
-  return c.json({ url: `/landing/preview/${row.preview_token}` });
+  if (!row) return c.json({ error: 'no preview token' }, 404);
+  let token = row.preview_token;
+  if (!token) {
+    token = Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, '0')).join('');
+    await c.env.DB.prepare('UPDATE landing_pages SET preview_token = ? WHERE project_id = ?').bind(token, pid).run();
+  }
+  return c.json({ url: `/landing/preview/${token}` });
 });
 
 brand.get('/landing/:slug', async (c) => {
@@ -758,7 +764,7 @@ function escapeHtml(s: string | null | undefined): string {
 
 function buildLandingPageHtml(
   row: any,
-  opts: { slug?: string; token?: string; noindex?: boolean } = {},
+  opts: { slug?: string; token?: string; noindex?: boolean; nonce?: string } = {},
 ): Response {
   const name = escapeHtml(row.name);
   const color = /^#[0-9a-fA-F]{6}$/.test(row.theme_color || '') ? row.theme_color : '#7c3aed';
@@ -869,7 +875,7 @@ ${opts.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     </div>
     <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
   </div>
-<script>
+<script${opts.nonce ? ` nonce="${opts.nonce}"` : ''}>
 function switchTab(aud){
   document.querySelectorAll('.tab').forEach(function(t){
     var on = t.dataset.a===aud;
@@ -910,7 +916,7 @@ function switchTab(aud){
   });
 }
 
-export async function renderLandingHtml(env: Env, slug: string): Promise<Response> {
+export async function renderLandingHtml(env: Env, slug: string, nonce?: string): Promise<Response> {
   await ensureSchema(env);
   const row = await env.DB.prepare(
     `SELECT * FROM landing_pages WHERE slug = ? AND published = 1`
@@ -922,10 +928,10 @@ export async function renderLandingHtml(env: Env, slug: string): Promise<Respons
   env.DB.prepare(
     `UPDATE landing_pages SET views_count = COALESCE(views_count, 0) + 1 WHERE slug = ?`
   ).bind(slug).run().catch(() => {});
-  return buildLandingPageHtml(row, { slug, noindex: false });
+  return buildLandingPageHtml(row, { slug, noindex: false, nonce });
 }
 
-export async function renderLandingPreview(env: Env, token: string): Promise<Response> {
+export async function renderLandingPreview(env: Env, token: string, nonce?: string): Promise<Response> {
   await ensureSchema(env);
   const row = await env.DB.prepare(
     `SELECT * FROM landing_pages WHERE preview_token = ?`
@@ -933,7 +939,7 @@ export async function renderLandingPreview(env: Env, token: string): Promise<Res
   if (!row) {
     return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain' } });
   }
-  return buildLandingPageHtml(row, { token, noindex: true });
+  return buildLandingPageHtml(row, { token, noindex: true, nonce });
 }
 
 export default brand;
