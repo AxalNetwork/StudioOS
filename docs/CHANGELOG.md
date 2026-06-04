@@ -11,6 +11,31 @@
 > building it.
 
 
+## Articles reader: fix unreadable bodies + unblock the deploy
+
+The public Articles pages now read like a real publication. Two fixes:
+
+- **Markdown renderer** (`cloudflare-worker/src/services/newsRender.ts`) — heading,
+  blockquote and fenced-code detection now tolerate leading indentation, so the
+  article bodies (written with a uniform leading indent per line) render as real
+  `<h2>`/`<blockquote>`/etc. instead of leaking literal `## ...` text. Paragraph
+  lines are trimmed so stray leading whitespace doesn't leak. Also fixed a latent
+  blockquote bug: input is HTML-escaped before tokenisation, so the `>` marker is
+  `&gt;` by that point — detection/strip/paragraph-break now match `&gt;`. Unit
+  coverage added in `cloudflare-worker/test/newsRender.test.ts` (indented heading,
+  all levels, indented quote/list, paragraph trim, heading-breaks-paragraph),
+  wired into `npm run test:drift`.
+- **Reader build break** (`frontend/src/pages/ArticleReaderPage.jsx`) — `lucide-react`
+  v1 dropped its brand icons (`Twitter`/`Facebook`/`Linkedin`), which broke
+  `npm run build` and is why the already-merged reader chrome (header/footer/share
+  bar/linked byline/recommended-reading) never shipped — the prod deploy was stale.
+  Replaced the share-bar brand glyphs with local inline SVGs (mirroring
+  `PublicFooter`), keeping `Mail` from lucide. Build is green again.
+
+Renderer is the single source of truth for both prod (Worker) and dev — the public
+article endpoint re-renders HTML from stored Markdown on every read, so no
+stored-content backfill is needed. Ship via `npm run deploy` (user-owned).
+
 ## Team page → About page
 
 The public `/team` page is now an "About" page. It keeps the photo, sets the
