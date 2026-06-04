@@ -176,7 +176,7 @@ export function applyBrandKitToSlides(
     { kind: 'paragraph', key: 'brandkit_bg', value: kit.bg || '' },
     { kind: 'paragraph', key: 'brandkit_ink', value: kit.ink || '' },
     { kind: 'paragraph', key: 'brandkit_secondary', value: kit.secondary || '' },
-    { kind: 'paragraph', key: 'brandkit_accent', value: kit.accent || '' },
+    { kind: 'paragraph', key: 'brandkit_accent', value: (brandTheme === 'accent_only' ? kit.theme_color : kit.accent) || '' },
     { kind: 'paragraph', key: 'brandkit_fonts', value: kit.fonts || '' },
     { kind: 'paragraph', key: 'brandkit_theme', value: brandTheme },
     { kind: 'paragraph', key: 'brandkit_project_name', value: projectName || '' },
