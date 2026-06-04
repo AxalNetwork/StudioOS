@@ -5,6 +5,14 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Updated: Our Team page is now an About page
+
+The "Team" link in the footer is now called "About". The page keeps the photo
+and introduces Axal VC's Managing Partner, with a short note on why Axal exists
+and how it helps founders turn ideas into businesses.
+
+---
+
 ## Improved: Brand Builder now creates real AI names, taglines and logos
 
 The Brand & Landing Page builder now uses our own built-in AI to suggest brand

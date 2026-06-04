@@ -11,6 +11,21 @@
 > building it.
 
 
+## Team page → About page
+
+The public `/team` page is now an "About" page. It keeps the photo, sets the
+title to "Managing Partner", and shows a founder statement about why Axal VC
+exists. The footer "Company" link label is renamed Team → About (route stays
+`/team`).
+
+- `frontend/src/pages/TeamPage.jsx` — rewritten from a team-member grid to a
+  single-person About layout. Still fetches `/api/public/team` for the photo
+  (first member) and name; title hard-coded to "Managing Partner"; About copy
+  inlined as `ABOUT_TEXT`. Graceful fallback (User icon) when no photo.
+- `frontend/src/components/PublicFooter.jsx` — Company list link relabelled
+  Team → About; `to="/team"` unchanged.
+
+
 ## Brand Builder — names, taglines & logos on Workers AI (OpenAI dropped)
 
 Task #16. The founder Brand & Landing Page wizard now generates brand
