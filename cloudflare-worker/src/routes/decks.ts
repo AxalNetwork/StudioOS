@@ -19,7 +19,7 @@ import { autofillDeck, toEditorSlides } from '../services/decks/autofill';
 // that don't fit the project/financials/captable source shape.
 import { fillAxalSpinoutDemoDay, buildAxalSpinoutDemoDaySlides, buildAxalSpinoutCoverage } from '../services/decks/axalSpinoutDemoDay';
 import { recommendMethod, listOverrides, setOverride, deleteOverride } from '../services/decks/recommend';
-import { getDeckBrand, setStudioWatermark, ensureMethodAllowed } from '../services/decks/branding';
+import { getDeckBrand, setStudioWatermark, ensureMethodAllowed, fetchLandingPageForProject, applyBrandKitToSlides } from '../services/decks/branding';
 import { renderDeckHTML, type RenderableDeck } from '../services/decks/render';
 import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx';
 import { stripTrailingSlashes } from '../util/url';
@@ -513,8 +513,11 @@ decks.post('/generate', async (c) => {
   const aligned = enforceTen(raw, fallback);
   const slides = sanitizeSlides(aligned);
   while (slides.length < 10) slides.push(fallback[slides.length]);
+  // Task #6 — inject brand kit from landing page (generic generate = 'off' theme)
+  const landingPage = await fetchLandingPageForProject(c.env, pid);
+  const brandedSlides = applyBrandKitToSlides(slides, landingPage, 'off', p.name);
   const title = `${p.name} — Pitch deck`;
-  const id = await insertVersion(c.env, pid, slides, title, Number(user.id) || null);
+  const id = await insertVersion(c.env, pid, brandedSlides, title, Number(user.id) || null);
   const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
   return c.json(rowToDeck(row));
 });
@@ -1066,8 +1069,11 @@ decks.post('/apply-method', async (c) => {
     const data = await fillAxalSpinoutDemoDay(c.env, Number(user.id), pid);
     const wrapped = buildAxalSpinoutDemoDaySlides(data);
     const safeWrapped = sanitizeSlides(wrapped);
+    // Task #6 — inject brand kit for spin-out (accent_only)
+    const landingPage = await fetchLandingPageForProject(c.env, pid);
+    const branded = applyBrandKitToSlides(safeWrapped, landingPage, method.brandTheme, proj.name);
     const title = `${proj.name} — ${method.label}`;
-    const id = await insertVersion(c.env, pid, safeWrapped, title, Number(user.id) || null);
+    const id = await insertVersion(c.env, pid, branded, title, Number(user.id) || null);
     const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
     // No generic coverage metric for the custom path — report 1 when
     // the project has a name + sector, else 0. Keeps the picker's
@@ -1105,8 +1111,11 @@ decks.post('/apply-method', async (c) => {
   // guard before they're persisted and later rendered into the
   // headless browser during /export.
   const safeWrapped = sanitizeSlides(wrapped);
+  // Task #6 — inject brand kit per the template's theme tier
+  const landingPage = await fetchLandingPageForProject(c.env, pid);
+  const branded = applyBrandKitToSlides(safeWrapped, landingPage, method.brandTheme, proj.name);
   const title = `${proj.name} — ${method.label}`;
-  const id = await insertVersion(c.env, pid, safeWrapped, title, Number(user.id) || null);
+  const id = await insertVersion(c.env, pid, branded, title, Number(user.id) || null);
   const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
   return c.json({
     deck: rowToDeck(row),
@@ -1202,8 +1211,14 @@ decks.post('/:id/autofill', async (c) => {
     image_url: (s.fields.find((f) => f.kind === 'image')?.value as any) || null,
   }));
   const safeWrapped = sanitizeSlides(wrapped);
+  // Task #6 — re-inject brand kit on re-fill (preserve original method.brandTheme)
+  const projectName = String(
+    (await c.env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(Number(row.project_id)).first<any>())?.name || ''
+  );
+  const landingPage = await fetchLandingPageForProject(c.env, Number(row.project_id));
+  const branded = applyBrandKitToSlides(safeWrapped, landingPage, method.brandTheme, projectName);
   await c.env.DB.prepare(`UPDATE pitch_decks SET slides = ? WHERE id = ?`)
-    .bind(JSON.stringify(safeWrapped), id).run();
+    .bind(JSON.stringify(branded), id).run();
   const fresh = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
   // Per-slide confidence — surfaced in the editor rail. `filled.slides`
   // and `editorSlides` share the same order/length.

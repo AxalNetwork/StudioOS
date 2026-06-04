@@ -22,6 +22,8 @@ import { Deck_axal_spinout_demoday } from './axal_spinout_demoday_app';
 
 export type TemplateCategory = 'commercial' | 'fundraising';
 
+export type BrandTheme = 'full' | 'accent_only' | 'off';
+
 export interface TemplateMeta {
   key: string;
   label: string;
@@ -37,22 +39,32 @@ export interface TemplateMeta {
    */
   category: TemplateCategory;
   Component: React.FC<DeckProps>;
+  /**
+   * Task #6 — brand kit theming tier.
+   *   `full`       — full palette override (bg, ink, accent, fonts)
+   *   `accent_only` — accent color only; backgrounds stay neutral
+   *   `off`         — no palette injection; logo still appears on cover
+   */
+  brandTheme: BrandTheme;
 }
 
 export const TEMPLATES: Record<string, TemplateMeta> = {
-  yc_seed:            { key: 'yc_seed',            label: 'Y Combinator — Seed',           description: '10 slides · YC seed style',                        slide_count: 10, required_tier: 'free',   category: 'fundraising', Component: Deck_yc_seed },
-  sequoia_classic:    { key: 'sequoia_classic',    label: 'Sequoia Classic — Narrative',   description: '12 slides · narrative-driven',                     slide_count: 12, required_tier: 'free',   category: 'fundraising', Component: Deck_sequoia_classic },
-  kawasaki_10_20_30:  { key: 'kawasaki_10_20_30',  label: 'Kawasaki — 10 / 20 / 30',       description: '10 slides · big type only',                        slide_count: 10, required_tier: 'free',   category: 'fundraising', Component: Deck_kawasaki_10_20_30 },
-  minimal_seed:       { key: 'minimal_seed',       label: 'Minimal Seed — 6 slides',       description: '6 slides · stripped to essentials',                slide_count: 6,  required_tier: 'free',   category: 'fundraising', Component: Deck_minimal_seed },
-  series_a_growth:    { key: 'series_a_growth',    label: 'Series A — Growth & GTM',       description: '15 slides · metrics + GTM',                        slide_count: 15, required_tier: 'growth', category: 'fundraising', Component: Deck_series_a_growth },
-  series_b_diligence: { key: 'series_b_diligence', label: 'Series B — Diligence Pack',     description: '22 main + 10 appendix · board-grade',              slide_count: 32, required_tier: 'studio', category: 'fundraising', Component: Deck_series_b_diligence },
-  demo_day:           { key: 'demo_day',           label: 'Demo Day — Product-first',      description: '12 slides · product-first · SVG mockups',          slide_count: 12, required_tier: 'growth', category: 'event', Component: Deck_demo_day },
-  sales_commercial:   { key: 'sales_commercial',   label: 'Sales — Customer-facing',       description: '18 slides · customer-facing · SVG product screens', slide_count: 18, required_tier: 'growth', category: 'commercial',  Component: Deck_sales_commercial },
-  partnership_bd:     { key: 'partnership_bd',     label: 'Partnership / BD',              description: '12 slides · executive consulting · SVG diagrams', slide_count: 12, required_tier: 'growth', category: 'commercial',  Component: Deck_partnership_bd },
-  one_pager_teaser:   { key: 'one_pager_teaser',   label: 'One-Pager Teaser',              description: '1 page · cold outreach',                           slide_count: 1,  required_tier: 'free',   category: 'commercial',  Component: Deck_one_pager_teaser },
-  investor_appendix:  { key: 'investor_appendix',  label: 'Investor + Appendix',           description: '12 core + 30 appendix (A–I) · editorial · with charts', slide_count: 42, required_tier: 'studio', category: 'fundraising', Component: Deck_investor_appendix },
-  narrative_brand:    { key: 'narrative_brand',    label: 'Narrative — Brand-led',         description: '4 acts · 15 chapters + 4 dividers · cinematic · custom SVG artwork', slide_count: 19, required_tier: 'studio', category: 'commercial',  Component: Deck_narrative_brand },
-  axal_spinout_demoday: { key: 'axal_spinout_demoday', label: 'Axal VC Spin-Out', description: '11 slides · 4 variants (editorial / product-first / data-dense / manifesto) · binds to Lab data', slide_count: 11, required_tier: 'growth', category: 'event', Component: Deck_axal_spinout_demoday },
+  // accent_only — accent color only; backgrounds stay neutral
+  yc_seed:            { key: 'yc_seed',            label: 'Y Combinator — Seed',           description: '10 slides · YC seed style',                        slide_count: 10, required_tier: 'free',   category: 'fundraising', Component: Deck_yc_seed,            brandTheme: 'accent_only' },
+  kawasaki_10_20_30:  { key: 'kawasaki_10_20_30',  label: 'Kawasaki — 10 / 20 / 30',       description: '10 slides · big type only',                        slide_count: 10, required_tier: 'free',   category: 'fundraising', Component: Deck_kawasaki_10_20_30,  brandTheme: 'accent_only' },
+  minimal_seed:       { key: 'minimal_seed',       label: 'Minimal Seed — 6 slides',       description: '6 slides · stripped to essentials',                slide_count: 6,  required_tier: 'free',   category: 'fundraising', Component: Deck_minimal_seed,       brandTheme: 'accent_only' },
+  investor_appendix:  { key: 'investor_appendix',  label: 'Investor + Appendix',           description: '12 core + 30 appendix (A–I) · editorial · with charts', slide_count: 42, required_tier: 'studio', category: 'fundraising', Component: Deck_investor_appendix,  brandTheme: 'accent_only' },
+  demo_day:           { key: 'demo_day',           label: 'Demo Day — Product-first',      description: '12 slides · product-first · SVG mockups',          slide_count: 12, required_tier: 'growth', category: 'event',       Component: Deck_demo_day,           brandTheme: 'accent_only' },
+  axal_spinout_demoday: { key: 'axal_spinout_demoday', label: 'Axal VC Spin-Out', description: '11 slides · 4 variants (editorial / product-first / data-dense / manifesto) · binds to Lab data', slide_count: 11, required_tier: 'growth', category: 'event', Component: Deck_axal_spinout_demoday, brandTheme: 'accent_only' },
+  // full — full palette override (bg, ink, accent, fonts)
+  narrative_brand:    { key: 'narrative_brand',    label: 'Narrative — Brand-led',         description: '4 acts · 15 chapters + 4 dividers · cinematic · custom SVG artwork', slide_count: 19, required_tier: 'studio', category: 'commercial',  Component: Deck_narrative_brand,    brandTheme: 'full' },
+  one_pager_teaser:   { key: 'one_pager_teaser',   label: 'One-Pager Teaser',              description: '1 page · cold outreach',                           slide_count: 1,  required_tier: 'free',   category: 'commercial',  Component: Deck_one_pager_teaser,   brandTheme: 'full' },
+  partnership_bd:     { key: 'partnership_bd',     label: 'Partnership / BD',              description: '12 slides · executive consulting · SVG diagrams', slide_count: 12, required_tier: 'growth', category: 'commercial',  Component: Deck_partnership_bd,     brandTheme: 'full' },
+  sales_commercial:   { key: 'sales_commercial',   label: 'Sales — Customer-facing',       description: '18 slides · customer-facing · SVG product screens', slide_count: 18, required_tier: 'growth', category: 'commercial',  Component: Deck_sales_commercial,   brandTheme: 'full' },
+  // off — no palette injection; logo still appears on cover
+  sequoia_classic:    { key: 'sequoia_classic',    label: 'Sequoia Classic — Narrative',   description: '12 slides · narrative-driven',                     slide_count: 12, required_tier: 'free',   category: 'fundraising', Component: Deck_sequoia_classic,    brandTheme: 'off' },
+  series_a_growth:    { key: 'series_a_growth',    label: 'Series A — Growth & GTM',       description: '15 slides · metrics + GTM',                        slide_count: 15, required_tier: 'growth', category: 'fundraising', Component: Deck_series_a_growth,    brandTheme: 'off' },
+  series_b_diligence: { key: 'series_b_diligence', label: 'Series B — Diligence Pack',     description: '22 main + 10 appendix · board-grade',              slide_count: 32, required_tier: 'studio', category: 'fundraising', Component: Deck_series_b_diligence, brandTheme: 'off' },
 };
 
 // Explicit registry list — kept in the same order as the TEMPLATES map.

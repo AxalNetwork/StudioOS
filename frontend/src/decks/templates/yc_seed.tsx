@@ -1,5 +1,5 @@
 import React from 'react';
-import { Slide16x9, Editable, DeckProps, v } from '../DeckBase';
+import { Slide16x9, Editable, DeckProps, v, BrandProvider, useBrandContext } from '../DeckBase';
 
 // ─────────────────────────────────────────────────────────────────
 // YC Seed — 10-slide investor deck. Each slide is wrapped in the
@@ -59,39 +59,47 @@ const fmtPct = (n?: any) => {
 
 // ── SVG primitives ───────────────────────────────────────────────
 
-const Logo: React.FC<{ size?: number }> = ({ size = 64 }) => (
-  <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden>
-    <rect x="4" y="4" width="56" height="56" rx="14" fill={ORANGE} />
-    <path d="M20 44 L32 18 L44 44 M24.5 36 H39.5" stroke="#FFFFFF" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
+const Logo: React.FC<{ size?: number }> = ({ size = 64 }) => {
+  const { accent: brandAccent } = useBrandContext();
+  const ac = brandAccent || ORANGE;
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden>
+      <rect x="4" y="4" width="56" height="56" rx="14" fill={ac} />
+      <path d="M20 44 L32 18 L44 44 M24.5 36 H39.5" stroke="#FFFFFF" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+};
 
-const HeroOrb: React.FC = () => (
-  <svg viewBox="0 0 800 600" width="100%" height="100%" aria-hidden>
-    <defs>
-      <radialGradient id="orb-g" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stopColor="#FFB380" stopOpacity="0.9" />
-        <stop offset="60%" stopColor={ORANGE} stopOpacity="0.5" />
-        <stop offset="100%" stopColor={ORANGE} stopOpacity="0" />
-      </radialGradient>
-      <radialGradient id="orb-h" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.9" />
-        <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
-      </radialGradient>
-    </defs>
-    <circle cx="500" cy="300" r="260" fill="url(#orb-g)" />
-    <circle cx="500" cy="300" r="180" fill="none" stroke={ORANGE} strokeOpacity="0.25" />
-    <circle cx="500" cy="300" r="240" fill="none" stroke={ORANGE} strokeOpacity="0.15" />
-    <circle cx="500" cy="300" r="300" fill="none" stroke={ORANGE} strokeOpacity="0.08" />
-    <circle cx="430" cy="240" r="40" fill="url(#orb-h)" />
-    {[...Array(8)].map((_, i) => {
-      const a = (i / 8) * Math.PI * 2;
-      const x = 500 + Math.cos(a) * 220;
-      const y = 300 + Math.sin(a) * 220;
-      return <circle key={i} cx={x} cy={y} r="6" fill={ORANGE} />;
-    })}
-  </svg>
-);
+const HeroOrb: React.FC = () => {
+  const { accent: brandAccent } = useBrandContext();
+  const ac = brandAccent || ORANGE;
+  return (
+    <svg viewBox="0 0 800 600" width="100%" height="100%" aria-hidden>
+      <defs>
+        <radialGradient id="orb-g" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor={mix(ac, '#ffffff', 0.5)} stopOpacity="0.9" />
+          <stop offset="60%" stopColor={ac} stopOpacity="0.5" />
+          <stop offset="100%" stopColor={ac} stopOpacity="0" />
+        </radialGradient>
+        <radialGradient id="orb-h" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.9" />
+          <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <circle cx="500" cy="300" r="260" fill="url(#orb-g)" />
+      <circle cx="500" cy="300" r="180" fill="none" stroke={ac} strokeOpacity="0.25" />
+      <circle cx="500" cy="300" r="240" fill="none" stroke={ac} strokeOpacity="0.15" />
+      <circle cx="500" cy="300" r="300" fill="none" stroke={ac} strokeOpacity="0.08" />
+      <circle cx="430" cy="240" r="40" fill="url(#orb-h)" />
+      {[...Array(8)].map((_, i) => {
+        const a = (i / 8) * Math.PI * 2;
+        const x = 500 + Math.cos(a) * 220;
+        const y = 300 + Math.sin(a) * 220;
+        return <circle key={i} cx={x} cy={y} r="6" fill={ac} />;
+      })}
+    </svg>
+  );
+};
 
 const LineChart: React.FC<{ data: { month: string; v: number }[]; height?: number; color?: string; fill?: boolean }> = ({
   data, height = 240, color = ORANGE, fill = true,
@@ -201,25 +209,30 @@ const MarketCircles: React.FC<{ tam?: number; sam?: number; som?: number }> = ({
 
 const Frame: React.FC<React.PropsWithChildren<{ index: number; total?: number; company?: string }>> = ({
   index, total = 10, company, children,
-}) => (
-  <Slide16x9 font={FONT} ink={INK}>
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Logo size={32} />
-        <span style={{ fontSize: 16, fontWeight: 600, color: INK, letterSpacing: -0.2 }}>{company || 'Company'}</span>
+}) => {
+  const { accent: brandAccent } = useBrandContext();
+  const ac = brandAccent || ORANGE;
+  return (
+    <Slide16x9 font={FONT} ink={INK}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Logo size={32} />
+          <span style={{ fontSize: 16, fontWeight: 600, color: INK, letterSpacing: -0.2 }}>{company || 'Company'}</span>
+        </div>
+        <div style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: 3, color: '#A3A3A3', fontWeight: 500 }}>
+          {String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
+        </div>
       </div>
-      <div style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: 3, color: '#A3A3A3', fontWeight: 500 }}>
-        {String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
-      </div>
-    </div>
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>{children}</div>
-    <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 4, background: ORANGE }} />
-  </Slide16x9>
-);
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>{children}</div>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 4, background: ac }} />
+    </Slide16x9>
+  );
+};
 
-const SectionEyebrow: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: 3, fontWeight: 700, color: ORANGE }}>{children}</div>
-);
+const SectionEyebrow: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { accent: brandAccent } = useBrandContext();
+  return <div style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: 3, fontWeight: 700, color: brandAccent || ORANGE }}>{children}</div>;
+};
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <h2 style={{ marginTop: 12, fontSize: 52, fontWeight: 800, letterSpacing: -1, lineHeight: 1.1, color: INK }}>{children}</h2>
@@ -229,7 +242,13 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 // Deck
 // ─────────────────────────────────────────────────────────────────
 
-export const Deck_yc_seed: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+export const Deck_yc_seed: React.FC<DeckProps> = ({ data, editable, onEdit }) => (
+  <BrandProvider data={data || {}} fallbackAccent={ORANGE}>
+    <Deck_yc_seed_inner data={data} editable={editable} onEdit={onEdit} />
+  </BrandProvider>
+);
+
+const Deck_yc_seed_inner: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
   const company = v(data, 'company') || undefined;
 
   // Pre-resolve arrays with placeholder fallbacks

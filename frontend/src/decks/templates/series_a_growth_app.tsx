@@ -11,6 +11,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { BrandProvider, useBrandContext } from '../DeckBase';
 import {
   ResponsiveContainer,
   AreaChart, Area,
@@ -2068,7 +2069,13 @@ function mergeShape(sample: SeriesAData, input: Record<string, any>): SeriesADat
   return out;
 }
 
-export const Deck_series_a_growth_app: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
+export const Deck_series_a_growth_app: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => (
+  <BrandProvider data={data || {}} fallbackAccent={ACCENT}>
+    <Deck_series_a_growth_app_inner data={data} editable={editable} onEdit={onEdit} />
+  </BrandProvider>
+);
+
+const Deck_series_a_growth_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
   const seed: SeriesAData = (data && Object.keys(data).length > 0)
     ? mergeShape(SAMPLE_DATA, data as Record<string, any>)
     : SAMPLE_DATA;

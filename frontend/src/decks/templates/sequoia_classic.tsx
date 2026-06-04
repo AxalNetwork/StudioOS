@@ -1,5 +1,5 @@
 import React from 'react';
-import { Slide16x9, Editable, DeckProps, DeckData, v, fmtUSD, fmtPct, fmtNum } from '../DeckBase';
+import { Slide16x9, Editable, DeckProps, DeckData, v, fmtUSD, fmtPct, fmtNum, BrandProvider, useBrandContext } from '../DeckBase';
 
 // ─────────────────────────────────────────────────────────────────
 // Sequoia Classic — narrative-driven 12-slide investor deck.
@@ -958,11 +958,13 @@ const SLIDES: Array<React.FC<DeckProps>> = [
 ];
 
 export const Deck_sequoia_classic: React.FC<DeckProps> = ({ data, editable, onEdit }) => (
-  <>
-    {SLIDES.map((S, i) => (
-      <S key={i} data={data} editable={editable} onEdit={onEdit} />
-    ))}
-  </>
+  <BrandProvider data={data || {}} fallbackAccent={ACCENT}>
+    <>
+      {SLIDES.map((S, i) => (
+        <S key={i} data={data} editable={editable} onEdit={onEdit} />
+      ))}
+    </>
+  </BrandProvider>
 );
 
 export default Deck_sequoia_classic;

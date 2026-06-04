@@ -5,6 +5,15 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: Brand kit in pitch decks
+
+Your saved Brand Builder colours and logo now flow into every pitch deck automatically.
+- Fundraising decks pick up your accent colour.
+- Commercial decks (Narrative, Partnership, Sales, One-Pager) apply your full palette.
+- Even if you haven't set a brand kit, your logo still appears on the cover slide.
+
+---
+
 ## New: Landing page templates
 
 Your landing page now has five layout options:

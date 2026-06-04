@@ -62,6 +62,8 @@ export type DeckSlideSpec = {
   appendix?: boolean;
 };
 
+export type BrandTheme = 'full' | 'accent_only' | 'off';
+
 export type DeckMethodSpec = {
   id: DeckMethodId;
   /** Storage key (matches id). */
@@ -77,6 +79,8 @@ export type DeckMethodSpec = {
   premium?: boolean;
   /** Suggested category badge in the picker. */
   category: 'fundraising' | 'commercial' | 'event' | 'narrative';
+  /** Task #6 — brand kit theming tier. */
+  brandTheme: BrandTheme;
   fields_from_project: string[];
   fields_from_financials: string[];
   fields_from_captable: string[];
@@ -267,6 +271,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     best_for: 'Pre-seed / seed founders pitching accelerators.',
     slide_count: 10,
     category: 'fundraising',
+    brandTheme: 'accent_only',
     fields_from_project: ['name', 'tagline', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'funding_needed', 'use_of_funds'],
     fields_from_financials: ['runway_months', 'ltv_cac_ratio', 'avg_monthly_burn'],
     fields_from_captable: ['founders', 'holders'],
@@ -289,6 +294,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     best_for: 'Seed / Series A with a clear narrative + sizable market.',
     slide_count: 12,
     category: 'narrative',
+    brandTheme: 'off',
     fields_from_project: ['name', 'tagline', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'funding_needed', 'use_of_funds', 'sector', 'contact_email'],
     fields_from_financials: ['mrr', 'mrr_usd', 'runway_months', 'ltv', 'ltv_cac_ratio', 'avg_monthly_burn', 'breakeven_month', 'mom_growth_pct', 'nrr_pct'],
     fields_from_captable: ['founders', 'holders'],
@@ -426,6 +432,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     best_for: 'Investor meetings where you need to be ruthlessly concise.',
     slide_count: 10,
     category: 'fundraising',
+    brandTheme: 'accent_only',
     fields_from_project: ['name', 'problem_statement', 'solution', 'business_model', 'tam', 'users_count', 'revenue', 'funding_needed', 'use_of_funds', 'sector', 'contact_email'],
     fields_from_financials: ['mrr_usd', 'runway_months', 'avg_monthly_burn', 'gross_margin_pct', 'mom_growth_pct', 'nrr_pct', 'payback_months', 'avg_contract_usd'],
     fields_from_captable: ['founders'],
@@ -530,6 +537,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     best_for: 'Sending to investors over email; first-touch pitches.',
     slide_count: 6,
     category: 'fundraising',
+    brandTheme: 'accent_only',
     fields_from_project: ['name', 'tagline', 'problem_statement', 'solution', 'users_count', 'revenue', 'funding_needed'],
     fields_from_financials: ['runway_months'],
     fields_from_captable: ['founders'],
@@ -545,6 +553,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     best_for: 'Companies with $500k+ ARR raising a Series A.',
     slide_count: 15,
     category: 'fundraising',
+    brandTheme: 'off',
     fields_from_project: ['name', 'problem_statement', 'solution', 'tam', 'sam', 'som', 'users_count', 'revenue', 'growth_signals', 'funding_needed', 'use_of_funds'],
     fields_from_financials: ['runway_months', 'ltv', 'ltv_cac_ratio', 'avg_monthly_burn', 'breakeven_month', 'ending_cash', 'total_revenue_horizon'],
     fields_from_captable: ['founders', 'holders', 'founder_pct'],
@@ -566,6 +575,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     best_for: 'Series B+ rounds where investors expect a data room in slides.',
     slide_count: 22, premium: true,
     category: 'fundraising',
+    brandTheme: 'off',
     fields_from_project: ['name', 'problem_statement', 'solution', 'tam', 'sam', 'som', 'users_count', 'revenue', 'growth_signals', 'funding_needed', 'use_of_funds'],
     fields_from_financials: ['runway_months', 'ltv', 'ltv_cac_ratio', 'avg_monthly_burn', 'breakeven_month', 'ending_cash', 'total_revenue_horizon'],
     fields_from_captable: ['founders', 'holders', 'founder_pct', 'total_shares'],
@@ -609,6 +619,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     best_for: 'Accelerator demo days, pitch competitions.',
     slide_count: 12,
     category: 'event',
+    brandTheme: 'accent_only',
     fields_from_project: ['name', 'tagline', 'problem_statement', 'solution', 'users_count', 'revenue', 'funding_needed'],
     fields_from_financials: ['runway_months'],
     fields_from_captable: ['founders'],
@@ -627,6 +638,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     best_for: 'Enterprise sales meetings; commercial pitches.',
     slide_count: 18,
     category: 'commercial',
+    brandTheme: 'full',
     fields_from_project: ['name', 'tagline', 'problem_statement', 'solution', 'description'],
     fields_from_financials: [],
     fields_from_captable: [],
@@ -655,6 +667,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     best_for: 'Strategic partnerships, channel deals, co-marketing.',
     slide_count: 12,
     category: 'commercial',
+    brandTheme: 'full',
     fields_from_project: ['name', 'tagline', 'description', 'sector'],
     fields_from_financials: [],
     fields_from_captable: [],
@@ -679,6 +692,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     best_for: 'First-touch teaser to send to investors or partners.',
     slide_count: 1,
     category: 'commercial',
+    brandTheme: 'full',
     fields_from_project: ['name', 'tagline', 'problem_statement', 'solution', 'users_count', 'revenue', 'funding_needed'],
     fields_from_financials: ['runway_months', 'ltv_cac_ratio'],
     fields_from_captable: ['founders'],
@@ -706,6 +720,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     best_for: 'Sophisticated investors who want both a TL;DR and source data.',
     slide_count: 12, premium: true,
     category: 'fundraising',
+    brandTheme: 'accent_only',
     fields_from_project: ['name', 'problem_statement', 'solution', 'tam', 'sam', 'users_count', 'revenue', 'funding_needed', 'use_of_funds'],
     fields_from_financials: ['runway_months', 'ltv', 'ltv_cac_ratio', 'avg_monthly_burn', 'breakeven_month', 'ending_cash'],
     fields_from_captable: ['founders', 'holders', 'founder_pct'],
@@ -754,6 +769,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     best_for: 'Mission-driven companies; brand-first founders.',
     slide_count: 15, premium: true,
     category: 'narrative',
+    brandTheme: 'full',
     fields_from_project: ['name', 'tagline', 'description', 'problem_statement', 'solution', 'why_now'],
     fields_from_financials: [],
     fields_from_captable: ['founders'],
@@ -787,6 +803,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     slide_count: 10,
     premium: true,
     category: 'event',
+    brandTheme: 'accent_only',
     fields_from_project: ['name', 'sector', 'tagline', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'contact_email', 'vision', 'traction_summary'],
     fields_from_financials: ['runway_months', 'use_of_funds'],
     fields_from_captable: ['founders', 'all_holders'],

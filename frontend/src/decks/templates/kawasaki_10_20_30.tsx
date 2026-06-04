@@ -1,5 +1,5 @@
 import React from 'react';
-import { Slide16x9, Editable, DeckProps, DeckData, v } from '../DeckBase';
+import { Slide16x9, Editable, DeckProps, DeckData, v, BrandProvider, useBrandContext } from '../DeckBase';
 
 // ─────────────────────────────────────────────────────────────────
 // Kawasaki 10/20/30 — exactly 10 slides, one question per slide,
@@ -53,10 +53,13 @@ const fmtPct = (n?: any): string => {
 
 const Frame: React.FC<React.PropsWithChildren<{
   index: number; total: number; question: string; company?: string;
-}>> = ({ index, total, question, company, children }) => (
+}>> = ({ index, total, question, company, children }) => {
+  const { accent: brandAccent } = useBrandContext();
+  const ac = brandAccent || ACCENT;
+  return (
   <Slide16x9 bg={PAPER} ink={INK} font={FONT}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-      <span style={{ fontSize: TYPE.eyebrow, letterSpacing: 5.2, fontWeight: 700, color: ACCENT }}>
+      <span style={{ fontSize: TYPE.eyebrow, letterSpacing: 5.2, fontWeight: 700, color: ac }}>
         {String(index + 1).padStart(2, '0')}
       </span>
       <span style={{ fontSize: TYPE.eyebrow, letterSpacing: 5.2, color: SUBTLE, textTransform: 'uppercase' }}>
@@ -83,7 +86,8 @@ const Frame: React.FC<React.PropsWithChildren<{
       <span>{String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}</span>
     </div>
   </Slide16x9>
-);
+  );
+};
 
 // ─────────────────────────────────────────────────────────────────
 // SVG primitives — bold, one accent.
@@ -708,7 +712,13 @@ const Slide10: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
   );
 };
 
-export const Deck_kawasaki_10_20_30: React.FC<DeckProps> = (props) => {
+export const Deck_kawasaki_10_20_30: React.FC<DeckProps> = (props) => (
+  <BrandProvider data={props.data ?? {}} fallbackAccent={ACCENT}>
+    <Deck_kawasaki_10_20_30_inner {...props} />
+  </BrandProvider>
+);
+
+const Deck_kawasaki_10_20_30_inner: React.FC<DeckProps> = (props) => {
   // Normalise a null `data` prop to `{}` so the per-slide `data = {}`
   // default (which only fires for `undefined`) can't be bypassed — a
   // null payload otherwise throws on the first `data.problem_stat` read.

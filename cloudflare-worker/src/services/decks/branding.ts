@@ -101,6 +101,97 @@ function sanitizeWatermarkUrl(input: string): string | null {
   return u.toString();
 }
 
+export type BrandKitRow = {
+  logo_url: string | null;
+  logo_svg: string | null;
+  logo_asset_id: string | null;
+  theme_color: string | null;
+  palette_bg: string | null;
+  palette_ink: string | null;
+  palette_secondary: string | null;
+  palette_accent: string | null;
+  font_pairing: string | null;
+  name: string | null;
+};
+
+export async function fetchLandingPageForProject(env: Env, projectId: number): Promise<BrandKitRow | null> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT logo_url, logo_svg, logo_asset_id, theme_color, palette_bg, palette_ink,
+              palette_secondary, palette_accent, font_pairing, name
+       FROM landing_pages WHERE project_id = ?`
+    ).bind(projectId).first<BrandKitRow>();
+    return row || null;
+  } catch {
+    return null;
+  }
+}
+
+export type BrandTheme = 'full' | 'accent_only' | 'off';
+
+/**
+ * Task #6 — Inject brand kit fields into the cover slide of any deck.
+ *
+ * - `full`:       overwrites bg, ink, accent, and fonts.
+ * - `accent_only`: injects theme_color as accent; leaves bg neutral.
+ * - `off`:         skips palette but still injects logo + project name.
+ *
+ * Brandkit fields are written as paragraph fields on the cover slide so
+ * `buildTemplateData()` in the frontend flattens them into `data.brandkit_*`.
+ */
+export function applyBrandKitToSlides(
+  slides: any[],
+  landingPage: BrandKitRow | null,
+  brandTheme: BrandTheme,
+  projectName?: string | null,
+): any[] {
+  if (!slides || !slides.length) return slides;
+
+  const hasKit = !!landingPage;
+  const kit = {
+    present: hasKit,
+    logo_url: landingPage?.logo_url || null,
+    logo_svg: landingPage?.logo_svg || null,
+    logo_asset_id: landingPage?.logo_asset_id || null,
+    theme_color: landingPage?.theme_color || null,
+    bg: landingPage?.palette_bg || null,
+    ink: landingPage?.palette_ink || null,
+    secondary: landingPage?.palette_secondary || null,
+    accent: landingPage?.palette_accent || null,
+    fonts: landingPage?.font_pairing || null,
+  };
+
+  // Find the cover slide (first match of spec_id, id, or title heuristics)
+  const coverIdx = slides.findIndex((s) =>
+    s?.spec_id === 'cover' || s?.id === 'title' || s?.title === 'Title' || s?.title === 'Cover'
+  );
+  const coverIdxResolved = coverIdx >= 0 ? coverIdx : 0;
+
+  const brandFields = [
+    { kind: 'paragraph', key: 'brandkit_present', value: kit.present ? 'true' : 'false' },
+    { kind: 'paragraph', key: 'brandkit_logo_url', value: kit.logo_url || '' },
+    { kind: 'paragraph', key: 'brandkit_logo_svg', value: kit.logo_svg || '' },
+    { kind: 'paragraph', key: 'brandkit_logo_asset_id', value: kit.logo_asset_id || '' },
+    { kind: 'paragraph', key: 'brandkit_theme_color', value: kit.theme_color || '' },
+    { kind: 'paragraph', key: 'brandkit_bg', value: kit.bg || '' },
+    { kind: 'paragraph', key: 'brandkit_ink', value: kit.ink || '' },
+    { kind: 'paragraph', key: 'brandkit_secondary', value: kit.secondary || '' },
+    { kind: 'paragraph', key: 'brandkit_accent', value: kit.accent || '' },
+    { kind: 'paragraph', key: 'brandkit_fonts', value: kit.fonts || '' },
+    { kind: 'paragraph', key: 'brandkit_theme', value: brandTheme },
+    { kind: 'paragraph', key: 'brandkit_project_name', value: projectName || '' },
+  ];
+
+  const cover = slides[coverIdxResolved];
+  const fields = Array.isArray(cover?.fields) ? [...cover.fields] : [];
+  const filtered = fields.filter((f: any) => !f?.key?.startsWith('brandkit_'));
+  filtered.push(...brandFields);
+
+  const newSlides = [...slides];
+  newSlides[coverIdxResolved] = { ...cover, fields: filtered };
+  return newSlides;
+}
+
 /** Throws PAYWALL_PREMIUM_METHOD if a free-tier user picks a premium template. */
 export function ensureMethodAllowed(user: User | null, methodId: string, premiumIds: string[]): void {
   if (!premiumIds.includes(methodId)) return;

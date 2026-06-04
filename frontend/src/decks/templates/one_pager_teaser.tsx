@@ -1,11 +1,18 @@
 import React from 'react';
-import { Slide16x9, Editable, DeckProps, v, fmtUSD } from '../DeckBase';
+import { Slide16x9, Editable, DeckProps, v, fmtUSD, BrandProvider, useBrandContext } from '../DeckBase';
 
-export const Deck_one_pager_teaser: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
-  const F = 'Inter, system-ui, sans-serif';
-  const INK = '#0F172A';
-  const ACCENT = '#DC2626';
-  return <Slide16x9 font={F} ink={INK}>
+export const Deck_one_pager_teaser: React.FC<DeckProps> = ({ data, editable, onEdit }) => (
+  <BrandProvider data={data || {}} fallbackAccent="#DC2626" fallbackBg="#FFFFFF" fallbackInk="#0F172A" fallbackFont="Inter, system-ui, sans-serif">
+    <Deck_one_pager_teaser_inner data={data} editable={editable} onEdit={onEdit} />
+  </BrandProvider>
+);
+
+const Deck_one_pager_teaser_inner: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const { accent, bg, ink, font } = useBrandContext();
+  const F = font || 'Inter, system-ui, sans-serif';
+  const INK = ink || '#0F172A';
+  const ACCENT = accent || '#DC2626';
+  return <Slide16x9 font={F} ink={INK} bg={bg || '#FFFFFF'}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
       <Editable path="company" value={v(data,'company')} editable={editable} onEdit={onEdit}
         placeholder="[Company]" style={{ fontSize: 112, fontWeight: 800, letterSpacing: -2 }} />

@@ -13,7 +13,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Slide16x9, type DeckProps as RegistryDeckProps } from '../DeckBase';
+import { Slide16x9, type DeckProps as RegistryDeckProps, BrandProvider, useBrandContext } from '../DeckBase';
 
 /* ───────────────────────────── types ────────────────────────────── */
 
@@ -2000,7 +2000,13 @@ function mergeShape<T>(base: T, incoming: any): T {
   return (incoming as T) ?? base;
 }
 
-export const Deck_partnership_bd_app: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
+export const Deck_partnership_bd_app: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => (
+  <BrandProvider data={data || {}} fallbackAccent="#0A84FF">
+    <Deck_partnership_bd_app_inner data={data} editable={editable} onEdit={onEdit} />
+  </BrandProvider>
+);
+
+const Deck_partnership_bd_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
   const merged = useMemo(
     () => mergeShape(SAMPLE_DATA, data || {}) as PartnershipData,
     [data],

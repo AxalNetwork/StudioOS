@@ -14,6 +14,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { BrandProvider, useBrandContext } from '../DeckBase';
 import type { DeckProps as RegistryDeckProps } from '../DeckBase';
 
 // ─────────────────────────────────────────────────────────────────
@@ -150,37 +151,40 @@ const SlideFrame: React.FC<
     question: string;
     company?: string;
   }>
-> = ({ index, total, label, question, company, children }) => (
-  <div
-    data-slide-frame=""
-    className="relative"
-    style={{
-      width: 1920,
-      height: 1080,
-      background: PAPER,
-      color: INK,
-      fontFamily: FONT,
-      padding: 96,
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-      pageBreakAfter: 'always',
-    }}
-  >
-    {/* Eyebrow */}
-    <div className="flex items-center gap-6">
-      <span
-        style={{
-          fontSize: 11,
-          letterSpacing: '0.36em',
-          fontWeight: 700,
-          color: ACCENT,
-          fontFamily: FONT_MONO,
-        }}
-      >
-        {String(index + 1).padStart(2, '0')}
-      </span>
-      <span className="block w-12 h-px" style={{ background: ACCENT, opacity: 0.5 }} />
+> = ({ index, total, label, question, company, children }) => {
+  const { accent: brandAccent } = useBrandContext();
+  const ac = brandAccent || ACCENT;
+  return (
+    <div
+      data-slide-frame=""
+      className="relative"
+      style={{
+        width: 1920,
+        height: 1080,
+        background: PAPER,
+        color: INK,
+        fontFamily: FONT,
+        padding: 96,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        pageBreakAfter: 'always',
+      }}
+    >
+      {/* Eyebrow */}
+      <div className="flex items-center gap-6">
+        <span
+          style={{
+            fontSize: 11,
+            letterSpacing: '0.36em',
+            fontWeight: 700,
+            color: ac,
+            fontFamily: FONT_MONO,
+          }}
+        >
+          {String(index + 1).padStart(2, '0')}
+        </span>
+        <span className="block w-12 h-px" style={{ background: ac, opacity: 0.5 }} />
       <span
         style={{
           fontSize: 11,
@@ -241,7 +245,8 @@ const SlideFrame: React.FC<
       </span>
     </div>
   </div>
-);
+  );
+};
 
 // ─────────────────────────────────────────────────────────────────
 // SVG primitives
@@ -1615,7 +1620,13 @@ function mergeWithSample(input: Record<string, any> | undefined): MinimalSeedDat
   return out;
 }
 
-export const Deck_minimal_seed: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
+export const Deck_minimal_seed: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => (
+  <BrandProvider data={data || {}} fallbackAccent={ACCENT}>
+    <Deck_minimal_seed_inner data={data} editable={editable} onEdit={onEdit} />
+  </BrandProvider>
+);
+
+const Deck_minimal_seed_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
   const merged = mergeWithSample(data);
   return (
     <>

@@ -19,6 +19,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { BrandProvider, useBrandContext } from '../DeckBase';
 
 /* ───────────────────────────── tokens ───────────────────────────── */
 
@@ -1320,7 +1321,13 @@ function mergeShape<T>(base: T, incoming: any): T {
   return (incoming as T) ?? base;
 }
 
-export const Deck_narrative_brand_app: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
+export const Deck_narrative_brand_app: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => (
+  <BrandProvider data={data || {}} fallbackAccent="#C84A1F" fallbackBg="#F7F3EC" fallbackInk="#0A0A0C" fallbackFont="Inter, system-ui, sans-serif">
+    <Deck_narrative_brand_app_inner data={data} editable={editable} onEdit={onEdit} />
+  </BrandProvider>
+);
+
+const Deck_narrative_brand_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
   const merged = useMemo(
     () => mergeShape(SAMPLE_DATA, data || {}) as NarrativeData,
     [data],

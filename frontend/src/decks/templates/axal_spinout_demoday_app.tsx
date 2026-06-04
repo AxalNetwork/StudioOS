@@ -39,7 +39,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import type { DeckProps } from '../DeckBase';
-import { Slide16x9 } from '../DeckBase';
+import { Slide16x9, BrandProvider, useBrandContext } from '../DeckBase';
 import { useReviewDealSlot } from './reviewDealSlot';
 import { trimPitchCopyToMax, getPitchCopyLengthStatus, extractPitchHeadline, HEADLINE_MAX_WORDS } from '../../lib/pitchCopyLength';
 
@@ -3106,5 +3106,9 @@ const DeckRoot: React.FC<DeckProps> = (props) => {
  * Default export — registered as `Deck_axal_spinout_demoday` in
  * `frontend/src/decks/templates/index.ts`.
  */
-export const Deck_axal_spinout_demoday: React.FC<DeckProps> = (props) => <DeckRoot {...props} />;
+export const Deck_axal_spinout_demoday: React.FC<DeckProps> = (props) => (
+  <BrandProvider data={props.data || {}} fallbackAccent="#7C3AED">
+    <DeckRoot {...props} />
+  </BrandProvider>
+);
 export default Deck_axal_spinout_demoday;

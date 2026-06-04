@@ -11,6 +11,17 @@
 > building it.
 
 
+## Task #6 — Brand kit across all 13 pitch deck templates
+- `frontend/src/decks/templates/index.ts` — added `brandTheme` field (`'full' | 'accent_only' | 'off'`) to all 13 `TemplateMeta` entries with correct tier mapping.
+- `cloudflare-worker/src/services/decks/methods.ts` — mirrored `brandTheme` on all 13 backend specs.
+- `cloudflare-worker/src/services/decks/branding.ts` — generalised `applyBrandKitToSlides()` to inject `brandkit_*` paragraph fields (logo, accent, bg, ink, fonts, theme) on the cover slide based on tier: `full` (full palette override), `accent_only` (accent only, neutral bg), `off` (logo only, no palette).
+- `cloudflare-worker/src/routes/decks.ts` — wired `applyBrandKitToSlides()` into three generation endpoints (POST /generate, /apply-method, /:id/autofill).
+- `frontend/src/decks/DeckBase.tsx` — added `BrandContext` + `BrandProvider` + `useBrandContext()` for reactive brand-value propagation; existing `useBrandKit()` / `brandAccent()` / `brandPalette()` / `brandFont()` helpers unchanged.
+- `frontend/src/decks/templates/*.tsx` — all 13 deck components now wrapped in `<BrandProvider>` so child slides can read `brandkit_*` values via context. Accent-only templates (`yc_seed`, `kawasaki`, `minimal_seed`, `investor_appendix`, `demo_day`, `axal_spinout_demoday`) replace hard-coded accent constants with `useBrandContext().accent`. Full-palette templates (`narrative_brand`, `one_pager_teaser`, `partnership_bd`, `sales_commercial`) override bg/ink/accent/font. Off templates (`sequoia_classic`, `series_a_growth`, `series_b_diligence`) skip palette but still receive context for logo.
+- `frontend/src/decks/templates/yc_seed.tsx` — `Frame`, `Logo`, `HeroOrb`, `SectionEyebrow` now use brand accent instead of `ORANGE` constant.
+- `frontend/src/decks/templates/one_pager_teaser.tsx` — full-palette override: bg, ink, font, accent from brand context.
+- Worker typecheck and frontend build both pass.
+
 ## Task #5 — Landing page template library
 
 - **`cloudflare-worker/sql/migrations/082_landing_templates.sql`** — additive migration adding `template`, `hero_media_url`, `product_screenshot_url` to `landing_pages`.
