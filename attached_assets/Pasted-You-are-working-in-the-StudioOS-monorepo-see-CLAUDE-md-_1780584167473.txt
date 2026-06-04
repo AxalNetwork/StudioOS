@@ -1,0 +1,94 @@
+You are working in the StudioOS monorepo (see CLAUDE.md). Production lives
+in the Cloudflare Worker. Tasks 1 and 2 (brand kit upgrades + audience
+segmentation) are merged — do not reintroduce those changes.
+
+GOAL — Replace the single hard-coded HTML in `renderLandingHtml`
+(cloudflare-worker/src/routes/brand.ts:387) with a template library of
+five visual layouts. Founders pick one in the Brand Builder; same content
++ brand kit slot into whichever they choose.
+
+TEMPLATES (each must render the three audience tabs from Task 2):
+  1. `minimal` — current minimal layout, kept for backwards compatibility.
+  2. `bold_hero` — full-bleed color background using palette_bg, oversized
+     headline, logo top-left, CTA buttons inline.
+  3. `video_first` — 16:9 video/image placeholder block at top (sourced
+     from a new `hero_media_url` field), copy below.
+  4. `editorial` — magazine-style two-column layout, serif heading
+     (typography pulled from font_pairing='editorial'), pull-quote slot.
+  5. `product_mock` — left column copy + signup, right column device frame
+     (CSS-only "browser chrome") containing optional `product_screenshot_url`.
+
+All five render server-side; all five include the three audience tabs
+(Customer / Partner / Investor) with the per-audience headline / body /
+CTA. The waitlist form posts to the existing
+`/api/brand/landing/:slug/waitlist` with `audience` set from the active tab.
+
+FILES TO CREATE:
+  - cloudflare-worker/src/landing-templates/index.ts — exports
+    `TEMPLATES: Record<TemplateKey, TemplateDef>` where each def has
+    `{ key, label, description, thumbnailUrl, render(row, opts) => string }`.
+    Define `TemplateKey = 'minimal' | 'bold_hero' | 'video_first' |
+    'editorial' | 'product_mock'`.
+  - cloudflare-worker/src/landing-templates/minimal.ts — move the current
+    HTML body from `renderLandingHtml` here. Update the form to be tabbed.
+  - cloudflare-worker/src/landing-templates/bold_hero.ts
+  - cloudflare-worker/src/landing-templates/video_first.ts
+  - cloudflare-worker/src/landing-templates/editorial.ts
+  - cloudflare-worker/src/landing-templates/product_mock.ts
+  - cloudflare-worker/src/landing-templates/_shared.ts — `escapeHtml`,
+    `renderAudienceTabs(row)`, `renderWaitlistScript(slug)`. The script
+    captures the active tab's `data-audience` and posts it as `audience`.
+  - frontend/src/pages/BrandBuilderPage.jsx — new step "2.5. Pick a
+    template" between suggestions (line 204) and edit (line 233). Render
+    a 5-card picker with thumbnails (use placeholder `/img/landing-tmpl-
+    {key}.svg` paths — design can replace later). Selected key stored as
+    `draft.template_key`.
+
+FILES TO EDIT:
+  - cloudflare-worker/sql/migrations/082_landing_template_key.sql (NEW):
+      ALTER TABLE landing_pages ADD COLUMN template_key TEXT
+        DEFAULT 'minimal';
+      ALTER TABLE landing_pages ADD COLUMN hero_media_url TEXT;
+      ALTER TABLE landing_pages ADD COLUMN product_screenshot_url TEXT;
+  - cloudflare-worker/src/services/landingPageSchema.ts — extend bootstrap.
+  - cloudflare-worker/src/routes/brand.ts:
+      • Update PUT handler to persist `template_key`, `hero_media_url`,
+        `product_screenshot_url`. Default `template_key` to 'minimal'
+        when missing or unknown.
+      • Replace `renderLandingHtml` body (line 387–474) with a dispatcher:
+          import { TEMPLATES } from '../landing-templates';
+          const tmpl = TEMPLATES[row.template_key] ?? TEMPLATES.minimal;
+          return new Response(tmpl.render(row, { slug, isPreview }), {...});
+      • Pass `isPreview` from the preview-token route (added in Task 2)
+        so previews get a noindex meta.
+      • Add `GET /api/brand/templates` — returns
+        `[{ key, label, description, thumbnailUrl }]` for the picker.
+  - frontend/src/lib/api.js — add `brandListTemplates()` and extend
+    `brandSaveLanding` to forward `template_key`, `hero_media_url`,
+    `product_screenshot_url`.
+  - backend/app/api/routes/brand.py — mirror schema, the templates list
+    endpoint, and the template-key persistence. The dev FastAPI does not
+    need to render the HTML itself (worker does that in prod), but the
+    JSON endpoints must match.
+
+CRITICAL CONSTRAINTS:
+  - Every template must SSR (no client-only rendering) so previews work
+    without JS and SEO meta tags resolve.
+  - Every template must include the three audience tabs and post `audience`
+    on submit.
+  - Every template must respect `palette_bg`, `palette_ink`, `theme_color`,
+    `palette_secondary`, `palette_accent`, and `font_pairing` from the
+    brand kit. No hard-coded colors that conflict with the kit.
+  - Escape all row-derived strings via `escapeHtml`. Treat
+    `hero_media_url` / `product_screenshot_url` / `logo_url` as
+    same-origin or https:// only — reject `javascript:` / `data:` text/html.
+
+VALIDATION:
+  - `npm run test:drift` must pass.
+  - Render each of the 5 templates via the preview URL with the same brand
+    kit and confirm visual differences. Submit a waitlist signup from each
+    audience tab and verify the row in D1 has the right `audience`.
+
+COMMIT MESSAGE: "Landing templates: 5 visual layouts with audience tabs"
+
+Push to branch {branch} and open a draft PR.
