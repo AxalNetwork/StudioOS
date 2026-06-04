@@ -77,7 +77,7 @@ export default function PublicFooter() {
               </span>
             </div>
             <p className="text-sm text-gray-600 mb-5">
-              The Global Venture Partner Network — where founders, partners, and capital connect across borders.
+              A global venture partner network connecting founders, partners, and capital.
             </p>
             <div className="flex items-center gap-3">
               {socials.map(({ label, href, icon }) => (
