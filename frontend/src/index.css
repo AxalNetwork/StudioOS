@@ -302,6 +302,156 @@ select::-ms-expand { display: none; }
   background-color: #374151;
 }
 
+/* ---------------------------------------------------------------------------
+   Task #8 — Article reader prose overrides.
+   Scoped under .article-prose so it only affects the reading column.
+   ------------------------------------------------------------------------ */
+.article-prose {
+  font-size: 1.125rem;
+  line-height: 1.8;
+  color: var(--app-text);
+}
+.article-prose p {
+  margin-bottom: 1.5em;
+}
+.article-prose h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-top: 3em;
+  margin-bottom: 0.6em;
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid var(--app-border);
+  color: var(--app-text);
+  line-height: 1.3;
+}
+.article-prose h3 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin-top: 2em;
+  margin-bottom: 0.5em;
+  color: var(--app-text);
+  line-height: 1.35;
+}
+.article-prose h4 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  color: var(--app-text);
+}
+.article-prose blockquote {
+  margin: 1.5em 0;
+  padding: 1em 1.25em;
+  border-left: 3px solid var(--color-brand);
+  background: var(--app-surface-2);
+  border-radius: 0 0.5rem 0.5rem 0;
+  font-style: italic;
+  color: var(--app-text-muted);
+}
+.article-prose blockquote p:last-child {
+  margin-bottom: 0;
+}
+.article-prose ul,
+.article-prose ol {
+  margin-bottom: 1.5em;
+  padding-left: 1.5em;
+}
+.article-prose li {
+  margin-bottom: 0.4em;
+}
+.article-prose pre {
+  margin: 1.5em 0;
+  padding: 1em 1.25em;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  font-size: 0.95em;
+  line-height: 1.6;
+}
+.article-prose code {
+  font-size: 0.9em;
+  padding: 0.15em 0.35em;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 0.25rem;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+}
+.article-prose pre code {
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: inherit;
+}
+.article-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 1.5em 0;
+}
+.article-prose figure {
+  margin: 1.5em 0;
+}
+.article-prose figcaption {
+  font-size: 0.875rem;
+  color: var(--app-text-muted);
+  text-align: center;
+  margin-top: 0.5em;
+}
+.article-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5em 0;
+  font-size: 0.95em;
+}
+.article-prose th,
+.article-prose td {
+  padding: 0.6em 0.75em;
+  border: 1px solid var(--app-border);
+  text-align: left;
+}
+.article-prose th {
+  background: var(--app-surface-2);
+  font-weight: 600;
+}
+.article-prose hr {
+  margin: 2.5em 0;
+  border: none;
+  border-top: 1px solid var(--app-border);
+}
+.article-prose a {
+  color: var(--color-brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.article-prose a:hover {
+  color: var(--color-brand-dark);
+}
+.article-prose strong {
+  font-weight: 700;
+  color: var(--app-text);
+}
+.article-prose aside,
+.article-prose .callout {
+  margin: 1.5em 0;
+  padding: 1em 1.25em;
+  background: var(--app-surface-2);
+  border-radius: 0.5rem;
+  border: 1px solid var(--app-border);
+}
+.article-prose aside p:last-child,
+.article-prose .callout p:last-child {
+  margin-bottom: 0;
+}
+
+/* Rotate chevron when details is open */
+details[open] > summary .details-chevron {
+  transform: rotate(90deg);
+}
+details > summary .details-chevron {
+  transition: transform 0.2s ease;
+}
+
 /* Mobile responsive helpers — Task #3 (IC).
    `data-table-cards` opt-in collapses a <table>-like grid into a card
    stack below 768px. Pages that adopt it wrap rows with

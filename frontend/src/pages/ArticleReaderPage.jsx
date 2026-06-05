@@ -1,14 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, FileText, Mail } from 'lucide-react';
+import { ArrowLeft, Loader2, FileText, Mail, ChevronRight } from 'lucide-react';
 import { articles as api } from '../lib/api';
 import { reportError } from '../lib/log';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
 
-// Brand glyphs as inline SVGs — lucide-react dropped its brand icons
-// (Twitter/Facebook/Linkedin) in v1, so we carry the marks locally to keep
-// the share bar recognisable. Mirrors the SVGs already in PublicFooter.
+// ── Brand glyphs ──────────────────────────────────────────────────
 function XIcon({ className }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
@@ -31,12 +29,67 @@ function FacebookIcon({ className }) {
   );
 }
 
-// Task #9 — Public article reader. Reads like a real publication: shared
-// public header/footer, a linked author byline, social sharing, and a
-// recommended-reading strip. HTML body comes pre-sanitised by the worker via
-// renderMarkdown (DOMPurify-equivalent server-side).
+// ── Hooks ─────────────────────────────────────────────────────────
+function useReadingProgress() {
+  const [progress, setProgress] = useState(0);
+  useEffect(() => {
+    const onScroll = () => {
+      const doc = document.documentElement;
+      const scrollTop = doc.scrollTop || document.body.scrollTop;
+      const scrollHeight = doc.scrollHeight - doc.clientHeight;
+      const pct = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
+      setProgress(Math.min(100, Math.max(0, pct)));
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  return progress;
+}
 
-function ShareBar({ title }) {
+function useTOC(bodyRef) {
+  const [items, setItems] = useState([]);
+  const [activeId, setActiveId] = useState(null);
+
+  useEffect(() => {
+    if (!bodyRef.current) return;
+    const headings = Array.from(bodyRef.current.querySelectorAll('h2, h3'));
+    const slugify = (text) =>
+      text
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .substring(0, 60);
+    const list = headings.map((h) => {
+      if (!h.id) h.id = slugify(h.textContent || '');
+      return { id: h.id, text: h.textContent || '', level: h.tagName === 'H2' ? 2 : 3 };
+    });
+    setItems(list);
+  }, [bodyRef]);
+
+  useEffect(() => {
+    if (items.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible.length > 0) setActiveId(visible[0].target.id);
+      },
+      { rootMargin: '-10% 0px -70% 0px', threshold: 0 }
+    );
+    items.forEach((it) => {
+      const el = document.getElementById(it.id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, [items]);
+
+  return { items, activeId };
+}
+
+// ── Share bar ───────────────────────────────────────────────────────
+function ShareBar({ title, compact = false }) {
   const url = typeof window !== 'undefined' ? window.location.href : '';
   const u = encodeURIComponent(url);
   const t = encodeURIComponent(title || 'Axal article');
@@ -47,8 +100,10 @@ function ShareBar({ title }) {
     { key: 'email', label: 'Share by email', Icon: Mail, href: `mailto:?subject=${t}&body=${t}%0A%0A${u}` },
   ];
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-slate-500 dark:text-slate-400 mr-1">Share</span>
+    <div className={`flex items-center gap-2 ${compact ? '' : ''}`}>
+      {!compact && (
+        <span className="text-xs text-slate-500 dark:text-slate-400 mr-1 hidden sm:inline">Share</span>
+      )}
       {targets.map(({ key, label, Icon, href }) => (
         <a
           key={key}
@@ -57,15 +112,16 @@ function ShareBar({ title }) {
           rel={key === 'email' ? undefined : 'noopener noreferrer'}
           aria-label={label}
           title={label}
-          className="p-2 rounded-full border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-violet-700 dark:hover:text-violet-300 hover:border-violet-400 dark:hover:border-violet-600 transition"
+          className={`rounded-full border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-violet-700 dark:hover:text-violet-300 hover:border-violet-400 dark:hover:border-violet-600 transition ${compact ? 'p-1.5' : 'p-2'}`}
         >
-          <Icon className="w-4 h-4" />
+          <Icon className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
         </a>
       ))}
     </div>
   );
 }
 
+// ── Recommended card ──────────────────────────────────────────────
 function RecommendedCard({ a }) {
   return (
     <Link
@@ -81,8 +137,8 @@ function RecommendedCard({ a }) {
           onError={(e) => { e.currentTarget.style.display = 'none'; }}
         />
       ) : (
-        <div className="w-full aspect-[16/9] bg-gradient-to-br from-violet-100 to-violet-50 dark:from-violet-900/30 dark:to-slate-800 flex items-center justify-center">
-          <FileText className="w-8 h-8 text-violet-400" />
+        <div className="w-full aspect-[16/9] bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+          <FileText className="w-8 h-8 text-slate-300 dark:text-slate-600" />
         </div>
       )}
       <div className="p-4 flex-1 flex flex-col">
@@ -102,12 +158,69 @@ function RecommendedCard({ a }) {
   );
 }
 
+// ── TOC components ────────────────────────────────────────────────
+function TOCDesktop({ items, activeId }) {
+  if (items.length < 2) return null;
+  return (
+    <aside className="hidden xl:block" aria-label="Table of contents">
+      <nav className="sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
+          Contents
+        </h2>
+        <ul className="space-y-1">
+          {items.map((it) => (
+            <li key={it.id}>
+              <a
+                href={`#${it.id}`}
+                className={`block text-sm leading-snug rounded px-2 py-1 transition ${
+                  it.level === 3 ? 'pl-4 text-slate-500 dark:text-slate-400' : 'text-slate-700 dark:text-slate-300'
+                } ${activeId === it.id ? 'text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/20 font-medium' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                aria-current={activeId === it.id ? 'true' : undefined}
+              >
+                {it.text}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </aside>
+  );
+}
+
+function TOCMobile({ items }) {
+  if (items.length < 2) return null;
+  return (
+    <details className="xl:hidden mb-8 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50/50 dark:bg-slate-900/50">
+      <summary className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-300 cursor-pointer select-none hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition">
+        <ChevronRight className="w-4 h-4 details-chevron" />
+        Table of contents
+      </summary>
+      <ul className="px-4 pb-3 space-y-1">
+        {items.map((it) => (
+          <li key={it.id}>
+            <a
+              href={`#${it.id}`}
+              className={`block text-sm py-1 ${it.level === 3 ? 'pl-3 text-slate-500 dark:text-slate-400' : 'text-slate-700 dark:text-slate-300'}`}
+            >
+              {it.text}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────
 export default function ArticleReaderPage() {
   const { slug } = useParams();
   const [a, setA] = useState(null);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
   const [recs, setRecs] = useState([]);
+  const bodyRef = useRef(null);
+  const progress = useReadingProgress();
+  const { items, activeId } = useTOC(bodyRef);
 
   useEffect(() => {
     setLoading(true); setErr(null); setRecs([]);
@@ -120,8 +233,6 @@ export default function ArticleReaderPage() {
       .finally(() => setLoading(false));
   }, [slug]);
 
-  // Recommended reading: prefer same-sector articles, then fall back to the
-  // most recent, always excluding the one currently open.
   useEffect(() => {
     if (!a) return;
     let cancelled = false;
@@ -154,17 +265,26 @@ export default function ArticleReaderPage() {
   }, [a]);
 
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col pt-16">
+    <div className="min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
+      {/* Reading progress bar */}
+      <div
+        className="fixed top-0 left-0 h-[2px] bg-violet-600 z-[60] transition-[width] duration-150 ease-out"
+        style={{ width: `${progress}%` }}
+        aria-hidden="true"
+      />
+
       <PublicNav />
-      <div className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+
+      {/* Breadcrumb bar */}
+      <div className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur pt-16">
         <div className="max-w-3xl mx-auto px-6 py-3">
-          <Link to="/articles" className="inline-flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400 hover:text-violet-700">
+          <Link to="/articles" className="inline-flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-violet-700 transition">
             <ArrowLeft className="w-4 h-4" /> All articles
           </Link>
         </div>
       </div>
 
-      <main className="flex-1 max-w-3xl mx-auto w-full px-6 py-10">
+      <main className="flex-1 w-full">
         {loading && (
           <div className="text-center text-slate-500 py-20 flex flex-col items-center gap-3">
             <Loader2 className="w-6 h-6 animate-spin" /> Loading…
@@ -178,70 +298,126 @@ export default function ArticleReaderPage() {
           </div>
         )}
         {a && (
-          <article>
-            <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3 flex flex-wrap items-center gap-2">
-              {a.sector && <span>{a.sector.replace(/_/g, ' ')}</span>}
-              {a.read_minutes ? <><span>·</span><span>{a.read_minutes} min read</span></> : null}
-              {a.published_at && <><span>·</span><span>{new Date(a.published_at).toLocaleDateString()}</span></>}
-            </div>
-            <h1 className="text-4xl font-bold leading-tight">{a.title}</h1>
-            {a.subtitle && (
-              <p className="mt-3 text-lg text-slate-600 dark:text-slate-400">{a.subtitle}</p>
-            )}
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-4 pb-6 border-b border-slate-200 dark:border-slate-800">
-              <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                <span>by</span>
-                {a.author_website ? (
-                  <a
-                    href={a.author_website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-violet-700 dark:text-violet-300 hover:underline"
-                  >
-                    {a.author || '—'}
-                  </a>
-                ) : (
-                  <span className="font-medium text-slate-800 dark:text-slate-200">{a.author || '—'}</span>
+          <div className="max-w-7xl mx-auto px-6 py-10 xl:py-14">
+            {/* Two-column layout: reading column + sticky TOC */}
+            <div className="xl:grid xl:grid-cols-[1fr_240px] xl:gap-16">
+              {/* Reading column */}
+              <div className="max-w-[68ch] mx-auto xl:mx-0">
+                <article>
+                  {/* Hero */}
+                  <header className="mb-10">
+                    {/* Category badge */}
+                    {a.sector && (
+                      <div className="mb-4">
+                        <span className="inline-block text-[11px] uppercase tracking-[0.15em] font-semibold text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 px-2.5 py-1 rounded">
+                          {a.sector.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                    )}
+                    {/* Title */}
+                    <h1 className="text-[clamp(2rem,5vw,3.25rem)] font-bold leading-[1.1] tracking-tight text-slate-900 dark:text-slate-50">
+                      {a.title}
+                    </h1>
+                    {/* Subtitle / deck */}
+                    {a.subtitle && (
+                      <p className="mt-4 text-xl text-slate-500 dark:text-slate-400 leading-relaxed font-light">
+                        {a.subtitle}
+                      </p>
+                    )}
+                    {/* Metadata row */}
+                    <div className="mt-6 flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+                      {a.author && (
+                        <>
+                          <span className="font-medium text-slate-800 dark:text-slate-200">
+                            {a.author_website ? (
+                              <a href={a.author_website} target="_blank" rel="noopener noreferrer" className="hover:text-violet-700 hover:underline">
+                                {a.author}
+                              </a>
+                            ) : (
+                              a.author
+                            )}
+                          </span>
+                        </>
+                      )}
+                      {a.author_role && (
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                          {a.author_role}
+                        </span>
+                      )}
+                      <span className="text-slate-300 dark:text-slate-700">·</span>
+                      {a.published_at && (
+                        <time dateTime={a.published_at}>
+                          {new Date(a.published_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                        </time>
+                      )}
+                      {a.read_minutes && (
+                        <>
+                          <span className="text-slate-300 dark:text-slate-700">·</span>
+                          <span>{a.read_minutes} min read</span>
+                        </>
+                      )}
+                    </div>
+                    {/* Top share bar */}
+                    <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800">
+                      <ShareBar title={a.title} compact />
+                    </div>
+                  </header>
+
+                  {/* Cover image */}
+                  {a.cover_url && (
+                    <figure className="my-8">
+                      <img
+                        src={a.cover_url}
+                        alt={a.title}
+                        className="w-full rounded-lg border border-slate-200 dark:border-slate-800 object-cover max-h-[28rem]"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    </figure>
+                  )}
+
+                  {/* Mobile TOC */}
+                  <TOCMobile items={items} />
+
+                  {/* Body */}
+                  <div
+                    ref={bodyRef}
+                    className="article-prose"
+                    dangerouslySetInnerHTML={{ __html: a.body_html || '' }}
+                  />
+
+                  {/* Tags */}
+                  {(a.tags || []).length > 0 && (
+                    <div className="mt-12 pt-8 border-t border-slate-200 dark:border-slate-800 flex flex-wrap gap-2">
+                      {a.tags.map((t) => (
+                        <span key={t} className="text-xs px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-full text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900">
+                          #{t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Bottom share bar */}
+                  <div className="mt-10 pt-8 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <span className="text-sm text-slate-500 dark:text-slate-400">Enjoyed this? Pass it on.</span>
+                    <ShareBar title={a.title} />
+                  </div>
+                </article>
+
+                {/* Recommended reading */}
+                {recs.length > 0 && (
+                  <section className="mt-16 pt-10 border-t border-slate-200 dark:border-slate-800">
+                    <h2 className="text-lg font-semibold mb-6 text-slate-900 dark:text-slate-100">Recommended reading</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                      {recs.map((r) => <RecommendedCard key={r.id} a={r} />)}
+                    </div>
+                  </section>
                 )}
-                {a.author_role && <span className="px-1.5 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-800">{a.author_role}</span>}
               </div>
-              <ShareBar title={a.title} />
-            </div>
-            {a.cover_url && (
-              <img
-                src={a.cover_url}
-                alt=""
-                className="mt-6 w-full max-h-96 object-cover rounded-lg border border-slate-200 dark:border-slate-800"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            )}
-            <div
-              className="prose dark:prose-invert max-w-none mt-8"
-              // body_html is sanitised server-side by services/newsRender.ts.
-              dangerouslySetInnerHTML={{ __html: a.body_html || '' }}
-            />
-            {(a.tags || []).length > 0 && (
-              <div className="mt-10 pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-wrap gap-2">
-                {a.tags.map((t) => (
-                  <span key={t} className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-slate-700 dark:text-slate-300">#{t}</span>
-                ))}
-              </div>
-            )}
 
-            <div className="mt-10 pt-6 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4">
-              <span className="text-sm text-slate-500 dark:text-slate-400">Enjoyed this? Pass it on.</span>
-              <ShareBar title={a.title} />
+              {/* Desktop sticky TOC */}
+              <TOCDesktop items={items} activeId={activeId} />
             </div>
-
-            {recs.length > 0 && (
-              <section className="mt-12">
-                <h2 className="text-lg font-semibold mb-4">Recommended reading</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                  {recs.map((r) => <RecommendedCard key={r.id} a={r} />)}
-                </div>
-              </section>
-            )}
-          </article>
+          </div>
         )}
       </main>
       <PublicFooter />
