@@ -11,6 +11,10 @@
 > building it.
 
 
+## Task #8 — Article reader: editorial redesign
+- `frontend/src/pages/ArticleReaderPage.jsx` — full rewrite into a long-form editorial layout: `useReadingProgress` hook (fixed 2px violet progress bar, z-60, below nav); `useTOC(bodyRef)` hook scans rendered `h2/h3`, auto-injects slug `id`s for deep-linking, and tracks the active heading via `IntersectionObserver` (`-10%/-70%` rootMargin). Structured hero (`<header>`): category badge (uppercased, bordered), clamped H1 (`clamp(2rem,5vw,3.25rem)`), light-weight subtitle, metadata row (author + optional `author_website` link, role chip, publish date, read time), inline compact `ShareBar`. Reading column capped `max-w-[68ch]`, centred. Desktop sticky TOC `<aside>` in a `xl:grid-cols-[1fr_240px]` two-column grid (`sticky top-24`, active item highlighted, `aria-current`), renders only with ≥2 headings; mobile `<details>` TOC disclosure below the hero. Cover image in `<figure>`, tags as bordered pills, bottom `ShareBar`, refreshed recommended-reading grid (flat tinted cards, no gradient). All new elements carry `dark:` variants and `aria-label`s on icon-only links.
+- `frontend/src/index.css` — added scoped `.article-prose` overrides driven by app CSS-vars (`--app-text`/`--app-surface-2`/`--app-border`/`--color-brand`): 1.125rem base / 1.8 line-height, paragraph spacing, H2 (3em top + hairline rule) / H3 (2em top) contrast, styled blockquotes (left accent bar), callout/aside boxes, code/pre, tables, figures/figcaptions, hr, links. Added `details[open] .details-chevron` rotation.
+
 ## Task #6 — Brand kit across all 13 pitch deck templates
 - `frontend/src/decks/templates/index.ts` — added `brandTheme` field (`'full' | 'accent_only' | 'off'`) to all 13 `TemplateMeta` entries with correct tier mapping.
 - `cloudflare-worker/src/services/decks/methods.ts` — mirrored `brandTheme` on all 13 backend specs.

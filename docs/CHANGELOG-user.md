@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Improved: A better way to read articles
+
+Articles now open in a polished, magazine-style reading experience.
+- A bigger, clearer headline, subtitle, and author details up top.
+- A comfortable, narrow reading column with larger, easier-to-read text.
+- A table of contents that follows along as you scroll (on wide screens) or tucks into a tidy "Contents" drop-down on phones and tablets.
+- A slim progress bar at the top shows how far through the piece you are.
+- Share buttons right where you need them, plus a cleaner "Recommended reading" section at the end.
+
+---
+
 ## New: Brand kit in pitch decks
 
 Your saved Brand Builder colours and logo now flow into every pitch deck automatically.

@@ -47,7 +47,7 @@ function useReadingProgress() {
   return progress;
 }
 
-function useTOC(bodyRef) {
+function useTOC(bodyRef, html) {
   const [items, setItems] = useState([]);
   const [activeId, setActiveId] = useState(null);
 
@@ -59,13 +59,20 @@ function useTOC(bodyRef) {
         .toLowerCase()
         .replace(/[^\w\s-]/g, '')
         .replace(/\s+/g, '-')
-        .substring(0, 60);
+        .substring(0, 60) || 'section';
+    const used = new Map();
+    const uniq = (base) => {
+      const n = used.get(base) || 0;
+      used.set(base, n + 1);
+      return n === 0 ? base : `${base}-${n + 1}`;
+    };
     const list = headings.map((h) => {
-      if (!h.id) h.id = slugify(h.textContent || '');
-      return { id: h.id, text: h.textContent || '', level: h.tagName === 'H2' ? 2 : 3 };
+      const id = uniq(h.id || slugify(h.textContent || ''));
+      h.id = id;
+      return { id, text: h.textContent || '', level: h.tagName === 'H2' ? 2 : 3 };
     });
     setItems(list);
-  }, [bodyRef]);
+  }, [bodyRef, html]);
 
   useEffect(() => {
     if (items.length === 0) return;
@@ -159,11 +166,19 @@ function RecommendedCard({ a }) {
 }
 
 // ── TOC components ────────────────────────────────────────────────
+function scrollToHeading(e, id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  e.preventDefault();
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (window.history?.replaceState) window.history.replaceState(null, '', `#${id}`);
+}
+
 function TOCDesktop({ items, activeId }) {
   if (items.length < 2) return null;
   return (
-    <aside className="hidden xl:block" aria-label="Table of contents">
-      <nav className="sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto">
+    <aside className="hidden xl:block">
+      <nav className="sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto" aria-label="Table of contents">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
           Contents
         </h2>
@@ -172,6 +187,7 @@ function TOCDesktop({ items, activeId }) {
             <li key={it.id}>
               <a
                 href={`#${it.id}`}
+                onClick={(e) => scrollToHeading(e, it.id)}
                 className={`block text-sm leading-snug rounded px-2 py-1 transition ${
                   it.level === 3 ? 'pl-4 text-slate-500 dark:text-slate-400' : 'text-slate-700 dark:text-slate-300'
                 } ${activeId === it.id ? 'text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/20 font-medium' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
@@ -195,18 +211,21 @@ function TOCMobile({ items }) {
         <ChevronRight className="w-4 h-4 details-chevron" />
         Table of contents
       </summary>
-      <ul className="px-4 pb-3 space-y-1">
-        {items.map((it) => (
-          <li key={it.id}>
-            <a
-              href={`#${it.id}`}
-              className={`block text-sm py-1 ${it.level === 3 ? 'pl-3 text-slate-500 dark:text-slate-400' : 'text-slate-700 dark:text-slate-300'}`}
-            >
-              {it.text}
-            </a>
-          </li>
-        ))}
-      </ul>
+      <nav aria-label="Table of contents">
+        <ul className="px-4 pb-3 space-y-1">
+          {items.map((it) => (
+            <li key={it.id}>
+              <a
+                href={`#${it.id}`}
+                onClick={(e) => scrollToHeading(e, it.id)}
+                className={`block text-sm py-1 ${it.level === 3 ? 'pl-3 text-slate-500 dark:text-slate-400' : 'text-slate-700 dark:text-slate-300'}`}
+              >
+                {it.text}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
     </details>
   );
 }
@@ -220,7 +239,7 @@ export default function ArticleReaderPage() {
   const [recs, setRecs] = useState([]);
   const bodyRef = useRef(null);
   const progress = useReadingProgress();
-  const { items, activeId } = useTOC(bodyRef);
+  const { items, activeId } = useTOC(bodyRef, a?.body_html);
 
   useEffect(() => {
     setLoading(true); setErr(null); setRecs([]);
