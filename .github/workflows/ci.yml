@@ -77,6 +77,30 @@ jobs:
         run: node scripts/check-api-drift.mjs
 
   # -------------------------------------------------------------------------
+  # LFS size gate. Local pre-commit hook only catches dev machines that
+  # opted in; this job rejects PRs that add LFS-extension files without
+  # an LFS pointer, or PDFs/PNGs > 500 KB without LFS — see
+  # scripts/lfs-size-gate.mjs and MIGRATION_LFS_AUDIT.md.
+  # -------------------------------------------------------------------------
+  lfs-gate:
+    name: lfs size gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history so the diff range works on a PR build.
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+      - name: Run LFS size gate (against PR base)
+        run: |
+          base_ref="${{ github.base_ref || 'main' }}"
+          git fetch --no-tags --depth=1 origin "$base_ref"
+          node scripts/lfs-size-gate.mjs --against="origin/$base_ref"
+
+  # -------------------------------------------------------------------------
   # FastAPI dev backend: import + smoke. Catches obvious Python breakage in
   # the dev environment so Replit sessions don't start broken. We do NOT
   # treat dev failure as a deploy gate (FastAPI is not deployed) but we DO

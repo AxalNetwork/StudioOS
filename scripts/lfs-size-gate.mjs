@@ -13,9 +13,10 @@
  *     in — only staged additions are checked, not the whole working tree.
  *
  * Usage:
- *   node scripts/lfs-size-gate.mjs              # check staged files (pre-commit)
- *   node scripts/lfs-size-gate.mjs --all        # check entire working tree
- *   node scripts/lfs-size-gate.mjs --install    # install as a git pre-commit hook
+ *   node scripts/lfs-size-gate.mjs                    # check staged files (pre-commit)
+ *   node scripts/lfs-size-gate.mjs --all              # check entire working tree
+ *   node scripts/lfs-size-gate.mjs --against=<ref>    # check files A/M between <ref> and HEAD (CI)
+ *   node scripts/lfs-size-gate.mjs --install          # install as a git pre-commit hook
  *
  * Exit codes:
  *   0  — clean
@@ -60,6 +61,13 @@ function listAll() {
   return out ? out.split("\n").filter(Boolean) : [];
 }
 
+function listAgainst(ref) {
+  const out = tryShOrEmpty(
+    `git diff ${JSON.stringify(ref)}...HEAD --name-only --diff-filter=AM`,
+  );
+  return out ? out.split("\n").filter(Boolean) : [];
+}
+
 function extOf(p) {
   const lower = p.toLowerCase();
   if (lower.endsWith(".tar.gz")) return ".tar.gz";
@@ -101,7 +109,15 @@ function main() {
     return;
   }
 
-  const files = args.has("--all") ? listAll() : listStagedAdditions();
+  const againstArg = [...args].find((a) => a.startsWith("--against="));
+  let files;
+  if (againstArg) {
+    files = listAgainst(againstArg.slice("--against=".length));
+  } else if (args.has("--all")) {
+    files = listAll();
+  } else {
+    files = listStagedAdditions();
+  }
   if (files.length === 0) {
     process.exit(0);
   }
