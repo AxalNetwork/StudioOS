@@ -296,7 +296,7 @@ export default function ArticleReaderPage() {
 
       {/* Breadcrumb bar */}
       <div className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur pt-16">
-        <div className="max-w-3xl mx-auto px-6 py-3">
+        <div className="max-w-7xl mx-auto px-6 py-3">
           <Link to="/articles" className="inline-flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-violet-700 transition">
             <ArrowLeft className="w-4 h-4" /> All articles
           </Link>
