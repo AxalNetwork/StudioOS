@@ -22,7 +22,7 @@
 - `cloudflare-worker/src/routes/decks.ts` — wired `applyBrandKitToSlides()` into three generation endpoints (POST /generate, /apply-method, /:id/autofill).
 - `frontend/src/decks/DeckBase.tsx` — added `BrandContext` + `BrandProvider` + `useBrandContext()` for reactive brand-value propagation; existing `useBrandKit()` / `brandAccent()` / `brandPalette()` / `brandFont()` helpers unchanged.
 - `frontend/src/decks/templates/*.tsx` — all 13 deck components now wrapped in `<BrandProvider>` so child slides can read `brandkit_*` values via context. Accent-only templates (`yc_seed`, `kawasaki`, `minimal_seed`, `investor_appendix`, `demo_day`, `axal_spinout_demoday`) replace hard-coded accent constants with `useBrandContext().accent`. Full-palette templates (`narrative_brand`, `one_pager_teaser`, `partnership_bd`, `sales_commercial`) override bg/ink/accent/font. Off templates (`sequoia_classic`, `series_a_growth`, `series_b_diligence`) skip palette but still receive context for logo.
-- `frontend/src/decks/templates/yc_seed.tsx` — `Frame`, `Logo`, `HeroOrb`, `SectionEyebrow` now use brand accent instead of `ORANGE` constant.
+- `frontend/src/decks/templates/yc_seed.tsx` — `Frame`, `Logo`, `HeroOrb`, `SectionEyebrow` now use brand accent instead of `ORANGE` constant. Regression fix: `HeroOrb`'s gradient called `mix()` which is not exported from `DeckBase`; added a local `normHex/hexToRgb/toHex2/rgbToHex/mix` helper block (mirrors `axal_spinout_demoday_app.tsx`) — was throwing `ReferenceError: mix is not defined` at SSR, caught only by `test:drift`.
 - `frontend/src/decks/templates/one_pager_teaser.tsx` — full-palette override: bg, ink, font, accent from brand context.
 - Worker typecheck and frontend build both pass.
 

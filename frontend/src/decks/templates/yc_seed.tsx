@@ -37,6 +37,23 @@ const HAIRLINE = '#E5E5E5';
 const PAPER = '#FFFFFF';
 const FONT = '-apple-system, BlinkMacSystemFont, "Inter", "SF Pro Display", Helvetica, Arial, sans-serif';
 
+const normHex = (h: string) => {
+  const s = String(h).trim().replace(/^#/, '');
+  if (s.length === 3) return `#${s[0]}${s[0]}${s[1]}${s[1]}${s[2]}${s[2]}`;
+  if (s.length === 6) return `#${s}`;
+  return `#${s.slice(0, 6).padEnd(6, '0')}`;
+};
+const hexToRgb = (h: string): [number, number, number] => {
+  const s = normHex(h);
+  return [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)];
+};
+const toHex2 = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+const rgbToHex = (r: number, g: number, b: number) => `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
+const mix = (a: string, b: string, t: number): string => {
+  const [ar, ag, ab] = hexToRgb(a); const [br, bg, bb] = hexToRgb(b);
+  return rgbToHex(ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t);
+};
+
 const fmtUSD = (n?: any) => {
   if (n == null || n === '' || (typeof n === 'number' && isNaN(n))) return '—';
   const num = typeof n === 'number' ? n : Number(n);
