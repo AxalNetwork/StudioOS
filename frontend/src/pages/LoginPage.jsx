@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Shield, LogIn } from 'lucide-react';
+import { ArrowLeft, Shield, LogIn, KeyRound } from 'lucide-react';
+import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import { api } from '../lib/api';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 
@@ -49,6 +50,9 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [googleAvailable, setGoogleAvailable] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
+  // BLOCK-AUTH-02 — passkey state.
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const passkeySupported = typeof window !== 'undefined' && browserSupportsWebAuthn();
 
   // Discover whether the worker has Google OAuth configured; hide the
   // button otherwise so we don't show users a control that returns 503.
@@ -88,6 +92,30 @@ export default function LoginPage() {
       window.history.replaceState({}, '', url.pathname + (url.search ? `?${url.searchParams}` : ''));
     }
   }, []);
+
+  // BLOCK-AUTH-02 — sign in with a passkey. Email is optional: a discoverable
+  // (resident) credential lets the authenticator pick the account, so we pass
+  // whatever's typed but don't require it. A passkey assertion mints a
+  // full-assurance session server-side.
+  const signInWithPasskey = async () => {
+    setPasskeyBusy(true); setError('');
+    try {
+      const wanted = email.trim() || undefined;
+      const options = await api.passkey.authOptions(wanted);
+      const assertion = await startAuthentication({ optionsJSON: options });
+      const res = await api.passkey.authVerify(wanted, assertion);
+      if (!res?.token || !res?.user) throw new Error('Invalid response from server.');
+      localStorage.setItem('token', res.token);
+      localStorage.setItem('user', JSON.stringify(res.user));
+      window.location.href = '/dashboard';
+    } catch (e) {
+      if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
+        setError('Passkey sign-in was cancelled.');
+      } else {
+        setError(e?.message || 'Passkey sign-in failed.');
+      }
+    } finally { setPasskeyBusy(false); }
+  };
 
   const continueWithGoogle = async () => {
     setGoogleBusy(true); setError('');
@@ -261,6 +289,14 @@ export default function LoginPage() {
               className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white flex items-center justify-center gap-2">
               {loading ? 'Signing in…' : <>Sign in <LogIn size={14} /></>}
             </button>
+
+            {/* BLOCK-AUTH-02 — passkey sign-in (Face ID / Touch ID / security key). */}
+            {passkeySupported && (
+              <button type="button" onClick={signInWithPasskey} disabled={passkeyBusy}
+                className="w-full bg-white hover:bg-gray-50 border border-gray-300 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-gray-700 flex items-center justify-center gap-2">
+                <KeyRound size={14} /> {passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}
+              </button>
+            )}
 
             {googleAvailable && (
               <>

@@ -10,6 +10,10 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Restore passkey sign-in on the login page
+
+Brings back the "Sign in with a passkey" button (removed in the prior change) while leaving the "Email me a sign-in link" magic-link button removed. `frontend/src/pages/LoginPage.jsx` re-adds the `signInWithPasskey` handler, the `passkeyBusy`/`passkeySupported` state, the `KeyRound` lucide import, and the `@simplewebauthn/browser` import (`startAuthentication`/`browserSupportsWebAuthn`). The button is gated on `passkeySupported` (rendered only when the browser supports WebAuthn) and sits directly below "Sign in", above the Google/demo blocks. Backend `/api/auth/passkey/*` routes, the `api.passkey.*` client methods, and the Settings → Security passkey panel were never removed, so no other wiring changed. Magic-link UI stays removed; the `?magic_error=` handler + `MAGIC_ERROR_COPY` remain untouched.
+
 ## Hide passwordless login options; fix recovery-page CSRF
 
 Two auth-surface changes.

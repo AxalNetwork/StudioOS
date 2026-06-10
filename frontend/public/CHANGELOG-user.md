@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Updated: "Sign in with a passkey" is back
+
+You can once again sign in with a passkey — Face ID, Touch ID, or a security key — right from the login page. The button appears automatically on browsers that support passkeys. The "Email me a sign-in link" option stays off for now.
+
+---
+
 ## Updated: Simpler sign-in, and account recovery works again
 
 - **A cleaner sign-in screen** — signing in now uses your email and your authenticator code (or Continue with Google). The "Email me a sign-in link" and "Sign in with a passkey" buttons have been removed from the login page to keep things simple.
