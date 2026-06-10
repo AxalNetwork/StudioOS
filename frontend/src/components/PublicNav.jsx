@@ -8,8 +8,6 @@ const LINKS = [
   { label: 'Lanes', href: '/#lanes' },
   { label: 'Spin-Out Lab', href: '/spinout-lab' },
   { label: 'Directory', href: '/directory' },
-  { label: 'Insights', href: '/insights' },
-  { label: 'About', href: '/about' },
 ];
 
 export default function PublicNav() {
