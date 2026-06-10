@@ -10,6 +10,19 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Fix blank/broken pages across the platform
+
+Three root-cause fixes for the dark-blank-page and broken-page patterns reported across all routes:
+
+**1. Prevent dark FOUC on first paint (`frontend/index.html`)**
+Removed `class="dark"` from `<html>`. Added a tiny inline `<script>` (before any CSS or module load) that reads `axal_appearance_v1` from `localStorage`, normalises `'system'` → `'light'` (matching `SettingsContext.normalizeTheme`), and applies `data-theme="dark"` + `class="dark"` only when the user's saved theme is dark. Light-theme users (the default) now see a white background from the very first frame instead of the dark `#0b1220` navy.
+
+**2. Add top-level error boundary (`frontend/src/components/TopLevelErrorBoundary.jsx`, `frontend/src/main.jsx`)**
+Created `TopLevelErrorBoundary` — a class component that sits outside `BrowserRouter`, `AuthProvider`, and `SettingsProvider` in `main.jsx`. If either provider throws during init (malformed cached data, API client error), the user now sees a plain-styled "Something went wrong — Reload page" screen instead of a dark blank. Uses inline styles so it has zero dependency on CSS variables or app providers.
+
+**3. Harden chunk-load detection + auto-recovery (`frontend/src/components/RouteErrorBoundary.jsx`)**
+Broadened `isChunkLoadError` regex to explicitly cover all browser phrasings: WebKit/Safari "Importing a module script failed." / "module script failed to load", Chrome "Failed to fetch dynamically imported module" / "error loading dynamically imported module", Vite "Failed to load module script", and classic "ChunkLoadError" / "Loading chunk NNN failed". Added `componentDidCatch` auto-reload guarded by `sessionStorage` key `axal:chunk-reload-boundary` (prevents loops). "Reload" button calls `handleChunkReload` which clears the guard and does a true `window.location.reload()`. Both guard keys cleared on successful `load` + 5s delay in `main.jsx`.
+
 ## Split `Persistent gotchas` out of `replit.md` into `GOTCHAS.md`
 
 `replit.md` had grown to ~27KB with its "Persistent gotchas" section as the bulk of the file. Moved that section verbatim into a new root-level `GOTCHAS.md` (sibling of `README.md`/`CONTRIBUTING.md`) — every subsection preserved (Migrations & schema, Telegram broadcaster, X broadcaster, Auth blockers, Backend/Worker, Frontend, Ops items still owned by user). No gotcha text was deleted, condensed, or paraphrased; this was a relocation, not an edit pass. `replit.md` keeps a short "Persistent gotchas" stub: a one-line pointer plus a linked index of the subsection headings, so the README stays a scannable overview of live invariants while the detail remains easy to find. Mirrors the 2026-05-21 precedent that moved oversized blocks into this file. Cross-references updated: `CONTRIBUTING.md` ("read `replit.md` first") and `CLAUDE.md` (canonical-docs list) now also point at `GOTCHAS.md`. Internal/engineering change only — no user-facing changelog line.

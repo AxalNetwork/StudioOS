@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
+import TopLevelErrorBoundary from './components/TopLevelErrorBoundary';
 import './index.css';
 import { registerServiceWorker } from './lib/pwa';
 
@@ -46,16 +47,22 @@ function recoverFromStaleChunk(reason) {
 }
 window.addEventListener('error', (e) => recoverFromStaleChunk(e.error || e.message));
 window.addEventListener('unhandledrejection', (e) => recoverFromStaleChunk(e.reason));
-// Clear the guard flag once the app successfully renders.
+// Clear both chunk-reload guard flags once the app successfully renders,
+// so the next real chunk failure can trigger a fresh auto-recovery.
 window.addEventListener('load', () => {
-  setTimeout(() => { try { sessionStorage.removeItem('axal:chunk-reload'); } catch {} }, 5000);
+  setTimeout(() => {
+    try { sessionStorage.removeItem('axal:chunk-reload'); } catch {}
+    try { sessionStorage.removeItem('axal:chunk-reload-boundary'); } catch {}
+  }, 5000);
 });
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <TopLevelErrorBoundary>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </TopLevelErrorBoundary>
   </React.StrictMode>
 );
 

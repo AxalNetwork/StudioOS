@@ -1,6 +1,27 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
+  <script>
+    // Theme init — runs before first paint so the background is always correct.
+    // Reads axal_appearance_v1 from localStorage (same key + shape as
+    // SettingsContext). Falls back to 'light' (the app default).
+    // 'system' was a legacy tri-state value; it collapses to 'light' here too,
+    // matching normalizeTheme() in SettingsContext.jsx.
+    (function () {
+      try {
+        var raw = localStorage.getItem('axal_appearance_v1');
+        var theme = 'light';
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          if (parsed && parsed.theme === 'dark') theme = 'dark';
+        }
+        if (theme === 'dark') {
+          document.documentElement.dataset.theme = 'dark';
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) { /* localStorage blocked or JSON invalid — stay light */ }
+    })();
+  </script>
   <script>
     // Dev-only: unregister any stale service worker + clear caches BEFORE any
     // module loads. The SW precaches '/' and serves stale HTML referencing old

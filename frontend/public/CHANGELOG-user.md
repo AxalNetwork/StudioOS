@@ -5,6 +5,14 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Fixed: Dark blank screen and broken pages on load
+
+- **No more dark flash on load** — if your theme is set to light, the page now opens light from the very first frame instead of briefly flashing dark navy.
+- **App crashes now show a recovery screen** — if the app fails to start (e.g. a temporary internal error), you now see a clear "Reload page" button instead of a blank dark screen with no way out.
+- **Broken-chunk recovery works on all browsers** — if the app fails to load after a deployment (especially on Safari/iOS), the "Reload" button and automatic recovery now work correctly on every browser, not just Chrome.
+
+---
+
 ## Fixed: Stripe revenue now flows into your financials
 
 If you connect Stripe, your live MRR, ARR, paying-customer count, and churn now land in your project's financial model automatically — including on the regular background sync — instead of stopping short. Connect Stripe from the Integrations page and your numbers will keep themselves up to date.

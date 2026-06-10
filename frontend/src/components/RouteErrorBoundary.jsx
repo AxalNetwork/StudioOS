@@ -26,6 +26,27 @@ import { reportError } from '../lib/log';
  * message so the user knows what's wrong and the next reload of the
  * agent has a starting clue.
  */
+
+// Chunk/dynamic-import failure phrases across all major browsers:
+//   Chrome:  "Failed to fetch dynamically imported module"
+//            "error loading dynamically imported module"
+//   WebKit/Safari: "Importing a module script failed."
+//                  "module script failed to load"
+//   Firefox: "error loading dynamically imported module"
+//   Webpack: "ChunkLoadError" / "Loading chunk NNN failed"
+//   Vite:    "Failed to load module script"
+const CHUNK_LOAD_RE = /chunk|loading chunk|chunkloaderror|failed to fetch dynamically imported module|error loading dynamically imported module|importing a module script failed|module script failed to load|failed to load module script/i;
+
+function isChunkLoadError(error) {
+  if (!error) return false;
+  if (error.name === 'ChunkLoadError') return true;
+  const msg = String(error.message || error);
+  return CHUNK_LOAD_RE.test(msg);
+}
+
+// sessionStorage key used to prevent auto-reload loops.
+const RELOAD_GUARD_KEY = 'axal:chunk-reload-boundary';
+
 class RouteErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -45,6 +66,18 @@ class RouteErrorBoundary extends React.Component {
       }
       this.setState({ info });
     } catch { /* never let the boundary itself throw */ }
+
+    // Auto-recover from chunk-load failures exactly once per session.
+    // The guard is cleared on a successful app load (see main.jsx), so
+    // it only loops-stops if the chunk is permanently broken.
+    if (isChunkLoadError(error)) {
+      try {
+        if (sessionStorage.getItem(RELOAD_GUARD_KEY) !== '1') {
+          sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
+          window.location.reload();
+        }
+      } catch { /* sessionStorage blocked — show the UI instead */ }
+    }
   }
 
   componentDidUpdate(prevProps) {
@@ -59,11 +92,16 @@ class RouteErrorBoundary extends React.Component {
     this.setState({ error: null, info: null });
   };
 
+  handleChunkReload = () => {
+    try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch {}
+    window.location.reload();
+  };
+
   render() {
     if (!this.state.error) return this.props.children;
 
     const msg = this.state.error?.message || String(this.state.error) || 'Unknown error';
-    const isChunkLoadError = /chunk|loading|dynamically imported module/i.test(msg);
+    const isChunk = isChunkLoadError(this.state.error);
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gray-950 px-4 py-12">
@@ -79,7 +117,7 @@ class RouteErrorBoundary extends React.Component {
             This page hit an unexpected error
           </h1>
           <p className="text-sm text-gray-700 dark:text-gray-300 mb-4 leading-relaxed">
-            {isChunkLoadError
+            {isChunk
               ? 'A new version of the app was just deployed. Reload to pick it up.'
               : 'The page failed to render. The team has been notified. You can try again, or head back to the dashboard.'}
           </p>
@@ -89,11 +127,11 @@ class RouteErrorBoundary extends React.Component {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
             <button
               type="button"
-              onClick={isChunkLoadError ? () => window.location.reload() : this.handleRetry}
+              onClick={isChunk ? this.handleChunkReload : this.handleRetry}
               className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-medium hover:bg-gray-800 dark:hover:bg-white transition-colors"
             >
               <RefreshCcw size={15} aria-hidden="true" />
-              {isChunkLoadError ? 'Reload' : 'Try again'}
+              {isChunk ? 'Reload' : 'Try again'}
             </button>
             <a
               href="/dashboard"
