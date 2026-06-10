@@ -48,6 +48,22 @@ export function registerServiceWorker() {
     }
     return;
   }
+  // Auto-reload exactly once when a NEWLY activated service worker takes
+  // control of the page. Without this, a freshly deployed build leaves an
+  // open/cached tab running the old in-memory bundle, which can reference
+  // asset chunks the new deploy removed → a site-wide blank page that
+  // survives normal refreshes. We only arm this when a controller already
+  // exists (i.e. this is an UPDATE, not the first-ever install, which would
+  // otherwise reload every brand-new visitor) and guard against any reload
+  // loop with a one-shot flag.
+  if (navigator.serviceWorker.controller) {
+    let _reloadingForUpdate = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (_reloadingForUpdate) return;
+      _reloadingForUpdate = true;
+      window.location.reload();
+    });
+  }
   // Register after first paint to avoid blocking LCP.
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' })

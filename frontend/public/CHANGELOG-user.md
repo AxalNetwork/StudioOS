@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Fixed: Blank page that wouldn't go away after an update
+
+If you ever opened the site and got a blank page that stayed blank even after refreshing — but worked in a private/incognito window — that was your browser holding on to an old cached version of the app. The app now automatically detects when a new version has been published and refreshes itself to pick it up, so you stay on the latest version instead of getting stuck on a blank screen.
+
+---
+
 ## Fixed: Dark blank screen and broken pages on load
 
 - **No more dark flash on load** — if your theme is set to light, the page now opens light from the very first frame instead of briefly flashing dark navy.

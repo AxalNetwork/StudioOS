@@ -10,6 +10,15 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Auto-reload on new deploys (kills stale-bundle blank pages)
+
+A returning visitor whose browser was controlled by an older service worker could be left running a stale in-memory bundle that references asset chunks a later deploy removed, producing a site-wide blank page that survives ordinary refreshes (only incognito / clear-site-data recovered). Two changes make the SW self-heal:
+
+- `frontend/src/lib/pwa.js` — added a guarded `controllerchange` listener in `registerServiceWorker()`: when a newly activated SW takes control of an already-controlled page, reload exactly once. Armed only when `navigator.serviceWorker.controller` already exists (so brand-new first-install visitors are never reloaded) and protected by a one-shot `_reloadingForUpdate` flag against reload loops.
+- `frontend/public/sw.js` — bumped `VERSION` `v9-2026-05-27e` → `v10-2026-06-10a` so returning browsers fetch the new SW (the update check bypasses the HTTP cache via the default `updateViaCache:'imports'`), which the existing `skipWaiting` + `clients.claim()` + old-cache purge turn into an immediate controller change → the new reload path fires and the tab lands on fresh HTML/assets.
+
+Net: the v9→v10 transition purges stale caches and serves fresh content on the next refresh; from v10 onward, deploys auto-reload open tabs instead of stranding them on a blank page.
+
 ## Fix blank/broken pages across the platform
 
 Three root-cause fixes for the dark-blank-page and broken-page patterns reported across all routes:
