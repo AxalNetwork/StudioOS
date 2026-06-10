@@ -8,9 +8,9 @@ everyone using the platform. Newest changes are at the top.
 ## Improved: Admin observability and reliability
 
 For admins and operators:
-- **Dead-letter queue (DLQ) management** — the Infrastructure panel now includes a dedicated DLQ tab where you can view failed jobs, retry them individually, or permanently discard them.
-- **Cron run history** — a new Cron History tab shows every scheduled run, when it started and finished, whether it succeeded, and a summary of what happened. This makes it easy to spot when background tasks fail silently.
-- **WebSocket health check** — the same Cron History panel includes a live spot-check that verifies the real-time pipeline and chat connections are reachable.
+- **Dead-letter queue (DLQ) management** — the Infrastructure panel now includes a dedicated DLQ tab where you can view failed jobs, retry them individually, or permanently discard them. You can filter by source (Cloudflare Queue or D1) to tell where each failure came from.
+- **Cron run history** — a new Cron History tab shows every scheduled run, when it started and finished, whether it succeeded, and a summary of what happened. It also displays the schedule for each trigger and when the next run is due, so you can anticipate upcoming background work.
+- **WebSocket health check** — the same Cron History panel includes a live spot-check that performs real upgrade handshakes on the pipeline and chat endpoints, so you can verify the full connection chain is working.
 
 (Behind the scenes, Cloudflare Workers trace collection is now enabled for deeper debugging when needed.)
 

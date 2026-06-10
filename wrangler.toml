@@ -222,6 +222,14 @@ max_batch_timeout  = 10
 max_retries        = 3
 dead_letter_queue  = "studioos-job-queue-dlq"
 
+# Task #7 (IE) — DLQ consumer mirrors exhausted CF Queue messages to D1
+# so the admin panel can inspect and retry them.
+[[queues.consumers]]
+queue              = "studioos-job-queue-dlq"
+max_batch_size     = 10
+max_batch_timeout  = 5
+max_retries        = 3
+
 # ---------- Durable Objects (real-time fan-out) ----------
 # PIPELINE_ROOM   – one DO instance per pipeline deal_id; broadcasts stage /
 #                   metric / AI-recommendation events to every connected
@@ -536,6 +544,13 @@ max_batch_timeout  = 10
 max_retries        = 3
 dead_letter_queue  = "studioos-job-queue-dlq"
 
+# Task #7 (IE) — production DLQ consumer
+[[env.production.queues.consumers]]
+queue              = "studioos-job-queue-dlq"
+max_batch_size     = 10
+max_batch_timeout  = 5
+max_retries        = 3
+
 [[env.production.durable_objects.bindings]]
 name       = "PIPELINE_ROOM"
 class_name = "PipelineRoom"
@@ -661,6 +676,13 @@ max_batch_size     = 25
 max_batch_timeout  = 10
 max_retries        = 3
 dead_letter_queue  = "studioos-job-queue-preview-dlq"
+
+# Task #7 (IE) — preview DLQ consumer
+[[env.preview.queues.consumers]]
+queue              = "studioos-job-queue-preview-dlq"
+max_batch_size     = 10
+max_batch_timeout  = 5
+max_retries        = 3
 
 [[env.preview.durable_objects.bindings]]
 name       = "PIPELINE_ROOM"

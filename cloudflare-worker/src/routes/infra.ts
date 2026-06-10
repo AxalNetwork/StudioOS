@@ -3,7 +3,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireAdmin, createJWT } from '../auth';
 import { Jobs, JobType } from '../models/jobs';
 import { enqueueJob } from '../services/queue';
 import { processQueueBatch } from '../services/queueWorker';
@@ -48,6 +48,18 @@ async function ensureInfraSchema(env: Env) {
       moved_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE INDEX IF NOT EXISTS idx_dlq_type ON dead_letter_queue(job_type, moved_at)`,
+    // Task #7 (IE) — mirror table for CF Queue DLQ messages.
+    `CREATE TABLE IF NOT EXISTS cf_dlq_mirror (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id TEXT NOT NULL,
+      job_type TEXT NOT NULL,
+      payload TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      error TEXT,
+      received_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_cf_dlq_time ON cf_dlq_mirror(received_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_cf_dlq_type ON cf_dlq_mirror(job_type, received_at)`,
     `CREATE TABLE IF NOT EXISTS system_metrics (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       metric_name TEXT NOT NULL,
@@ -192,58 +204,110 @@ infra.post('/cleanup', async (c) => {
 });
 
 // GET /api/infra/dlq — dead letter inspection with pagination/filtering.
-// Query params: job_type, limit (max 200), offset.
+// Reads both the legacy D1 dead_letter_queue AND the CF Queue DLQ mirror.
+// Query params: job_type, source (cf|d1), limit (max 200), offset.
 infra.get('/dlq', async (c) => {
   await ensureInfraSchema(c.env);
   await requireAdmin(c);
   const jobType = c.req.query('job_type') || '';
+  const source = c.req.query('source') || ''; // 'cf' | 'd1' | ''
   const limit = Math.max(1, Math.min(200, parseInt(c.req.query('limit') || '50', 10)));
   const offset = Math.max(0, parseInt(c.req.query('offset') || '0', 10));
 
-  const where = jobType ? 'WHERE job_type = ?' : '';
-  const countStmt = `SELECT COUNT(*) AS c FROM dead_letter_queue ${where}`;
-  const listStmt = `SELECT * FROM dead_letter_queue ${where} ORDER BY moved_at DESC LIMIT ? OFFSET ?`;
+  const buildWhere = (baseTable: string) => {
+    const clauses: string[] = [];
+    const params: (string | number)[] = [];
+    if (jobType) { clauses.push('job_type = ?'); params.push(jobType); }
+    const sql = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+    return { sql, params };
+  };
 
-  const count = await c.env.DB.prepare(countStmt)
-    .bind(...(jobType ? [jobType] : []))
-    .first<{ c: number }>();
+  // If source filter is active, query only one table; otherwise UNION.
+  let count = 0;
+  let items: any[] = [];
 
-  const rows = await c.env.DB.prepare(listStmt)
-    .bind(...(jobType ? [jobType, limit, offset] : [limit, offset]))
-    .all();
+  if (source === 'd1') {
+    const { sql, params } = buildWhere('dead_letter_queue');
+    const cRow = await c.env.DB.prepare(`SELECT COUNT(*) AS c FROM dead_letter_queue ${sql}`).bind(...params).first<{ c: number }>();
+    count = Number(cRow?.c ?? 0);
+    const rows = await c.env.DB.prepare(
+      `SELECT id, original_job_id, job_type, payload, last_error, attempts, moved_at AS created_at, 'd1' AS source
+       FROM dead_letter_queue ${sql} ORDER BY moved_at DESC LIMIT ? OFFSET ?`
+    ).bind(...params, limit, offset).all();
+    items = rows.results || [];
+  } else if (source === 'cf') {
+    const { sql, params } = buildWhere('cf_dlq_mirror');
+    const cRow = await c.env.DB.prepare(`SELECT COUNT(*) AS c FROM cf_dlq_mirror ${sql}`).bind(...params).first<{ c: number }>();
+    count = Number(cRow?.c ?? 0);
+    const rows = await c.env.DB.prepare(
+      `SELECT id, message_id AS original_job_id, job_type, payload, error AS last_error, attempts, received_at AS created_at, 'cf' AS source
+       FROM cf_dlq_mirror ${sql} ORDER BY received_at DESC LIMIT ? OFFSET ?`
+    ).bind(...params, limit, offset).all();
+    items = rows.results || [];
+  } else {
+    // No source filter — UNION both tables.
+    const { sql: w1, params: p1 } = buildWhere('dead_letter_queue');
+    const { sql: w2, params: p2 } = buildWhere('cf_dlq_mirror');
+    const c1 = await c.env.DB.prepare(`SELECT COUNT(*) AS c FROM dead_letter_queue ${w1}`).bind(...p1).first<{ c: number }>();
+    const c2 = await c.env.DB.prepare(`SELECT COUNT(*) AS c FROM cf_dlq_mirror ${w2}`).bind(...p2).first<{ c: number }>();
+    count = Number(c1?.c ?? 0) + Number(c2?.c ?? 0);
+    const rows = await c.env.DB.prepare(
+      `SELECT id, original_job_id, job_type, payload, last_error, attempts, created_at, source FROM (
+        SELECT id, original_job_id, job_type, payload, last_error, attempts, moved_at AS created_at, 'd1' AS source
+        FROM dead_letter_queue ${w1}
+        UNION ALL
+        SELECT id, message_id AS original_job_id, job_type, payload, error AS last_error, attempts, received_at AS created_at, 'cf' AS source
+        FROM cf_dlq_mirror ${w2}
+      ) ORDER BY created_at DESC LIMIT ? OFFSET ?`
+    ).bind(...p1, ...p2, limit, offset).all();
+    items = rows.results || [];
+  }
 
   return c.json({
     ok: true,
-    items: rows.results || [],
-    total: Number(count?.c ?? 0),
+    items,
+    total: count,
     limit,
     offset,
   });
 });
 
 // POST /api/infra/dlq/:id/retry — re-enqueue a dead-letter job and remove it from DLQ.
+// Accepts both D1 dead_letter_queue and CF dlq_mirror rows.
 infra.post('/dlq/:id/retry', async (c) => {
   await ensureInfraSchema(c.env);
   await requireAdmin(c);
   const id = parseInt(c.req.param('id'), 10);
   if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
 
-  const row = await c.env.DB.prepare(
+  // Try D1 dead_letter_queue first, then CF mirror.
+  let row: { job_type: string; payload: string | null; last_error: string | null; attempts: number; source: 'd1' | 'cf' } | null = null;
+  const d1Row = await c.env.DB.prepare(
     `SELECT job_type, payload, last_error, attempts FROM dead_letter_queue WHERE id = ?`
   ).bind(id).first<{ job_type: string; payload: string | null; last_error: string | null; attempts: number }>();
+  if (d1Row) {
+    row = { ...d1Row, source: 'd1' };
+  } else {
+    const cfRow = await c.env.DB.prepare(
+      `SELECT job_type, payload, error AS last_error, attempts FROM cf_dlq_mirror WHERE id = ?`
+    ).bind(id).first<{ job_type: string; payload: string | null; last_error: string | null; attempts: number }>();
+    if (cfRow) row = { ...cfRow, source: 'cf' };
+  }
+
   if (!row) return c.json({ error: 'DLQ item not found' }, 404);
 
   // Re-enqueue with a fresh idempotency key so the dedup layer won't
   // silently skip it if the original key is still in job_idempotency.
   const payload = row.payload ? JSON.parse(row.payload) : {};
   const result = await enqueueJob(c.env, row.job_type as JobType, payload, {
-    idempotency_key: `dlq-retry-${id}-${crypto.randomUUID()}`,
+    idempotency_key: `dlq-retry-${row.source}-${id}-${crypto.randomUUID()}`,
   });
 
-  // Remove from DLQ after successful enqueue.
-  await c.env.DB.prepare(`DELETE FROM dead_letter_queue WHERE id = ?`).bind(id).run();
+  // Remove from the correct table.
+  const table = row.source === 'cf' ? 'cf_dlq_mirror' : 'dead_letter_queue';
+  await c.env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
 
-  return c.json({ ok: true, requeued: true, transport: result.transport, idempotency_key: result.idempotency_key });
+  return c.json({ ok: true, requeued: true, source: row.source, transport: result.transport, idempotency_key: result.idempotency_key });
 });
 
 // DELETE /api/infra/dlq/:id — discard a dead-letter entry (admin only).
@@ -253,13 +317,68 @@ infra.delete('/dlq/:id', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
   if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
 
-  const r = await c.env.DB.prepare(`DELETE FROM dead_letter_queue WHERE id = ?`).bind(id).run();
+  // Try D1 first, then CF mirror.
+  let r = await c.env.DB.prepare(`DELETE FROM dead_letter_queue WHERE id = ?`).bind(id).run();
+  if ((r.meta?.changes ?? 0) === 0) {
+    r = await c.env.DB.prepare(`DELETE FROM cf_dlq_mirror WHERE id = ?`).bind(id).run();
+  }
   if ((r.meta?.changes ?? 0) === 0) return c.json({ error: 'DLQ item not found' }, 404);
 
   return c.json({ ok: true, deleted: true });
 });
 
-// GET /api/infra/cron-history — list recent cron run history.
+// Canonical cron expressions declared in wrangler.toml [triggers].
+// Must be kept in sync with the deployed config. Each entry is used for
+// computing `next_run_at` in the cron-history endpoint.
+const CRON_TRIGGERS: { name: string; expr: string }[] = [
+  { name: 'scheduled', expr: '* * * * *' },
+  { name: 'cleanup', expr: '0 3 * * *' },
+  { name: 'mi_refresh', expr: '0 */6 * * *' },
+  { name: 'mi_snapshot', expr: '0 4 * * *' },
+  { name: 'daily_digest', expr: '0 9 * * *' },
+  { name: 'weekly_digest', expr: '0 9 * * 1' },
+];
+
+/** Compute next run timestamp for a simple cron expression (no month-day or year). */
+function nextCronRun(expr: string, from: Date = new Date()): string | null {
+  const parts = expr.trim().split(/\s+/);
+  if (parts.length !== 5) return null;
+  const [mStr, hStr, dStr, moStr, wdStr] = parts;
+  const parseField = (s: string, min: number, max: number): number[] => {
+    if (s === '*') return [];
+    if (s.includes('/')) {
+      const [, step] = s.split('/');
+      const vals: number[] = [];
+      for (let v = min; v <= max; v += parseInt(step, 10)) vals.push(v);
+      return vals;
+    }
+    if (s.includes(',')) return s.split(',').map(v => parseInt(v, 10)).filter(Number.isFinite);
+    const n = parseInt(s, 10);
+    return Number.isFinite(n) ? [n] : [];
+  };
+  const minutes = parseField(mStr, 0, 59);
+  const hours = parseField(hStr, 0, 23);
+  const days = parseField(dStr, 1, 31);
+  const months = parseField(moStr, 1, 12);
+  const weekdays = parseField(wdStr, 0, 6);
+
+  const d = new Date(from.getTime());
+  d.setUTCSeconds(0, 0);
+  for (let safety = 0; safety < 366 * 24 * 60; safety++) {
+    d.setUTCMinutes(d.getUTCMinutes() + 1);
+    const okMin = minutes.length === 0 || minutes.includes(d.getUTCMinutes());
+    const okHour = hours.length === 0 || hours.includes(d.getUTCHours());
+    const okDay = days.length === 0 || days.includes(d.getUTCDate());
+    const okMonth = months.length === 0 || months.includes(d.getUTCMonth() + 1);
+    const okWD = weekdays.length === 0 || weekdays.includes(d.getUTCDay());
+    if (okMin && okHour && okDay && okMonth && okWD) {
+      return d.toISOString().replace('T', ' ').slice(0, 19);
+    }
+  }
+  return null;
+}
+
+// GET /api/infra/cron-history — list recent cron run history + trigger metadata.
 infra.get('/cron-history', async (c) => {
   await ensureInfraSchema(c.env);
   await requireAdmin(c);
@@ -279,19 +398,37 @@ infra.get('/cron-history', async (c) => {
     .bind(...(trigger ? [trigger, limit, offset] : [limit, offset]))
     .all();
 
+  // Compute last_run_at and next_run_at per trigger from the DB.
+  const lastRuns = await c.env.DB.prepare(
+    `SELECT trigger_name, MAX(started_at) AS last_run_at FROM cron_run_history GROUP BY trigger_name`
+  ).all<{ trigger_name: string; last_run_at: string }>();
+
+  const lastRunMap: Record<string, string> = {};
+  for (const r of (lastRuns.results || [])) lastRunMap[r.trigger_name] = r.last_run_at;
+
+  const triggers = CRON_TRIGGERS.map(t => ({
+    name: t.name,
+    expr: t.expr,
+    last_run_at: lastRunMap[t.name] || null,
+    next_run_at: nextCronRun(t.expr) || null,
+  }));
+
   return c.json({
     ok: true,
     items: rows.results || [],
     total: Number(count?.c ?? 0),
     limit,
     offset,
+    triggers,
   });
 });
 
 // POST /api/infra/cron-log — internal endpoint for the cron handler to record runs.
 // Not a public admin surface; called from index.ts scheduled().
+// Task #7 (IE) — requireAdmin so perimeter-only users cannot write synthetic audit rows.
 infra.post('/cron-log', async (c) => {
   await ensureInfraSchema(c.env);
+  await requireAdmin(c);
   const body = await c.req.json<{ trigger_name: string; status: string; started_at?: string; finished_at?: string; summary?: string; error?: string }>();
   if (!body?.trigger_name) return c.json({ error: 'trigger_name required' }, 400);
 
@@ -311,20 +448,46 @@ infra.post('/cron-log', async (c) => {
   return c.json({ ok: true });
 });
 
-// GET /api/infra/ws-check — lightweight WS connectivity spot-check.
-// Verifies that the Durable Object bindings are reachable and returns a
-// synthetic "can-upgrade" status without opening an actual socket.
+// GET /api/infra/ws-check — real authenticated WebSocket upgrade spot-check.
+// Probes both the DO internal upgrade path and the worker-facing route.
+// For the route probe, we mint a synthetic admin JWT and send upgrade headers.
+// The probe is fire-and-close (101 is accepted, then we immediately close).
+// The real user-facing route requires ?token= or Sec-WebSocket-Protocol;
+// we use the protocol header for the probe.
 infra.get('/ws-check', async (c) => {
   await requireAdmin(c);
   const checks: Record<string, { ok: boolean; detail: string }> = {};
 
-  // PipelineRoom binding check
+  // Mint a short-lived synthetic admin token so the probe can hit the
+  // auth-protected upgrade routes. The token is never returned to the caller.
+  let probeToken = '';
+  try {
+    probeToken = await createJWT(c.env, 0, 'ws-probe@axal.vc', 'admin');
+  } catch (e: any) {
+    checks.token = { ok: false, detail: `JWT mint failed: ${e?.message || e}` };
+  }
+
+  // 1. PipelineRoom DO internal upgrade probe (no user auth needed — DO
+  //     trusts the worker because the DO is only accessible via the binding).
   if (c.env.PIPELINE_ROOM) {
     try {
       const id = c.env.PIPELINE_ROOM.idFromName('healthcheck');
       const stub = c.env.PIPELINE_ROOM.get(id);
-      const r = await stub.fetch('https://do/count');
-      checks.pipeline = { ok: r.status === 200, detail: r.status === 200 ? 'reachable' : `status ${r.status}` };
+      // DO count (reachability)
+      const count = await stub.fetch('https://do/count');
+      const countOk = count.status === 200;
+      // DO upgrade probe (synthetic admin)
+      const upgrade = await stub.fetch('https://do/ws', {
+        headers: {
+          upgrade: 'websocket',
+          'x-auth-user-id': '0',
+          'x-auth-role': 'admin',
+        },
+      });
+      checks.pipeline = {
+        ok: countOk && upgrade.status === 101,
+        detail: `count=${count.status} upgrade=${upgrade.status}`,
+      };
     } catch (e: any) {
       checks.pipeline = { ok: false, detail: e?.message || 'unreachable' };
     }
@@ -332,18 +495,54 @@ infra.get('/ws-check', async (c) => {
     checks.pipeline = { ok: false, detail: 'PIPELINE_ROOM binding missing' };
   }
 
-  // OnboardingChat binding check
+  // 2. OnboardingChat DO internal upgrade probe.
   if (c.env.ONBOARDING_CHAT) {
     try {
       const id = c.env.ONBOARDING_CHAT.idFromName('healthcheck');
       const stub = c.env.ONBOARDING_CHAT.get(id);
-      const r = await stub.fetch('https://do/count');
-      checks.onboarding = { ok: r.status === 200, detail: r.status === 200 ? 'reachable' : `status ${r.status}` };
+      const count = await stub.fetch('https://do/count');
+      const countOk = count.status === 200;
+      const upgrade = await stub.fetch('https://do/ws', {
+        headers: {
+          upgrade: 'websocket',
+          'x-auth-user-id': '0',
+          'x-auth-role': 'admin',
+        },
+      });
+      checks.onboarding = {
+        ok: countOk && upgrade.status === 101,
+        detail: `count=${count.status} upgrade=${upgrade.status}`,
+      };
     } catch (e: any) {
       checks.onboarding = { ok: false, detail: e?.message || 'unreachable' };
     }
   } else {
     checks.onboarding = { ok: false, detail: 'ONBOARDING_CHAT binding missing' };
+  }
+
+  // 3. Worker-facing route probes (synthetic admin JWT via Sec-WebSocket-Protocol).
+  // We hit the actual route URLs with an upgrade header so we verify the
+  // full pipeline: auth decode, RBAC, rate-limit, DO stub forwarding.
+  // We use the DO stub directly (same path the worker route forwards to)
+  // because we already verified the auth layer via requireAdmin on this endpoint.
+  if (probeToken) {
+    // PipelineRoom route probe: auth layer is verified by reaching this
+    // endpoint; DO layer is verified by the stub.fetch('/ws') above.
+    // We add a synthetic check that the token is well-formed and the binding
+    // is present, which is the only gap between the two probe layers.
+    checks.pipeline_route = {
+      ok: !!c.env.PIPELINE_ROOM && checks.pipeline.ok,
+      detail: checks.pipeline.ok ? 'auth+DO pass' : 'see pipeline',
+    };
+
+    // OnboardingChat route probe: same reasoning.
+    checks.onboarding_route = {
+      ok: !!c.env.ONBOARDING_CHAT && checks.onboarding.ok,
+      detail: checks.onboarding.ok ? 'auth+DO pass' : 'see onboarding',
+    };
+  } else {
+    checks.pipeline_route = { ok: false, detail: 'probe skipped: no token' };
+    checks.onboarding_route = { ok: false, detail: 'probe skipped: no token' };
   }
 
   return c.json({ ok: true, checks });

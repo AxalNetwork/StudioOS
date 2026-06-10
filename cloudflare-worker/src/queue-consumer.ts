@@ -92,6 +92,32 @@ async function recordResult(env: Env, idempotencyKey: string, result: unknown): 
   } catch {/* best-effort cache */}
 }
 
+export async function dlqConsumer(
+  batch: MessageBatch<JobMessage>,
+  env: Env,
+  _ctx: ExecutionContext,
+): Promise<void> {
+  for (const message of batch.messages) {
+    const body = message.body || ({} as JobMessage);
+    try {
+      await env.DB.prepare(
+        `INSERT INTO cf_dlq_mirror (message_id, job_type, payload, attempts, error, received_at)
+         VALUES (?, ?, ?, ?, ?, datetime('now'))`
+      ).bind(
+        message.id || crypto.randomUUID(),
+        body.job_type || 'unknown',
+        JSON.stringify(body.payload ?? {}),
+        message.attempts ?? 0,
+        `CF DLQ message; timestamp=${message.timestamp}`,
+      ).run();
+      message.ack();
+    } catch (e: any) {
+      console.error('[dlq-consumer] mirror failed:', e?.message || e);
+      message.retry();
+    }
+  }
+}
+
 export async function queueConsumer(
   batch: MessageBatch<JobMessage>,
   env: Env,

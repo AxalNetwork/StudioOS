@@ -9,6 +9,7 @@ export default function DlqTab() {
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [jobType, setJobType] = useState('');
+  const [source, setSource] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [actionId, setActionId] = useState(null);
@@ -16,7 +17,7 @@ export default function DlqTab() {
   const load = async () => {
     setBusy(true); setErr('');
     try {
-      const r = await api.infraDLQ({ job_type: jobType, limit: PAGE_SIZE, offset });
+      const r = await api.infraDLQ({ job_type: jobType, source, limit: PAGE_SIZE, offset });
       setItems(r.items || []);
       setTotal(r.total || 0);
     } catch (e) {
@@ -24,7 +25,7 @@ export default function DlqTab() {
     } finally { setBusy(false); }
   };
 
-  useEffect(() => { load(); }, [offset, jobType]);
+  useEffect(() => { load(); }, [offset, jobType, source]);
 
   const retry = async (id) => {
     if (!confirm(`Re-enqueue DLQ item #${id}?`)) return;
@@ -67,6 +68,15 @@ export default function DlqTab() {
             onChange={e => { setJobType(e.target.value); setOffset(0); }}
             className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
           />
+          <select
+            value={source}
+            onChange={e => { setSource(e.target.value); setOffset(0); }}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+          >
+            <option value="">All sources</option>
+            <option value="d1">D1 (legacy)</option>
+            <option value="cf">CF Queue</option>
+          </select>
           <button onClick={load} disabled={busy}
             className="px-3 py-1.5 text-sm bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-lg flex items-center gap-1.5">
             <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Refresh
@@ -91,6 +101,11 @@ export default function DlqTab() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-sm text-red-800 font-semibold">{d.job_type}</span>
                     <span className="text-xs text-gray-500">#{d.id} · orig #{d.original_job_id}</span>
+                    {d.source && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${d.source === 'cf' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {d.source === 'cf' ? 'CF Queue' : 'D1'}
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-gray-500 mt-0.5">
                     {d.moved_at ? new Date(d.moved_at + (d.moved_at.endsWith('Z') ? '' : 'Z')).toLocaleString() : '—'} · {d.attempts} attempt(s)

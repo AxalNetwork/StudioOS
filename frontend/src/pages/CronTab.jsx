@@ -15,6 +15,7 @@ export default function CronTab() {
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [trigger, setTrigger] = useState('');
+  const [triggers, setTriggers] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [wsCheck, setWsCheck] = useState(null);
@@ -29,6 +30,7 @@ export default function CronTab() {
       if (cr.status === 'fulfilled') {
         setItems(cr.value.items || []);
         setTotal(cr.value.total || 0);
+        setTriggers(cr.value.triggers || []);
       }
       if (ws.status === 'fulfilled') setWsCheck(ws.value);
     } catch (e) {
@@ -59,6 +61,27 @@ export default function CronTab() {
           <div className="text-xs text-gray-500">Loading WS health…</div>
         )}
       </div>
+
+      {/* Triggers metadata */}
+      {triggers.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Triggers schedule</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {triggers.map(t => (
+              <div key={t.name} className="border border-gray-100 rounded-lg p-3 dark:border-gray-800">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-mono text-xs font-semibold text-gray-800 dark:text-gray-200">{t.name}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">{t.expr}</span>
+                </div>
+                <div className="text-xs text-gray-500 space-y-0.5">
+                  <div>Last: {t.last_run_at ? new Date(t.last_run_at + (t.last_run_at.endsWith('Z') ? '' : 'Z')).toLocaleString() : '—'}</div>
+                  <div>Next: {t.next_run_at ? new Date(t.next_run_at + (t.next_run_at.endsWith('Z') ? '' : 'Z')).toLocaleString() : '—'}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Cron history */}
       <div className="space-y-4">

@@ -179,7 +179,7 @@ import { processQueueBatch } from './services/queueWorker';
 import { requireTier } from './middleware/requireTier';
 import billing from './routes/billing';
 import { Jobs } from './models/jobs';
-import { queueConsumer } from './queue-consumer';
+import { queueConsumer, dlqConsumer } from './queue-consumer';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
 import { securityHeadersMiddleware } from './middleware/securityHeaders';
@@ -1313,7 +1313,13 @@ export default {
     await work;
   },
   async queue(batch: MessageBatch<JobMessage>, env: Env, ctx: ExecutionContext) {
-    await queueConsumer(batch, env, ctx);
+    // Task #7 (IE) — route DLQ batches to dlqConsumer so exhausted CF Queue
+    // messages are mirrored to D1 for admin inspection + retry.
+    if (batch.queue?.includes('dlq')) {
+      await dlqConsumer(batch, env, ctx);
+    } else {
+      await queueConsumer(batch, env, ctx);
+    }
   },
 };
 
