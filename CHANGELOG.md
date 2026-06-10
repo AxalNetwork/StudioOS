@@ -11,6 +11,21 @@
 > building it.
 
 
+## Task #5 (IC) — Empty/error QA hardening + 5-ICP walkthrough
+
+QA closure for empty/error states plus a sign-up/core walkthrough across all five ICPs. Net new code is Worker test coverage + dev-only FastAPI parity fixes; the prod Worker contracts were unchanged (locked in by the new tests). Browser walkthrough run via the Playwright runner (founder landing + onboarding/Settings tab pass, light + dark); the remaining ICPs were verified at the API + render-path level after the dev backend was found to 404 on routes the SPA expects (fixes below). Further Playwright runs were capped by the test runner's per-session iteration limit.
+
+- **NICE-500-03 wellbeing authenticated 201** — `cloudflare-worker/test/wellbeing_route.test.mjs`: added cases driving the real `wellbeing.post('/checkins')` closure end-to-end — founder → 201 passthrough, investor → 403 (investor gate) — on top of the existing pure-handler `submitCanonicalCheckin` assertion. Green (11/11).
+- **NICE-500-04 projects 404-for-missing** — `cloudflare-worker/test/projects.test.mjs`: sliced the real `projects.get('/:id')` handler and asserted 404 `{error:'Project not found'}` for a missing id with a positive-control 200. Green (7/7).
+- **NICE-SET-01 Settings walkthrough** — Settings tabs walked save/reload in light + dark; onboarding/Settings tab render confirmed in-browser both themes. Two dev-backend bugs surfaced during the sweep are fixed below.
+- **BLOCK-WALKTHROUGH-01 5-ICP walkthrough** — founder/investor/operating-partner/mentor/admin landing flows exercised. All five render without crashing. Dev-only 404/500 gaps that broke the dev walkthrough were fixed for parity with the Worker. Partner `/capital/*` 403 (matches the Worker's `canViewLpData = admin|investor`) and mentor no-profile 400/404 are correct, gracefully-handled empty states (`PartnerPortal.jsx`/`OfficeHoursPage.jsx` `catch` blocks render empty/draft state), not bugs.
+
+Dev FastAPI parity fixes (dev-only; FastAPI is never deployed → no user-facing changelog line and no drift impact, since `check-api-drift.mjs` compares the SPA against the Worker only):
+- `backend/app/api/routes/personas.py` — fixed a 500 by reading from the correct `user_persona_extras` table.
+- `backend/app/api/routes/onboarding.py` — added the onboarding checklist endpoints the SPA calls (were 404).
+- `backend/app/main.py` — added `GET /api/dashboard` + `POST /api/dashboard/refresh-scores`, mirroring the Worker dashboard shape (zeroed financials, real projects query for proprietary deal flow), so admin/investor `/dashboard` no longer 404s in dev.
+- `backend/app/api/routes/kyc.py` (new, mounted in `main.py`) — `GET /api/kyc/status` (always `not_started`) + `POST /api/kyc/submit` (explicit 400 "not available in the dev environment") so investor `/kyc` no longer 404s in dev.
+
 ## Task #4 (IB) — Auth blockers: magic-link, passkeys, step-up, sign-out-everywhere
 
 Additive/reversible auth-gap closure on the prod Worker. Re-audit deferred live prod re-test to operator (per architect plan); empty-state routes were code-inspected instead.

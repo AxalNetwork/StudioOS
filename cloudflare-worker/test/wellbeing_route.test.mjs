@@ -267,3 +267,77 @@ test('POST /checkins: production + no secret → still falls back to plaintext (
     console.warn = origWarn;
   }
 });
+
+/* ------------------------------------------------------------------ */
+/* Authenticated route wiring (NICE-500-03).                          */
+/*                                                                    */
+/* The tests above drive the pure `submitCanonicalCheckin` handler.   */
+/* These drive the REAL `wellbeing.post('/checkins')` closure — sliced */
+/* from source so we exercise the exact bytes that ship — to lock in  */
+/* the end-to-end authenticated contract: `requireAuth` runs first,   */
+/* investors are gated with 403 BEFORE any DB work, and an            */
+/* authenticated non-investor flows through to a 201.                 */
+/* ------------------------------------------------------------------ */
+async function loadCheckinsRoute() {
+  const src = await readFile(resolve(__dirname, '../src/routes/wellbeing.ts'), 'utf8');
+  const marker = "wellbeing.post('/checkins', async (c) => {";
+  const i = src.indexOf(marker);
+  assert.notEqual(i, -1, 'checkins route signature not found in wellbeing.ts');
+  const bodyOpen = i + marker.length - 1; // index of the body-opening '{'
+  let depth = 0, close = -1;
+  for (let j = bodyOpen; j < src.length; j++) {
+    const ch = src[j];
+    if (ch === '{') depth++;
+    else if (ch === '}') { depth--; if (depth === 0) { close = j; break; } }
+  }
+  assert.notEqual(close, -1, 'failed to balance checkins handler braces');
+  const body = src.slice(bodyOpen + 1, close); // plain JS — no TS annotations in this handler
+  // Wrap so the handler's free deps are injected; `return c.json(...)`
+  // resolves the inner IIFE which we hand back to the caller.
+  const fn = new Function('c', '__deps', `
+    const { requireAuth, role, ensureWellbeingSchema, submitCanonicalCheckin } = __deps;
+    return (async () => { ${body} })();
+  `);
+  return fn;
+}
+
+test('authenticated route: founder POST /checkins → 201 (requireAuth + real handler)', async () => {
+  const route = await loadCheckinsRoute();
+  const env = { ...ENV_WITH_SECRET, DB: makeFakeDB() };
+  let captured;
+  const c = {
+    env,
+    req: { json: async () => ({ mood: 4, stress: 2, sleep: 5, energy: 3, focus: 4, connection: 4 }) },
+    json: (b, status) => { captured = { b, status: status ?? 200 }; return captured; },
+  };
+  await route(c, {
+    requireAuth: async () => ({ id: 21, role: 'founder' }),
+    role: (u) => u.role,
+    ensureWellbeingSchema: async () => {},
+    submitCanonicalCheckin, // the REAL extracted handler
+  });
+  assert.equal(captured.status, 201);
+  assert.equal(captured.b.ok, true);
+  assert.equal(captured.b.mood, 4);
+  assert.ok(captured.b.id);
+});
+
+test('authenticated route: investor POST /checkins → 403 (gate short-circuits before DB)', async () => {
+  const route = await loadCheckinsRoute();
+  const env = { ...ENV_WITH_SECRET, DB: makeFakeDB() };
+  let captured;
+  const c = {
+    env,
+    req: { json: async () => ({ mood: 4 }) },
+    json: (b, status) => { captured = { b, status: status ?? 200 }; return captured; },
+  };
+  await route(c, {
+    requireAuth: async () => ({ id: 99, role: 'investor' }),
+    role: (u) => u.role,
+    // These MUST NOT be reached — the investor gate returns before them.
+    ensureWellbeingSchema: async () => { throw new Error('investor reached schema bootstrap'); },
+    submitCanonicalCheckin: async () => { throw new Error('investor reached handler'); },
+  });
+  assert.equal(captured.status, 403);
+  assert.match(captured.b.detail, /investor/i);
+});

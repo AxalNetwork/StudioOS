@@ -195,3 +195,85 @@ test('partner with no founder_email in form: returns null (legacy behaviour)', a
   assert.equal(founderId, null);
   assert.equal(state.founders.length, 0);
 });
+
+/* ------------------------------------------------------------------ */
+/* GET /:id 404-for-missing contract (NICE-500-04).                   */
+/*                                                                    */
+/* A missing project id must return a clean 404 — not a 500 — under   */
+/* auth. We slice the real `projects.get('/:id', …)` closure from     */
+/* source (transpiling away its TS annotations) and invoke it with a  */
+/* stubbed `sql` that returns no rows, then assert the 404 reply. A   */
+/* positive control proves the 404 is missing-only, not blanket.     */
+/* ------------------------------------------------------------------ */
+async function loadGetByIdHandler() {
+  const src = await readFile(resolve(__dirname, '../src/routes/projects.ts'), 'utf8');
+  const marker = "projects.get('/:id', async (c) => {";
+  const i = src.indexOf(marker);
+  assert.notEqual(i, -1, "projects.get('/:id', …) not found in projects.ts");
+  const bodyOpen = i + marker.length - 1; // index of the body-opening '{'
+  let depth = 0, close = -1;
+  for (let j = bodyOpen; j < src.length; j++) {
+    const ch = src[j];
+    if (ch === '{') depth++;
+    else if (ch === '}') { depth--; if (depth === 0) { close = j; break; } }
+  }
+  assert.notEqual(close, -1, 'failed to balance /:id handler braces');
+  const body = src.slice(bodyOpen + 1, close); // contains TS annotations → must transpile
+  const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js'))).default;
+  const wrapped = `const __run = async (c, __deps) => {
+    const { requireAuth, getSQL, ensureProjectDataRoomColumns, ensureProjectRevenueProofColumns, ensureFounderCompanyColumn, canAccessFounderResource } = __deps;
+    ${body}
+  };`;
+  const { outputText } = ts.transpileModule(wrapped, {
+    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
+  });
+  return new Function(`${outputText}; return __run;`)();
+}
+
+function makeStubSql(rows) {
+  const sql = (_strings, ..._values) => Promise.resolve(rows);
+  sql.end = async () => {};
+  return sql;
+}
+
+const PROJECT_DEPS = {
+  ensureProjectDataRoomColumns: async () => {},
+  ensureProjectRevenueProofColumns: async () => {},
+  ensureFounderCompanyColumn: async () => {},
+  canAccessFounderResource: () => true,
+};
+
+test('GET /:id: missing project → 404 (not 500) under auth', async () => {
+  const run = await loadGetByIdHandler();
+  let captured;
+  const c = {
+    env: {},
+    req: { param: () => '99999' },
+    json: (b, status) => { captured = { b, status: status ?? 200 }; return captured; },
+  };
+  await run(c, {
+    ...PROJECT_DEPS,
+    requireAuth: async () => ({ id: 1, role: 'founder', founder_id: 1 }),
+    getSQL: () => makeStubSql([]), // no rows → not found
+  });
+  assert.equal(captured.status, 404);
+  assert.deepEqual(captured.b, { error: 'Project not found' });
+});
+
+test('GET /:id: existing project → 200 (404 is missing-only, not blanket)', async () => {
+  const run = await loadGetByIdHandler();
+  let captured;
+  const project = { id: 5, name: 'Demo', founder_id: null };
+  const c = {
+    env: {},
+    req: { param: () => '5' },
+    json: (b, status) => { captured = { b, status: status ?? 200 }; return captured; },
+  };
+  await run(c, {
+    ...PROJECT_DEPS,
+    requireAuth: async () => ({ id: 1, role: 'admin', founder_id: null }),
+    getSQL: () => makeStubSql([project]), // row present → returned, not 404
+  });
+  assert.equal(captured.status, 200);
+  assert.equal(captured.b.id, 5);
+});

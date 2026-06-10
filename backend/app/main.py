@@ -448,6 +448,8 @@ from backend.app.api.routes import search as _search  # noqa: E402
 app.include_router(_search.router, prefix="/api")
 from backend.app.api.routes import onboarding as _onboarding  # noqa: E402
 app.include_router(_onboarding.router, prefix="/api")
+from backend.app.api.routes import kyc as _kyc  # noqa: E402
+app.include_router(_kyc.router, prefix="/api")
 from backend.app.database import get_session  # noqa: E402
 from backend.app.api.routes import brand as _brand  # noqa: E402
 app.include_router(_brand.router, prefix="/api")
@@ -598,6 +600,121 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 @app.get("/api/health")
 def health():
     return {"status": "ok", "app": "StudioOS v1.0", "tagline": "The 30-Day Spin-Out Engine"}
+
+
+@app.get("/api/dashboard")
+def dashboard(request: Request, user=Depends(get_current_user)):
+    """Dev mirror of the Worker's GET /api/dashboard (cloudflare-worker/src/routes/dashboard.ts).
+
+    The SPA's Dashboard page (api.ln() -> GET /api/dashboard) expects a fixed
+    payload shape. The Worker aggregates commissions / syndicates / referral
+    chains, but those tables are not seeded in the dev FastAPI DB, so we return
+    the same SHAPE with fail-soft empty/zero defaults and only query `projects`
+    for the proprietary deal-flow list. Never deployed.
+    """
+    from datetime import datetime, timedelta
+
+    from sqlmodel import Session, select
+
+    from backend.app.database import engine
+    from backend.app.models.entities import Project, User
+
+    # ?days window (default 30, clamp 1..365) — sizes the zero-filled series.
+    try:
+        days = int(request.query_params.get("days", "30"))
+    except (TypeError, ValueError):
+        days = 30
+    days = max(1, min(days, 365))
+
+    role_raw = user.role.value if hasattr(user.role, "value") else str(user.role)
+    role = str(role_raw).split(".")[-1].lower()
+    is_admin = role == "admin"
+    is_investor = role == "investor"
+    is_partner = role == "partner" or is_investor
+    is_founder = role == "founder"
+
+    deals: list[dict] = []
+    with Session(engine) as session:
+        rows = session.exec(select(Project).order_by(Project.created_at.desc())).all()
+        for p in rows:
+            status = getattr(p.status, "value", None) or str(p.status)
+            if status in ("rejected", "archived"):
+                continue
+            if is_founder and user.founder_id is not None and p.founder_id != user.founder_id:
+                continue
+            deals.append({
+                "id": p.id,
+                "name": p.name,
+                "sector": p.sector,
+                "stage": getattr(p.stage, "value", None) or str(p.stage),
+                "status": status,
+                "score": getattr(p, "score", None),
+                "ai_decision": getattr(p, "ai_decision", None),
+                "created_at": p.created_at.isoformat() if getattr(p, "created_at", None) else None,
+            })
+            if len(deals) >= 12:
+                break
+
+    today = datetime.utcnow().date()
+    series = [
+        {"day": (today - timedelta(days=i)).isoformat(), "cents": 0}
+        for i in range(days - 1, -1, -1)
+    ]
+
+    return {
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "role": role,
+            "kyc_status": getattr(user, "kyc_status", None),
+            "assistant_enabled": 0,
+        },
+        "quick_stats": {
+            "month_earnings_cents": 0,
+            "lifetime_earnings_cents": 0,
+            "compound_earnings_cents": 0,
+            "pending_payouts_cents": 0,
+            "active_syndicates": 0,
+            "my_syndicates": 0,
+            "ai_score_avg": None,
+            "network_reach": 0,
+            "marketplace_available": 0,
+        },
+        "proprietary_deal_flow": deals,
+        "ai_scored_opportunities": [],
+        "syndication_tools": {
+            "open_syndicates": [],
+            "my_memberships": [],
+            "ai_recommendations": [],
+        },
+        "performance_analytics": {
+            "earnings_series_30d": series,
+            "window_days": days,
+            "chain_counts": {"L1": 0, "L2": 0, "L3": 0},
+            "network_reach": 0,
+            "top_referrers": [],
+            "recent_commissions": [],
+        },
+        "operator_workspace": {"assigned_tasks": []},
+        "notifications": [],
+        "role_view": (
+            "admin" if is_admin
+            else "investor" if is_investor
+            else "partner" if is_partner
+            else "founder" if is_founder
+            else "member"
+        ),
+        "cached": False,
+        "generated_at": datetime.utcnow().isoformat(),
+    }
+
+
+@app.post("/api/dashboard/refresh-scores")
+def dashboard_refresh_scores(user=Depends(get_current_user)):
+    """Dev mirror of the Worker's POST /api/dashboard/refresh-scores. No cache in
+    dev, so this is a no-op that returns the same ack shape the SPA expects."""
+    return {"ok": True, "message": "Cache cleared. Next fetch will re-aggregate."}
 
 
 @app.get("/api/dashboard/stats")

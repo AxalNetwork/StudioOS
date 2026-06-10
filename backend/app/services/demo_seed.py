@@ -104,6 +104,7 @@ def seed_demo_investor_and_founder() -> None:
             founder_row = _ensure_founder_row(session, founder_user)
             project = _ensure_project(session, founder_row)
             _ensure_deal(session, project)
+            _ensure_onboarding_complete(session, investor, founder_user)
             session.commit()
             logger.info(
                 "demo_seed: ready (investor_user_id=%s, founder_user_id=%s, project_id=%s)",
@@ -111,6 +112,47 @@ def seed_demo_investor_and_founder() -> None:
             )
     except Exception as exc:  # noqa: BLE001
         logger.warning("demo_seed: skipped due to error: %s", exc)
+
+
+def _ensure_onboarding_complete(session: Session, *users: User) -> None:
+    """Mark demo accounts as onboarding-complete so the dev quick-login /
+    Playwright e2e suite can reach the authenticated app (dashboard, settings,
+    …) instead of being pinned to the onboarding wizard. These accounts exist
+    solely for dev login + e2e.
+
+    NOTE: investors remain subject to the client-side /kyc gate — the dev
+    schema has no `kyc_status` column, so `/api/auth/me` always reports
+    'not_started'. That gate is exercised as the investor's core onboarding
+    flow; founders/partners/mentors/admins are unaffected by it.
+    """
+    # `onboarding_progress` is normally bootstrapped lazily by
+    # routes/onboarding.py on first request. Create it here so the seed runs
+    # cleanly at startup, before any request has hit that route.
+    session.exec(text(
+        """
+        CREATE TABLE IF NOT EXISTS onboarding_progress (
+            user_id INTEGER PRIMARY KEY,
+            flow TEXT NOT NULL,
+            step INTEGER NOT NULL DEFAULT 0,
+            total_steps INTEGER NOT NULL DEFAULT 0,
+            data TEXT,
+            completed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    ))
+    for u in users:
+        role_str = (u.role.value if hasattr(u.role, "value") else str(u.role)).lower()
+        session.exec(
+            text(
+                """
+                INSERT INTO onboarding_progress (user_id, flow, step, total_steps, completed_at)
+                VALUES (:uid, :flow, 7, 7, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id) DO UPDATE SET completed_at = CURRENT_TIMESTAMP
+                """
+            ).bindparams(uid=u.id, flow=role_str)
+        )
 
 
 def _ensure_user(session: Session, *, email: str, name: str, role: UserRole) -> User:

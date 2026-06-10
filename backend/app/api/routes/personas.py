@@ -227,8 +227,16 @@ def _ensure_personas_schema(db: Session) -> None:
         )
         """,
         "CREATE INDEX IF NOT EXISTS idx_user_personas_user ON user_personas(user_id)",
+        # NOTE: dev-only table name divergence from prod. The prod Worker stores
+        # persona key/value extras in `user_profile_extras`, but in the dev
+        # FastAPI backend that name is already owned by settings.py's
+        # profile-extras blob (personal_data/corporate_data/dismissed_explainers),
+        # a completely different schema. Sharing the name made this CREATE TABLE
+        # IF NOT EXISTS a no-op and the persona_id index 500 on every settings
+        # load. Dev personas therefore use `user_persona_extras` to avoid the
+        # collision. The dev backend is never deployed, so this has no prod impact.
         """
-        CREATE TABLE IF NOT EXISTS user_profile_extras (
+        CREATE TABLE IF NOT EXISTS user_persona_extras (
             id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL,
             persona_id TEXT NOT NULL,
@@ -240,8 +248,8 @@ def _ensure_personas_schema(db: Session) -> None:
             UNIQUE(user_id, persona_id, key)
         )
         """,
-        "CREATE INDEX IF NOT EXISTS idx_user_profile_extras_user ON user_profile_extras(user_id)",
-        "CREATE INDEX IF NOT EXISTS idx_user_profile_extras_persona ON user_profile_extras(user_id, persona_id)",
+        "CREATE INDEX IF NOT EXISTS idx_user_persona_extras_user ON user_persona_extras(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_user_persona_extras_persona ON user_persona_extras(user_id, persona_id)",
     ]
     try:
         for stmt in statements:
@@ -351,7 +359,7 @@ def my_personas(
     ).mappings().all()
     extras = db.execute(
         text(
-            "SELECT id, user_id, persona_id, key, value, source FROM user_profile_extras WHERE user_id = :uid"
+            "SELECT id, user_id, persona_id, key, value, source FROM user_persona_extras WHERE user_id = :uid"
         ),
         {"uid": user.id},
     ).mappings().all()
@@ -392,7 +400,7 @@ async def answer(
     db.execute(
         text(
             """
-            INSERT INTO user_profile_extras (user_id, persona_id, key, value)
+            INSERT INTO user_persona_extras (user_id, persona_id, key, value)
             VALUES (:uid, :pid, :key, :val)
             ON CONFLICT (user_id, persona_id, key) DO UPDATE SET
                 value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP
