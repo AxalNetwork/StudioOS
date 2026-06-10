@@ -5,6 +5,15 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: Public pages for Spin-Out Lab, About, Insights & the Directory
+
+Key parts of Axal are now public — no sign-in needed.
+- **Spin-Out Lab**, the **Directory**, a new **About** page (meet the team), and a new **Insights** page (market briefs and venture intelligence) all open directly from a shared link.
+- The top navigation and footer now link straight to About and Insights.
+- We tidied the homepage wording so it better reflects the whole network.
+
+---
+
 ## New: Easier, safer ways to sign in
 
 Signing in to Axal is now more flexible — and sensitive actions stay protected.

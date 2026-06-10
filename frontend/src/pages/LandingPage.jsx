@@ -285,7 +285,7 @@ export default function LandingPage() {
               <br />globally.
             </h1>
             <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto mb-8 leading-relaxed">
-              One network. Five lanes — partners, capital, founders, mentors, coaches. Built on a six-layer
+              One network connecting partners, capital, founders, mentors, and coaches. Built on a six-layer
               venture OS, with <span className="text-violet-700 font-medium">Spin-Out Lab</span> as our niche 30-day sprint.
             </p>
 

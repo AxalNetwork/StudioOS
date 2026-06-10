@@ -138,6 +138,25 @@ function unsubscribePage(message: string): string {
 <p>${message.replace(/</g, '&lt;')}</p></body></html>`;
 }
 
+// Task #6 (ID) — Public index of published insights for the /insights
+// landing page. Lists only published, non-internal publications with a
+// minimal card shape; the heavy aggregate payload is loaded per-slug by
+// the read endpoint below. Outside the CF Access perimeter like the read.
+marketIntelPublic.get('/publications', async (c) => {
+  let rows: Array<{ slug: string; title: string; subtitle: string | null; section: string; published_at: string | null }> = [];
+  try {
+    const res = await c.env.DB.prepare(
+      "SELECT slug, title, subtitle, section, published_at FROM admin_publications WHERE status = 'published' AND audience != 'internal' ORDER BY COALESCE(published_at, '') DESC, id DESC LIMIT 100",
+    ).all<{ slug: string; title: string; subtitle: string | null; section: string; published_at: string | null }>();
+    rows = res.results || [];
+  } catch (e) {
+    // Table may not exist yet (no publications drafted) — return empty list.
+    console.warn('[mi public] publications list query failed:', (e as Error).message);
+    rows = [];
+  }
+  return c.json({ publications: rows });
+});
+
 // Task #2 (AU) — Public read for an admin-published Axal-VC publication.
 // Mounted under /api/market-intel-public, which sits OUTSIDE the
 // /api/admin/* CF Access perimeter, so anonymous visitors can read a

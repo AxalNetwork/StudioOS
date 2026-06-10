@@ -99,13 +99,15 @@ export async function request(path, options = {}) {
           || currentPath === '/spinout-lab'
           || currentPath === '/directory'
           || currentPath === '/roadmap'
+          || currentPath === '/about'
+          || currentPath === '/contact'
           || currentPath.startsWith('/pricing/')
           || currentPath.startsWith('/partner-onboarding/')
           || currentPath.startsWith('/partners/onboard')
           || currentPath.startsWith('/esign/')
           || currentPath.startsWith('/deck/share/')
           || currentPath.startsWith('/share/deck/')
-          || currentPath.startsWith('/insights/public/')
+          || currentPath.startsWith('/insights')
           || currentPath.startsWith('/settings/email/');
         if (!isPublicPath) {
           window.location.href = '/login';
@@ -2022,6 +2024,8 @@ export const publications = {
   // /api/admin/* CF Access perimeter — anonymous visitors must be able
   // to load /insights/public/:slug without an Axal session.
   publicGet: (slug) => request(`/market-intel-public/publications/${slug}`),
+  // Task #6 (ID) — Public index of published insights for /insights.
+  publicList: () => request('/market-intel-public/publications'),
 };
 
 // Task #10 (LD) — Admin team roster (Public /team page lives on axal.vc).

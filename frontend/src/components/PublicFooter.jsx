@@ -110,6 +110,7 @@ export default function PublicFooter() {
             <h3 className="font-semibold text-gray-900 mb-4">Products</h3>
             <ul className="space-y-2">
               <li><Link to="/spinout-lab" className="text-sm text-gray-600 hover:text-gray-900">Spin-Out Lab</Link></li>
+              <li><Link to="/insights" className="text-sm text-gray-600 hover:text-gray-900">Insights</Link></li>
               <li><Link to="/articles" className="text-sm text-gray-600 hover:text-gray-900">Articles</Link></li>
               <li><Link to="/register?lane=lp" className="text-sm text-gray-600 hover:text-gray-900">LP Portal</Link></li>
               <li><Link to="/register?lane=partner" className="text-sm text-gray-600 hover:text-gray-900">Partner Network</Link></li>
@@ -119,7 +120,7 @@ export default function PublicFooter() {
           <div>
             <h3 className="font-semibold text-gray-900 mb-4">Company</h3>
             <ul className="space-y-2">
-              <li><Link to="/team" className="text-sm text-gray-600 hover:text-gray-900">About</Link></li>
+              <li><Link to="/about" className="text-sm text-gray-600 hover:text-gray-900">About</Link></li>
               <li><Link to="/contact" className="text-sm text-gray-600 hover:text-gray-900">Contact</Link></li>
               <li><Link to="/terms" className="text-sm text-gray-600 hover:text-gray-900">Terms</Link></li>
               <li><Link to="/privacy" className="text-sm text-gray-600 hover:text-gray-900">Privacy</Link></li>

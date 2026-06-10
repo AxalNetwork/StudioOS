@@ -452,6 +452,39 @@ zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/login/*"
 zone_name  = "axal.vc"
+# Task #6 (ID) — public marketing pages served by the SPA on the apex.
+# Each route is path-scoped (exact + /*) so the Jekyll site keeps every
+# other apex path. /insights/* also covers /insights/public/:slug.
+[[env.production.routes]]
+pattern    = "axal.vc/spinout-lab"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/spinout-lab/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/about"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/about/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/insights"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/insights/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/directory"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/directory/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/contact"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/contact/*"
+zone_name  = "axal.vc"
 
 [env.production.vars]
 # Task #5 — canonical-host flip. APP_URL/PUBLIC_BASE_URL now point at

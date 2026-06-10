@@ -55,6 +55,7 @@ const ArticlesQueuePage = lazy(() => import('./pages/admin/ArticlesQueuePage'));
 const AdminPublicationNew = lazy(() => import('./pages/admin/PublicationNew'));
 const AdminPublicationDetail = lazy(() => import('./pages/admin/PublicationDetail'));
 const PublicInsight = lazy(() => import('./pages/insights/PublicInsight'));
+const InsightsPage = lazy(() => import('./pages/insights/InsightsPage'));
 const MarketIntelPage = lazy(() => import('./pages/MarketIntelPage'));
 const AdvisoryPage = lazy(() => import('./pages/AdvisoryPage'));
 const ActivityPage = lazy(() => import('./pages/ActivityPage'));
@@ -1080,6 +1081,7 @@ function AppInner() {
       <Route path="/admin/publications" element={guard(['admin'], <AdminPublications />)} />
       <Route path="/admin/publications/new" element={guard(['admin'], <AdminPublicationNew />)} />
       <Route path="/admin/publications/:id" element={guard(['admin'], <AdminPublicationDetail />)} />
+      <Route path="/insights" element={<InsightsPage />} />
       <Route path="/insights/public/:slug" element={<PublicInsight />} />
       <Route path="/admin/due-diligence" element={guard(['admin', 'partner', 'investor', 'mentor'], <AdminDueDiligencePage />)} />
       <Route path="/admin/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'mentor'], <AdminDueDiligenceCasePage />)} />
@@ -1157,7 +1159,8 @@ function AppInner() {
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/contact" element={<ContactPage />} />
-      <Route path="/team" element={<TeamPage />} />
+      <Route path="/about" element={<TeamPage />} />
+      <Route path="/team" element={<Navigate to="/about" replace />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/risk-disclosures" element={<RiskDisclosuresPage />} />
       {/* Task #4 (ID) — Public marketing surfaces. No auth. */}
