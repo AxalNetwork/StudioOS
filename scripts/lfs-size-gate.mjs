@@ -13,9 +13,10 @@
  *     in — only staged additions are checked, not the whole working tree.
  *
  * Usage:
- *   node scripts/lfs-size-gate.mjs              # check staged files (pre-commit)
- *   node scripts/lfs-size-gate.mjs --all        # check entire working tree
- *   node scripts/lfs-size-gate.mjs --install    # install as a git pre-commit hook
+ *   node scripts/lfs-size-gate.mjs                    # check staged files (pre-commit)
+ *   node scripts/lfs-size-gate.mjs --all              # check entire working tree
+ *   node scripts/lfs-size-gate.mjs --against=<ref>    # check files added/modified since <ref>
+ *   node scripts/lfs-size-gate.mjs --install          # install as a git pre-commit hook
  *
  * Exit codes:
  *   0  — clean
@@ -33,11 +34,16 @@ const SIZE_GATED_EXTS = new Set([".pdf", ".png"]);
 
 const LFS_TRACKED_EXTS = new Set([
   ".psd", ".psb", ".ai", ".xd", ".fig", ".sketch",
+  ".docx", ".doc", ".pptx", ".ppt", ".xlsx", ".xls",
   ".onnx", ".safetensors", ".pt", ".pth", ".gguf",
+  ".h5", ".hdf5", ".pkl", ".ckpt", ".npy", ".npz", ".pb", ".bin",
   ".parquet",
   ".zip", ".tar.gz", ".tgz",
+  ".7z", ".rar", ".bz2", ".xz",
   ".mp4", ".webm", ".mov",
   ".wav", ".flac",
+  ".duckdb", ".sqlite", ".sqlite3",
+  ".woff2",
 ]);
 
 const args = new Set(process.argv.slice(2));
@@ -57,6 +63,11 @@ function listStagedAdditions() {
 
 function listAll() {
   const out = tryShOrEmpty("git ls-files");
+  return out ? out.split("\n").filter(Boolean) : [];
+}
+
+function listAgainst(ref) {
+  const out = tryShOrEmpty(`git diff ${ref}...HEAD --name-only --diff-filter=AM`);
   return out ? out.split("\n").filter(Boolean) : [];
 }
 
@@ -101,7 +112,15 @@ function main() {
     return;
   }
 
-  const files = args.has("--all") ? listAll() : listStagedAdditions();
+  function pickFiles() {
+    if (args.has("--all")) return listAll();
+    for (const a of args) {
+      if (a.startsWith("--against=")) return listAgainst(a.slice("--against=".length));
+    }
+    return listStagedAdditions();
+  }
+
+  const files = pickFiles();
   if (files.length === 0) {
     process.exit(0);
   }

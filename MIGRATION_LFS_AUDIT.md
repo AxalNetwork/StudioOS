@@ -133,3 +133,44 @@ workflow input.
 - [ ] **Operator**: first design-source LFS commit (steps above). Main-agent sandbox cannot do this — git is sandbox-blocked.
 - [ ] **Operator**: add `SLACK_OPS_WEBHOOK_URL` to GitHub Actions secrets (Settings → Secrets and variables → Actions).
 - [ ] **Operator** (optional, recommended): install the pre-commit hook via `npm run lfs:install-hook` (added in this task).
+
+## 2026-06-10 follow-up — Bucket A applied (A1–A5)
+
+This section records the post-audit drift and the changes applied to close the gap without history rewrites.
+
+### Post-audit drift (2026-05-21 → 2026-06-10)
+
+- 547 new PNGs were added since the baseline audit.
+- 60 oversize files (> 500 KB) now trip `--all` (previously 325 tracked files > 100 KB at audit baseline):
+  - 47 PNGs (100 KB – 5.6 MB, mostly `attached_assets/Screenshot_*.png` and `IMG_*.png`)
+  - 1 PDF (`attached_assets/AXAL_VC_-_STARTUP_SCORING-merged_*.pdf`, 1.4 MB)
+  - 3 `axal-logo.png` copies (root, `frontend/public/`, `docs/`, 853 KB each — intended for Worker/GH Pages serve, so they stay in the regular pack; future logo *masters* go to LFS via `*.ai`/`*.fig`).
+  - The remaining `dist-deploy/`, `backend/app.db`, and `users/1/activity.md` were addressed in A2–A4 (see below).
+
+### Applied changes (A1–A5)
+
+| Step | Action | Status | Notes |
+|---|---|---|---|
+| A1 | Broaden `.gitattributes` LFS patterns (Office, ML/data, DB snapshots, archives, fonts) | **Done** — Task #1. Additive only; 16 existing DOCX + 1 PPTX grandfathered. |
+| A2 | `.gitignore` + untrack `dist-deploy/` | **Done** — Task #2. `git rm --cached` kept files on disk. |
+| A3 | `.gitignore` + untrack `backend/app.db` | **Done** — Task #2. Dev-only SQLite; real data lives in D1. |
+| A4 | Delete `users/1/activity.md` (PII export) | **Done** — Task #2. File removed from tree and disk. |
+| A5 | Add `--against=<ref>` mode to `scripts/lfs-size-gate.mjs` | **Done** — Task #3. Enables PR-scoped gating in CI. |
+| A6 | Wire `--against` into CI as an `lfs-gate` job | **Done** — Task #3. Added after `drift` job in `ci.yml`. |
+| A7 | Update this audit doc | **Done** — Task #3 (this section). |
+
+### What changed in the CI job
+
+The `lfs-gate` job:
+- checks out with `fetch-depth: 0` so the merge-base resolves on PR builds,
+- fetches the PR base branch with `--depth=1`,
+- runs `node scripts/lfs-size-gate.mjs --against=origin/${{ github.base_ref }}`,
+- passes only if files touched by the PR are clean (no grandfathered oversize blobs from the audit baseline trigger failures).
+
+### Still pending / needs decision
+
+- **Bucket B** — history rewrite: explicitly declined in the original plan. The 60 oversize files and the 16 existing DOCX + 1 PPTX remain in the regular pack. They will rotate out naturally as the codebase evolves.
+- **Bucket C** — structural decisions:
+  - `docs/` rotation: GitHub Pages currently serves from `docs/`. A CI-built `docs/` rotation would decouple the committed build output from the marketing site. **Tag:** `needs decision`.
+  - `attached_assets/Pasted-*.txt` excerpts: deferred curation decision on whether these excerpts are still needed. **Tag:** `needs decision`.
+  - Deck PDFs → GitHub Releases: public decks (Axal VC source decks) currently in `attached_assets/*.pdf` should migrate to Releases for better bandwidth and discoverability. **Tag:** `needs decision`.

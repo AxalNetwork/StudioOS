@@ -77,6 +77,29 @@ jobs:
         run: node scripts/check-api-drift.mjs
 
   # -------------------------------------------------------------------------
+  # LFS size gate — only fires on files added / modified in the PR.
+  # Uses --against so grandfathered pre-audit blobs do NOT block CI.
+  # -------------------------------------------------------------------------
+  lfs-gate:
+    name: lfs size gate
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.base_ref }} --depth=1
+      - name: Run LFS size gate
+        run: node scripts/lfs-size-gate.mjs --against=origin/${{ github.base_ref }}
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+
+  # -------------------------------------------------------------------------
   # FastAPI dev backend: import + smoke. Catches obvious Python breakage in
   # the dev environment so Replit sessions don't start broken. We do NOT
   # treat dev failure as a deploy gate (FastAPI is not deployed) but we DO
