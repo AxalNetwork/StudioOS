@@ -10,6 +10,13 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Task #7 (IE) — Ops observability surfaces
+
+- **Traces enabled** — `wrangler.toml` `[observability.traces].enabled` flipped from `false` to `true` so Cloudflare Workers trace data is collected.
+- **DLQ admin panel** — `cloudflare-worker/src/routes/infra.ts`: `GET /api/infra/dlq` now supports pagination (`limit`, `offset`) and `job_type` filtering. Added `POST /api/infra/dlq/:id/retry` (re-enqueues with fresh `idempotency_key` + removes from DLQ) and `DELETE /api/infra/dlq/:id` (discard). Added `cron_run_history` table to `ensureInfraSchema()` (lazy bootstrap). Added `GET /api/infra/cron-history` (paginated + trigger filter) and `POST /api/infra/cron-log` (internal surface for cron handler). Added `GET /api/infra/ws-check` (lightweight DO connectivity spot-check for `PipelineRoom` + `OnboardingChat`).
+- **Cron run logging** — `cloudflare-worker/src/index.ts`: `scheduled()` handler now records every run into `cron_run_history` with `trigger_name='scheduled'`, `status`, `summary`, and `error` in a `finally` block so partial failures are still captured.
+- **Frontend tabs** — `MonitoringPage.jsx`: added `dlq` and `cron` tabs. New `DlqTab.jsx` (paginated DLQ list with retry/discard buttons + job_type filter). New `CronTab.jsx` (paginated cron history table + WS spot-check panel). `api.js`: added `infraDLQ(params)`, `infraRetryDLQ(id)`, `infraDeleteDLQ(id)`, `infraCronHistory(params)`, `infraWSCheck()`.
+- Route mount precedence: `/api/infra` already mounted before `/api/admin` catch-all in `index.ts` — no change needed.
 
 ## Task #6 (ID) — Publish public marketing pages
 

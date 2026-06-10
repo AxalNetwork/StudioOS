@@ -56,6 +56,17 @@ async function ensureInfraSchema(env: Env) {
       timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE INDEX IF NOT EXISTS idx_sm_name_time ON system_metrics(metric_name, timestamp)`,
+    // Task #7 (IE) — cron run history for observability dashboard.
+    `CREATE TABLE IF NOT EXISTS cron_run_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trigger_name TEXT NOT NULL,
+      started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      finished_at TIMESTAMP,
+      status TEXT NOT NULL DEFAULT 'started',
+      summary TEXT,
+      error TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_crh_trigger_time ON cron_run_history(trigger_name, started_at)`,
   ];
   // Only flip infraMigrated=true when every statement succeeds — otherwise
   // a transient D1 hiccup would lock the warm isolate into a partial schema.
@@ -180,14 +191,162 @@ infra.post('/cleanup', async (c) => {
   return c.json({ ok: true });
 });
 
-// GET /api/infra/dlq — dead letter inspection
+// GET /api/infra/dlq — dead letter inspection with pagination/filtering.
+// Query params: job_type, limit (max 200), offset.
 infra.get('/dlq', async (c) => {
   await ensureInfraSchema(c.env);
   await requireAdmin(c);
-  const rows = await c.env.DB.prepare(
-    `SELECT * FROM dead_letter_queue ORDER BY moved_at DESC LIMIT 100`
-  ).all();
-  return c.json({ ok: true, items: rows.results || [] });
+  const jobType = c.req.query('job_type') || '';
+  const limit = Math.max(1, Math.min(200, parseInt(c.req.query('limit') || '50', 10)));
+  const offset = Math.max(0, parseInt(c.req.query('offset') || '0', 10));
+
+  const where = jobType ? 'WHERE job_type = ?' : '';
+  const countStmt = `SELECT COUNT(*) AS c FROM dead_letter_queue ${where}`;
+  const listStmt = `SELECT * FROM dead_letter_queue ${where} ORDER BY moved_at DESC LIMIT ? OFFSET ?`;
+
+  const count = await c.env.DB.prepare(countStmt)
+    .bind(...(jobType ? [jobType] : []))
+    .first<{ c: number }>();
+
+  const rows = await c.env.DB.prepare(listStmt)
+    .bind(...(jobType ? [jobType, limit, offset] : [limit, offset]))
+    .all();
+
+  return c.json({
+    ok: true,
+    items: rows.results || [],
+    total: Number(count?.c ?? 0),
+    limit,
+    offset,
+  });
+});
+
+// POST /api/infra/dlq/:id/retry — re-enqueue a dead-letter job and remove it from DLQ.
+infra.post('/dlq/:id/retry', async (c) => {
+  await ensureInfraSchema(c.env);
+  await requireAdmin(c);
+  const id = parseInt(c.req.param('id'), 10);
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
+
+  const row = await c.env.DB.prepare(
+    `SELECT job_type, payload, last_error, attempts FROM dead_letter_queue WHERE id = ?`
+  ).bind(id).first<{ job_type: string; payload: string | null; last_error: string | null; attempts: number }>();
+  if (!row) return c.json({ error: 'DLQ item not found' }, 404);
+
+  // Re-enqueue with a fresh idempotency key so the dedup layer won't
+  // silently skip it if the original key is still in job_idempotency.
+  const payload = row.payload ? JSON.parse(row.payload) : {};
+  const result = await enqueueJob(c.env, row.job_type as JobType, payload, {
+    idempotency_key: `dlq-retry-${id}-${crypto.randomUUID()}`,
+  });
+
+  // Remove from DLQ after successful enqueue.
+  await c.env.DB.prepare(`DELETE FROM dead_letter_queue WHERE id = ?`).bind(id).run();
+
+  return c.json({ ok: true, requeued: true, transport: result.transport, idempotency_key: result.idempotency_key });
+});
+
+// DELETE /api/infra/dlq/:id — discard a dead-letter entry (admin only).
+infra.delete('/dlq/:id', async (c) => {
+  await ensureInfraSchema(c.env);
+  await requireAdmin(c);
+  const id = parseInt(c.req.param('id'), 10);
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
+
+  const r = await c.env.DB.prepare(`DELETE FROM dead_letter_queue WHERE id = ?`).bind(id).run();
+  if ((r.meta?.changes ?? 0) === 0) return c.json({ error: 'DLQ item not found' }, 404);
+
+  return c.json({ ok: true, deleted: true });
+});
+
+// GET /api/infra/cron-history — list recent cron run history.
+infra.get('/cron-history', async (c) => {
+  await ensureInfraSchema(c.env);
+  await requireAdmin(c);
+  const limit = Math.max(1, Math.min(200, parseInt(c.req.query('limit') || '100', 10)));
+  const offset = Math.max(0, parseInt(c.req.query('offset') || '0', 10));
+  const trigger = c.req.query('trigger') || '';
+
+  const where = trigger ? 'WHERE trigger_name = ?' : '';
+  const countStmt = `SELECT COUNT(*) AS c FROM cron_run_history ${where}`;
+  const listStmt = `SELECT * FROM cron_run_history ${where} ORDER BY started_at DESC LIMIT ? OFFSET ?`;
+
+  const count = await c.env.DB.prepare(countStmt)
+    .bind(...(trigger ? [trigger] : []))
+    .first<{ c: number }>();
+
+  const rows = await c.env.DB.prepare(listStmt)
+    .bind(...(trigger ? [trigger, limit, offset] : [limit, offset]))
+    .all();
+
+  return c.json({
+    ok: true,
+    items: rows.results || [],
+    total: Number(count?.c ?? 0),
+    limit,
+    offset,
+  });
+});
+
+// POST /api/infra/cron-log — internal endpoint for the cron handler to record runs.
+// Not a public admin surface; called from index.ts scheduled().
+infra.post('/cron-log', async (c) => {
+  await ensureInfraSchema(c.env);
+  const body = await c.req.json<{ trigger_name: string; status: string; started_at?: string; finished_at?: string; summary?: string; error?: string }>();
+  if (!body?.trigger_name) return c.json({ error: 'trigger_name required' }, 400);
+
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  await c.env.DB.prepare(
+    `INSERT INTO cron_run_history (trigger_name, started_at, finished_at, status, summary, error)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(
+    body.trigger_name,
+    body.started_at || now,
+    body.finished_at || now,
+    body.status || 'completed',
+    body.summary || null,
+    body.error || null,
+  ).run();
+
+  return c.json({ ok: true });
+});
+
+// GET /api/infra/ws-check — lightweight WS connectivity spot-check.
+// Verifies that the Durable Object bindings are reachable and returns a
+// synthetic "can-upgrade" status without opening an actual socket.
+infra.get('/ws-check', async (c) => {
+  await requireAdmin(c);
+  const checks: Record<string, { ok: boolean; detail: string }> = {};
+
+  // PipelineRoom binding check
+  if (c.env.PIPELINE_ROOM) {
+    try {
+      const id = c.env.PIPELINE_ROOM.idFromName('healthcheck');
+      const stub = c.env.PIPELINE_ROOM.get(id);
+      const r = await stub.fetch('https://do/count');
+      checks.pipeline = { ok: r.status === 200, detail: r.status === 200 ? 'reachable' : `status ${r.status}` };
+    } catch (e: any) {
+      checks.pipeline = { ok: false, detail: e?.message || 'unreachable' };
+    }
+  } else {
+    checks.pipeline = { ok: false, detail: 'PIPELINE_ROOM binding missing' };
+  }
+
+  // OnboardingChat binding check
+  if (c.env.ONBOARDING_CHAT) {
+    try {
+      const id = c.env.ONBOARDING_CHAT.idFromName('healthcheck');
+      const stub = c.env.ONBOARDING_CHAT.get(id);
+      const r = await stub.fetch('https://do/count');
+      checks.onboarding = { ok: r.status === 200, detail: r.status === 200 ? 'reachable' : `status ${r.status}` };
+    } catch (e: any) {
+      checks.onboarding = { ok: false, detail: e?.message || 'unreachable' };
+    }
+  } else {
+    checks.onboarding = { ok: false, detail: 'ONBOARDING_CHAT binding missing' };
+  }
+
+  return c.json({ ok: true, checks });
 });
 
 export default infra;

@@ -819,10 +819,16 @@ export default {
         console.error('[cron] lease acquire failed', e);
       }
 
+      // Task #7 (IE) — record cron run start in D1 for observability dashboard.
+      const cronStartedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      let cronSummary: string[] = [];
+      let cronError: string | null = null;
+
       try {
         const r = await processQueueBatch(env, 25);
         if (r.processed || r.failed) {
           console.info(`[cron] drain processed=${r.processed} failed=${r.failed}`);
+          cronSummary.push(`drain processed=${r.processed} failed=${r.failed}`);
         }
         const now = new Date();
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
@@ -1275,7 +1281,27 @@ export default {
             console.error('[cron] analytics snapshot failed', e);
           }
         }
+      } catch (e: any) {
+        cronError = e?.message || 'cron batch error';
+        console.error('[cron] unhandled batch error', e);
       } finally {
+        // Task #7 (IE) — persist cron run summary to D1.
+        try {
+          const cronFinishedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
+          await env.DB.prepare(
+            `INSERT INTO cron_run_history (trigger_name, started_at, finished_at, status, summary, error)
+             VALUES (?, ?, ?, ?, ?, ?)`
+          ).bind(
+            'scheduled',
+            cronStartedAt,
+            cronFinishedAt,
+            cronError ? 'failed' : 'completed',
+            cronSummary.join(' | ') || null,
+            cronError,
+          ).run();
+        } catch (dbErr) {
+          console.error('[cron] cron history write failed', dbErr);
+        }
         try {
           const cur = await env.RATE_LIMITS.get(LEASE_KEY);
           if (cur === leaseHolder) await env.RATE_LIMITS.delete(LEASE_KEY);

@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Improved: Admin observability and reliability
+
+For admins and operators:
+- **Dead-letter queue (DLQ) management** — the Infrastructure panel now includes a dedicated DLQ tab where you can view failed jobs, retry them individually, or permanently discard them.
+- **Cron run history** — a new Cron History tab shows every scheduled run, when it started and finished, whether it succeeded, and a summary of what happened. This makes it easy to spot when background tasks fail silently.
+- **WebSocket health check** — the same Cron History panel includes a live spot-check that verifies the real-time pipeline and chat connections are reachable.
+
+(Behind the scenes, Cloudflare Workers trace collection is now enabled for deeper debugging when needed.)
+
+---
+
 ## New: Public pages for Spin-Out Lab, About, Insights & the Directory
 
 Key parts of Axal are now public — no sign-in needed.

@@ -1354,8 +1354,18 @@ export const api = {
   infraProcess: (batch = 10) => request(`/infra/process?batch=${batch}`, { method: 'POST' }),
   infraEnqueue: (job_type, payload, max_retries) =>
     request('/infra/enqueue', { method: 'POST', body: JSON.stringify({ job_type, payload, max_retries }) }),
-  infraDLQ: () => request('/infra/dlq'),
   infraCleanup: () => request('/infra/cleanup', { method: 'POST' }),
+  infraDLQ: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
+    return request(`/infra/dlq${q ? `?${q}` : ''}`);
+  },
+  infraRetryDLQ: (id) => request(`/infra/dlq/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
+  infraDeleteDLQ: (id) => request(`/infra/dlq/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  infraCronHistory: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
+    return request(`/infra/cron-history${q ? `?${q}` : ''}`);
+  },
+  infraWSCheck: () => request('/infra/ws-check'),
 
   // ---------- Funds & LPs ----------
   fundsList: (status) => request(`/funds${status ? `?status=${status}` : ''}`),
