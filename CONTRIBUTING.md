@@ -11,9 +11,12 @@ For product/architecture context, read `replit.md` first.
 |---|---|
 | A new feature, route, component, migration | regular git (no LFS) |
 | Logo masters, Figma sources, design PSDs | **Git LFS** (`*.psd`, `*.fig`, `*.ai`, `*.xd`, `*.sketch`) |
-| ML weights, model checkpoints | **Git LFS** (`*.onnx`, `*.safetensors`, `*.pt`, `*.pth`, `*.gguf`) |
-| Sample/fixture archives, audit snapshots | **Git LFS** (`*.zip`, `*.tar.gz`, `*.parquet`) |
+| Office documents (legal templates, decks) | **Git LFS** (`*.docx`, `*.doc`, `*.pptx`, `*.ppt`, `*.xlsx`, `*.xls`) |
+| ML weights, model checkpoints, data arrays | **Git LFS** (`*.onnx`, `*.safetensors`, `*.pt`, `*.pth`, `*.gguf`, `*.h5`, `*.hdf5`, `*.pkl`, `*.ckpt`, `*.npy`, `*.npz`, `*.pb`, `*.bin`) |
+| Sample/fixture archives, audit snapshots | **Git LFS** (`*.zip`, `*.tar.gz`, `*.parquet`, `*.7z`, `*.rar`, `*.bz2`, `*.xz`) |
+| Database snapshots / fixtures | **Git LFS** (`*.duckdb`, `*.sqlite`, `*.sqlite3`) |
 | Source video / audio (marketing source, podcast masters) | **Git LFS** (`*.mp4`, `*.webm`, `*.mov`, `*.wav`, `*.flac`) |
+| Web fonts | **Git LFS** (`*.woff2`) |
 | A PDF or PNG > 500 KB | **Git LFS** (size-gated; `git lfs track "<glob>"` first) |
 | User uploads, signed docs, KYC, deck exports, backups | **R2** (not git) |
 | A public PDF (quarterly Signals report, sector report) | **GitHub Releases** (not git) |
