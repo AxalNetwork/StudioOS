@@ -262,12 +262,25 @@ async function resolveProjectId(env: Env, row: IntegrationRow): Promise<number |
   const explicit = Number(cfg.project_id);
   if (Number.isFinite(explicit) && explicit > 0) return explicit;
   try {
+    // Integrations are keyed by `user_id`, but `projects` has NO owner_user_id
+    // column — it is keyed by `founder_id` (see schema.sql). The old query hit
+    // a non-existent column, threw, and was silently swallowed, which is why
+    // the Stripe MRR pull never landed. Map user → founder → project the same
+    // way routes/projects.ts does, and only auto-resolve when the founder owns
+    // exactly one live project (ambiguous → null → sync skips the snapshot).
     const owned = await env.DB.prepare(
-      'SELECT id FROM projects WHERE owner_user_id = ? AND (deleted_at IS NULL OR deleted_at = "") LIMIT 2',
+      `SELECT p.id FROM projects p
+         JOIN users u ON u.founder_id = p.founder_id
+        WHERE u.id = ? AND p.deleted_at IS NULL
+        LIMIT 2`,
     ).bind(row.user_id).all<{ id: number }>();
     const rows = owned.results || [];
     if (rows.length === 1) return rows[0].id;
-  } catch { /* projects table shape varies in dev */ }
+  } catch (e) {
+    // Surface real DB errors instead of swallowing them — a silent catch here
+    // is exactly how the wrong-column bug above stayed hidden.
+    console.warn('[stripe] resolveProjectId:', (e as Error).message);
+  }
   return null;
 }
 

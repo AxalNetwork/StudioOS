@@ -10,6 +10,15 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Task #10 (IH) — Stripe/integration data pulls
+
+Mostly a verification track; one real bug fixed. The Stripe MRR pull was wired end-to-end but silently dropped because the project resolver hit a non-existent column.
+
+- **BLOCK-INT-02 — Stripe MRR now actually lands in financials.** `integrations/providers/stripe.ts::resolveProjectId` queried `SELECT id FROM projects WHERE owner_user_id = ?`, but `projects` has no `owner_user_id` column (it is keyed by `founder_id` — see `schema.sql`; migration `034` never added that column). The query threw `no such column`, was swallowed by a bare `catch {}`, and `resolveProjectId` returned `null`, so `sync()`/cron/connect-webhook all skipped `projectMetricsToProject` — the `metrics_snapshots` row (`source='stripe'`) and the `financial_models.assumptions_json` upsert (`_sources.mrr='stripe'` + `_stripe_synced_at`) never wrote. Fixed by mapping `integrations.user_id → users.founder_id → projects.founder_id` (the same join `routes/projects.ts` uses), auto-resolving only when the founder owns exactly one live (`deleted_at IS NULL`) project. The bare `catch` now logs `[stripe] resolveProjectId:` so a real DB error can never hide a broken pull again. The explicit-`config_json.project_id` path and the manual `import-stripe` endpoint (which pass `projectId` directly) were unaffected and keep working.
+- **NICE-INT-03 — LinkedIn redirect host confirmed correct (no change).** `routes/linkedin.ts::linkedinRedirectUri` already ignores any stale `*.workers.dev` override in production and falls back to `callbackBase(env)` (→ `app.axal.vc` until provider dashboards flip to `axal.vc`, then `axal.vc`). The OAuth start + token-exchange + callback all derive `redirect_uri` from the same helper, so the consent screen never shows `workers.dev`.
+- **NICE-INT-04 — all four tiles confirmed present (no change).** `integrations/registry.ts` REGISTRY already carries HubSpot (`live`), Carta (`coming_soon`), Affinity (`coming_soon`), and DocuSign (`coming_soon`); `IntegrationsPage.jsx` renders `coming_soon`/no-impl providers in its "Coming soon" section, so every audited tile shows.
+- **NICE-INT-01 — Stripe Connect OAuth round-trip is an operator step.** A live round-trip needs real `STRIPE_CONNECT_CLIENT_ID` + `STRIPE_SECRET_KEY` Worker secrets and the deployed Worker (dev runs FastAPI, which has no Stripe Connect path). Captured as a follow-up/operator verification rather than agent-runnable.
+
 ## Task #9 (IG) — Admin transcripts + ID backfill
 
 Verification track — no prod-contract or frontend behavior change. Both admin transcript surfaces and the public-ID backfill path were already shipped (Tasks #1 DB / #11 / #34); this task confirms the wiring end-to-end and hands off the operator-run prod count.
