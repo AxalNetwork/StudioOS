@@ -1359,8 +1359,8 @@ export const api = {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
     return request(`/infra/dlq${q ? `?${q}` : ''}`);
   },
-  infraRetryDLQ: (id) => request(`/infra/dlq/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
-  infraDeleteDLQ: (id) => request(`/infra/dlq/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  infraRetryDLQ: (id, source) => request(`/infra/dlq/${encodeURIComponent(id)}/retry?source=${encodeURIComponent(source)}`, { method: 'POST' }),
+  infraDeleteDLQ: (id, source) => request(`/infra/dlq/${encodeURIComponent(id)}?source=${encodeURIComponent(source)}`, { method: 'DELETE' }),
   infraCronHistory: (params = {}) => {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
     return request(`/infra/cron-history${q ? `?${q}` : ''}`);

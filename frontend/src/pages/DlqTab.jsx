@@ -27,22 +27,22 @@ export default function DlqTab() {
 
   useEffect(() => { load(); }, [offset, jobType, source]);
 
-  const retry = async (id) => {
-    if (!confirm(`Re-enqueue DLQ item #${id}?`)) return;
-    setActionId(id);
+  const retry = async (id, source) => {
+    if (!confirm(`Re-enqueue DLQ item #${id} (${source})?`)) return;
+    setActionId(`${source}:${id}`);
     try {
-      await api.infraRetryDLQ(id);
+      await api.infraRetryDLQ(id, source);
       await load();
     } catch (e) {
       setErr(e?.message || 'Retry failed');
     } finally { setActionId(null); }
   };
 
-  const discard = async (id) => {
-    if (!confirm(`Permanently discard DLQ item #${id}?`)) return;
-    setActionId(id);
+  const discard = async (id, source) => {
+    if (!confirm(`Permanently discard DLQ item #${id} (${source})?`)) return;
+    setActionId(`${source}:${id}`);
     try {
-      await api.infraDeleteDLQ(id);
+      await api.infraDeleteDLQ(id, source);
       await load();
     } catch (e) {
       setErr(e?.message || 'Discard failed');
@@ -95,7 +95,7 @@ export default function DlqTab() {
       ) : (
         <div className="space-y-2">
           {items.map(d => (
-            <div key={d.id} className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+            <div key={`${d.source}:${d.id}`} className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -108,7 +108,7 @@ export default function DlqTab() {
                     )}
                   </div>
                   <div className="text-xs text-gray-500 mt-0.5">
-                    {d.moved_at ? new Date(d.moved_at + (d.moved_at.endsWith('Z') ? '' : 'Z')).toLocaleString() : '—'} · {d.attempts} attempt(s)
+                    {d.created_at ? new Date(d.created_at + (d.created_at.endsWith('Z') ? '' : 'Z')).toLocaleString() : '—'} · {d.attempts} attempt(s)
                   </div>
                   {d.last_error && (
                     <div className="text-xs text-red-700 mt-1 font-mono whitespace-pre-wrap break-words max-w-2xl">
@@ -123,15 +123,15 @@ export default function DlqTab() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() => retry(d.id)}
-                    disabled={actionId === d.id}
+                    onClick={() => retry(d.id, d.source)}
+                    disabled={actionId === `${d.source}:${d.id}`}
                     className="px-2.5 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-lg flex items-center gap-1"
                   >
                     <RotateCcw size={12} /> Retry
                   </button>
                   <button
-                    onClick={() => discard(d.id)}
-                    disabled={actionId === d.id}
+                    onClick={() => discard(d.id, d.source)}
+                    disabled={actionId === `${d.source}:${d.id}`}
                     className="px-2.5 py-1.5 text-xs bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300"
                   >
                     <Trash2 size={12} /> Discard

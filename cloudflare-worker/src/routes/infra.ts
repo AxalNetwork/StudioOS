@@ -273,26 +273,20 @@ infra.get('/dlq', async (c) => {
 });
 
 // POST /api/infra/dlq/:id/retry — re-enqueue a dead-letter job and remove it from DLQ.
-// Accepts both D1 dead_letter_queue and CF dlq_mirror rows.
+// Requires ?source=d1|cf to avoid ambiguous ID collisions between the two tables.
 infra.post('/dlq/:id/retry', async (c) => {
   await ensureInfraSchema(c.env);
   await requireAdmin(c);
   const id = parseInt(c.req.param('id'), 10);
+  const source = (c.req.query('source') || '').trim();
   if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
+  if (source !== 'd1' && source !== 'cf') return c.json({ error: 'source query param required (d1|cf)' }, 400);
 
-  // Try D1 dead_letter_queue first, then CF mirror.
-  let row: { job_type: string; payload: string | null; last_error: string | null; attempts: number; source: 'd1' | 'cf' } | null = null;
-  const d1Row = await c.env.DB.prepare(
-    `SELECT job_type, payload, last_error, attempts FROM dead_letter_queue WHERE id = ?`
+  const table = source === 'cf' ? 'cf_dlq_mirror' : 'dead_letter_queue';
+  const errorCol = source === 'cf' ? 'error' : 'last_error';
+  const row = await c.env.DB.prepare(
+    `SELECT job_type, payload, ${errorCol} AS last_error, attempts FROM ${table} WHERE id = ?`
   ).bind(id).first<{ job_type: string; payload: string | null; last_error: string | null; attempts: number }>();
-  if (d1Row) {
-    row = { ...d1Row, source: 'd1' };
-  } else {
-    const cfRow = await c.env.DB.prepare(
-      `SELECT job_type, payload, error AS last_error, attempts FROM cf_dlq_mirror WHERE id = ?`
-    ).bind(id).first<{ job_type: string; payload: string | null; last_error: string | null; attempts: number }>();
-    if (cfRow) row = { ...cfRow, source: 'cf' };
-  }
 
   if (!row) return c.json({ error: 'DLQ item not found' }, 404);
 
@@ -300,28 +294,27 @@ infra.post('/dlq/:id/retry', async (c) => {
   // silently skip it if the original key is still in job_idempotency.
   const payload = row.payload ? JSON.parse(row.payload) : {};
   const result = await enqueueJob(c.env, row.job_type as JobType, payload, {
-    idempotency_key: `dlq-retry-${row.source}-${id}-${crypto.randomUUID()}`,
+    idempotency_key: `dlq-retry-${source}-${id}-${crypto.randomUUID()}`,
   });
 
   // Remove from the correct table.
-  const table = row.source === 'cf' ? 'cf_dlq_mirror' : 'dead_letter_queue';
   await c.env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
 
-  return c.json({ ok: true, requeued: true, source: row.source, transport: result.transport, idempotency_key: result.idempotency_key });
+  return c.json({ ok: true, requeued: true, source, transport: result.transport, idempotency_key: result.idempotency_key });
 });
 
 // DELETE /api/infra/dlq/:id — discard a dead-letter entry (admin only).
+// Requires ?source=d1|cf to avoid ambiguous ID collisions between the two tables.
 infra.delete('/dlq/:id', async (c) => {
   await ensureInfraSchema(c.env);
   await requireAdmin(c);
   const id = parseInt(c.req.param('id'), 10);
+  const source = (c.req.query('source') || '').trim();
   if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
+  if (source !== 'd1' && source !== 'cf') return c.json({ error: 'source query param required (d1|cf)' }, 400);
 
-  // Try D1 first, then CF mirror.
-  let r = await c.env.DB.prepare(`DELETE FROM dead_letter_queue WHERE id = ?`).bind(id).run();
-  if ((r.meta?.changes ?? 0) === 0) {
-    r = await c.env.DB.prepare(`DELETE FROM cf_dlq_mirror WHERE id = ?`).bind(id).run();
-  }
+  const table = source === 'cf' ? 'cf_dlq_mirror' : 'dead_letter_queue';
+  const r = await c.env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
   if ((r.meta?.changes ?? 0) === 0) return c.json({ error: 'DLQ item not found' }, 404);
 
   return c.json({ ok: true, deleted: true });
@@ -520,26 +513,45 @@ infra.get('/ws-check', async (c) => {
     checks.onboarding = { ok: false, detail: 'ONBOARDING_CHAT binding missing' };
   }
 
-  // 3. Worker-facing route probes (synthetic admin JWT via Sec-WebSocket-Protocol).
-  // We hit the actual route URLs with an upgrade header so we verify the
-  // full pipeline: auth decode, RBAC, rate-limit, DO stub forwarding.
-  // We use the DO stub directly (same path the worker route forwards to)
-  // because we already verified the auth layer via requireAdmin on this endpoint.
+  // 3. Worker-facing route probes — real authenticated upgrade requests.
+  // We self-request the actual Hono routes so the full auth+RBAC+rate-limit
+  // pipeline is exercised. The DO layer is verified by the stub probes above.
   if (probeToken) {
-    // PipelineRoom route probe: auth layer is verified by reaching this
-    // endpoint; DO layer is verified by the stub.fetch('/ws') above.
-    // We add a synthetic check that the token is well-formed and the binding
-    // is present, which is the only gap between the two probe layers.
-    checks.pipeline_route = {
-      ok: !!c.env.PIPELINE_ROOM && checks.pipeline.ok,
-      detail: checks.pipeline.ok ? 'auth+DO pass' : 'see pipeline',
-    };
+    const origin = c.env.APP_URL || new URL(c.req.url).origin;
 
-    // OnboardingChat route probe: same reasoning.
-    checks.onboarding_route = {
-      ok: !!c.env.ONBOARDING_CHAT && checks.onboarding.ok,
-      detail: checks.onboarding.ok ? 'auth+DO pass' : 'see onboarding',
-    };
+    // /api/pipeline/ws/overview — any authenticated active user may subscribe.
+    try {
+      const req = new Request(`${origin}/api/pipeline/ws/overview`, {
+        headers: {
+          upgrade: 'websocket',
+          'sec-websocket-protocol': `bearer.${probeToken}`,
+        },
+      });
+      const resp = await fetch(req);
+      checks.pipeline_route = {
+        ok: resp.status === 101,
+        detail: `handshake=${resp.status}`,
+      };
+    } catch (e: any) {
+      checks.pipeline_route = { ok: false, detail: e?.message || 'probe-failed' };
+    }
+
+    // /api/onboarding/ws/0 — admin or self; admin JWT (user_id=0) passes.
+    try {
+      const req = new Request(`${origin}/api/onboarding/ws/0`, {
+        headers: {
+          upgrade: 'websocket',
+          'sec-websocket-protocol': `bearer.${probeToken}`,
+        },
+      });
+      const resp = await fetch(req);
+      checks.onboarding_route = {
+        ok: resp.status === 101,
+        detail: `handshake=${resp.status}`,
+      };
+    } catch (e: any) {
+      checks.onboarding_route = { ok: false, detail: e?.message || 'probe-failed' };
+    }
   } else {
     checks.pipeline_route = { ok: false, detail: 'probe skipped: no token' };
     checks.onboarding_route = { ok: false, detail: 'probe skipped: no token' };
