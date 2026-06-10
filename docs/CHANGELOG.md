@@ -10,6 +10,22 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Hide passwordless login options; fix recovery-page CSRF
+
+Two auth-surface changes.
+
+- **Login page — passwordless options removed (UI-only).** `frontend/src/pages/LoginPage.jsx` no longer renders the "Email me a sign-in link" (magic-link) button + its helper/sent-confirmation branch, nor the "Sign in with a passkey" button. Removed the now-orphaned `sendMagicLink`/`signInWithPasskey` handlers, the `magicBusy`/`magicSent`/`passkeyBusy`/`passkeySupported` state, and the now-unused `Mail`/`KeyRound` lucide imports + the `@simplewebauthn/browser` import. TOTP sign-in, "Continue with Google", and the dev-only quick-login are untouched. Backend routes (`/api/auth/magic/*`, `/api/auth/passkey/*`), the `api.magicStart`/`api.passkey.*` client methods, and the Settings → Security passkey panel are all left in place. The `?magic_error=` URL-param handler + `MAGIC_ERROR_COPY` are intentionally KEPT so a stale magic link still renders a graceful error.
+- **Recover page — CSRF header now attached.** `frontend/src/pages/RecoverPage.jsx`'s local `post()` helper sent mutating requests with no `X-CSRF-Token` header, so the Worker's double-submit CSRF check rejected every recovery POST ("CSRF token missing or invalid") whenever a stale auth cookie was present. Added a `csrfHeader()` reader (mirrors the double-submit logic in `frontend/src/lib/api.js::getCsrfHeader` — reads the `studioos_csrf` cookie, echoes it as the header, returns `{}` when absent) and spread it into the `post()` headers, so it applies to ALL recovery POSTs (start, backup-code, sms/start, sms/verify, email/start, trusted-contact/start, admin/escalate, claim). The GET-based email-link verify is unaffected. The email one-time-link recovery option stays present.
+
+## Auto-reload on new deploys (kills stale-bundle blank pages)
+
+A returning visitor whose browser was controlled by an older service worker could be left running a stale in-memory bundle that references asset chunks a later deploy removed, producing a site-wide blank page that survives ordinary refreshes (only incognito / clear-site-data recovered). Two changes make the SW self-heal:
+
+- `frontend/src/lib/pwa.js` — added a guarded `controllerchange` listener in `registerServiceWorker()`: when a newly activated SW takes control of an already-controlled page, reload exactly once. Armed only when `navigator.serviceWorker.controller` already exists (so brand-new first-install visitors are never reloaded) and protected by a one-shot `_reloadingForUpdate` flag against reload loops.
+- `frontend/public/sw.js` — bumped `VERSION` `v9-2026-05-27e` → `v10-2026-06-10a` so returning browsers fetch the new SW (the update check bypasses the HTTP cache via the default `updateViaCache:'imports'`), which the existing `skipWaiting` + `clients.claim()` + old-cache purge turn into an immediate controller change → the new reload path fires and the tab lands on fresh HTML/assets.
+
+Net: the v9→v10 transition purges stale caches and serves fresh content on the next refresh; from v10 onward, deploys auto-reload open tabs instead of stranding them on a blank page.
+
 ## Fix blank/broken pages across the platform
 
 Three root-cause fixes for the dark-blank-page and broken-page patterns reported across all routes:

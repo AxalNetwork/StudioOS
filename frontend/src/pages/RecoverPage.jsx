@@ -8,10 +8,31 @@ import { ArrowLeft, Shield, Mail, MessageSquare, KeyRound, Users, ShieldAlert } 
 // All URLs in emitted emails / SMS land here (env.APP_URL → axal.vc).
 const API = '';  // same-origin via Cloudflare Worker
 
+// Mirror the double-submit CSRF logic from frontend/src/lib/api.js: read the
+// JS-readable `studioos_csrf` cookie and echo it back in the X-CSRF-Token
+// header on every mutating (POST) request. The Worker only enforces CSRF when
+// an auth cookie is present (e.g. a stale session lingering on this device), so
+// without this header the recovery POSTs fail with "CSRF token missing or
+// invalid". Returns {} when the cookie is absent (dev / never-logged-in), where
+// the Worker doesn't enforce the check anyway.
+function csrfHeader() {
+  if (typeof document === 'undefined') return {};
+  const cookie = document.cookie || '';
+  for (const part of cookie.split(';')) {
+    const trimmed = part.trim();
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    if (trimmed.slice(0, eq) === 'studioos_csrf') {
+      return { 'X-CSRF-Token': trimmed.slice(eq + 1) };
+    }
+  }
+  return {};
+}
+
 async function post(path, body) {
   const r = await fetch(`${API}/api/auth/recover${path}`, {
     method: 'POST', credentials: 'include',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...csrfHeader() },
     body: JSON.stringify(body || {}),
   });
   const j = await r.json().catch(() => ({}));
