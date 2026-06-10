@@ -48,6 +48,9 @@ from backend.app.models.entities import (
     Deal,
     LimitedPartner,
     PipelineVote,
+    Project,
+    ProjectStatus,
+    ScoreSnapshot,
     User,
     UserRole,
 )
@@ -237,6 +240,71 @@ class VoteRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # REST endpoints
 # ---------------------------------------------------------------------------
+@router.get("/active")
+def pipeline_active(
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Active pipeline board — dev FastAPI mirror of the Worker's
+    `pipeline.get('/active')`.
+
+    Prod is served by the Cloudflare Worker on D1; this dev-only shim returns
+    the same enriched shape so the Pipeline + Legal/Capital pages (and the
+    error dashboard) don't 404 in local dev. Role visibility mirrors the
+    Worker: admins/partners/investors see every non-rejected deal; founders
+    see only their own. The Worker also enriches each card from D1-only
+    tables (`project_stages`, `mvp_tasks`, `metrics_snapshots`,
+    `decision_gates`) that the dev FastAPI does not model — those fields are
+    returned with safe empty defaults here so the UI renders without errors.
+    """
+    if user.role == UserRole.FOUNDER:
+        # Founders only ever see their own deals. An unlinked founder
+        # (founder_id is None) sees nothing — short-circuit, because
+        # `Project.founder_id == None` compiles to `IS NULL` and would
+        # otherwise leak every ownerless project.
+        if user.founder_id is None:
+            return []
+        stmt = (
+            select(Project)
+            .where(Project.status != ProjectStatus.REJECTED)
+            .where(Project.founder_id == user.founder_id)
+        )
+    else:
+        stmt = select(Project).where(Project.status != ProjectStatus.REJECTED)
+    stmt = stmt.order_by(Project.created_at.desc()).limit(100)
+    projects = session.exec(stmt).all()
+
+    out: list[dict] = []
+    for p in projects:
+        # Mirror the Worker's verified-snapshot read: sandbox (founder
+        # Practice) snapshots are never surfaced on the board.
+        latest_score = session.exec(
+            select(ScoreSnapshot.total_score)
+            .where(ScoreSnapshot.project_id == p.id)
+            .where(ScoreSnapshot.is_sandbox == False)  # noqa: E712
+            .order_by(ScoreSnapshot.created_at.desc())
+            .limit(1)
+        ).first()
+        out.append(
+            {
+                "id": p.id,
+                "name": p.name,
+                "sector": p.sector,
+                "project_stage": p.stage,
+                "founder_id": p.founder_id,
+                "project_status": getattr(p.status, "value", p.status),
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "score": latest_score,
+                "pipeline_stage": p.stage or "idea",
+                "pipeline_stage_started": None,
+                "task_counts": {"todo": 0, "in_progress": 0, "done": 0},
+                "latest_metrics": None,
+                "latest_gate": None,
+            }
+        )
+    return out
+
+
 @router.post("/vote/{deal_id}")
 async def cast_vote(
     deal_id: int,

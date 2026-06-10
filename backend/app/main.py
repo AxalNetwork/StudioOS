@@ -380,6 +380,10 @@ app.include_router(projects.router, prefix="/api")
 app.include_router(legal.router, prefix="/api")
 app.include_router(partners.router, prefix="/api")
 app.include_router(capital.router, prefix="/api")
+# Dev-only shim: re-expose the LP portal at the canonical Worker path
+# (`/api/legalcap/capital/lp-portal`) so the error dashboard doesn't 404.
+from backend.app.api.routes import legalcap as _legalcap  # noqa: E402
+app.include_router(_legalcap.router, prefix="/api")
 app.include_router(tickets.router, prefix="/api")
 app.include_router(deals.router, prefix="/api")
 app.include_router(users.router, prefix="/api")

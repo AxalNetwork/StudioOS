@@ -10,6 +10,13 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Task #8 (IF) — Mount missing dev API routes
+
+Dev-FastAPI-only parity fix; no prod change (the Cloudflare Worker on D1 already serves both routes). Keeps the error dashboard honest in local dev.
+
+- **`GET /api/pipeline/active`** — `backend/app/api/routes/pipeline_votes.py`: added a dev mirror of the Worker's `pipeline.get('/active')` (`cloudflare-worker/src/routes/pipeline.ts`). Returns the same enriched per-deal shape (`pipeline_stage`, `task_counts`, `latest_metrics`, `latest_gate`, `score`). Role visibility mirrors the Worker (admins/partners/investors see all non-rejected deals; founders see only their own). D1-only enrichment tables (`project_stages`/`mvp_tasks`/`metrics_snapshots`/`decision_gates`) aren't modeled in dev, so those fields return safe empty defaults; `score` pulls the latest `score_snapshots.total_score`. Previously 404'd (only `pipeline_votes.py` was mounted under `/pipeline`).
+- **`GET /api/legalcap/capital/lp-portal`** — `backend/app/api/routes/legalcap.py` (new dev shim) + mount in `backend/app/main.py`. Re-exposes the existing `capital.py::lp_portal` handler verbatim at the canonical Worker path the dashboard probes (the frontend itself already calls `/api/capital/lp-portal`). Previously 404'd (no `legalcap` prefix mounted in dev).
+
 ## Task #7 (IE) — Ops observability surfaces
 
 - **Traces enabled** — `wrangler.toml` `[observability.traces].enabled` flipped from `false` to `true` so Cloudflare Workers trace data is collected.
