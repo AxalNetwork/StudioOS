@@ -1,0 +1,358 @@
+# Git LFS Migration — StudioOS
+
+_Branch: `claude/eager-lovelace-pf7lZ` · Generated 2026-06-06_
+
+## Context
+
+StudioOS already has substantial Git LFS scaffolding from a prior audit
+(`MIGRATION_LFS_AUDIT.md`, baseline 2026-05-21): `.gitattributes`
+patterns, a `scripts/lfs-size-gate.mjs` pre-commit hook, a
+`.github/workflows/lfs-budget.yml` budget cron, and matching guidance in
+`CONTRIBUTING.md`. **No LFS objects have actually been created yet** —
+the audit's "first LFS commit" remained an operator task that was never
+done.
+
+Between the prior audit and today, **547 new PNGs** landed in
+`attached_assets/`; **54 of them are >500KB (48.8 MB total)** — exactly
+what the size-gate hook is designed to catch. The hook isn't enforced in
+CI, only locally, so the drift slipped through.
+
+This plan does **three** things:
+
+1. **Patch the obvious gaps** that allowed the post-audit drift: enforce
+   the size-gate in CI, broaden `.gitattributes` to cover Office and
+   ML/data formats that don't yet match a rule, ignore `dist-deploy/`
+   and `backend/app.db`.
+2. **Close the prior audit's open follow-ups** that are safe to act on
+   without rewriting history: drop `users/1/activity.md` (PII), document
+   the operator handoff for the first LFS object.
+3. **Surface — but do not execute without confirmation** — the one
+   history-rewriting option that would actually shrink the pack: a
+   targeted `git lfs migrate import` of the 54 post-audit large
+   screenshots, scoped to commits made since the audit baseline.
+
+Goal: a clean, durable LFS posture that prevents the next round of
+drift, without surprising collaborators with a force-push.
+
+## Recap of repo state
+
+| Metric | Value |
+|---|---|
+| Working tree | 311 MB |
+| `.git` pack | 132 MB (4,871 objects) |
+| Tracked files | 2,157 |
+| Branch | `claude/eager-lovelace-pf7lZ` (clean) |
+| LFS objects | 0 |
+| `git-lfs` binary in sandbox | not installed (operator side only) |
+
+Largest content groups:
+
+| Path | Size | Notes |
+|---|---|---|
+| `attached_assets/` | 140 MB / 921 files | 534 PNG screenshots, 13 source-deck PDFs, 16 DOCX legal templates, 1 PPTX, 340 `Pasted-*.txt` excerpts |
+| `dist-deploy/` | 9.7 MB | Worker bundle (`index.js` 2.4 MB + `index.js.map` 7.7 MB). Only referenced in itself + the two LFS docs — nothing in CI/scripts depends on it being committed. |
+| `docs/` | 8.2 MB | Vite build output. **Intentionally committed** per `.gitignore` line 22–24 and wrangler.toml `[assets] directory = "./docs"`. Leave alone. |
+| `users/1/activity.md` | 400 KB | Per-user activity export with PII (flagged in prior audit follow-up). |
+| `backend/app.db` | 0 B | Dev-only SQLite. Empty but tracked. |
+
+## Bucket A — Safe changes (Phase 1, do now)
+
+### A1 — Broaden `.gitattributes` for formats already in tree or imminent
+
+Add to existing `.gitattributes` (grouped, human-readable):
+
+```
+# ---- Office documents (legal templates, decks) ------------------------------
+*.docx  filter=lfs diff=lfs merge=lfs -text
+*.doc   filter=lfs diff=lfs merge=lfs -text
+*.pptx  filter=lfs diff=lfs merge=lfs -text
+*.ppt   filter=lfs diff=lfs merge=lfs -text
+*.xlsx  filter=lfs diff=lfs merge=lfs -text
+*.xls   filter=lfs diff=lfs merge=lfs -text
+
+# ---- Additional ML / data formats -------------------------------------------
+*.h5      filter=lfs diff=lfs merge=lfs -text
+*.hdf5    filter=lfs diff=lfs merge=lfs -text
+*.pkl     filter=lfs diff=lfs merge=lfs -text
+*.ckpt    filter=lfs diff=lfs merge=lfs -text
+*.npy     filter=lfs diff=lfs merge=lfs -text
+*.npz     filter=lfs diff=lfs merge=lfs -text
+*.pb      filter=lfs diff=lfs merge=lfs -text
+*.bin     filter=lfs diff=lfs merge=lfs -text
+
+# ---- Database snapshots / fixtures ------------------------------------------
+*.duckdb     filter=lfs diff=lfs merge=lfs -text
+*.sqlite     filter=lfs diff=lfs merge=lfs -text
+*.sqlite3    filter=lfs diff=lfs merge=lfs -text
+
+# ---- Additional archives ----------------------------------------------------
+*.7z   filter=lfs diff=lfs merge=lfs -text
+*.rar  filter=lfs diff=lfs merge=lfs -text
+*.bz2  filter=lfs diff=lfs merge=lfs -text
+*.xz   filter=lfs diff=lfs merge=lfs -text
+
+# ---- Fonts ------------------------------------------------------------------
+*.woff2  filter=lfs diff=lfs merge=lfs -text
+```
+
+_Skipped:_ `*.pdf` and `*.png` stay size-gated by the hook (prior
+policy — auto-tracking would route every small inline diagram and rewrite
+the existing ~280 in-tree screenshots). `*.ttf/*.otf/*.woff` are usually
+tiny — leave on demand.
+
+**Existing 17 Office docs in `attached_assets/` are NOT migrated** —
+that would require history rewrite. The new patterns apply to future
+adds and re-adds.
+
+### A2 — `.gitignore` and untrack `dist-deploy/`
+
+`dist-deploy/` is worker build output (`npm run build` → wrangler).
+Grep confirmed it's referenced only in itself and the two LFS audit
+docs — no CI/script depends on it being committed.
+
+```
+# Cloudflare worker bundle output (regenerated by `npm run build`)
+dist-deploy/
+```
+
+Then:
+
+```bash
+git rm -r --cached dist-deploy/
+```
+
+Working tree stays; the directory is just untracked. Reclaims ~9.7 MB
+from future clones once the change is merged.
+
+### A3 — `.gitignore` and untrack `backend/app.db`
+
+Dev-only SQLite. Currently 0 B. Should never be in git.
+
+```
+# Dev-only SQLite (real users live in D1 — see CLAUDE.md)
+backend/app.db
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
+```
+
+Then:
+
+```bash
+git rm --cached backend/app.db
+```
+
+### A4 — Remove `users/1/activity.md`, gitignore the pattern
+
+Prior audit flagged: 400 KB per-user activity export containing PII
+(name + email). Doesn't belong in git, LFS, or R2.
+
+```
+# Per-user activity exports — generated artifact, contains PII
+users/*/activity.md
+```
+
+Then:
+
+```bash
+git rm users/1/activity.md
+```
+
+This DOES change tree contents (delete the file). Reversible by
+re-generating via the backend export script.
+
+### A5 — Add a `--against=<ref>` mode to the size-gate, then enforce in CI
+
+The 547-PNG / 48.8 MB drift since the prior audit is direct evidence
+the local-only hook isn't enough.
+
+**Problem with the existing script:** the default mode reads `git diff
+--cached`, which is empty in CI; the `--all` mode walks `git ls-files`,
+which would flag every grandfathered pre-audit screenshot
+(~280 PNGs >500 KB intentionally left in place). Neither mode is
+appropriate for CI.
+
+**Fix:** add an `--against=<ref>` mode that lists files added/modified
+relative to a base ref (the PR's merge target) and runs the existing
+checks against just those files:
+
+```js
+function listAgainst(ref) {
+  const out = tryShOrEmpty(
+    `git diff ${JSON.stringify(ref)}...HEAD --name-only --diff-filter=AM`
+  );
+  return out ? out.split("\n").filter(Boolean) : [];
+}
+
+// in main(), before the existing branching:
+const againstArg = [...args].find((a) => a.startsWith("--against="));
+const files = againstArg
+  ? listAgainst(againstArg.slice("--against=".length))
+  : args.has("--all")
+  ? listAll()
+  : listStagedAdditions();
+```
+
+Then add a `lfs-gate` job to `.github/workflows/ci.yml` after the
+`drift` job:
+
+```yaml
+  lfs-gate:
+    name: lfs size gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history so the diff range works on a PR build.
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+      - name: Run LFS size gate (against PR base)
+        run: |
+          base="origin/${{ github.base_ref || 'main' }}"
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref || 'main' }}"
+          node scripts/lfs-size-gate.mjs --against="$base"
+```
+
+`--all` mode stays available for ad-hoc local audits; the CI gate uses
+`--against=...` so it only fires on files the PR actually touches.
+
+### A6 — Verify the existing hook + new mode
+
+Run the unmodified script first to make sure it still loads:
+
+```bash
+node scripts/lfs-size-gate.mjs --all
+```
+
+This will exit non-zero on the ~280 grandfathered + 54 post-audit
+oversize PNGs. Capture the count and confirm the script's error
+messages are sensible.
+
+Then after editing the script, verify the new mode behaves correctly:
+
+```bash
+# Should be clean against main (no LFS-extension files added on this branch yet)
+node scripts/lfs-size-gate.mjs --against=origin/main || true
+```
+
+### A7 — Update `MIGRATION_LFS_AUDIT.md`
+
+Append a "2026-06-06 follow-up" section that:
+
+- Records the post-audit drift (numbers from above)
+- Notes the changes made in A1–A5
+- Lists the Bucket B / C decisions still pending
+
+This keeps the audit doc the canonical changelog of LFS policy moves.
+
+## Bucket B — Optional history-rewriting migration (DECLINED by user 2026-06-06)
+
+For the record: 54 PNGs >500 KB / 48.8 MB were added to `attached_assets/`
+**after the audit baseline (2026-05-21)** — these are the files the
+hook would have blocked. A scoped `git lfs migrate import` of just
+those files on `claude/eager-lovelace-pf7lZ` would have saved ~49 MB
+from the pack at the cost of a force-push.
+
+**User decision: do not rewrite history.** The CI gate (A5) prevents
+the same drift recurring; the existing oversize PNGs stay full-fat in
+the pack and are grandfathered alongside the pre-audit set.
+
+**Permanently out of scope:** the ~280 pre-audit screenshots from
+before 2026-05-21. Rewriting those would touch `main`'s history.
+
+## Bucket C — Decisions to defer (do NOT touch without explicit instruction)
+
+| Question | Why deferred |
+|---|---|
+| Should `docs/` move from committed to CI-built? | Prior `.gitignore` comment + wrangler.toml `[assets]` binding both treat committed `docs/` as intentional. Removing it touches deploy; needs a separate, coordinated change. |
+| Should the 340 `attached_assets/Pasted-*.txt` excerpts be pruned? | They're tiny (~800 KB) but mostly one-off AI-chat references. Pruning is a content-curation call, not an LFS call. |
+| Should existing source-deck PDFs move to GitHub Releases? | Aligns with the audit's "Releases for public artifacts" policy, but requires editorial decisions about which decks are public. |
+| Should `attached_assets/Pasted-*.txt` be gitignored going forward? | Same — curation call, not infra call. |
+
+These items appear in the audit-doc update (A7) tagged **needs
+decision** so they're visible without being acted on.
+
+## Exact command list (Bucket A, in order)
+
+```bash
+# 0. Confirm clean tree on the assigned branch
+git status
+git branch --show-current   # expect: claude/eager-lovelace-pf7lZ
+
+# A1. Edit .gitattributes (append the new blocks above)
+#     Use the Edit tool — keep existing rules unchanged, append at end.
+
+# A2. Edit .gitignore (append dist-deploy/, app.db, activity.md patterns)
+#     Use the Edit tool.
+
+# A3+A4. Untrack files (does NOT touch working tree)
+git rm -r --cached dist-deploy/
+git rm --cached backend/app.db
+git rm users/1/activity.md         # actual delete, the file is PII
+
+# A5. Edit scripts/lfs-size-gate.mjs (add --against=<ref> mode)
+#     Edit .github/workflows/ci.yml (add the lfs-gate job)
+
+# A6. Verify the hook still loads + new mode behaves
+node scripts/lfs-size-gate.mjs --all || true   # expect non-zero (grandfathered) — note the count
+node scripts/lfs-size-gate.mjs --against=origin/main   # expect 0 on this branch's current state
+
+# A7. Append the "2026-06-06 follow-up" section to MIGRATION_LFS_AUDIT.md.
+
+# Commit (one focused commit per concern, or one combined "chore(lfs): ..." commit)
+git add .gitattributes .gitignore .github/workflows/ci.yml scripts/lfs-size-gate.mjs MIGRATION_LFS_AUDIT.md
+git status   # sanity-check the staged set
+git commit -m "chore(lfs): broaden patterns, untrack build/dev artifacts, gate in CI"
+
+git push -u origin claude/eager-lovelace-pf7lZ
+
+# Create draft PR (per session rules).
+```
+
+## Risks and rollback
+
+| Step | Risk | Mitigation / rollback |
+|---|---|---|
+| A1 (new patterns) | Future commits route DOCX/etc. through LFS; needs `git lfs install` on every contributor's machine. | Already documented in `CONTRIBUTING.md`. New patterns only affect new files. Revert: `git revert` the commit. |
+| A2 (dist-deploy/) | Someone might be relying on the committed worker bundle for audit/inspection. | Grep confirmed no CI/script depends on it. If a reviewer objects, drop `dist-deploy/` from `.gitignore`; bundle re-appears on next build. |
+| A3 (app.db) | None — file is 0 B and Replit-dev-only. | Reversible: `touch backend/app.db && git add -f backend/app.db`. |
+| A4 (activity.md) | The file is **deleted** from tree, not just untracked. | Reversible: the backend export script regenerates it. PII removal is the goal, so re-adding is undesirable. |
+| A5 (CI gate) | New PRs fail until contributors install `git-lfs` locally. | Hook output points at remediation: `git lfs track "*.pdf"` + re-add. Lower friction than letting bytes pile up. |
+| B (history rewrite) | Force-push, collaborators must re-fetch the branch. | Only run with explicit user say-so. Scoped to the dev branch — `main` unaffected. |
+
+## Verification
+
+After the Bucket A commit lands:
+
+1. `git ls-files | grep -E '^(dist-deploy/|backend/app\.db|users/1/activity\.md)$'` — should return empty.
+2. `git check-attr filter -- attached_assets/foo.docx` — should report `filter: lfs`.
+3. Open a draft PR; the new `lfs-gate` CI job should run green — it uses `--against=origin/main`, so the grandfathered oversize PNGs already in tree are ignored. To prove the gate actually blocks bad commits, follow up with an intentional offending commit (e.g. drop a 1 MB PNG into a feature branch) and confirm the job fails.
+4. On the operator machine (outside this sandbox), after `git pull`:
+   - `git lfs install`
+   - First real LFS object (the audit's `design/logo/axal-logo-master.ai` step) — Operator action, unchanged.
+   - GitHub → Repo Settings → Git LFS panel shows one object.
+
+## Estimated impact (Bucket A only — no history rewrite)
+
+| Item | Pack size now | Pack size after | Note |
+|---|---|---|---|
+| `dist-deploy/index.js` + `.map` | 10 MB | unchanged | Pack keeps old blobs; future clones still drag them until rotation, but no NEW versions accumulate. |
+| `backend/app.db` | 0 B | unchanged | Symbolic; closes a footgun. |
+| `users/1/activity.md` | 0.4 MB | unchanged | Same. |
+| New LFS extensions matching nothing yet | 0 B | 0 B | Pure future-proofing. |
+| CI gate | n/a | n/a | Stops next +50 MB drift episode. |
+
+**Net Bucket A working-tree savings: ~10 MB now; ongoing: prevents the
+next round of 50+ MB drift.**
+
+Bucket B was declined — no additional pack savings.
+
+## Next steps for the team (post-merge)
+
+1. Operator: `git lfs install` locally and run `npm run lfs:install-hook` to wire the local pre-commit hook (still useful even with CI gate — faster feedback).
+2. Operator: first real LFS commit (the audit's existing `design/logo/axal-logo-master.ai` workflow) to validate the LFS panel.
+3. Operator: set `SLACK_OPS_WEBHOOK_URL` in GitHub Actions secrets so the daily budget cron alerts.
+4. Decide on Bucket C items in their own follow-up issues (docs/ committed-vs-CI, Pasted-*.txt cleanup, PDFs to GitHub Releases).
