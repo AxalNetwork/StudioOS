@@ -323,7 +323,7 @@ infra.delete('/dlq/:id', async (c) => {
 // Canonical cron expressions declared in wrangler.toml [triggers].
 // Must be kept in sync with the deployed config. Each entry is used for
 // computing `next_run_at` in the cron-history endpoint.
-const CRON_TRIGGERS: { name: string; expr: string }[] = [
+export const CRON_TRIGGERS: { name: string; expr: string }[] = [
   { name: 'scheduled', expr: '* * * * *' },
   { name: 'cleanup', expr: '0 3 * * *' },
   { name: 'mi_refresh', expr: '0 */6 * * *' },
@@ -392,6 +392,8 @@ infra.get('/cron-history', async (c) => {
     .all();
 
   // Compute last_run_at and next_run_at per trigger from the DB.
+  // The DB stores the raw cron expression as trigger_name (e.g. '* * * * *'),
+  // so we map by expr rather than display name.
   const lastRuns = await c.env.DB.prepare(
     `SELECT trigger_name, MAX(started_at) AS last_run_at FROM cron_run_history GROUP BY trigger_name`
   ).all<{ trigger_name: string; last_run_at: string }>();
@@ -402,7 +404,7 @@ infra.get('/cron-history', async (c) => {
   const triggers = CRON_TRIGGERS.map(t => ({
     name: t.name,
     expr: t.expr,
-    last_run_at: lastRunMap[t.name] || null,
+    last_run_at: lastRunMap[t.expr] || null,
     next_run_at: nextCronRun(t.expr) || null,
   }));
 
@@ -453,9 +455,12 @@ infra.get('/ws-check', async (c) => {
 
   // Mint a short-lived synthetic admin token so the probe can hit the
   // auth-protected upgrade routes. The token is never returned to the caller.
+  // We use the real authenticated admin user so the downstream auth layer
+  // (authenticateForUpgrade) finds a valid user row and passes the token.
   let probeToken = '';
   try {
-    probeToken = await createJWT(c.env, 0, 'ws-probe@axal.vc', 'admin');
+    const admin = await requireAdmin(c);
+    probeToken = await createJWT(c.env, admin.id, admin.email, 'admin');
   } catch (e: any) {
     checks.token = { ok: false, detail: `JWT mint failed: ${e?.message || e}` };
   }

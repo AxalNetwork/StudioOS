@@ -180,6 +180,7 @@ import { requireTier } from './middleware/requireTier';
 import billing from './routes/billing';
 import { Jobs } from './models/jobs';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
+import { CRON_TRIGGERS } from './routes/infra';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
 import { securityHeadersMiddleware } from './middleware/securityHeaders';
@@ -801,7 +802,7 @@ export default {
     }
     return app.fetch(request, env, ctx);
   },
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     const work = (async () => {
       const LEASE_KEY = 'cron:queue:lease';
       const leaseHolder = crypto.randomUUID();
@@ -823,6 +824,14 @@ export default {
       const cronStartedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
       let cronSummary: string[] = [];
       let cronError: string | null = null;
+
+      // Map the actual event cron expression to a named trigger.
+      const eventCron = (event as any).cron || '* * * * *';
+      const triggerName = CRON_TRIGGERS.find(t => t.expr === eventCron)?.name || eventCron;
+      // We store the raw cron expression as trigger_name so the DB last-run
+      // map can be keyed by expr (consistent across the cron-history endpoint
+      // and the CRON_TRIGGERS array). The display name is resolved at read time.
+      const triggerKey = eventCron;
 
       try {
         const r = await processQueueBatch(env, 25);
@@ -1292,7 +1301,7 @@ export default {
             `INSERT INTO cron_run_history (trigger_name, started_at, finished_at, status, summary, error)
              VALUES (?, ?, ?, ?, ?, ?)`
           ).bind(
-            'scheduled',
+            triggerKey,
             cronStartedAt,
             cronFinishedAt,
             cronError ? 'failed' : 'completed',
