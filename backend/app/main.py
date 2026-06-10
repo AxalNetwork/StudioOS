@@ -333,7 +333,10 @@ async def security_and_observability(request: Request, call_next):
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
-    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    # Mirror the production Worker's canonical `no-referrer` (NICE-SEC-01) so the
+    # dev surface matches prod — this FastAPI process is dev-only but serves the
+    # same authenticated app/API shape, where IDs/query-params must never leak.
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
     response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
     # T0 — Architecture truth. This FastAPI process is Replit-dev-only and is
     # NEVER deployed to production. Production lives on the Cloudflare Worker

@@ -14,6 +14,9 @@
     Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
     X-Content-Type-Options = "nosniff"
     X-Frame-Options = "DENY"
+    # Static/marketing default — the authenticated app/API surface (the Worker,
+    # see cloudflare-worker/src/middleware/securityHeaders.ts) uses the stricter
+    # `no-referrer` per NICE-SEC-01. The split is deliberate; do not unify.
     Referrer-Policy = "strict-origin-when-cross-origin"
     Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'
 

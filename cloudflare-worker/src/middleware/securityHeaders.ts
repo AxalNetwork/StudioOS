@@ -5,7 +5,12 @@ import type { Context, Next } from 'hono';
  * - HSTS: force HTTPS for 2 years incl. subdomains (axal.vc is HTTPS-only).
  * - X-Content-Type-Options: block MIME-sniffing.
  * - X-Frame-Options: deny embedding (the API is JSON, never framed).
- * - Referrer-Policy: never leak full URLs (which contain query params, IDs).
+ * - Referrer-Policy: `no-referrer` — never leak full URLs (which contain
+ *   query params, IDs) from the authenticated app/API surface. This is the
+ *   CANONICAL value for the Worker (NICE-SEC-01); it is intentionally stricter
+ *   than the `strict-origin-when-cross-origin` used by the public Jekyll
+ *   marketing site (github.toml / cloudflare.toml), whose pages carry no
+ *   sensitive URLs and benefit from cross-origin referral attribution.
  * - Permissions-Policy: disable powerful browser features for any HTML responses.
  * - Cross-Origin-Resource-Policy: only same-site can load API responses as resources.
  *
@@ -49,6 +54,8 @@ export function securityHeadersMiddleware() {
     h.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
     h.set('X-Content-Type-Options', 'nosniff');
     h.set('X-Frame-Options', 'DENY');
+    // Canonical for the authenticated app/API surface (NICE-SEC-01). The
+    // public marketing site deliberately uses strict-origin-when-cross-origin.
     h.set('Referrer-Policy', 'no-referrer');
     // Task #33 — broaden Permissions-Policy to deny every powerful sensor
     // by default. Add features only when an actual route needs them.

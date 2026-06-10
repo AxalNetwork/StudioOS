@@ -161,7 +161,7 @@ Source: `curl -I https://axal.vc/api/health` (2026-06-03).
 | CSP | 🟢 green | = | `content-security-policy: default-src 'self'; …` (nonce + strict-dynamic; verified present). | Run `securityheaders.com` post-deploy to confirm A+. | — |
 | HSTS | 🟢 green | = | `strict-transport-security: max-age=63072000; includeSubDomains; preload` | — | — |
 | X-Frame-Options | 🟢 green | = | `x-frame-options: DENY` | — | — |
-| Referrer-Policy | 🟡 partial | = | `referrer-policy: no-referrer` — stricter than the spec's `strict-origin-when-cross-origin`. | Reconcile the checklist or relax. | NICE-SEC-01 |
+| Referrer-Policy | 🟢 green | ⬆️ | `referrer-policy: no-referrer` — **canonical** for the authenticated app/API surface (NICE-SEC-01 resolved: `no-referrer` is the deliberate, stricter choice so authenticated URLs with IDs/query-params never leak; the public Jekyll marketing site keeps `strict-origin-when-cross-origin`). | — | — |
 
 Extras still observed (positive): `cross-origin-opener-policy: same-origin`, `cross-origin-resource-policy: same-site`, full `permissions-policy` lockdown, `x-content-type-options: nosniff`.
 
@@ -234,8 +234,8 @@ Prod magic-link + passkey remain 🔴 red, so real prod sign-up is still blocked
 - NICE-ADV-03 / -05 / -06 — SSE transcript; free-form `/explain` smoke; per-second burst guard
 
 ### Trust / Sec / Misc
-- NICE-TRUST-01 — Confirm `pairwise_ndas` on prod D1
-- NICE-SEC-01 — Reconcile `Referrer-Policy: no-referrer` vs spec
+- NICE-TRUST-01 — Confirm `pairwise_ndas` on prod D1 *(operator-run read-only check; Worker `ensureTrustSchema()` `CREATE TABLE IF NOT EXISTS` self-heals on first hit regardless)*
+- NICE-SEC-01 — ✅ Resolved — `no-referrer` adopted as canonical for the app/API; marketing static site keeps `strict-origin-when-cross-origin` (documented two-tier policy)
 
 ---
 
@@ -245,6 +245,7 @@ Prod magic-link + passkey remain 🔴 red, so real prod sign-up is still blocked
 |---|---|---|
 | **BLOCK-OPS-02** | DLQ is now admin-visible | `routes/infra.ts:184` `GET /api/infra/dlq` (reads `dead_letter_queue`) + `/api/infra/cleanup` + self-heal table create |
 | **NICE-MKT-07** | Contact form → GitHub Issue round-trip implemented | `routes/tickets.ts:109-121` `POST /` creates an issue; `fetchGithubIssue()` + comments read-back; `github_issue_number`/`_url` columns |
+| **NICE-SEC-01** | `Referrer-Policy` reconciled — `no-referrer` canonical for app/API; marketing static keeps `strict-origin-when-cross-origin` (two-tier, documented) | `cloudflare-worker/src/middleware/securityHeaders.ts` (`no-referrer` + decision comment); `backend/app/main.py` dev mirror flipped to `no-referrer`; `github.toml` / `cloudflare.toml` carry intentional-split comments |
 
 Partial improvements (NOT yet closeable): **BLOCK-AUTH-03** (recovery step-up infra only), **BLOCK-500-05** & **BLOCK-500-06** (Worker route shipped; dev FastAPI mirror still missing).
 

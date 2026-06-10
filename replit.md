@@ -83,6 +83,7 @@ Admin docs live behind `roles: ['admin']` on sections/subsections in `frontend/s
 
 ### Backend / Worker
 - **Admin role changes** — direct SQL only, no UI.
+- **Referrer-Policy is two-tier (NICE-SEC-01)** — the authenticated app/API surface (`middleware/securityHeaders.ts` on the Worker + dev `backend/app/main.py`) emits `no-referrer` (canonical; never leak IDs/query-params); the public Jekyll marketing site (`github.toml`) + static/Pages header config (`cloudflare.toml`) keep `strict-origin-when-cross-origin` (no sensitive URLs, wants referral attribution). The split is deliberate — don't "unify" them.
 - **`activity_logs.actor`** — 16-hex SHA-256-truncated `email_hash` for all writes (`util/hashEmail.ts`); never plaintext. Join on `user_id`. Legacy reads in `routes/activity.ts` keep `LOWER(actor)=LOWER(email)`.
 - **`SCORING_HMAC_SECRET`** — ≥32 bytes hard-required in production; worker refuses to boot otherwise. Dev falls back to `JWT_SECRET` with a warning.
 - **`AXAL_ENCRYPTION_SECRET || JWT_SECRET`** keys all `cryptoBox` AES-GCM at-rest encryption. PBKDF2 iterations are **100,000** (Workers runtime caps PBKDF2 at 100k — values above throw `NotSupportedError: PBKDF2 failed: iterations exceeds the maximum`). `decryptString`/`decryptBytes` retain a 200k LEGACY fallback via `decryptWithFallback()` so ciphertext written by older isolates (whose key was cached before the limit tightened) stays readable. Never change `ITERATIONS` without keeping the legacy in the fallback list.

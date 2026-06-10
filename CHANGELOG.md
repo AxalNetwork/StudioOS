@@ -10,6 +10,13 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Task #13 — Trust / security / misc checks
+
+Two small audit items that didn't fit a PR track: the prod-D1 `pairwise_ndas` existence check (operator-run) and the `Referrer-Policy` discrepancy.
+
+- **NICE-SEC-01 — `Referrer-Policy` reconciled; `no-referrer` is canonical for the app/API.** Decided in favour of the stricter, security-first value rather than relaxing to the checklist's `strict-origin-when-cross-origin`. The authenticated Worker surface (`cloudflare-worker/src/middleware/securityHeaders.ts`) already emits `no-referrer` so authenticated URLs (which carry IDs / query-params) never leak in a `Referer` header — kept as-is, with the comment now recording the canonical decision and the marketing-site exception. The dev FastAPI (`backend/app/main.py`) was flipped from `strict-origin-when-cross-origin` to `no-referrer` so the dev surface mirrors prod. The public Jekyll marketing site (`github.toml`) and the static/Pages header config (`cloudflare.toml`) deliberately KEEP `strict-origin-when-cross-origin` — those pages carry no sensitive URLs and benefit from cross-origin referral attribution; both now carry a comment marking the intentional two-tier split so the value isn't "fixed" back into a contradiction. `BETA_READINESS_AUDIT_2026-06-03.md`'s NICE-SEC-01 row flipped 🟡→🟢 and was added to the close list. No prod runtime behaviour change (the emitted value is unchanged); no user-facing changelog line.
+- **NICE-TRUST-01 — `pairwise_ndas` on prod D1 is an operator-run read-only check.** The main agent cannot reach prod D1 (the Worker's D1 store is operator-run via `wrangler --remote`; the dev DB is a different store). Verify with: `export PATH=/nix/store/51gywl5jn4nna7al9waj142pw4vfhy0k-nodejs-22.19.0/bin:$PATH` then `wrangler d1 execute studioos-db --remote --env production --command="SELECT name FROM sqlite_master WHERE type='table' AND name='pairwise_ndas';"`. Safety net regardless of the result: `cloudflare-worker/src/services/trust.ts::ensureTrustSchema()` runs `CREATE TABLE IF NOT EXISTS pairwise_ndas (…)` (plus its three indexes) on the first hit of any trust route, so an absent table self-heals on first use; if the check returns no row, applying `ensureTrustSchema` ahead of a hot path is the only action. No schema change shipped in this task.
+
 ## Task #12 (IJ) — Advisor follow-ups
 
 Closes four advisor backlog items: a real admin question bank, a never-run-dry dynamic reflection fallback, a repeat-question regression guard, and the verify/operator docs for the advisor AI-gateway + `/explain` SSE + daily-cap posture.

@@ -26,6 +26,9 @@
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
     Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
+    # Public marketing site default — intentionally laxer than the app/API's
+    # `no-referrer` (NICE-SEC-01): these Jekyll pages carry no sensitive URLs and
+    # benefit from cross-origin referral attribution. Do not unify with the app.
     Referrer-Policy = "strict-origin-when-cross-origin"
 
 # Redirects
