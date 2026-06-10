@@ -3,7 +3,7 @@
 Welcome. This guide covers the dev-side rules for staying inside our storage
 budgets and keeping the repo fast for everyone.
 
-For product/architecture context, read `replit.md` first.
+For product/architecture context, read `replit.md` first; the detailed operational gotchas live in [`GOTCHAS.md`](./GOTCHAS.md).
 
 ## TL;DR
 

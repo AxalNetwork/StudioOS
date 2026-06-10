@@ -2,7 +2,8 @@
 
 This document is the canonical, authoritative description of where production
 runs and how this repo is laid out. Other docs (README.md, replit.md,
-PRODUCTION.md) defer to this file when they conflict.
+GOTCHAS.md, PRODUCTION.md) defer to this file when they conflict. The detailed
+operational gotchas previously inline in `replit.md` now live in `GOTCHAS.md`.
 
 ## The four facts
 

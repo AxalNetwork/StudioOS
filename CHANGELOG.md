@@ -10,6 +10,10 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Split `Persistent gotchas` out of `replit.md` into `GOTCHAS.md`
+
+`replit.md` had grown to ~27KB with its "Persistent gotchas" section as the bulk of the file. Moved that section verbatim into a new root-level `GOTCHAS.md` (sibling of `README.md`/`CONTRIBUTING.md`) — every subsection preserved (Migrations & schema, Telegram broadcaster, X broadcaster, Auth blockers, Backend/Worker, Frontend, Ops items still owned by user). No gotcha text was deleted, condensed, or paraphrased; this was a relocation, not an edit pass. `replit.md` keeps a short "Persistent gotchas" stub: a one-line pointer plus a linked index of the subsection headings, so the README stays a scannable overview of live invariants while the detail remains easy to find. Mirrors the 2026-05-21 precedent that moved oversized blocks into this file. Cross-references updated: `CONTRIBUTING.md` ("read `replit.md` first") and `CLAUDE.md` (canonical-docs list) now also point at `GOTCHAS.md`. Internal/engineering change only — no user-facing changelog line.
+
 ## Task #13 — Trust / security / misc checks
 
 Two small audit items that didn't fit a PR track: the prod-D1 `pairwise_ndas` existence check (operator-run) and the `Referrer-Policy` discrepancy.

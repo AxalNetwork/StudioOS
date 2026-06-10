@@ -5,7 +5,7 @@
  * TOTP (C) auth surfaces. It is NEVER the only way in: every account can
  * fall back to magic-link + TOTP. Google identity counts as ONE factor for
  * step-up purposes — sensitive routes still demand TOTP/passkey/SMS via
- * requireFactor(). See replit.md "Persistent gotchas → Backend / Worker".
+ * requireFactor(). See GOTCHAS.md "Backend / Worker".
  *
  * Endpoints (mounted at /api/auth/google in index.ts):
  *
