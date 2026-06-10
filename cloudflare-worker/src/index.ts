@@ -74,6 +74,7 @@ import { runDailyKvSnapshot, writeBackupHeartbeat } from './services/backup';
 import advisory from './routes/advisory';
 import activity from './routes/activity';
 import admin from './routes/admin';
+import adminBilling from './routes/admin_billing';
 import adminContracts from './routes/admin_contracts';
 import adminIntegrationKeys from './routes/admin_integration_keys';
 // Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
@@ -376,6 +377,9 @@ const COOL_OFF_PREFIXES = [
   '/api/capital',
   '/api/dd',
   '/api/admin/impersonate',
+  // Task #11 (II) — admin refunds are money-movement; pause them too so a
+  // freshly-recovered admin account can't issue refunds during cool-off.
+  '/api/admin/billing',
 ];
 for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
@@ -521,6 +525,10 @@ app.route('/api/admin/slack', adminSlack);
 app.route('/api/admin/news', adminNews);
 // Task #1 (Articles) — same mount-before-catch-all precedence as News.
 app.route('/api/admin/articles', adminArticles);
+// Task #11 (II) — Admin billing actions (Stripe refunds). Mounted BEFORE the
+// catch-all /api/admin so /api/admin/billing/* resolves here, not in the
+// generic admin router. Step-up + requireAdmin enforced per-route.
+app.route('/api/admin/billing', adminBilling);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);

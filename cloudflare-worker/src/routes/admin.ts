@@ -340,7 +340,7 @@ admin.get('/users/:user_id/profile', async (c) => {
 // table_info(). Safe to call on every request, on a fresh DB, and on
 // a DB that already has the canonical schema.
 let adminAuditLogTableReady = false;
-async function ensureAdminAuditLogTable(env: Env): Promise<void> {
+export async function ensureAdminAuditLogTable(env: Env): Promise<void> {
   if (adminAuditLogTableReady) return;
   try {
     await env.DB.exec(

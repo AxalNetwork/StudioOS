@@ -43,16 +43,26 @@ function isValidPlan(p: unknown): p is 'mi_pro_monthly' | 'mi_pro_annual' {
   return p === 'mi_pro_monthly' || p === 'mi_pro_annual';
 }
 
-export async function stripeCall<T>(env: Env, path: string, body: Record<string, string>): Promise<T> {
+export async function stripeCall<T>(
+  env: Env,
+  path: string,
+  body: Record<string, string>,
+  opts?: { idempotencyKey?: string },
+): Promise<T> {
   const key = env.STRIPE_SECRET_KEY;
   if (!key) throw new Error('stripe_not_configured');
   const form = new URLSearchParams(body);
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${key}`,
+    'Content-Type': 'application/x-www-form-urlencoded',
+  };
+  // Stripe replays the original response for 24h when the same Idempotency-Key
+  // recurs — protects money-movement calls (e.g. /refunds) from double-submits
+  // and retries. Only sent when a caller opts in (existing callers unaffected).
+  if (opts?.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey;
   const res = await fetch(`https://api.stripe.com/v1${path}`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
+    headers,
     body: form.toString(),
   });
   if (!res.ok) {
