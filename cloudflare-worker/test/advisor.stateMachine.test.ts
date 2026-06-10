@@ -543,3 +543,120 @@ test('nextTurn loads state, ranks, marks asked, and onAnswered fires hooks', asy
   });
   assert.equal(live.next_question!.id, 'fresh');
 });
+
+// ---------------------------------------------------------------------------
+// Task #12 (BLOCK-ADV-07) — dynamic reflection generator (pure helpers).
+// ---------------------------------------------------------------------------
+test('nextDynamicIndex returns highest answered dyn index + 1', () => {
+  // Empty set → 1.
+  assert.equal(SM.nextDynamicIndex(new Set()), 1);
+  // Only non-dyn ids → 1.
+  assert.equal(SM.nextDynamicIndex(new Set(['founder.profile.x', 'investor.thesis.y'])), 1);
+  // Mixed — picks the max dyn index +1.
+  assert.equal(SM.nextDynamicIndex(new Set(['dyn.reflect.1', 'dyn.reflect.3', 'founder.x'])), 4);
+  // Out-of-pattern dyn ids are ignored: >4 digits and non-numeric tail.
+  assert.equal(SM.nextDynamicIndex(new Set(['dyn.reflect.12345', 'dyn.reflect.abc'])), 1);
+});
+
+test('generateDynamicQuestion emits a strict dyn.reflect.N reflection', () => {
+  // First reflection for a founder — id N=1, persona-aware prompt, low importance, skippable.
+  const first = SM.generateDynamicQuestion('founder', new Set());
+  assert.equal(first.id, 'dyn.reflect.1');
+  assert.equal(first.persona, 'founder');
+  assert.equal(first.section, 'REFLECT');
+  assert.equal(first.importance, 'low');
+  assert.equal(first.skip_allowed, true);
+  assert.equal(first.input_kind, 'long');
+  assert.match(first.id, /^dyn\.reflect\.\d{1,4}$/);
+  assert.ok(typeof first.prompt === 'string' && first.prompt.length > 0);
+
+  // Prompt rotates with N (keyed off index) and advances the id.
+  const second = SM.generateDynamicQuestion('founder', new Set(['dyn.reflect.1']));
+  assert.equal(second.id, 'dyn.reflect.2');
+  assert.notEqual(second.prompt, first.prompt);
+
+  // Unknown/unmapped persona falls back to the generic prompt pool (?? branch).
+  const weird = SM.generateDynamicQuestion('weird' as any, new Set());
+  assert.equal(weird.id, 'dyn.reflect.1');
+  assert.ok(typeof weird.prompt === 'string' && weird.prompt.length > 0);
+});
+
+test('nextTurn falls back to a dynamic reflection only when persona is known', async () => {
+  const env = makeDb();
+  const nowMs = Date.now();
+
+  // Empty bank + persona → reflection question, marked asked.
+  const dyn = await SM.nextTurn(env, 21, [], {
+    focusPage: null, week: 1, completedMilestones: new Set(),
+    persona: 'investor', now: nowMs,
+  });
+  assert.equal(dyn.next_question!.id, 'dyn.reflect.1');
+  assert.equal(dyn.next_question!.persona, 'investor');
+  assert.deepEqual(dyn.queue, []);
+  assert.ok(env._tables.advisor_state.find((r: StateRow) => r.question_id === 'dyn.reflect.1'));
+
+  // Persona present but caller opts out → null (legacy complete semantics).
+  const optOut = await SM.nextTurn(env, 22, [], {
+    focusPage: null, week: 1, completedMilestones: new Set(),
+    persona: 'investor', dynamicFallback: false, now: nowMs,
+  });
+  assert.equal(optOut.next_question, null);
+
+  // No persona → null (preserves /answer + /skip behaviour).
+  const noPersona = await SM.nextTurn(env, 23, [], {
+    focusPage: null, week: 1, completedMilestones: new Set(), now: nowMs,
+  });
+  assert.equal(noPersona.next_question, null);
+
+  // Exhausted-by-answers (non-empty bank, all answered) + persona → reflection.
+  const exhausted = await SM.nextTurn(env, 24, [q({ id: 'only', importance: 'critical' })], {
+    focusPage: null, week: 1, completedMilestones: new Set(),
+    extraAnswered: new Set(['only']), persona: 'founder', now: nowMs,
+  });
+  assert.equal(exhausted.next_question!.id, 'dyn.reflect.1');
+});
+
+// ---------------------------------------------------------------------------
+// Task #12 (BLOCK-ADV-02) — repeat-question regression.
+//
+// A question with a statically-authored `followups` array must (a) be
+// served first, (b) never be re-served once answered — even if it was
+// answered more than once (the cross-conversation answered set dedupes
+// via a Set + the recordAnswer upsert keys on (conversation,question)),
+// and (c) yield to its un-answered peer.
+// ---------------------------------------------------------------------------
+test('answered question is never re-served and its followups are preserved', async () => {
+  const env = makeDb();
+  const nowMs = Date.now();
+  const X = q({ id: 'x', importance: 'critical', followups: ['y'] });
+  const Y = q({ id: 'y', importance: 'normal' });
+  const bank = [X, Y];
+
+  // (a) X (critical) wins the first turn; its followups are statically authored.
+  const t1 = await SM.nextTurn(env, 30, bank, {
+    focusPage: null, week: 1, completedMilestones: new Set(), now: nowMs,
+  });
+  assert.equal(t1.next_question!.id, 'x');
+  assert.deepEqual(t1.next_question!.followups, ['y']);
+
+  // Simulate the user answering X TWICE (two write rows). The
+  // cross-conversation answered set must collapse them to ONE id.
+  env._tables.advisor_answers.push({ user_id: 30, question_id: 'x', saved_status: 'saved' });
+  env._tables.advisor_answers.push({ user_id: 30, question_id: 'x', saved_status: 'saved' });
+  const answered = await SM.loadAnsweredForUser(env, 30);
+  assert.equal(answered.size, 1);
+  assert.deepEqual([...answered], ['x']);
+
+  // (b) + (c) Next turn drops X (answered) and serves the peer Y.
+  const t2 = await SM.nextTurn(env, 30, bank, {
+    focusPage: null, week: 1, completedMilestones: new Set(), now: nowMs,
+  });
+  assert.equal(t2.next_question!.id, 'y');
+
+  // Answer Y too — bank now exhausted, no persona → null (X never returns).
+  env._tables.advisor_answers.push({ user_id: 30, question_id: 'y', saved_status: 'saved' });
+  const t3 = await SM.nextTurn(env, 30, bank, {
+    focusPage: null, week: 1, completedMilestones: new Set(), now: nowMs,
+  });
+  assert.equal(t3.next_question, null);
+});

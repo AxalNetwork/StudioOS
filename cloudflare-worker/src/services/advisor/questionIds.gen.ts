@@ -7,6 +7,17 @@
 // coverage tests + any consumer that needs an exhaustive switch.
 
 export type AdvisorQuestionId =
+  | 'admin.governance.access_review_cadence'
+  | 'admin.governance.data_retention_pref'
+  | 'admin.operations.intake_priority'
+  | 'admin.operations.onboarding_sla'
+  | 'admin.oversight.escalation_threshold'
+  | 'admin.oversight.portfolio_focus'
+  | 'admin.oversight.review_cadence'
+  | 'admin.oversight.risk_tolerance'
+  | 'admin.preferences.alert_channel'
+  | 'admin.preferences.digest_freq'
+  | 'admin.preferences.timezone'
   | 'founder.brand.tagline'
   | 'founder.brand.theme_color'
   | 'founder.capital.bridge_likely'
@@ -530,6 +541,17 @@ export type AdvisorQuestionId =
   | 'role_detect.primary';
 
 export const ADVISOR_QUESTION_IDS: readonly AdvisorQuestionId[] = [
+  "admin.governance.access_review_cadence",
+  "admin.governance.data_retention_pref",
+  "admin.operations.intake_priority",
+  "admin.operations.onboarding_sla",
+  "admin.oversight.escalation_threshold",
+  "admin.oversight.portfolio_focus",
+  "admin.oversight.review_cadence",
+  "admin.oversight.risk_tolerance",
+  "admin.preferences.alert_channel",
+  "admin.preferences.digest_freq",
+  "admin.preferences.timezone",
   "founder.brand.tagline",
   "founder.brand.theme_color",
   "founder.capital.bridge_likely",

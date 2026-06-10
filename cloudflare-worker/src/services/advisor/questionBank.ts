@@ -102,6 +102,7 @@ export const BANK_SIZE_TARGETS = {
   existingFounder: 120,
   investor: 60,
   mentor: 30,
+  admin: 10,
   operatingPartnerPerSubtype: 50, // ×4 sub-types = 200 total
 } as const;
 
@@ -160,18 +161,11 @@ import { EXISTING_FOUNDER_BANK } from './banks/existingFounder.ts';
 import { INVESTOR_BANK } from './banks/investor.ts';
 import { OPERATING_PARTNER_BANK } from './banks/operatingPartner.ts';
 import { MENTOR_BANK } from './banks/mentor.ts';
+import { ADMIN_BANK } from './banks/admin.ts';
 
 export type BankName =
   | 'newFounderSpinout' | 'existingFounder'
   | 'investor' | 'operatingPartner' | 'mentor' | 'admin';
-
-const ADMIN_BANK: Question[] = [
-  { id: 'admin.preferences.digest_freq', persona: 'admin', section: 'PREFS',
-    prompt: 'How often do you want the daily-digest summary?',
-    input_kind: 'select', options: ['Daily', 'Weekly', 'Off'],
-    importance: 'normal', page_target: '/settings',
-    doc_anchor: 'getting-started/personas', validate: 'select' },
-];
 
 export const BANKS: Record<BankName, Question[]> = {
   newFounderSpinout: NEW_FOUNDER_SPINOUT_BANK,
@@ -202,15 +196,49 @@ export function bankFor(persona: Persona, ctx?: { spinoutLabActive?: boolean }):
   }
 }
 
+// ---------------------------------------------------------------------------
+// Task #12 (BLOCK-ADV-07) — dynamic reflection questions.
+//
+// When a persona bank is exhausted the state machine generates an
+// open-ended `dyn.reflect.N` question (see stateMachine.ts::
+// generateDynamicQuestion). These ids are NOT in any bank or the
+// manifest, so `questionById` synthesises a generic Question for them
+// — needed so the /answer + /skip round-trip and the conversation
+// history renderer recognise the id instead of 400-ing on it. The
+// regex is deliberately STRICT (`dyn.reflect.<digits>`) so callers
+// can't smuggle arbitrary keys into `users.advisor_extras_json` via a
+// fabricated `dyn.*` id.
+// ---------------------------------------------------------------------------
+export const DYNAMIC_ID_RE = /^dyn\.reflect\.\d{1,4}$/;
+
+export function synthesizeDynamicQuestion(id: string): Question | null {
+  if (!DYNAMIC_ID_RE.test(id)) return null;
+  return {
+    id,
+    persona: 'unknown',
+    section: 'REFLECT',
+    prompt: 'Anything else on your mind right now?',
+    input_kind: 'long',
+    importance: 'low',
+    page_target: undefined,
+    doc_anchor: 'getting-started/personas',
+    validate: 'long',
+    skip_allowed: true,
+  };
+}
+
 /**
  * Lookup any question by id across every bank + the role detector.
+ * Synthesises a generic Question for dynamic `dyn.reflect.N` ids.
  */
 export function questionById(id: string): Question | null {
   for (const name of Object.keys(BANKS) as BankName[]) {
     const hit = BANKS[name].find((q) => q.id === id);
     if (hit) return hit;
   }
-  return ROLE_DETECTOR.find((q) => q.id === id) || null;
+  const detector = ROLE_DETECTOR.find((q) => q.id === id);
+  if (detector) return detector;
+  return synthesizeDynamicQuestion(id);
 }
 
 // ---------------------------------------------------------------------------

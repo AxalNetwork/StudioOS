@@ -3930,6 +3930,85 @@
         "mi_section": "sentiment"
       }
     ],
+    "admin": [
+      {
+        "persona": "admin",
+        "section": "PREFS",
+        "page_target": "/settings",
+        "doc_anchor": "getting-started/personas",
+        "id": "admin.preferences.digest_freq"
+      },
+      {
+        "persona": "admin",
+        "section": "PREFS",
+        "page_target": "/settings",
+        "doc_anchor": "getting-started/personas",
+        "id": "admin.preferences.alert_channel"
+      },
+      {
+        "persona": "admin",
+        "section": "PREFS",
+        "page_target": "/settings",
+        "doc_anchor": "getting-started/personas",
+        "id": "admin.preferences.timezone"
+      },
+      {
+        "persona": "admin",
+        "section": "OVERSIGHT",
+        "page_target": "/admin",
+        "doc_anchor": "getting-started/personas",
+        "id": "admin.oversight.review_cadence"
+      },
+      {
+        "persona": "admin",
+        "section": "OVERSIGHT",
+        "page_target": "/admin",
+        "doc_anchor": "getting-started/personas",
+        "id": "admin.oversight.portfolio_focus"
+      },
+      {
+        "persona": "admin",
+        "section": "OVERSIGHT",
+        "page_target": "/admin",
+        "doc_anchor": "getting-started/personas",
+        "id": "admin.oversight.risk_tolerance"
+      },
+      {
+        "persona": "admin",
+        "section": "OVERSIGHT",
+        "page_target": "/admin",
+        "doc_anchor": "getting-started/personas",
+        "id": "admin.oversight.escalation_threshold"
+      },
+      {
+        "persona": "admin",
+        "section": "OPERATIONS",
+        "page_target": "/admin",
+        "doc_anchor": "getting-started/personas",
+        "id": "admin.operations.intake_priority"
+      },
+      {
+        "persona": "admin",
+        "section": "OPERATIONS",
+        "page_target": "/admin",
+        "doc_anchor": "getting-started/personas",
+        "id": "admin.operations.onboarding_sla"
+      },
+      {
+        "persona": "admin",
+        "section": "GOVERNANCE",
+        "page_target": "/admin",
+        "doc_anchor": "getting-started/personas",
+        "id": "admin.governance.data_retention_pref"
+      },
+      {
+        "persona": "admin",
+        "section": "GOVERNANCE",
+        "page_target": "/admin",
+        "doc_anchor": "getting-started/personas",
+        "id": "admin.governance.access_review_cadence"
+      }
+    ],
     "roleDetector": [
       {
         "id": "role_detect.primary",

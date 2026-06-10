@@ -51,6 +51,7 @@ import {
   ROLE_DETECTOR,
   bankFor,
   questionById,
+  DYNAMIC_ID_RE,
   filterByContext,
   groupByPage,
   groupBySection,
@@ -782,7 +783,12 @@ advisor.post('/answer', async (c) => {
     const isVisible = visibleNow.some((vq) => vq.id === q.id);
     const isDetector = DETECTOR_IDS.includes(q.id);
     const isReAnswer = answeredNow.has(q.id);
-    if (!isVisible && !isDetector && !isReAnswer) {
+    // Task #12 (BLOCK-ADV-07) — dynamic reflection ids are synthesised
+    // on the fly (never in the visible bank), so bypass the in-bank
+    // eligibility gate for them. The strict `dyn.reflect.N` regex is
+    // the access-control boundary here.
+    const isDynamic = DYNAMIC_ID_RE.test(q.id);
+    if (!isVisible && !isDetector && !isReAnswer && !isDynamic) {
       return c.json({
         error: 'question_not_available',
         message: 'This question isn\'t available yet — finish earlier milestones first.',
@@ -1157,7 +1163,10 @@ advisor.post('/skip', async (c) => {
     const { visible: visibleNow } = selectBank(user, answeredNow, gate);
     const isVisible = visibleNow.some((vq) => vq.id === q.id);
     const isDetector = DETECTOR_IDS.includes(q.id);
-    if (!isVisible && !isDetector) {
+    // Task #12 (BLOCK-ADV-07) — see /answer: dynamic reflection ids are
+    // synthesised, not in the visible bank, so allow them through.
+    const isDynamic = DYNAMIC_ID_RE.test(q.id);
+    if (!isVisible && !isDetector && !isDynamic) {
       return c.json({
         error: 'question_not_available',
         message: 'This question isn\'t available yet — finish earlier milestones first.',
@@ -2125,6 +2134,11 @@ advisor.post('/turn', async (c) => {
     week: gate.week,
     completedMilestones: gate.completedMilestones,
     extraAnswered: answered,
+    // Task #12 (BLOCK-ADV-07) — when the persona bank is exhausted,
+    // /turn surfaces a dynamic `dyn.reflect.N` reflection instead of
+    // an empty turn. /answer + /skip deliberately omit persona so they
+    // keep their conversation-`complete` semantics.
+    persona: personaFor(user),
   });
   return c.json({
     persona: personaFor(user),

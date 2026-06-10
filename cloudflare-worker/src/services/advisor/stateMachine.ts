@@ -39,7 +39,7 @@
  * coverage without any D1 round-trips.
  */
 import type { Env } from '../../types';
-import type { Question, Importance } from './questionBank.ts';
+import type { Question, Importance, Persona } from './questionBank.ts';
 // Re-use the canonical Spin-Out Lab milestone catalog so the
 // "advance week when all weekly milestones are met" rule (architect
 // review item #2) stays in lock-step with /api/spinout-lab. Routes
@@ -322,12 +322,103 @@ export async function markAsked(env: Env, userId: number, questionId: string): P
 }
 
 // ---------------------------------------------------------------------------
+// Task #12 (BLOCK-ADV-07) — dynamic reflection question generator.
+//
+// When a persona bank is exhausted (pickNext returns null) the
+// orchestrator emits an open-ended reflection question instead of
+// leaving the advisor with nothing to ask. The id is STRICTLY
+// `dyn.reflect.N` (N = highest already-answered dyn index + 1) so
+// `questionById` can synthesise a matching Question and `writeRouter`
+// can persist the answer to the `users.advisor_extras_json` sidecar.
+//
+// Only one reflection is live at a time: until the user answers (or
+// skips) `dyn.reflect.N`, every /turn regenerates the SAME id (N is
+// unchanged because no answered dyn row exists yet), so reflections
+// can't proliferate. Answering or skipping advances N by one.
+// Prompts rotate through a persona-aware pool keyed off N.
+// ---------------------------------------------------------------------------
+const DYNAMIC_PROMPTS: Record<Persona, string[]> = {
+  founder: [
+    'Stepping back from the checklist — what is the single biggest thing on your mind about the business right now?',
+    'What would have to go right in the next 90 days for you to call this a breakout quarter?',
+    'Where are you most likely to be fooling yourself about the company today?',
+  ],
+  investor: [
+    'Outside your written thesis — what pattern are you seeing in the market that you can\u2019t fully explain yet?',
+    'Which recent pass do you most expect to regret, and why?',
+    'If you had to deploy the rest of the fund this quarter, what would you change about your sourcing?',
+  ],
+  partner: [
+    'Across the ventures you support, where do you feel your time is being least well spent?',
+    'What capability is the portfolio missing that you keep wishing you could offer?',
+    'Which relationship in your network is most underused relative to its potential?',
+  ],
+  mentor: [
+    'Across the founders you mentor, what mistake do you find yourself flagging over and over?',
+    'What advice do you give that founders most often resist — and are usually wrong to?',
+    'Where do you feel least confident giving guidance right now?',
+  ],
+  admin: [
+    'Looking across the whole studio, what operational risk worries you most this quarter?',
+    'If you could automate one recurring decision you make, which would it be?',
+    'Where is the studio\u2019s process creating the most friction for founders today?',
+  ],
+  unknown: [
+    'Anything else on your mind that we haven\u2019t covered yet?',
+    'What is the most useful thing the advisor could help you think through next?',
+    'Is there a decision you are weighing right now that you\u2019d like a second perspective on?',
+  ],
+};
+
+/** Highest answered `dyn.reflect.N` index + 1 (1-based). */
+export function nextDynamicIndex(answered: Set<string>): number {
+  let max = 0;
+  for (const id of answered) {
+    const m = /^dyn\.reflect\.(\d{1,4})$/.exec(id);
+    if (m) {
+      const n = Number(m[1]);
+      if (n > max) max = n;
+    }
+  }
+  return max + 1;
+}
+
+/**
+ * Pure generator for the next dynamic reflection question. Exported so
+ * unit tests drive its branches without a D1 round-trip.
+ */
+export function generateDynamicQuestion(persona: Persona, answered: Set<string>): Question {
+  const n = nextDynamicIndex(answered);
+  const pool = DYNAMIC_PROMPTS[persona] ?? DYNAMIC_PROMPTS.unknown;
+  const prompt = pool[(n - 1) % pool.length];
+  return {
+    id: `dyn.reflect.${n}`,
+    persona,
+    section: 'REFLECT',
+    prompt,
+    input_kind: 'long',
+    importance: 'low',
+    page_target: undefined,
+    doc_anchor: 'getting-started/personas',
+    validate: 'long',
+    skip_allowed: true,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Orchestrator. Thin wrapper that wires the DB helpers into pickNext.
 // ---------------------------------------------------------------------------
 export interface NextTurnContext {
   focusPage?: string | null;
   week: number;
   completedMilestones: Set<string>;
+  /** Task #12 — persona of the user. When provided (and
+   *  `dynamicFallback` is not false) an exhausted bank yields a
+   *  `dyn.reflect.N` reflection question instead of null. */
+  persona?: Persona;
+  /** Set false to suppress the reflection fallback even when persona
+   *  is known (lets tests assert natural bank exhaustion). */
+  dynamicFallback?: boolean;
   /** Additional answered ids the route layer already knows about.
    *  Historically this carried domain-table hydration from the
    *  legacy `hydrateAlreadyAnswered` shim; Task #7 retired that
@@ -380,6 +471,17 @@ export async function nextTurn(
     // await so the next /turn within the same isolate sees the
     // updated row, but if it throws we don't block the response.
     await markAsked(env, userId, result.next.id);
+    return { next_question: result.next, queue: result.queue };
+  }
+  // Task #12 (BLOCK-ADV-07) — bank exhausted. Emit a dynamic reflection
+  // question so the advisor always has a next move, unless the caller
+  // opted out (dynamicFallback === false) or the persona is unknown to
+  // this call (no persona passed → preserve the legacy null/complete
+  // semantics for /answer + /skip).
+  if (ctx.persona && ctx.dynamicFallback !== false) {
+    const dyn = generateDynamicQuestion(ctx.persona, answered);
+    await markAsked(env, userId, dyn.id);
+    return { next_question: dyn, queue: [] };
   }
   return { next_question: result.next, queue: result.queue };
 }

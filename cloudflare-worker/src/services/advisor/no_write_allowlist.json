@@ -53,7 +53,9 @@
     "^partner\\.st\\.",
     "^partner\\.cv\\.",
     "^partner\\.rate\\.",
-    "^partner\\.comp\\."
+    "^partner\\.comp\\.",
+    "^admin\\.",
+    "^dyn\\.reflect\\."
   ],
   "ids": []
 }

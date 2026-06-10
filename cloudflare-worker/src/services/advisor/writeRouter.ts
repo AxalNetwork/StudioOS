@@ -18,7 +18,7 @@
  */
 import type { Env } from '../../types';
 import type { User } from '../../types';
-import { questionById, mapRoleAnswer } from './questionBank.ts';
+import { questionById, mapRoleAnswer, DYNAMIC_ID_RE } from './questionBank.ts';
 
 export type WriteStatus = 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop' | 'needs_evidence' | 'invalid';
 
@@ -437,6 +437,19 @@ export async function routeAnswer(
   rawValue: string,
   evidence?: string | null,
 ): Promise<WriteResult> {
+  // Task #12 (BLOCK-ADV-07) — dynamic reflection answers persist to the
+  // user's advisor_extras_json sidecar (no typed column). Handled BEFORE
+  // the bank lookup so a strict-regex dyn id never trips the unknown-id
+  // failure below.
+  if (DYNAMIC_ID_RE.test(questionId)) {
+    const dynValue = String(rawValue ?? '').trim();
+    if (!dynValue) return { status: 'skipped' };
+    const ok = await mergeUserExtras(env, user.id, questionId, dynValue);
+    return ok
+      ? { status: 'saved', saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id } }
+      : { status: 'noop' };
+  }
+
   const q = questionById(questionId);
   if (!q) return { status: 'failed', error: 'unknown question_id' };
   const value = String(rawValue ?? '').trim();
@@ -1046,6 +1059,13 @@ export async function routeAnswer(
         return { status: 'noop' };
       }
     }
+    // Task #12 — other admin preferences/oversight answers have no typed
+    // column; persist them in the users sidecar so they aren't dropped.
+    // (Acknowledged by the `^admin\.` pattern in no_write_allowlist.json.)
+    const ok = await mergeUserExtras(env, user.id, questionId, value);
+    return ok
+      ? { status: 'saved', saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id } }
+      : { status: 'noop' };
   }
 
   return { status: 'noop' };

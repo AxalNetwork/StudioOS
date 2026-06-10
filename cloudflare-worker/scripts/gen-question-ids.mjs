@@ -29,6 +29,7 @@ const BANK_FILES = {
   investor:          { rel: 'banks/investor.ts',          persona: 'investor' },
   operatingPartner:  { rel: 'banks/operatingPartner.ts',  persona: 'partner' },
   mentor:            { rel: 'banks/mentor.ts',            persona: 'mentor' },
+  admin:             { rel: 'banks/admin.ts',             persona: 'admin' },
 };
 
 const PARTNER_SUBTYPE_BY_HELPER = {
