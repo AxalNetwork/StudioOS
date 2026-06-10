@@ -10,6 +10,19 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Task #9 (IG) — Admin transcripts + ID backfill
+
+Verification track — no prod-contract or frontend behavior change. Both admin transcript surfaces and the public-ID backfill path were already shipped (Tasks #1 DB / #11 / #34); this task confirms the wiring end-to-end and hands off the operator-run prod count.
+
+- **NICE-ADM-02 admin transcript tabs — confirmed wired.** The admin user-detail drawer (`frontend/src/pages/AdminPage.jsx`, opened from the Users table via `setOpenUser`) renders both an **Onboarding** tab and an **Ongoing Conversation** (advisor) tab. Onboarding fetches `api.adminUserOnboardingConversation` → Worker `GET /api/admin/users/:user_id/conversations/onboarding`. Ongoing fetches the list `api.adminUserAdvisorConversations` → `GET …/conversations/advisor` (left-rail with search + date filters), per-conversation drilldown `api.adminUserAdvisorConversation` → `GET …/conversations/advisor/:id`, and the "Download CSV" button calls the message-level export `api.adminUserAdvisorTranscriptExport` → `POST …/conversations/advisor/export`. (The conversation-list CSV helper `api.adminUserAdvisorConversationsCsvUrl` → `GET …/conversations/advisor?format=csv` exists for completeness but is currently unused by the UI.) Every read is audited (`auditConversationView`) and notifies the viewed user (`notifyTranscriptViewed`). Both routes live inside the `/api/admin/*` CF-Access perimeter and gate on `requireAdmin`. `admin_advisor_audit.ts` (`/api/admin/advisor-audit`) is the separate guardrail-audit reader and is intentionally NOT what these tabs consume.
+- **NICE-ADM-01 public-ID backfill — operator-run on prod D1.** The idempotent backfill endpoint already exists: `POST /api/admin/maintenance/public-ids/backfill?limit=N` (`routes/admin.ts` → `services/publicIds.ts::backfillPublicIds`, walks `created_at ASC` and assigns `AXF-`/`AXP-` ids; safe to re-run until counts return zero). `esign.ts::createAndSendEnvelope` also auto-assigns at send-time so legal merge fields never expand empty. The main agent cannot reach prod Cloudflare D1 (the database-skill prod replica is Replit-managed Postgres, a different system), so the read-only count is operator-run.
+
+Operator runbook (NICE-ADM-01 — run in Shell, not the agent):
+- Use Node 22 for wrangler first: `export PATH=/nix/store/51gywl5jn4nna7al9waj142pw4vfhy0k-nodejs-22.19.0/bin:$PATH`
+- Read-only count (predicate mirrors `backfillPublicIds`):
+  `wrangler d1 execute studioos-db --remote --env production --command="SELECT (SELECT COUNT(*) FROM users WHERE founder_public_id IS NULL AND (role='founder' OR founder_id IS NOT NULL)) AS founders_missing, (SELECT COUNT(*) FROM users WHERE partner_public_id IS NULL AND (role='partner' OR partner_id IS NOT NULL)) AS partners_missing;"`
+- If either count > 0, run the backfill (admin JWT): `POST https://axal.vc/api/admin/maintenance/public-ids/backfill?limit=1000`, re-invoke until `{founders_assigned:0, partners_assigned:0}`, then re-run the count to confirm both are zero. The endpoint writes an `admin_public_ids_backfill` row to `activity_logs`.
+
 ## Task #8 (IF) — Mount missing dev API routes
 
 Dev-FastAPI-only parity fix; no prod change (the Cloudflare Worker on D1 already serves both routes). Keeps the error dashboard honest in local dev.
