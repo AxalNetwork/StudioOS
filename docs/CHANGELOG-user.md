@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Fixed: Stripe revenue now flows into your financials
+
+If you connect Stripe, your live MRR, ARR, paying-customer count, and churn now land in your project's financial model automatically — including on the regular background sync — instead of stopping short. Connect Stripe from the Integrations page and your numbers will keep themselves up to date.
+
+---
+
 ## Improved: Admin observability and reliability
 
 For admins and operators:
