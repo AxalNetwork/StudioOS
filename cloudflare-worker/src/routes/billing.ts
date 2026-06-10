@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth, requireFactor } from '../auth';
+import { requireAuth, requireFactor, requireStepUp } from '../auth';
 import { ensureMiPaywallSchema, MI_PRO_PRODUCTS, userHasMiPro } from '../middleware/miAccess';
 import { ensureTierSchema, type TierUser } from '../middleware/requireTier';
 import {
@@ -67,6 +67,7 @@ billing.post('/mi-pro/checkout', async (c) => {
   // and must re-authenticate with TOTP before they can mint a Stripe
   // Checkout session.
   await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
   const user = (await requireAuth(c)) as MiUser;
   await ensureMiPaywallSchema(c.env);
   const body = await c.req.json().catch(() => ({} as { plan?: string }));
@@ -120,6 +121,7 @@ billing.post('/mi-pro/portal', async (c) => {
   // Task #6 — Stripe Customer Portal is the cancel/upgrade surface; gate
   // it on TOTP step-up so a stolen SMS factor can never reach billing.
   await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
   const user = (await requireAuth(c)) as MiUser;
   if (!user.mi_stripe_customer_id) return c.json({ error: 'no_subscription' }, 400);
   const appUrl = c.env.APP_URL || 'http://localhost:5000';
@@ -300,6 +302,7 @@ billing.post('/investor/checkout', async (c) => {
   // Step-up to TOTP, mirrors mi-pro/checkout — billing surfaces never run on
   // SMS-only sessions.
   await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
   const user = (await requireAuth(c)) as InvestorUser;
   await ensureInvestorPaywallSchema(c.env);
   if (user.role !== 'investor' && user.role !== 'admin') {
@@ -365,6 +368,7 @@ billing.post('/investor/checkout', async (c) => {
 
 billing.post('/investor/portal', async (c) => {
   await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
   const user = (await requireAuth(c)) as InvestorUser;
   if (!user.investor_stripe_customer_id) return c.json({ error: 'no_subscription' }, 400);
   const appUrl = c.env.APP_URL || 'http://localhost:5000';

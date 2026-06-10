@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth, requireAdmin } from '../auth';
+import { requireAuth, requireAdmin, requireStepUp } from '../auth';
 import { putKycDocumentFromDataUri, getKycDocument, deleteKycDocument } from '../services/r2';
 import { hashEmail } from '../util/hashEmail';
 
@@ -315,6 +315,7 @@ kyc.get('/admin/:userId/document', async (c) => {
 
 kyc.patch('/admin/:userId/approve', async (c) => {
   const adminUser = await requireAdmin(c);
+  await requireStepUp(c); // BLOCK-AUTH-03 — KYC verdicts require a RECENT TOTP step-up
   await ensureColumns(c.env);
   const userId = parseInt(c.req.param('userId'));
   const sql = getSQL(c.env);
@@ -348,6 +349,7 @@ kyc.patch('/admin/:userId/approve', async (c) => {
 
 kyc.patch('/admin/:userId/reject', async (c) => {
   const adminUser = await requireAdmin(c);
+  await requireStepUp(c); // BLOCK-AUTH-03 — KYC verdicts require a RECENT TOTP step-up
   await ensureColumns(c.env);
   const userId = parseInt(c.req.param('userId'));
   const { reason } = await c.req.json().catch(() => ({}));

@@ -29,6 +29,7 @@ import authRecover from './routes/auth_recover';
 // /api/auth (magic link + TOTP); never the only path in. See
 // routes/auth_google.ts for the linking precedence and step-up rules.
 import authGoogle from './routes/auth_google';
+import authPasskey from './routes/auth_passkey';
 import { recoveryCoolOff } from './middleware/recoveryCoolOff';
 import scoring from './routes/scoring';
 import projects from './routes/projects';
@@ -351,6 +352,9 @@ app.route('/api/auth/recover', authRecover);
 // Task #51 — Google sign-in (optional). Mounted on its own /api/auth/google
 // prefix so it never shadows the magic-link / TOTP routes on /api/auth.
 app.route('/api/auth/google', authGoogle);
+// BLOCK-AUTH-02 — WebAuthn passkeys. Own /api/auth/passkey prefix so the
+// ceremony routes never shadow the password/TOTP/magic routes on /api/auth.
+app.route('/api/auth/passkey', authPasskey);
 
 // Task #50 — 24h cool-off middleware. Blocks the listed sensitive
 // surfaces while users.recovery_cooling_off_until is in the future
@@ -666,6 +670,14 @@ const AUTH_ERROR_STATUSES: Record<string, 401 | 403> = {
 
 app.onError((err: any, c) => {
   const msg = (err?.message ?? '') as string;
+  // BLOCK-AUTH-03 — step-up gate. Carries a machine-readable code + the TTL so
+  // the SPA can prompt for a fresh TOTP, POST /api/auth/step-up, then retry.
+  if (msg === 'step_up_required') {
+    return c.json(
+      { detail: 'Recent re-authentication required', code: 'step_up_required', ttl_minutes: err?.ttlMinutes ?? 15 },
+      403,
+    );
+  }
   const mapped = AUTH_ERROR_STATUSES[msg];
   if (mapped) return c.json({ detail: msg }, mapped);
   console.error('[edge] unhandled error:', err);

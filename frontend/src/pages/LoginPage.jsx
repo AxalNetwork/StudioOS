@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Shield, LogIn } from 'lucide-react';
+import { ArrowLeft, Shield, LogIn, Mail, KeyRound } from 'lucide-react';
+import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import { api } from '../lib/api';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 
@@ -30,6 +31,16 @@ const GOOGLE_ERROR_COPY = {
   internal_error: 'Something went wrong on our side. Please try again.',
 };
 
+// BLOCK-AUTH-01 — copy for the codes raised by GET /api/auth/magic/verify when
+// a magic link can't sign the user in (mirrors routes/auth.ts::fail()).
+const MAGIC_ERROR_COPY = {
+  invalid: 'That sign-in link is invalid. Request a new one below.',
+  expired: 'That sign-in link has expired or was already used. Request a new one below.',
+  rate: 'Too many attempts. Please wait a minute and try again.',
+  inactive: 'Your Axal account is inactive. Contact support.',
+  error: 'Something went wrong completing your sign-in. Please try again.',
+};
+
 export default function LoginPage() {
   useForcedLightTheme();
   const [email, setEmail] = useState('');
@@ -39,6 +50,12 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [googleAvailable, setGoogleAvailable] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
+  // BLOCK-AUTH-01 — magic-link state.
+  const [magicBusy, setMagicBusy] = useState(false);
+  const [magicSent, setMagicSent] = useState(false);
+  // BLOCK-AUTH-02 — passkey state.
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const passkeySupported = typeof window !== 'undefined' && browserSupportsWebAuthn();
 
   // Discover whether the worker has Google OAuth configured; hide the
   // button otherwise so we don't show users a control that returns 503.
@@ -66,6 +83,56 @@ export default function LoginPage() {
       window.history.replaceState({}, '', url.pathname + (url.search ? `?${url.searchParams}` : ''));
     }
   }, []);
+
+  // BLOCK-AUTH-01 — surface any magic-link failure bounced back as ?magic_error=.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('magic_error');
+    if (code) {
+      setError(MAGIC_ERROR_COPY[code] || 'That sign-in link could not be used. Request a new one below.');
+      const url = new URL(window.location.href);
+      url.searchParams.delete('magic_error');
+      window.history.replaceState({}, '', url.pathname + (url.search ? `?${url.searchParams}` : ''));
+    }
+  }, []);
+
+  // BLOCK-AUTH-01 — request a passwordless sign-in link. Response is a constant
+  // 202 regardless of whether the account exists, so we always show the same
+  // confirmation (no account-enumeration leak). Rate-limited server-side.
+  const sendMagicLink = async () => {
+    if (!email.trim()) { setError('Enter your email to get a sign-in link.'); return; }
+    setMagicBusy(true); setError('');
+    try {
+      await api.magicStart(email.trim());
+      setMagicSent(true);
+    } catch (e) {
+      setError(e?.message || 'Could not send your sign-in link. Please try again.');
+    } finally { setMagicBusy(false); }
+  };
+
+  // BLOCK-AUTH-02 — sign in with a passkey. Email is optional: a discoverable
+  // (resident) credential lets the authenticator pick the account, so we pass
+  // whatever's typed but don't require it. A passkey assertion mints a
+  // full-assurance session server-side.
+  const signInWithPasskey = async () => {
+    setPasskeyBusy(true); setError('');
+    try {
+      const wanted = email.trim() || undefined;
+      const options = await api.passkey.authOptions(wanted);
+      const assertion = await startAuthentication({ optionsJSON: options });
+      const res = await api.passkey.authVerify(wanted, assertion);
+      if (!res?.token || !res?.user) throw new Error('Invalid response from server.');
+      localStorage.setItem('token', res.token);
+      localStorage.setItem('user', JSON.stringify(res.user));
+      window.location.href = '/dashboard';
+    } catch (e) {
+      if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
+        setError('Passkey sign-in was cancelled.');
+      } else {
+        setError(e?.message || 'Passkey sign-in failed.');
+      }
+    } finally { setPasskeyBusy(false); }
+  };
 
   const continueWithGoogle = async () => {
     setGoogleBusy(true); setError('');
@@ -239,6 +306,31 @@ export default function LoginPage() {
               className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white flex items-center justify-center gap-2">
               {loading ? 'Signing in…' : <>Sign in <LogIn size={14} /></>}
             </button>
+
+            {/* BLOCK-AUTH-01 — passwordless magic-link alternative. */}
+            {magicSent ? (
+              <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                Check your inbox — if <span className="font-medium">{email.trim()}</span> has an Axal account, a sign-in link is on its way. It expires in 15 minutes.
+              </div>
+            ) : (
+              <>
+                <button type="button" onClick={sendMagicLink} disabled={magicBusy || !email.trim()}
+                  className="w-full bg-white hover:bg-gray-50 border border-gray-300 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-gray-700 flex items-center justify-center gap-2">
+                  <Mail size={14} /> {magicBusy ? 'Sending…' : 'Email me a sign-in link'}
+                </button>
+                <p className="text-[10px] text-gray-500 text-center">
+                  No authenticator handy? We'll email a one-time link. Sensitive actions still ask for your authenticator.
+                </p>
+              </>
+            )}
+
+            {/* BLOCK-AUTH-02 — passkey sign-in (Face ID / Touch ID / security key). */}
+            {passkeySupported && (
+              <button type="button" onClick={signInWithPasskey} disabled={passkeyBusy}
+                className="w-full bg-white hover:bg-gray-50 border border-gray-300 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-gray-700 flex items-center justify-center gap-2">
+                <KeyRound size={14} /> {passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}
+              </button>
+            )}
 
             {googleAvailable && (
               <>

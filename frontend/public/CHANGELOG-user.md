@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: Easier, safer ways to sign in
+
+Signing in to Axal is now more flexible — and sensitive actions stay protected.
+- **Passkeys** — sign in with Face ID, Touch ID, Windows Hello, or a security key, with no code to type. Add and manage your passkeys under Settings → Security.
+- **Email sign-in link** — no authenticator handy? We'll email you a one-time link that's good for 15 minutes.
+- **Extra check for sensitive actions** — when you sign in with an email link, things like billing and account changes will ask for your authenticator code first, so your account stays secure.
+- **Sign out everywhere** — one click signs you out of every device at once.
+
+---
+
 ## Improved: A better way to read articles
 
 Articles now open in a polished, magazine-style reading experience.

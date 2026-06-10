@@ -3,7 +3,7 @@ import { clampLimit, parseOffset } from '../util/pagination';
 import { hashEmail } from '../util/hashEmail';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, createJWT, hashToken, requireFactor } from '../auth';
+import { requireAdmin, createJWT, hashToken, requireFactor, requireStepUp } from '../auth';
 import {
   serializeTranscriptCsv,
   classifyOnboardingEmpty,
@@ -1002,6 +1002,7 @@ admin.post('/users/:user_id/resend-verification', async (c) => {
 // Also wired into the daily 04:20 UTC cron as a backup.
 admin.post('/maintenance/totp-remediation', async (c) => {
   await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
   await requireAdmin(c);
   const result = await runTotpRemediation(c.env);
   return c.json({ ok: true, ...result });
@@ -1012,6 +1013,7 @@ admin.post('/impersonate/:userId', async (c) => {
   // session must have authenticated with TOTP (not SMS, not a recovery
   // code). requireFactor throws 'TOTP required' (→403) otherwise.
   await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
   const adminUser = await requireAdmin(c);
   const userId = parseInt(c.req.param('userId'));
   const sql = getSQL(c.env);

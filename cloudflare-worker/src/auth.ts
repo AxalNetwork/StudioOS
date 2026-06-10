@@ -297,12 +297,24 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
     }
     // Per-session revocation. Tokens without jti skip (back-compat).
     const tokenJti = payload.jti;
+    // Task IB — session-scoped step-up deadline. Captured here so the
+    // auto-relock below can prefer it over the prod-broken users column.
+    let sessionStepUpDue: string | null = null;
     if (tokenJti) {
       try {
-        const sess = await c.env.DB.prepare(
-          'SELECT revoked_at FROM user_sessions WHERE jti = ? AND user_id = ?'
-        ).bind(tokenJti, payload.user_id).first<{ revoked_at: string | null }>();
+        let sess: { revoked_at: string | null; step_up_due_at?: string | null } | null = null;
+        try {
+          sess = await c.env.DB.prepare(
+            'SELECT revoked_at, step_up_due_at FROM user_sessions WHERE jti = ? AND user_id = ?'
+          ).bind(tokenJti, payload.user_id).first<{ revoked_at: string | null; step_up_due_at: string | null }>();
+        } catch {
+          // step_up_due_at column not migrated yet — fall back to the base check.
+          sess = await c.env.DB.prepare(
+            'SELECT revoked_at FROM user_sessions WHERE jti = ? AND user_id = ?'
+          ).bind(tokenJti, payload.user_id).first<{ revoked_at: string | null }>();
+        }
         if (!sess || sess.revoked_at) return null;
+        sessionStepUpDue = (sess as any).step_up_due_at ?? null;
         try {
           // T22.6 — Coalesce last_seen_at writes. Only update if the row's
           // existing value is >5 min old. Prevents a write per request on a
@@ -316,13 +328,19 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
         // user_sessions not migrated yet; rely on iat alone.
       }
     }
-    // Task #50 — lower-assurance step-up deadline. When a session was
-    // minted via the email-magic recovery layer ('email_only'), the user
-    // has 7 days to re-enrol TOTP (or a passkey, once shipped). Once
-    // that deadline elapses without re-enrolment, every subsequent
-    // request returns 401 EXCEPT the narrow re-enrol surface and the
-    // logout endpoint. This is the "auto-relock" enforcement.
-    const stepUpDue = (u as any).recovery_step_up_due_at as string | null;
+    // Task #50 / Task IB — lower-assurance step-up deadline. When a session
+    // was minted via the email-magic recovery layer OR the BLOCK-AUTH-01
+    // magic-link sign-in ('email_only'), the user has 7 days to re-enrol a
+    // strong factor. Once that deadline elapses without re-enrolment, every
+    // subsequent request returns 401 EXCEPT the narrow re-enrol surface and
+    // the logout endpoint. This is the "auto-relock" enforcement. We prefer
+    // the SESSION-scoped deadline (user_sessions.step_up_due_at) because the
+    // users.recovery_step_up_due_at column is unapplied/broken in prod (060).
+    // NOTE: the relock allowlist below currently exposes ONLY the TOTP re-enrol
+    // surface — passkey enrolment (/api/auth/passkey/*) is intentionally not a
+    // relock-recovery path yet, so a relocked user recovers via TOTP, then can
+    // add a passkey from a fresh full-assurance session.
+    const stepUpDue = sessionStepUpDue || ((u as any).recovery_step_up_due_at as string | null);
     if (stepUpDue) {
       let expired = false;
       try { expired = new Date(stepUpDue).getTime() < Date.now(); } catch {}
@@ -446,6 +464,80 @@ export async function requireFactor(
     throw new Error('TOTP required');
   }
   return user;
+}
+
+// ─────────────────────────────────────── BLOCK-AUTH-03 — step-up auth ──
+export const STEP_UP_TTL_MINUTES = 15;
+
+/** Parse a SQLite/D1 timestamp. CURRENT_TIMESTAMP is 'YYYY-MM-DD HH:MM:SS'
+ *  (UTC, no zone); ISO strings already carry T/Z. Returns NaN on failure. */
+function parseSqlTs(s: string | null | undefined): number {
+  if (!s) return NaN;
+  const iso = s.includes('T') ? s : s.replace(' ', 'T') + 'Z';
+  return Date.parse(iso);
+}
+
+/**
+ * Task IB (BLOCK-AUTH-03) — step-up auth. Stricter than requireFactor: the
+ * session must have been minted via a STRONG factor (TOTP or passkey) AND that
+ * factor (or an explicit POST /api/auth/step-up) must be RECENT (within
+ * ttlMinutes). Otherwise throws 'step_up_required' (mapped to 403
+ * {code:'step_up_required', ttl_minutes}) so the SPA can prompt for a fresh
+ * TOTP and retry. SMS / recovery-code / magic-link / google sessions can never
+ * satisfy step-up.
+ */
+export async function requireStepUp(
+  c: Context<{ Bindings: Env }>,
+  ttlMinutes: number = STEP_UP_TTL_MINUTES,
+): Promise<User> {
+  const user = await requireAuth(c);
+  const deny = (): never => {
+    const e: any = new Error('step_up_required');
+    e.ttlMinutes = ttlMinutes;
+    throw e;
+  };
+  const sel = await selectJwt(c);
+  const jti = sel?.payload?.jti as string | undefined;
+  if (!jti) deny();
+
+  let row: { factor: string | null; created_at: string | null; last_step_up_at?: string | null } | null = null;
+  try {
+    row = await c.env.DB.prepare(
+      'SELECT factor, created_at, last_step_up_at FROM user_sessions WHERE jti = ? AND user_id = ?'
+    ).bind(jti, user.id).first<{ factor: string | null; created_at: string | null; last_step_up_at: string | null }>();
+  } catch {
+    // last_step_up_at column not migrated yet — fall back to factor+created_at.
+    try {
+      row = await c.env.DB.prepare(
+        'SELECT factor, created_at FROM user_sessions WHERE jti = ? AND user_id = ?'
+      ).bind(jti, user.id).first<{ factor: string | null; created_at: string | null }>();
+    } catch { row = null; }
+  }
+  if (!row) deny();
+
+  const strong = row!.factor === 'totp' || row!.factor === 'passkey';
+  const candidates: number[] = [];
+  // A fresh strong-factor login counts as a step-up for its first ttl window.
+  if (strong) { const t = parseSqlTs(row!.created_at); if (!Number.isNaN(t)) candidates.push(t); }
+  // An explicit /step-up always counts, regardless of the original factor.
+  const stamped = parseSqlTs(row!.last_step_up_at);
+  if (!Number.isNaN(stamped)) candidates.push(stamped);
+
+  const mostRecent = candidates.length ? Math.max(...candidates) : 0;
+  if (!mostRecent || Date.now() - mostRecent > ttlMinutes * 60 * 1000) deny();
+  return user;
+}
+
+/**
+ * NICE-AUTH-04 — sign-out-everywhere primitive. Bumps users.jwt_min_iat so
+ * every JWT issued at or before now is rejected on its next request (see the
+ * minIat check in getCurrentUser). Returns the new epoch-seconds floor. Shared
+ * by POST /api/auth/sign-out-everywhere and POST /api/settings/sessions/revoke-all.
+ */
+export async function bumpJwtMinIat(env: Env, userId: number): Promise<number> {
+  const nowSec = Math.floor(Date.now() / 1000) + 1;
+  await env.DB.prepare('UPDATE users SET jwt_min_iat = ? WHERE id = ?').bind(nowSec, userId).run();
+  return nowSec;
 }
 
 export async function requireApprovedKyc(c: Context<{ Bindings: Env }>): Promise<User> {

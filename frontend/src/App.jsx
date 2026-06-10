@@ -141,6 +141,7 @@ import NotificationBell from './components/NotificationBell';
 import CommandPalette from './components/CommandPalette';
 // Task #7 (IG) — Contextual help (+ paid-tier customer chat) on every signed-in page.
 import HelpWidget from './components/HelpWidget';
+import StepUpModal from './components/StepUpModal';
 import InstallPrompt from './components/InstallPrompt';
 import KeyboardShortcutsOverlay from './components/KeyboardShortcutsOverlay';
 import useInactivityTimeout from './hooks/useInactivityTimeout';
@@ -708,6 +709,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
       <HelpWidget />
       <KeyboardShortcutsOverlay />
       <InstallPrompt />
+      <StepUpModal />
     </ViewModeContext.Provider>
   );
 }

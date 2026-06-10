@@ -10,6 +10,7 @@ import {
   Sun, Moon, ChevronDown, Check, Database,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
+import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 // Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
 import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
@@ -1043,6 +1044,115 @@ function EmailSection({ data, flash, reload }) {
 // back to a quiet "not available" notice so single-tenant deployments
 // without GCIP don't see a broken form. Phone numbers are stored encrypted
 // at rest server-side; the UI only ever sees the last 4 digits.
+// BLOCK-AUTH-02 — passkey (WebAuthn) management. Register a platform/roaming
+// authenticator, list registered passkeys, and remove them. A passkey is a
+// strong factor: signing in with one mints a full-assurance session that also
+// satisfies step-up, so it's a phishing-resistant alternative to the TOTP code.
+function PasskeyPanel({ flash }) {
+  const [passkeys, setPasskeys] = useState(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [removingId, setRemovingId] = useState(null);
+  const [label, setLabel] = useState('');
+  const supported = typeof window !== 'undefined' && browserSupportsWebAuthn();
+
+  const load = async () => {
+    setErr('');
+    try {
+      const r = await api.passkey.list();
+      setPasskeys(r?.passkeys || []);
+    } catch (e) { setErr(e?.message || 'Failed to load passkeys'); }
+  };
+  useEffect(() => { if (supported) load(); else setPasskeys([]); }, [supported]);
+
+  const addPasskey = async () => {
+    setBusy(true); setErr('');
+    try {
+      const options = await api.passkey.registerOptions();
+      const attResp = await startRegistration({ optionsJSON: options });
+      await api.passkey.registerVerify(attResp, label.trim() || 'Passkey');
+      setLabel('');
+      flash && flash('Passkey added.');
+      await load();
+    } catch (e) {
+      // User-cancelled / no authenticator surfaces as a DOMException; keep it quiet.
+      if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
+        setErr('Passkey setup was cancelled.');
+      } else {
+        setErr(e?.message || 'Could not add passkey.');
+      }
+    } finally { setBusy(false); }
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm('Remove this passkey? You will no longer be able to sign in with it.')) return;
+    setRemovingId(id); setErr('');
+    try {
+      await api.passkey.remove(id);
+      flash && flash('Passkey removed.');
+      await load();
+    } catch (e) { setErr(e?.message || 'Could not remove passkey.'); }
+    finally { setRemovingId(null); }
+  };
+
+  return (
+    <Card title="Passkeys"
+      description="Sign in with Face ID, Touch ID, Windows Hello, or a security key — no code to type. Passkeys are phishing-resistant and count as a strong factor.">
+      {!supported ? (
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          This browser doesn't support passkeys. Try a recent version of Safari, Chrome, or Edge.
+        </div>
+      ) : (
+        <>
+          {err && <div className="text-sm text-red-600 mb-3">{err}</div>}
+          {passkeys === null ? (
+            <div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div>
+          ) : passkeys.length === 0 ? (
+            <div className="text-sm text-gray-500 dark:text-gray-400 mb-4">No passkeys yet. Add one to sign in without a code.</div>
+          ) : (
+            <ul className="space-y-2 mb-4">
+              {passkeys.map((p) => (
+                <li key={p.id} className="flex items-center justify-between gap-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
+                  <div className="min-w-0 flex items-center gap-2">
+                    <KeyRound size={16} className="text-violet-500 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{p.name || 'Passkey'}</div>
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                        Added {p.created_at ? new Date(p.created_at).toLocaleDateString() : '—'}
+                        {p.last_used_at ? ` · last used ${new Date(p.last_used_at).toLocaleDateString()}` : ''}
+                        {Number(p.backed_up) === 1 ? ' · synced' : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <button onClick={() => remove(p.id)} disabled={removingId === p.id}
+                    className="text-xs text-red-600 hover:text-red-800 disabled:text-gray-400 shrink-0">
+                    {removingId === p.id ? 'Removing…' : 'Remove'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              value={label}
+              onChange={(e) => setLabel(e.target.value.slice(0, 60))}
+              placeholder="Name this passkey (e.g. MacBook Touch ID)"
+              className={inputCls + ' flex-1'}
+            />
+            <button onClick={addPasskey} disabled={busy}
+              className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 shrink-0">
+              <Plus size={14} /> {busy ? 'Waiting for authenticator…' : 'Add passkey'}
+            </button>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+// SMS as a backup 2FA factor (Google Cloud Identity Platform). Phone numbers
+// at rest server-side; the UI only ever sees the last 4 digits.
 function SmsPanel({ data, flash }) {
   const [status, setStatus] = useState(null);
   const [step, setStep] = useState('idle');           // idle | enroll | verify
@@ -1652,6 +1762,8 @@ function AuthSection({ data, flash }) {
           </div>
         )}
       </Card>
+
+      <PasskeyPanel flash={flash} />
 
       <SmsPanel data={data} flash={flash} />
 

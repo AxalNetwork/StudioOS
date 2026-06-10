@@ -28,6 +28,32 @@ function getCsrfHeader(method) {
   return {};
 }
 
+// BLOCK-AUTH-03 — global step-up coordination. When the worker returns
+// 403 {code:'step_up_required'}, request() calls requestStepUp(), which fans out
+// a `studioos:step_up_required` event carrying a `done(ok)` callback. A globally
+// mounted <StepUpModal> collects a fresh TOTP, POSTs /auth/step-up, then calls
+// done(true) so the original request is retried once. Concurrent 403s share one
+// in-flight prompt. If no modal is mounted (e.g. nothing listening), we fail
+// fast via the synchronous `ack` flag so the request never hangs.
+let _stepUpInFlight = null;
+function requestStepUp(ttlMinutes) {
+  if (_stepUpInFlight) return _stepUpInFlight;
+  _stepUpInFlight = new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') { reject(new Error('step_up_unavailable')); return; }
+    let settled = false;
+    const done = (ok) => {
+      if (settled) return;
+      settled = true;
+      _stepUpInFlight = null;
+      if (ok) resolve(); else reject(new Error('step_up_cancelled'));
+    };
+    const detail = { ttlMinutes: ttlMinutes || 15, done, ack: false };
+    window.dispatchEvent(new CustomEvent('studioos:step_up_required', { detail }));
+    if (!detail.ack) done(false); // no modal listening — surface the original 403
+  });
+  return _stepUpInFlight;
+}
+
 export async function request(path, options = {}) {
   try {
     // FormData uploads must NOT carry an explicit Content-Type — the browser
@@ -125,6 +151,22 @@ export async function request(path, options = {}) {
           } catch { /* noop */ }
         }
       }
+      // BLOCK-AUTH-03 — step-up gate. Prompt for a fresh TOTP via the global
+      // modal, then retry the ORIGINAL request once. `__steppedUp` guards
+      // against an infinite loop; we never intercept the step-up call itself.
+      if (
+        res.status === 403 &&
+        err && err.code === 'step_up_required' &&
+        !options.__steppedUp &&
+        !path.startsWith('/auth/step-up')
+      ) {
+        try {
+          await requestStepUp(err.ttl_minutes);
+        } catch {
+          throw e; // user cancelled — surface the original 403
+        }
+        return request(path, { ...options, __steppedUp: true });
+      }
       throw e;
     }
     const data = await res.json().catch(() => {
@@ -202,6 +244,27 @@ export const api = {
   },
   getConnectedAccounts: () => request('/settings/connected-accounts'),
   unlinkGoogle: () => request('/settings/connected-accounts/google/unlink', { method: 'POST' }),
+  // BLOCK-AUTH-01 — passwordless magic-link sign-in. /start always returns the
+  // same 202 (no account-existence leak); the link in the email hits the
+  // worker's GET /magic/verify which sets cookies and 302s into the SPA.
+  magicStart: (email) => request('/auth/magic/start', { method: 'POST', body: JSON.stringify({ email }) }),
+  // BLOCK-AUTH-03 — step-up: re-assert a RECENT TOTP for the current session.
+  stepUp: (totp_code) => request('/auth/step-up', { method: 'POST', body: JSON.stringify({ totp_code }) }),
+  // NICE-AUTH-04 — sign out every active session (alias of revokeAllSessions).
+  signOutEverywhere: () => request('/auth/sign-out-everywhere', { method: 'POST', body: JSON.stringify({}) }),
+  // BLOCK-AUTH-02 — passkeys / WebAuthn. register-* require an authed session;
+  // auth-* are the passwordless login path keyed by email.
+  passkey: {
+    registerOptions: () => request('/auth/passkey/register-options'),
+    registerVerify: (attResp, label) =>
+      request('/auth/passkey/register-verify', { method: 'POST', body: JSON.stringify({ response: attResp, label }) }),
+    authOptions: (email) =>
+      request('/auth/passkey/auth-options', { method: 'POST', body: JSON.stringify({ email }) }),
+    authVerify: (email, assertionResp) =>
+      request('/auth/passkey/auth-verify', { method: 'POST', body: JSON.stringify({ email, response: assertionResp }) }),
+    list: () => request('/auth/passkey/list'),
+    remove: (id) => request(`/auth/passkey/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  },
   // Task #7 (IG) — Cmd+K + Help widget + Customer chat.
   getRecentActivity: (limit = 20) => request(`/activity/recent?limit=${encodeURIComponent(limit)}`),
   getCustomerChatThread: () => request('/customer-chat/thread'),

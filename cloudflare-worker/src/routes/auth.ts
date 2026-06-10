@@ -3,8 +3,10 @@ import { TOTP, Secret } from 'otpauth';
 import * as QRCode from 'qrcode';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken, revokeStaleCrossIdentitySession } from '../auth';
+import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken, revokeStaleCrossIdentitySession, selectJwt, bumpJwtMinIat, STEP_UP_TTL_MINUTES } from '../auth';
 import { sendVerificationEmail } from '../services/email';
+import { send as sendEmail } from '../services/email/send';
+import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
 import { verifyTurnstile } from '../services/turnstile';
 import { persistNewTotpEnrolment, loadTotp, updateRecoveryHashes, markTotpUsed, hasTotpConfigured, clearTotp } from '../services/authTotp';
 import { setUserFactor } from '../services/authSms';
@@ -875,6 +877,201 @@ auth.post('/verify-totp', safe('verify-totp', 'Could not verify your code. Pleas
   const totp = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
   const valid = totp.validate({ token: totp_code, window: 1 }) !== null;
   return c.json({ valid });
+}));
+
+// ───────────────────────────────────── BLOCK-AUTH-01 — magic-link sign-in ──
+// Passwordless email sign-in / sign-up. /magic/start emails a single-use,
+// 15-minute link; /magic/verify claims it, find-or-creates the account, and
+// mints a LOWER-assurance ('email_only') session that must step-up to TOTP
+// within 7 days (enforced session-scoped by getCurrentUser auto-relock). We
+// never reveal whether an email exists — /start always returns the same 202.
+const MAGIC_LINK_TTL_MIN = 15;
+const MAGIC_STEP_UP_DAYS = 7;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function publicBase(env: Env): string {
+  return String((env as any).PUBLIC_BASE_URL || (env as any).APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+}
+
+auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link. Please try again in a moment.', async (c) => {
+  await ensureAuthBlockersSchema(c.env);
+  const ip = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64);
+  if (!(await checkRateLimit(c.env, `magic-start-ip:${ip || 'unknown'}`, 5, 300))) {
+    return c.json({ error: 'Too many requests. Please wait a minute and try again.' }, 429);
+  }
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+  const email = String(parsed.body?.email || '').toLowerCase().trim();
+  if (!EMAIL_RE.test(email)) return c.json({ error: 'Please enter a valid email address' }, 400);
+  if (!(await checkRateLimit(c.env, `magic-start-email:${email}`, 3, 900))) {
+    return c.json({ error: 'Too many requests for this email. Please wait a few minutes.' }, 429);
+  }
+
+  const raw = generateToken();
+  const tokenHash = await hashToken(raw);
+  const expires = new Date(Date.now() + MAGIC_LINK_TTL_MIN * 60 * 1000).toISOString();
+  const ua = (c.req.header('user-agent') || '').slice(0, 500);
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO magic_link_tokens (email, token_hash, expires_at, ip, user_agent) VALUES (?, ?, ?, ?, ?)`,
+    ).bind(email, tokenHash, expires, ip || null, ua || null).run();
+  } catch (e) {
+    console.error('[AUTH:magic-start] token insert failed', e);
+    return c.json({ error: 'Could not send your sign-in link. Please try again in a moment.' }, 500);
+  }
+
+  const magicUrl = `${publicBase(c.env)}/api/auth/magic/verify?token=${raw}`;
+  // Use the account's name if we already know it — no enumeration leak, the
+  // response shape is identical whether or not the account exists.
+  let name = email.split('@')[0];
+  try {
+    const sql = getSQL(c.env);
+    const rows = await sql`SELECT name FROM users WHERE email = ${email}`;
+    await sql.end();
+    if (rows.length && rows[0].name) name = rows[0].name;
+  } catch {}
+  try {
+    await sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl });
+  } catch (e) {
+    console.error('[AUTH:magic-start] email send failed', e);
+  }
+  return c.json({ ok: true, message: 'If that email is valid, a sign-in link is on its way. It expires in 15 minutes.' }, 202);
+}));
+
+auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in link.', async (c) => {
+  await ensureAuthBlockersSchema(c.env);
+  const base = publicBase(c.env);
+  const fail = (code: string) => c.redirect(`${base}/login?magic_error=${code}`, 302);
+  const token = String(c.req.query('token') || '');
+  if (!token) return fail('invalid');
+  const ip = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64);
+  if (!(await checkRateLimit(c.env, `magic-verify-ip:${ip || 'unknown'}`, 20, 300))) return fail('rate');
+
+  const tokenHash = await hashToken(token);
+  // Atomic single-use claim — succeeds only for an unused, unexpired token.
+  let claimed: { email: string } | null = null;
+  try {
+    claimed = await c.env.DB.prepare(
+      `UPDATE magic_link_tokens SET used_at = CURRENT_TIMESTAMP
+         WHERE token_hash = ? AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+         RETURNING email`,
+    ).bind(tokenHash).first() as { email: string } | null;
+  } catch (e) {
+    console.error('[AUTH:magic-verify] claim failed', e);
+    return fail('invalid');
+  }
+  if (!claimed) return fail('expired');
+  const email = String(claimed.email).toLowerCase().trim();
+
+  const sql = getSQL(c.env);
+  try {
+    let user: any;
+    let newSignup = false;
+    const existing = await sql`SELECT * FROM users WHERE email = ${email}`;
+    if (existing.length) {
+      user = existing[0];
+      if (Number(user.is_active ?? 1) === 0) { await sql.end(); return fail('inactive'); }
+      if (!user.email_verified) {
+        await sql`UPDATE users SET email_verified = true WHERE id = ${user.id}`;
+        user.email_verified = true;
+      }
+    } else {
+      const inserted = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${email.split('@')[0]}, 'founder', true) RETURNING *`;
+      user = inserted[0];
+      newSignup = true;
+    }
+
+    const eh = await hashEmail(user.email);
+    if (newSignup) {
+      await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+                VALUES ('user_signup_magic', ${`magic-link sign-up (email_hash=${eh})`}, ${eh}, ${user.id})`;
+    }
+
+    // Mint a LOWER-assurance session. factor='magic' so requireFactor('totp')
+    // AND requireStepUp() still gate sensitive routes; the 7-day session-scoped
+    // step_up_due_at drives the getCurrentUser auto-relock.
+    const jti = crypto.randomUUID();
+    const jwtToken = await createJWT(c.env, user.id, user.email, user.role, undefined, jti);
+    const ua = (c.req.header('user-agent') || '').slice(0, 500);
+    const stepUpDue = new Date(Date.now() + MAGIC_STEP_UP_DAYS * 86400 * 1000).toISOString();
+    try {
+      await sql`INSERT INTO user_sessions (user_id, jti, user_agent, ip, factor, assurance_level, step_up_due_at)
+                VALUES (${user.id}, ${jti}, ${ua || null}, ${ip || null}, 'magic', 'email_only', ${stepUpDue})`;
+    } catch (e) { console.error('[AUTH:magic-verify] session insert failed', e); }
+
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+              VALUES ('user_login_magic', ${`magic-link sign-in (email_hash=${eh})`}, ${eh}, ${user.id})`;
+    await sql.end();
+
+    // Best-effort downstream seeding for brand-new accounts (mirrors /register + Google).
+    if (newSignup) {
+      try { const { seedObligations } = await import('../services/trust'); await seedObligations(c.env, user.id, user.role || 'founder'); } catch (e) { console.error('[AUTH:magic-verify] trust seed failed', e); }
+      try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'partner', id: user.id }); } catch {}
+    }
+
+    await revokeStaleCrossIdentitySession(c, user.id);
+    const csrf = generateCsrfToken();
+    setAuthCookies(c, jwtToken, csrf);
+    const landing = newSignup ? '/onboarding/chat' : '/dashboard';
+    return c.redirect(`${base}${landing}?magic=ok`, 302);
+  } catch (e) {
+    try { await sql.end(); } catch {}
+    console.error('[AUTH:magic-verify] error', e);
+    return fail('error');
+  }
+}));
+
+// ──────────────────────────────────────── BLOCK-AUTH-03 — step-up auth ──
+// Re-assert a RECENT TOTP for the current session. Stamps last_step_up_at on
+// the session row so requireStepUp() passes for the next ttl window. TOTP-only
+// by design — recovery codes / SMS / magic / google can never satisfy step-up.
+auth.post('/step-up', safe('step-up', 'Could not verify your code. Please try again.', async (c) => {
+  await ensureAuthBlockersSchema(c.env);
+  const user = await requireAuth(c);
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+  const code = String(parsed.body?.totp_code || '').trim();
+  if (!code) return c.json({ error: 'Authenticator code required' }, 400);
+  if (!(await checkRateLimit(c.env, `stepup:${user.id}`, 5, 300))) {
+    return c.json({ error: 'Too many attempts. Please wait a few minutes.' }, 429);
+  }
+  const sel = await selectJwt(c);
+  const jti = sel?.payload?.jti as string | undefined;
+  if (!jti) return c.json({ error: 'No active session' }, 401);
+
+  const totpRow = await loadTotp(c.env, user.id, (user as any).password_hash, (user as any).totp_recovery_codes);
+  if (!totpRow) return c.json({ error: 'No authenticator is set up on this account.', code: 'totp_not_configured' }, 400);
+  const totp = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
+  if (totp.validate({ token: code, window: 1 }) === null) {
+    return c.json({ error: 'Invalid authenticator code' }, 401);
+  }
+  await markTotpUsed(c.env, user.id);
+  const now = new Date().toISOString();
+  try {
+    await c.env.DB.prepare(
+      `UPDATE user_sessions SET last_step_up_at = ? WHERE jti = ? AND user_id = ?`,
+    ).bind(now, jti, user.id).run();
+  } catch (e) {
+    console.error('[AUTH:step-up] stamp failed', e);
+    return c.json({ error: 'Could not record step-up. Please try again.' }, 500);
+  }
+  return c.json({ ok: true, stepped_up_at: now, ttl_minutes: STEP_UP_TTL_MINUTES });
+}));
+
+// ─────────────────────────── NICE-AUTH-04 — sign-out-everywhere alias ──
+// Alias of POST /api/settings/sessions/revoke-all. Same jwt_min_iat bump;
+// kept as a distinct /api/auth path so the SPA + integrations can call either.
+auth.post('/sign-out-everywhere', safe('sign-out-everywhere', 'Could not sign out other sessions.', async (c) => {
+  const user = await requireAuth(c);
+  const nowSec = await bumpJwtMinIat(c.env, user.id);
+  try {
+    const eh = await hashEmail(user.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id)
+       VALUES ('sessions_revoked_all', 'User revoked all active sessions via /api/auth/sign-out-everywhere', ?, ?)`,
+    ).bind(eh, user.id).run();
+  } catch {}
+  return c.json({ ok: true, revoked_at: nowSec });
 }));
 
 // Task #6 — mount SMS 2FA endpoints (and the /factors discovery endpoint)

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, requireFactor } from '../auth';
+import { requireAdmin, requireFactor, requireStepUp } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken } from '../services/signedDownload';
 import { sendAgreementAssignedEmail } from '../services/email';
@@ -973,6 +973,7 @@ adminContracts.post('/:uid/void', async (c) => {
   // Task #6 — voiding a contract is irreversible from the recipient's POV
   // (their magic link stops working). Gate on TOTP step-up.
   await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
   const adminUser = await requireAdmin(c);
   const uid = c.req.param('uid') ?? '';
   const body = await c.req.json().catch(() => ({} as any));

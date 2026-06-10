@@ -14,7 +14,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, requireAuth, requireFactor } from '../auth';
+import { requireAdmin, requireAuth, requireFactor, requireStepUp } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken, verifyAndConsumeToken } from '../services/signedDownload';
 import { notify } from '../services/notify';
@@ -538,6 +538,7 @@ dd.post('/cases/:uid/report', async (c) => {
   // /reports/download/:token GET stays unauth-by-token; this is the
   // chokepoint that controls who can hand out tokens in the first place.
   await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
   const cs = await getCaseByUid(c.env, c.req.param('uid'));
   if (!cs) return c.json({ error: 'Case not found' }, 404);
   let user: AppUser;
