@@ -134,11 +134,11 @@ workflow input.
 - [ ] **Operator**: add `SLACK_OPS_WEBHOOK_URL` to GitHub Actions secrets (Settings → Secrets and variables → Actions).
 - [ ] **Operator** (optional, recommended): install the pre-commit hook via `npm run lfs:install-hook` (added in this task).
 
-## 2026-06-10 follow-up — Bucket A applied (A1–A5)
+## 2026-06-06 follow-up — Bucket A applied (A1–A7)
 
 This section records the post-audit drift and the changes applied to close the gap without history rewrites.
 
-### Post-audit drift (2026-05-21 → 2026-06-10)
+### Post-audit drift (2026-05-21 → 2026-06-06)
 
 - 547 new PNGs were added since the baseline audit.
 - 60 oversize files (> 500 KB) now trip `--all` (previously 325 tracked files > 100 KB at audit baseline):
