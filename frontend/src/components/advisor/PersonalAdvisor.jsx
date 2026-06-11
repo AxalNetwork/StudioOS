@@ -10,15 +10,14 @@
  * Behaviour:
  *  - Mobile (`< md`): inline card in the dashboard slot, with the chat
  *    column capped at `max-h-[60vh]` so the transcript scrolls inside
- *    the widget instead of taking over the viewport. Floating bubble
- *    when minimised. (Previously this was a `fixed inset-0` full-screen
- *    takeover; removed because it hid the rest of the dashboard.)
- *  - Desktop (`md+`): pinned card in the dashboard slot when open,
- *    fixed-position floating bubble in the bottom-right when
- *    minimised. Right rail (section focus + per-page rings) is
- *    desktop-only.
+ *    the widget instead of taking over the viewport.
+ *  - Desktop (`md+`): pinned card in the dashboard slot. Right rail
+ *    (section focus + per-page rings) is desktop-only.
+ *  - A fullscreen view mode (`viewMode: 'normal' | 'fullscreen'`) lets
+ *    the chat take over the viewport; the header's maximize button
+ *    toggles it. (Replaces the legacy minimise-to-bubble pattern.)
  *  - Conversation state persists across reloads via the
- *    `advisor:state` localStorage key (open/closed + last seen
+ *    `advisor:state` localStorage key (view mode + last seen
  *    conversation_id) — the actual transcript lives server-side and
  *    is re-hydrated by GET `/advisor/conversations/:id`.
  *
@@ -33,7 +32,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Sparkles, Send, X, Minus, HelpCircle, Loader2, CheckCircle2,
+  Sparkles, Send, X, Maximize2, HelpCircle, Loader2, CheckCircle2,
   ArrowRight, MessageSquare, SkipForward, BookOpen,
 } from 'lucide-react';
 import { api, spinoutLab as spinoutLabApi } from '../../lib/api';
@@ -75,8 +74,11 @@ function useIsDesktop() {
 
 export default function PersonalAdvisor() {
   const { user } = useAuth();
-  const persisted = useMemo(() => safeReadJSON(STORAGE_KEY, { minimised: false }) || { minimised: false }, []);
-  const [minimised, setMinimised] = useState(!!persisted.minimised);
+  const persisted = useMemo(() => safeReadJSON(STORAGE_KEY, {}) || {}, []);
+  // viewMode: 'normal' (embedded card) | 'fullscreen' (viewport takeover).
+  // Migration: legacy persisted state used a `minimised` boolean (now
+  // removed) — we ignore it and default to 'normal'.
+  const [viewMode, setViewMode] = useState(persisted.viewMode === 'fullscreen' ? 'fullscreen' : 'normal');
   const [conversationId, setConversationId] = useState(persisted.conversation_id || null);
   const [persona, setPersona] = useState(null);
   const [question, setQuestion] = useState(null);     // public_question shape from server
@@ -120,8 +122,8 @@ export default function PersonalAdvisor() {
 
   // ---------- Persistence -------------------------------------------------
   useEffect(() => {
-    safeWriteJSON(STORAGE_KEY, { minimised, conversation_id: conversationId });
-  }, [minimised, conversationId]);
+    safeWriteJSON(STORAGE_KEY, { viewMode, conversation_id: conversationId });
+  }, [viewMode, conversationId]);
 
   // ---------- Server-driven progress (by_page / by_section / overall) ----
   const refreshProgress = useCallback(async () => {
@@ -195,7 +197,7 @@ export default function PersonalAdvisor() {
   // content carries `kind: 'advisor-progress' | 'page-fill'`.
   const wsPath = user?.id ? `/api/onboarding/ws/${user.id}` : null;
   useWebSocket(wsPath, {
-    enabled: !!user?.id && !minimised,
+    enabled: !!user?.id,
     onMessage: (msg) => {
       if (!msg) return;
       // The DO wraps payloads as chat_message frames with role='system'
@@ -529,13 +531,10 @@ export default function PersonalAdvisor() {
   // tile to the user.
   if (unavailable) return null;
 
-  if (minimised) return <MinimisedBubble onOpen={() => setMinimised(false)} percent={progress.percent} />;
-
   // Mobile no longer takes over the viewport. The advisor renders as an
   // inline, height-capped card so the rest of the dashboard (Quick Stats,
-  // Performance Analytics, etc.) stays scrollable around it. Users who
-  // want it out of the way can tap Minimise to collapse to the floating
-  // bubble (same UX as desktop).
+  // Performance Analytics, etc.) stays scrollable around it. The header's
+  // maximize button switches to the fullscreen view (added in a later task).
   const containerClass =
     'bg-white dark:bg-gray-900 border border-violet-200 dark:border-violet-900/50 rounded-xl shadow-sm overflow-hidden flex flex-col';
 
@@ -544,8 +543,7 @@ export default function PersonalAdvisor() {
       <Header
         persona={persona}
         progress={progress}
-        onMinimise={() => setMinimised(true)}
-        isDesktop={isDesktop}
+        onMaximize={() => setViewMode('fullscreen')}
       />
       {weekBanner && <WeekBanner week={weekBanner.week} />}
 
@@ -660,23 +658,7 @@ export default function PersonalAdvisor() {
 
 // ---------- Subcomponents -----------------------------------------------
 
-function MinimisedBubble({ onOpen, percent }) {
-  return (
-    <button
-      onClick={onOpen}
-      className="fixed bottom-4 right-4 z-40 flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-3 rounded-full shadow-lg print:hidden"
-      title="Open Personal Advisor"
-    >
-      <Sparkles size={16} />
-      <span className="text-sm font-medium">Advisor</span>
-      {percent > 0 && percent < 100 && (
-        <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full">{percent}%</span>
-      )}
-    </button>
-  );
-}
-
-function Header({ persona, progress, onMinimise, isDesktop }) {
+function Header({ persona, progress, onMaximize }) {
   return (
     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/30 dark:to-indigo-950/30">
       <div className="flex items-center gap-3 min-w-0">
@@ -692,11 +674,11 @@ function Header({ persona, progress, onMinimise, isDesktop }) {
       </div>
       <div className="flex items-center gap-1">
         <button
-          onClick={onMinimise}
+          onClick={onMaximize}
           className="p-1.5 rounded text-gray-600 dark:text-gray-300 hover:bg-white/60 dark:hover:bg-gray-800/60"
-          title={isDesktop ? 'Minimise to bubble' : 'Close'}
+          title="Open fullscreen"
         >
-          {isDesktop ? <Minus size={16} /> : <X size={16} />}
+          <Maximize2 size={16} />
         </button>
       </div>
     </div>
