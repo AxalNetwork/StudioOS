@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Admin pages are working again
+
+Admin tools and pages that were loading empty or showing "Request failed" are back to normal. An extra production sign-in layer had been unintentionally blocking the admin area; it has been removed. Your in-app admin permissions still protect those pages exactly as before.
+
+---
+
 ## Cover images for your articles now work
 
 When you add a cover image to an article, you'll now see it right away: a preview appears the moment you pick a file, the button shows "Uploading…" while it saves, and the saved image stays put after a refresh — both while you're drafting and once the article is published. If an upload can't go through (the file is too big or the wrong type), you'll get a clear message explaining why instead of a vague error.

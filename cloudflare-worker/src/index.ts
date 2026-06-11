@@ -481,25 +481,17 @@ app.use('/api/assistant/*', async (c, next) => {
 app.route('/api/assistant', assistantRoutes);
 app.route('/api/advisory', advisory);
 app.route('/api/activity', activity);
-// Task #33 — Cloudflare Access perimeter on the most sensitive route groups.
-// `requireCfAccess` is a soft no-op when CF_ACCESS_TEAM_DOMAIN / CF_ACCESS_AUD
-// are unset (dev/preview); production wrangler secrets engage the gate. The
-// in-app requireAdmin/requireAuth checks still run as the inner perimeter.
-// We mount BOTH the exact root and the wildcard because Hono's `/*`
-// pattern doesn't always match the bare root path — without this any
-// `GET /api/admin` (no trailing slash) would skip the perimeter and rely
-// on RBAC alone, which is exactly the leaked-admin-JWT scenario this
-// middleware exists to defend against.
-// IMPORTANT: every path gated here MUST also be listed as a path in the
-// Cloudflare Access application, or Cloudflare never injects the assertion
-// header and requireCfAccess() returns 403 to EVERYONE (incl. SSO'd admins)
-// the moment the secrets are set. See GOTCHAS.md item (h).
-app.use('/api/admin', requireCfAccess());
-app.use('/api/admin/*', requireCfAccess());
-app.use('/api/monitoring', requireCfAccess());
-app.use('/api/monitoring/*', requireCfAccess());
-app.use('/api/infra', requireCfAccess());
-app.use('/api/infra/*', requireCfAccess());
+// Task #33 — Cloudflare Access perimeter on /api/admin, /api/monitoring and
+// /api/infra was REMOVED. The Access app is configured on the apex only, while
+// the SPA uses a relative API base (BASE='/api' in frontend/src/lib/api.js), so
+// app.axal.vc/api/admin/* fetches could not carry the Cf-Access-Jwt-Assertion
+// header — requireCfAccess() then fail-closed with 403 for legitimate admins and
+// took the entire admin/monitoring/infra UI down. These route groups remain
+// protected by the in-app requireAdmin/requireAuth RBAC (the inner perimeter).
+// Do NOT re-add requireCfAccess() here without first completing the re-engage
+// checklist in GOTCHAS.md item (h): every worker-gated path must also be a path
+// in the Access app AND admin traffic must be routed to the gated host, or the
+// admin API goes down again.
 
 // Mount the more-specific /admin/contracts prefix FIRST so it takes
 // precedence over the generic /admin router (which has no contract routes).
