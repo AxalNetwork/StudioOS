@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -230,7 +230,62 @@ function CompareStep({ jurisdictions, recommendedId, selectedId, setSelectedId }
   );
 }
 
-function ConfirmStep({ jurisdiction, projects, form, setForm }) {
+// Task #10 — availability pill under the company-name input. Renders nothing
+// until there's something to say; "unavailable" is informational and never
+// blocks submit.
+function NameAvailability({ jurisdiction, nameChecking, nameCheck, skipNameCheck, setSkipNameCheck }) {
+  if (nameChecking) {
+    return (
+      <div className="mt-2 flex items-center gap-1.5 text-xs text-gray-500">
+        <Loader2 className="animate-spin" size={13} /> Checking availability on the {jurisdiction.country} register…
+      </div>
+    );
+  }
+  if (!nameCheck) return null;
+
+  if (nameCheck.status === 'available') {
+    return (
+      <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+        <CheckCircle2 size={13} /> Looks available on the {jurisdiction.country} register.
+      </div>
+    );
+  }
+
+  if (nameCheck.status === 'taken') {
+    const matches = (nameCheck.matches || []).slice(0, 3);
+    return (
+      <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-2.5 dark:border-red-900/50 dark:bg-red-950/30">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-red-700 dark:text-red-400">
+          <AlertTriangle size={13} /> That name appears to be taken on the {jurisdiction.country} register.
+        </div>
+        {matches.length > 0 && (
+          <ul className="mt-1 list-disc pl-4 text-[11px] text-red-700/90 dark:text-red-300/90">
+            {matches.map((m) => <li key={m}>{m}</li>)}
+          </ul>
+        )}
+        <label className="mt-2 flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer dark:text-gray-400">
+          <input
+            type="checkbox"
+            checked={skipNameCheck}
+            onChange={(e) => setSkipNameCheck(e.target.checked)}
+            className="rounded"
+          />
+          Use this name anyway — I'll verify availability myself
+        </label>
+      </div>
+    );
+  }
+
+  // unavailable — couldn't check (e.g. register down, no key, or dev env).
+  return (
+    <div className="mt-2 flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-500">
+      <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
+      <span>Couldn't verify automatically — please check the official {jurisdiction.country} register before filing.</span>
+    </div>
+  );
+}
+
+function ConfirmStep({ jurisdiction, projects, form, setForm, nameCheck, nameChecking, skipNameCheck, setSkipNameCheck }) {
   if (!jurisdiction) {
     // Defensive — Next button on step 1 is gated on selectedId + a populated
     // jurisdictions list, so this branch should be unreachable. If we still
@@ -269,6 +324,13 @@ function ConfirmStep({ jurisdiction, projects, form, setForm }) {
                        jurisdiction.id === 'uk_ltd' ? 'e.g. Acme Limited' :
                        jurisdiction.id === 'ee_oy' ? 'e.g. Acme OÜ' : 'e.g. Acme, Inc.'}
           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 dark:border-gray-700"
+        />
+        <NameAvailability
+          jurisdiction={jurisdiction}
+          nameChecking={nameChecking}
+          nameCheck={nameCheck}
+          skipNameCheck={skipNameCheck}
+          setSkipNameCheck={setSkipNameCheck}
         />
       </div>
 
@@ -402,6 +464,11 @@ export default function IncorporatePage() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
+  // Task #10 — live company-name availability state.
+  const [nameCheck, setNameCheck] = useState(null);
+  const [nameChecking, setNameChecking] = useState(false);
+  const [skipNameCheck, setSkipNameCheck] = useState(false);
+  const nameCheckSeq = useRef(0);
 
   const [answers, setAnswers] = useState({
     raisingVc: '', region: '', minimalCost: '', entityPref: '',
@@ -463,6 +530,35 @@ export default function IncorporatePage() {
     if (step === 1 && !selectedId && recommendedId) setSelectedId(recommendedId);
   }, [step, recommendedId, selectedId]);
 
+  // Task #10 — debounced, sequence-guarded company-name availability check on
+  // the Confirm step. A slow lookup never clobbers a newer one, and ANY
+  // failure (incl. the dev FastAPI env, which has no such route) degrades to
+  // "couldn't check — verify manually" rather than blocking the wizard.
+  useEffect(() => {
+    setSkipNameCheck(false);
+    const name = form.company_name.trim();
+    if (step !== 2 || !selectedId || name.length < 2) {
+      setNameChecking(false);
+      setNameCheck(null);
+      return;
+    }
+    const seq = ++nameCheckSeq.current;
+    setNameChecking(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await api.legalNameCheck(selectedId, name);
+        if (seq !== nameCheckSeq.current) return; // a newer check superseded us
+        setNameCheck(res);
+      } catch {
+        if (seq !== nameCheckSeq.current) return;
+        setNameCheck({ status: 'unavailable', reason: 'check_failed' });
+      } finally {
+        if (seq === nameCheckSeq.current) setNameChecking(false);
+      }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [step, selectedId, form.company_name]);
+
   const selected = jurisdictions.find((j) => j.id === selectedId) || null;
   const goalsAnswered = answers.raisingVc && answers.region && answers.minimalCost && answers.entityPref;
 
@@ -470,6 +566,11 @@ export default function IncorporatePage() {
     if (!form.company_name.trim()) { setErr('Enter a company name to continue.'); return; }
     if (!form.project_id) { setErr('Select a project to attach the documents to.'); return; }
     if (!selectedId) { setErr('Pick a jurisdiction.'); return; }
+    if (nameChecking) { setErr('Hold on — still checking name availability.'); return; }
+    if (nameCheck?.status === 'taken' && !skipNameCheck) {
+      setErr('That company name appears to be taken. Pick another name, or tick "use this name anyway" to proceed.');
+      return;
+    }
     setBusy(true); setErr('');
     try {
       const res = await api.legalIncorporateWizard({
@@ -543,6 +644,10 @@ export default function IncorporatePage() {
                 projects={projects}
                 form={form}
                 setForm={setForm}
+                nameCheck={nameCheck}
+                nameChecking={nameChecking}
+                skipNameCheck={skipNameCheck}
+                setSkipNameCheck={setSkipNameCheck}
               />
             )}
             {step === 3 && <DoneStep result={result} navigate={navigate} />}
@@ -569,7 +674,7 @@ export default function IncorporatePage() {
             ) : (
               <button
                 onClick={submit}
-                disabled={busy}
+                disabled={busy || nameChecking || (nameCheck?.status === 'taken' && !skipNameCheck)}
                 className="inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2 rounded-md disabled:opacity-50"
               >
                 {busy ? <Loader2 className="animate-spin" size={14} /> : <Building2 size={14} />}

@@ -332,6 +332,9 @@ export const api = {
   incorporateProject: (projectId) => request(`/legal/incorporate?project_id=${projectId}`, { method: 'POST' }),
   // Task #30 — Jurisdiction wizard
   legalJurisdictions: () => request('/legal/jurisdictions'),
+  // Task #10 — live company-name availability check (Confirm step).
+  legalNameCheck: (jurisdictionId, name) =>
+    request(`/legal/name-check?jurisdiction_id=${encodeURIComponent(jurisdictionId)}&name=${encodeURIComponent(name)}`),
   legalIncorporateWizard: (data) =>
     request('/legal/incorporate/wizard', { method: 'POST', body: JSON.stringify(data) }),
   // Task #31 — Co-founder agreement + 83(b) tracker

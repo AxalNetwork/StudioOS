@@ -304,6 +304,19 @@ export interface Env {
   // Crunchbase API
   CRUNCHBASE_API_KEY?: string;
 
+  // Task #10 — Incorporate wizard live company-name availability check.
+  // All optional: when a key is unset the relevant register degrades to
+  // "could not check — verify manually" rather than erroring.
+  //   COMPANIES_HOUSE_API_KEY — free Companies House REST key (UK), used as
+  //     the Basic-auth username. Falls back to the BROWSER binding when unset.
+  //   OPENCORPORATES_API_KEY  — backs the Delaware (us_de) look-up; also used
+  //     by services/dueDiligence.ts.
+  //   SG_ACRA_RESOURCE_ID     — data.gov.sg ACRA datastore resource id for the
+  //     Singapore look-up (keyless JSON API). Unset → manual check.
+  COMPANIES_HOUSE_API_KEY?: string;
+  OPENCORPORATES_API_KEY?: string;
+  SG_ACRA_RESOURCE_ID?: string;
+
   // Slack OAuth (one-way per-user notifications — see notify.ts).
   SLACK_CLIENT_ID?: string;
   SLACK_CLIENT_SECRET?: string;

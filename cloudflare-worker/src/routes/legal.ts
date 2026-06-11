@@ -6,6 +6,7 @@ import { seedStandardEventsForJurisdiction } from './compliance';
 import { CONTRACT_DOC_TYPES } from './admin_contracts';
 import { getActiveTemplateBody } from '../services/legalTemplateStore';
 import { applyMergeFields } from '../services/mergeFields';
+import { checkCompanyName } from '../services/nameCheck';
 
 const legal = new Hono<{ Bindings: Env }>();
 
@@ -62,6 +63,39 @@ const JURISDICTIONS = [
 legal.get('/jurisdictions', async (c) => {
   await requireAuth(c);
   return c.json({ jurisdictions: JURISDICTIONS });
+});
+
+// Task #10 — live company-name availability check for the Incorporate wizard's
+// Confirm step. Queries the selected jurisdiction's official register (or a
+// documented JSON API) and caches definitive results ~1h in RATE_LIMITS KV.
+// Every failure mode degrades to `status: 'unavailable'` ("verify manually").
+legal.get('/name-check', async (c) => {
+  const user = await requireAuth(c);
+
+  const jurisdictionId = (c.req.query('jurisdiction_id') || '').trim();
+  const name = (c.req.query('name') || '').trim();
+  if (name.length < 2) return c.json({ error: 'A company name of at least 2 characters is required.' }, 400);
+  if (!JURISDICTIONS.some((j) => j.id === jurisdictionId)) {
+    return c.json({ error: `Unknown jurisdiction: ${jurisdictionId}` }, 400);
+  }
+
+  // Per-user rate limit — this endpoint can trigger billable outbound
+  // Browser-Rendering navigations, so requireAuth alone isn't enough.
+  // 30 checks / 10-minute window, counted against a fixed-window key.
+  const windowMs = 10 * 60 * 1000;
+  const rlKey = `namecheck:rl:${user.id}:${Math.floor(Date.now() / windowMs)}`;
+  try {
+    const current = parseInt((await c.env.RATE_LIMITS.get(rlKey)) || '0', 10) || 0;
+    if (current >= 30) {
+      return c.json({ error: 'Too many name checks. Please wait a few minutes and try again.' }, 429);
+    }
+    await c.env.RATE_LIMITS.put(rlKey, String(current + 1), { expirationTtl: 11 * 60 });
+  } catch {
+    /* best-effort limiter — never block the check on a KV hiccup */
+  }
+
+  const result = await checkCompanyName(c.env, jurisdictionId, name);
+  return c.json(result);
 });
 
 // Concise stub bodies for jurisdiction-specific docs. The richer drafts
