@@ -575,6 +575,18 @@ app.route('/api/decks', decks);
 app.get('/landing/:slug', async (c) => renderLandingHtml(c.env, c.req.param('slug'), c.get('cspNonce' as never) as string | undefined));
 // Task #4 — private preview URL for unpublished drafts (noindex).
 app.get('/landing/preview/:token', async (c) => renderLandingPreview(c.env, c.req.param('token'), c.get('cspNonce' as never) as string | undefined));
+// Task #15 — Cloudflare Access on sensitive R2 read endpoints (KYC IDs,
+// signed eSign documents, and incorporation certificates). Soft no-op in
+// dev/preview; production wrangler secrets engage the gate. Per-route
+// auth checks (requireAdmin/requireAuth) still run as the inner perimeter.
+app.use('/api/legal/esign/:id/document', requireCfAccess());
+app.use('/api/legal/esign/:id/document/*', requireCfAccess());
+app.use('/api/kyc/admin/:userId/document', requireCfAccess());
+app.use('/api/kyc/admin/:userId/document/*', requireCfAccess());
+// Note: when the incorporation-packet / certificate-of-formation download
+// endpoint is wired (downstream task), it should also carry the same
+// requireCfAccess() middleware.
+
 app.route('/api/kyc', kyc);
 // Task #3 (Y-1) — Trust Center: per-role obligations + 3-way NDA flow.
 app.route('/api/trust', trust);

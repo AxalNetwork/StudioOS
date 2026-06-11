@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Security: tighter production-only perimeter on sensitive documents
+
+In production, any sensitive document download (signed eSign PDFs, KYC identification files) now requires an additional layer of identity verification via Cloudflare Access before your in-app credentials are even checked. Development and preview environments remain unaffected so you can keep working normally.
+
+---
+
 ## New: Preview signed documents and forward them to your legal partners
 
 When you open any signed contract in the Legal → Signed tab, you'll now see a full-screen preview of the PDF with its metadata on the side. You can click "Forward" to send the signed document directly to one or more legal partners by email, with an optional note. You can also choose whether to include the audit page (the signature and timestamp page) or leave it out. Every forward is logged, so you always know who received what and when.

@@ -10,6 +10,17 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Cloudflare Access on sensitive R2 read endpoints (Task #15)
+
+`requireCfAccess()` now sits as an outer perimeter on the two sensitive document routes that stream from R2. Production wrangler secrets (`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`) engage the gate; dev/preview stays a no-op.
+
+- `cloudflare-worker/src/index.ts`:
+  - `app.use('/api/legal/esign/:id/document', requireCfAccess())` and `.../*` wildcard on the signed eSign PDF download endpoint.
+  - `app.use('/api/kyc/admin/:userId/document', requireCfAccess())` and `.../*` wildcard on the raw KYC ID document stream.
+  - Inline comment notes the future incorporation-packet / certificate-of-formation endpoint must carry the same middleware when wired.
+- Existing `cfAccess.ts` middleware (Task #33) is reused unchanged; it soft-no-ops when env vars are unset, so dev/preview remain fully functional.
+- In-app RBAC (requireAdmin/requireAuth) still runs per-route after the Access gate.
+
 ## Signed-doc lightbox with "Forward to legal partner" (Task #14)
 
 Full-screen lightbox for signed eSign contracts in Legal → Signed. PDF preview in an iframe, metadata sidebar, forward log, and a "Forward to legal partner" sub-modal that emails the signed PDF as an attachment.
