@@ -10,6 +10,34 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Advisor composer voice-to-text mic (Task #9)
+
+The advisor composer now has a mic button for dictating answers, sitting between the text input and the skip control so it appears in both the embedded card and the fullscreen view (they share `<Composer>`).
+
+- `frontend/src/components/advisor/PersonalAdvisor.jsx`: new `useMicRecorder` hook wraps the `MediaRecorder` lifecycle, a `MicButton` renders the four states, and `blobToBase64`/`micSupported` are local helpers. Composer instantiates the hook and appends (never replaces) the transcript to the current input via `setInput((prev) => ...)`.
+- Click requests the mic (`getUserMedia({ audio: true })`) and records; click again stops, builds a `Blob` with the recorder's negotiated mime (webm on Chrome, mp4/aac on mobile Safari — the endpoint accepts both), base64-encodes it, and calls `api.advisor.transcribe(b64, mime)` (Task #8). Mic tracks are stopped on stop and on unmount.
+- States: idle (gray mic), recording (red, `animate-pulse`), transcribing (`Loader2` spinner), unsupported (`MicOff`, disabled with explanatory tooltip). Disabled while `busy`/`disabled`. Permission denial or a missing `MediaRecorder`/`getUserMedia` flips to `unsupported` until refresh; all failures route through `reportError` and return to idle.
+- Worker-only feature: the dev FastAPI backend has no `/advisor/transcribe`, so live transcription is not exercisable in dev. Verified by `npm run build` (frontend) + review. No worker/backend changes.
+
+## Personal Advisor fullscreen view (Task #7)
+
+The advisor's header maximize button now opens a true fullscreen takeover instead of only toggling state.
+
+- `frontend/src/components/advisor/PersonalAdvisor.jsx`: new `FullscreenView` + `FullscreenHeader` subcomponents render a `role="dialog"` `fixed inset-0 z-50` overlay when `viewMode === 'fullscreen'` (early-returned INSTEAD of the embedded card). It reuses the existing `Transcript`, `CurrentQuestion`, `Composer`, `AdvisorProgressWidget` and a newly-extracted `FocusChips` unchanged — only the layout/height differ (chat column `flex-1 min-h-0` with a scrolling transcript; desktop-only `w-80` right rail scrolling independently).
+- Two exit affordances (filled "Back to dashboard" + outlined "Normal view" pills) plus Escape (`useEscapeClose`) return to the card. Persisted `viewMode:'fullscreen'` opens fullscreen on load.
+- The two previously-inline handlers (CTA-click progress refresh, queue-item pick) were lifted to shared `handleCtaClick`/`handlePickQuestion` `useCallback`s so the card and overlay stay behaviourally identical; the transcript auto-scroll effect now also depends on `viewMode` so toggling views lands on the latest message.
+- Reuses the shared `scrollerRef`; only one Transcript is mounted at a time. No worker/backend changes.
+
+## Article lifecycle is now first-class in the author editor (Task #28)
+
+The author page surfaced no real lifecycle: the left rail was a flat list with a localized date and no copy/view affordances, and the editor showed only a status pill + generic Submit button, so a draft, a submitted article, a changes-requested article, and a published one were hard to tell apart.
+
+- `frontend/src/pages/ArticleAuthorPage.jsx`: the left rail is now three collapsible, counted sections grouped by `lifecycleGroup()` — **Drafts** (`draft`, `rejected`), **In review** (`submitted`/`in_review`/`changes_requested`/`approved`), **Published** (`published`). Each row shows title, colour-coded status pill, word count, and relative updated time (`relativeTime()`); published rows get a copy-public-URL button + "View live" link.
+- New top-of-editor status strip shows the status pill + label, a live save-state (`Saving…` / `Unsaved changes` / `Saved <relative>` driven by a `dirty` diff of `editing` vs `article` and a `lastSavedAt` set on save), word/read counts, and — for `changes_requested` — the reviewer's note (latest admin review comment, falling back to latest comment then `rejection_reason`). Published shows a public-link footer with copy.
+- State-aware primary action: `published` → "View live", `submitted` → "Retract", `in_review`/`approved` → disabled status label, `draft` → "Submit", `changes_requested`/`rejected` → "Resubmit". Save is disabled when not dirty. A 15s ticker keeps relative times fresh.
+- Public URL is `https://axal.vc/articles/{slug}` (`PUBLIC_ARTICLE_BASE`). Deviation from the literal "disabled unless draft/changes_requested": `rejected` keeps Resubmit enabled because the worker allows submit from `rejected` and the in-app banner documents the edit-and-resubmit flow.
+- Articles are a Worker-only surface (no FastAPI dev route), so this is verified by `npm run build` + dark-mode guard + review; submit/PII error handling and editor/autosave internals are out of scope.
+
 ## Restore admin / monitoring / infra API — remove CF Access worker mounts
 
 Admin, Monitoring and Infra pages rendered empty or returned "Request failed" because the Cloudflare Access perimeter (Task #33) fail-closed the SPA. The Access app is configured on the apex only, but the SPA uses a relative API base (`BASE='/api'` in `frontend/src/lib/api.js`), so `app.axal.vc/api/admin/*` fetches can't carry the `Cf-Access-Jwt-Assertion` header — `requireCfAccess()` then returns 403 to every admin request (see GOTCHAS.md item (h)).

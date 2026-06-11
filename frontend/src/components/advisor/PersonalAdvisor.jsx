@@ -36,9 +36,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   Sparkles, Send, X, Maximize2, Minimize2, LayoutDashboard, HelpCircle,
   Loader2, CheckCircle2, ArrowRight, MessageSquare, SkipForward, BookOpen,
+  Mic, MicOff,
 } from 'lucide-react';
 import { api, spinoutLab as spinoutLabApi } from '../../lib/api';
 import { safeReadJSON, safeWriteJSON } from '../../lib/storage';
+import { reportError } from '../../lib/log';
 import { useAuth } from '../../hooks/useAuthSync';
 import { useEscapeClose } from '../useEscapeClose';
 import { predictTarget } from '../../lib/advisor/router';
@@ -1004,6 +1006,180 @@ function CurrentQuestion({ q, onExplain }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Task #9 — Composer voice-to-text mic. Records a short clip in the browser,
+// base64-encodes it, and posts to the Workers AI Whisper endpoint
+// (api.advisor.transcribe); the returned text is appended to the current
+// composer input. Lives in <Composer>, so it shows in both the embedded card
+// and the fullscreen view (they render the same composer).
+// ---------------------------------------------------------------------------
+const MIC = { IDLE: 'idle', RECORDING: 'recording', TRANSCRIBING: 'transcribing', UNSUPPORTED: 'unsupported' };
+
+function micSupported() {
+  return typeof navigator !== 'undefined'
+    && !!navigator.mediaDevices?.getUserMedia
+    && typeof window !== 'undefined'
+    && typeof window.MediaRecorder !== 'undefined';
+}
+
+// FileReader hands back a `data:<mime>;base64,...` URL; strip the prefix so we
+// send only the bare base64 payload (the endpoint tolerates either, but this
+// keeps the request small).
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = String(reader.result || '');
+      const comma = result.indexOf(',');
+      resolve(comma === -1 ? result : result.slice(comma + 1));
+    };
+    reader.onerror = () => reject(reader.error || new Error('audio_read_failed'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Encapsulates the MediaRecorder lifecycle. Returns the visual state and a
+// single toggle() that starts/stops; onText receives the trimmed transcript.
+function useMicRecorder(onText) {
+  const [state, setState] = useState(() => (micSupported() ? MIC.IDLE : MIC.UNSUPPORTED));
+  const recorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const streamRef = useRef(null);
+  // Guards against a second click while getUserMedia is still resolving, which
+  // would open (and leak) a second mic stream.
+  const startingRef = useRef(false);
+  // Hold the latest onText so the recorder callbacks never go stale without
+  // having to re-create the recorder.
+  const onTextRef = useRef(onText);
+  onTextRef.current = onText;
+
+  // Stop the mic tracks and drop refs. Safe to call repeatedly.
+  const releaseMic = useCallback(() => {
+    try { streamRef.current?.getTracks?.().forEach((t) => t.stop()); } catch { /* ignore */ }
+    streamRef.current = null;
+    recorderRef.current = null;
+    chunksRef.current = [];
+    startingRef.current = false;
+  }, []);
+
+  // Release the mic if we unmount mid-recording (e.g. card → fullscreen swap).
+  useEffect(() => () => releaseMic(), [releaseMic]);
+
+  const start = useCallback(async () => {
+    if (!micSupported()) { setState(MIC.UNSUPPORTED); return; }
+    // Ignore a second start() while the first getUserMedia is still pending.
+    if (startingRef.current || recorderRef.current) return;
+    startingRef.current = true;
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      // Permission denied / no device — stay disabled until a refresh.
+      startingRef.current = false;
+      reportError('advisor.mic.permission', e);
+      setState(MIC.UNSUPPORTED);
+      return;
+    }
+    let rec;
+    try {
+      rec = new MediaRecorder(stream);
+    } catch (e) {
+      startingRef.current = false;
+      reportError('advisor.mic.recorder', e);
+      try { stream.getTracks().forEach((t) => t.stop()); } catch { /* ignore */ }
+      setState(MIC.UNSUPPORTED);
+      return;
+    }
+    streamRef.current = stream;
+    recorderRef.current = rec;
+    chunksRef.current = [];
+    rec.ondataavailable = (ev) => { if (ev.data && ev.data.size > 0) chunksRef.current.push(ev.data); };
+    rec.onstop = async () => {
+      const chunks = chunksRef.current;
+      // Use the recorder's negotiated mime — it varies by browser (webm on
+      // Chrome, mp4/aac on mobile Safari); the endpoint accepts both.
+      const mime = rec.mimeType || chunks[0]?.type || 'audio/webm';
+      const blob = new Blob(chunks, { type: mime });
+      releaseMic();
+      if (!blob.size) { setState(MIC.IDLE); return; }
+      setState(MIC.TRANSCRIBING);
+      try {
+        const b64 = await blobToBase64(blob);
+        const res = await api.advisor.transcribe(b64, mime);
+        const text = String(res?.text || '').trim();
+        if (text) onTextRef.current?.(text);
+      } catch (e) {
+        reportError('advisor.transcribe', e);
+      } finally {
+        setState(MIC.IDLE);
+      }
+    };
+    try {
+      rec.start();
+    } catch (e) {
+      startingRef.current = false;
+      reportError('advisor.mic.start', e);
+      releaseMic();
+      setState(MIC.UNSUPPORTED);
+      return;
+    }
+    startingRef.current = false;
+    setState(MIC.RECORDING);
+  }, [releaseMic]);
+
+  const stop = useCallback(() => {
+    const rec = recorderRef.current;
+    if (rec && rec.state !== 'inactive') {
+      try { rec.stop(); } catch (e) { reportError('advisor.mic.stop', e); releaseMic(); setState(MIC.IDLE); }
+    } else {
+      setState(MIC.IDLE);
+    }
+  }, [releaseMic]);
+
+  const toggle = useCallback(() => {
+    if (state === MIC.IDLE) start();
+    else if (state === MIC.RECORDING) stop();
+    // transcribing / unsupported: ignore.
+  }, [state, start, stop]);
+
+  return { state, toggle };
+}
+
+function MicButton({ state, onToggle, busy, disabled }) {
+  const recording = state === MIC.RECORDING;
+  const transcribing = state === MIC.TRANSCRIBING;
+  const unsupported = state === MIC.UNSUPPORTED;
+  const isDisabled = disabled || busy || transcribing || unsupported;
+  const title = unsupported
+    ? 'Microphone unavailable — allow access and refresh to use voice input'
+    : transcribing
+      ? 'Transcribing…'
+      : recording
+        ? 'Stop recording'
+        : 'Record a voice answer';
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={isDisabled}
+      aria-pressed={recording}
+      aria-label={title}
+      title={title}
+      className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
+        recording
+          ? 'bg-red-600 text-white animate-pulse hover:bg-red-700'
+          : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+      }`}
+    >
+      {transcribing
+        ? <Loader2 size={16} className="animate-spin" />
+        : unsupported
+          ? <MicOff size={16} />
+          : <Mic size={16} />}
+    </button>
+  );
+}
+
 function Composer({ input, setInput, onSend, onSkip, busy, disabled, skipAllowed, inputKind, options, onPickOption }) {
   const onKey = (e) => {
     if (e.key === 'Enter' && !e.shiftKey && (inputKind === 'short' || !inputKind)) {
@@ -1011,6 +1187,11 @@ function Composer({ input, setInput, onSend, onSkip, busy, disabled, skipAllowed
       onSend();
     }
   };
+  // Append (never replace) the transcript to whatever is already typed.
+  const appendTranscript = useCallback((text) => {
+    setInput((prev) => (prev && prev.trim() ? `${prev.replace(/\s+$/, '')} ${text}` : text));
+  }, [setInput]);
+  const mic = useMicRecorder(appendTranscript);
   // Render the option chips for select/multiselect kinds.
   const showOptions = Array.isArray(options) && options.length > 0 && (inputKind === 'select' || inputKind === 'choice');
   return (
@@ -1040,6 +1221,7 @@ function Composer({ input, setInput, onSend, onSkip, busy, disabled, skipAllowed
           data-density-target
           className="flex-1 resize-none rounded-lg border border-gray-200 dark:border-gray-700 bg-[var(--app-input-bg,#fff)] dark:bg-gray-800 text-sm px-3 py-2 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
         />
+        <MicButton state={mic.state} onToggle={mic.toggle} busy={busy} disabled={disabled} />
         {skipAllowed && !disabled && (
           <button
             onClick={onSkip}

@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Speak your answers to the Personal Advisor
+
+The advisor's message box now has a microphone button so you can talk instead of type. Tap it to start recording, tap again to stop, and your words are transcribed and added to whatever you've already written. The button turns red while it's listening and shows a spinner while it works. It's available both in the normal view and the fullscreen view. If your browser blocks microphone access, the button simply shows as unavailable — allow access and refresh to use it.
+
+---
+
 ## Expand the Personal Advisor to fullscreen
 
 The Personal Advisor's expand button now opens it in a full-screen view that fills the whole window, giving you more room to chat and to see your progress alongside the conversation. Return to the normal dashboard view any time with the "Back to dashboard" or "Normal view" buttons, or just press Escape. If you leave it expanded, it stays that way the next time you open it.

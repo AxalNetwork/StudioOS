@@ -10,6 +10,15 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Advisor composer voice-to-text mic (Task #9)
+
+The advisor composer now has a mic button for dictating answers, sitting between the text input and the skip control so it appears in both the embedded card and the fullscreen view (they share `<Composer>`).
+
+- `frontend/src/components/advisor/PersonalAdvisor.jsx`: new `useMicRecorder` hook wraps the `MediaRecorder` lifecycle, a `MicButton` renders the four states, and `blobToBase64`/`micSupported` are local helpers. Composer instantiates the hook and appends (never replaces) the transcript to the current input via `setInput((prev) => ...)`.
+- Click requests the mic (`getUserMedia({ audio: true })`) and records; click again stops, builds a `Blob` with the recorder's negotiated mime (webm on Chrome, mp4/aac on mobile Safari — the endpoint accepts both), base64-encodes it, and calls `api.advisor.transcribe(b64, mime)` (Task #8). Mic tracks are stopped on stop and on unmount.
+- States: idle (gray mic), recording (red, `animate-pulse`), transcribing (`Loader2` spinner), unsupported (`MicOff`, disabled with explanatory tooltip). Disabled while `busy`/`disabled`. Permission denial or a missing `MediaRecorder`/`getUserMedia` flips to `unsupported` until refresh; all failures route through `reportError` and return to idle.
+- Worker-only feature: the dev FastAPI backend has no `/advisor/transcribe`, so live transcription is not exercisable in dev. Verified by `npm run build` (frontend) + review. No worker/backend changes.
+
 ## Personal Advisor fullscreen view (Task #7)
 
 The advisor's header maximize button now opens a true fullscreen takeover instead of only toggling state.
