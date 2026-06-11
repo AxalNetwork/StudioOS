@@ -751,13 +751,13 @@ esign.get('/:id{[0-9]+}/document', async (c) => {
 // at `esign/signed/<uuid>.pdf.enc`; in-house envelopes are stored
 // plaintext at `esign/signed/<uuid>.pdf`. We pick the decode path off
 // the suffix so a single download route handles both providers.
-async function materializeSignedPdf(env: Env, key: string, obj: R2ObjectBody): Promise<Uint8Array | ReadableStream | null> {
+async function materializeSignedPdf(env: Env, key: string, obj: R2ObjectBody): Promise<Uint8Array | null> {
   if (key.endsWith('.enc')) {
     const { decryptBytes } = await import('../services/cryptoBox');
     const ciphertext = new Uint8Array(await obj.arrayBuffer());
     return await decryptBytes(env, ciphertext);
   }
-  return obj.body;
+  return new Uint8Array(await obj.arrayBuffer());
 }
 
 // GET /api/legal/esign/sign/:token — public, fetch envelope for signing UI.
@@ -1071,10 +1071,10 @@ esign.post('/:id{[0-9]+}/forward', async (c) => {
   const obj = await c.env.FILES.get(envRow.signed_r2_key);
   if (!obj) return c.json({ error: 'Document not found in storage' }, 404);
   const pdfBytes = await materializeSignedPdf(c.env, envRow.signed_r2_key, obj);
-  if (!pdfBytes || (pdfBytes as Uint8Array).length === 0) return c.json({ error: 'Failed to load PDF' }, 500);
+  if (!pdfBytes || pdfBytes.length === 0) return c.json({ error: 'Failed to load PDF' }, 500);
 
   // Optionally strip the last page (audit/signature page).
-  let attachmentBytes = pdfBytes as Uint8Array;
+  let attachmentBytes = pdfBytes;
   let actuallyIncludedAudit = true;
   if (!includeAuditPage) {
     try {
