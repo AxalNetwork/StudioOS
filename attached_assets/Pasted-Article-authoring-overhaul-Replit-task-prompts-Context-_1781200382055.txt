@@ -1,0 +1,102 @@
+Article authoring overhaul — Replit task prompts
+Context
+The "Write an Article" page at /articles/draft (sidebar entry from frontend/src/sidebarConfig.js:128) does not match the maturity of the backend behind it. Exploration showed that the Cloudflare Worker already implements a full author + admin workflow on a single articles table — cloudflare-worker/sql/migrations/068_news_articles.sql defines status (draft → submitted → in_review → changes_requested → approved → published → rejected), author_user_id, R2-backed cover storage, revisions, review comments, and submission rate-limit ledger; cloudflare-worker/src/routes/articles.ts and admin_articles.ts expose every action the UI needs. The "News" routes (news.ts, admin_news.ts) read and write the same articles table — they are legacy aliases, not a second domain. So the structural data layer is fine.
+What is broken or weak today, per the user:
+1. Ownership mismatch. The three already-published articles at axal.vc/articles/... are not linked to guillaumelauzier@gmail.com's users.id, so the edit gate at articles.ts rejects him. Backend ACL is correct; the seed data is wrong.
+2. Cover image upload appears to do nothing. Backend (POST /api/articles/:id/cover) stores in R2 and returns a cover_url; the editor renders <img src={article.cover_url}> (ArticleAuthorPage.jsx:424). The failure is most likely (a) silent error on the dataURI POST, (b) the response field name mismatch, or (c) cache busting after re-upload — needs a verification round on real bytes.
+3. Submit does nothing visible. Handler exists (ArticleAuthorPage.jsx:221-247) and the endpoint exists, but failure modes (PII linter, weekly rate cap, validation) are surfaced as raw toast.error strings with no in-UI status change, so users can't tell what happened.
+4. Draft / pending / published state is invisible. The left rail just shows "No drafts yet" and never differentiates submitted-pending-publication, changes-requested, or live. Nothing tells the author "your article is live at this URL."
+5. Admin sees two queues for one table. sidebarConfig.js:123-124 ships News Queue (/admin/news) and Articles Queue (/admin/articles) side by side. Same data. Merge into one.
+6. Editor UX is weak for serious writers. Plain textarea, no autosave indicator, no slug preview, no SEO/excerpt field, no inline image upload (only the cover), no revision diff, no public URL preview.
+The intended outcome is a coherent authoring + review surface where Guillaume can edit his three live articles, the cover upload works visibly, Submit gives clear status, drafts are first-class, and admins manage one queue.
+Replit task prompts
+Each prompt below is self-contained, scoped to one PR, and ready to paste into a Replit task. They are ordered so unblockers ship first.
+
+Task A — Backfill author ownership of the three published articles
+Why. Guillaume cannot edit his own posts because articles.author_user_id does not point at his users.id.
+Do.
+* Add cloudflare-worker/sql/migrations/0NN_backfill_article_authors.sql that sets author_user_id to the users.id of guillaumelauzier@gmail.com for slugs how-ai-is-changing-startup-investment-and-venture-support, why-i-avoid-consensus-and-invest-early, cybersecurity-and-zero-trust-systems.
+* Idempotent: wrap in UPDATE ... WHERE author_user_id IS DISTINCT FROM (...); no-op if already correct.
+* Run against prod D1 with wrangler d1 execute studioos-db --file=....
+* Verify by logging in as Guillaume and opening GET /api/articles/mine — the three articles must appear with status='published'.
+Acceptance. Guillaume can open each article in the editor; the published status badge renders; editing the body is allowed (or, if we prefer to keep published immutable, "Propose revision" creates a new draft revision linked via article_revisions).
+
+Task B — Wire and verify cover upload end-to-end
+Why. Upload "does nothing" visibly. The backend works; the front-to-back contract or error path is the suspect.
+Do.
+* In ArticleAuthorPage.jsx, after api.uploadCover resolves, log the response shape, then update local state from the actual field name returned by cloudflare-worker/src/routes/articles.ts (cover_url vs coverUrl vs url). Fix any drift.
+* Add an explicit "Uploading…" state on the cover button, a thumbnail preview rendered from the dataURI immediately (optimistic) and swapped for the R2 URL on success.
+* Show a real error banner on failure (5 MB cap, MIME reject, auth) — not a silent toast.
+* Append ?v=<updated_at> to the cover URL to defeat browser caching after re-upload.
+* Update cloudflare-worker/src/routes/articles.ts if the response omits a usable absolute URL — return { cover_url: "/api/articles/cover/" + id }.
+Acceptance. Uploading a PNG/JPEG shows a preview within 500 ms, and after a hard refresh the cover is still visible on the draft and on the public reader page.
+
+Task C — Make draft state, submission state, and live state first-class in the UI
+Why. Author cannot tell what state an article is in or where it lives.
+Do. In frontend/src/pages/ArticleAuthorPage.jsx:
+* Replace the flat left-rail list with three collapsible sections: Drafts, In review (submitted / in_review / changes_requested), Published. Counts in each header.
+* For each row show: title, status pill with colour, word count, last updated relative time, and for published rows a copy-to-clipboard of the public URL https://axal.vc/articles/{slug}.
+* Top-of-editor status strip: shows current status, last save time ("Saved 4s ago" / "Saving…" / "Unsaved"), and for changes_requested the inline reviewer note from article_review_comments.
+* "View live" button visible when status='published' linking to the public reader.
+* Disable the Submit button when status is anything except draft or changes_requested, and replace it with the right verb ("Resubmit", "Retract", "View live") to match.
+Acceptance. A new draft, a submitted article, a changes-requested article, and a published article each render distinguishably without the user reading any text.
+
+Task D — Fix Submit feedback and PII / rate-limit surfacing
+Why. Submit looks broken when the server actually rejected it for PII or rate limit.
+Do.
+* In the submit handler, render the server's pii_blocked findings[] as inline highlights in the textarea (offset + length already returned by the worker linter — confirm in articles.ts and extend if missing) plus a non-dismissable banner: "Submission blocked: remove the highlighted personal data."
+* For rate_limited, show a banner "You can submit N more this week. Next slot opens {when}." Derive from article_submission_log (extend the worker response to include next_available_at if not already present).
+* On success, transition the editor into the read-only "In review" mode immediately and pop a confirmation modal listing the next steps.
+* Replace generic toast.error('Error') calls with the specific server-provided message.
+Acceptance. Triggering each failure path produces a clear, targeted message; success transitions visibly without a manual refresh.
+
+Task E — Merge Articles Queue and News Queue into a single admin surface
+Why. Same table, two nav entries, double maintenance.
+Do.
+* In frontend/src/sidebarConfig.js, delete the /admin/news entry (line 123). Rename the remaining entry to Content Queue, route /admin/articles.
+* In frontend/src/pages/admin/ (or wherever the articles admin page lives — confirm by Glob), add tabs: All, Submitted, In review, Changes requested, Approved, Published, Rejected. Each tab calls GET /api/admin/articles/queue?status=....
+* Delete NewsAuthorPage.jsx and its route; if it still has inbound links, redirect them to /articles/draft.
+* In the Worker, keep news.ts and admin_news.ts as thin aliases that re-export the article handlers, but add a Deprecation response header to make the legacy surface visible. Do not delete — external links to /news/:slug still exist.
+Acceptance. Admin sidebar shows one Content Queue entry; the queue view filters work; existing /news/:slug URLs still resolve.
+
+Task F — Editor upgrades for serious writers
+Why. Plain textarea is below the bar for the kind of writing Axal publishes.
+Do. In ArticleAuthorPage.jsx:
+* Swap the textarea for a markdown editor with split-pane preview (use a small dependency like @uiw/react-md-editor or build on top of CodeMirror — pick whichever already exists in package.json; do not add a new heavy framework).
+* Inline image upload: drag-and-drop or paste an image inside the body → reuse the existing R2 cover endpoint generalised to POST /api/articles/:id/assets (new worker route, same R2 path prefix articles/{id}/inline/). Insert returned URL as markdown.
+* Add fields: Excerpt (used for cards and OG description, ≤200 chars), SEO title override, Canonical URL (optional), Estimated reading time auto-computed.
+* Slug preview: live-rendered "axal.vc/articles/{slug}" derived from title with a manual override field locked once status='published'.
+* Autosave every 5s when dirty; debounce so we don't hammer D1.
+* Word count and read time in the header (read time = ceil(words / 220)).
+* Tag picker that reads the existing taxonomy from /articles/sectors plus free-form tags persisted in tags JSON column.
+Acceptance. A 1500-word article with three inline images, custom excerpt, and overridden SEO title saves, submits, and renders correctly on the public reader page.
+
+Task G — Author dashboard polish & public profile
+Why. Authors should see their own footprint.
+Do.
+* New frontend/src/pages/MyArticlesPage.jsx (or a tab inside an existing profile page) listing all of the author's articles with views (if articles.views exists; otherwise add a counter incremented by the reader route), status, last edit, public URL.
+* On the public reader page (ArticleReaderPage.jsx) link the author name to /u/{author_handle} showing their bio + their other published articles via GET /api/articles/by-author/:user_id.
+* "Edit" button on the public reader when viewer.id === author_user_id or viewer is admin, deep-linking back to the editor for that article.
+Acceptance. From the public article page, Guillaume sees an Edit button on his three posts and clicking it lands directly on the right draft in the editor.
+
+Critical files to touch
+* cloudflare-worker/sql/migrations/0NN_backfill_article_authors.sql (new, Task A)
+* cloudflare-worker/src/routes/articles.ts (Tasks B, D, F — response shape, PII findings detail, inline asset endpoint)
+* cloudflare-worker/src/routes/admin_articles.ts (Task E — confirm queue filter)
+* cloudflare-worker/src/routes/news.ts, admin_news.ts (Task E — deprecation header, keep aliases)
+* frontend/src/sidebarConfig.js (Task E — remove /admin/news)
+* frontend/src/pages/ArticleAuthorPage.jsx (Tasks B, C, D, F — the main rewrite)
+* frontend/src/pages/ArticleReaderPage.jsx (Task G — edit button, author link)
+* frontend/src/pages/NewsAuthorPage.jsx (Task E — delete)
+* frontend/src/lib/api.js (Tasks B, F — add inline asset upload method)
+* New frontend/src/pages/MyArticlesPage.jsx (Task G)
+Reuse, don't rebuild
+* Status transitions, PII linter, R2 cover storage, submission rate cap, admin review comments, and revisions all exist in articles.ts + admin_articles.ts + migration 068_news_articles.sql. Do not redesign them — the frontend changes simply surface what is already there.
+* Sector taxonomy: GET /articles/sectors already exists; reuse for the tag picker.
+* api.articles.* methods (in frontend/src/lib/api.js:2239-2272) already cover every action except inline asset upload — add only that one.
+Verification
+End-to-end after each task lands on claude/beautiful-faraday-sxq4n2:
+1. Drift test: npm run test:drift (the CLAUDE.md-enforced check that every frontend/src/lib/api.js method has a matching worker route).
+2. Local worker + frontend: cd cloudflare-worker && wrangler dev and cd frontend && npm run dev; log in as Guillaume, walk through: see three published articles in left rail (A), upload a cover and see the preview (B), see distinct states (C), trigger PII reject and see highlights (D), see one Content Queue tab (E), draft with inline image (F), click Edit from public reader (G).
+3. Production smoke: after deploy, hit https://axal.vc/articles/why-i-avoid-consensus-and-invest-early logged in as Guillaume — Edit button visible; click it, land on the editor.
+4. Regression: https://axal.vc/news/{slug} still resolves (legacy alias preserved).
