@@ -1,0 +1,23 @@
+#28 - First-Class Article State UI
+What & Why
+The author cannot tell what state an article is in or where it lives. The left rail just says "No drafts yet" and never distinguishes a draft from a submitted, changes-requested, or live article, and nothing tells the author "your article is published at this URL." This task surfaces the full lifecycle (draft → submitted → in_review → changes_requested → approved → published → rejected) that the worker already tracks.
+Done looks like
+* The left rail groups articles into three labelled, collapsible sections — Drafts, In review (submitted / in_review / changes_requested), Published — each with a count.
+* Each row shows: title, a colour-coded status pill, word count, and last-updated relative time. Published rows include a copy-to-clipboard of the public URL https://axal.vc/articles/{slug} and a "View live" link.
+* A status strip at the top of the editor shows the current status, the save state ("Saved 4s ago" / "Saving…" / "Unsaved"), and for changes-requested articles the reviewer's note.
+* The primary action button shows the correct verb for the state (Submit / Resubmit / Retract / View live) and is disabled when the status is not draft or changes_requested.
+* A new draft, a submitted article, a changes-requested article, and a published article each look distinct without reading any text.
+Out of scope
+* The actual submit error/PII handling (handled in the submit-feedback task).
+* Markdown editor, autosave internals, inline images (handled in editor-upgrades).
+Steps
+1. Replace the flat left-rail list with three collapsible, counted sections grouped by lifecycle stage, fed from the author's article list.
+2. Render per-row metadata (status pill, word count, relative updated time) and, for published rows, a copy-public-URL control plus a View-live link.
+3. Add a top-of-editor status strip showing current status, save state, and the reviewer note for changes-requested articles (read from the existing review comments the worker returns with the draft).
+4. Make the primary action button state-aware (correct verb + disabled when not editable).
+Relevant files
+* frontend/src/pages/ArticleAuthorPage.jsx
+* frontend/src/lib/api.js:2299-2334
+* cloudflare-worker/src/routes/articles.ts
+Dependencies
+Make article cover image upload actually work

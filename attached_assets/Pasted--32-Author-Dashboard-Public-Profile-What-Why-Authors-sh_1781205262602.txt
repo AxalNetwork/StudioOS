@@ -1,0 +1,28 @@
+#32 - Author Dashboard & Public Profile
+What & Why
+Authors should see their own footprint, and readers should be able to reach an author's other work — and the author should be able to jump straight from a public article into editing it. This task adds an author dashboard, a public author view, and an edit affordance on the reader page.
+Verified backend reality: the public "articles by author" endpoint already exists (api.articles.public.byAuthor(userId)). However the articles table has NO views column today — if per-article view counts are wanted, add the column via migration and increment it from the public reader route.
+Done looks like
+* A "My articles" page (or tab) lists all of the author's articles with status, last edit, public URL, and view count (once the counter exists).
+* On the public reader page, the author's name links to a public author view showing their bio and their other published articles (via the existing by-author endpoint).
+* The public reader page shows an "Edit" button when the viewer is the author or an admin, deep-linking to that article in the editor.
+* From the public page of one of his three posts, Guillaume sees an Edit button and clicking it lands directly on the right draft in the editor.
+Out of scope
+* The editor internals themselves (built in the editor-upgrades task this depends on).
+* Admin queue work (separate task).
+Steps
+1. Create a "My articles" page listing the author's articles with status, last edit, public URL, and view count.
+2. Add a views column via migration and increment it from the public reader route so the dashboard can show counts.
+3. On the public reader page, link the author name to a public author view that lists their bio and other published articles using the existing by-author endpoint.
+4. Add an "Edit" button on the reader page shown only to the author or an admin, deep-linking to the editor for that article.
+Relevant files
+* frontend/src/pages/MyArticlesPage.jsx
+* frontend/src/pages/ArticleReaderPage.jsx
+* cloudflare-worker/src/routes/articles.ts
+* frontend/src/lib/api.js:2299-2334
+* frontend/src/App.jsx
+* cloudflare-worker/sql/migrations/068_news_articles.sql
+Dependencies
+
+Upgrade the article editor for serious writers
+Main
