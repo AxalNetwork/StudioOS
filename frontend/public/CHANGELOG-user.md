@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: Paid incorporation checkout with per-jurisdiction pricing
+
+The Incorporate wizard now collects payment before we generate your signing packet. When you finish the jurisdiction questionnaire and name check, you'll click "Continue to payment" and be taken to a secure Stripe checkout. After payment confirms, you'll land on a success page that tells you your signing link will be emailed once the packet is ready. You can also check the status of any incorporation from the success page.
+
+---
+
 ## New: We check if your company name is available
 
 When you set up a new company in the Incorporate flow, we now check your chosen name against the official business register for that country as you type. You'll see right away whether the name looks available, appears to be taken (with a few of the closest matches), or couldn't be checked automatically. If a name comes back as taken but you know it's fine, you can tick a box to use it anyway. When we can't reach a register, we'll simply ask you to double-check on the official site before filing — nothing ever blocks you from moving forward by mistake.

@@ -1823,3 +1823,23 @@ class FundScenario(SQLModel, table=True):
     created_by_user_id: int = Field(foreign_key="users.id", index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# Task #11 — Incorporation Stripe Checkout (FastAPI parity)
+class Incorporation(SQLModel, table=True):
+    __tablename__ = "incorporations"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    project_id: int = Field(foreign_key="projects.id", index=True)
+    jurisdiction_id: str = Field(index=True)
+    company_name: str
+    registered_agent_name: Optional[str] = None
+    registered_agent_address: Optional[str] = None
+    amount_cents: int
+    currency: str = Field(default="usd")
+    stripe_session_id: Optional[str] = Field(default=None, unique=True)
+    stripe_payment_intent: Optional[str] = None
+    status: str = Field(default="pending_payment")  # pending_payment -> paid -> packet_processing -> packet_ready|failed
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    paid_at: Optional[datetime] = None

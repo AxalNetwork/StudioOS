@@ -335,6 +335,12 @@ export const api = {
   // Task #10 — live company-name availability check (Confirm step).
   legalNameCheck: (jurisdictionId, name) =>
     request(`/legal/name-check?jurisdiction_id=${encodeURIComponent(jurisdictionId)}&name=${encodeURIComponent(name)}`),
+  // Task #11 — per-jurisdiction Stripe Checkout (replaces free wizard submit).
+  legalIncorporateCheckout: (data) =>
+    request('/legal/incorporate/checkout', { method: 'POST', body: JSON.stringify(data) }),
+  legalIncorporateStatus: (id) =>
+    request(`/legal/incorporate/status?id=${encodeURIComponent(id)}`),
+  // Legacy free wizard — still available for admin/back-compat (admin only).
   legalIncorporateWizard: (data) =>
     request('/legal/incorporate/wizard', { method: 'POST', body: JSON.stringify(data) }),
   // Task #31 — Co-founder agreement + 83(b) tracker

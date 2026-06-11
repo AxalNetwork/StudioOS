@@ -466,6 +466,17 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       if (!ok) throw new Error(`email_send failed template=${payload?.template_key} log=${payload?.log_id}`);
       return;
     }
+    case 'incorporation_packet_start': {
+      // Task #11 — downstream seam: advances status to 'packet_processing'.
+      // The real packet-build pipeline (eSign PDF assembler) will be wired
+      // here by a separate task. For now, the queue handler just sets the
+      // state so the success-page poll knows work started.
+      const { startIncorporationPacket } = await import('./incorporations');
+      const id = Number(payload.incorporation_id ?? 0);
+      if (!id) throw new Error('incorporation_packet_start requires incorporation_id');
+      await startIncorporationPacket(env, id);
+      return;
+    }
     default:
       throw new Error(`unknown job type ${job.job_type}`);
   }

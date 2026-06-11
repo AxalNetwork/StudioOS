@@ -316,6 +316,12 @@ export interface Env {
   COMPANIES_HOUSE_API_KEY?: string;
   OPENCORPORATES_API_KEY?: string;
   SG_ACRA_RESOURCE_ID?: string;
+  // Task #11 — per-jurisdiction Stripe Checkout price IDs for incorporation.
+  STRIPE_PRICE_INCORP_US_DE_CCORP?: string;
+  STRIPE_PRICE_INCORP_US_DE_LLC?: string;
+  STRIPE_PRICE_INCORP_UK_LTD?: string;
+  STRIPE_PRICE_INCORP_SG_PTE?: string;
+  STRIPE_PRICE_INCORP_EE_OY?: string;
 
   // Slack OAuth (one-way per-user notifications — see notify.ts).
   SLACK_CLIENT_ID?: string;

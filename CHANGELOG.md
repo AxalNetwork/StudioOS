@@ -10,6 +10,23 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Per-jurisdiction Stripe Checkout in the Incorporate wizard (Task #11)
+
+Replaces the free wizard submit with a paid Stripe Checkout flow. Each jurisdiction maps to a Stripe Price ID (operator creates Price in dashboard, stores ID in Worker env). On successful payment, the webhook records a paid incorporation row and enqueues a `incorporation_packet_start` job; the downstream eSign packet pipeline will build the signing packet in a separate task.
+
+- **Migration** — `cloudflare-worker/sql/migrations/086_incorporations.sql` creates `incorporations` (id, user_id, project_id, jurisdiction_id, company_name, registered_agent_name/address, amount_cents, currency, stripe_session_id UNIQUE, stripe_payment_intent, status `pending_payment`→`paid`→`packet_processing`→`packet_ready`|`failed`, created_at/updated_at/paid_at) + index on `(user_id, status)`.
+- **Service** — `cloudflare-worker/src/services/incorporations.ts` exports `ensureIncorporationsSchema(env)` (idempotent `_migrated` guard), `createPendingIncorporation(env, args)`, `recordPaidIncorporation(env, obj)` (idempotent `UPDATE … WHERE status = 'pending_payment'`, enqueue only if `meta.changes === 1` with deterministic `idempotency_key: 'incorp_packet:' + id`), `startIncorporationPacket(env, id)` (status→`packet_processing`; real packet build is downstream), `getIncorporationForUser(env, id, userId)` (IDOR-scoped).
+- **Queue** — `models/jobs.ts` adds `'incorporation_packet_start'` to `JobType`. `services/queueWorker.ts` switch handles it via `startIncorporationPacket`. Not an AI job; no AI-budget gate needed.
+- **Worker endpoints** (all in `routes/legal.ts`):
+  - `POST /api/legal/incorporate/checkout` — `requireAuth`, ownership (admin/partner OR founder-owns-project; investors blocked), jurisdiction→price env lookup, `mode: 'payment'` Stripe Checkout session with `metadata[kind]=incorporation`, `metadata[incorporation_id]=id`, `metadata[user_id]`, `client_reference_id='incorporation:'+userId`, `success_url=/incorporate/success?incorporation_id=ID`, `cancel_url=/incorporate?cancelled=1`. Dev fallback (no STRIPE_SECRET_KEY/priceId) creates pending row and returns `{url: '/api/legal/incorporate/dev-complete?id=ID', dev: true}`.
+  - `GET /api/legal/incorporate/status` — `requireAuth`, `WHERE id=? AND user_id=?` (IDOR).
+  - `POST /api/legal/incorporate/dev-complete` — fail-closed via `ENVIRONMENT` allowlist (`development|dev|test|local|preview`); simulates paid webhook, flips status to `paid`, enqueues packet-start job.
+- **Worker webhook** — `routes/billing.ts`: `ensureIncorporationsSchema` called in webhook top; `isIncorporation` flag from `metadata.kind` or `client_reference_id` prefix; `recordPaidIncorporation` in `checkout.session.completed` **before** the generic userId/MI-Pro fallthrough (mirrors `isExpertBooking` early-return). `payment_status==='paid'` guard and `amount_total` read from session.
+- **Gated legacy endpoint** — `POST /api/legal/incorporate/wizard` is now **admin-only** (`requireAuth` + `role==='admin'`). The free doc-gen logic is retained for downstream packet pipeline reuse; founders must use the paid checkout. This is a behavior change flagged to the user.
+- **Frontend** — `api.js` adds `legalIncorporateCheckout` and `legalIncorporateStatus`. `IncorporatePage.jsx` `submit()` calls checkout then `window.location.href = res.url`; button relabeled to "Continue to payment". New `IncorporateSuccessPage.jsx` polls `/api/legal/incorporate/status?id=…` every 3s, shows "Confirming payment" when still `pending_payment`, then "Payment confirmed" / "Packet ready" with the signing-link email message. `App.jsx` lazy-imports + routes `/incorporate/success`.
+- **FastAPI parity** — `backend/app/models/entities.py` adds `Incorporation` SQLModel so `init_db()` auto-creates the table. `backend/app/api/routes/legal.py` adds `POST /api/legal/incorporate/checkout`, `GET /api/legal/incorporate/status`, `POST /api/legal/incorporate/dev-complete` with identical validation/ownership rules so dev (`Vite proxy → localhost:8000`) works end-to-end.
+- **Env types** — `types.ts` adds `STRIPE_PRICE_INCORP_US_DE_CCORP`, `STRIPE_PRICE_INCORP_US_DE_LLC`, `STRIPE_PRICE_INCORP_UK_LTD`, `STRIPE_PRICE_INCORP_SG_PTE`, `STRIPE_PRICE_INCORP_EE_OY`.
+
 ## Live company-name availability check on the Incorporate wizard (Task #10)
 
 Adds a live availability check on the Confirm step of the Incorporate wizard: as the founder types a company name, the worker queries that jurisdiction's official register and reports whether the name looks available, is taken, or couldn't be verified.

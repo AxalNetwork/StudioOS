@@ -573,17 +573,16 @@ export default function IncorporatePage() {
     }
     setBusy(true); setErr('');
     try {
-      const res = await api.legalIncorporateWizard({
+      // Task #11 — per-jurisdiction Stripe Checkout.
+      const res = await api.legalIncorporateCheckout({
         project_id: form.project_id,
         jurisdiction_id: selectedId,
         company_name: form.company_name.trim(),
         registered_agent_name: form.registered_agent_name || null,
         registered_agent_address: form.registered_agent_address || null,
       });
-      setResult(res);
-      setStep(3);
-      // Spin-Out Lab — Week 4 final milestone (auto-exits the Lab).
-      await markMilestone(user, 'incorporation_completed');
+      // Redirect to Stripe (or the dev-complete URL in dev).
+      window.location.href = res.url;
     } catch (e) {
       const status = e?.status;
       const msg = (e?.message || '').toLowerCase();
@@ -594,7 +593,6 @@ export default function IncorporatePage() {
       } else {
         setErr('Submission failed. Please retry in a moment, or contact support if it persists.');
       }
-    } finally {
       setBusy(false);
     }
   };
@@ -677,8 +675,8 @@ export default function IncorporatePage() {
                 disabled={busy || nameChecking || (nameCheck?.status === 'taken' && !skipNameCheck)}
                 className="inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2 rounded-md disabled:opacity-50"
               >
-                {busy ? <Loader2 className="animate-spin" size={14} /> : <Building2 size={14} />}
-                {busy ? 'Working…' : 'Generate documents'}
+                {busy ? <Loader2 className="animate-spin" size={14} /> : <DollarSign size={14} />}
+                {busy ? 'Working…' : 'Continue to payment'}
               </button>
             )}
           </div>

@@ -452,6 +452,8 @@ billing.post('/stripe/webhook', async (c) => {
   await ensureMiPaywallSchema(c.env);
   await ensureTierSchema(c.env);
   await ensureInvestorPaywallSchema(c.env);
+  const { ensureIncorporationsSchema } = await import('../services/incorporations');
+  await ensureIncorporationsSchema(c.env);
   const raw = await c.req.text();
   const sig = c.req.header('stripe-signature') ?? '';
   const secret = c.env.STRIPE_WEBHOOK_SECRET;
@@ -541,6 +543,8 @@ async function handleStripeEvent(
     || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('investor:'));
   const isExpertBooking = meta.kind === 'expert_booking'
     || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('expert_booking:'));
+  const isIncorporation = meta.kind === 'incorporation'
+    || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('incorporation:'));
 
   switch (event.type) {
     case 'checkout.session.completed': {
@@ -548,6 +552,12 @@ async function handleStripeEvent(
       if (isExpertBooking) {
         const { confirmBookingFromStripe } = await import('../services/wellbeing/bookings');
         await confirmBookingFromStripe(env, obj);
+        return;
+      }
+      // Task #11 — incorporation Stripe Checkout fulfilment.
+      if (isIncorporation) {
+        const { recordPaidIncorporation } = await import('../services/incorporations');
+        await recordPaidIncorporation(env, obj as any);
         return;
       }
       const userId = Number(meta.user_id ??

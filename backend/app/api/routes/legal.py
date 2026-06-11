@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 from sqlalchemy.exc import IntegrityError
 from backend.app.database import get_session
-from backend.app.models.entities import Document, Entity, Project, DocumentType, DocumentStatus, User, Section83bTracker
+from backend.app.models.entities import Document, Entity, Project, DocumentType, DocumentStatus, User, Section83bTracker, Incorporation
 from backend.app.schemas.scoring import DocumentCreate
 from backend.app.api.routes.auth import get_current_user
 from backend.app.api.deps import require_role, ensure_founder_access, is_privileged
@@ -1870,18 +1870,20 @@ def incorporate_wizard(
     session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ):
-    """Task #30 — Jurisdiction-aware incorporation hand-off.
+    """Task #30 / Task #11 — Jurisdiction-aware incorporation hand-off.
 
-    1. Validates the chosen jurisdiction and the caller's access to the
-       project (founder-of, partner, or admin).
+    NOTE: This endpoint is now admin-only. The founder-facing paid flow
+    is via POST /incorporate/checkout (Stripe Checkout). The free wizard
+    is retained for doc-gen reuse by the downstream packet pipeline.
+
+    1. Validates the chosen jurisdiction and admin access.
     2. Creates an `Entity` row with the right jurisdiction + status.
-    3. Generates the jurisdiction-specific document set into Documents
-       (already surfaces in LegalPage).
-    4. For Delaware C-Corp, returns a `stripe_atlas` hand-off block so
-       the UI can deep-link the user to Atlas with the company name
-       pre-filled. For other jurisdictions, returns the generated
-       documents only — filing + payment is out-of-scope per the brief.
+    3. Generates the jurisdiction-specific document set into Documents.
+    4. For Delaware C-Corp, returns a `stripe_atlas` hand-off block.
     """
+    role = (user.role.value if hasattr(user.role, "value") else str(user.role)).lower()
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="This endpoint is now admin-only. Founders must use the paid checkout flow.")
     j = JURISDICTIONS.get(body.jurisdiction_id)
     if not j:
         raise HTTPException(status_code=400, detail=f"Unknown jurisdiction: {body.jurisdiction_id}")
@@ -2077,6 +2079,113 @@ def incorporate_wizard(
         "handoff": handoff,
         "compliance_events": seeded_compliance,
     }
+
+
+# Task #11 — FastAPI parity stubs for the paid incorporation Stripe Checkout flow.
+# The real implementation lives on the Cloudflare Worker (prod). In dev, the frontend
+# calls these FastAPI endpoints because the Vite proxy sends /api/* to the backend.
+
+class _IncorporateCheckoutReq(BaseModel):
+    project_id: int
+    jurisdiction_id: str
+    company_name: str
+    registered_agent_name: Optional[str] = None
+    registered_agent_address: Optional[str] = None
+
+
+@router.post("/incorporate/checkout")
+def _incorporate_checkout(
+    body: _IncorporateCheckoutReq,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Dev parity: create a pending Incorporation row and return a dev-complete URL."""
+    j = JURISDICTIONS.get(body.jurisdiction_id)
+    if not j:
+        raise HTTPException(status_code=400, detail=f"Unknown jurisdiction: {body.jurisdiction_id}")
+    if not body.company_name or not body.company_name.strip():
+        raise HTTPException(status_code=400, detail="company_name is required")
+    project = session.get(Project, body.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    role = (user.role.value if hasattr(user.role, "value") else str(user.role)).lower()
+    if role not in ("admin", "partner"):
+        owns_project = (
+            project.founder_id is not None
+            and getattr(user, "founder_id", None) == project.founder_id
+        )
+        if not owns_project:
+            raise HTTPException(status_code=403, detail="Forbidden: you do not own this project")
+
+    # Dev fallback: create a pending row and return a URL to the dev-complete endpoint.
+    import uuid as _uuid
+    dev_session_id = f"dev_session_{user.id}_{_uuid.uuid4().hex[:12]}"
+    inc = Incorporation(
+        user_id=user.id,
+        project_id=project.id,
+        jurisdiction_id=body.jurisdiction_id,
+        company_name=body.company_name.strip(),
+        registered_agent_name=body.registered_agent_name or None,
+        registered_agent_address=body.registered_agent_address or None,
+        amount_cents=50000,
+        currency="usd",
+        stripe_session_id=dev_session_id,
+    )
+    session.add(inc)
+    session.commit()
+    session.refresh(inc)
+    return {
+        "url": f"/api/legal/incorporate/dev-complete?id={inc.id}",
+        "incorporation_id": inc.id,
+        "dev": True,
+    }
+
+
+@router.get("/incorporate/status")
+def _incorporate_status(
+    id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Dev parity: owner-scoped incorporation status poll."""
+    inc = session.get(Incorporation, id)
+    if not inc or inc.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {
+        "id": inc.id,
+        "status": inc.status,
+        "jurisdiction_id": inc.jurisdiction_id,
+        "company_name": inc.company_name,
+        "amount_cents": inc.amount_cents,
+        "currency": inc.currency,
+        "stripe_session_id": inc.stripe_session_id,
+        "paid_at": inc.paid_at.isoformat() if inc.paid_at else None,
+        "created_at": inc.created_at.isoformat() if inc.created_at else None,
+    }
+
+
+@router.post("/incorporate/dev-complete")
+def _incorporate_dev_complete(
+    id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Dev parity: simulate paid and return success. No real Stripe webhook here."""
+    import os
+    env_name = os.environ.get("ENVIRONMENT", "development").lower()
+    if env_name not in ("development", "dev", "test", "local", "preview"):
+        raise HTTPException(status_code=403, detail="dev_only")
+    inc = session.get(Incorporation, id)
+    if not inc or inc.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Not found")
+    if inc.status != "pending_payment":
+        raise HTTPException(status_code=409, detail="not_pending")
+    inc.status = "paid"
+    inc.paid_at = datetime.utcnow()
+    inc.updated_at = datetime.utcnow()
+    session.add(inc)
+    session.commit()
+    return {"ok": True, "incorporation_id": inc.id, "status": "paid"}
 
 
 @router.post("/incorporate")

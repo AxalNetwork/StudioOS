@@ -7,6 +7,12 @@ import { CONTRACT_DOC_TYPES } from './admin_contracts';
 import { getActiveTemplateBody } from '../services/legalTemplateStore';
 import { applyMergeFields } from '../services/mergeFields';
 import { checkCompanyName } from '../services/nameCheck';
+import { stripeCall } from './billing';
+import {
+  ensureIncorporationsSchema,
+  createPendingIncorporation,
+  getIncorporationForUser,
+} from '../services/incorporations';
 
 const legal = new Hono<{ Bindings: Env }>();
 
@@ -132,7 +138,13 @@ const _ALLOWED_DOC_TYPES = new Set([
 ]);
 
 legal.post('/incorporate/wizard', async (c) => {
+  // Task #11 — the free wizard is now admin-only; the paid Stripe Checkout flow
+  // replaces the founder-facing submit. This endpoint is retained for doc-gen
+  // reuse by the downstream packet pipeline and for admin back-compat.
   const user = await requireAuth(c);
+  if (user.role !== 'admin') {
+    return c.json({ error: 'This endpoint is now admin-only. Founders must use the paid checkout flow.' }, 403);
+  }
   const body = await c.req.json<{
     project_id: number;
     jurisdiction_id: string;
@@ -306,6 +318,170 @@ legal.post('/incorporate/wizard', async (c) => {
     seeded_compliance: seededCompliance,
     handoff,
   });
+});
+
+// Task #11 — per-jurisdiction Stripe Checkout for incorporation.
+//   POST /incorporate/checkout → creates Stripe Checkout session + pending row
+//   GET  /incorporate/status   → owner-scoped poll
+//   POST /incorporate/dev-complete → dev/test-only simulate paid + enqueue
+
+const JURISDICTION_PRICE_ENV: Record<string, keyof Env> = {
+  us_de_ccorp: 'STRIPE_PRICE_INCORP_US_DE_CCORP' as keyof Env,
+  us_de_llc: 'STRIPE_PRICE_INCORP_US_DE_LLC' as keyof Env,
+  uk_ltd: 'STRIPE_PRICE_INCORP_UK_LTD' as keyof Env,
+  sg_pte: 'STRIPE_PRICE_INCORP_SG_PTE' as keyof Env,
+  ee_oy: 'STRIPE_PRICE_INCORP_EE_OY' as keyof Env,
+};
+
+const JURISDICTION_COSTS: Record<string, number> = {
+  us_de_ccorp: 50000,
+  us_de_llc: 30000,
+  uk_ltd: 5000,
+  sg_pte: 60000,
+  ee_oy: 20000,
+};
+
+legal.post('/incorporate/checkout', async (c) => {
+  const user = await requireAuth(c);
+  await ensureIncorporationsSchema(c.env);
+  const body = await c.req.json<{
+    project_id: number;
+    jurisdiction_id: string;
+    company_name: string;
+    registered_agent_name?: string | null;
+    registered_agent_address?: string | null;
+  }>();
+
+  const j = JURISDICTIONS.find((x) => x.id === body.jurisdiction_id);
+  if (!j) return c.json({ error: `Unknown jurisdiction: ${body.jurisdiction_id}` }, 400);
+  if (!body.company_name?.trim()) return c.json({ error: 'company_name is required' }, 400);
+
+  const sql = getSQL(c.env);
+  const projRows = await sql`SELECT id, name, founder_id, entity_id FROM projects WHERE id = ${body.project_id}`;
+  if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+  const project = projRows[0] as any;
+
+  // Ownership: admin/partner OR founder-owns-project. Investors blocked.
+  if (user.role !== 'admin' && user.role !== 'partner') {
+    const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
+    if (!ownsProject) { await sql.end(); return c.json({ error: 'Forbidden: you do not own this project' }, 403); }
+  }
+
+  await sql.end();
+
+  const priceEnvKey = JURISDICTION_PRICE_ENV[j.id];
+  const priceId = (c.env as unknown as Record<string, unknown>)[priceEnvKey] as string | undefined;
+  const appUrl = c.env.APP_URL || 'http://localhost:5000';
+  const stripeKey = c.env.STRIPE_SECRET_KEY;
+
+  // Dev fallback — when Stripe or price is not configured, redirect to the
+  // dev-complete endpoint so the UI flow is testable without real payment.
+  if (!stripeKey || !priceId) {
+    const devAmount = JURISDICTION_COSTS[j.id] ?? 0;
+    const devSessionId = `dev_session_${user.id}_${Date.now()}`;
+    const incId = await createPendingIncorporation(c.env, {
+      user_id: user.id,
+      project_id: project.id,
+      jurisdiction_id: j.id,
+      company_name: body.company_name.trim(),
+      registered_agent_name: body.registered_agent_name ?? null,
+      registered_agent_address: body.registered_agent_address ?? null,
+      amount_cents: devAmount,
+      currency: 'usd',
+      stripe_session_id: devSessionId,
+    });
+    return c.json({
+      url: `${appUrl}/api/legal/incorporate/dev-complete?id=${incId}`,
+      incorporation_id: incId,
+      dev: true,
+    });
+  }
+
+  const params: Record<string, string> = {
+    mode: 'payment',
+    'line_items[0][price]': priceId,
+    'line_items[0][quantity]': '1',
+    success_url: `${appUrl}/incorporate/success?incorporation_id=PENDING`,
+    cancel_url: `${appUrl}/incorporate?cancelled=1`,
+    'metadata[kind]': 'incorporation',
+    'metadata[user_id]': String(user.id),
+    'metadata[jurisdiction_id]': j.id,
+    'metadata[company_name]': body.company_name.trim(),
+    client_reference_id: `incorporation:${user.id}`,
+  };
+  if (user.email) params.customer_email = user.email;
+
+  try {
+    const session = await stripeCall<{ url: string; id: string; amount_total?: number }>(c.env, '/checkout/sessions', params);
+    const incId = await createPendingIncorporation(c.env, {
+      user_id: user.id,
+      project_id: project.id,
+      jurisdiction_id: j.id,
+      company_name: body.company_name.trim(),
+      registered_agent_name: body.registered_agent_name ?? null,
+      registered_agent_address: body.registered_agent_address ?? null,
+      amount_cents: session.amount_total ?? (JURISDICTION_COSTS[j.id] ?? 0),
+      currency: 'usd',
+      stripe_session_id: session.id,
+    });
+    // Patch success_url with the real incorporation_id so the success page can poll.
+    const successUrl = `${appUrl}/incorporate/success?incorporation_id=${incId}`;
+    await stripeCall<{ id: string }>(c.env, `/checkout/sessions/${session.id}`, {
+      success_url: successUrl,
+    }, { idempotencyKey: `incorp_update_url:${session.id}` });
+    return c.json({ url: session.url, incorporation_id: incId, session_id: session.id });
+  } catch (e) {
+    return c.json({ error: 'checkout_failed', detail: (e as Error).message }, 502);
+  }
+});
+
+legal.get('/incorporate/status', async (c) => {
+  const user = await requireAuth(c);
+  await ensureIncorporationsSchema(c.env);
+  const id = Number(c.req.query('id') ?? 0);
+  if (!id) return c.json({ error: 'id is required' }, 400);
+  const row = await getIncorporationForUser(c.env, id, user.id);
+  if (!row) return c.json({ error: 'Not found' }, 404);
+  return c.json({
+    id: row.id,
+    status: row.status,
+    jurisdiction_id: row.jurisdiction_id,
+    company_name: row.company_name,
+    amount_cents: row.amount_cents,
+    currency: row.currency,
+    stripe_session_id: row.stripe_session_id,
+    paid_at: row.paid_at,
+    created_at: row.created_at,
+  });
+});
+
+legal.post('/incorporate/dev-complete', async (c) => {
+  // Fail-closed: only run in dev/test/preview/local environments.
+  const envName = String((c.env as { ENVIRONMENT?: string }).ENVIRONMENT || '').toLowerCase();
+  const SOFT_ACCEPT_ENVS = new Set(['development', 'dev', 'test', 'local', 'preview']);
+  if (!SOFT_ACCEPT_ENVS.has(envName)) {
+    return c.json({ error: 'dev_only' }, 403);
+  }
+
+  const user = await requireAuth(c);
+  await ensureIncorporationsSchema(c.env);
+  const id = Number(c.req.query('id') ?? 0);
+  if (!id) return c.json({ error: 'id is required' }, 400);
+
+  const row = await getIncorporationForUser(c.env, id, user.id);
+  if (!row) return c.json({ error: 'Not found' }, 404);
+  if (row.status !== 'pending_payment') return c.json({ error: 'not_pending' }, 409);
+
+  const { recordPaidIncorporation } = await import('../services/incorporations');
+  await recordPaidIncorporation(c.env, {
+    id: 'dev_session',
+    metadata: { incorporation_id: String(id), user_id: String(user.id) },
+    payment_status: 'paid',
+    amount_total: Number(row.amount_cents) || 0,
+    currency: String(row.currency) || 'usd',
+  });
+
+  return c.json({ ok: true, incorporation_id: id, status: 'paid' });
 });
 
 legal.get('/templates', async (c) => {

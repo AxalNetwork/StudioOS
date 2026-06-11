@@ -25,6 +25,7 @@ const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
 const IncorporatePage = lazy(() => import('./pages/IncorporatePage'));
+const IncorporateSuccessPage = lazy(() => import('./pages/IncorporateSuccessPage'));
 const CofounderAgreementPage = lazy(() => import('./pages/CofounderAgreementPage'));
 const Section83bPage = lazy(() => import('./pages/Section83bPage'));
 const CompliancePage = lazy(() => import('./pages/CompliancePage'));
@@ -1090,6 +1091,7 @@ function AppInner() {
       <Route path="/projects/:id" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectDetail />)} />
       <Route path="/legal" element={guard(['admin', 'founder'], <LegalPage />)} />
       <Route path="/incorporate" element={guard(['admin', 'founder', 'partner', 'investor'], <IncorporatePage />)} />
+      <Route path="/incorporate/success" element={guard(['admin', 'founder', 'partner', 'investor'], <IncorporateSuccessPage />)} />
       <Route path="/incorporate/cofounder-agreement" element={guard(['admin', 'founder', 'partner'], <CofounderAgreementPage />)} />
       <Route path="/incorporate/83b" element={guard(['admin', 'founder', 'partner'], <Section83bPage />)} />
       <Route path="/compliance" element={guard(['admin', 'founder', 'partner'], <CompliancePage />)} />

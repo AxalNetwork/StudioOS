@@ -30,7 +30,9 @@ export type JobType =
   | 'mi_reduce'
   // Task #2 (IB) — unified transactional email pipeline. Payload is the
   // rendered MIME-ready envelope produced by services/email/send.ts.
-  | 'email_send';
+  | 'email_send'
+  // Task #11 — incorporation packet start (Stripe Checkout paid flow).
+  | 'incorporation_packet_start';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
