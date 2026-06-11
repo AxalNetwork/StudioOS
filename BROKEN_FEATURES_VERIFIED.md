@@ -28,7 +28,7 @@ drift test or the Playwright smoke suite, and both jobs are wired into
 
 | Surface (bug-list item) | Spec | Auth role | URL probed | Page-level testid asserted |
 | --- | --- | --- | --- | --- |
-| Admin > Contracts (All / Pending / Signed / Voided / Pairwise / Partner Deals / Templates) | `admin_contracts.spec.js` | admin | `/admin?tab=contracts` | `admin-contracts-panel`, `contracts-sub-{all,pending,signed,voided,pairwise,partner,templates}` |
+| Admin > Legal (All / Pending / Signed / Voided / Pairwise / Partner Deals / Templates / Forms / Incorporation) | `admin_contracts.spec.js` | admin | `/admin?tab=legal` | `admin-legal-panel`, `legal-sub-{all,pending,signed,voided,pairwise,partner,templates}` |
 | Admin > Integration Keys | `admin_integration_keys.spec.js` | admin | `/admin?tab=integration-keys` | `admin-integration-keys-panel` |
 | Monitoring > User Analytics + sibling tabs | `monitoring_user_analytics.spec.js` | admin | `/monitoring?tab=analytics` | `monitoring-page`, `monitoring-tab-{overview,analytics,integrity,infra}`, `monitoring-analytics-panel` |
 | Projects (founder DELETE) | `projects_founder_delete.spec.js` | founder | `/projects` → first `/projects/:id` | `projects-page`, `project-detail`, `project-delete-btn` |

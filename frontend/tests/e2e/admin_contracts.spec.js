@@ -3,17 +3,20 @@ import { requirePreview, loginAs } from './_helpers.js';
 
 const FILTERS = ['all', 'pending', 'signed', 'voided', 'pairwise', 'partner', 'templates'];
 
-test.describe('Admin > Contracts (post-AO verification)', () => {
+test.describe('Admin > Legal (post-AO verification)', () => {
   test.beforeEach(() => requirePreview(test));
 
   test('every sub-filter renders rows OR a non-error empty state', async ({ page }) => {
     await loginAs(page, 'admin');
-    await page.goto('/admin?tab=contracts');
-    const panel = page.getByTestId('admin-contracts-panel');
+    await page.goto('/admin?tab=legal');
+    // AdminPage doesn't sync the active tab from the URL query, so click the
+    // Legal tab explicitly to open the panel.
+    await page.getByTestId('admin-tab-legal').click();
+    const panel = page.getByTestId('admin-legal-panel');
     await expect(panel).toBeVisible();
 
     for (const k of FILTERS) {
-      const btn = page.getByTestId(`contracts-sub-${k}`);
+      const btn = page.getByTestId(`legal-sub-${k}`);
       await expect(btn).toBeVisible();
       // Capture the underlying API call so we can assert non-error.
       const respPromise = page.waitForResponse(

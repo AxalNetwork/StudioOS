@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Updated: "Contracts" is now "Legal"
+
+The admin Contracts area has been renamed to "Legal" as it grows into a home for incorporation paperwork. Two new sections — "Forms" and "Incorporation" — now appear there; they're empty for now and will fill in over the coming updates. Everything you used before — sent, signed, and voided contracts, NDAs, partner deals, and templates — is exactly where it was.
+
+---
+
 ## Updated: "Sign in with a passkey" is back
 
 You can once again sign in with a passkey — Face ID, Touch ID, or a security key — right from the login page. The button appears automatically on browsers that support passkeys. The "Email me a sign-in link" option stays off for now.

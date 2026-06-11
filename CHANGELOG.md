@@ -10,6 +10,10 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Rename admin "Contracts" tab to "Legal"; scaffold Forms + Incorporation sub-tabs
+
+Foundation for the Legal-section overhaul. `frontend/src/pages/AdminPage.jsx` renames the Admin Console "Contracts" tab to "Legal": the tab `data-testid` is now `admin-tab-legal`, the internal `tab` state key is `'legal'` (was `'contracts'`), the mounted wrapper is `admin-legal-panel`, and the exported `ContractsPanel` component is now `LegalPanel`. Two new sub-tabs — "Forms" and "Incorporation" — are added after "Templates", each rendering an empty placeholder (`legal-forms-placeholder` / `legal-incorporation-placeholder`) to be populated by later tasks. The sub-tab `data-testid` prefix changed `contracts-sub-*` → `legal-sub-*`. No backend routes or API URLs changed. Deviation from the task plan: the `api.adminListContracts` / `adminContractStats` / `adminContractTemplates` client methods keep their names (and `/admin/contracts/*` URLs) — renaming was cosmetic-only (drift is URL-based) and risked a confusing near-collision with the existing `adminListLegalTemplates`, plus the downstream template-editor task owns that surface. All existing sub-tabs (All / Pending / Signed / Voided / Pairwise / Partner / Templates) are unchanged.
+
 ## Restore passkey sign-in on the login page
 
 Brings back the "Sign in with a passkey" button (removed in the prior change) while leaving the "Email me a sign-in link" magic-link button removed. `frontend/src/pages/LoginPage.jsx` re-adds the `signInWithPasskey` handler, the `passkeyBusy`/`passkeySupported` state, the `KeyRound` lucide import, and the `@simplewebauthn/browser` import (`startAuthentication`/`browserSupportsWebAuthn`). The button is gated on `passkeySupported` (rendered only when the browser supports WebAuthn) and sits directly below "Sign in", above the Google/demo blocks. Backend `/api/auth/passkey/*` routes, the `api.passkey.*` client methods, and the Settings → Security passkey panel were never removed, so no other wiring changed. Magic-link UI stays removed; the `?magic_error=` handler + `MAGIC_ERROR_COPY` remain untouched.

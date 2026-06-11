@@ -4,11 +4,11 @@ import { test, expect, type APIRequestContext, type Page } from '@playwright/tes
  * Task #21 — admins can send any new template end-to-end.
  *
  * Flow under test (matches `frontend/src/pages/AdminPage.jsx`
- * NewEnvelopeWizard + ContractsPanel and the worker route
+ * NewEnvelopeWizard + LegalPanel and the worker route
  * `cloudflare-worker/src/routes/admin_contracts.ts`):
  *
  *   1. sign in as admin
- *   2. navigate to Admin > Contracts
+ *   2. navigate to Admin > Legal
  *   3. open "New envelope" wizard
  *   4. pick the `investor_nda_axal` template (rendered as
  *      "Investor NDA (Axal) v1" in the catalog)
@@ -76,7 +76,7 @@ async function loginAsAdmin(request: APIRequestContext, page: Page) {
   await page.context().addCookies(storage.cookies);
 }
 
-test.describe('Admin · Contracts — New envelope wizard', () => {
+test.describe('Admin · Legal — New envelope wizard', () => {
   test.skip(
     !ADMIN_EMAIL || !ADMIN_PASSWORD,
     'Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD to run this test. ' +
@@ -93,10 +93,10 @@ test.describe('Admin · Contracts — New envelope wizard', () => {
 
     await loginAsAdmin(request, page);
 
-    // Navigate to Admin > Contracts. The Admin page uses ?tab=contracts
-    // in its URL state (see `AdminPage.jsx`), but the Contracts sub-tab
-    // is also reachable by clicking the "Contracts" tab once on /admin.
-    await page.goto('/admin?tab=contracts');
+    // Navigate to Admin > Legal. AdminPage doesn't sync the active tab from
+    // the URL query, so click the Legal tab explicitly to open its panel.
+    await page.goto('/admin?tab=legal');
+    await page.getByTestId('admin-tab-legal').click();
     await expect(
       page.getByRole('button', { name: 'New envelope' }),
     ).toBeVisible();

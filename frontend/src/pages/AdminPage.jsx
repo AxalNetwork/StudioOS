@@ -265,9 +265,9 @@ export default function AdminPage({ onImpersonate }) {
             <span className="ml-2 bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">{kycQueue.length} pending</span>
           )}
         </button>
-        <button data-testid="admin-tab-contracts" onClick={() => setTab('contracts')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'contracts' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <FileText size={14} className="inline mr-1.5" /> Contracts
+        <button data-testid="admin-tab-legal" onClick={() => setTab('legal')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'legal' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+          <FileText size={14} className="inline mr-1.5" /> Legal
         </button>
         <button data-testid="admin-tab-personas" onClick={() => setTab('personas')}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'personas' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
@@ -295,7 +295,7 @@ export default function AdminPage({ onImpersonate }) {
         <div data-testid="admin-network-profiles-panel"><AdminNetworkProfiles /></div>
       )}
 
-      {tab === 'contracts' && <div data-testid="admin-contracts-panel"><ContractsPanel /></div>}
+      {tab === 'legal' && <div data-testid="admin-legal-panel"><LegalPanel /></div>}
       {tab === 'personas' && <PersonasPanel />}
       {tab === 'directory' && <div data-testid="admin-directory-panel"><DirectoryPanel /></div>}
       {tab === 'integration-keys' && <div data-testid="admin-integration-keys-panel"><IntegrationKeysPanel /></div>}
@@ -1707,7 +1707,7 @@ const PARTY_ROLE_OPTIONS = [
   ['axal', 'Axal'],
 ];
 
-export function ContractsPanel() {
+export function LegalPanel() {
   const [stats, setStats] = useState(null);
   const [items, setItems] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -1715,7 +1715,7 @@ export function ContractsPanel() {
   const [partnerDeals, setPartnerDeals] = useState([]);
   const [partnerDealsNote, setPartnerDealsNote] = useState('');
   const [loading, setLoading] = useState(true);
-  const [sub, setSub] = useState('all'); // all | pending | signed | voided | templates | pairwise | partner
+  const [sub, setSub] = useState('all'); // all | pending | signed | voided | pairwise | partner | templates | forms | incorporation
   const [q, setQ] = useState('');
   const [docType, setDocType] = useState('');
   const [providerFilter, setProviderFilter] = useState(''); // '' | 'native' | 'docusign'
@@ -1785,15 +1785,17 @@ export function ContractsPanel() {
       {/* Sub-tabs */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         {[
-          ['all',       'All Contracts'],
-          ['pending',   'Sent / Pending'],
-          ['signed',    'Signed'],
-          ['voided',    'Voided'],
-          ['pairwise',  'Pairwise NDAs'],
-          ['partner',   'Partner Deals'],
-          ['templates', 'Templates'],
+          ['all',           'All Contracts'],
+          ['pending',       'Sent / Pending'],
+          ['signed',        'Signed'],
+          ['voided',        'Voided'],
+          ['pairwise',      'Pairwise NDAs'],
+          ['partner',       'Partner Deals'],
+          ['templates',     'Templates'],
+          ['forms',         'Forms'],
+          ['incorporation', 'Incorporation'],
         ].map(([k, label]) => (
-          <button key={k} data-testid={`contracts-sub-${k}`} onClick={() => setSub(k)}
+          <button key={k} data-testid={`legal-sub-${k}`} onClick={() => setSub(k)}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg border ${sub === k ? 'bg-violet-600 border-violet-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-violet-300'}`}>
             {label}
           </button>
@@ -1854,6 +1856,14 @@ export function ContractsPanel() {
           onOpen={(uid) => uid && setOpenContract({ uid })} />
       ) : sub === 'partner' ? (
         <PartnerDealsTable rows={partnerDeals} note={partnerDealsNote} dealTypeFilter={pdDealType} onDealTypeFilter={setPdDealType} />
+      ) : sub === 'forms' ? (
+        <div data-testid="legal-forms-placeholder" className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">
+          IRS-style forms will appear here soon.
+        </div>
+      ) : sub === 'incorporation' ? (
+        <div data-testid="legal-incorporation-placeholder" className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">
+          Incorporation packets will appear here soon.
+        </div>
       ) : items.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">
           {sub === 'pending' && 'No contracts are currently awaiting signature. New sends will appear here within a few seconds.'}
