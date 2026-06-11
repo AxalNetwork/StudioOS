@@ -7,9 +7,11 @@
 -- access control is correct; only the seed data is wrong. This migration sets
 -- author_user_id = the id of guillaumelauzier@gmail.com for those three slugs.
 --
--- Apply with:
---   wrangler d1 execute studioos-db --remote --env production \
+-- Apply with (verified working — D1 "studioos-db" is bound as DB in the
+-- repo-root wrangler.toml; target it by name with --remote):
+--   npx wrangler d1 execute studioos-db --config wrangler.toml --remote \
 --     --file=cloudflare-worker/sql/migrations/088_backfill_article_authors.sql
+-- (Applied to prod on 2026-06-11.)
 --
 -- Idempotent: the WHERE clause only touches rows whose author_user_id is not
 -- already the target id (null-safe `IS NOT`), so re-running is a no-op. It also
