@@ -434,12 +434,27 @@ articles.post('/:id/submit', async (c) => {
   if (!row.body_markdown || String(row.body_markdown).trim().length < 200) {
     return c.json({ error: 'body_too_short', min_chars: 200 }, 400);
   }
-  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  // `article_submission_log.submitted_at` defaults to zone-less datetime('now')
+  // ('YYYY-MM-DD HH:MM:SS', UTC). Compare against the SAME space-form string:
+  // an ISO-T weekAgo would mis-sort on the boundary day (space 0x20 < 'T'),
+  // letting a just-expired row slip back inside the window and loosen the cap.
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    .toISOString().replace('T', ' ').slice(0, 19);
   const cnt: any = await c.env.DB.prepare(
-    `SELECT COUNT(*) AS c FROM article_submission_log WHERE author_id = ? AND submitted_at >= ?`,
+    `SELECT COUNT(*) AS c,
+            strftime('%Y-%m-%dT%H:%M:%SZ', datetime(MIN(submitted_at), '+7 days')) AS next_available_at
+       FROM article_submission_log
+      WHERE author_id = ? AND submitted_at >= ?`,
   ).bind(user.id, weekAgo).first();
   if ((cnt?.c ?? 0) >= SUBMISSIONS_PER_WEEK) {
-    return c.json({ error: 'rate_limited', per_week: SUBMISSIONS_PER_WEEK }, 429);
+    // `next_available_at` = when the oldest in-window submission ages out, so
+    // the editor can show "next slot opens {when}" instead of a bare cap.
+    return c.json({
+      error: 'rate_limited',
+      per_week: SUBMISSIONS_PER_WEEK,
+      used: cnt?.c ?? SUBMISSIONS_PER_WEEK,
+      next_available_at: cnt?.next_available_at ?? null,
+    }, 429);
   }
   const lint = await lintForSend(c.env, String(row.body_markdown), 'public');
   if (!lint.ok) {

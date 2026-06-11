@@ -10,6 +10,15 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Clear submit & PII feedback (Task #2)
+
+Submit rejections on the article author page now drive in-UI state instead of a generic toast. Root cause: `request()` in `frontend/src/lib/api.js` attaches the parsed error body to `e.data`/`e.status`, but `ArticleAuthorPage.jsx` read `e?.body?.*` (always undefined) so every 4xx fell through to "Submit failed".
+
+- `frontend/src/pages/ArticleAuthorPage.jsx`: `e?.body?.*` → `e?.data?.*` in save/submit. Split `save()` into `persist()` (returns boolean, no success toast) + `save()`; `submit()` now persists first and ABORTS if the save fails — otherwise the worker lints stale stored text and the returned PII offsets won't line up with the editor. New state `piiFindings`/`rateLimit`/`submitSuccess`, cleared in `loadOne`, on `retract`, and (piiFindings) on body edit. Local `HighlightedTextarea` overlay: a transparent textarea over a scroll-synced backdrop that mirrors the body with `<mark>` spans at each finding's `offset`/`length`; clicking a finding focuses the editor and selects the span. Three render states: non-dismissable PII banner ("remove the highlighted personal data" + clickable findings list), amber rate-limit banner (uses `next_available_at` for "submit again in N days (around …)"), emerald "Submitted — now in review" panel with next steps (gated on status submitted/in_review).
+- `cloudflare-worker/src/services/telegramRedactCheck.ts`: `RedactFinding` gains optional `offset?`/`length?`. `scanRegexes` sets them for email/phone (trim-aware)/tax_id/bank_iban/card_like; `lintForSend` recovers offsets for consent_missing/private_in_public via case-insensitive `indexOf`. Additive — the other consumers (`admin_telegram`, `admin_x`, `news`) are unaffected.
+- `cloudflare-worker/src/routes/articles.ts` `POST /:id/submit`: the 429 now returns `used` + `next_available_at` (`strftime('%Y-%m-%dT%H:%M:%SZ', datetime(MIN(submitted_at),'+7 days'))`). Also normalized the window comparison to the zone-less space form (`submitted_at` defaults to `datetime('now')`) so the boundary day can't mis-sort (space 0x20 < 'T') and loosen the cap.
+- Verified: frontend typecheck + build, worker `tsc --noEmit`, `npm run test:drift` (dark-mode + API-drift) all green. Dev FastAPI has no `/api/articles` route, so the PII path is worker-only (it degrades in dev).
+
 ## User skill profile (Task #11)
 
 Per-user skill self-ratings + connection-gated peer endorsements + a blended self+peer aggregate, built on the Task #10 taxonomy. Worker-only (dev FastAPI does not mount `/api/skills`; the page degrades to an error banner in dev).

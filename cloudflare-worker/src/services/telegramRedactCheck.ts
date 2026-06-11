@@ -26,6 +26,8 @@ export interface RedactFinding {
   match: string;                // the offending substring (masked for tax/card)
   context?: string;             // ~40 chars surrounding the hit
   user_id?: number;             // populated for consent_missing / private_in_public
+  offset?: number;              // 0-based char offset of the hit within the linted body
+  length?: number;              // length (in chars) of the offending substring in the body
 }
 
 export interface RedactResult {
@@ -66,15 +68,24 @@ function scanRegexes(body: string, findings: RedactFinding[]): void {
       severity: 'high',
       match: m[0],
       context: around(body, m.index ?? 0, m[0].length),
+      offset: m.index ?? 0,
+      length: m[0].length,
     });
   }
   for (const m of body.matchAll(PHONE_RE)) {
     if (!looksLikePhone(m[0])) continue;
+    // The phone regex can capture leading/trailing whitespace; trim it so the
+    // highlight offset/length map to the actual digits, not the surrounding gap.
+    const raw = m[0];
+    const lead = raw.length - raw.trimStart().length;
+    const trimmed = raw.trim();
     findings.push({
       kind: 'phone',
       severity: 'high',
-      match: m[0].trim(),
-      context: around(body, m.index ?? 0, m[0].length),
+      match: trimmed,
+      context: around(body, m.index ?? 0, raw.length),
+      offset: (m.index ?? 0) + lead,
+      length: trimmed.length,
     });
   }
   for (const m of body.matchAll(SSN_RE)) {
@@ -83,6 +94,8 @@ function scanRegexes(body: string, findings: RedactFinding[]): void {
       severity: 'high',
       match: maskTail(m[0]),
       context: around(body, m.index ?? 0, m[0].length),
+      offset: m.index ?? 0,
+      length: m[0].length,
     });
   }
   for (const m of body.matchAll(IBAN_RE)) {
@@ -91,6 +104,8 @@ function scanRegexes(body: string, findings: RedactFinding[]): void {
       severity: 'high',
       match: maskTail(m[0]),
       context: around(body, m.index ?? 0, m[0].length),
+      offset: m.index ?? 0,
+      length: m[0].length,
     });
   }
   for (const m of body.matchAll(CARD_RE)) {
@@ -101,6 +116,8 @@ function scanRegexes(body: string, findings: RedactFinding[]): void {
       severity: 'medium',
       match: maskTail(digits),
       context: around(body, m.index ?? 0, m[0].length),
+      offset: m.index ?? 0,
+      length: m[0].length,
     });
   }
 }
@@ -176,6 +193,11 @@ export async function lintForSend(
   const mentions = await scanUserMentions(env, body);
 
   for (const m of mentions) {
+    // The mention scan doesn't track offsets; recover the first occurrence so
+    // the editor can highlight it. Multi-occurrence mentions only flag the
+    // first hit, which is acceptable for a "remove this" prompt.
+    const idx = body.toLowerCase().indexOf(m.matched.toLowerCase());
+    const loc = idx >= 0 ? { offset: idx, length: m.matched.length } : {};
     if (audience === 'public') {
       findings.push({
         kind: 'private_in_public',
@@ -183,6 +205,7 @@ export async function lintForSend(
         match: m.matched,
         user_id: m.user_id,
         context: `Public channel cannot mention specific users (${m.via}).`,
+        ...loc,
       });
     } else if (!m.consented) {
       findings.push({
@@ -191,6 +214,7 @@ export async function lintForSend(
         match: m.matched,
         user_id: m.user_id,
         context: `User has not opted in via user_promotion_consent (matched via ${m.via}).`,
+        ...loc,
       });
     }
   }

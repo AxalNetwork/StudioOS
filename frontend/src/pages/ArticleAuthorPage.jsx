@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   FileText, Plus, RefreshCw, Loader2, Save, Send, ArrowLeft, ImageIcon,
   CheckCircle2, Trash2, Eye, MessageSquare, ChevronDown, ChevronRight,
-  Copy, ExternalLink,
+  Copy, ExternalLink, ShieldAlert, Clock,
 } from 'lucide-react';
 import { articles as api } from '../lib/api';
 import { useToast } from '../components/useToast';
@@ -77,6 +77,120 @@ function relativeTime(value) {
   const months = Math.floor(days / 30);
   if (months < 12) return `${months}mo ago`;
   return `${Math.floor(months / 12)}y ago`;
+}
+
+// Human label for each PII finding kind in the blocked-submission banner.
+const PII_LABEL = {
+  email: 'Email',
+  phone: 'Phone',
+  tax_id: 'Tax ID',
+  bank_iban: 'Bank account',
+  card_like: 'Card number',
+  consent_missing: 'Person',
+  private_in_public: 'Person',
+};
+
+// D1 timestamps can be zone-less "YYYY-MM-DD HH:MM:SS" (UTC); the worker's
+// next_available_at is ISO-Z. Normalise the zone-less form before parsing.
+function parseServerTs(value) {
+  if (!value) return NaN;
+  let v = value;
+  if (typeof v === 'string' && !v.includes('T') && !v.endsWith('Z')
+      && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(v)) {
+    v = `${v.replace(' ', 'T')}Z`;
+  }
+  return new Date(v).getTime();
+}
+
+// Forward-looking companion to relativeTime() for the rate-limit "next slot" copy.
+function futureRelative(value) {
+  const t = parseServerTs(value);
+  if (Number.isNaN(t)) return '';
+  const secs = Math.round((t - Date.now()) / 1000);
+  if (secs <= 0) return 'now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `in ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `in ${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  return `in ${days} day${days === 1 ? '' : 's'}`;
+}
+
+function absoluteWhen(value) {
+  const t = parseServerTs(value);
+  if (Number.isNaN(t)) return '';
+  return new Date(t).toLocaleString();
+}
+
+// Split `text` into plain/marked segments for the highlight backdrop. Ranges
+// are {offset,length}; out-of-bounds entries are dropped and overlaps merged.
+function buildHighlightSegments(text, ranges) {
+  const valid = (ranges || [])
+    .filter((r) => Number.isInteger(r.offset) && Number.isInteger(r.length)
+      && r.length > 0 && r.offset >= 0 && r.offset < text.length)
+    .map((r) => ({ start: r.offset, end: Math.min(text.length, r.offset + r.length) }))
+    .sort((a, b) => a.start - b.start);
+  const merged = [];
+  for (const r of valid) {
+    const last = merged[merged.length - 1];
+    if (last && r.start <= last.end) last.end = Math.max(last.end, r.end);
+    else merged.push({ ...r });
+  }
+  const segs = [];
+  let cursor = 0;
+  for (const r of merged) {
+    if (r.start > cursor) segs.push({ text: text.slice(cursor, r.start), mark: false });
+    segs.push({ text: text.slice(r.start, r.end), mark: true });
+    cursor = r.end;
+  }
+  if (cursor < text.length) segs.push({ text: text.slice(cursor), mark: false });
+  return segs;
+}
+
+// Local-only overlay-highlight textarea for the article body. A transparent
+// textarea sits over a scroll-synced backdrop that mirrors the text with
+// <mark> spans at the PII ranges, so blocked personal data is highlighted
+// in place. Intentionally NOT a general editor component (see the separate
+// editor-upgrades task) — just enough to satisfy this feedback flow.
+function HighlightedTextarea({ value, onChange, disabled, ranges, textareaRef }) {
+  const backdropRef = useRef(null);
+  const marks = (ranges || []).filter(
+    (r) => Number.isInteger(r.offset) && Number.isInteger(r.length) && r.length > 0,
+  );
+  const hasMarks = marks.length > 0;
+  const segs = hasMarks ? buildHighlightSegments(value || '', marks) : null;
+  // Identical box model on backdrop + textarea so the marks stay aligned.
+  const box = 'px-3 py-3 font-mono text-sm leading-6';
+  const syncScroll = () => {
+    const ta = textareaRef.current;
+    const bd = backdropRef.current;
+    if (ta && bd) { bd.scrollTop = ta.scrollTop; bd.scrollLeft = ta.scrollLeft; }
+  };
+  return (
+    <div className="relative rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus-within:border-violet-500">
+      {hasMarks && (
+        <div
+          ref={backdropRef}
+          aria-hidden="true"
+          className={`${box} absolute inset-0 overflow-hidden whitespace-pre-wrap break-words pointer-events-none select-none rounded text-transparent`}
+        >
+          {segs.map((s, i) => (s.mark
+            ? <mark key={i} className="rounded-sm bg-red-300/80 text-transparent dark:bg-red-500/40">{s.text}</mark>
+            : <span key={i}>{s.text}</span>))}
+        </div>
+      )}
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={onChange}
+        onScroll={hasMarks ? syncScroll : undefined}
+        disabled={disabled}
+        placeholder="Write your article in markdown…"
+        rows={24}
+        className={`${box} relative block w-full resize-y rounded border-0 bg-transparent focus:outline-none focus:ring-0 disabled:opacity-60`}
+      />
+    </div>
+  );
 }
 
 function readFileAsDataUri(file) {
@@ -276,6 +390,10 @@ export default function ArticleAuthorPage() {
   const [coverPreview, setCoverPreview] = useState(null);
   const [coverError, setCoverError] = useState(null);
   const [lastSavedAt, setLastSavedAt] = useState(null);
+  const [piiFindings, setPiiFindings] = useState(null);
+  const [rateLimit, setRateLimit] = useState(null);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const bodyRef = useRef(null);
   const [, setNowTick] = useState(0);
 
   const setSelectedId = useCallback((id) => {
@@ -320,6 +438,9 @@ export default function ArticleAuthorPage() {
     setCoverPreview(null);
     setCoverError(null);
     setLastSavedAt(null);
+    setPiiFindings(null);
+    setRateLimit(null);
+    setSubmitSuccess(false);
     try {
       const r = await api.draft(id);
       setArticle(r.article);
@@ -350,8 +471,13 @@ export default function ArticleAuthorPage() {
     }
   };
 
-  const save = async () => {
-    if (!article) return;
+  // Persist the draft and report success/failure via the return value (no
+  // toast on success). `save` wraps it for the explicit Save button; `submit`
+  // uses it directly so it can ABORT when the save fails — otherwise the
+  // server would lint stale stored text and any PII offsets we highlight
+  // would be misaligned against what the author actually sees.
+  const persist = async () => {
+    if (!article) return false;
     setSaving(true);
     try {
       const patch = {
@@ -365,13 +491,20 @@ export default function ArticleAuthorPage() {
       setArticle(r.article);
       setItems((prev) => prev.map((a) => (a.id === r.article.id ? r.article : a)));
       setLastSavedAt(Date.now());
-      toast.success('Saved');
+      return true;
     } catch (e) {
       reportError('ArticleAuthor:save', e);
-      toast.error(e?.body?.error || 'Save failed');
+      toast.error(e?.data?.error || 'Save failed');
+      return false;
     } finally {
       setSaving(false);
     }
+  };
+
+  const save = async () => {
+    const ok = await persist();
+    if (ok) toast.success('Saved');
+    return ok;
   };
 
   const submit = async () => {
@@ -379,23 +512,39 @@ export default function ArticleAuthorPage() {
     if (!editing.title.trim()) { toast.error('Title is required'); return; }
     if ((editing.body_markdown || '').trim().length < 200) { toast.error('Body must be at least 200 characters'); return; }
     setSubmitting(true);
+    setPiiFindings(null);
+    setRateLimit(null);
+    setSubmitSuccess(false);
     try {
-      await save();
+      const ok = await persist();
+      if (!ok) { setSubmitting(false); return; }
       const r = await api.submit(article.id);
       setArticle(r.article);
       setItems((prev) => prev.map((a) => (a.id === r.article.id ? r.article : a)));
+      setSubmitSuccess(true);
       toast.success('Submitted for admin review');
     } catch (e) {
-      if (e?.body?.error === 'pii_blocked') {
-        const findings = e.body.findings || [];
-        toast.error(`Blocked: ${findings.length} PII issue(s). Remove emails/phones/IDs before submitting.`);
-      } else if (e?.body?.error === 'rate_limited') {
-        toast.error(`Hit the limit of ${e.body.per_week} submissions/week.`);
-      } else if (e?.body?.error === 'body_too_short') {
-        toast.error(`Body must be at least ${e.body.min_chars} characters.`);
+      const code = e?.data?.error;
+      if (code === 'pii_blocked') {
+        const findings = e.data?.findings || [];
+        setPiiFindings(findings);
+        toast.error(`Submission blocked — ${findings.length} item${findings.length === 1 ? '' : 's'} of personal data found.`);
+      } else if (code === 'rate_limited') {
+        setRateLimit({
+          per_week: e.data?.per_week,
+          used: e.data?.used,
+          next_available_at: e.data?.next_available_at || null,
+        });
+        toast.error('Weekly submission limit reached.');
+      } else if (code === 'body_too_short') {
+        toast.error(`Body must be at least ${e.data?.min_chars || 200} characters.`);
+      } else if (code === 'title_required') {
+        toast.error('Title is required.');
+      } else if (code === 'invalid_status') {
+        toast.error('This article can no longer be submitted from its current state — refresh and try again.');
       } else {
         reportError('ArticleAuthor:submit', e);
-        toast.error(e?.body?.error || 'Submit failed');
+        toast.error(e?.message || 'Submit failed');
       }
     } finally {
       setSubmitting(false);
@@ -406,6 +555,7 @@ export default function ArticleAuthorPage() {
     if (!article) return;
     try {
       await api.retract(article.id);
+      setSubmitSuccess(false);
       await loadOne(article.id);
       await refresh();
       toast.success('Retracted to draft');
@@ -413,6 +563,33 @@ export default function ArticleAuthorPage() {
       reportError('ArticleAuthor:retract', e);
       toast.error('Retract failed');
     }
+  };
+
+  // Editing the body invalidates the server-supplied PII offsets, so clear the
+  // highlights/banner the moment the author starts removing the flagged data.
+  const onBodyChange = (e) => {
+    const v = e.target.value;
+    setEditing((p) => ({ ...p, body_markdown: v }));
+    if (piiFindings) setPiiFindings(null);
+  };
+
+  // Clicking a finding jumps the caret to it and selects the offending text.
+  const jumpToFinding = (f) => {
+    if (typeof f?.offset !== 'number') return;
+    if (preview) setPreview(false);
+    setTimeout(() => {
+      const ta = bodyRef.current;
+      if (!ta) return;
+      const end = typeof f.length === 'number' ? f.offset + f.length : f.offset;
+      ta.focus();
+      try { ta.setSelectionRange(f.offset, end); } catch { /* noop */ }
+      // Textareas can't scrollIntoView a range — approximate by line number.
+      const before = (editing.body_markdown || '').slice(0, f.offset);
+      const line = before.split('\n').length;
+      ta.scrollTop = Math.max(0, (line - 3) * 24);
+      const bd = ta.previousElementSibling;
+      if (bd) bd.scrollTop = ta.scrollTop;
+    }, 0);
   };
 
   const uploadCover = async (file) => {
@@ -592,6 +769,68 @@ export default function ArticleAuthorPage() {
                 )}
               </div>
 
+              {piiFindings && piiFindings.length > 0 && (
+                <div className="p-3 mb-4 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-800 rounded text-sm">
+                  <div className="font-semibold text-red-800 dark:text-red-200 flex items-center gap-1.5">
+                    <ShieldAlert className="w-4 h-4" /> Submission blocked: remove the highlighted personal data.
+                  </div>
+                  <p className="text-red-700 dark:text-red-300 mt-1">
+                    We found {piiFindings.length} {piiFindings.length === 1 ? 'item' : 'items'} that look like personal data (emails, phone numbers, IDs, or named people who haven&apos;t opted in). Remove them from the body, then submit again.
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {piiFindings.map((f, i) => (
+                      <li key={i}>
+                        <button
+                          type="button"
+                          onClick={() => jumpToFinding(f)}
+                          className="text-left inline-flex items-start gap-2 hover:underline"
+                          title={typeof f.offset === 'number' ? 'Jump to this in the editor' : undefined}
+                        >
+                          <span className="shrink-0 text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200">
+                            {PII_LABEL[f.kind] || f.kind}
+                          </span>
+                          <span className="font-mono text-red-700 dark:text-red-300 break-all">
+                            {f.match}
+                            {f.context ? <span className="text-red-500/80 dark:text-red-400/80"> — …{f.context}…</span> : null}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {rateLimit && (
+                <div className="p-3 mb-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-800 rounded text-sm">
+                  <div className="font-semibold text-amber-800 dark:text-amber-200 flex items-center gap-1.5">
+                    <Clock className="w-4 h-4" /> Weekly submission limit reached
+                  </div>
+                  <p className="text-amber-700 dark:text-amber-300 mt-1">
+                    You&apos;ve used all {rateLimit.per_week ?? ''} of your weekly submissions.
+                    {rateLimit.next_available_at
+                      ? <> You can submit again {futureRelative(rateLimit.next_available_at)} (around {absoluteWhen(rateLimit.next_available_at)}).</>
+                      : ' Please try again in a few days.'}
+                  </p>
+                </div>
+              )}
+
+              {submitSuccess && (article.status === 'submitted' || article.status === 'in_review') && (
+                <div className="p-4 mb-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-800 rounded text-sm">
+                  <div className="font-semibold text-emerald-800 dark:text-emerald-200 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4" /> Submitted — now in review
+                  </div>
+                  <p className="text-emerald-700 dark:text-emerald-300 mt-1">
+                    Your article is locked while the team reviews it. Here&apos;s what happens next:
+                  </p>
+                  <ul className="list-disc ml-5 mt-2 space-y-0.5 text-emerald-700 dark:text-emerald-300">
+                    <li>An admin reviewer reads your draft and either approves it or requests changes.</li>
+                    <li>If they ask for changes, their notes appear here and the draft unlocks for editing.</li>
+                    <li>Once approved and published, you&apos;ll get a public link to share.</li>
+                    <li>Need to make a quick edit now? Use <strong>Retract</strong> to pull it back to draft.</li>
+                  </ul>
+                </div>
+              )}
+
               {article.status === 'rejected' && article.rejection_reason && (
                 <div className="p-3 mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm">
                   <div className="font-semibold text-red-800 dark:text-red-200">Rejected</div>
@@ -684,13 +923,12 @@ export default function ArticleAuthorPage() {
                       {coverError}
                     </div>
                   )}
-                  <textarea
+                  <HighlightedTextarea
                     value={editing.body_markdown}
-                    onChange={(e) => setEditing((p) => ({ ...p, body_markdown: e.target.value }))}
-                    placeholder="Write your article in markdown…"
+                    onChange={onBodyChange}
                     disabled={!isEditable}
-                    rows={24}
-                    className="w-full px-3 py-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded font-mono text-sm focus:outline-none focus:border-violet-500 disabled:opacity-60"
+                    ranges={piiFindings}
+                    textareaRef={bodyRef}
                   />
                   <div className="text-xs text-slate-500">
                     Markdown supported: # headings, **bold**, *italic*, [links](https://…), - lists, ```code blocks```.
