@@ -490,6 +490,10 @@ app.route('/api/activity', activity);
 // `GET /api/admin` (no trailing slash) would skip the perimeter and rely
 // on RBAC alone, which is exactly the leaked-admin-JWT scenario this
 // middleware exists to defend against.
+// IMPORTANT: every path gated here MUST also be listed as a path in the
+// Cloudflare Access application, or Cloudflare never injects the assertion
+// header and requireCfAccess() returns 403 to EVERYONE (incl. SSO'd admins)
+// the moment the secrets are set. See GOTCHAS.md item (h).
 app.use('/api/admin', requireCfAccess());
 app.use('/api/admin/*', requireCfAccess());
 app.use('/api/monitoring', requireCfAccess());
@@ -575,17 +579,21 @@ app.route('/api/decks', decks);
 app.get('/landing/:slug', async (c) => renderLandingHtml(c.env, c.req.param('slug'), c.get('cspNonce' as never) as string | undefined));
 // Task #4 — private preview URL for unpublished drafts (noindex).
 app.get('/landing/preview/:token', async (c) => renderLandingPreview(c.env, c.req.param('token'), c.get('cspNonce' as never) as string | undefined));
-// Task #15 — Cloudflare Access on sensitive R2 read endpoints (KYC IDs,
-// signed eSign documents, and incorporation certificates). Soft no-op in
-// dev/preview; production wrangler secrets engage the gate. Per-route
-// auth checks (requireAdmin/requireAuth) still run as the inner perimeter.
-app.use('/api/legal/esign/:id/document', requireCfAccess());
-app.use('/api/legal/esign/:id/document/*', requireCfAccess());
+// Task #15 — Cloudflare Access on sensitive R2 read endpoints. Soft no-op in
+// dev/preview; production wrangler secrets engage the gate. Per-route auth
+// checks (requireAdmin/requireAuth) still run as the inner perimeter.
+// NOTE: eSign document downloads are deliberately NOT behind CF Access. The
+// `/api/legal/esign/:id/document` route also serves non-admin envelope OWNERS,
+// and the sibling PUBLIC route `/api/legal/esign/sign/:token/document` serves
+// email-only recipients with no account — neither is on the staff SSO
+// allow-list, and a Cloudflare Access path wildcard (`*/document`) would catch
+// the public route too. eSign docs therefore stay RBAC-only. KYC docs are
+// admin-only (requireAdmin, no owner/public sibling) so they CAN be gated.
 app.use('/api/kyc/admin/:userId/document', requireCfAccess());
 app.use('/api/kyc/admin/:userId/document/*', requireCfAccess());
 // Note: when the incorporation-packet / certificate-of-formation download
 // endpoint is wired (downstream task), it should also carry the same
-// requireCfAccess() middleware.
+// requireCfAccess() middleware (it's admin-only, so safe to gate).
 
 app.route('/api/kyc', kyc);
 // Task #3 (Y-1) — Trust Center: per-role obligations + 3-way NDA flow.
