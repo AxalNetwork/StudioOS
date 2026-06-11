@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Build your Skills Profile
+
+There's a new **Skills Profile** page (under "Account" in the sidebar) where you can rate yourself from 0 to 5 across the full skills taxonomy, grouped by category. For any skill you can optionally add a link that backs up your experience and how many years you've practised it. Use the filter box to quickly find a skill, then hit Save — the button tells you how many changes are pending. When people you're connected with endorse you on a skill, that skill shows how many endorsements you have, the peer average, and a combined "blended" score that mixes your own rating with what your peers say.
+
+---
+
 ## Speak your answers to the Personal Advisor
 
 The advisor's message box now has a microphone button so you can talk instead of type. Tap it to start recording, tap again to stop, and your words are transcribed and added to whatever you've already written. The button turns red while it's listening and shows a spinner while it works. It's available both in the normal view and the fullscreen view. If your browser blocks microphone access, the button simply shows as unavailable — allow access and refresh to use it.

@@ -81,6 +81,7 @@ const PartnerOfficeHoursPage = lazy(() => import('./pages/PartnerOfficeHoursPage
 const CoMarketingPage = lazy(() => import('./pages/CoMarketingPage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
 const CofounderPage = lazy(() => import('./pages/CofounderPage'));
+const SkillsProfilePage = lazy(() => import('./pages/SkillsProfilePage'));
 const PortfolioHealthPage = lazy(() => import('./pages/PortfolioHealthPage'));
 const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
 const ReferEarnPage = lazy(() => import('./pages/ReferEarnPage'));
@@ -1110,6 +1111,8 @@ function AppInner() {
       <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], <CoMarketingPage user={user} />)} />
       <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <CalendarPage />)} />
       <Route path="/cofounder" element={guard(['admin', 'founder'], <CofounderPage />)} />
+      {/* Task #11 — User Skill Profile (self ratings + peer endorsements). */}
+      <Route path="/skills" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SkillsProfilePage />)} />
       <Route path="/portfolio/health" element={guard(['admin', 'founder', 'partner', 'investor'], <PortfolioHealthPage />)} />
       <Route path="/watchlist" element={guard(['admin', 'partner', 'investor'], <WatchlistJournalPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ActivityPage />)} />

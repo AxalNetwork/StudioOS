@@ -10,6 +10,17 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## User skill profile (Task #11)
+
+Per-user skill self-ratings + connection-gated peer endorsements + a blended self+peer aggregate, built on the Task #10 taxonomy. Worker-only (dev FastAPI does not mount `/api/skills`; the page degrades to an error banner in dev).
+
+- `cloudflare-worker/sql/migrations/091_user_skill_profile.sql`: creates `user_skills` (`user_id`, `skill_id`, `self_level` 0–5, `evidence_url`, `years`, `UNIQUE(user_id, skill_id)`, `CHECK self_level 0..5`) and `skill_endorsements` (`endorser_id`, `endorsee_id`, `skill_id`, `level` 0–5, `note`, `UNIQUE(endorser_id, endorsee_id, skill_id)`, `CHECK level 0..5`, `CHECK endorser<>endorsee`), plus indexes. `IF NOT EXISTS` / additive / idempotent. `skill_id` soft-links `skills.id` (house style, no hard FK). NOT yet applied to prod D1 — apply via wrangler (`npx wrangler d1 execute studioos-db --config wrangler.toml --remote --file=…091…`).
+- `cloudflare-worker/src/services/skillProfileSchema.ts`: lazy bootstrap `ensureSkillProfileSchema()` (table SHAPE only, per-isolate `_ready`, try/catch `console.warn`) mirroring `skillsTaxonomySchema.ts`. Exports reusable `computeBlendedSkills(env, userId)` + `SELF_WEIGHT`/`PEER_WEIGHT` so the downstream radar/matching code shares the exact blend: `blended = 0.4*self + 0.6*peer_avg` when `peer_count > 0`, else `self`.
+- `cloudflare-worker/src/routes/skills.ts` (mounted at `/api/skills` in `index.ts`, after `/api/cofounder`): `GET /taxonomy` (categories + active skills; weak `ETag` from row counts + `MAX(updated_at)`, honours `If-None-Match` → 304, `Cache-Control: private, max-age=300, must-revalidate`); `GET /me` + `PUT /me` (bulk upsert; `self_level <= 0` deletes the row; `evidence_url` must be http(s); validates `skill_id` against active skills); `POST /endorsements` (requires an **active** `cofounder_connections` row between the two users — non-connection → 403 `not_connected`; blocks self-endorsement; upsert on the unique triple); `GET /me/aggregate` + `GET /users/:userId/aggregate` (self | admin | active-connection only, else 403). All endpoints `requireAuth`.
+- `frontend/src/lib/api.js`: `api.skills` namespace (`getTaxonomy`, `getMySkills`, `saveMySkills`, `endorse`, `getMyAggregate`, `getUserAggregate`) — literal paths so the API↔Worker drift checker matches the `/api/skills` mount.
+- `frontend/src/pages/SkillsProfilePage.jsx` (lazy + auth-gated at `/skills` in `App.jsx` for all roles; linked from each role's "Account" sidebar group in `sidebarConfig.js`): category-grouped tag/level picker with a 0–5 selector per skill, optional evidence link + years, a filter box, dirty-diff Save, and a peer/blended badge where endorsements exist. Loaders fail gracefully via `reportError` + an error banner.
+- Verified: migration idempotency + CHECK enforcement via `node:sqlite`; worker `tsc --noEmit` clean (new files); `npm run test:drift` dark-mode + API-drift (CLI + node:test) all green.
+
 ## Skills & values taxonomy (Task #10)
 
 Canonical reference data — an 8-axis skill taxonomy + a personal-values taxonomy — as normalized D1 tables that every downstream feature (skill profiles, radar graph, co-founder/partner/investor matching, deck spider autofill) will read from as the single source of truth. Reference data only: no UI, no API routes, no per-user data.
