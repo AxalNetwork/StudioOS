@@ -554,6 +554,14 @@ export const api = {
     // <AdvisorFilledBanner> + the per-field sparkle icons.
     sources: (page) =>
       request(`/advisor/sources${page ? `?page=${encodeURIComponent(page)}` : ''}`),
+    // Voice-to-text for the composer mic. Posts a base64-encoded audio clip
+    // + its mime type to the Workers AI Whisper endpoint; returns { text }.
+    // The UI mic button that calls this is a separate task.
+    transcribe: (audio, mime) =>
+      request('/advisor/transcribe', {
+        method: 'POST',
+        body: JSON.stringify({ audio, mime }),
+      }),
   },
 
   listPartners: () => request('/partners'),

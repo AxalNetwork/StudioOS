@@ -2190,6 +2190,66 @@ advisor.get('/queue', async (c) => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// POST /transcribe  —  voice-to-text for the advisor composer mic.
+//
+// Accepts a base64-encoded audio clip plus its mime type, decodes it to raw
+// bytes and runs Cloudflare Workers AI Whisper, returning the transcribed
+// text. A missing clip is a 400; non-speech audio transcribes to an empty
+// string and is returned as-is (HTTP 200), never an error. This is the
+// server half of the mic feature — the UI button is a separate task. Reuses
+// the standard advisor auth + kill-switch guard (requireAuth + applyAdvisorGate).
+// ---------------------------------------------------------------------------
+const TRANSCRIBE_MODEL = '@cf/openai/whisper';
+// Cap the base64 payload tightly. Composer mic clips are only seconds long,
+// and `Array.from(bytes)` below expands the decoded audio into a plain JS
+// number[] (~8 bytes/element in V8), so an oversized clip — atob string +
+// Uint8Array + number[] together — can approach the 128 MB Workers isolate
+// limit and self-OOM. ~6 MB base64 ≈ 4.5 MB audio = minutes of compressed
+// (opus/webm) speech, with ample headroom.
+const TRANSCRIBE_MAX_B64 = 6 * 1024 * 1024;
+
+advisor.post('/transcribe', async (c) => {
+  const user = await requireAuth(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
+  // Workers AI is bound in production (wrangler.toml [ai]); guard anyway so a
+  // dev/preview env without the binding fails loudly instead of throwing.
+  if (!c.env.AI) return c.json({ error: 'ai_unavailable' }, 503);
+
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  // `mime` is accepted for forward-compat / client symmetry; the
+  // `@cf/openai/whisper` model sniffs the container itself and doesn't need it.
+  let b64 = String(body?.audio || '').trim();
+  // Tolerate a `data:audio/...;base64,<payload>` URL by stripping the prefix.
+  if (b64.startsWith('data:')) {
+    const comma = b64.indexOf(',');
+    if (comma !== -1) b64 = b64.slice(comma + 1);
+  }
+  if (!b64) return c.json({ error: 'no_audio' }, 400);
+  if (b64.length > TRANSCRIBE_MAX_B64) return c.json({ error: 'audio_too_large' }, 413);
+
+  let bytes: Uint8Array;
+  try {
+    const bin = atob(b64);
+    bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  } catch {
+    return c.json({ error: 'invalid_audio' }, 400);
+  }
+  if (bytes.byteLength === 0) return c.json({ error: 'no_audio' }, 400);
+
+  try {
+    const out: any = await c.env.AI.run(TRANSCRIBE_MODEL, { audio: Array.from(bytes) });
+    // Whisper returns { text, word_count, words, vtt }. Silence / non-speech
+    // yields an empty (or whitespace) string — surface it as empty text.
+    const text = String(out?.text ?? '').trim();
+    return c.json({ text });
+  } catch (e) {
+    return c.json({ error: 'transcribe_failed', message: (e as Error).message }, 502);
+  }
+});
+
 // Re-export for tests / debug.
 export { smNextTurn, smOnAnswered };
 
