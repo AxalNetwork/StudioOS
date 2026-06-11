@@ -10,6 +10,27 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## 8-page incorporation packet PDF assembler (Task #12)
+
+Builds a single function that assembles the full 8-page incorporation packet PDF in a fixed page order: Certificate of Formation, SS-4 Instructions, SS-4, Statement of Faxed EIN, Form 8821, Confirmation of Information, KYC ID page, and an Audit Trail page with a tamper-evident hash footer. The assembler is consumed by the downstream eSign packet pipeline.
+
+- **Service** — `cloudflare-worker/src/services/incorporationPacket.ts` exports:
+  - `renderCertificateOfFormationPdf(inputs)` — jurisdiction-aware certificate (Delaware C-Corp, Delaware LLC, UK Ltd, Singapore Pte, Estonia Oü). Includes entity fields, founder block, jurisdiction-specific boilerplate (Delaware GCL / LLC Act, UK Companies Act 2006, Singapore Companies Act, Estonian Commercial Code), and signature lines.
+  - `renderKycIdPagePdf(founderName, kycDocument?)` — embeds a PNG/JPEG image directly; for PDF KYC documents, renders a placeholder note (pdf-lib cannot embed a PDF page onto another page). Graceful fallback when no KYC document is provided.
+  - `renderAuditTrailPagePdf(events, bodyHash, envelopeUuid?)` — event list with timestamp, actor, and details; tamper-evident SHA-256 hash block at the bottom.
+  - `assembleIncorporationPacket(inputs)` — orchestrates all 7 body pages, computes a canonical body hash (SHA-256 of a deterministic JSON of inputs — not the PDF bytes, because PDF metadata is non-deterministic across save/load cycles), appends the audit trail as page 8. Returns `{bytes, pageCount, bodyHash}`.
+  - `sha256HexBytes` helper added to `services/pdf.ts` for hashing Uint8Array directly.
+- **Reuses** — `services/irsForms.ts` renderers for SS-4 (2 pages), faxed EIN, 8821, and confirmation. Mirrors the existing form geometry (PAGE_W=612, PAGE_H=792, MX=48) and `formFooter` / `sectionBar` / `fieldBox` patterns.
+- **Tests** — `cloudflare-worker/test/incorporationPacket.test.ts` (13 tests, node:test, pdf-lib assertions):
+  - Certificate renders for all 5 jurisdictions.
+  - KYC page renders with/without document.
+  - Audit trail renders with hash.
+  - Full packet: 8 pages, valid PDF magic, page size verification, canonical body hash recomputation and verification.
+  - KYC image embedding (1x1 red PNG fixture).
+  - KYC PDF document graceful handling.
+  - Added to `test:drift` suite in `package.json`.
+- **Out of scope** — Email delivery, signing, and envelope creation (handled by the downstream eSign packet task). Stripe checkout (Task #11).
+
 ## Per-jurisdiction Stripe Checkout in the Incorporate wizard (Task #11)
 
 Replaces the free wizard submit with a paid Stripe Checkout flow. Each jurisdiction maps to a Stripe Price ID (operator creates Price in dashboard, stores ID in Worker env). On successful payment, the webhook records a paid incorporation row and enqueues a `incorporation_packet_start` job; the downstream eSign packet pipeline will build the signing packet in a separate task.

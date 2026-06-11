@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: Your incorporation signing packet is now assembled automatically
+
+After your incorporation payment is confirmed, we build a complete 8-page signing packet behind the scenes: your jurisdiction-specific Certificate of Formation, the required IRS forms (SS-4 with instructions, Tax Information Authorization, Faxed EIN statement, and Confirmation of Information), a KYC identification page, and a tamper-evident audit trail. Each packet includes a unique hash so you can verify nothing has been altered after assembly. The signing link is emailed to you once the packet is ready.
+
+---
+
 ## New: Paid incorporation checkout with per-jurisdiction pricing
 
 The Incorporate wizard now collects payment before we generate your signing packet. When you finish the jurisdiction questionnaire and name check, you'll click "Continue to payment" and be taken to a secure Stripe checkout. After payment confirms, you'll land on a success page that tells you your signing link will be emailed once the packet is ready. You can also check the status of any incorporation from the success page.
