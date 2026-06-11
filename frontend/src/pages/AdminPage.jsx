@@ -13,6 +13,7 @@ import TrustScoreBadge from '../components/TrustScoreBadge';
 // /admin/network-profiles route stays wired for direct deep-links.
 import AdminNetworkProfiles from './admin/AdminNetworkProfiles';
 import AdminTemplates from './admin/AdminTemplates';
+import AdminForms from './admin/AdminForms';
 
 // Task #16 — per-row trust score column on the admin Users table.
 // Task #40 — accepts a pre-fetched `data` prop populated by the parent's
@@ -1859,9 +1860,7 @@ export function LegalPanel() {
       ) : sub === 'partner' ? (
         <PartnerDealsTable rows={partnerDeals} note={partnerDealsNote} dealTypeFilter={pdDealType} onDealTypeFilter={setPdDealType} />
       ) : sub === 'forms' ? (
-        <div data-testid="legal-forms-placeholder" className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">
-          IRS-style forms will appear here soon.
-        </div>
+        <AdminForms />
       ) : sub === 'incorporation' ? (
         <div data-testid="legal-incorporation-placeholder" className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">
           Incorporation packets will appear here soon.

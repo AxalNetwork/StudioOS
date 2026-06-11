@@ -863,6 +863,29 @@ export const api = {
     request(`/admin/contracts/templates/store/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(payload) }),
   adminTemplateStoreDelete: (slug) =>
     request(`/admin/contracts/templates/store/${encodeURIComponent(slug)}`, { method: 'DELETE' }),
+  // Task #9 — IRS-style forms catalog + on-the-fly PDF preview/download.
+  adminListForms: () => request('/admin/forms'),
+  // Returns { blob, url } for the rendered form PDF. The caller owns the
+  // object URL and must URL.revokeObjectURL(url) when done. `blank` renders a
+  // true blank; otherwise the form is filled with sample placeholder values.
+  adminFormPreviewBlob: async (id, { blank = false } = {}) => {
+    const token = localStorage.getItem('token');
+    const q = blank ? '?blank=1' : '';
+    const res = await fetch(`/api/admin/forms/${encodeURIComponent(id)}/preview${q}`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      let detail = res.statusText || 'Preview failed';
+      try { const err = await res.json(); detail = err?.error || err?.detail || detail; } catch { /* non-JSON */ }
+      const e = new Error(detail);
+      e.status = res.status;
+      throw e;
+    }
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `axal-form-${id}.pdf`;
+    return { blob, url: URL.createObjectURL(blob), filename };
+  },
   adminSendEnvelope: (payload) =>
     request('/legal/esign/send', { method: 'POST', body: JSON.stringify(payload) }),
   adminVoidContractWithReason: (uid, reason) =>

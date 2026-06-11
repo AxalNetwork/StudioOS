@@ -76,6 +76,8 @@ import activity from './routes/activity';
 import admin from './routes/admin';
 import adminBilling from './routes/admin_billing';
 import adminContracts from './routes/admin_contracts';
+// Task #9 — Hardcoded IRS-style forms (SS-4, 8821, Faxed-EIN, Confirmation).
+import adminForms from './routes/admin_forms';
 import adminIntegrationKeys from './routes/admin_integration_keys';
 // Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
 import adminAdvisorAudit from './routes/admin_advisor_audit';
@@ -498,6 +500,8 @@ app.use('/api/infra/*', requireCfAccess());
 // Mount the more-specific /admin/contracts prefix FIRST so it takes
 // precedence over the generic /admin router (which has no contract routes).
 app.route('/api/admin/contracts', adminContracts);
+// Task #9 — IRS-style forms catalog + PDF preview/download (admin-only).
+app.route('/api/admin/forms', adminForms);
 app.route('/api/admin/integration-keys', adminIntegrationKeys);
 app.route('/api/admin/advisor-audit', adminAdvisorAudit);
 // Task #10 (LD) — Admin team roster CRUD + photo upload. Mounted BEFORE

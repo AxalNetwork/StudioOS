@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: Edit legal templates right in the app
+
+Admins can now manage the legal template library directly from Admin → Legal → Templates. Templates are grouped by area (internal/GP, fund, portfolio, and compliance), and each one opens a side-by-side editor: type in plain Markdown on the left and see a live, formatted preview on the right. You can create new templates, edit existing ones, and remove ones you no longer need. Every edit is saved as a new version, so there's a full history you can look back on and restore from. Merge fields (the `{{placeholders}}` that get filled in per recipient) are detected automatically as you type, and the "uses" badge still shows where each template has been sent.
+
+---
+
 ## Updated: "Contracts" is now "Legal"
 
 The admin Contracts area has been renamed to "Legal" as it grows into a home for incorporation paperwork. Two new sections — "Forms" and "Incorporation" — now appear there; they're empty for now and will fill in over the coming updates. Everything you used before — sent, signed, and voided contracts, NDAs, partner deals, and templates — is exactly where it was.

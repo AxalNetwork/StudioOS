@@ -10,6 +10,15 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## IRS-style forms subsection (SS-4, 8821, Faxed-EIN ack, Confirmation) — programmatic PDFs
+
+Adds Admin → Legal → Forms: four IRS-style forms rendered on the fly as fixed-layout PDFs with three placeholder fields (full legal name, company, date). No reference PDFs were provided, so layouts are rendered from each form's standard structure (only the three fields are required — pixel-perfect IRS replicas are not).
+
+- **Renderer service** — `cloudflare-worker/src/services/irsForms.ts` (pdf-lib, same approach as `services/pdf.ts`). Exports `FormFields` (`fullLegalName`/`company`/`date`), `FORM_PLACEHOLDER_FIELDS`, the `IRS_FORMS` catalog (4 forms: `ss4` pages:2, `form_8821`, `faxed_ein`, `confirmation`), per-form renderers `renderSS4Pdf`/`renderForm8821Pdf`/`renderFaxedEinPdf`/`renderConfirmationPdf`, `sampleFields()`, and the `renderForm(id, fields)` dispatcher (returns `Uint8Array` or `null` for unknown ids). Shared drawing helpers (header, labeled field box, checkbox, section bar) with WinAnsi-safe text escaping. SS-4 renders the form page plus its instructions page (2 pages).
+- **Routes** — `cloudflare-worker/src/routes/admin_forms.ts` mounted at `/api/admin/forms` in `index.ts` (before the catch-all `/api/admin`). `GET /` returns the catalog + `placeholder_fields`; `GET /:id/preview` streams `application/pdf` (sample placeholder values by default, true blank when `?blank=1`), 404 JSON for unknown ids. Both `requireAdmin`. New route prefix, so `npm run test:drift` (API-drift) passes once the SPA calls land under it.
+- **Frontend** — new `frontend/src/pages/admin/AdminForms.jsx`: responsive card grid (one card per catalog form) with a preview lightbox (iframe over an object URL, sample/blank toggle, download) plus per-card download. Dark-mode variants throughout; object URLs are revoked on unmount. `api.js` adds `adminListForms` + `adminFormPreviewBlob(id, { blank })` (authed `fetch` → `{ blob, url, filename }`, caller owns the object URL). `AdminPage.jsx` `LegalPanel` swaps the `forms` placeholder for `<AdminForms/>`. Worker-only endpoints, so the dev FastAPI env shows an "unavailable in this environment" banner (404).
+- **Tests** — `cloudflare-worker/test/irsForms.test.ts` (node:test + pdf-lib `PDFDocument.load`): asserts the catalog has exactly the 4 ids + 3 placeholder fields, every id renders a valid `%PDF` with its declared page count, SS-4 = 2 pages, single-page forms = 1 page, blank fields render without throwing, unknown id → `null`, and `sampleFields()` supplies all three values. Appended to the `test:drift` TS suite in `package.json`.
+
 ## Worker-owned legal template store with markdown editor + versioning
 
 Makes the Cloudflare Worker / D1 the canonical store for legal templates, replacing the read-only `TemplatesGrid` on Admin → Legal → Templates with a full CRUD editor backed by two new tables.

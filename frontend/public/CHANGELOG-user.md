@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: Preview and download incorporation forms
+
+The "Forms" section under Admin → Legal is now live. It includes a set of common IRS-style forms — the SS-4 (with its instructions page), Form 8821, the Statement & Acknowledgement of a Faxed EIN, and a Confirmation of Information. Each one opens in a preview window where you can flip between a version filled with sample details and a completely blank copy, and download either as a PDF. These forms will be filled in automatically with real founder details as the incorporation flow comes together.
+
+---
+
 ## New: Edit legal templates right in the app
 
 Admins can now manage the legal template library directly from Admin → Legal → Templates. Templates are grouped by area (internal/GP, fund, portfolio, and compliance), and each one opens a side-by-side editor: type in plain Markdown on the left and see a live, formatted preview on the right. You can create new templates, edit existing ones, and remove ones you no longer need. Every edit is saved as a new version, so there's a full history you can look back on and restore from. Merge fields (the `{{placeholders}}` that get filled in per recipient) are detected automatically as you type, and the "uses" badge still shows where each template has been sent.
