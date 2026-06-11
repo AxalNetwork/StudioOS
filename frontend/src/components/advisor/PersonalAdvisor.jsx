@@ -581,7 +581,6 @@ export default function PersonalAdvisor() {
         persona={persona}
         progress={progress}
         onExit={() => setViewMode('normal')}
-        isDesktop={isDesktop}
         scrollerRef={scrollerRef}
         messages={messages}
         tutor={tutor}
@@ -717,7 +716,7 @@ function Header({ persona, progress, onMaximize }) {
 // distinct exit affordances (a filled "Back to dashboard" pill and an
 // outlined "Normal view" pill) plus Escape all return to the card.
 function FullscreenView({
-  persona, progress, onExit, isDesktop, scrollerRef,
+  persona, progress, onExit, scrollerRef,
   messages, tutor, onCloseTutor, loadError, complete, onCtaClick,
   question, onExplain,
   input, setInput, onSend, onSkip, busy, onPickOption,
@@ -733,10 +732,12 @@ function FullscreenView({
       className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-gray-900"
     >
       <FullscreenHeader persona={persona} progress={progress} onExit={onExit} />
-      <div className={`flex-1 min-h-0 ${isDesktop ? 'flex flex-row' : 'flex flex-col'}`}>
+      {/* Responsive: single column on small screens (chat over a capped,
+          scrollable progress section), two panes on large screens. */}
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
         {/* Chat column — fills the height; the transcript scrolls inside
             while the current-question + composer stay pinned at the bottom. */}
-        <div className={`flex-1 min-h-0 flex flex-col ${isDesktop ? 'border-r border-gray-100 dark:border-gray-800' : ''}`}>
+        <div className="flex-1 min-h-0 flex flex-col border-gray-100 dark:border-gray-800 lg:border-r">
           <Transcript
             ref={scrollerRef}
             messages={messages}
@@ -761,22 +762,21 @@ function FullscreenView({
           />
         </div>
 
-        {/* Right rail — same buckets as the card, scrolling naturally at
-            full height (no sticky / max-h cap). Desktop-only, matching the
-            embedded card so the widget isn't mounted on small screens. */}
-        {isDesktop && (
-          <aside className="w-80 xl:w-96 flex-shrink-0 min-h-0 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-950/40">
-            <FocusChips sectionStats={sectionStats} focusSection={focusSection} pickFocus={pickFocus} />
-            <AdvisorProgressWidget
-              focusSection={focusSection}
-              pendingEvidence={pendingEvidence}
-              currentQuestion={question}
-              labState={labState}
-              progressBumpToken={progressBumpToken}
-              onPickQuestion={onPickQuestion}
-            />
-          </aside>
-        )}
+        {/* Right rail — same buckets as the card. Always mounted in
+            fullscreen so the progress widget is present at every width:
+            a capped, independently-scrollable section stacked BELOW the
+            chat on small screens, and a full-height side rail on large. */}
+        <aside className="flex-shrink-0 min-h-0 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-950/40 max-h-[38vh] border-t border-gray-100 dark:border-gray-800 lg:max-h-none lg:border-t-0 lg:w-80 xl:w-96">
+          <FocusChips sectionStats={sectionStats} focusSection={focusSection} pickFocus={pickFocus} />
+          <AdvisorProgressWidget
+            focusSection={focusSection}
+            pendingEvidence={pendingEvidence}
+            currentQuestion={question}
+            labState={labState}
+            progressBumpToken={progressBumpToken}
+            onPickQuestion={onPickQuestion}
+          />
+        </aside>
       </div>
     </div>
   );
