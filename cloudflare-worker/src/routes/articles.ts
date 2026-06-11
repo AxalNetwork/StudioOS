@@ -20,7 +20,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, getCurrentUser } from '../auth';
 import { clampLimit, parseOffset } from '../util/pagination';
 import {
   ensureNewsSchema,
@@ -235,16 +235,30 @@ articles.get('/cover/:id', async (c) => {
   const id = Number(c.req.param('id'));
   if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid' }, 400);
   const row: any = await c.env.DB.prepare(
-    `SELECT cover_r2_key, cover_mime, status FROM articles WHERE id = ? LIMIT 1`,
+    `SELECT cover_r2_key, cover_mime, status, author_user_id FROM articles WHERE id = ? LIMIT 1`,
   ).bind(id).first();
-  if (!row || row.status !== 'published' || !row.cover_r2_key) return c.json({ error: 'not_found' }, 404);
+  if (!row || !row.cover_r2_key) return c.json({ error: 'not_found' }, 404);
+  // Published covers are public and long-cached. Unpublished covers (draft /
+  // submitted / in_review / changes_requested / rejected) are private: only the
+  // author or an admin may view them, so the editor preview survives a hard
+  // refresh without leaking unpublished art to the public. A same-origin <img>
+  // can't send a Bearer header, so this authenticates via the studioos_auth
+  // cookie; these responses are never cached.
+  let cacheControl = `public, max-age=${CACHE_TTL_SECONDS}, s-maxage=${CACHE_TTL_SECONDS}`;
+  if (row.status !== 'published') {
+    const user = await getCurrentUser(c).catch(() => null);
+    if (!user || (row.author_user_id !== user.id && user.role !== 'admin')) {
+      return c.json({ error: 'not_found' }, 404);
+    }
+    cacheControl = 'private, no-store';
+  }
   if (!c.env.FILES) return c.json({ error: 'r2_unavailable' }, 503);
   const obj = await c.env.FILES.get(row.cover_r2_key);
   if (!obj) return c.json({ error: 'not_found' }, 404);
   return new Response(obj.body, {
     headers: {
       'content-type': row.cover_mime || 'application/octet-stream',
-      'cache-control': `public, max-age=${CACHE_TTL_SECONDS}, s-maxage=${CACHE_TTL_SECONDS}`,
+      'cache-control': cacheControl,
     },
   });
 });

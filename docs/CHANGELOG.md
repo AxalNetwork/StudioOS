@@ -10,6 +10,22 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Article cover upload now visibly works end-to-end (Task #27)
+
+Fixed cover uploads silently doing nothing in the article editor. Root cause: `GET /api/articles/cover/:id` served covers only when `status='published'`, so a draft's freshly-uploaded cover 404'd in the editor `<img>` even though the worker stored it and returned `{ ok, cover_url }`.
+
+- `cloudflare-worker/src/routes/articles.ts`: the cover endpoint now serves unpublished covers (draft / submitted / in_review / changes_requested / rejected) to the author or an admin, authenticated via the `studioos_auth` cookie (a same-origin `<img>` can't send a Bearer header). Published covers stay public + 60-day-cached; unpublished are `private, no-store` and 404 for non-owners. Added `author_user_id` to the SELECT; imported `getCurrentUser`.
+- `frontend/src/pages/ArticleAuthorPage.jsx`: optimistic local-data-URI thumbnail on select, an "Uploading…" button state, reads the worker's returned `cover_url`, cache-busts the stored URL with `?v=updated_at`, and surfaces specific failures (`too_large` / `unsupported_mime` / auth / `r2_unavailable`) in an inline error banner instead of a generic toast.
+- Articles are a Worker-only surface (no FastAPI dev route), so this is verified by typecheck/drift + review and takes effect on `npm run deploy`.
+
+## Cloudflare Access re-scoped to the full admin surface (Task #15 ops)
+
+Re-scoped the CF Access perimeter from the eSign document endpoints to the full admin surface, and dropped eSign from the gate (it serves founders/external signers who can't be on a staff SSO allow-list).
+
+- `cloudflare-worker/src/index.ts`: removed the two `requireCfAccess()` mounts on `/api/legal/esign/:id/document{,/*}`; kept `/api/admin{,/*}`, `/api/monitoring{,/*}`, `/api/infra{,/*}` (Task #33) and `/api/kyc/admin/:userId/document{,/*}` (Task #15) under the gate. Added inline warning comments.
+- Engagement stays a prod-only switch via the `CF_ACCESS_TEAM_DOMAIN`/`CF_ACCESS_AUD` wrangler secrets; `requireCfAccess()` is a no-op when either is unset.
+- NOT currently engaged. Arming was verified correct on the canonical apex `axal.vc` (every gated path edge-302s to SSO; subpath inheritance confirmed — a bare `api/admin` Access path covers `/api/admin/users`), then rolled back: the SPA's relative API base (`BASE = '/api'`) means `app.axal.vc/api/*` fail-closes (403) when the Access app is apex-only, and the apex SPA assets are stale (404 on `axal.vc`) so `axal.vc/admin` renders blank. Re-arm after `scripts/git-push.sh` syncs the apex and admin traffic is routed to `axal.vc`.
+
 ## Cloudflare Access on sensitive R2 read endpoints (Task #15)
 
 `requireCfAccess()` now sits as an outer perimeter on the two sensitive document routes that stream from R2. Production wrangler secrets (`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`) engage the gate; dev/preview stays a no-op.

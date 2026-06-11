@@ -36,6 +36,36 @@ function readFileAsDataUri(file) {
   });
 }
 
+// Cache-bust the stored cover URL with the article's updated_at so a re-upload
+// is reflected immediately instead of serving the browser-cached old image.
+function coverSrc(article) {
+  if (!article?.cover_url) return null;
+  const v = article.updated_at ? `?v=${encodeURIComponent(article.updated_at)}` : '';
+  return `${article.cover_url}${v}`;
+}
+
+// Turn a failed-upload error into a specific, actionable message instead of a
+// generic "Upload failed". The request() helper attaches `.status` and `.data`
+// (the parsed worker JSON, e.g. { error: 'too_large' }).
+function coverErrorMessage(e) {
+  const code = e?.data?.error;
+  if (e?.status === 413 || code === 'too_large') {
+    return `That image is too large — covers must be under ${MAX_COVER_MB} MB.`;
+  }
+  if (code === 'unsupported_mime') return 'Unsupported image type. Use a PNG, JPEG, or WebP.';
+  if (code === 'invalid_data_uri') return 'That file could not be read as an image. Try another.';
+  if (code === 'r2_unavailable' || e?.status === 503) {
+    return 'Image storage is temporarily unavailable. Please try again shortly.';
+  }
+  if (e?.status === 401 || e?.status === 403 || e?.message === 'Session expired') {
+    return 'Your session expired. Sign in again to upload a cover.';
+  }
+  if (code === 'not_found_or_forbidden' || e?.status === 404) {
+    return 'You can only change the cover on your own draft.';
+  }
+  return e?.message || 'Cover upload failed. Please try again.';
+}
+
 function renderPreview(md) {
   const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const lines = esc(md || '').split('\n');
@@ -132,6 +162,9 @@ export default function ArticleAuthorPage() {
   const [submitting, setSubmitting] = useState(false);
   const [preview, setPreview] = useState(false);
   const [tagInput, setTagInput] = useState('');
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [coverPreview, setCoverPreview] = useState(null);
+  const [coverError, setCoverError] = useState(null);
 
   const setSelectedId = useCallback((id) => {
     setSelectedIdState(id);
@@ -165,6 +198,8 @@ export default function ArticleAuthorPage() {
   }, [refresh]);
 
   const loadOne = useCallback(async (id) => {
+    setCoverPreview(null);
+    setCoverError(null);
     try {
       const r = await api.draft(id);
       setArticle(r.article);
@@ -260,16 +295,45 @@ export default function ArticleAuthorPage() {
   };
 
   const uploadCover = async (file) => {
-    if (!file) return;
-    if (file.size > MAX_COVER_MB * 1024 * 1024) { toast.error(`Cover must be < ${MAX_COVER_MB} MB`); return; }
+    if (!file || !article) return;
+    setCoverError(null);
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      setCoverError('Use a PNG, JPEG, or WebP image for the cover.');
+      return;
+    }
+    if (file.size > MAX_COVER_MB * 1024 * 1024) {
+      setCoverError(`That image is ${(file.size / (1024 * 1024)).toFixed(1)} MB — covers must be under ${MAX_COVER_MB} MB.`);
+      return;
+    }
+    let dataUri;
     try {
-      const dataUri = await readFileAsDataUri(file);
-      await api.uploadCover(article.id, dataUri);
-      await loadOne(article.id);
-      toast.success('Cover uploaded');
+      dataUri = await readFileAsDataUri(file);
+    } catch {
+      setCoverError('Could not read that image file. Try another.');
+      return;
+    }
+    // Optimistic thumbnail from the local file (renders immediately), swapped
+    // for the stored image once the upload resolves.
+    setCoverPreview(dataUri);
+    setCoverUploading(true);
+    const articleId = article.id;
+    try {
+      const r = await api.uploadCover(articleId, dataUri);
+      // Apply the stored URL straight from the worker response and swap the
+      // optimistic data-URI preview for it. Guarded against the user switching
+      // articles mid-upload, so a slow response can't clobber another draft. A
+      // cover upload changes only the cover, so no full reload is needed.
+      setArticle((prev) => (prev && prev.id === articleId
+        ? { ...prev, cover_url: r?.cover_url || prev.cover_url, updated_at: new Date().toISOString() }
+        : prev));
+      setCoverPreview((prev) => (prev === dataUri ? null : prev));
+      toast.success('Cover updated');
     } catch (e) {
       reportError('ArticleAuthor:cover', e);
-      toast.error('Upload failed');
+      setCoverPreview(null); // revert to the previously stored cover, if any
+      setCoverError(coverErrorMessage(e));
+    } finally {
+      setCoverUploading(false);
     }
   };
 
@@ -414,14 +478,37 @@ export default function ArticleAuthorPage() {
                       )}
                     </div>
                     {isEditable && (
-                      <label className="text-sm px-3 py-2 border border-slate-300 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center gap-1">
-                        <ImageIcon className="w-4 h-4" /> Cover
-                        <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => uploadCover(e.target.files?.[0])} />
+                      <label className={`text-sm px-3 py-2 border border-slate-300 dark:border-slate-700 rounded flex items-center gap-1 ${coverUploading ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer'}`}>
+                        {coverUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                        {coverUploading ? 'Uploading…' : 'Cover'}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="hidden"
+                          disabled={coverUploading}
+                          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; uploadCover(f); }}
+                        />
                       </label>
                     )}
                   </div>
-                  {article.cover_url && (
-                    <img src={article.cover_url} alt="cover" className="max-h-48 rounded border border-slate-200 dark:border-slate-700" />
+                  {(coverPreview || article.cover_url) && (
+                    <div className="relative inline-block">
+                      <img
+                        src={coverPreview || coverSrc(article)}
+                        alt="cover"
+                        className={`max-h-48 rounded border border-slate-200 dark:border-slate-700 transition-opacity ${coverUploading ? 'opacity-50' : ''}`}
+                      />
+                      {coverUploading && (
+                        <span className="absolute inset-0 flex items-center justify-center">
+                          <Loader2 className="w-6 h-6 animate-spin text-violet-600" />
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {coverError && (
+                    <div className="text-sm rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-3 py-2">
+                      {coverError}
+                    </div>
                   )}
                   <textarea
                     value={editing.body_markdown}

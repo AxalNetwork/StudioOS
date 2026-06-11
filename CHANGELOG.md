@@ -10,6 +10,14 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Article cover upload now visibly works end-to-end (Task #27)
+
+Fixed cover uploads silently doing nothing in the article editor. Root cause: `GET /api/articles/cover/:id` served covers only when `status='published'`, so a draft's freshly-uploaded cover 404'd in the editor `<img>` even though the worker stored it and returned `{ ok, cover_url }`.
+
+- `cloudflare-worker/src/routes/articles.ts`: the cover endpoint now serves unpublished covers (draft / submitted / in_review / changes_requested / rejected) to the author or an admin, authenticated via the `studioos_auth` cookie (a same-origin `<img>` can't send a Bearer header). Published covers stay public + 60-day-cached; unpublished are `private, no-store` and 404 for non-owners. Added `author_user_id` to the SELECT; imported `getCurrentUser`.
+- `frontend/src/pages/ArticleAuthorPage.jsx`: optimistic local-data-URI thumbnail on select, an "Uploading…" button state, reads the worker's returned `cover_url`, cache-busts the stored URL with `?v=updated_at`, and surfaces specific failures (`too_large` / `unsupported_mime` / auth / `r2_unavailable`) in an inline error banner instead of a generic toast.
+- Articles are a Worker-only surface (no FastAPI dev route), so this is verified by typecheck/drift + review and takes effect on `npm run deploy`.
+
 ## Cloudflare Access re-scoped to the full admin surface (Task #15 ops)
 
 Re-scoped the CF Access perimeter from the eSign document endpoints to the full admin surface, and dropped eSign from the gate (it serves founders/external signers who can't be on a staff SSO allow-list).

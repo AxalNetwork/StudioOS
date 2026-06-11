@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Cover images for your articles now work
+
+When you add a cover image to an article, you'll now see it right away: a preview appears the moment you pick a file, the button shows "Uploading…" while it saves, and the saved image stays put after a refresh — both while you're drafting and once the article is published. If an upload can't go through (the file is too big or the wrong type), you'll get a clear message explaining why instead of a vague error.
+
+---
+
 ## Security: tighter production-only perimeter on sensitive documents
 
 In production, any sensitive document download (signed eSign PDFs, KYC identification files) now requires an additional layer of identity verification via Cloudflare Access before your in-app credentials are even checked. Development and preview environments remain unaffected so you can keep working normally.
