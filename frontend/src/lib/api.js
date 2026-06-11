@@ -2022,6 +2022,20 @@ export const api = {
     if (projectId) fd.append('project_id', String(projectId));
     return request('/imports/deck', { method: 'POST', body: fd });
   },
+
+  // Task #11 — User Skill Profile. Worker-only (dev FastAPI lacks /api/skills;
+  // the page degrades to an error banner in dev). Paths are literal so the
+  // API↔Worker drift checker can match them to the /api/skills mount.
+  skills: {
+    getTaxonomy: () => request('/skills/taxonomy'),
+    getMySkills: () => request('/skills/me'),
+    saveMySkills: (ratings) =>
+      request('/skills/me', { method: 'PUT', body: JSON.stringify({ ratings }) }),
+    endorse: (data) =>
+      request('/skills/endorsements', { method: 'POST', body: JSON.stringify(data) }),
+    getMyAggregate: () => request('/skills/me/aggregate'),
+    getUserAggregate: (userId) => request(`/skills/users/${userId}/aggregate`),
+  },
 };
 
 // Task #3 — Due Diligence module. Admin/partner/investor/mentor only;
@@ -2363,20 +2377,6 @@ export const adminArticles = {
   resolveComment: (cid, resolved) =>
     request(`/admin/articles/comments/${cid}`, { method: 'PUT', body: JSON.stringify({ resolved }) }),
   deleteComment: (cid) => request(`/admin/articles/comments/${cid}`, { method: 'DELETE' }),
-
-  // Task #11 — User Skill Profile. Worker-only (dev FastAPI lacks /api/skills;
-  // the page degrades to an error banner in dev). Paths are literal so the
-  // API↔Worker drift checker can match them to the /api/skills mount.
-  skills: {
-    getTaxonomy: () => request('/skills/taxonomy'),
-    getMySkills: () => request('/skills/me'),
-    saveMySkills: (ratings) =>
-      request('/skills/me', { method: 'PUT', body: JSON.stringify({ ratings }) }),
-    endorse: (data) =>
-      request('/skills/endorsements', { method: 'POST', body: JSON.stringify(data) }),
-    getMyAggregate: () => request('/skills/me/aggregate'),
-    getUserAggregate: (userId) => request(`/skills/users/${userId}/aggregate`),
-  },
 };
 
 // Spin-Out Lab — 4-week guided sprint for pre-incorporation founders.
