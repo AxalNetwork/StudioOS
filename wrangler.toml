@@ -493,6 +493,19 @@ zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/contact/*"
 zone_name  = "axal.vc"
+# Task #28 — public article reader served by the SPA on the apex. The
+# author editor surfaces `https://axal.vc/articles/{slug}` as the public
+# share URL (copy-link / "View live"), so the apex must serve `/articles`
+# (the public feed) and `/articles/*` (the reader at /articles/:slug).
+# Without these, a hard load / shared link falls through to Jekyll and
+# 404s (the edge 301 also rewrites app.axal.vc/articles/* to this apex
+# path). /articles/* does NOT capture Jekyll's /articles-* or /blogs/*.
+[[env.production.routes]]
+pattern    = "axal.vc/articles"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/articles/*"
+zone_name  = "axal.vc"
 
 [env.production.vars]
 # Task #5 — canonical-host flip. APP_URL/PUBLIC_BASE_URL now point at

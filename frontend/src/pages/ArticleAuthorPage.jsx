@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   FileText, Plus, RefreshCw, Loader2, Save, Send, ArrowLeft, ImageIcon,
-  CheckCircle2, Trash2, Eye, MessageSquare,
+  CheckCircle2, Trash2, Eye, MessageSquare, ChevronDown, ChevronRight,
+  Copy, ExternalLink,
 } from 'lucide-react';
 import { articles as api } from '../lib/api';
 import { useToast } from '../components/useToast';
@@ -25,6 +26,57 @@ function statusBadge(s) {
     rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
   };
   return <span className={`text-xs px-2 py-0.5 rounded-full ${map[s] || map.draft}`}>{s.replace('_', ' ')}</span>;
+}
+
+const PUBLIC_ARTICLE_BASE = 'https://axal.vc/articles';
+function publicArticleUrl(slug) {
+  return `${PUBLIC_ARTICLE_BASE}/${slug}`;
+}
+
+const STATUS_LABEL = {
+  draft: 'Draft',
+  submitted: 'Submitted',
+  in_review: 'In review',
+  changes_requested: 'Changes requested',
+  approved: 'Approved',
+  published: 'Published',
+  rejected: 'Rejected',
+};
+
+// Which collapsible rail section an article belongs to. Drafts also holds
+// `rejected` (still editable + resubmittable); In review holds the whole
+// review pipeline incl. `approved` (reviewed, awaiting publish).
+function lifecycleGroup(status) {
+  if (status === 'published') return 'published';
+  if (['submitted', 'in_review', 'changes_requested', 'approved'].includes(status)) return 'in_review';
+  return 'drafts';
+}
+
+// Compact relative time for row metadata + the editor save-state.
+function relativeTime(value) {
+  if (!value) return '';
+  // D1 default timestamps are zone-less "YYYY-MM-DD HH:MM:SS" (UTC), while
+  // our PUT/submit/retract writes use ISO-Z. Normalise the zone-less form to
+  // UTC before parsing so never-saved drafts don't show skewed times.
+  let v = value;
+  if (typeof v === 'string' && !v.includes('T') && !v.endsWith('Z')
+      && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(v)) {
+    v = `${v.replace(' ', 'T')}Z`;
+  }
+  const then = new Date(v).getTime();
+  if (Number.isNaN(then)) return '';
+  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (secs < 10) return 'just now';
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
 }
 
 function readFileAsDataUri(file) {
@@ -106,7 +158,54 @@ function renderPreview(md) {
   return out.join('\n');
 }
 
-function ArticleList({ items, selectedId, onSelect, onNew, refreshing, refresh }) {
+function ArticleRow({ a, selected, onSelect, onCopyUrl }) {
+  return (
+    <li>
+      <button
+        onClick={() => onSelect(a.id)}
+        className={`w-full text-left px-3 py-2 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 ${selected ? 'bg-violet-50 dark:bg-violet-900/20' : ''}`}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="font-medium text-sm truncate">{a.title || 'Untitled'}</div>
+          {statusBadge(a.status)}
+        </div>
+        <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          {a.word_count} words · {relativeTime(a.updated_at)}
+        </div>
+      </button>
+      {a.status === 'published' && a.slug && (
+        <div className="px-3 pb-2 flex items-center gap-3 text-xs border-b border-slate-100 dark:border-slate-800">
+          <button
+            onClick={() => onCopyUrl(a.slug)}
+            className="inline-flex items-center gap-1 text-slate-500 hover:text-violet-700 dark:hover:text-violet-300"
+          >
+            <Copy className="w-3 h-3" /> Copy link
+          </button>
+          <a
+            href={publicArticleUrl(a.slug)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-slate-500 hover:text-violet-700 dark:hover:text-violet-300"
+          >
+            <ExternalLink className="w-3 h-3" /> View live
+          </a>
+        </div>
+      )}
+    </li>
+  );
+}
+
+const RAIL_SECTIONS = [
+  { key: 'drafts', label: 'Drafts' },
+  { key: 'in_review', label: 'In review' },
+  { key: 'published', label: 'Published' },
+];
+
+function ArticleList({ items, selectedId, onSelect, onNew, refreshing, refresh, onCopyUrl }) {
+  const [open, setOpen] = useState({ drafts: true, in_review: true, published: true });
+  const groups = { drafts: [], in_review: [], published: [] };
+  for (const a of items || []) groups[lifecycleGroup(a.status)].push(a);
+
   return (
     <div className="border-r border-slate-200 dark:border-slate-800 w-72 flex-shrink-0 overflow-y-auto bg-white dark:bg-slate-900">
       <div className="p-3 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2">
@@ -118,26 +217,37 @@ function ArticleList({ items, selectedId, onSelect, onNew, refreshing, refresh }
         </button>
       </div>
       {(items || []).length === 0 ? (
-        <div className="p-4 text-sm text-slate-500 dark:text-slate-400">No drafts yet. Start your first article.</div>
+        <div className="p-4 text-sm text-slate-500 dark:text-slate-400">No articles yet. Click <strong>New draft</strong> to start.</div>
       ) : (
-        <ul>
-          {items.map((a) => (
-            <li key={a.id}>
-              <button
-                onClick={() => onSelect(a.id)}
-                className={`w-full text-left px-3 py-2 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 ${selectedId === a.id ? 'bg-violet-50 dark:bg-violet-900/20' : ''}`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="font-medium text-sm truncate">{a.title || 'Untitled'}</div>
-                  {statusBadge(a.status)}
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  {a.word_count} words · {new Date(a.updated_at).toLocaleDateString()}
-                </div>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div>
+          {RAIL_SECTIONS.map(({ key, label }) => {
+            const list = groups[key];
+            const isOpen = open[key];
+            return (
+              <section key={key}>
+                <button
+                  onClick={() => setOpen((p) => ({ ...p, [key]: !p[key] }))}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <span className="flex items-center gap-1.5">
+                    {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                    {label}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-normal">{list.length}</span>
+                </button>
+                {isOpen && (list.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800">None yet</div>
+                ) : (
+                  <ul>
+                    {list.map((a) => (
+                      <ArticleRow key={a.id} a={a} selected={selectedId === a.id} onSelect={onSelect} onCopyUrl={onCopyUrl} />
+                    ))}
+                  </ul>
+                ))}
+              </section>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -165,6 +275,8 @@ export default function ArticleAuthorPage() {
   const [coverUploading, setCoverUploading] = useState(false);
   const [coverPreview, setCoverPreview] = useState(null);
   const [coverError, setCoverError] = useState(null);
+  const [lastSavedAt, setLastSavedAt] = useState(null);
+  const [, setNowTick] = useState(0);
 
   const setSelectedId = useCallback((id) => {
     setSelectedIdState(id);
@@ -197,9 +309,17 @@ export default function ArticleAuthorPage() {
     refresh();
   }, [refresh]);
 
+  // Keep relative times ("Saved 12s ago", row updated times) ticking without
+  // a network round-trip.
+  useEffect(() => {
+    const t = setInterval(() => setNowTick((n) => n + 1), 15000);
+    return () => clearInterval(t);
+  }, []);
+
   const loadOne = useCallback(async (id) => {
     setCoverPreview(null);
     setCoverError(null);
+    setLastSavedAt(null);
     try {
       const r = await api.draft(id);
       setArticle(r.article);
@@ -244,6 +364,7 @@ export default function ArticleAuthorPage() {
       const r = await api.updateDraft(article.id, patch);
       setArticle(r.article);
       setItems((prev) => prev.map((a) => (a.id === r.article.id ? r.article : a)));
+      setLastSavedAt(Date.now());
       toast.success('Saved');
     } catch (e) {
       reportError('ArticleAuthor:save', e);
@@ -347,8 +468,35 @@ export default function ArticleAuthorPage() {
 
   const removeTag = (t) => setEditing((p) => ({ ...p, tags: (p.tags || []).filter((x) => x !== t) }));
 
+  const copyUrl = async (slug) => {
+    const url = publicArticleUrl(slug);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('no_clipboard');
+      await navigator.clipboard.writeText(url);
+      toast.success('Public link copied');
+    } catch {
+      toast.error(`Could not copy automatically — the link is ${url}`);
+    }
+  };
+
   const isLocked = article && ['in_review', 'submitted', 'approved', 'published'].includes(article.status);
   const isEditable = !isLocked;
+  const dirty = !!article && (
+    editing.title.trim() !== (article.title || '')
+    || editing.subtitle !== (article.subtitle || '')
+    || editing.body_markdown !== (article.body_markdown || '')
+    || (editing.sector || '') !== (article.sector || '')
+    || JSON.stringify(editing.tags || []) !== JSON.stringify(article.tags || [])
+  );
+  const savedAt = lastSavedAt || (article ? article.updated_at : null);
+  let reviewerNote = '';
+  if (article && article.status === 'changes_requested') {
+    const adminCmts = [...comments].reverse().filter((c) => c.author_role === 'admin');
+    const adminCmt = adminCmts.find((c) => !c.resolved_at) || adminCmts[0];
+    reviewerNote = (adminCmt && adminCmt.body)
+      || (comments.length ? comments[comments.length - 1].body : '')
+      || article.rejection_reason || '';
+  }
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3">
@@ -369,6 +517,7 @@ export default function ArticleAuthorPage() {
           onNew={onNew}
           refreshing={refreshing}
           refresh={refresh}
+          onCopyUrl={copyUrl}
         />
 
         <main className="flex-1 overflow-y-auto p-6">
@@ -378,38 +527,69 @@ export default function ArticleAuthorPage() {
             </div>
           ) : (
             <div className="max-w-4xl mx-auto">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  {statusBadge(article.status)}
-                  <span className="text-xs text-slate-500">
-                    {article.word_count} words · ~{article.read_minutes} min read
-                  </span>
-                  {article.status === 'published' && (
-                    <Link to={`/articles/${article.slug}`} className="text-xs text-violet-600 hover:underline">
-                      View published →
-                    </Link>
-                  )}
+              <div className="mb-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {statusBadge(article.status)}
+                    <span className="text-sm font-medium">{STATUS_LABEL[article.status] || article.status}</span>
+                    <span className="text-slate-300 dark:text-slate-600">·</span>
+                    {saving ? (
+                      <span className="text-xs inline-flex items-center gap-1 text-amber-600 dark:text-amber-400"><Loader2 className="w-3 h-3 animate-spin" /> Saving…</span>
+                    ) : dirty ? (
+                      <span className="text-xs text-amber-600 dark:text-amber-400">Unsaved changes</span>
+                    ) : (
+                      <span className="text-xs inline-flex items-center gap-1 text-slate-500 dark:text-slate-400"><CheckCircle2 className="w-3 h-3 text-emerald-500" /> Saved {relativeTime(savedAt)}</span>
+                    )}
+                    <span className="text-slate-300 dark:text-slate-600 hidden sm:inline">·</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 hidden sm:inline">{article.word_count} words · ~{article.read_minutes} min read</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setPreview((p) => !p)} className="text-sm px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1">
+                      <Eye className="w-4 h-4" /> {preview ? 'Edit' : 'Preview'}
+                    </button>
+                    {isEditable && (
+                      <button onClick={save} disabled={saving || !dirty} className="text-sm px-3 py-1.5 bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 rounded hover:opacity-90 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed">
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
+                      </button>
+                    )}
+                    {article.status === 'published' ? (
+                      <a href={publicArticleUrl(article.slug)} target="_blank" rel="noopener noreferrer" className="text-sm px-3 py-1.5 bg-violet-600 text-white rounded hover:bg-violet-700 flex items-center gap-1">
+                        <ExternalLink className="w-4 h-4" /> View live
+                      </a>
+                    ) : article.status === 'submitted' ? (
+                      <button onClick={retract} className="text-sm px-3 py-1.5 border border-orange-300 text-orange-700 dark:text-orange-300 rounded hover:bg-orange-50 dark:hover:bg-orange-900/20 flex items-center gap-1">
+                        <ArrowLeft className="w-4 h-4" /> Retract
+                      </button>
+                    ) : (article.status === 'in_review' || article.status === 'approved') ? (
+                      <button disabled title="This article is with the review team — you can't change it right now." className="text-sm px-3 py-1.5 border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 rounded flex items-center gap-1 opacity-70 cursor-not-allowed">
+                        {STATUS_LABEL[article.status]}
+                      </button>
+                    ) : (
+                      <button onClick={submit} disabled={submitting} className="text-sm px-3 py-1.5 bg-violet-600 text-white rounded hover:bg-violet-700 flex items-center gap-1 disabled:opacity-50">
+                        {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} {article.status === 'draft' ? 'Submit' : 'Resubmit'}
+                      </button>
+                    )}
+                    {article.status === 'changes_requested' && (
+                      <button onClick={retract} className="text-sm px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1">
+                        <ArrowLeft className="w-4 h-4" /> Retract
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setPreview((p) => !p)} className="text-sm px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1">
-                    <Eye className="w-4 h-4" /> {preview ? 'Edit' : 'Preview'}
-                  </button>
-                  {isEditable && (
-                    <button onClick={save} disabled={saving} className="text-sm px-3 py-1.5 bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 rounded hover:opacity-90 flex items-center gap-1 disabled:opacity-50">
-                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
-                    </button>
-                  )}
-                  {isEditable && (
-                    <button onClick={submit} disabled={submitting} className="text-sm px-3 py-1.5 bg-violet-600 text-white rounded hover:bg-violet-700 flex items-center gap-1 disabled:opacity-50">
-                      {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Submit
-                    </button>
-                  )}
-                  {['submitted', 'changes_requested'].includes(article.status) && (
-                    <button onClick={retract} className="text-sm px-3 py-1.5 border border-orange-300 text-orange-700 dark:text-orange-300 rounded hover:bg-orange-50 dark:hover:bg-orange-900/20 flex items-center gap-1">
-                      <ArrowLeft className="w-4 h-4" /> Retract
-                    </button>
-                  )}
-                </div>
+
+                {article.status === 'changes_requested' && reviewerNote && (
+                  <div className="px-4 py-3 border-t border-orange-200 dark:border-orange-900/50 bg-orange-50 dark:bg-orange-900/20 text-sm rounded-b-lg">
+                    <div className="font-semibold text-orange-800 dark:text-orange-200 flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> Reviewer asked for changes</div>
+                    <div className="text-orange-700 dark:text-orange-300 mt-1 whitespace-pre-wrap">{reviewerNote}</div>
+                  </div>
+                )}
+                {article.status === 'published' && article.slug && (
+                  <div className="px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-2 text-sm rounded-b-lg">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Public link</span>
+                    <code className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded break-all">{publicArticleUrl(article.slug)}</code>
+                    <button onClick={() => copyUrl(article.slug)} className="inline-flex items-center gap-1 text-xs text-violet-600 hover:underline"><Copy className="w-3.5 h-3.5" /> Copy</button>
+                  </div>
+                )}
               </div>
 
               {article.status === 'rejected' && article.rejection_reason && (
@@ -417,12 +597,6 @@ export default function ArticleAuthorPage() {
                   <div className="font-semibold text-red-800 dark:text-red-200">Rejected</div>
                   <div className="text-red-700 dark:text-red-300 mt-1">{article.rejection_reason}</div>
                   <div className="text-xs text-red-600 dark:text-red-400 mt-2">Your draft is preserved — edit and resubmit.</div>
-                </div>
-              )}
-              {article.status === 'changes_requested' && article.rejection_reason && (
-                <div className="p-3 mb-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded text-sm">
-                  <div className="font-semibold text-orange-800 dark:text-orange-200">Changes requested</div>
-                  <div className="text-orange-700 dark:text-orange-300 mt-1">{article.rejection_reason}</div>
                 </div>
               )}
 

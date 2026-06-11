@@ -10,6 +10,16 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Article lifecycle is now first-class in the author editor (Task #28)
+
+The author page surfaced no real lifecycle: the left rail was a flat list with a localized date and no copy/view affordances, and the editor showed only a status pill + generic Submit button, so a draft, a submitted article, a changes-requested article, and a published one were hard to tell apart.
+
+- `frontend/src/pages/ArticleAuthorPage.jsx`: the left rail is now three collapsible, counted sections grouped by `lifecycleGroup()` — **Drafts** (`draft`, `rejected`), **In review** (`submitted`/`in_review`/`changes_requested`/`approved`), **Published** (`published`). Each row shows title, colour-coded status pill, word count, and relative updated time (`relativeTime()`); published rows get a copy-public-URL button + "View live" link.
+- New top-of-editor status strip shows the status pill + label, a live save-state (`Saving…` / `Unsaved changes` / `Saved <relative>` driven by a `dirty` diff of `editing` vs `article` and a `lastSavedAt` set on save), word/read counts, and — for `changes_requested` — the reviewer's note (latest admin review comment, falling back to latest comment then `rejection_reason`). Published shows a public-link footer with copy.
+- State-aware primary action: `published` → "View live", `submitted` → "Retract", `in_review`/`approved` → disabled status label, `draft` → "Submit", `changes_requested`/`rejected` → "Resubmit". Save is disabled when not dirty. A 15s ticker keeps relative times fresh.
+- Public URL is `https://axal.vc/articles/{slug}` (`PUBLIC_ARTICLE_BASE`). Deviation from the literal "disabled unless draft/changes_requested": `rejected` keeps Resubmit enabled because the worker allows submit from `rejected` and the in-app banner documents the edit-and-resubmit flow.
+- Articles are a Worker-only surface (no FastAPI dev route), so this is verified by `npm run build` + dark-mode guard + review; submit/PII error handling and editor/autosave internals are out of scope.
+
 ## Restore admin / monitoring / infra API — remove CF Access worker mounts
 
 Admin, Monitoring and Infra pages rendered empty or returned "Request failed" because the Cloudflare Access perimeter (Task #33) fail-closed the SPA. The Access app is configured on the apex only, but the SPA uses a relative API base (`BASE='/api'` in `frontend/src/lib/api.js`), so `app.axal.vc/api/admin/*` fetches can't carry the `Cf-Access-Jwt-Assertion` header — `requireCfAccess()` then returns 403 to every admin request (see GOTCHAS.md item (h)).

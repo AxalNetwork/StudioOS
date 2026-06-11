@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## See exactly where each of your articles stands
+
+Your articles list is now grouped into **Drafts**, **In review**, and **Published**, with a count on each section you can collapse. Every article shows a colour-coded status, its word count, and when you last touched it — so a draft, an article waiting on review, and a live one are instantly distinguishable. Published articles get a one-click "Copy link" and "View live". Inside the editor, a status bar tells you the current stage and whether your work is saved ("Saving…", "Unsaved changes", or "Saved 4s ago"), shows the reviewer's note when changes are requested, and the main button always reads the right next step for you (Submit, Resubmit, Retract, or View live).
+
+---
+
 ## Admin pages are working again
 
 Admin tools and pages that were loading empty or showing "Request failed" are back to normal. An extra production sign-in layer had been unintentionally blocking the admin area; it has been removed. Your in-app admin permissions still protect those pages exactly as before.

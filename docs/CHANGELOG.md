@@ -10,6 +10,14 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Restore admin / monitoring / infra API — remove CF Access worker mounts
+
+Admin, Monitoring and Infra pages rendered empty or returned "Request failed" because the Cloudflare Access perimeter (Task #33) fail-closed the SPA. The Access app is configured on the apex only, but the SPA uses a relative API base (`BASE='/api'` in `frontend/src/lib/api.js`), so `app.axal.vc/api/admin/*` fetches can't carry the `Cf-Access-Jwt-Assertion` header — `requireCfAccess()` then returns 403 to every admin request (see GOTCHAS.md item (h)).
+
+- `cloudflare-worker/src/index.ts`: removed the `requireCfAccess()` mounts on `/api/admin{,/*}`, `/api/monitoring{,/*}`, `/api/infra{,/*}`. These groups keep their in-app `requireAdmin`/`requireAuth` RBAC (the inner perimeter). The `/api/kyc/admin/:userId/document{,/*}` mount stays (admin-only; opened via top-level `window.open`, which survives the SSO 302).
+- Re-arming the admin surface requires RE-ADDING the mounts **and** the GOTCHAS item (h) checklist (every gated path registered in the Access app + admin traffic routed to the gated host).
+- Worker-only change — takes effect on `npm run deploy`. If the gate is still live in prod, also disable/edit the edge Cloudflare Access application in the dashboard and unset the `CF_ACCESS_TEAM_DOMAIN`/`CF_ACCESS_AUD` wrangler secrets.
+
 ## Article cover upload now visibly works end-to-end (Task #27)
 
 Fixed cover uploads silently doing nothing in the article editor. Root cause: `GET /api/articles/cover/:id` served covers only when `status='published'`, so a draft's freshly-uploaded cover 404'd in the editor `<img>` even though the worker stored it and returned `{ ok, cover_url }`.
