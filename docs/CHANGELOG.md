@@ -18,16 +18,18 @@ Builds a single function that assembles the full 8-page incorporation packet PDF
   - `renderCertificateOfFormationPdf(inputs)` — jurisdiction-aware certificate (Delaware C-Corp, Delaware LLC, UK Ltd, Singapore Pte, Estonia Oü). Includes entity fields, founder block, jurisdiction-specific boilerplate (Delaware GCL / LLC Act, UK Companies Act 2006, Singapore Companies Act, Estonian Commercial Code), and signature lines.
   - `renderKycIdPagePdf(founderName, kycDocument?)` — embeds a PNG/JPEG image directly; for PDF KYC documents, renders a placeholder note (pdf-lib cannot embed a PDF page onto another page). Graceful fallback when no KYC document is provided.
   - `renderAuditTrailPagePdf(events, bodyHash, envelopeUuid?)` — event list with timestamp, actor, and details; tamper-evident SHA-256 hash block at the bottom.
-  - `assembleIncorporationPacket(inputs)` — orchestrates all 7 body pages, computes a canonical body hash (SHA-256 of a deterministic JSON of inputs — not the PDF bytes, because PDF metadata is non-deterministic across save/load cycles), appends the audit trail as page 8. Returns `{bytes, pageCount, bodyHash}`.
+  - `assembleIncorporationPacket(inputs)` — orchestrates all 7 body pages, computes the body hash (SHA-256 of the raw body PDF bytes), appends the audit trail as page 8. Returns `{bytes, pageCount, bodyHash}` (object shape chosen so the downstream eSign pipeline can access both the PDF and the hash without a separate call).
   - `sha256HexBytes` helper added to `services/pdf.ts` for hashing Uint8Array directly.
 - **Reuses** — `services/irsForms.ts` renderers for SS-4 (2 pages), faxed EIN, 8821, and confirmation. Mirrors the existing form geometry (PAGE_W=612, PAGE_H=792, MX=48) and `formFooter` / `sectionBar` / `fieldBox` patterns.
-- **Tests** — `cloudflare-worker/test/incorporationPacket.test.ts` (13 tests, node:test, pdf-lib assertions):
+- **Tests** — `cloudflare-worker/test/incorporationPacket.test.ts` (16 tests, node:test, pdf-lib assertions):
   - Certificate renders for all 5 jurisdictions.
   - KYC page renders with/without document.
   - Audit trail renders with hash.
-  - Full packet: 8 pages, valid PDF magic, page size verification, canonical body hash recomputation and verification.
+  - Full packet: 8 pages, valid PDF magic, page size verification.
+  - Body hash determinism (same inputs → same hash) and sensitivity (different inputs → different hash).
   - KYC image embedding (1x1 red PNG fixture).
   - KYC PDF document graceful handling.
+  - 5 MB packet size guard.
   - Added to `test:drift` suite in `package.json`.
 - **Out of scope** — Email delivery, signing, and envelope creation (handled by the downstream eSign packet task). Stripe checkout (Task #11).
 

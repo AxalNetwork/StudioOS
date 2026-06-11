@@ -28,6 +28,15 @@ function b64encode(str: string): string {
   return b64.match(/.{1,76}/g)!.join('\r\n');
 }
 
+// Task #14 — byte-accurate base64 for binary attachments (PDFs).
+// TextEncoder().encode() is UTF-8 and would corrupt bytes >127.
+function b64encodeBytes(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  const b64 = btoa(binary);
+  return b64.match(/.{1,76}/g)!.join('\r\n');
+}
+
 function stripHeaderInjection(s: string): string {
   return (s || '').replace(/[\r\n]+/g, ' ').trim();
 }
@@ -58,6 +67,56 @@ function buildRawEmail(to: string, subject: string, html: string, text: string, 
     b64encode(html),
     ``,
     `--${boundary}--`,
+  ];
+  return lines.join('\r\n');
+}
+
+// Task #14 — multipart email with a single PDF attachment.
+// The body is multipart/mixed containing a multipart/alternative inner
+// part (text + html) and an application/pdf attachment.
+function buildRawEmailWithAttachment(
+  to: string, subject: string, html: string, text: string, from: string,
+  filename: string, pdfBytes: Uint8Array,
+): string {
+  const outerBoundary = `boundary_${crypto.randomUUID().replace(/-/g, '')}`;
+  const innerBoundary = `inner_${crypto.randomUUID().replace(/-/g, '')}`;
+  const safeTo = stripHeaderInjection(to);
+  const safeSubject = stripHeaderInjection(subject);
+  const safeFrom = stripHeaderInjection(from);
+  const subjectEncoded = `=?UTF-8?B?${btoa(unescape(encodeURIComponent(safeSubject)))}?=`;
+  const pdfB64 = b64encodeBytes(pdfBytes);
+  const lines = [
+    `To: ${safeTo}`,
+    `From: ${safeFrom}`,
+    `Subject: ${subjectEncoded}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/mixed; boundary="${outerBoundary}"`,
+    ``,
+    `--${outerBoundary}`,
+    `Content-Type: multipart/alternative; boundary="${innerBoundary}"`,
+    ``,
+    `--${innerBoundary}`,
+    `Content-Type: text/plain; charset="UTF-8"`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    b64encode(text),
+    ``,
+    `--${innerBoundary}`,
+    `Content-Type: text/html; charset="UTF-8"`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    b64encode(html),
+    ``,
+    `--${innerBoundary}--`,
+    ``,
+    `--${outerBoundary}`,
+    `Content-Type: application/pdf; name="${filename}"`,
+    `Content-Disposition: attachment; filename="${filename}"`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    pdfB64,
+    ``,
+    `--${outerBoundary}--`,
   ];
   return lines.join('\r\n');
 }
@@ -610,5 +669,92 @@ export async function sendVerificationEmail(env: Env, to: string, name: string, 
   } catch (e: any) {
     console.error(`[EMAIL] Gmail notification failed for ${to}: ${e?.message || 'Unknown error'}`);
     return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Task #14 — Forward signed PDF to legal partner(s).
+// Sends a Gmail multipart email with the signed PDF as an attachment.
+// Returns { ok, error } so the caller can log per-recipient status.
+// ---------------------------------------------------------------------------
+export async function sendSignedPdfForwardedEmail(
+  env: Env,
+  to: string,
+  documentTitle: string,
+  senderName: string,
+  pdfBytes: Uint8Array,
+  opts?: { message?: string; from?: string },
+): Promise<{ ok: boolean; error?: string }> {
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_REFRESH_TOKEN) {
+    return { ok: false, error: 'Gmail not configured on this environment' };
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const greet = to.split('@')[0];
+    const safeTitle = escapeHtml(documentTitle || 'Signed Document');
+    const safeSender = escapeHtml(senderName || 'Axal StudioOS');
+    const noteBlock = opts?.message
+      ? `<tr><td style="padding:0 32px 8px;"><div style="background:#faf5ff;border-left:3px solid #7c3aed;border-radius:8px;padding:14px 16px;color:#4b5563;font-size:14px;line-height:1.55;white-space:pre-wrap;">${escapeHtml(opts.message)}</div></td></tr>`
+      : '';
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
+<tr><td align="center">
+<table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;">
+<tr><td style="padding:32px 32px 20px;border-bottom:1px solid #f3f4f6;">
+  <table cellpadding="0" cellspacing="0"><tr>
+    <td style="vertical-align:middle;padding-right:10px;">
+      <img src="https://axal.vc/axal-mark.png" alt="Axal VC" width="36" height="36" style="display:block;border:0;border-radius:8px;" />
+    </td>
+    <td style="vertical-align:middle;">
+      <span style="font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.01em;">Axal VC</span>
+      <div style="font-size:11px;color:#9ca3af;margin-top:2px;">Legal Forward</div>
+    </td>
+  </tr></table>
+</td></tr>
+<tr><td style="padding:28px 32px 0;">
+  <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">Signed document forwarded to you</h1>
+  <p style="font-size:14px;color:#6b7280;margin:0 0 18px;line-height:1.6;">Hi ${escapeHtml(greet)},</p>
+  <p style="font-size:14px;color:#374151;margin:0 0 18px;line-height:1.65;">
+    ${safeSender} has forwarded a signed document from the Axal StudioOS legal vault.
+    The executed PDF is attached below.
+  </p>
+</td></tr>
+${noteBlock}
+<tr><td style="padding:0 32px;">
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:16px 18px;margin:16px 0;">
+    <p style="margin:0 0 4px;color:#6b7280;font-size:13px;">Document:</p>
+    <p style="margin:0;color:#111827;font-size:14px;font-weight:600;">${safeTitle}</p>
+  </div>
+</td></tr>
+<tr><td style="padding:0 32px 32px;">
+  <p style="font-size:11px;color:#9ca3af;margin:20px 0 0;line-height:1.6;">
+    This email was generated from Axal StudioOS — Legal → Signed Documents.
+  </p>
+</td></tr>
+</table></td></tr></table></body></html>`;
+    const text = `Hi ${greet},\n\n${safeSender} has forwarded a signed document from Axal StudioOS.\n\nDocument: ${safeTitle}\n${opts?.message ? `\nNote: ${opts.message}\n` : ''}\nThe executed PDF is attached.`;
+    const rawEmail = buildRawEmailWithAttachment(
+      to,
+      `Signed document: ${documentTitle}`,
+      html, text,
+      opts?.from || 'Axal VC Legal <legal@axal.vc>',
+      `${safeTitle.replace(/[^a-zA-Z0-9 _-]/g, '')}.pdf`,
+      pdfBytes,
+    );
+    const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw }),
+    });
+    if (!res.ok) {
+      const err: any = await res.json().catch(() => ({}));
+      return { ok: false, error: err?.error?.message || err?.error || 'Gmail send failed' };
+    }
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'Unknown error' };
   }
 }

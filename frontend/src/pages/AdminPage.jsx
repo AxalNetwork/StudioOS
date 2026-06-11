@@ -1880,17 +1880,25 @@ export function LegalPanel() {
       )}
 
       {openContract && (
-        <ContractDetailModal
-          uid={openContract.uid}
-          onClose={() => setOpenContract(null)}
-          onChanged={(opts) => {
-            // Task #19 — submitVoid passes { keepOpen: true } so the
-            // recorded reason stays visible in the modal. All other
-            // mutations (e.g. resend) close the modal as before.
-            if (!opts || !opts.keepOpen) setOpenContract(null);
-            reload();
-          }}
-        />
+        sub === 'signed' && openContract.source === 'esign' ? (
+          <SignedDocLightbox
+            uid={openContract.uid}
+            onClose={() => setOpenContract(null)}
+            onChanged={(opts) => {
+              if (!opts || !opts.keepOpen) setOpenContract(null);
+              reload();
+            }}
+          />
+        ) : (
+          <ContractDetailModal
+            uid={openContract.uid}
+            onClose={() => setOpenContract(null)}
+            onChanged={(opts) => {
+              if (!opts || !opts.keepOpen) setOpenContract(null);
+              reload();
+            }}
+          />
+        )
       )}
 
       {showNewEnvelope && (
@@ -2651,6 +2659,234 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
                 <button onClick={submitVoid} disabled={busy || voidReason.trim().length < 5}
                   className="px-3 py-2 text-xs font-medium bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white rounded-lg flex items-center gap-1.5">
                   {busy ? <Loader2 size={13} className="animate-spin" /> : <Ban size={13} />} Void contract
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Task #14 — Full-screen lightbox for signed eSign documents. PDF preview
+// in an iframe + metadata/audit sidebar + "Forward to legal partner" action.
+// Only opens from the Signed sub-tab when the source is 'esign'.
+function SignedDocLightbox({ uid, onClose, onChanged }) {
+  const [doc, setDoc] = useState(null);
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [forwards, setForwards] = useState([]);
+  const [showForward, setShowForward] = useState(false);
+  const [fwEmails, setFwEmails] = useState('');
+  const [fwMessage, setFwMessage] = useState('');
+  const [fwIncludeAudit, setFwIncludeAudit] = useState(true);
+  const [fwBusy, setFwBusy] = useState(false);
+  const [fwErr, setFwErr] = useState('');
+  const { toast, showToast } = useToast(3000);
+  const pdfUrlRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [d, blob] = await Promise.all([
+          api.adminGetContract(uid),
+          api.adminDownloadContractBlob(uid),
+        ]);
+        if (!cancelled) {
+          setDoc(d);
+          const url = URL.createObjectURL(blob);
+          pdfUrlRef.current = url;
+          setPdfUrl(url);
+        }
+      } catch (e) { if (!cancelled) setErr(e.message); }
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => {
+      cancelled = true;
+      if (pdfUrlRef.current) {
+        URL.revokeObjectURL(pdfUrlRef.current);
+        pdfUrlRef.current = null;
+      }
+    };
+  }, [uid]);
+
+  useEffect(() => {
+    if (!doc || !doc.id || doc.source !== 'esign') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api.adminGetForwardLog(doc.id);
+        if (!cancelled) setForwards(r.forwards || []);
+      } catch (e) { if (!cancelled) reportError(e, 'forward-log'); }
+    })();
+    return () => { cancelled = true; };
+  }, [doc]);
+
+  const submitForward = async () => {
+    const recipients = fwEmails.split(/[,\s]+/).filter(e => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e));
+    if (!recipients.length) { setFwErr('Enter at least one valid email address.'); return; }
+    setFwBusy(true); setFwErr('');
+    try {
+      const r = await api.adminForwardContract(doc.id, {
+        recipients,
+        message: fwMessage.trim() || undefined,
+        include_audit_page: fwIncludeAudit,
+      });
+      const failed = (r.results || []).filter(x => !x.ok);
+      if (failed.length) {
+        setFwErr(`${failed.length} of ${r.results.length} emails failed: ${failed.map(x => `${x.email} (${x.error})`).join(', ')}`);
+      } else {
+        showToast({ kind: 'ok', msg: `Forwarded to ${r.results.length} recipient(s).` });
+        setShowForward(false);
+        setFwEmails('');
+        setFwMessage('');
+        setFwIncludeAudit(true);
+        const log = await api.adminGetForwardLog(doc.id);
+        setForwards(log.forwards || []);
+      }
+    } catch (e) { setFwErr(e.message || 'Forward failed'); }
+    finally { setFwBusy(false); }
+  };
+
+  useEscapeClose(onClose);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2" onClick={onClose}>
+      {toast}
+      <div onClick={e => e.stopPropagation()} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[96vw] h-[96vh] overflow-hidden flex flex-col dark:bg-gray-900">
+        {/* Header */}
+        <div className="px-5 py-3 border-b border-gray-200 flex items-start justify-between gap-3 dark:border-gray-800 flex-shrink-0">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <FileText size={16} className="text-violet-600" />
+              <h3 className="font-semibold text-gray-900 truncate dark:text-gray-100">{doc?.title || 'Signed Document'}</h3>
+              {doc && <StatusPill status={doc.status} />}
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              {doc?.doc_type_label || NEW_DOC_TYPE_LABELS[doc?.doc_type] || doc?.doc_type}
+              {doc?.template_name ? ` · ${doc.template_name}` : ''}
+              {doc?.provider === 'docusign' && <span className="ml-1 text-amber-600 font-medium">(DocuSign)</span>}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowForward(true)}
+              className="px-3 py-1.5 text-xs font-medium bg-violet-600 hover:bg-violet-700 text-white rounded-lg flex items-center gap-1.5">
+              <Send size={12} /> Forward
+            </button>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+          </div>
+        </div>
+
+        {/* Body: PDF + sidebar */}
+        <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
+          {/* PDF preview */}
+          <div className="flex-1 min-h-0 bg-gray-100 dark:bg-gray-950">
+            {loading ? (
+              <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400 text-sm">Loading PDF…</div>
+            ) : err ? (
+              <div className="h-full flex items-center justify-center text-red-500 text-sm px-6">{err}</div>
+            ) : pdfUrl ? (
+              <iframe src={pdfUrl} className="w-full h-full border-0" title="Signed PDF preview" />
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400 text-sm">No PDF available.</div>
+            )}
+          </div>
+
+          {/* Sidebar */}
+          <div className="w-full lg:w-80 border-l border-gray-200 overflow-y-auto dark:border-gray-800 flex-shrink-0 bg-white dark:bg-gray-900">
+            <div className="p-4 space-y-4">
+              {doc && (
+                <>
+                  <div className="space-y-3">
+                    <Field label="Recipient" value={doc.recipient_email} />
+                    <Field label="Signed by" value={doc.signed_by} />
+                    <Field label="Signed at" value={fmtDate(doc.signed_at)} />
+                    <Field label="Days to sign" value={doc.days_to_sign != null ? String(doc.days_to_sign) : '—'} />
+                    <Field label="Project" value={doc.project_name} />
+                    <Field label="Created" value={fmtDate(doc.created_at)} />
+                  </div>
+
+                  {/* Forward log */}
+                  {forwards.length > 0 && (
+                    <div>
+                      <div className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Forward log</div>
+                      <div className="space-y-2">
+                        {forwards.map(f => (
+                          <div key={f.id} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-[11px] dark:bg-gray-800 dark:border-gray-700">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-gray-700 font-medium dark:text-gray-300">{f.forwarded_to}</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${f.status === 'sent' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                {f.status}
+                              </span>
+                            </div>
+                            <div className="text-gray-400 dark:text-gray-500 mt-0.5">{fmtDate(f.forwarded_at)}</div>
+                            {f.include_audit_page === 0 && <div className="text-gray-500 dark:text-gray-400 mt-0.5">Audit page omitted</div>}
+                            {f.message && <div className="text-gray-500 dark:text-gray-400 mt-0.5 italic truncate">&ldquo;{f.message}&rdquo;</div>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Forward sub-modal */}
+        {showForward && (
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-4 z-10">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5 dark:bg-gray-900">
+              <div className="flex items-center gap-2 mb-3">
+                <Send size={16} className="text-violet-600" />
+                <h4 className="font-semibold text-gray-900 dark:text-gray-100">Forward to legal partner</h4>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                The signed PDF will be emailed as an attachment. You can include a short note and choose whether to include the audit page.
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Recipient emails (comma or space separated)</label>
+                  <textarea
+                    value={fwEmails}
+                    onChange={e => setFwEmails(e.target.value)}
+                    rows={2}
+                    placeholder="partner@firm.com, counsel@firm.com"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg dark:border-gray-800"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Optional note</label>
+                  <textarea
+                    value={fwMessage}
+                    onChange={e => setFwMessage(e.target.value)}
+                    rows={2}
+                    placeholder="Please review and advise on the governing-law clause."
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg dark:border-gray-800"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="fw-audit"
+                    type="checkbox"
+                    checked={fwIncludeAudit}
+                    onChange={e => setFwIncludeAudit(e.target.checked)}
+                    className="rounded border-gray-300 dark:border-gray-700"
+                  />
+                  <label htmlFor="fw-audit" className="text-xs text-gray-700 dark:text-gray-300">Include audit/signature page</label>
+                </div>
+                {fwErr && <div className="bg-red-50 border border-red-200 text-red-700 text-xs p-2 rounded dark:bg-red-900/20 dark:border-red-800 dark:text-red-400">{fwErr}</div>}
+              </div>
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => { setShowForward(false); setFwErr(''); }}
+                  className="px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-lg dark:bg-gray-900 dark:border-gray-800">Cancel</button>
+                <button onClick={submitForward} disabled={fwBusy}
+                  className="px-3 py-2 text-xs font-medium bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-lg flex items-center gap-1.5">
+                  {fwBusy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Send
                 </button>
               </div>
             </div>

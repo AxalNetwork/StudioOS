@@ -10,6 +10,34 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Signed-doc lightbox with "Forward to legal partner" (Task #14)
+
+Full-screen lightbox for signed eSign contracts in Legal → Signed. PDF preview in an iframe, metadata sidebar, forward log, and a "Forward to legal partner" sub-modal that emails the signed PDF as an attachment.
+
+- **Frontend** — `frontend/src/pages/AdminPage.jsx`:
+  - `SignedDocLightbox` opens only when `sub === 'signed'` and `source === 'esign'`; otherwise the legacy `ContractDetailModal` is used.
+  - Layout: flex row with PDF iframe (flex-1) + metadata/forward-log sidebar (80px / 320px on lg).
+  - Header: title, status pill, provider badge (DocuSign), Forward button, close.
+  - Forward sub-modal: multi-email input (comma/space-separated), optional message textarea, "Include audit/signature page" checkbox (default on). Max 10 recipients, 2000-char message.
+  - Forward log: per-envelope `esign_forward_log` rows rendered as cards with status (sent/failed), timestamp, "Audit page omitted" flag, and optional message preview.
+  - `useEscapeClose` + backdrop-click dismissal wired.
+- **Backend** — `cloudflare-worker/src/routes/esign.ts`:
+  - `POST /api/legal/esign/:id/forward` — re-materializes the signed PDF via `materializeSignedPdf` (decrypts if `.enc`), optionally strips the last page using `pdf-lib.removePage()` when `include_audit_page=false`, and sends via Gmail multipart email to each recipient. Logs every forward to `esign_forward_log`. Appends `document_forwarded` audit event. RBAC: admin or envelope owner.
+  - `GET /api/legal/esign/:id/forward` — returns `esign_forward_log` rows for the envelope. Same RBAC.
+  - `ensureSchema` extended to create `esign_forward_log` table with envelope + forwarded_to indexes.
+- **Email** — `cloudflare-worker/src/services/email.ts`:
+  - `buildRawEmailWithAttachment()` — MIME multipart/mixed with multipart/alternative inner body (text/html) + application/pdf attachment.
+  - `sendSignedPdfForwardedEmail()` — branded HTML template (Axal VC header), optional note block, and the PDF attachment. Returns `{ ok, error }` so callers can log per-recipient failure.
+- **Architect-review fixes (Task #14 follow-up)**:
+  - `services/email.ts` — replaced PDF attachment base64 encoding via `b64encode()` (UTF-8 text path, corrupted bytes >127) with new `b64encodeBytes()` that iterates raw bytes directly before `btoa()`, ensuring byte-accurate attachment encoding.
+  - `routes/esign.ts` — PDF strip-failure no longer silently falls back to full PDF. When `pdf-lib.load/removePage/save` throws, the endpoint returns `500` with `{ error: 'Failed to strip audit page from PDF', detail }`. The `actuallyIncludedAudit` flag is logged/audited instead of the user's request flag, so the forward log and audit trail always reflect the exact content sent.
+  - `AdminPage.jsx` — blob URL lifecycle fixed via `useRef` (`pdfUrlRef`) so the exact URL created is the one revoked on unmount; all dark-mode-only colors in the lightbox now have `dark:` variants; silent forward-log fetch error replaced with `reportError`.
+- **Migration** — `cloudflare-worker/sql/migrations/087_esign_forward_log.sql` (defensive, matches `ensureSchema` inline definition).
+- **API client** — `frontend/src/lib/api.js`:
+  - `adminForwardContract(id, data)` — `POST /legal/esign/:id/forward`.
+  - `adminGetForwardLog(id)` — `GET /legal/esign/:id/forward`.
+  - `adminDownloadContractBlob(uid)` — `fetch()` wrapper for `/admin/contracts/:uid/download` returning a `Blob` (for `URL.createObjectURL` iframe preview).
+
 ## 8-page incorporation packet PDF assembler (Task #12)
 
 Builds a single function that assembles the full 8-page incorporation packet PDF in a fixed page order: Certificate of Formation, SS-4 Instructions, SS-4, Statement of Faxed EIN, Form 8821, Confirmation of Information, KYC ID page, and an Audit Trail page with a tamper-evident hash footer. The assembler is consumed by the downstream eSign packet pipeline.

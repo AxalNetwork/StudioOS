@@ -897,6 +897,20 @@ export const api = {
   },
   adminSendEnvelope: (payload) =>
     request('/legal/esign/send', { method: 'POST', body: JSON.stringify(payload) }),
+  // Task #14 — forward signed PDF to legal partner(s).
+  adminForwardContract: (id, data) =>
+    request(`/legal/esign/${id}/forward`, { method: 'POST', body: JSON.stringify(data) }),
+  adminGetForwardLog: (id) =>
+    request(`/legal/esign/${id}/forward`),
+  // Task #14 — download signed PDF as blob (for iframe preview).
+  adminDownloadContractBlob: (uid) => {
+    const url = `/api/admin/contracts/${uid}/download`;
+    const token = localStorage.getItem('token');
+    return fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(r => {
+      if (!r.ok) throw new Error('Download failed');
+      return r.blob();
+    });
+  },
   adminVoidContractWithReason: (uid, reason) =>
     request(`/admin/contracts/${uid}/void`, { method: 'POST', body: JSON.stringify({ reason }) }),
   adminImpersonate: (userId) => request(`/admin/impersonate/${userId}`, { method: 'POST' }),

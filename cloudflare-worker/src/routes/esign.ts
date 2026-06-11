@@ -26,6 +26,7 @@ import type { Env } from '../types';
 import { requireAdmin, requireAuth } from '../auth';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { renderAgreementPdf, sha256Hex } from '../services/pdf';
+import { PDFDocument } from 'pdf-lib';
 
 const esign = new Hono<{ Bindings: Env }>();
 
@@ -107,6 +108,21 @@ async function ensureSchema(env: Env): Promise<void> {
     `CREATE UNIQUE INDEX IF NOT EXISTS uq_esign_account_docusign_envelope
        ON esign_envelopes(docusign_account_id, docusign_envelope_id)
        WHERE docusign_envelope_id IS NOT NULL`,
+    // Task #14 — forward-log table for signed-document forwarding to legal partners.
+    `CREATE TABLE IF NOT EXISTS esign_forward_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      envelope_id INTEGER NOT NULL,
+      forwarded_by INTEGER NOT NULL,
+      forwarded_to TEXT NOT NULL,
+      forwarded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      include_audit_page INTEGER NOT NULL DEFAULT 1,
+      message TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      email_sent INTEGER NOT NULL DEFAULT 0,
+      error_message TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_esign_forward_envelope ON esign_forward_log(envelope_id, forwarded_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_esign_forward_to ON esign_forward_log(forwarded_to)`,
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch {}
@@ -1024,6 +1040,111 @@ esign.post('/sign/:token/reject', async (c) => {
     meta: { reason },
   });
   return c.json({ rejected: true });
+});
+
+// POST /api/legal/esign/:id/forward — admin or owner forwards a signed PDF
+// to one or more legal partners by email. Optionally strips the last page
+// (audit/signature page) before sending.
+esign.post('/:id{[0-9]+}/forward', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const body = await c.req.json().catch(() => ({}));
+  const recipients = (body?.recipients || []).filter((e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e));
+  const includeAuditPage = body?.include_audit_page !== false;
+  const message = String(body?.message || '').slice(0, 2000);
+
+  if (!recipients.length) return c.json({ error: 'Provide at least one valid email address' }, 400);
+  if (recipients.length > 10) return c.json({ error: 'Maximum 10 recipients per forward' }, 400);
+
+  const envRow: any = await c.env.DB.prepare(
+    `SELECT id, envelope_uuid, document_title, signed_r2_key, status, user_id FROM esign_envelopes WHERE id = ?`
+  ).bind(id).first();
+  if (!envRow) return c.json({ error: 'Envelope not found' }, 404);
+
+  const isAdmin = user.role === 'admin';
+  if (!isAdmin && envRow.user_id !== user.id) return c.json({ error: 'Forbidden' }, 403);
+  if (!envRow.signed_r2_key || envRow.status !== 'completed') return c.json({ error: 'Document not yet signed' }, 409);
+  if (!c.env.FILES) return c.json({ error: 'R2 storage not configured' }, 500);
+
+  // Materialize the signed PDF (decrypt if needed).
+  const obj = await c.env.FILES.get(envRow.signed_r2_key);
+  if (!obj) return c.json({ error: 'Document not found in storage' }, 404);
+  const pdfBytes = await materializeSignedPdf(c.env, envRow.signed_r2_key, obj);
+  if (!pdfBytes || (pdfBytes as Uint8Array).length === 0) return c.json({ error: 'Failed to load PDF' }, 500);
+
+  // Optionally strip the last page (audit/signature page).
+  let attachmentBytes = pdfBytes as Uint8Array;
+  let actuallyIncludedAudit = true;
+  if (!includeAuditPage) {
+    try {
+      const doc = await PDFDocument.load(attachmentBytes);
+      const pageCount = doc.getPageCount();
+      if (pageCount > 1) {
+        doc.removePage(pageCount - 1);
+        attachmentBytes = await doc.save();
+        actuallyIncludedAudit = false;
+      }
+    } catch (e) {
+      const msg = (e as Error).message || 'Unknown PDF error';
+      console.warn('[esign] PDF strip-last-page failed:', msg);
+      return c.json({ error: 'Failed to strip audit page from PDF', detail: msg }, 500);
+    }
+  }
+
+  const { sendSignedPdfForwardedEmail } = await import('../services/email');
+  const results: { email: string; ok: boolean; error?: string }[] = [];
+
+  for (const email of recipients) {
+    const emailSent = await sendSignedPdfForwardedEmail(
+      c.env, email, envRow.document_title || 'Signed Document',
+      user.name || user.email || 'Axal StudioOS',
+      attachmentBytes,
+      { message: message || undefined, from: 'Axal VC Legal <legal@axal.vc>' },
+    );
+    results.push({ email, ok: emailSent.ok, error: emailSent.error });
+    const status = emailSent.ok ? 'sent' : 'failed';
+    await c.env.DB.prepare(
+      `INSERT INTO esign_forward_log (envelope_id, forwarded_by, forwarded_to, include_audit_page, message, status, email_sent, error_message)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      id, user.id, email.toLowerCase(),
+      actuallyIncludedAudit ? 1 : 0,
+      message || null,
+      status,
+      emailSent.ok ? 1 : 0,
+      emailSent.error || null,
+    ).run();
+    await appendAudit(c.env, id, {
+      ts: new Date().toISOString(),
+      signer_id: user.id,
+      signer_email: user.email,
+      action: 'document_forwarded',
+      ip: clientIp(c.req.raw),
+      meta: { forwarded_to: email, include_audit_page: actuallyIncludedAudit, ok: emailSent.ok },
+    });
+  }
+
+  return c.json({ forwarded: true, results });
+});
+
+// GET /api/legal/esign/:id/forward — list forward log for an envelope.
+// Admin or the envelope owner only.
+esign.get('/:id{[0-9]+}/forward', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const envRow: any = await c.env.DB.prepare(
+    `SELECT id, user_id FROM esign_envelopes WHERE id = ?`
+  ).bind(id).first();
+  if (!envRow) return c.json({ error: 'Envelope not found' }, 404);
+  const isAdmin = user.role === 'admin';
+  if (!isAdmin && envRow.user_id !== user.id) return c.json({ error: 'Forbidden' }, 403);
+  const rows: any = await c.env.DB.prepare(
+    `SELECT id, forwarded_to, forwarded_at, include_audit_page, message, status, email_sent, error_message
+       FROM esign_forward_log WHERE envelope_id = ? ORDER BY forwarded_at DESC`
+  ).bind(id).all();
+  return c.json({ forwards: rows?.results || [] });
 });
 
 export default esign;
