@@ -14,8 +14,10 @@
  *  - Desktop (`md+`): pinned card in the dashboard slot. Right rail
  *    (section focus + per-page rings) is desktop-only.
  *  - A fullscreen view mode (`viewMode: 'normal' | 'fullscreen'`) lets
- *    the chat take over the viewport; the header's maximize button
- *    toggles it. (Replaces the legacy minimise-to-bubble pattern.)
+ *    the chat take over the viewport via a fixed-inset overlay; the
+ *    header's maximize button opens it and a filled "Back to dashboard"
+ *    pill, an outlined "Normal view" pill, or Escape return to the card.
+ *    (Replaces the legacy minimise-to-bubble pattern.)
  *  - Conversation state persists across reloads via the
  *    `advisor:state` localStorage key (view mode + last seen
  *    conversation_id) — the actual transcript lives server-side and
@@ -32,8 +34,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Sparkles, Send, X, Maximize2, HelpCircle, Loader2, CheckCircle2,
-  ArrowRight, MessageSquare, SkipForward, BookOpen,
+  Sparkles, Send, X, Maximize2, Minimize2, LayoutDashboard, HelpCircle,
+  Loader2, CheckCircle2, ArrowRight, MessageSquare, SkipForward, BookOpen,
 } from 'lucide-react';
 import { api, spinoutLab as spinoutLabApi } from '../../lib/api';
 import { safeReadJSON, safeWriteJSON } from '../../lib/storage';
@@ -227,10 +229,13 @@ export default function PersonalAdvisor() {
   });
 
   // Auto-scroll the transcript on new messages / streaming tokens.
+  // `viewMode` is a dep so switching between the embedded card and the
+  // fullscreen overlay (which mounts a fresh Transcript at scrollTop 0)
+  // lands the user on the latest message rather than the top.
   useEffect(() => {
     const el = scrollerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, question, tutor]);
+  }, [messages, question, tutor, viewMode]);
 
   // ---------- Send answer -------------------------------------------------
   const submit = useCallback(async (rawValue, evidenceArg) => {
@@ -524,12 +529,84 @@ export default function PersonalAdvisor() {
     return { week: Number(src.week || 1), unlocked: src.unlockedFeatures || src.unlocked_features || null };
   }, [labState, progressDetail.spinout_lab]);
 
+  // Shared callbacks used by BOTH the embedded card and the fullscreen
+  // overlay so the two views stay behaviourally identical.
+  // onCtaClick — after a tool CTA navigates, re-pull /progress so the
+  // right-rail rings pick up any tool-driven completion (e.g. opening a
+  // page counts toward that page's profile section).
+  const handleCtaClick = useCallback(async () => {
+    try {
+      const p = await api.advisor.progress();
+      if (p) setProgress(p);
+      refreshProgress();
+    } catch { /* non-fatal */ }
+  }, [refreshProgress]);
+
+  // onPickQuestion — set the chat to an exact queue item by id. The item
+  // carries enough shape ({id, prompt, page_target, section}) to drive
+  // the existing free-text input flow; submit() reads question.id to
+  // attribute the answer. `section` is a SECTION key (e.g. "BUILD"),
+  // never a route path — assigning a path here would poison the /queue +
+  // /next-question focus filter downstream.
+  const handlePickQuestion = useCallback((q) => {
+    if (!q || !q.id) return;
+    setQuestion({
+      id: q.id,
+      prompt: q.prompt,
+      page_target: q.page_target || null,
+      section: q.section || null,
+      skip_allowed: q.skip_allowed !== false,
+    });
+    setMessages((m) => [...m, { role: 'assistant', content: q.prompt, question_id: q.id }]);
+    if (q.section && q.section !== focusSection) {
+      setFocusSection(q.section);
+    }
+  }, [focusSection]);
+
   // ---------- Render ------------------------------------------------------
   if (!user) return null; // anonymous: nothing to advise on yet
   // Endpoint missing in this environment — render nothing so the
   // dashboard slot collapses cleanly instead of showing a "Not found"
   // tile to the user.
   if (unavailable) return null;
+
+  // Fullscreen takeover. Rendered INSTEAD of the embedded card (the
+  // overlay is fixed inset-0). All chat / progress hooks live on this
+  // component, so the same conversation state drives whichever view is
+  // mounted, and `scrollerRef` follows the active Transcript. A persisted
+  // `viewMode: 'fullscreen'` therefore opens the overlay straight on load.
+  if (viewMode === 'fullscreen') {
+    return (
+      <FullscreenView
+        persona={persona}
+        progress={progress}
+        onExit={() => setViewMode('normal')}
+        isDesktop={isDesktop}
+        scrollerRef={scrollerRef}
+        messages={messages}
+        tutor={tutor}
+        onCloseTutor={closeTutor}
+        loadError={loadError}
+        complete={progress.complete && !question}
+        onCtaClick={handleCtaClick}
+        question={question}
+        onExplain={() => openTutor(question?.prompt || question?.id)}
+        input={input}
+        setInput={setInput}
+        onSend={handleSend}
+        onSkip={skip}
+        busy={busy}
+        onPickOption={(opt) => submit(opt)}
+        sectionStats={sectionStats}
+        focusSection={focusSection}
+        pickFocus={pickFocus}
+        pendingEvidence={pendingEvidence}
+        labState={labState}
+        progressBumpToken={progressBumpToken}
+        onPickQuestion={handlePickQuestion}
+      />
+    );
+  }
 
   // Mobile no longer takes over the viewport. The advisor renders as an
   // inline, height-capped card so the rest of the dashboard (Quick Stats,
@@ -559,16 +636,7 @@ export default function PersonalAdvisor() {
             onCloseTutor={closeTutor}
             loadError={loadError}
             complete={progress.complete && !question}
-            onCtaClick={async () => {
-              // Task #5 (AV) — refresh /progress so the right-rail rings
-              // pick up any tool-driven completion (e.g. opening a page
-              // counts toward that page's profile section).
-              try {
-                const p = await api.advisor.progress();
-                if (p) setProgress(p);
-                refreshProgress();
-              } catch { /* non-fatal */ }
-            }}
+            onCtaClick={handleCtaClick}
           />
 
           {question && (
@@ -597,57 +665,14 @@ export default function PersonalAdvisor() {
             Completed) stay visible as the chat transcript grows. */}
         {isDesktop && (
           <aside className="p-4 bg-gray-50 dark:bg-gray-950/40 max-h-[640px] overflow-y-auto sticky top-4">
-            {sectionStats.length > 1 && (
-              <div className="mb-3">
-                <div className="text-[11px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-2">Focus a section</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {sectionStats.map((s) => {
-                    const active = focusSection === s.section;
-                    return (
-                      <button
-                        key={s.section}
-                        onClick={() => pickFocus(s.section)}
-                        className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
-                          active
-                            ? 'bg-violet-600 text-white border-violet-600'
-                            : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:border-violet-400'
-                        }`}
-                        title={`${s.answered} / ${s.total} answered`}
-                      >
-                        {s.section} {s.percent > 0 ? `· ${s.percent}%` : ''}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            <FocusChips sectionStats={sectionStats} focusSection={focusSection} pickFocus={pickFocus} />
             <AdvisorProgressWidget
               focusSection={focusSection}
               pendingEvidence={pendingEvidence}
               currentQuestion={question}
               labState={labState}
               progressBumpToken={progressBumpToken}
-              onPickQuestion={(q) => {
-                // Set the chat to this exact question by id. The queue
-                // item carries enough shape ({id, prompt, page_target,
-                // section}) to drive the existing free-text input flow;
-                // submit() reads question.id to attribute the answer.
-                // focusSection is a SECTION key (e.g. "BUILD"), never a
-                // route path — assigning a path here would poison the
-                // /queue + /next-question focus filter downstream.
-                if (!q || !q.id) return;
-                setQuestion({
-                  id: q.id,
-                  prompt: q.prompt,
-                  page_target: q.page_target || null,
-                  section: q.section || null,
-                  skip_allowed: q.skip_allowed !== false,
-                });
-                setMessages((m) => [...m, { role: 'assistant', content: q.prompt, question_id: q.id }]);
-                if (q.section && q.section !== focusSection) {
-                  setFocusSection(q.section);
-                }
-              }}
+              onPickQuestion={handlePickQuestion}
             />
           </aside>
         )}
@@ -680,6 +705,142 @@ function Header({ persona, progress, onMaximize }) {
         >
           <Maximize2 size={16} />
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Fullscreen overlay (Task #7) --------------------------------
+// Viewport-takeover view. Reuses the embedded card's Transcript,
+// CurrentQuestion, Composer, FocusChips and AdvisorProgressWidget pieces
+// unchanged — only the surrounding layout/height differs. Two visually
+// distinct exit affordances (a filled "Back to dashboard" pill and an
+// outlined "Normal view" pill) plus Escape all return to the card.
+function FullscreenView({
+  persona, progress, onExit, isDesktop, scrollerRef,
+  messages, tutor, onCloseTutor, loadError, complete, onCtaClick,
+  question, onExplain,
+  input, setInput, onSend, onSkip, busy, onPickOption,
+  sectionStats, focusSection, pickFocus,
+  pendingEvidence, labState, progressBumpToken, onPickQuestion,
+}) {
+  useEscapeClose(onExit);
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Personal Advisor"
+      className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-gray-900"
+    >
+      <FullscreenHeader persona={persona} progress={progress} onExit={onExit} />
+      <div className={`flex-1 min-h-0 ${isDesktop ? 'flex flex-row' : 'flex flex-col'}`}>
+        {/* Chat column — fills the height; the transcript scrolls inside
+            while the current-question + composer stay pinned at the bottom. */}
+        <div className={`flex-1 min-h-0 flex flex-col ${isDesktop ? 'border-r border-gray-100 dark:border-gray-800' : ''}`}>
+          <Transcript
+            ref={scrollerRef}
+            messages={messages}
+            tutor={tutor}
+            onCloseTutor={onCloseTutor}
+            loadError={loadError}
+            complete={complete}
+            onCtaClick={onCtaClick}
+          />
+          {question && <CurrentQuestion q={question} onExplain={onExplain} />}
+          <Composer
+            input={input}
+            setInput={setInput}
+            onSend={onSend}
+            onSkip={onSkip}
+            busy={busy}
+            disabled={false}
+            skipAllowed={question?.skip_allowed !== false}
+            inputKind={question?.input_kind}
+            options={question?.options}
+            onPickOption={onPickOption}
+          />
+        </div>
+
+        {/* Right rail — same buckets as the card, scrolling naturally at
+            full height (no sticky / max-h cap). Desktop-only, matching the
+            embedded card so the widget isn't mounted on small screens. */}
+        {isDesktop && (
+          <aside className="w-80 xl:w-96 flex-shrink-0 min-h-0 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-950/40">
+            <FocusChips sectionStats={sectionStats} focusSection={focusSection} pickFocus={pickFocus} />
+            <AdvisorProgressWidget
+              focusSection={focusSection}
+              pendingEvidence={pendingEvidence}
+              currentQuestion={question}
+              labState={labState}
+              progressBumpToken={progressBumpToken}
+              onPickQuestion={onPickQuestion}
+            />
+          </aside>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FullscreenHeader({ persona, progress, onExit }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-b border-gray-100 dark:border-gray-800 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/30 dark:to-indigo-950/30">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-9 h-9 rounded-lg bg-violet-600 text-white flex items-center justify-center flex-shrink-0">
+          <Sparkles size={18} />
+        </div>
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Personal Advisor</div>
+          <div className="text-[11px] text-gray-600 dark:text-gray-400 truncate">
+            {persona ? `${persona} • ` : ''}{progress.answered}/{progress.total} answered{progress.percent > 0 ? ` (${progress.percent}%)` : ''}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <button
+          type="button"
+          onClick={onExit}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium"
+        >
+          <LayoutDashboard size={14} /> Back to dashboard
+        </button>
+        <button
+          type="button"
+          onClick={onExit}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/40 text-xs font-medium"
+        >
+          <Minimize2 size={14} /> Normal view
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Section-focus chips (shared by the embedded aside and the fullscreen
+// rail). Renders nothing when there's 0–1 section to choose between.
+function FocusChips({ sectionStats, focusSection, pickFocus }) {
+  if (!Array.isArray(sectionStats) || sectionStats.length <= 1) return null;
+  return (
+    <div className="mb-3">
+      <div className="text-[11px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-2">Focus a section</div>
+      <div className="flex flex-wrap gap-1.5">
+        {sectionStats.map((s) => {
+          const active = focusSection === s.section;
+          return (
+            <button
+              key={s.section}
+              onClick={() => pickFocus(s.section)}
+              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                active
+                  ? 'bg-violet-600 text-white border-violet-600'
+                  : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:border-violet-400'
+              }`}
+              title={`${s.answered} / ${s.total} answered`}
+            >
+              {s.section} {s.percent > 0 ? `· ${s.percent}%` : ''}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

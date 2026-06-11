@@ -10,6 +10,15 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Personal Advisor fullscreen view (Task #7)
+
+The advisor's header maximize button now opens a true fullscreen takeover instead of only toggling state.
+
+- `frontend/src/components/advisor/PersonalAdvisor.jsx`: new `FullscreenView` + `FullscreenHeader` subcomponents render a `role="dialog"` `fixed inset-0 z-50` overlay when `viewMode === 'fullscreen'` (early-returned INSTEAD of the embedded card). It reuses the existing `Transcript`, `CurrentQuestion`, `Composer`, `AdvisorProgressWidget` and a newly-extracted `FocusChips` unchanged — only the layout/height differ (chat column `flex-1 min-h-0` with a scrolling transcript; desktop-only `w-80` right rail scrolling independently).
+- Two exit affordances (filled "Back to dashboard" + outlined "Normal view" pills) plus Escape (`useEscapeClose`) return to the card. Persisted `viewMode:'fullscreen'` opens fullscreen on load.
+- The two previously-inline handlers (CTA-click progress refresh, queue-item pick) were lifted to shared `handleCtaClick`/`handlePickQuestion` `useCallback`s so the card and overlay stay behaviourally identical; the transcript auto-scroll effect now also depends on `viewMode` so toggling views lands on the latest message.
+- Reuses the shared `scrollerRef`; only one Transcript is mounted at a time. No worker/backend changes.
+
 ## Article lifecycle is now first-class in the author editor (Task #28)
 
 The author page surfaced no real lifecycle: the left rail was a flat list with a localized date and no copy/view affordances, and the editor showed only a status pill + generic Submit button, so a draft, a submitted article, a changes-requested article, and a published one were hard to tell apart.

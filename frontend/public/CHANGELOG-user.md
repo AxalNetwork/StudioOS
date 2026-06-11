@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Expand the Personal Advisor to fullscreen
+
+The Personal Advisor's expand button now opens it in a full-screen view that fills the whole window, giving you more room to chat and to see your progress alongside the conversation. Return to the normal dashboard view any time with the "Back to dashboard" or "Normal view" buttons, or just press Escape. If you leave it expanded, it stays that way the next time you open it.
+
+---
+
 ## See exactly where each of your articles stands
 
 Your articles list is now grouped into **Drafts**, **In review**, and **Published**, with a count on each section you can collapse. Every article shows a colour-coded status, its word count, and when you last touched it — so a draft, an article waiting on review, and a live one are instantly distinguishable. Published articles get a one-click "Copy link" and "View live". Inside the editor, a status bar tells you the current stage and whether your work is saved ("Saving…", "Unsaved changes", or "Saved 4s ago"), shows the reviewer's note when changes are requested, and the main button always reads the right next step for you (Submit, Resubmit, Retract, or View live).
