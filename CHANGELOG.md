@@ -36,7 +36,7 @@ Full-screen lightbox for signed eSign contracts in Legal → Signed. PDF preview
 - **API client** — `frontend/src/lib/api.js`:
   - `adminForwardContract(id, data)` — `POST /legal/esign/:id/forward`.
   - `adminGetForwardLog(id)` — `GET /legal/esign/:id/forward`.
-  - `adminDownloadContractBlob(uid)` — `fetch()` wrapper for `/admin/contracts/:uid/download` returning a `Blob` (for `URL.createObjectURL` iframe preview).
+  - `adminDownloadEsignDocumentBlob(id)` — `fetch()` wrapper for `/legal/esign/:id/document` returning a `Blob` (for `URL.createObjectURL` iframe preview). Uses the decrypt-aware eSign endpoint so `.enc` files are correctly decrypted before preview.
 
 ## 8-page incorporation packet PDF assembler (Task #12)
 

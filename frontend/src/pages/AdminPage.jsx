@@ -2691,15 +2691,16 @@ function SignedDocLightbox({ uid, onClose, onChanged }) {
     let cancelled = false;
     (async () => {
       try {
-        const [d, blob] = await Promise.all([
-          api.adminGetContract(uid),
-          api.adminDownloadContractBlob(uid),
-        ]);
-        if (!cancelled) {
-          setDoc(d);
-          const url = URL.createObjectURL(blob);
-          pdfUrlRef.current = url;
-          setPdfUrl(url);
+        const d = await api.adminGetContract(uid);
+        if (cancelled) return;
+        setDoc(d);
+        if (d?.id && d?.source === 'esign') {
+          const blob = await api.adminDownloadEsignDocumentBlob(d.id);
+          if (!cancelled) {
+            const url = URL.createObjectURL(blob);
+            pdfUrlRef.current = url;
+            setPdfUrl(url);
+          }
         }
       } catch (e) { if (!cancelled) setErr(e.message); }
       finally { if (!cancelled) setLoading(false); }

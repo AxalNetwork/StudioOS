@@ -903,8 +903,10 @@ export const api = {
   adminGetForwardLog: (id) =>
     request(`/legal/esign/${id}/forward`),
   // Task #14 — download signed PDF as blob (for iframe preview).
-  adminDownloadContractBlob: (uid) => {
-    const url = `/api/admin/contracts/${uid}/download`;
+  // Uses the decrypt-aware eSign document endpoint so .enc files are
+  // decrypted before reaching the iframe.
+  adminDownloadEsignDocumentBlob: (id) => {
+    const url = `/api/legal/esign/${id}/document`;
     const token = localStorage.getItem('token');
     return fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(r => {
       if (!r.ok) throw new Error('Download failed');
