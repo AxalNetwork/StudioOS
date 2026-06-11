@@ -6,6 +6,15 @@ import { requireAdmin, requireFactor, requireStepUp } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken } from '../services/signedDownload';
 import { sendAgreementAssignedEmail } from '../services/email';
+import {
+  listTemplates as storeListTemplates,
+  getTemplate as storeGetTemplate,
+  listVersions as storeListVersions,
+  createTemplate as storeCreateTemplate,
+  updateTemplate as storeUpdateTemplate,
+  softDeleteTemplate as storeSoftDeleteTemplate,
+  TemplateError,
+} from '../services/legalTemplateStore';
 
 type AppContext = Context<{ Bindings: Env }>;
 type ContractDownloadResult =
@@ -1248,6 +1257,126 @@ adminContracts.get('/templates/legal', async (c) => {
   return c.json({ items: LEGAL_TEMPLATE_CATALOG });
 });
 
+// ---------------------------------------------------------------------------
+// Task #8 — Worker-owned (D1) legal template STORE (canonical, editable).
+// Distinct from the legacy `/templates` (static catalog + usage grid) and
+// `/templates/legal` (e-sign wizard picker), which stay intact. The store
+// is the new source of truth for prod doc-generation + e-sign rendering.
+// All routes require admin; soft-delete additionally requires a recent
+// step-up factor. Sub-paths fall under the existing `/api/admin/contracts`
+// mount, so no API-drift allowlist change is needed.
+// ---------------------------------------------------------------------------
+
+// GET /templates/store?category= — full catalog (active rows), decorated
+// with usage_count + last_used_at from the same union the grid uses, so
+// cards keep their usage badge and the TemplateUsageModal still works.
+adminContracts.get('/templates/store', async (c) => {
+  await requireAdmin(c);
+  const category = c.req.query('category') || undefined;
+  const items = await storeListTemplates(c.env, category);
+
+  const sql = getSQL(c.env);
+  try {
+    const [docs, envs]: [any[], any[]] = await Promise.all([
+      sql.unsafe(
+        `SELECT template_name, doc_type, created_at FROM documents
+          WHERE LOWER(COALESCE(doc_type, '')) IN (${Array.from(CONTRACT_DOC_TYPES).map(() => '?').join(',')})`,
+        Array.from(CONTRACT_DOC_TYPES),
+      ),
+      sql`SELECT document_type, created_at FROM esign_envelopes`,
+    ]);
+    const usage = new Map<string, number>();
+    const lastUsed = new Map<string, string>();
+    const bump = (key: string | null | undefined, when: string | null | undefined) => {
+      if (!key) return;
+      usage.set(key, (usage.get(key) || 0) + 1);
+      const prev = lastUsed.get(key);
+      if (when && (!prev || new Date(when) > new Date(prev))) lastUsed.set(key, when);
+    };
+    for (const d of docs) bump(d.template_name || d.doc_type, d.created_at);
+    for (const e of envs) bump(e.document_type, e.created_at);
+
+    const out = items.map((t) => ({
+      ...t,
+      layer: t.category,
+      layer_label: TEMPLATE_LAYERS[t.category]?.label || t.category,
+      usage_count: usage.get(t.slug) || 0,
+      last_used_at: lastUsed.get(t.slug) || null,
+    }));
+    return c.json({ items: out, total: out.length });
+  } finally {
+    await sql.end();
+  }
+});
+
+// POST /templates/store — create a new template (slug must be unique).
+adminContracts.post('/templates/store', async (c) => {
+  const admin = await requireAdmin(c);
+  const body = await c.req.json<{ slug?: string; title?: string; category?: string; body_md?: string }>();
+  try {
+    const tpl = await storeCreateTemplate(
+      c.env,
+      { slug: String(body.slug || ''), title: String(body.title || ''), category: String(body.category || ''), body_md: body.body_md },
+      admin.id,
+    );
+    return c.json({ template: tpl }, 201);
+  } catch (e) {
+    if (e instanceof TemplateError) return c.json({ error: e.message, code: e.code }, e.status);
+    throw e;
+  }
+});
+
+// GET /templates/store/:slug — single template (full body + merge fields).
+adminContracts.get('/templates/store/:slug', async (c) => {
+  await requireAdmin(c);
+  const slug = c.req.param('slug');
+  const tpl = await storeGetTemplate(c.env, slug);
+  if (!tpl) return c.json({ error: 'Template not found', code: 'not_found', slug }, 404);
+  return c.json({
+    template: { ...tpl, layer: tpl.category, layer_label: TEMPLATE_LAYERS[tpl.category]?.label || tpl.category },
+  });
+});
+
+// GET /templates/store/:slug/versions — read-only version history (newest first).
+adminContracts.get('/templates/store/:slug/versions', async (c) => {
+  await requireAdmin(c);
+  const slug = c.req.param('slug');
+  const res = await storeListVersions(c.env, slug);
+  if (!res) return c.json({ error: 'Template not found', code: 'not_found', slug }, 404);
+  return c.json(res);
+});
+
+// PUT /templates/store/:slug — edit a template. The server snapshots the
+// prior row into history and bumps the version atomically.
+adminContracts.put('/templates/store/:slug', async (c) => {
+  const admin = await requireAdmin(c);
+  const slug = c.req.param('slug');
+  const body = await c.req.json<{ title?: string; category?: string; body_md?: string }>();
+  try {
+    const tpl = await storeUpdateTemplate(
+      c.env,
+      slug,
+      { title: String(body.title || ''), category: String(body.category || ''), body_md: String(body.body_md ?? '') },
+      admin.id,
+    );
+    return c.json({ template: tpl });
+  } catch (e) {
+    if (e instanceof TemplateError) return c.json({ error: e.message, code: e.code }, e.status);
+    throw e;
+  }
+});
+
+// DELETE /templates/store/:slug — soft-delete (is_active = 0). Requires a
+// recent step-up factor, mirroring the other destructive contract actions.
+adminContracts.delete('/templates/store/:slug', async (c) => {
+  const admin = await requireAdmin(c);
+  await requireStepUp(c);
+  const slug = c.req.param('slug');
+  const ok = await storeSoftDeleteTemplate(c.env, slug, admin.id);
+  if (!ok) return c.json({ error: 'Template not found', code: 'not_found', slug }, 404);
+  return c.json({ ok: true });
+});
+
 // GET /api/admin/contracts/templates/:doc_type/usage — drill-down for a
 // single template card on Admin > Contracts > Templates. Returns the
 // template metadata, aggregate counters across the 4-source union for
@@ -1259,8 +1388,32 @@ adminContracts.get('/templates/legal', async (c) => {
 adminContracts.get('/templates/:doc_type/usage', async (c) => {
   await requireAdmin(c);
   const docType = c.req.param('doc_type');
+  // Task #8 — the Templates grid now lists every store slug (esign bodies +
+  // spaced AGREEMENT_OPTIONS stubs + admin-created rows), not just the static
+  // TEMPLATES registry. Fall back to the D1 store so the "N uses" chip resolves
+  // a header for those slugs too; the usage stats below are doc_type-driven and
+  // need no other change.
   const tpl = TEMPLATES[docType];
-  if (!tpl) return c.json({ error: 'unknown_template', doc_type: docType }, 404);
+  let templateMeta: { key: string; doc_type: string; title: string; layer: string; layer_label: string };
+  if (tpl) {
+    templateMeta = {
+      key: docType,
+      doc_type: docType,
+      title: tpl.title,
+      layer: tpl.layer,
+      layer_label: TEMPLATE_LAYERS[tpl.layer]?.label || tpl.layer,
+    };
+  } else {
+    const stored = await storeGetTemplate(c.env, docType);
+    if (!stored) return c.json({ error: 'unknown_template', doc_type: docType }, 404);
+    templateMeta = {
+      key: stored.slug,
+      doc_type: stored.slug,
+      title: stored.title,
+      layer: stored.category,
+      layer_label: TEMPLATE_LAYERS[stored.category]?.label || stored.category,
+    };
+  }
 
   const limit = Math.min(parseInt(c.req.query('limit') || '200', 10) || 200, 500);
   const offset = parseInt(c.req.query('offset') || '0', 10) || 0;
@@ -1302,13 +1455,7 @@ adminContracts.get('/templates/:doc_type/usage', async (c) => {
     }
 
     return c.json({
-      template: {
-        key: docType,
-        doc_type: docType,
-        title: tpl.title,
-        layer: tpl.layer,
-        layer_label: TEMPLATE_LAYERS[tpl.layer]?.label || tpl.layer,
-      },
+      template: templateMeta,
       stats: {
         total: rows.length,
         by_status: byStatus,

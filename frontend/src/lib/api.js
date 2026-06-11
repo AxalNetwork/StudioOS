@@ -849,6 +849,20 @@ export const api = {
     return request(`/admin/contracts/partner-deals${qs ? `?${qs}` : ''}`);
   },
   adminListLegalTemplates: () => request('/admin/contracts/templates/legal'),
+  // Task #8 — Worker-owned (D1) legal template store CRUD + versioning.
+  adminTemplateStoreList: (category) => {
+    const q = category ? `?category=${encodeURIComponent(category)}` : '';
+    return request(`/admin/contracts/templates/store${q}`);
+  },
+  adminTemplateStoreGet: (slug) => request(`/admin/contracts/templates/store/${encodeURIComponent(slug)}`),
+  adminTemplateStoreVersions: (slug) =>
+    request(`/admin/contracts/templates/store/${encodeURIComponent(slug)}/versions`),
+  adminTemplateStoreCreate: (payload) =>
+    request('/admin/contracts/templates/store', { method: 'POST', body: JSON.stringify(payload) }),
+  adminTemplateStoreUpdate: (slug, payload) =>
+    request(`/admin/contracts/templates/store/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  adminTemplateStoreDelete: (slug) =>
+    request(`/admin/contracts/templates/store/${encodeURIComponent(slug)}`, { method: 'DELETE' }),
   adminSendEnvelope: (payload) =>
     request('/legal/esign/send', { method: 'POST', body: JSON.stringify(payload) }),
   adminVoidContractWithReason: (uid, reason) =>

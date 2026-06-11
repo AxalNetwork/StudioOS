@@ -12,6 +12,7 @@ import TrustScoreBadge from '../components/TrustScoreBadge';
 // the network roster via /admin?tab=network-profiles. The standalone
 // /admin/network-profiles route stays wired for direct deep-links.
 import AdminNetworkProfiles from './admin/AdminNetworkProfiles';
+import AdminTemplates from './admin/AdminTemplates';
 
 // Task #16 — per-row trust score column on the admin Users table.
 // Task #40 — accepts a pre-fetched `data` prop populated by the parent's
@@ -1710,7 +1711,6 @@ const PARTY_ROLE_OPTIONS = [
 export function LegalPanel() {
   const [stats, setStats] = useState(null);
   const [items, setItems] = useState([]);
-  const [templates, setTemplates] = useState([]);
   const [pairwise, setPairwise] = useState([]);
   const [partnerDeals, setPartnerDeals] = useState([]);
   const [partnerDealsNote, setPartnerDealsNote] = useState('');
@@ -1725,6 +1725,7 @@ export function LegalPanel() {
   const [pdDealType, setPdDealType] = useState(''); // partner deal_type filter
   const [openContract, setOpenContract] = useState(null);
   const [showNewEnvelope, setShowNewEnvelope] = useState(false);
+  const [openTplUsage, setOpenTplUsage] = useState(null); // { docType, fallback } — Task #8 usage chip
 
   const statusFilter = sub === 'pending' ? 'sent' : sub === 'signed' ? 'signed' : sub === 'voided' ? 'void' : '';
   const isListSub = sub === 'all' || sub === 'pending' || sub === 'signed' || sub === 'voided';
@@ -1732,16 +1733,17 @@ export function LegalPanel() {
   const reload = async () => {
     setLoading(true);
     try {
-      const [s, list, tpls, pw, pd] = await Promise.all([
+      // Task #8 — the Templates sub-tab now self-loads from the store via
+      // <AdminTemplates>, so it is no longer fetched here.
+      const [s, list, , pw, pd] = await Promise.all([
         api.adminContractStats().catch(() => null),
         isListSub ? api.adminListContracts({ status: statusFilter, doc_type: docType, provider: providerFilter, party_role: partyRole, q, limit: 200 }) : Promise.resolve({ items: [] }),
-        sub === 'templates' ? api.adminContractTemplates().catch(() => []) : Promise.resolve(null),
+        Promise.resolve(null),
         sub === 'pairwise' ? api.adminListPairwiseNdas({ status: pwStatus, intermediary: pwIntermediary }).catch(() => ({ items: [] })) : Promise.resolve(null),
         sub === 'partner' ? api.adminListPartnerDeals({ deal_type: pdDealType }).catch(() => ({ items: [], note: 'Failed to load.' })) : Promise.resolve(null),
       ]);
       setStats(s);
       setItems(list?.items || []);
-      if (tpls) setTemplates(tpls);
       if (pw) setPairwise(pw.items || []);
       if (pd) { setPartnerDeals(pd.items || []); setPartnerDealsNote(pd.note || ''); }
     } catch (e) {
@@ -1849,7 +1851,7 @@ export function LegalPanel() {
       {loading ? (
         <div className="text-center text-gray-500 py-12 text-sm">Loading…</div>
       ) : sub === 'templates' ? (
-        <TemplatesGrid templates={templates} />
+        <AdminTemplates onOpenUsage={(docType, fallback) => setOpenTplUsage({ docType, fallback })} />
       ) : sub === 'pairwise' ? (
         <PairwiseNdasTable rows={pairwise} statusFilter={pwStatus} onStatusFilter={setPwStatus}
           intermediaryFilter={pwIntermediary} onIntermediaryFilter={setPwIntermediary}
@@ -1894,6 +1896,14 @@ export function LegalPanel() {
 
       {showNewEnvelope && (
         <NewEnvelopeWizard onClose={() => setShowNewEnvelope(false)} onSent={() => { setShowNewEnvelope(false); reload(); }} />
+      )}
+
+      {openTplUsage && (
+        <TemplateUsageModal
+          docType={openTplUsage.docType}
+          fallback={openTplUsage.fallback}
+          onClose={() => setOpenTplUsage(null)}
+        />
       )}
     </div>
   );
@@ -2268,46 +2278,6 @@ function ContractRow({ c, onOpen }) {
         </div>
       </div>
     </button>
-  );
-}
-
-function TemplatesGrid({ templates }) {
-  const [openTpl, setOpenTpl] = useState(null);
-  if (!templates || templates.length === 0) {
-    return <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">No templates available.</div>;
-  }
-  return (
-    <>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {templates.map(t => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setOpenTpl(t)}
-            data-testid={`template-card-${t.key}`}
-            className="bg-white border border-gray-200 rounded-xl p-4 text-left hover:border-violet-400 hover:shadow-sm transition focus:outline-none focus:ring-2 focus:ring-violet-400 dark:bg-gray-900 dark:border-gray-800">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="font-semibold text-gray-900 truncate dark:text-gray-100">{t.title}</div>
-                <div className="text-[11px] text-gray-500 mt-0.5">{t.layer_label}</div>
-              </div>
-              <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-2 py-1 rounded-full whitespace-nowrap">{t.usage_count} uses</span>
-            </div>
-            <div className="text-[11px] text-gray-500 mt-3">
-              Last used: {fmtDate(t.last_used_at) || 'Never'}
-            </div>
-            <div className="text-[10px] text-gray-400 mt-1 font-mono truncate">{t.key}</div>
-          </button>
-        ))}
-      </div>
-      {openTpl && (
-        <TemplateUsageModal
-          docType={openTpl.doc_type || openTpl.key}
-          fallback={openTpl}
-          onClose={() => setOpenTpl(null)}
-        />
-      )}
-    </>
   );
 }
 

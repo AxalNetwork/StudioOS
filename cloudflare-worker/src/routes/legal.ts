@@ -4,6 +4,8 @@ import { getSQL } from '../db';
 import { requireAuth, requireRole, requireApprovedKyc, canAccessFounderResource } from '../auth';
 import { seedStandardEventsForJurisdiction } from './compliance';
 import { CONTRACT_DOC_TYPES } from './admin_contracts';
+import { getActiveTemplateBody } from '../services/legalTemplateStore';
+import { applyMergeFields } from '../services/mergeFields';
 
 const legal = new Hono<{ Bindings: Env }>();
 
@@ -185,8 +187,13 @@ legal.post('/incorporate/wizard', async (c) => {
       continue;
     }
     const docType = _ALLOWED_DOC_TYPES.has(tkey) ? tkey : 'other';
-    const baseContent = (TEMPLATES as any)[tkey]?.content || `${meta.title}\n\nCompany: ${fill.company_name}\nJurisdiction: ${fill.jurisdiction}\nDate: ${fill.incorporation_date}\n\n[Counsel-reviewed body managed in the FastAPI backend.]`;
-    const content = fillContent(baseContent);
+    // Task #8 — prefer the canonical D1 store body (with {{merge}} tokens)
+    // over the inline stub; fall back to fillContent for the legacy
+    // single-brace inline bodies.
+    const d1Body = await getActiveTemplateBody(c.env, tkey);
+    const content = d1Body
+      ? applyMergeFields(d1Body, fill)
+      : fillContent((TEMPLATES as any)[tkey]?.content || `${meta.title}\n\nCompany: ${fill.company_name}\nJurisdiction: ${fill.jurisdiction}\nDate: ${fill.incorporation_date}\n\n[Counsel-reviewed body managed in the FastAPI backend.]`);
     const inserted = await sql`
       INSERT INTO documents (project_id, title, doc_type, status, content, template_name)
       VALUES (${project.id}, ${meta.title}, ${docType}, 'generated', ${content}, ${tkey})
@@ -317,9 +324,18 @@ legal.post('/templates/:key/generate', async (c) => {
       code: 'use_esign_envelope',
     }, 409);
   }
-  let content = template.content;
-  if (body.company_name) content = content.replace(/\{company_name\}/g, body.company_name);
-  if (body.project_id) content = content.replace(/\{project_id\}/g, body.project_id);
+  // Task #8 — prefer the canonical D1 store body over the inline stub. D1
+  // bodies carry {{merge}} tokens (applyMergeFields); the legacy inline
+  // stubs use {single} braces and remain the fallback path.
+  const d1Body = await getActiveTemplateBody(c.env, key);
+  let content: string;
+  if (d1Body) {
+    content = applyMergeFields(d1Body, { ...body, company_name: body.company_name, project_id: body.project_id });
+  } else {
+    content = template.content;
+    if (body.company_name) content = content.replace(/\{company_name\}/g, body.company_name);
+    if (body.project_id) content = content.replace(/\{project_id\}/g, body.project_id);
+  }
 
   const [doc] = await sql`INSERT INTO documents (project_id, title, doc_type, status, content, template_name) VALUES (${body.project_id || null}, ${template.title}, ${key}, 'generated', ${content}, ${key}) RETURNING *`;
   await sql.end();

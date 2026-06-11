@@ -251,11 +251,17 @@ export async function createAndSendEnvelope(
   // (investor_nda_axal, mentor_nda_axal, partner_services, …) so the
   // admin wizard sends real legal templates rather than the legacy
   // `buildTemplateBody` placeholder fallback.
-  const { templateKeyForDocType, renderLegalTemplate } = await import('../services/legalTemplates');
+  const { templateKeyForDocType, renderLegalTemplate, applyMergeFields } = await import('../services/legalTemplates');
+  const { getActiveTemplateBody } = await import('../services/legalTemplateStore');
   const tplKey = templateKeyForDocType(opts.documentType);
+  // Task #8 — prefer the canonical D1 store body (active, non-stub) keyed by
+  // `document_type`, falling back to the Y-1 markdown templates and then the
+  // `buildTemplateBody` placeholder. This makes the editable store the source
+  // of truth for what is actually rendered into the signed envelope.
+  const d1Body = await getActiveTemplateBody(env, opts.documentType);
   let tpl: AgreementTemplate;
   const appliedMergeKeys: string[] = [];
-  if (tplKey) {
+  if (tplKey || d1Body) {
     // Y-1 markdown — `renderLegalTemplate` already does {{key}}
     // substitution. We always seed a sane set of default merge values
     // (recipient_name/email + effective_date) and let the caller
@@ -324,7 +330,7 @@ export async function createAndSendEnvelope(
       counterparty,
       ...(opts.mergeFields || {}),
     };
-    const body = await renderLegalTemplate(tplKey, merge);
+    const body = d1Body ? applyMergeFields(d1Body, merge) : await renderLegalTemplate(tplKey!, merge);
     tpl = { title: opts.documentType, body };
     if (opts.mergeFields) appliedMergeKeys.push(...Object.keys(opts.mergeFields));
   } else {
