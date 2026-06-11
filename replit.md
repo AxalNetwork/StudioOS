@@ -50,6 +50,7 @@ Admin docs live behind `roles: ['admin']` on sections/subsections in `frontend/s
 
 The full, detailed gotchas now live in [`GOTCHAS.md`](./GOTCHAS.md) so this README stays a scannable overview. Subsections (each in `GOTCHAS.md`):
 - [Migrations & schema](./GOTCHAS.md#migrations--schema)
+- [Skills & values taxonomy](./GOTCHAS.md#skills--values-taxonomy-task-10)
 - [Telegram broadcaster](./GOTCHAS.md#telegram-broadcaster-task-3)
 - [X (Twitter) broadcaster](./GOTCHAS.md#x-twitter-broadcaster-task-4)
 - [Auth blockers — magic-link / passkeys / step-up](./GOTCHAS.md#auth-blockers--magic-link--passkeys--step-up-task-4-ib)

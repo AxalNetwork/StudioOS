@@ -10,6 +10,16 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Skills & values taxonomy (Task #10)
+
+Canonical reference data — an 8-axis skill taxonomy + a personal-values taxonomy — as normalized D1 tables that every downstream feature (skill profiles, radar graph, co-founder/partner/investor matching, deck spider autofill) will read from as the single source of truth. Reference data only: no UI, no API routes, no per-user data.
+
+- `cloudflare-worker/sql/migrations/089_skills_values_taxonomy.sql`: creates `skill_categories`, `skills`, `value_dimensions` (`CREATE TABLE IF NOT EXISTS`, additive/idempotent). 8 categories carry `is_radar_axis=1` with equal default `radar_weight=1.0`. `skills.category_slug` is a soft link to `skill_categories.slug` (no hard FK, matching house style); `skills.seniority_levels_json` defaults to the canonical 5-rung ladder `["aware","working","proficient","advanced","expert"]`. Header documents the canonical axes/slugs/weights, the seniority ladder, and the legacy-12-axis mapping.
+- `cloudflare-worker/sql/migrations/090_seed_skills_values_taxonomy.sql`: `INSERT OR IGNORE` seed — 8 radar categories, 128 skills (16 per category, over the ≥120 floor), 15 value dimensions (10 Schwartz unipolar + 5 founder-specific bipolar: Mission-vs-Profit, Speed-vs-Quality, Risk-Appetite, Growth-vs-Sustainability, Autonomy-vs-Structure). Re-running is a clean no-op.
+- `cloudflare-worker/src/services/skillsTaxonomySchema.ts`: lazy bootstrap `ensureSkillsTaxonomySchema()` mirroring `ensureNetworkProfilesSchema()` — creates the table SHAPE only on a cold D1 (deliberately does NOT seed; that's 090's job), with a per-isolate `_ready` flag and try/catch `console.warn`. Exports the canonical `RADAR_AXES` (with legacy-axis mapping), `SENIORITY_LEVELS`, and `VALUE_FAMILIES` constants for downstream code. Not imported by any route yet (downstream tasks wire it in) but typechecked via the worker `tsconfig` `include`.
+- The 8 axes (`product`, `engineering`, `design`, `gtm_sales`, `marketing_brand`, `finance_ops`, `legal_compliance`, `capital_network`) cleanly absorb the legacy 12-axis free-text `SKILL_CATALOG` (engineering←Engineering+Technical DD, gtm_sales←GTM+Sales, finance_ops←Finance+Operations, capital_network←Fundraising+Recruiting; rest 1:1). Reconciling/retiring the legacy catalog is a later task.
+- Docs added to `GOTCHAS.md` (new "Skills & values taxonomy" subsection) + `replit.md` subsection list. Verified parse/counts/idempotency via `node:sqlite` (8 categories all radar, 128 skills at 16/category, 0 orphan slugs, 15 value dims, identical counts on re-apply). Migrations 089/090 are NOT yet applied to prod D1 — apply via wrangler (`089` then `090`). Note: `INSERT OR IGNORE` means later label/description corrections in 090 won't update already-seeded rows; corrections need an explicit `UPDATE` migration.
+
 ## Advisor composer voice-to-text mic (Task #9)
 
 The advisor composer now has a mic button for dictating answers, sitting between the text input and the skip control so it appears in both the embedded card and the fullscreen view (they share `<Composer>`).
