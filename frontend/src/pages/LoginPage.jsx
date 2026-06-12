@@ -187,15 +187,15 @@ export default function LoginPage() {
   // bundle never includes it. Lands the user on /deals so testers can
   // immediately drive the LockedFounderCard → Request intro flow.
   const showDemoQuickLogin = !!import.meta.env.DEV;
-  const [demoLoading, setDemoLoading] = useState(false);
-  const demoLogin = async () => {
-    setDemoLoading(true); setError('');
+  const [demoLoading, setDemoLoading] = useState('');
+  const demoLogin = async ({ email: demoEmail, landing } = {}) => {
+    setDemoLoading(demoEmail || 'investor'); setError('');
     try {
       const res = await fetch('/api/auth/dev/quick-login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({}),
+        body: JSON.stringify(demoEmail ? { email: demoEmail } : {}),
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
@@ -205,10 +205,10 @@ export default function LoginPage() {
       if (!data?.token || !data?.user) throw new Error('Invalid response from demo login.');
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
-      window.location.href = '/deals';
+      window.location.href = landing || '/deals';
     } catch (e) {
       setError(e?.message || 'Demo login failed.');
-    } finally { setDemoLoading(false); }
+    } finally { setDemoLoading(''); }
   };
 
   // ---- Submit ----
@@ -326,17 +326,25 @@ export default function LoginPage() {
             )}
 
             {showDemoQuickLogin && (
-              <div className="pt-2 border-t border-gray-200">
+              <div className="pt-2 border-t border-gray-200 space-y-2">
                 <button
-                  onClick={demoLogin}
-                  disabled={demoLoading}
+                  onClick={() => demoLogin()}
+                  disabled={!!demoLoading}
                   data-testid="demo-investor-login"
                   className="w-full bg-amber-100 hover:bg-amber-200 border border-amber-300 disabled:opacity-50 rounded-lg py-2 text-xs font-medium text-amber-900 flex items-center justify-center gap-2"
                 >
-                  {demoLoading ? 'Signing in…' : 'Sign in as demo investor (dev only)'}
+                  {demoLoading === 'investor' ? 'Signing in…' : 'Sign in as demo investor (dev only)'}
+                </button>
+                <button
+                  onClick={() => demoLogin({ email: 'demo-admin@axal.test', landing: '/admin' })}
+                  disabled={!!demoLoading}
+                  data-testid="demo-admin-login"
+                  className="w-full bg-violet-100 hover:bg-violet-200 border border-violet-300 disabled:opacity-50 rounded-lg py-2 text-xs font-medium text-violet-900 flex items-center justify-center gap-2"
+                >
+                  {demoLoading === 'demo-admin@axal.test' ? 'Signing in…' : 'Sign in as demo admin (dev only)'}
                 </button>
                 <p className="text-[10px] text-gray-500 mt-1 text-center">
-                  Skips TOTP &amp; Turnstile. Lands on <code>/deals</code>. Disabled in production builds.
+                  Skips TOTP &amp; Turnstile. Admin lands on <code>/admin</code>. Disabled in production builds.
                 </p>
               </div>
             )}

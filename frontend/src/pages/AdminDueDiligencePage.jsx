@@ -22,6 +22,7 @@ const STATUS_STYLES = {
 export default function AdminDueDiligencePage() {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
   const [filter, setFilter] = useState({ status: '', risk_band: '', subject_type: '' });
   const [search, setSearch] = useState('');
   const [openModal, setOpenModal] = useState(false);
@@ -29,12 +30,21 @@ export default function AdminDueDiligencePage() {
 
   const load = async () => {
     setLoading(true);
+    setUnavailable(false);
     try {
       const res = await dd.listCases(filter);
       setCases(res.items || []);
     } catch (e) {
-      reportError('AdminDueDiligencePage:list', e);
-      push(e.message || 'Failed to load cases', 'error');
+      // The DD case store is worker-only (D1); in the dev FastAPI backend the
+      // endpoint 404s. Surface the same "unavailable in dev" banner the other
+      // store-backed admin panels use instead of a scary error toast.
+      if (e?.status === 404) {
+        setUnavailable(true);
+        setCases([]);
+      } else {
+        reportError('AdminDueDiligencePage:list', e);
+        push(e.message || 'Failed to load cases', 'error');
+      }
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter.status, filter.risk_band, filter.subject_type]);
@@ -112,9 +122,18 @@ export default function AdminDueDiligencePage() {
         </button>
       </div>
 
+      {unavailable && (
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200 text-sm rounded-xl px-4 py-3 mb-4 flex items-start gap-2">
+          <ShieldAlert size={16} className="mt-0.5 flex-shrink-0" />
+          <div>Due diligence cases are managed by the production worker and aren't available in this development environment. Deploy the worker to open and track cases.</div>
+        </div>
+      )}
+
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
         {loading ? (
           <div className="p-10 text-center text-gray-500 text-sm">Loading…</div>
+        ) : unavailable ? (
+          <div className="p-10 text-center text-gray-400 text-sm">Case list is unavailable in this environment.</div>
         ) : filtered.length === 0 ? (
           <div className="p-10 text-center text-gray-500 text-sm">No cases match the current filters.</div>
         ) : (

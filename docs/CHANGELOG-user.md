@@ -5,6 +5,20 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Spin-out decks now show your real team coverage
+
+The team chart on the spin-out demo-day deck now reflects your actual founding team instead of a placeholder. It maps your team's strengths across eight areas — product, engineering, design, sales, marketing, finance, legal, and capital — and overlays a dashed "ideal coverage" guide so investors can see at a glance where you're strong and where there are gaps. Any gap areas are highlighted with two suggested roles to hire, so the deck doubles as a hiring signal.
+
+---
+
+## Investor matching for founders
+
+Founders can now see which investors are the best fit for their project. The new **Investor Match** tab on the AI Matching Engine page lets you pick one of your projects and run a scored match against every investor on the platform. Each investor gets a composite score based on thesis fit, traction fit, values alignment, and how warm your existing network connection is. Results are ranked, and any investors excluded by hard anti-thesis rules (e.g. they avoid your sector or stage) are shown separately so you know why they didn't appear.
+
+For investors, the onboarding wizard now includes two extra steps: **Anti-thesis** (sectors and stages you never want to be matched with) and **Value weights** (how much mission-driven founders, technical depth, growth trajectory, team diversity, and market timing matter to you). These preferences also appear in **Settings → Privacy** so you can adjust them anytime.
+
+---
+
 ## Intent-based partner matching
 
 The Partner Matchmaking panel now lets you search by **intent** instead of just sector. Choose from eight focus areas (Product, Engineering, Design, GTM / Sales, Marketing / Brand, Finance / Ops, Legal / Compliance, or Capital / Network) and the system ranks partners by how well they fit that specific need. Every result shows a match score and a breakdown of why it was ranked that way, including domain fit, track record, values alignment, and availability.

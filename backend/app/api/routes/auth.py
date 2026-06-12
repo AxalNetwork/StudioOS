@@ -651,10 +651,15 @@ def dev_quick_login(
         raise HTTPException(status_code=404, detail="Not found")
 
     from backend.app.services.demo_seed import (
+        DEMO_ADMIN_EMAIL,
         DEMO_FOUNDER_EMAIL,
         DEMO_INVESTOR_EMAIL,
     )
-    ALLOWED = {DEMO_INVESTOR_EMAIL.lower(), DEMO_FOUNDER_EMAIL.lower()}
+    ALLOWED = {
+        DEMO_INVESTOR_EMAIL.lower(),
+        DEMO_FOUNDER_EMAIL.lower(),
+        DEMO_ADMIN_EMAIL.lower(),
+    }
     target_email = (req.email or DEMO_INVESTOR_EMAIL).strip().lower()
     if target_email not in ALLOWED:
         # Hard allowlist — refuse to mint a token for anyone other than

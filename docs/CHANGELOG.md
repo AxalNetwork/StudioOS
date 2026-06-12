@@ -10,6 +10,24 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Spin-out Deck Radar Autofill (Task #17)
+
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`: the Axal spin-out demo-day deck now autofills a real 8-axis founding-team coverage radar. Resolves the team = founder (`userId`) + active `cofounder_connections` (status='active', user_a_id/user_b_id), then calls `computeRadar(env, teamUserIds)` (after `ensureSkillsTaxonomySchema`/`ensureSkillProfileSchema`) and maps it into a new `TeamRadar` shape via `buildTeamRadar()`. Team mode plots per-axis `coverage` (best-of member); solo founders plot their own axis `score`. Gap axes (coverage < 60) get up to 2 suggested hiring roles via the static `GAP_AXIS_ROLES` map. Constant ideal-coverage reference = 70/axis. Emitted as `mn_team_radar_json`; degrades to `null` on any DB/schema error so the slide falls back to the legacy skill_coverage spider. All wrapped in try-catch.
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx`: added `TeamRadar`/`TeamRadarAxis`/`TeamRadarGap` types, `team_radar` on `mentor_network` (type + SAMPLE_DATA + hydrate via `parseJsonField`), and a new pure-SVG `TeamCoverageRadar` component (team polygon + dashed ideal reference polygon + gold gap-axis vertices/labels + Team/Ideal legend + gap hiring chips as styled HTML below). Rendered in both the Mentor & Network slide (size 200) and the merged Team slide (size 170), preferring `team_radar.has_data && axes.length >= 3`, then the legacy `SkillsSpider`, then `NetworkConstellation`.
+- `DECK_AUTOFILL_AUDIT.md`: marked `mentor_network.team_radar.*` as AUTOFILLED (#17).
+
+## Investor Matching (Task #16)
+
+- `cloudflare-worker/sql/migrations/096_investor_thesis.sql`: adds `anti_thesis_sectors_json`, `anti_thesis_stages_json`, `value_weights_json` to `investor_profiles` (idempotent, SQLite/D1 safe). Also updated `cloudflare-worker/sql/schema.sql`.
+- `cloudflare-worker/src/routes/investor_signals.ts`: extended `ProfileRow` interface, `emptyProfile()`, `shapeProfile()`, and `PUT /me` to accept, persist, and return anti-thesis + value_weights. Lazy-bootstrap `ALTER TABLE ADD COLUMN` fallback in `ensureSchema` for tables created before migration 096.
+- `cloudflare-worker/src/routes/matches.ts`: new `POST /api/matches/investor-match` endpoint. Scores investors for a given project_id using weights: thesis_fit (0.45), traction_fit (0.20), values_alignment (0.20), network_warmth (0.15). Hard anti-thesis exclusion (sector/stage) before scoring. Check-size band gate using ticket_band midpoint or min/max bounds. Uses `user_values` for cosine-similarity values alignment and `investor_introductions` for network warmth. Returns ranked results + excluded list with per-component breakdown.
+- `backend/app/api/routes/investor_signals.py`: backend parity. `PUT /me` now parses and persists `anti_thesis_sectors`, `anti_thesis_stages`, and `value_weights` (clamped 0-1). `_empty_profile` returns default values for the new fields.
+- `frontend/src/lib/api.js`: added `api.matchInvestors(projectId)` (POST /api/matches/investor-match).
+- `frontend/src/pages/MatchesPage.jsx`: added "Investor Match" tab (founder-only, visible when `role === 'founder'`). Displays project selector, ranked investors with score pills, per-component breakdown (thesis/traction/values/network), and an excluded list with reasons. Uses existing `DealCard`/`ScorePill`/`Loading`/`Empty` patterns.
+- `frontend/src/components/OnboardingWizard.jsx`: added `SliderField` export (range 0-1, step 0.05, percentage display).
+- `frontend/src/pages/OnboardingInvestorPage.jsx`: added two new wizard steps: "Anti-thesis" (sector/stage exclusions) and "Value weights" (mission_driven, technical_depth, growth_trajectory, team_diversity, market_timing sliders). Persists `anti_thesis_sectors`, `anti_thesis_stages`, and `value_weights` on `saveInvestorProfile`.
+- `frontend/src/pages/SettingsPage.jsx`: added `InvestorThesisEditorCard` in Privacy tab. Investors can toggle anti-thesis sectors/stages and adjust value-weight sliders. Save calls `api.saveInvestorProfile` with all fields.
+
 ## Partner Matching (Task #15)
 
 - `cloudflare-worker/sql/migrations/095_partner_accepting_intros.sql`: adds `accepting_intros` column to `partners` (default 1) + composite index on `(accepting_intros, status)`. Also updated `cloudflare-worker/sql/schema.sql`.

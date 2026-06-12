@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Admin console is reachable again in the preview environment
+
+The Admin Console now works when previewing the app outside of production. There's a one-click "Sign in as demo admin" option on the sign-in screen (preview only) so administrators can open the console and see real data — users, monitoring, legal templates, and more — instead of empty screens and errors. A few admin sections that only run in the live environment (such as due diligence cases and the IRS-style forms) now show a clear note explaining they're available once the app is deployed, rather than an error.
+
+---
+
 ## Spin-out decks now show your real team coverage
 
 The team chart on the spin-out demo-day deck now reflects your actual founding team instead of a placeholder. It maps your team's strengths across eight areas — product, engineering, design, sales, marketing, finance, legal, and capital — and overlays a dashed "ideal coverage" guide so investors can see at a glance where you're strong and where there are gaps. Any gap areas are highlighted with two suggested roles to hire, so the deck doubles as a hiring signal.

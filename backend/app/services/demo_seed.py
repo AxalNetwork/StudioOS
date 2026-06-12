@@ -52,6 +52,13 @@ DEMO_INVESTOR_TOTP_SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"  # 32-char base32
 DEMO_FOUNDER_EMAIL = "demo-founder@axal.test"
 DEMO_FOUNDER_NAME = "Demo Founder"
 
+# Dev-only admin so the Admin Console (/admin) is reachable + testable in the
+# dev FastAPI backend. Like the investor, its `password_hash` doubles as the
+# well-known pyotp secret so BOTH the dev quick-login button AND the regular
+# /login TOTP flow work. Never seeded in production (is_production gate).
+DEMO_ADMIN_EMAIL = "demo-admin@axal.test"
+DEMO_ADMIN_NAME = "Demo Admin"
+
 DEMO_PROJECT_NAME = "Demo Trust Center Co."
 DEMO_PROJECT_SECTOR = "AI"
 DEMO_PROJECT_STAGE = "seed"
@@ -101,14 +108,20 @@ def seed_demo_investor_and_founder() -> None:
                 name=DEMO_FOUNDER_NAME,
                 role=UserRole.FOUNDER,
             )
+            admin_user = _ensure_user(
+                session,
+                email=DEMO_ADMIN_EMAIL,
+                name=DEMO_ADMIN_NAME,
+                role=UserRole.ADMIN,
+            )
             founder_row = _ensure_founder_row(session, founder_user)
             project = _ensure_project(session, founder_row)
             _ensure_deal(session, project)
-            _ensure_onboarding_complete(session, investor, founder_user)
+            _ensure_onboarding_complete(session, investor, founder_user, admin_user)
             session.commit()
             logger.info(
-                "demo_seed: ready (investor_user_id=%s, founder_user_id=%s, project_id=%s)",
-                investor.id, founder_user.id, project.id,
+                "demo_seed: ready (investor_user_id=%s, founder_user_id=%s, admin_user_id=%s, project_id=%s)",
+                investor.id, founder_user.id, admin_user.id, project.id,
             )
     except Exception as exc:  # noqa: BLE001
         logger.warning("demo_seed: skipped due to error: %s", exc)
@@ -169,7 +182,7 @@ def _ensure_user(session: Session, *, email: str, name: str, role: UserRole) -> 
         if not user.is_active:
             user.is_active = True
             changed = True
-        if role == UserRole.INVESTOR and user.password_hash != DEMO_INVESTOR_TOTP_SECRET:
+        if role in (UserRole.INVESTOR, UserRole.ADMIN) and user.password_hash != DEMO_INVESTOR_TOTP_SECRET:
             user.password_hash = DEMO_INVESTOR_TOTP_SECRET
             changed = True
         if changed:
@@ -182,7 +195,7 @@ def _ensure_user(session: Session, *, email: str, name: str, role: UserRole) -> 
         role=role,
         email_verified=True,
         is_active=True,
-        password_hash=DEMO_INVESTOR_TOTP_SECRET if role == UserRole.INVESTOR else None,
+        password_hash=DEMO_INVESTOR_TOTP_SECRET if role in (UserRole.INVESTOR, UserRole.ADMIN) else None,
     )
     session.add(user)
     session.commit()
