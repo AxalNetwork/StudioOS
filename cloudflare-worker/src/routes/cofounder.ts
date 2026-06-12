@@ -16,6 +16,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { filterOptedInUserIds } from '../services/matchingConsent';
+import { logMatchListGeneration } from '../services/matchAudit';
 
 const cofounder = new Hono<{ Bindings: Env }>();
 
@@ -373,6 +375,9 @@ cofounder.get('/browse', async (c) => {
   // T20 — exclude users who set show_in_directory=0 in user_settings.
   // The table is created lazily; absence == default (visible).
   const hiddenIds = new Set<number>();
+  // Task #19 — hard matching-consent filter. Co-founder browse is a people-match
+  // surface, so only users who explicitly opted into matching may be listed.
+  const optedIn = await filterOptedInUserIds(c.env, userIds);
   if (userIds.length) {
     const placeholders = userIds.map(() => '?').join(',');
     const ures = await c.env.DB.prepare(
@@ -391,6 +396,7 @@ cofounder.get('/browse', async (c) => {
   for (const p of rows) {
     if (closedIds.has(p.user_id)) continue;
     if (hiddenIds.has(p.user_id)) continue;
+    if (!optedIn.has(p.user_id)) continue;
     const cSkills = loadList(p.skills_json).map((s) => s.toLowerCase());
     const cSectors = loadList(p.sectors_json).map((s) => s.toLowerCase());
     if (skill && !cSkills.includes(skill)) continue;
@@ -421,6 +427,10 @@ cofounder.get('/browse', async (c) => {
     card.interest_received = received.has(p.user_id);
     card.mutual_interest = card.interest_sent && card.interest_received;
     return card;
+  });
+  // Task #19 — audit when an admin browses the co-founder match list (no-op otherwise).
+  await logMatchListGeneration(c.env, user as any, 'cofounder_browse', {
+    result_count: cards.length,
   });
   return c.json({ items: cards });
 });

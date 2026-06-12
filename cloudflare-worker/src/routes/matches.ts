@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireAdmin } from '../auth';
+import { filterOptedInUserIds } from '../services/matchingConsent';
+import { logMatchListGeneration } from '../services/matchAudit';
 
 const matches = new Hono<{ Bindings: Env }>();
 
@@ -456,6 +458,12 @@ matches.post('/investor-match', async (c) => {
     ORDER BY ip.user_id
   `;
 
+  // Task #19 — hard consent filter: only investors who explicitly opted into
+  // matching may appear as candidates. Opted-out (the default) are dropped
+  // before any scoring so they never surface in the ranked OR excluded lists.
+  const optedInInvestors = await filterOptedInUserIds(c.env, (investorRows as any[]).map((r) => Number(r.user_id)));
+  const visibleInvestorRows = (investorRows as any[]).filter((r) => optedInInvestors.has(Number(r.user_id)));
+
   // Fetch founder's values vector
   const founderValuesRows = await sql`
     SELECT v.dimension_id, v.score, v.confidence
@@ -468,7 +476,7 @@ matches.post('/investor-match', async (c) => {
   }
 
   // Fetch investor values vectors (all investors in one query)
-  const investorUserIds = (investorRows as any[]).map((r) => Number(r.user_id)).filter(Boolean);
+  const investorUserIds = visibleInvestorRows.map((r) => Number(r.user_id)).filter(Boolean);
   const investorValuesMap = new Map<number, Record<number, number>>();
   if (investorUserIds.length > 0) {
     const ph = investorUserIds.map(() => '?').join(',');
@@ -508,7 +516,7 @@ matches.post('/investor-match', async (c) => {
   const projectStage = String(project.stage || '').trim().toLowerCase();
   const projectFunding = project.funding_needed != null ? Number(project.funding_needed) : null;
 
-  const scored = (investorRows as any[]).map((inv) => {
+  const scored = visibleInvestorRows.map((inv) => {
     const invUid = Number(inv.user_id);
     const invName = inv.user_name || inv.email || 'Investor';
     const sectors = safeJsonArray(inv.sectors_json);
@@ -655,6 +663,12 @@ matches.post('/investor-match', async (c) => {
   const ranked = scored.filter((s) => !s.excluded).sort((a, b) => b.match_score - a.match_score);
   const excluded = scored.filter((s) => s.excluded);
 
+  // Task #19 — audit when an admin generates an investor match list (no-op otherwise).
+  await logMatchListGeneration(c.env, user as any, 'investor_match', {
+    project_id: projectId,
+    result_count: ranked.length,
+  });
+
   return c.json({
     project_id: projectId,
     project_name: project.name,
@@ -667,7 +681,7 @@ matches.post('/investor-match', async (c) => {
 // --------- Admin ---------
 
 matches.get('/admin/all', async (c) => {
-  await requireAdmin(c);
+  const admin = await requireAdmin(c);
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
   const rows = await sql`
@@ -678,6 +692,10 @@ matches.get('/admin/all', async (c) => {
     ORDER BY m.created_at DESC LIMIT 500
   `;
   await sql.end();
+  // Task #19 — audit that an admin pulled the full cross-user match list.
+  await logMatchListGeneration(c.env, admin as any, 'admin_all_matches', {
+    result_count: (rows as any[]).length,
+  });
   return c.json(rows);
 });
 

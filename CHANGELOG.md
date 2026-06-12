@@ -10,6 +10,20 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Privacy, Consent & Taxonomy Versioning (Task #19)
+
+- `cloudflare-worker/src/services/matchingConsent.ts`: new. `filterOptedInUserIds(env, userIds)` returns the subset who set `user_settings.matching_opt_in = 1` (fails closed — empty set on error/missing column). Exports `MATCHING_MIN_COMPLETION_PCT = 60`.
+- `cloudflare-worker/src/services/userSettings.ts`: added `matching_opt_in` (default 0) to `UserSettingsRow`, `DEFAULT_ROW`, the `CREATE TABLE`, an idempotent `ALTER TABLE … ADD COLUMN`, `UserSettingsPatch`, and `buildUpdates` (asInt).
+- `cloudflare-worker/src/routes/settings.ts`: `GET/PUT /settings/privacy` now expose `matching_opt_in` plus `profile_completion_pct`, `matching_min_pct`, and `matching_eligible` (read from `users.profile_completion_pct`). `PUT` rejects enabling the toggle with 400 when completion < 60%.
+- `cloudflare-worker/src/services/taxonomyVersion.ts`: new. `getTaxonomyVersion(env)` = counts + `MAX(updated_at)` over `skill_categories`/`skills`/`value_dimensions`; `ensureTaxonomyVersionColumns(env)` idempotently adds `taxonomy_version TEXT` to `user_skills`/`user_values`.
+- `cloudflare-worker/src/routes/radar.ts`: replaced the local taxonomy-version helper with the centralized `getTaxonomyVersion`; version is computed once per request and folded into the KV radar cache key (taxonomy bump → key change → recompute next request, ≪60s).
+- `cloudflare-worker/src/routes/skills.ts` (`PUT /me`) + `routes/values.ts` (`POST /submit`): stamp `taxonomy_version` on each `user_skills`/`user_values` upsert (INSERT + ON CONFLICT).
+- Hard consent filter enforced across people-match endpoints: `routes/matches.ts` `/investor-match` (filters investor candidates before scoring) and `/admin/all`; `routes/partners.ts` `/match` (drops linked-user partners not opted in, keeps directory-only partners with no linked user); `routes/cofounder.ts` `/browse` (skips opted-out user_ids alongside hidden ids). Note: cofounder `/browse` was included beyond the task's listed files to satisfy "any people-match endpoint."
+- `cloudflare-worker/src/services/matchAudit.ts`: new. `logMatchListGeneration(env, user, kind, details)` writes `activity_logs(action='match_list_generated', …)`, admin-only no-op, never throws. Called from `matches.ts /admin/all` and `partners.ts /match`.
+- `frontend/src/pages/SettingsPage.jsx`: `PrivacyCoreCard` gains an "Include me in matching" toggle, disabled with an inline hint until the profile is ≥60% complete; saved via existing `api.updatePrivacySettings`.
+- `SECURITY.md`: new "Matching data — storage, sharing, and retention" section.
+- Prod = Worker on D1; the new endpoints/columns 404/degrade gracefully in dev FastAPI by design.
+
 ## Partner Coverage Analytics (Task #18)
 
 - `cloudflare-worker/src/routes/portfolio.ts`: new `GET /coverage[?fund_id=N]` (admin/partner only, else 403). Builds a portfolio-wide skill-coverage heatmap: for each in-scope project it resolves the team (`users.founder_id` == `project.founder_id` with `is_active=1`, plus active `cofounder_connections`), calls `computeRadar(env, teamUserIds)` (after `ensureSkillsTaxonomySchema`/`ensureSkillProfileSchema`), and emits the 8 `RADAR_AXES` scores (0–100). Gap axis = score < `GAP_THRESHOLD` (60); a company is `flagged` when it has ≥ `MIN_GAP_AXES_TO_FLAG` (3) gap axes. `fund_id` scopes via `fund_reserve_allocations(fund_id, project_id)` JOIN with fund name from `vc_funds`. Aggregate row = mean of per-company axis scores (2dp). Returns `{axes, companies[], aggregate, fund, company_count, flagged_count, gap_threshold}`. Worker-only (D1); 404s in dev FastAPI by design.

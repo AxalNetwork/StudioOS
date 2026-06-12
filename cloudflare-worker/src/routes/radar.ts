@@ -16,22 +16,19 @@ import { getSQL } from '../db';
 import { ensureSkillsTaxonomySchema } from '../services/skillsTaxonomySchema';
 import { ensureSkillProfileSchema } from '../services/skillProfileSchema';
 import { computeRadar, radarCacheKey } from '../services/radar';
+import { getTaxonomyVersion } from '../services/taxonomyVersion';
 
 const radar = new Hono<{ Bindings: Env }>();
 
 const CACHE_TTL_SECONDS = 300; // 5 minutes
 
-/** Cheap taxonomy version for cache invalidation. */
-async function getTaxonomyVersion(env: Env): Promise<string> {
-  const sql = getSQL(env);
-  const [meta] = await sql`SELECT MAX(updated_at) AS mx FROM skill_categories`;
-  return String(meta?.mx || '0');
-}
-
-async function getCachedRadar(env: Env, userIds: number[]): Promise<any | null> {
+// Task #19 — taxonomy version now comes from the centralized service (folds in
+// counts + latest edit time of categories/skills/values). An admin taxonomy
+// edit changes the string → the radar cache key changes → cached radars miss
+// and recompute on the next request (well within the ~60s invalidation target).
+async function getCachedRadar(env: Env, userIds: number[], version: string): Promise<any | null> {
   const kv = env.TOKENS;
   if (!kv) return null;
-  const version = await getTaxonomyVersion(env);
   const key = await radarCacheKey(userIds, version);
   try {
     const cached = await kv.get(key, 'json');
@@ -40,10 +37,9 @@ async function getCachedRadar(env: Env, userIds: number[]): Promise<any | null> 
   return null;
 }
 
-async function setCachedRadar(env: Env, userIds: number[], data: any): Promise<void> {
+async function setCachedRadar(env: Env, userIds: number[], data: any, version: string): Promise<void> {
   const kv = env.TOKENS;
   if (!kv) return;
-  const version = await getTaxonomyVersion(env);
   const key = await radarCacheKey(userIds, version);
   try {
     await kv.put(key, JSON.stringify(data), { expirationTtl: CACHE_TTL_SECONDS });
@@ -58,7 +54,8 @@ radar.get('/me', async (c) => {
   await ensureSkillsTaxonomySchema(c.env);
   await ensureSkillProfileSchema(c.env);
 
-  const cached = await getCachedRadar(c.env, [user.id]);
+  const version = await getTaxonomyVersion(c.env);
+  const cached = await getCachedRadar(c.env, [user.id], version);
   if (cached) return c.json(cached);
 
   const result = await computeRadar(c.env, [user.id]);
@@ -67,7 +64,7 @@ radar.get('/me', async (c) => {
     user_id: user.id,
     cached: false,
   };
-  await setCachedRadar(c.env, [user.id], payload);
+  await setCachedRadar(c.env, [user.id], payload, version);
   return c.json(payload);
 });
 
@@ -119,7 +116,8 @@ radar.post('/team', async (c) => {
     }, 403);
   }
 
-  const cached = await getCachedRadar(c.env, ids);
+  const version = await getTaxonomyVersion(c.env);
+  const cached = await getCachedRadar(c.env, ids, version);
   if (cached) return c.json(cached);
 
   const result = await computeRadar(c.env, ids);
@@ -128,7 +126,7 @@ radar.post('/team', async (c) => {
     user_ids: ids,
     cached: false,
   };
-  await setCachedRadar(c.env, ids, payload);
+  await setCachedRadar(c.env, ids, payload, version);
   return c.json(payload);
 });
 

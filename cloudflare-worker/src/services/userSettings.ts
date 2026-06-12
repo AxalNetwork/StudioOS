@@ -25,6 +25,9 @@ export interface UserSettingsRow {
   visibility: Visibility;
   show_in_directory: number;
   discoverable: number;
+  // Task #19 — explicit "Include me in matching" consent. Defaults OFF; a user
+  // is never returned as a match candidate until this is 1.
+  matching_opt_in: number;
   digest_frequency: DigestFrequency;
   notif_categories_email: string;
   notif_categories_inapp: string;
@@ -48,6 +51,7 @@ const DEFAULT_ROW = {
   visibility: 'network' as Visibility,
   show_in_directory: 1,
   discoverable: 1,
+  matching_opt_in: 0,
   digest_frequency: 'weekly' as DigestFrequency,
   notif_categories_email: '{}',
   notif_categories_inapp: '{}',
@@ -75,6 +79,7 @@ export async function ensureUserSettings(env: Env): Promise<void> {
         visibility TEXT DEFAULT 'network' CHECK (visibility IN ('public','network','private')),
         show_in_directory INTEGER DEFAULT 1,
         discoverable INTEGER DEFAULT 1,
+        matching_opt_in INTEGER DEFAULT 0,
         digest_frequency TEXT DEFAULT 'weekly',
         notif_categories_email TEXT DEFAULT '{}',
         notif_categories_inapp TEXT DEFAULT '{}',
@@ -98,6 +103,12 @@ export async function ensureUserSettings(env: Env): Promise<void> {
     try {
       await env.DB.prepare(
         `ALTER TABLE user_settings ADD COLUMN dismissed_explainers TEXT NOT NULL DEFAULT '[]'`,
+      ).run();
+    } catch {}
+    // Task #19 — explicit matching consent (additive, defaults OFF).
+    try {
+      await env.DB.prepare(
+        `ALTER TABLE user_settings ADD COLUMN matching_opt_in INTEGER DEFAULT 0`,
       ).run();
     } catch {}
     migrated = true;
@@ -126,6 +137,7 @@ export interface UserSettingsPatch {
   visibility?: Visibility;
   show_in_directory?: boolean | number;
   discoverable?: boolean | number;
+  matching_opt_in?: boolean | number;
   digest_frequency?: DigestFrequency;
   notif_categories_email?: Record<string, boolean>;
   notif_categories_inapp?: Record<string, boolean>;
@@ -239,6 +251,7 @@ function buildUpdates(patch: UserSettingsPatch): Array<[string, unknown]> {
   }
   if (patch.show_in_directory !== undefined) push('show_in_directory', asInt(patch.show_in_directory));
   if (patch.discoverable !== undefined) push('discoverable', asInt(patch.discoverable));
+  if (patch.matching_opt_in !== undefined) push('matching_opt_in', asInt(patch.matching_opt_in));
   if (patch.digest_frequency !== undefined) {
     if (!['off', 'daily', 'weekly'].includes(patch.digest_frequency)) {
       throw new SettingsValidationError(

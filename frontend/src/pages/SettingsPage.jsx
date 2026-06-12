@@ -2812,6 +2812,30 @@ function PrivacyCoreCard({ flash }) {
             className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500" />
           Allow mentors and founders to discover me for matching
         </label>
+        {/* Task #19 — explicit matching consent, gated on profile completeness. */}
+        <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+          <label className="flex items-start gap-3 text-sm text-gray-800 dark:text-gray-200">
+            <input type="checkbox" checked={!!row.matching_opt_in}
+              disabled={busy || (!row.matching_opt_in && !row.matching_eligible)}
+              onChange={e => save({ matching_opt_in: e.target.checked })}
+              className="mt-0.5 w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500 disabled:opacity-50" />
+            <span>
+              Include me in matching
+              <span className="block text-xs text-gray-500 dark:text-gray-400">
+                When on, you can appear as a candidate in investor, partner and co-founder
+                match results. Off by default — turning it off removes you from all match lists.
+              </span>
+              {!row.matching_eligible && !row.matching_opt_in && (
+                <span className="block mt-1 text-xs text-amber-600 dark:text-amber-400">
+                  Complete at least {row.matching_min_pct ?? 60}% of your profile to enable this
+                  {typeof row.profile_completion_pct === 'number'
+                    ? ` (currently ${row.profile_completion_pct}%).`
+                    : '.'}
+                </span>
+              )}
+            </span>
+          </label>
+        </div>
       </div>
     </Card>
   );

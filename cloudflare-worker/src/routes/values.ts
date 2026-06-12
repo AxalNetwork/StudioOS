@@ -14,6 +14,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { getSQL } from '../db';
 import { ensureSkillsTaxonomySchema } from '../services/skillsTaxonomySchema';
+import { ensureTaxonomyVersionColumns, getTaxonomyVersion } from '../services/taxonomyVersion';
 
 const values = new Hono<{ Bindings: Env }>();
 
@@ -226,6 +227,11 @@ values.post('/submit', async (c) => {
     return c.json({ error: 'retake_window', next_retake_at: nextAt }, 429);
   }
 
+  // Task #19 — stamp the active taxonomy version onto each value row so we can
+  // tell which taxonomy a user's value vector was captured against.
+  await ensureTaxonomyVersionColumns(c.env);
+  const taxonomyVersion = await getTaxonomyVersion(c.env);
+
   const sql = getSQL(c.env);
   const dims = await sql`
     SELECT id, slug, label, family, is_bipolar, pole_low, pole_high
@@ -240,13 +246,14 @@ values.post('/submit', async (c) => {
     const dimRow = dims.find((d) => d.slug === v.dimension_slug);
     if (!dimRow) continue;
     await c.env.DB.prepare(
-      `INSERT INTO user_values (user_id, dimension_id, score, confidence, updated_at)
-       VALUES (?, ?, ?, ?, datetime('now'))
+      `INSERT INTO user_values (user_id, dimension_id, score, confidence, taxonomy_version, updated_at)
+       VALUES (?, ?, ?, ?, ?, datetime('now'))
        ON CONFLICT(user_id, dimension_id) DO UPDATE SET
          score = excluded.score,
          confidence = excluded.confidence,
+         taxonomy_version = excluded.taxonomy_version,
          updated_at = excluded.updated_at`
-    ).bind(user.id, dimRow.id, v.score, v.confidence).run();
+    ).bind(user.id, dimRow.id, v.score, v.confidence, taxonomyVersion).run();
   }
 
   const summary = summarizeVector(vector);

@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## You decide when you show up in matching
+
+Matching is now strictly opt-in. There's a new **"Include me in matching"** switch in Settings → Privacy. While it's off (the default), you won't appear as a candidate in any investor, partner, or co-founder match results. You can turn it on once your profile is at least 60% complete, and switching it back off removes you from all match lists right away. When an administrator pulls a match list, we record that in our internal audit log. Our security policy now spells out how matching data is stored, shared, and kept.
+
+---
+
 ## See where your whole portfolio is strong — and where the gaps are
 
 Partners and admins have a new **Portfolio Coverage** dashboard. It lays out every portfolio company as a row and the eight key skill areas — product, engineering, design, sales, marketing, finance, legal, and capital — as columns, colour-coded so weak spots jump out at a glance. You can sort by any area to see which companies are thinnest, and any company missing three or more areas is automatically flagged for attention. A bottom row shows the portfolio-wide average for each area, and you can narrow the view to a single fund.

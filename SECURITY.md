@@ -117,6 +117,42 @@ severity bucket we assigned and why.
 If you are unsure whether something is in scope, ask us first via
 `security@axal.vc` before testing.
 
+## Matching data — storage, sharing, and retention
+
+The platform computes people-matches (investor ↔ founder, partner, and
+co-founder) from member profiles, skill ratings, and values vectors.
+We treat these as sensitive and handle them as follows.
+
+**Consent (opt-in, off by default).** A member only appears as a
+candidate in any match list after they explicitly enable *"Include me in
+matching"* in Settings → Privacy. The preference is stored in
+`user_settings.matching_opt_in` and defaults OFF — the absence of a
+setting is treated as opted out. It can only be enabled once the
+member's profile is at least 60% complete. Every people-matching
+endpoint enforces this as a **hard filter**: opted-out members are
+removed before any scoring, so they never surface in ranked *or*
+excluded results. The filter fails closed — if the consent store is
+unavailable, no one is treated as opted in.
+
+**Storage.** Skill and value rows are stamped with the active taxonomy
+version at write time (`taxonomy_version`) so we can tell which taxonomy
+a member's profile was captured against. Match scores are computed on
+demand; cached radar results live in KV with a short (~5 minute) TTL and
+are keyed on the taxonomy version, so a taxonomy change invalidates them
+on the next request.
+
+**Sharing.** Match lists are visible only to the requesting member
+(their own matches) and to admins. When an admin generates a
+cross-member match list, we write an audit-log entry
+(`activity_logs`, action `match_list_generated`) recording the actor,
+the kind of list, and the result count. Founder/member self-service
+match requests are not audited.
+
+**Retention.** Consent preferences and taxonomy stamps persist with the
+member's profile and are removed on account deletion. Cached radars
+expire automatically via their KV TTL. Audit-log entries are retained
+under our standard activity-log retention policy.
+
 ## Safe harbor
 
 Axal authorizes good-faith security research under this policy. If you

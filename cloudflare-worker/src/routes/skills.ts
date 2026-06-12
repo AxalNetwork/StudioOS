@@ -27,6 +27,7 @@ import { requireAuth } from '../auth';
 import { getSQL } from '../db';
 import { ensureSkillsTaxonomySchema } from '../services/skillsTaxonomySchema';
 import { ensureSkillProfileSchema, computeBlendedSkills } from '../services/skillProfileSchema';
+import { ensureTaxonomyVersionColumns, getTaxonomyVersion } from '../services/taxonomyVersion';
 
 const skills = new Hono<{ Bindings: Env }>();
 
@@ -161,6 +162,10 @@ skills.get('/me', async (c) => {
 skills.put('/me', async (c) => {
   const user = await requireAuth(c);
   await ensureSkillProfileSchema(c.env);
+  // Task #19 — stamp the active taxonomy version onto each rated row so we can
+  // tell which taxonomy a user's skill profile was captured against.
+  await ensureTaxonomyVersionColumns(c.env);
+  const taxonomyVersion = await getTaxonomyVersion(c.env);
   const sql = getSQL(c.env);
 
   let body: any;
@@ -197,12 +202,13 @@ skills.put('/me', async (c) => {
     }
     const years = normYears(raw?.years);
     await sql`
-      INSERT INTO user_skills (user_id, skill_id, self_level, evidence_url, years, updated_at)
-      VALUES (${user.id}, ${skillId}, ${level}, ${evidence}, ${years}, datetime('now'))
+      INSERT INTO user_skills (user_id, skill_id, self_level, evidence_url, years, taxonomy_version, updated_at)
+      VALUES (${user.id}, ${skillId}, ${level}, ${evidence}, ${years}, ${taxonomyVersion}, datetime('now'))
       ON CONFLICT(user_id, skill_id) DO UPDATE SET
         self_level = excluded.self_level,
         evidence_url = excluded.evidence_url,
         years = excluded.years,
+        taxonomy_version = excluded.taxonomy_version,
         updated_at = datetime('now')`;
   }
 

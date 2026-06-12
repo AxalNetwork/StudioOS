@@ -45,6 +45,7 @@ import {
   ProfileValidationError,
 } from '../services/profileExpansion';
 import { hashEmail } from '../util/hashEmail';
+import { MATCHING_MIN_COMPLETION_PCT } from '../services/matchingConsent';
 
 const settings = new Hono<{ Bindings: Env }>();
 
@@ -925,6 +926,28 @@ function pickPrivacy(row: UserSettingsRow) {
     visibility: row.visibility,
     show_in_directory: !!row.show_in_directory,
     discoverable: !!row.discoverable,
+    matching_opt_in: !!row.matching_opt_in,
+  };
+}
+
+// Task #19 — the "Include me in matching" consent may only be enabled once the
+// user's profile is at least MATCHING_MIN_COMPLETION_PCT complete. Read the
+// stored completeness ring (recomputed after every profile save) cheaply.
+async function getProfileCompletionPct(env: Env, userId: number): Promise<number> {
+  try {
+    const r = await env.DB.prepare(`SELECT profile_completion_pct FROM users WHERE id = ?`)
+      .bind(userId).first<{ profile_completion_pct: number | null }>();
+    return Number(r?.profile_completion_pct) || 0;
+  } catch { return 0; }
+}
+
+async function privacyResponse(env: Env, userId: number, row: UserSettingsRow) {
+  const pct = await getProfileCompletionPct(env, userId);
+  return {
+    ...pickPrivacy(row),
+    profile_completion_pct: pct,
+    matching_min_pct: MATCHING_MIN_COMPLETION_PCT,
+    matching_eligible: pct >= MATCHING_MIN_COMPLETION_PCT,
   };
 }
 function pickAppearance(row: UserSettingsRow) {
@@ -1305,7 +1328,7 @@ settings.get('/privacy', async (c) => {
   await ensureUserSettingsTable(c.env);
   const user = await requireAuth(c);
   const row = await getUserSettings(c.env, user.id);
-  return c.json(pickPrivacy(row));
+  return c.json(await privacyResponse(c.env, user.id, row));
 });
 settings.put('/privacy', async (c) => {
   await ensureUserSettingsTable(c.env);
@@ -1315,9 +1338,23 @@ settings.put('/privacy', async (c) => {
   if ('visibility' in body) patch.visibility = body.visibility;
   if ('show_in_directory' in body) patch.show_in_directory = body.show_in_directory;
   if ('discoverable' in body) patch.discoverable = body.discoverable;
+  // Task #19 — enabling matching consent is gated on profile completeness.
+  if ('matching_opt_in' in body) {
+    if (body.matching_opt_in) {
+      const pct = await getProfileCompletionPct(c.env, user.id);
+      if (pct < MATCHING_MIN_COMPLETION_PCT) {
+        return c.json({
+          error: `Complete at least ${MATCHING_MIN_COMPLETION_PCT}% of your profile before opting into matching.`,
+          field: 'matching_opt_in',
+          errors: { matching_opt_in: `Profile is ${pct}% complete (need ${MATCHING_MIN_COMPLETION_PCT}%).` },
+        }, 400);
+      }
+    }
+    patch.matching_opt_in = body.matching_opt_in;
+  }
   try {
     const row = await upsertUserSettings(c.env, user.id, patch);
-    return c.json(pickPrivacy(row));
+    return c.json(await privacyResponse(c.env, user.id, row));
   } catch (e) { return handleSettingsError(c, e); }
 });
 

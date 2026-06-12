@@ -4,6 +4,8 @@ import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 import { computeRadar } from '../services/radar';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
+import { filterOptedInUserIds } from '../services/matchingConsent';
+import { logMatchListGeneration } from '../services/matchAudit';
 
 const partners = new Hono<{ Bindings: Env }>();
 const RADAR_AXIS_SLUGS: readonly string[] = RADAR_AXES.map((a) => a.slug);
@@ -164,6 +166,16 @@ partners.post('/match', async (c) => {
      ORDER BY p.id
   `;
 
+  // Task #19 — hard consent filter. Partners with a linked user account are
+  // people, so they must have opted into matching to appear. Partners with NO
+  // linked user (directory-only contacts, no privacy preference to honor) are
+  // kept as before.
+  const linkedPartnerUserIds = (allPartners as any[]).map((p) => Number(p.user_id)).filter(Boolean);
+  const optedInPartners = await filterOptedInUserIds(c.env, linkedPartnerUserIds);
+  const visiblePartners = (allPartners as any[]).filter(
+    (p) => !p.user_id || optedInPartners.has(Number(p.user_id)),
+  );
+
   // Load founder's values vector for alignment computation.
   const founderValuesRows = await sql`
     SELECT v.dimension_id, v.score, v.confidence
@@ -176,7 +188,7 @@ partners.post('/match', async (c) => {
   }
 
   // Pre-compute radar for every partner that has a linked user account.
-  const partnerWithUser = allPartners.filter((p: any) => p.user_id);
+  const partnerWithUser = visiblePartners.filter((p: any) => p.user_id);
   const radarByUserId = new Map<number, number>(); // user_id → axis score (0-100)
   for (const p of partnerWithUser) {
     const uid = Number(p.user_id);
@@ -221,7 +233,7 @@ partners.post('/match', async (c) => {
   // partner_profiles is keyed by invitation_id; it has a user_id FK that
   // links to users.id, and users.partner_id links to partners.id. Query by
   // user_id instead since we already have the partner-linked user_ids.
-  const partnerWithUserIds = allPartners.filter((p: any) => p.user_id);
+  const partnerWithUserIds = visiblePartners.filter((p: any) => p.user_id);
   const partnerUserIds = partnerWithUserIds.map((p: any) => Number(p.user_id));
   const userIdToPartnerId = new Map<number, number>();
   for (const p of partnerWithUserIds) userIdToPartnerId.set(Number(p.user_id), Number(p.id));
@@ -254,7 +266,7 @@ partners.post('/match', async (c) => {
 
   await sql.end();
 
-  const results = allPartners.map((p: any) => {
+  const results = visiblePartners.map((p: any) => {
     const reasons: string[] = [];
 
     // 1. domain_fit (0-100)
@@ -320,6 +332,12 @@ partners.post('/match', async (c) => {
       reasons,
     };
   }).sort((a: any, b: any) => b.match_score - a.match_score);
+
+  // Task #19 — audit when an admin generates a partner match list (no-op otherwise).
+  await logMatchListGeneration(c.env, me as any, 'partner_match', {
+    intent,
+    result_count: results.length,
+  });
 
   return c.json({ intent, matches: results, total_matched: results.length });
 });
