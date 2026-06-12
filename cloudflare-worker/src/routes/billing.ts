@@ -47,23 +47,34 @@ export async function stripeCall<T>(
   env: Env,
   path: string,
   body: Record<string, string>,
-  opts?: { idempotencyKey?: string },
+  opts?: { idempotencyKey?: string; method?: 'GET' | 'POST' },
 ): Promise<T> {
   const key = env.STRIPE_SECRET_KEY;
   if (!key) throw new Error('stripe_not_configured');
-  const form = new URLSearchParams(body);
+  const method = opts?.method ?? 'POST';
+  const params = new URLSearchParams(body);
   const headers: Record<string, string> = {
     Authorization: `Bearer ${key}`,
-    'Content-Type': 'application/x-www-form-urlencoded',
   };
   // Stripe replays the original response for 24h when the same Idempotency-Key
   // recurs — protects money-movement calls (e.g. /refunds) from double-submits
   // and retries. Only sent when a caller opts in (existing callers unaffected).
   if (opts?.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey;
-  const res = await fetch(`https://api.stripe.com/v1${path}`, {
-    method: 'POST',
+  // GET (list/read) endpoints take query params; POST (mutations) take a
+  // form-encoded body. Catalog reads use GET; all existing callers stay POST.
+  let url = `https://api.stripe.com/v1${path}`;
+  let reqBody: string | undefined;
+  if (method === 'GET') {
+    const qs = params.toString();
+    if (qs) url += `?${qs}`;
+  } else {
+    headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    reqBody = params.toString();
+  }
+  const res = await fetch(url, {
+    method,
     headers,
-    body: form.toString(),
+    body: reqBody,
   });
   if (!res.ok) {
     const text = await res.text();

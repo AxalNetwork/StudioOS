@@ -184,6 +184,8 @@ import { processQueueBatch } from './services/queueWorker';
 // import was missed in the first pass and left tier checkout/webhook 404.
 import { requireTier } from './middleware/requireTier';
 import billing from './routes/billing';
+// Task — Stripe-backed product catalog (read + admin sync over the D1 mirror).
+import catalog, { adminCatalog } from './routes/catalog';
 import { Jobs } from './models/jobs';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
 import { CRON_TRIGGERS } from './routes/infra';
@@ -393,6 +395,11 @@ for (const p of COOL_OFF_PREFIXES) {
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
 app.route('/api/billing', billing);
 
+// Task — Stripe-backed product catalog read surface. Authenticated read of
+// the D1 mirror (admin sync lives at /api/admin/catalog/sync). Mounted as a
+// sibling of /api/billing so SKUs come from one source, not STRIPE_PRICE_*.
+app.route('/api/catalog', catalog);
+
 // Task #6 — Studio-tier paywall mounts. Wildcards run BEFORE the route
 // registration so a 402 short-circuits the handler. Bypass roles
 // (admin/partner/investor/mentor) are exempt inside the middleware itself.
@@ -532,6 +539,9 @@ app.route('/api/admin/articles', adminArticles);
 // catch-all /api/admin so /api/admin/billing/* resolves here, not in the
 // generic admin router. Step-up + requireAdmin enforced per-route.
 app.route('/api/admin/billing', adminBilling);
+// Task — Stripe product catalog admin sync. Mounted BEFORE the catch-all
+// /api/admin so /api/admin/catalog/* resolves here. requireAdmin per-route.
+app.route('/api/admin/catalog', adminCatalog);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);
