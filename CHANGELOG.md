@@ -10,6 +10,10 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Export portfolio coverage heatmap (CSV)
+
+- `frontend/src/pages/PortfolioCoveragePage.jsx`: added an "Export CSV" control (next to Refresh, admin/partner-only page) that downloads the current scope as a CSV. New pure helpers `csvCell` (RFC-4180 escaping), `buildCoverageCsv(data, companies)` (header + one row per company in the on-screen sort order + a "Portfolio average" footer row), and `downloadTextFile`. Columns: Company, Sector, Stage, Team size, one per radar axis (label), Gap count, Flagged (yes/no). The average row mirrors the table's `aggregate` (integers plain, fractions to 1dp). Export is client-side from the already-loaded `GET /portfolio/coverage` payload, so it respects the selected fund and current sort with no new endpoint. Filename: `portfolio-coverage-<scope>-<YYYY-MM-DD>.csv` (scope = fund slug or `all-companies`). Button disabled while loading or when there are no companies in scope.
+
 ## Privacy, Consent & Taxonomy Versioning (Task #19)
 
 - `cloudflare-worker/src/services/matchingConsent.ts`: new. `filterOptedInUserIds(env, userIds)` returns the subset who set `user_settings.matching_opt_in = 1` (fails closed — empty set on error/missing column). Exports `MATCHING_MIN_COMPLETION_PCT = 60`.

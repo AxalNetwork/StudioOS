@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Network, RefreshCw, AlertTriangle, ChevronDown, Info } from 'lucide-react';
+import { Network, RefreshCw, AlertTriangle, ChevronDown, Info, Download } from 'lucide-react';
 import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
 import { reportError } from '../lib/log';
@@ -20,6 +20,59 @@ function cellStyle(score) {
   if (score >= 40) return 'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200';
   if (score >= 20) return 'bg-orange-100 text-orange-900 dark:bg-orange-900/30 dark:text-orange-200';
   return 'bg-rose-100 text-rose-900 dark:bg-rose-900/40 dark:text-rose-200';
+}
+
+// CSV cell escaping per RFC 4180: wrap in quotes when the value contains a
+// comma, quote, or newline, and double any embedded quotes.
+function csvCell(value) {
+  const s = value == null ? '' : String(value);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Build a CSV of the current coverage scope: header + one row per company
+// (in the on-screen sort order) + a portfolio-average footer row. Columns are
+// Company, Sector, Stage, Team size, then one column per radar axis, then
+// Gap count and Flagged. `data` is the GET /coverage payload; `companies` is
+// the already-sorted list shown in the table.
+function buildCoverageCsv(data, companies) {
+  const axes = data?.axes || [];
+  const header = [
+    'Company', 'Sector', 'Stage', 'Team size',
+    ...axes.map((a) => a.label),
+    'Gap count', 'Flagged',
+  ];
+  const rows = companies.map((co) => [
+    co.name,
+    co.sector || '',
+    co.stage || '',
+    co.team_size,
+    ...axes.map((a) => co.axes?.[a.slug] ?? 0),
+    co.gap_count,
+    co.flagged ? 'yes' : 'no',
+  ]);
+  const agg = data?.aggregate || {};
+  const avgRow = [
+    'Portfolio average', '', '', '',
+    ...axes.map((a) => {
+      const v = agg[a.slug] ?? 0;
+      return Number.isInteger(v) ? v : Number(v).toFixed(1);
+    }),
+    '', '',
+  ];
+  return [header, ...rows, avgRow]
+    .map((row) => row.map(csvCell).join(','))
+    .join('\r\n');
+}
+
+// Trigger a client-side file download for the given text content.
+function downloadTextFile(filename, text, mime = 'text/csv;charset=utf-8') {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
 function AxisHeader({ axis, sort, setSort }) {
@@ -90,6 +143,18 @@ export default function PortfolioCoveragePage() {
 
   const axes = data?.axes || [];
 
+  function exportCsv() {
+    if (!data || !sortedCompanies.length) return;
+    const scope = data.fund
+      ? data.fund.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()
+      : 'all-companies';
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadTextFile(
+      `portfolio-coverage-${scope}-${stamp}.csv`,
+      buildCoverageCsv(data, sortedCompanies),
+    );
+  }
+
   const sortedCompanies = useMemo(() => {
     const arr = [...(data?.companies || [])];
     arr.sort((a, b) => {
@@ -136,6 +201,15 @@ export default function PortfolioCoveragePage() {
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
           </select>
+          <button
+            onClick={exportCsv}
+            disabled={loading || !data || !sortedCompanies.length}
+            title="Export the current scope (companies × axes, gaps, flagged, and the portfolio average) as CSV"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 dark:text-slate-200"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export CSV
+          </button>
           <button
             onClick={load}
             disabled={loading}

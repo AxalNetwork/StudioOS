@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Export the Portfolio Coverage view for reports
+
+The **Portfolio Coverage** dashboard now has an **Export CSV** button. It downloads exactly what you're looking at — every company with its score in each skill area, how many gaps it has, whether it's flagged, and the portfolio-average row at the bottom. If you've narrowed the view to a single fund or sorted by a column, the file matches that. Drop it straight into an LP update or open it in a spreadsheet for partner meetings.
+
+---
+
 ## You decide when you show up in matching
 
 Matching is now strictly opt-in. There's a new **"Include me in matching"** switch in Settings → Privacy. While it's off (the default), you won't appear as a candidate in any investor, partner, or co-founder match results. You can turn it on once your profile is at least 60% complete, and switching it back off removes you from all match lists right away. When an administrator pulls a match list, we record that in our internal audit log. Our security policy now spells out how matching data is stored, shared, and kept.
