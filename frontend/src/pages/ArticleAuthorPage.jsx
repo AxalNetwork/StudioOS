@@ -1,13 +1,14 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   FileText, Plus, RefreshCw, Loader2, Save, Send, ArrowLeft, ImageIcon,
   CheckCircle2, Trash2, Eye, MessageSquare, ChevronDown, ChevronRight,
-  Copy, ExternalLink, ShieldAlert, Clock,
+  Copy, ExternalLink, ShieldAlert, Clock, Upload, X,
 } from 'lucide-react';
 import { articles as api } from '../lib/api';
 import { useToast } from '../components/useToast';
 import { reportError } from '../lib/log';
+import { renderMarkdown, wordsAndMinutes, slugify } from '../lib/articleMarkdown';
 
 // Task #1 — Article author dashboard, scoped to the /articles surface
 // (role-aware list, dynamic sector taxonomy from `/api/articles/sectors`,
@@ -234,43 +235,10 @@ function coverErrorMessage(e) {
 }
 
 function renderPreview(md) {
-  const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const lines = esc(md || '').split('\n');
-  const out = [];
-  let i = 0;
-  function inline(s) {
-    return s
-      .replace(/`([^`]+)`/g, (_, c) => `<code class="bg-slate-100 dark:bg-slate-800 px-1 rounded text-sm">${c}</code>`)
-      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a class="text-violet-600 underline" href="$2" target="_blank" rel="noopener">$1</a>')
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
-  }
-  while (i < lines.length) {
-    const line = lines[i];
-    if (/^```/.test(line)) {
-      const buf = []; i++;
-      while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i++; }
-      i++; out.push(`<pre class="bg-slate-100 dark:bg-slate-800 p-3 rounded text-sm overflow-x-auto"><code>${buf.join('\n')}</code></pre>`);
-      continue;
-    }
-    const h = line.match(/^(#{1,6})\s+(.+)$/);
-    if (h) {
-      const lvl = Math.min(6, h[1].length);
-      out.push(`<h${lvl} class="font-bold mt-4 mb-2 text-${['','3xl','2xl','xl','lg','base','sm'][lvl]}">${inline(h[2])}</h${lvl}>`);
-      i++; continue;
-    }
-    if (/^\s*[-*]\s+/.test(line)) {
-      const buf = [];
-      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) { buf.push(`<li>${inline(lines[i].replace(/^\s*[-*]\s+/, ''))}</li>`); i++; }
-      out.push(`<ul class="list-disc ml-6 my-2">${buf.join('')}</ul>`);
-      continue;
-    }
-    if (!line.trim()) { i++; continue; }
-    const buf = [];
-    while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|>\s?|\s*[-*]\s+|```)/.test(lines[i])) { buf.push(lines[i]); i++; }
-    if (buf.length) out.push(`<p class="my-2 leading-relaxed">${buf.map(inline).join('<br>')}</p>`);
-  }
-  return out.join('\n');
+  // Task #4: use the verbatim server renderer so the preview matches the
+  // public reader output exactly. The container uses `prose dark:prose-invert`
+  // which provides the visual styles on top of the bare tags.
+  return renderMarkdown(md || '');
 }
 
 function ArticleRow({ a, selected, onSelect, onCopyUrl }) {
@@ -382,7 +350,8 @@ export default function ArticleAuthorPage() {
   const [selectedId, setSelectedIdState] = useState(routeId ? Number(routeId) : null);
   const [article, setArticle] = useState(null);
   const [comments, setComments] = useState([]);
-  const [editing, setEditing] = useState({ title: '', subtitle: '', body_markdown: '', sector: '', tags: [] });
+  const [editing, setEditing] = useState({ title: '', subtitle: '', body_markdown: '', sector: '', tags: [], excerpt: '', seo_title: '', canonical_url: '', slug: '' });
+  const [slugTouched, setSlugTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [preview, setPreview] = useState(false);
@@ -394,7 +363,11 @@ export default function ArticleAuthorPage() {
   const [piiFindings, setPiiFindings] = useState(null);
   const [rateLimit, setRateLimit] = useState(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [imageError, setImageError] = useState(null);
+  const [imageUploading, setImageUploading] = useState(false);
   const bodyRef = useRef(null);
+  const articleRef = useRef(null);
+  const autosaveTimerRef = useRef(null);
   const [, setNowTick] = useState(0);
 
   const setSelectedId = useCallback((id) => {
@@ -438,13 +411,17 @@ export default function ArticleAuthorPage() {
   const loadOne = useCallback(async (id) => {
     setCoverPreview(null);
     setCoverError(null);
+    setImageError(null);
     setLastSavedAt(null);
     setPiiFindings(null);
     setRateLimit(null);
     setSubmitSuccess(false);
+    setSlugTouched(false);
+    if (autosaveTimerRef.current) { clearTimeout(autosaveTimerRef.current); autosaveTimerRef.current = null; }
     try {
       const r = await api.draft(id);
       setArticle(r.article);
+      articleRef.current = r.article;
       setComments(r.comments || []);
       setEditing({
         title: r.article.title || '',
@@ -452,6 +429,10 @@ export default function ArticleAuthorPage() {
         body_markdown: r.article.body_markdown || '',
         sector: r.article.sector || '',
         tags: r.article.tags || [],
+        excerpt: r.article.excerpt || '',
+        seo_title: r.article.seo_title || '',
+        canonical_url: r.article.canonical_url || '',
+        slug: r.article.slug || '',
       });
     } catch (e) {
       reportError('ArticleAuthor:load', e);
@@ -487,10 +468,19 @@ export default function ArticleAuthorPage() {
         body_markdown: editing.body_markdown,
         sector: editing.sector || null,
         tags: editing.tags,
+        excerpt: editing.excerpt || null,
+        seo_title: editing.seo_title || null,
+        canonical_url: editing.canonical_url || null,
+        slug: editing.slug || null,
       };
       const r = await api.updateDraft(article.id, patch);
       setArticle(r.article);
+      articleRef.current = r.article;
       setItems((prev) => prev.map((a) => (a.id === r.article.id ? r.article : a)));
+      setEditing((prev) => ({
+        ...prev,
+        slug: r.article.slug || prev.slug,
+      }));
       setLastSavedAt(Date.now());
       return true;
     } catch (e) {
@@ -501,6 +491,30 @@ export default function ArticleAuthorPage() {
       setSaving(false);
     }
   };
+
+  // Task #4 — debounced autosave (~2.5s) when editable+dirty. No toast.
+  // Guard against race: capture articleId at schedule time and compare to
+  // the current article ref when the timer fires.
+  const scheduleAutosave = useCallback(() => {
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    if (!isEditable || !dirty || saving || submitting) return;
+    const capturedId = articleRef.current?.id;
+    autosaveTimerRef.current = setTimeout(() => {
+      if (articleRef.current?.id !== capturedId) return;
+      if (saving || submitting) return;
+      persist();
+    }, 2500);
+  }, [isEditable, dirty, saving, submitting]);
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    scheduleAutosave();
+  }, [editing, scheduleAutosave]);
 
   const save = async () => {
     const ok = await persist();
@@ -636,6 +650,60 @@ export default function ArticleAuthorPage() {
     }
   };
 
+  // Task #4 — inline body image upload (drag/paste or file picker)
+  const insertImageMarkdown = (url) => {
+    const ta = bodyRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart ?? 0;
+    const end = ta.selectionEnd ?? 0;
+    const before = editing.body_markdown.slice(0, start);
+    const after = editing.body_markdown.slice(end);
+    const insert = `![image](${url})\n`;
+    const next = before + insert + after;
+    setEditing((p) => ({ ...p, body_markdown: next }));
+    setTimeout(() => {
+      if (bodyRef.current) {
+        const pos = start + insert.length;
+        bodyRef.current.focus();
+        bodyRef.current.setSelectionRange(pos, pos);
+      }
+    }, 0);
+  };
+
+  const handleImageUpload = async (file) => {
+    if (!file || !article) return;
+    setImageError(null);
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) {
+      setImageError('Use a PNG, JPEG, WebP, or GIF image for inline uploads.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setImageError('That image is too large — must be under 5 MB.');
+      return;
+    }
+    let dataUri;
+    try {
+      dataUri = await readFileAsDataUri(file);
+    } catch {
+      setImageError('Could not read that image file. Try another.');
+      return;
+    }
+    setImageUploading(true);
+    const articleId = article.id;
+    try {
+      const r = await api.uploadImage(articleId, dataUri);
+      if (articleRef.current?.id === articleId) {
+        insertImageMarkdown(r.url);
+      }
+      toast.success('Image inserted');
+    } catch (e) {
+      reportError('ArticleAuthor:image', e);
+      setImageError(e?.data?.error || 'Image upload failed');
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
   const addTag = () => {
     const t = tagInput.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 40);
     if (!t) return;
@@ -657,16 +725,29 @@ export default function ArticleAuthorPage() {
     }
   };
 
-  const isLocked = article && ['in_review', 'submitted', 'approved', 'published'].includes(article.status);
-  const isEditable = !isLocked;
-  const dirty = !!article && (
+  const isLocked = useMemo(() => article && ['in_review', 'submitted', 'approved', 'published'].includes(article.status), [article]);
+  const isEditable = useMemo(() => !isLocked, [isLocked]);
+  const dirty = useMemo(() => !!article && (
     editing.title.trim() !== (article.title || '')
     || editing.subtitle !== (article.subtitle || '')
     || editing.body_markdown !== (article.body_markdown || '')
     || (editing.sector || '') !== (article.sector || '')
     || JSON.stringify(editing.tags || []) !== JSON.stringify(article.tags || [])
-  );
+    || editing.excerpt !== (article.excerpt || '')
+    || editing.seo_title !== (article.seo_title || '')
+    || editing.canonical_url !== (article.canonical_url || '')
+    || editing.slug !== (article.slug || '')
+  ), [article, editing]);
   const savedAt = lastSavedAt || (article ? article.updated_at : null);
+  const liveStats = useMemo(() => {
+    const { words, minutes } = wordsAndMinutes(editing.body_markdown || '');
+    return { words, minutes };
+  }, [editing.body_markdown]);
+  const slugPreview = useMemo(() => {
+    if (slugTouched) return editing.slug || '';
+    if (editing.title) return slugify(editing.title);
+    return '';
+  }, [slugTouched, editing.slug, editing.title]);
   let reviewerNote = '';
   if (article && article.status === 'changes_requested') {
     const adminCmts = [...comments].reverse().filter((c) => c.author_role === 'admin');
@@ -840,6 +921,7 @@ export default function ArticleAuthorPage() {
                 </div>
               )}
 
+              {/* Task #4 — split-pane editor */}
               {preview ? (
                 <div className="bg-white dark:bg-slate-900 p-8 rounded border border-slate-200 dark:border-slate-800">
                   <h1 className="text-3xl font-bold">{editing.title}</h1>
@@ -848,6 +930,43 @@ export default function ArticleAuthorPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
+                  {/* Meta header row */}
+                  <div className="flex flex-wrap gap-3 items-center">
+                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <span>{liveStats.words} words</span>
+                      <span>·</span>
+                      <span>~{liveStats.minutes} min</span>
+                    </div>
+                    <span className="text-xs text-slate-300 dark:text-slate-600">·</span>
+                    <select
+                      value={editing.sector}
+                      onChange={(e) => setEditing((p) => ({ ...p, sector: e.target.value }))}
+                      disabled={!isEditable}
+                      className="text-xs px-2 py-1 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 disabled:opacity-60"
+                    >
+                      <option value="">Sector…</option>
+                      {sectors.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                    </select>
+                    <div className="flex flex-wrap gap-1 items-center">
+                      {(editing.tags || []).map((t) => (
+                        <span key={t} className="text-xs px-2 py-0.5 bg-slate-200 dark:bg-slate-700 rounded flex items-center gap-1">
+                          {t}
+                          {isEditable && <button onClick={() => removeTag(t)} className="hover:text-red-600"><X className="w-3 h-3" /></button>}
+                        </span>
+                      ))}
+                      {isEditable && (editing.tags || []).length < 8 && (
+                        <input
+                          value={tagInput}
+                          onChange={(e) => setTagInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
+                          placeholder="Add tag…"
+                          className="text-xs px-2 py-1 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 w-24"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Title + subtitle */}
                   <input
                     type="text"
                     value={editing.title}
@@ -864,33 +983,38 @@ export default function ArticleAuthorPage() {
                     disabled={!isEditable}
                     className="w-full text-base px-3 py-2 bg-transparent border-b border-slate-200 dark:border-slate-700 focus:outline-none focus:border-violet-500 disabled:opacity-60"
                   />
-                  <div className="flex flex-wrap gap-3 items-center">
-                    <select
-                      value={editing.sector}
-                      onChange={(e) => setEditing((p) => ({ ...p, sector: e.target.value }))}
-                      disabled={!isEditable}
-                      className="px-3 py-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-sm disabled:opacity-60"
-                    >
-                      <option value="">Sector…</option>
-                      {sectors.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                    </select>
-                    <div className="flex-1 min-w-[180px] flex flex-wrap gap-2 items-center">
-                      {(editing.tags || []).map((t) => (
-                        <span key={t} className="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-700 rounded flex items-center gap-1">
-                          {t}
-                          {isEditable && <button onClick={() => removeTag(t)} className="hover:text-red-600"><Trash2 className="w-3 h-3" /></button>}
-                        </span>
-                      ))}
-                      {isEditable && (editing.tags || []).length < 8 && (
+
+                  {/* Slug preview + lock on publish */}
+                  <div className="flex flex-wrap gap-2 items-center text-sm">
+                    <span className="text-slate-500 dark:text-slate-400">Slug preview</span>
+                    <code className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded break-all">
+                      {slugPreview || (editing.title ? slugify(editing.title) : 'untitled')}
+                    </code>
+                    {isEditable && (
+                      <>
                         <input
-                          value={tagInput}
-                          onChange={(e) => setTagInput(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
-                          placeholder="Add tag…"
-                          className="text-xs px-2 py-1 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 w-24"
+                          type="text"
+                          value={editing.slug}
+                          onChange={(e) => { setEditing((p) => ({ ...p, slug: e.target.value })); setSlugTouched(true); }}
+                          placeholder="Override slug"
+                          className="text-xs px-2 py-1 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 w-40"
                         />
-                      )}
-                    </div>
+                        <button
+                          onClick={() => { setEditing((p) => ({ ...p, slug: '' })); setSlugTouched(false); }}
+                          className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                          title="Reset to auto"
+                        >
+                          Auto
+                        </button>
+                      </>
+                    )}
+                    {article.status === 'published' && (
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400">Locked — published</span>
+                    )}
+                  </div>
+
+                  {/* Cover image */}
+                  <div className="flex flex-wrap gap-2 items-center">
                     {isEditable && (
                       <label className={`text-sm px-3 py-2 border border-slate-300 dark:border-slate-700 rounded flex items-center gap-1 ${coverUploading ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer'}`}>
                         {coverUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
@@ -904,36 +1028,127 @@ export default function ArticleAuthorPage() {
                         />
                       </label>
                     )}
+                    {(coverPreview || article.cover_url) && (
+                      <div className="relative inline-block">
+                        <img
+                          src={coverPreview || coverSrc(article)}
+                          alt="cover"
+                          className={`max-h-48 rounded border border-slate-200 dark:border-slate-700 transition-opacity ${coverUploading ? 'opacity-50' : ''}`}
+                        />
+                        {coverUploading && (
+                          <span className="absolute inset-0 flex items-center justify-center">
+                            <Loader2 className="w-6 h-6 animate-spin text-violet-600" />
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {coverError && (
+                      <div className="text-sm rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-3 py-2">
+                        {coverError}
+                      </div>
+                    )}
                   </div>
-                  {(coverPreview || article.cover_url) && (
-                    <div className="relative inline-block">
-                      <img
-                        src={coverPreview || coverSrc(article)}
-                        alt="cover"
-                        className={`max-h-48 rounded border border-slate-200 dark:border-slate-700 transition-opacity ${coverUploading ? 'opacity-50' : ''}`}
+
+                  {/* SEO / meta fields */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-slate-500 dark:text-slate-400">Excerpt ({(editing.excerpt || '').length}/200)</label>
+                      <textarea
+                        value={editing.excerpt || ''}
+                        onChange={(e) => setEditing((p) => ({ ...p, excerpt: e.target.value.slice(0, 200) }))}
+                        disabled={!isEditable}
+                        rows={3}
+                        placeholder="Short summary for cards and SEO (max 200 chars)"
+                        className="w-full text-sm px-3 py-2 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900 focus:outline-none focus:border-violet-500 disabled:opacity-60"
                       />
-                      {coverUploading && (
-                        <span className="absolute inset-0 flex items-center justify-center">
-                          <Loader2 className="w-6 h-6 animate-spin text-violet-600" />
-                        </span>
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs text-slate-500 dark:text-slate-400">SEO title (optional)</label>
+                        <input
+                          type="text"
+                          value={editing.seo_title || ''}
+                          onChange={(e) => setEditing((p) => ({ ...p, seo_title: e.target.value }))}
+                          disabled={!isEditable}
+                          placeholder="Override the browser title for this article"
+                          className="w-full text-sm px-3 py-2 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900 focus:outline-none focus:border-violet-500 disabled:opacity-60"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-500 dark:text-slate-400">Canonical URL (optional)</label>
+                        <input
+                          type="text"
+                          value={editing.canonical_url || ''}
+                          onChange={(e) => setEditing((p) => ({ ...p, canonical_url: e.target.value }))}
+                          disabled={!isEditable}
+                          placeholder="https://…"
+                          className="w-full text-sm px-3 py-2 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900 focus:outline-none focus:border-violet-500 disabled:opacity-60"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Body editor + live preview split pane */}
+                  <div className="flex flex-col lg:flex-row gap-0 rounded border border-slate-300 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900">
+                    {/* Editor pane */}
+                    <div className="flex-1 min-h-[360px] flex flex-col"
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const files = e.dataTransfer.files;
+                        if (files?.length) handleImageUpload(files[0]);
+                      }}
+                      onPaste={(e) => {
+                        if (!e.clipboardData.files?.length) return;
+                        e.preventDefault();
+                        handleImageUpload(e.clipboardData.files[0]);
+                      }}
+                    >
+                      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+                        <span className="text-xs text-slate-500">Markdown</span>
+                        <div className="flex-1" />
+                        {isEditable && (
+                          <label className="text-xs inline-flex items-center gap-1 px-2 py-1 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
+                            <Upload className="w-3 h-3" />
+                            <span>Image</span>
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/gif"
+                              className="hidden"
+                              disabled={imageUploading}
+                              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; handleImageUpload(f); }}
+                            />
+                          </label>
+                        )}
+                        {imageUploading && (
+                          <span className="text-xs inline-flex items-center gap-1 text-amber-600">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Uploading…
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex-1 relative">
+                        <HighlightedTextarea
+                          value={editing.body_markdown}
+                          onChange={onBodyChange}
+                          disabled={!isEditable}
+                          ranges={piiFindings}
+                          textareaRef={bodyRef}
+                        />
+                      </div>
+                      {imageError && (
+                        <div className="text-xs px-3 py-2 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-t border-red-200 dark:border-red-800">
+                          {imageError}
+                        </div>
                       )}
+                      <div className="text-xs text-slate-400 px-3 py-1.5 border-t border-slate-200 dark:border-slate-800">
+                        # headings, **bold**, *italic*, [links](https://…), - lists, ```code blocks```, ![images](url). Drag or paste images here to upload.
+                        Minimum 200 characters.
+                      </div>
                     </div>
-                  )}
-                  {coverError && (
-                    <div className="text-sm rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-3 py-2">
-                      {coverError}
+                    {/* Preview pane */}
+                    <div className="flex-1 min-h-[360px] border-t lg:border-t-0 lg:border-l border-slate-300 dark:border-slate-700 overflow-y-auto">
+                      <div className="px-3 py-1.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs text-slate-500">Preview</div>
+                      <div className="p-4 prose dark:prose-invert max-w-none text-sm" dangerouslySetInnerHTML={{ __html: renderPreview(editing.body_markdown) }} />
                     </div>
-                  )}
-                  <HighlightedTextarea
-                    value={editing.body_markdown}
-                    onChange={onBodyChange}
-                    disabled={!isEditable}
-                    ranges={piiFindings}
-                    textareaRef={bodyRef}
-                  />
-                  <div className="text-xs text-slate-500">
-                    Markdown supported: # headings, **bold**, *italic*, [links](https://…), - lists, ```code blocks```.
-                    Minimum 200 characters. Personal data (emails, phone numbers, IDs) will block submission.
                   </div>
                 </div>
               )}

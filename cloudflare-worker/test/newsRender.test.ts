@@ -11,7 +11,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { renderMarkdown } from '../src/services/newsRender.ts';
+import { renderMarkdown, isValidArticleImageName } from '../src/services/newsRender.ts';
 
 test('indented heading renders as a real heading, not literal text', () => {
   const html = renderMarkdown('  ## Why this matters');
@@ -41,4 +41,45 @@ test('an indented heading still breaks the preceding paragraph', () => {
   const html = renderMarkdown('  Intro line\n  ## Section');
   assert.match(html, /<p>Intro line<\/p>/);
   assert.match(html, /<h2>Section<\/h2>/);
+});
+
+// Task #4 — image URL policy: root-relative accepted, protocol-relative rejected
+test('root-relative image URL is accepted in renderMarkdown', () => {
+  const html = renderMarkdown('![alt](/api/articles/1/image/img-abc.png)');
+  assert.match(html, /<img alt="alt" src="\/api\/articles\/1\/image\/img-abc\.png" loading="lazy" \/>/);
+});
+
+test('protocol-relative image URL is rejected in renderMarkdown', () => {
+  const html = renderMarkdown('![alt](//evil.com/x.png)');
+  // Rejected image becomes an empty paragraph, not a bare `<img>` tag.
+  assert.equal(html, '<p></p>');
+  assert.doesNotMatch(html, /<img/);
+  assert.doesNotMatch(html, /evil\.com/);
+});
+
+test('root-relative link is accepted, protocol-relative link is rejected', () => {
+  const html = renderMarkdown('[text](/about) [bad](//evil.com)');
+  assert.match(html, /<a href="\/about" rel="noopener nofollow" target="_blank">text<\/a>/);
+  assert.match(html, /bad/);
+  assert.doesNotMatch(html, /evil\.com/);
+});
+
+// Task #4 — inline-image filename validation
+test('isValidArticleImageName accepts valid minted filenames', () => {
+  assert.ok(isValidArticleImageName('img-550e8400-e29b-41d4-a716-446655440000.png'));
+  assert.ok(isValidArticleImageName('img-550e8400.png'));
+  assert.ok(isValidArticleImageName('img-abc.png'));
+  assert.ok(isValidArticleImageName('img-abc.jpg'));
+  assert.ok(isValidArticleImageName('img-abc.webp'));
+  assert.ok(isValidArticleImageName('img-abc.gif'));
+});
+
+test('isValidArticleImageName rejects path traversal and bad extensions', () => {
+  assert.equal(isValidArticleImageName('cover-abc.png'), false);
+  assert.equal(isValidArticleImageName('img-abc..png'), false);
+  assert.equal(isValidArticleImageName('img-abc.exe'), false);
+  assert.equal(isValidArticleImageName('../etc/passwd'), false);
+  assert.equal(isValidArticleImageName('img-550e8400-e29b-41d4-a716-446655440000.svg'), false);
+  assert.equal(isValidArticleImageName(''), false);
+  assert.equal(isValidArticleImageName(null as unknown as string), false);
 });

@@ -32,7 +32,7 @@ import { ensureArticleCovers } from '../services/articleCovers';
 import { computeAuthorTrust } from '../services/newsTrust';
 import { lintForSend } from '../services/telegramRedactCheck';
 import { notifyArticle } from '../services/articleNotify';
-import { renderMarkdown, slugify, snapshotRevision, wordsAndMinutes } from '../services/newsRender';
+import { renderMarkdown, slugify, snapshotRevision, wordsAndMinutes, isValidArticleImageName } from '../services/newsRender';
 import { SECTORS, isValidSector } from '../data/sectors';
 
 const articles = new Hono<{ Bindings: Env }>();
@@ -42,6 +42,7 @@ articles.use('/', cors({ origin: ['https://axal.vc', 'https://www.axal.vc'], cre
 articles.use('/sectors', cors({ origin: ['https://axal.vc', 'https://www.axal.vc'], credentials: false }));
 articles.use('/by-author/:user_id', cors({ origin: ['https://axal.vc', 'https://www.axal.vc'], credentials: false }));
 articles.use('/cover/:id', cors({ origin: ['https://axal.vc', 'https://www.axal.vc'], credentials: false }));
+articles.use('/:id/image/:filename', cors({ origin: ['https://axal.vc', 'https://www.axal.vc'], credentials: false }));
 articles.use('/:slug', cors({ origin: ['https://axal.vc', 'https://www.axal.vc'], credentials: false }));
 
 const MAX_COVER_BYTES = 5 * 1024 * 1024;
@@ -49,6 +50,13 @@ const COVER_MIME: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
+};
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const IMAGE_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
 };
 // Short TTL on the public list — variants are unbounded (sector × role ×
 // search × pagination × featured) and we can't enumerate every key for
@@ -76,6 +84,9 @@ function publicArticleShape(row: any) {
     slug: row.slug,
     title: row.title,
     subtitle: row.subtitle,
+    excerpt: row.excerpt || null,
+    seo_title: row.seo_title || null,
+    canonical_url: row.canonical_url || null,
     sector: row.sector,
     tags,
     cover_url: row.cover_r2_key ? `/api/articles/cover/${row.id}` : null,
@@ -100,6 +111,9 @@ function authorArticleShape(row: any) {
     slug: row.slug,
     title: row.title,
     subtitle: row.subtitle,
+    excerpt: row.excerpt || null,
+    seo_title: row.seo_title || null,
+    canonical_url: row.canonical_url || null,
     body_markdown: row.body_markdown,
     sector: row.sector,
     tags,
@@ -185,7 +199,7 @@ articles.get('/', async (c) => {
                           : 'a.published_at DESC';
   const sql = `SELECT a.id, a.slug, a.title, a.subtitle, a.sector, a.tags,
                       a.cover_r2_key, a.published_at, a.word_count, a.read_minutes,
-                      a.author_user_id,
+                      a.author_user_id, a.excerpt, a.seo_title, a.canonical_url,
                       u.name AS author_name, NULL AS author_handle, u.role AS author_role,
                       aw.website_url AS author_website
                  FROM articles a
@@ -216,7 +230,7 @@ articles.get('/by-author/:user_id', async (c) => {
   const res = await c.env.DB.prepare(
     `SELECT a.id, a.slug, a.title, a.subtitle, a.sector, a.tags,
             a.cover_r2_key, a.published_at, a.word_count, a.read_minutes,
-            a.author_user_id,
+            a.author_user_id, a.excerpt, a.seo_title, a.canonical_url,
             u.name AS author_name, NULL AS author_handle, u.role AS author_role,
             aw.website_url AS author_website
        FROM articles a
@@ -267,7 +281,7 @@ articles.get('/:slug', async (c) => {
   const slug = c.req.param('slug');
   // Reserved sub-paths handled by their own routes above must not be
   // shadowed by the slug catch-all.
-  if (['mine', 'draft', 'trust', 'cover', 'sectors', 'by-author'].includes(slug)) {
+  if (['mine', 'draft', 'trust', 'cover', 'sectors', 'by-author', 'image'].includes(slug)) {
     return c.json({ error: 'not_found' }, 404);
   }
   await ensureNewsSchema(c.env);
@@ -363,6 +377,9 @@ articles.post('/draft', async (c) => {
   const tags = Array.isArray(body.tags)
     ? body.tags.slice(0, 8).map((t: any) => String(t).slice(0, 40))
     : [];
+  const excerpt = body.excerpt ? String(body.excerpt).slice(0, 200) : null;
+  const seoTitle = body.seo_title ? String(body.seo_title).slice(0, 120) : null;
+  const canonicalUrl = body.canonical_url ? String(body.canonical_url).slice(0, 500) : null;
   const wm = wordsAndMinutes(md);
   const baseSlug = slugify(title);
   let slug = baseSlug;
@@ -373,9 +390,9 @@ articles.post('/draft', async (c) => {
   }
   const ins: any = await c.env.DB.prepare(
     `INSERT INTO articles (slug, title, subtitle, body_markdown, sector, tags, status,
-                           author_user_id, word_count, read_minutes)
-     VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`,
-  ).bind(slug, title, subtitle, md, sector, JSON.stringify(tags), user.id, wm.words, wm.minutes).run();
+                           author_user_id, word_count, read_minutes, excerpt, seo_title, canonical_url)
+     VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)`,
+  ).bind(slug, title, subtitle, md, sector, JSON.stringify(tags), user.id, wm.words, wm.minutes, excerpt, seoTitle, canonicalUrl).run();
   const id = Number(ins?.meta?.last_row_id);
   await snapshotRevision(c.env, id, user.id, 'manual');
   const row: any = await c.env.DB.prepare(`SELECT * FROM articles WHERE id = ?`).bind(id).first();
@@ -402,11 +419,32 @@ articles.put('/:id', async (c) => {
   if (typeof body.title === 'string') patch.title = body.title.slice(0, 280).trim();
   if (typeof body.subtitle === 'string') patch.subtitle = body.subtitle.slice(0, 500);
   if (typeof body.body_markdown === 'string') patch.body_markdown = body.body_markdown.slice(0, 200_000);
+  if (typeof body.excerpt === 'string') patch.excerpt = body.excerpt.slice(0, 200);
+  if (typeof body.seo_title === 'string') patch.seo_title = body.seo_title.slice(0, 120);
+  if (typeof body.canonical_url === 'string') {
+    const cu = body.canonical_url.slice(0, 500);
+    patch.canonical_url = /^https?:\/\//i.test(cu) ? cu : null;
+  }
   if (typeof body.sector === 'string') {
     const s = body.sector.slice(0, 64);
     patch.sector = isValidSector(s) ? s : null;
   }
   if (Array.isArray(body.tags)) patch.tags = JSON.stringify(body.tags.slice(0, 8).map((t: any) => String(t).slice(0, 40)));
+  // Slug override: allowed for non-published drafts; auto-dedupe excluding self.
+  if (typeof body.slug === 'string') {
+    const proposed = slugify(body.slug.slice(0, 120));
+    if (proposed !== row.slug) {
+      let finalSlug = proposed;
+      for (let i = 1; i < 10; i++) {
+        const exists: any = await c.env.DB.prepare(
+          `SELECT id FROM articles WHERE slug = ? AND id != ?`,
+        ).bind(finalSlug, id).first();
+        if (!exists) break;
+        finalSlug = `${proposed}-${i + 1}`;
+      }
+      patch.slug = finalSlug;
+    }
+  }
   if (Object.keys(patch).length === 0) return c.json({ error: 'no_changes' }, 400);
   if (patch.body_markdown !== undefined) {
     const wm = wordsAndMinutes(patch.body_markdown);
@@ -528,6 +566,69 @@ articles.post('/:id/cover', async (c) => {
     `UPDATE articles SET cover_r2_key = ?, cover_mime = ?, updated_at = ? WHERE id = ?`,
   ).bind(key, mime, new Date().toISOString(), id).run();
   return c.json({ ok: true, cover_url: `/api/articles/cover/${id}` });
+});
+
+articles.post('/:id/image', async (c) => {
+  const user = await requireAuth(c);
+  await ensureNewsSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const row = await loadOwned(c.env, id, user.id, user.role);
+  if (!row) return c.json({ error: 'not_found_or_forbidden' }, 404);
+  if (!c.env.FILES) return c.json({ error: 'r2_unavailable' }, 503);
+  const body: any = await c.req.json().catch(() => ({}));
+  const dataUri = String(body.data_uri || '');
+  const m = dataUri.match(/^data:([\w/+\-.]+);base64,(.+)$/);
+  if (!m) return c.json({ error: 'invalid_data_uri' }, 400);
+  const mime = m[1].toLowerCase();
+  const ext = IMAGE_MIME[mime];
+  if (!ext) return c.json({ error: 'unsupported_mime' }, 400);
+  const bytes = bytesFromBase64(m[2]);
+  if (bytes.byteLength > MAX_IMAGE_BYTES) return c.json({ error: 'too_large', max: MAX_IMAGE_BYTES }, 413);
+  const uuid = crypto.randomUUID();
+  const filename = `img-${uuid}.${ext}`;
+  const key = `articles/${id}/${filename}`;
+  await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: mime } });
+  return c.json({ ok: true, url: `/api/articles/${id}/image/${filename}` });
+});
+
+articles.get('/:id/image/:filename', async (c) => {
+  await ensureNewsSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const filename = c.req.param('filename');
+  if (!Number.isInteger(id) || id <= 0 || !isValidArticleImageName(filename)) {
+    return c.json({ error: 'invalid' }, 400);
+  }
+  const row: any = await c.env.DB.prepare(
+    `SELECT status, author_user_id FROM articles WHERE id = ? LIMIT 1`,
+  ).bind(id).first();
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  // Published images are public. Unpublished images are gated exactly like
+  // covers: the author or an admin may view them via the studioos_auth cookie;
+  // these responses are never cached.
+  let cacheControl = 'public, max-age=86400, s-maxage=86400';
+  if (row.status !== 'published') {
+    const user = await getCurrentUser(c).catch(() => null);
+    if (!user || (row.author_user_id !== user.id && user.role !== 'admin')) {
+      return c.json({ error: 'not_found' }, 404);
+    }
+    cacheControl = 'private, no-store';
+  }
+  if (!c.env.FILES) return c.json({ error: 'r2_unavailable' }, 503);
+  const key = `articles/${id}/${filename}`;
+  const obj = await c.env.FILES.get(key);
+  if (!obj) return c.json({ error: 'not_found' }, 404);
+  // sniff mime from the extension in the filename since the stored key
+  // extension matches the image-mime map.
+  const ext = filename.split('.').pop()?.toLowerCase() || 'png';
+  const mimeMap: Record<string, string> = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif',
+  };
+  return new Response(obj.body, {
+    headers: {
+      'content-type': mimeMap[ext] || 'application/octet-stream',
+      'cache-control': cacheControl,
+    },
+  });
 });
 
 export default articles;

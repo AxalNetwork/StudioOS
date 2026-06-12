@@ -252,6 +252,21 @@ export default function ArticleReaderPage() {
       .finally(() => setLoading(false));
   }, [slug]);
 
+  // Task #4 — reader SEO surfacing
+  useEffect(() => {
+    if (!a) return;
+    const title = a.seo_title || a.title || 'Axal article';
+    document.title = title;
+    const metaDesc = document.querySelector('meta[name="description"]');
+    if (metaDesc) metaDesc.setAttribute('content', a.excerpt || a.subtitle || '');
+    const canonical = document.querySelector('link[rel="canonical"]');
+    if (canonical) canonical.setAttribute('href', a.canonical_url || window.location.href);
+    return () => {
+      document.title = 'Axal Studio';
+      if (metaDesc) metaDesc.setAttribute('content', '');
+    };
+  }, [a]);
+
   useEffect(() => {
     if (!a) return;
     let cancelled = false;

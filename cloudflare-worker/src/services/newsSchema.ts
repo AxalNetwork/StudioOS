@@ -14,7 +14,7 @@ export async function ensureNewsSchema(env: Env): Promise<void> {
   if (_ready) return;
   try {
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS articles (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT NOT NULL UNIQUE, title TEXT NOT NULL, subtitle TEXT, body_markdown TEXT NOT NULL DEFAULT '', body_html TEXT, cover_r2_key TEXT, cover_mime TEXT, tags TEXT, sector TEXT, status TEXT NOT NULL DEFAULT 'draft', author_user_id INTEGER NOT NULL REFERENCES users(id), reviewer_user_id INTEGER REFERENCES users(id), submitted_at TEXT, reviewed_at TEXT, approved_at TEXT, published_at TEXT, rejected_at TEXT, rejection_reason TEXT, word_count INTEGER NOT NULL DEFAULT 0, read_minutes INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
+      "CREATE TABLE IF NOT EXISTS articles (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT NOT NULL UNIQUE, title TEXT NOT NULL, subtitle TEXT, body_markdown TEXT NOT NULL DEFAULT '', body_html TEXT, cover_r2_key TEXT, cover_mime TEXT, tags TEXT, sector TEXT, status TEXT NOT NULL DEFAULT 'draft', author_user_id INTEGER NOT NULL REFERENCES users(id), reviewer_user_id INTEGER REFERENCES users(id), submitted_at TEXT, reviewed_at TEXT, approved_at TEXT, published_at TEXT, rejected_at TEXT, rejection_reason TEXT, word_count INTEGER NOT NULL DEFAULT 0, read_minutes INTEGER NOT NULL DEFAULT 0, excerpt TEXT, seo_title TEXT, canonical_url TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
     );
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_articles_status_pub ON articles(status, published_at DESC)',
@@ -43,6 +43,19 @@ export async function ensureNewsSchema(env: Env): Promise<void> {
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_article_submission_log_author ON article_submission_log(author_id, submitted_at DESC)',
     );
+    // Lazy column backfill for migration 092 (SQLite lacks ADD COLUMN IF NOT EXISTS).
+    // Run once per process, before the _ready guard.
+    const info: any = await env.DB.prepare('PRAGMA table_info(articles)').all();
+    const names = new Set((info.results || []).map((c: any) => c.name));
+    if (!names.has('excerpt')) {
+      await env.DB.exec('ALTER TABLE articles ADD COLUMN excerpt TEXT').catch(() => {});
+    }
+    if (!names.has('seo_title')) {
+      await env.DB.exec('ALTER TABLE articles ADD COLUMN seo_title TEXT').catch(() => {});
+    }
+    if (!names.has('canonical_url')) {
+      await env.DB.exec('ALTER TABLE articles ADD COLUMN canonical_url TEXT').catch(() => {});
+    }
     _ready = true;
   } catch (e) {
     console.warn('[newsSchema] ensure failed:', (e as Error).message);

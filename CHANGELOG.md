@@ -10,6 +10,27 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Pro Article Editor Upgrades (Task #4)
+
+Split-pane markdown editor with live preview, inline image upload, SEO fields, live slug preview, debounced autosave, and live word/reading-time stats.
+
+- `cloudflare-worker/sql/migrations/092_article_editor_fields.sql`: ALTER TABLE articles ADD COLUMN excerpt, seo_title, canonical_url (all TEXT, nullable).
+- `cloudflare-worker/src/services/newsSchema.ts`: `ensureNewsSchema` adds PRAGMA-based lazy backfill for the three new columns; `createDraft` includes `excerpt`, `seo_title`, `canonical_url` in defaults; `updateDraft` persists all new fields plus optional `slug` override (server-side slugify + auto-dedupe via `slugifyUnique`, returns final slug). Added to `authorArticleShape` and `publicArticleShape`.
+- `cloudflare-worker/src/routes/articles.ts`: POST `/:id/image` (owner-only, data_uri JSON, 5MB cap, mime whitelist png/jpeg/webp/gif) → R2 key `articles/:id/img-<uuid>.<ext>` → `{ url }`. GET `/:id/image/:filename` with `isValidArticleImageName` regex gate (pure exported validator); public access for published articles, owner/admin gate for drafts. Cache: published=24h public, unpublished=private+no-store. `bustArticleEdgeCache` on publish/unpublish now lists the `articles/:id/` R2 prefix to purge inline image edge keys.
+- `cloudflare-worker/src/services/newsRender.ts`: `renderMarkdown` now allows root-relative image URLs via `/^\/(?!\/)/` regex (blocks protocol-relative `//evil.com` on both image and link branches). `isValidArticleImageName` exported for reuse.
+- `cloudflare-worker/test/newsRender.test.ts`: added test cases for `isValidArticleImageName` (accepts valid UUID minted filenames, rejects path traversal/bad extensions) and root-relative image URL rendering.
+- `frontend/src/lib/articleMarkdown.js`: verbatim client-side port of `renderMarkdown` + `wordsAndMinutes` + `slugify` (guarantees preview parity with server rendering; no react-markdown dependency).
+- `frontend/src/lib/api.js`: added `articles.uploadImage(id, dataUri)` POST helper; `articles` namespace `createDraft`/`updateDraft` payloads transparently pass new fields.
+- `frontend/src/pages/ArticleAuthorPage.jsx`: 
+  - Split-pane editor on lg screens: left = markdown textarea with drag/paste image upload + inline image picker toolbar; right = live preview via `renderMarkdown`. Toggle `Preview` button for small screens.
+  - New fields: Excerpt (≤200 chars, live counter), SEO title, Canonical URL. Slug preview auto-derived from title unless overridden; locks on publish. 
+  - Debounced autosave (~2.5s) guarded by `articleRef` capture pattern to prevent stale saves when switching drafts mid-debounce. Save state in header: "Saving…", "Unsaved changes", or "Saved … ago".
+  - Live word count + reading time in header bar, computed via `wordsAndMinutes`.
+  - Tag picker: sector dropdown + free-form tags (8 max, slugified, deduped).
+  - Dark-mode variants on all new hardcoded colors.
+- `frontend/src/pages/ArticleReaderPage.jsx`: reader SEO surfacing via `document.title` = `seo_title || title`, `meta[name="description"]` = `excerpt || subtitle`, `link[rel="canonical"]` = `canonical_url || current URL`.
+- Verified: `npm run test:drift` (dark-mode + API-drift + worker `tsc --noEmit` — pre-existing `auth_passkey.ts` Uint8Array typing error only), `npm run build`, frontend `npm run build`, `newsRender.test.ts` (10 pass).
+
 ## Merge News & Articles admin queues into one Content Queue (Task #3)
 
 The duplicate admin "News Queue" (`/admin/news`) and "Articles Queue" (`/admin/articles`) — both operating over the SAME `articles` table — are consolidated into a single **Content Queue** at `/admin/articles`. Root cause of the duplication: `news.ts`/`admin_news.ts` (Task #2) and `articles.ts`/`admin_articles.ts` (Task #1) were built independently against the same tables; `articles.ts` is a strict superset of `news.ts`.

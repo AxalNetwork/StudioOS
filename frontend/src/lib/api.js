@@ -2353,6 +2353,8 @@ export const articles = {
   retract: (id) => request(`/articles/${id}/retract`, { method: 'POST', body: '{}' }),
   uploadCover: (id, dataUri) =>
     request(`/articles/${id}/cover`, { method: 'POST', body: JSON.stringify({ data_uri: dataUri }) }),
+  uploadImage: (id, dataUri) =>
+    request(`/articles/${id}/image`, { method: 'POST', body: JSON.stringify({ data_uri: dataUri }) }),
 };
 
 export const adminArticles = {

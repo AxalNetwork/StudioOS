@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A better article editor
+
+The article editor is now a split-pane writing surface: the left side is a markdown editor with drag-and-drop image upload, and the right side shows a live preview of how the article will look when published. You can also paste an image straight into the editor to insert it at the cursor.
+
+New fields help you control how your article appears: write a short **Excerpt** (up to 200 characters) for cards and search results, add a **SEO title** to override the browser tab title, and set a **Canonical URL** if the article was originally published elsewhere. A live word count and reading-time estimate sit in the header, and the editor quietly autosaves after you stop typing. The slug preview is auto-generated from your title, but you can override it before you publish. Once published, the slug is locked so shared links stay stable.
+
+The tag picker now shows the full sector taxonomy so you can pick a sector, and you can still add up to eight free-form tags.
+
+---
+
 ## One place to review content
 
 The admin sidebar had two near-identical review areas — "News Queue" and "Articles Queue" — that managed the very same content. They're now a single **Content Queue**. It has clearer tabs so you can jump straight to new submissions, drafts in review, changes you've requested, pieces ready to publish, and now also everything already **Published** or **Rejected**. The old links still work and quietly send you to the right place, and existing public article links keep working as before.
