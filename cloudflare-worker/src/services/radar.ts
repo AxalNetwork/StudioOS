@@ -25,6 +25,7 @@ export interface RadarTeamResult {
   slug: string;
   label: string;
   score: number;       // 0–100, weighted mean of team blended scores
+  raw_score: number;   // 0–5, un-normalized team mean
   coverage: number;      // 0–100, max(member scores) per axis
   raw_coverage: number;  // 0–5, max raw
   member_count: number;  // how many members had data in this axis
@@ -32,7 +33,7 @@ export interface RadarTeamResult {
 
 export interface RadarResult {
   axes: RadarAxisResult[];
-  overall: number;       // 0–100, mean of all axis scores
+  overall: number;       // 0–100, weighted mean of axis scores
   has_data: boolean;
   // Team-only fields (null when computing for a single user).
   team?: RadarTeamResult[];
@@ -106,7 +107,7 @@ export async function computeRadar(env: Env, userIds: number[]): Promise<RadarRe
   const teamResults: RadarTeamResult[] = [];
   const gapAxes: string[] = [];
   let overallSum = 0;
-  let overallCount = 0;
+  let overallWeight = 0;
 
   for (const axis of RADAR_AXES) {
     // Single user: mean of their axis skills.
@@ -133,8 +134,8 @@ export async function computeRadar(env: Env, userIds: number[]): Promise<RadarRe
           raw_score: raw,
           skill_count: scores.length,
         });
-        overallSum += norm;
-        overallCount++;
+        overallSum += norm * axis.weight;
+        overallWeight += axis.weight;
       }
     } else {
       // Team: compute per-member raw scores, then mean and coverage.
@@ -154,12 +155,16 @@ export async function computeRadar(env: Env, userIds: number[]): Promise<RadarRe
       const teamScore = memberScores.length > 0
         ? round2(memberScores.reduce((a, b) => a + b, 0) / memberScores.length)
         : 0;
+      const rawScore = memberRaw.length > 0
+        ? round2(memberRaw.reduce((a, b) => a + b, 0) / memberRaw.length)
+        : 0;
       const coverage = memberRaw.length > 0 ? Math.max(...memberRaw) : 0;
       const normCoverage = normalizeTo100(coverage);
       teamResults.push({
         slug: axis.slug,
         label: axis.label,
         score: teamScore,
+        raw_score: rawScore,
         coverage: normCoverage,
         raw_coverage: coverage,
         member_count: memberCount,
@@ -167,12 +172,12 @@ export async function computeRadar(env: Env, userIds: number[]): Promise<RadarRe
       if (normCoverage < 60) {
         gapAxes.push(axis.slug);
       }
-      overallSum += teamScore;
-      overallCount++;
+      overallSum += teamScore * axis.weight;
+      overallWeight += axis.weight;
     }
   }
 
-  const overall = overallCount > 0 ? round2(overallSum / overallCount) : 0;
+  const overall = overallWeight > 0 ? round2(overallSum / overallWeight) : 0;
   const hasData = userIds.length === 1
     ? axes.some((a) => a.skill_count > 0)
     : teamResults.some((t) => t.member_count > 0);
@@ -185,9 +190,9 @@ export async function computeRadar(env: Env, userIds: number[]): Promise<RadarRe
     axes: teamResults.map((t) => ({
       slug: t.slug,
       label: t.label,
-      weight: 1.0,
+      weight: RADAR_AXES.find((a) => a.slug === t.slug)?.weight ?? 1.0,
       score: t.score,
-      raw_score: t.raw_coverage,
+      raw_score: t.raw_score,
       skill_count: t.member_count,
     })),
     overall,
