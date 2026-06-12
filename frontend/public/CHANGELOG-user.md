@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Pay for mentor sessions without leaving Axal
+
+Booking a paid session with a mentor or expert now happens entirely inside Axal. Instead of being sent to a separate payment page, you enter your card on an Axal-branded form right on the expert's profile — matching the app's light and dark themes, with any extra bank verification appearing in the same window. Your expert is still paid automatically, and your card details are handled securely by Stripe and never touch Axal's servers.
+
+---
+
+## Unlock features individually
+
+Some features can now be unlocked on their own with a one-time purchase, without subscribing to a higher plan. Once your purchase goes through, the feature opens up right away — permanently or for a set period, depending on the option you chose.
+
+---
+
 ## Pay for upgrades without leaving Axal
 
 You can now complete an upgrade right inside **Settings → Billing**. A new **Pay by card** section lets you pick a plan and enter your card on an Axal-branded form — no more jumping out to a separate Stripe page. It matches the app's light and dark themes, and if your bank asks for extra verification, that step appears right there in the same window. Your card details are handled securely by Stripe and never touch Axal's servers.

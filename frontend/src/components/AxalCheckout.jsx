@@ -23,6 +23,10 @@ import Skeleton from './Skeleton';
  * touch our code (PCI scope stays SAQ A) and are never logged.
  *
  * Props:
+ *   clientSecret — pre-created PaymentIntent client_secret (e.g. a booking
+ *                  intent minted server-side with a Connect destination
+ *                  transfer). When provided, the component renders that intent
+ *                  directly and skips its own POST /api/payments/intent fetch.
  *   priceId      — Stripe price id (recurring → subscription, one-time → charge)
  *   amount       — ad-hoc one-time amount in the smallest currency unit (cents)
  *   currency     — ISO currency for the ad-hoc path (default 'usd')
@@ -33,13 +37,13 @@ import Skeleton from './Skeleton';
  *   onError(error)    — fired on a terminal payment error
  */
 export default function AxalCheckout(props) {
-  const { priceId, amount, currency, quantity, description } = props;
+  const { priceId, amount, currency, quantity, description, clientSecret: providedClientSecret } = props;
   const { effectiveTheme } = useSettings();
   const isDark = effectiveTheme === 'dark';
 
   const stripePromise = useMemo(() => getStripe(), []);
-  const [clientSecret, setClientSecret] = useState(null);
-  const [intentKind, setIntentKind] = useState(null);
+  const [clientSecret, setClientSecret] = useState(providedClientSecret || null);
+  const [intentKind, setIntentKind] = useState(providedClientSecret ? 'payment' : null);
   const [loadError, setLoadError] = useState(null);
   // Stable nonce per mount so retries of the same purchase reuse the
   // server-side idempotency key instead of creating duplicate intents.
@@ -52,6 +56,14 @@ export default function AxalCheckout(props) {
 
   useEffect(() => {
     if (!stripePromise) return; // not configured — handled in render
+    // Caller-supplied secret (e.g. a booking PaymentIntent created server-side
+    // with a Connect destination transfer) — render it directly, no fetch.
+    if (providedClientSecret) {
+      setClientSecret(providedClientSecret);
+      setIntentKind('payment');
+      setLoadError(null);
+      return;
+    }
     if (priceId == null && amount == null) {
       setLoadError('Nothing to pay for.');
       return;
@@ -86,7 +98,7 @@ export default function AxalCheckout(props) {
     return () => {
       cancelled = true;
     };
-  }, [stripePromise, priceId, amount, currency, quantity, description]);
+  }, [stripePromise, priceId, amount, currency, quantity, description, providedClientSecret]);
 
   // No publishable key configured → graceful unavailable state.
   if (!STRIPE_PUBLISHABLE_KEY || !stripePromise) {

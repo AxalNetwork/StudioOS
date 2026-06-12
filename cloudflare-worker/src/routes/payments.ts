@@ -3,7 +3,8 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { stripeCall } from './billing';
 import { ensureTierSchema, type TierUser } from '../middleware/requireTier';
-import { findCatalogPriceById } from '../services/catalog';
+import { findCatalogPriceById, findCatalogProductByPriceId } from '../services/catalog';
+import { ensureFeatureUnlockSchema, listActiveUnlocks } from '../services/featureUnlocks';
 
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 //
@@ -31,7 +32,7 @@ const MAX_RAW_AMOUNT = 100_000_00; // $100k in cents — sanity cap on raw amoun
  * SetupIntents and saved-card listing all require a customer so the card can be
  * attached and reused across the user's purchases.
  */
-async function ensurePaymentsCustomer(env: Env, user: TierUser): Promise<string> {
+export async function ensurePaymentsCustomer(env: Env, user: TierUser): Promise<string> {
   if (user.stripe_customer_id) return user.stripe_customer_id;
   const customer = await stripeCall<{ id: string }>(env, '/customers', {
     email: user.email,
@@ -283,6 +284,65 @@ payments.delete('/methods/:id', async (c) => {
   } catch (e) {
     return c.json({ error: 'detach_failed', detail: (e as Error).message }, 502);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Task #7 — À la carte feature unlocks.
+//
+//   POST /api/payments/alacarte/intent  { price_id, nonce? } → { client_secret, ... }
+//   GET  /api/payments/alacarte/unlocks → { unlocks: [{ feature_key, expires_at }] }
+//
+// An à la carte SKU is a Stripe Product with metadata.kind='alacarte' and a
+// metadata.feature_key (plus optional metadata.unlock_days). Buying it creates a
+// one-time PaymentIntent carrying that metadata; the billing webhook
+// (payment_intent.succeeded, kind='alacarte') writes the `feature_unlocks` row
+// that feature gates read. No Connect transfer — these are platform-owned SKUs.
+// ---------------------------------------------------------------------------
+payments.post('/alacarte/intent', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureTierSchema(c.env);
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+
+  const body = (await c.req.json().catch(() => ({}))) as { price_id?: string; nonce?: string };
+  if (!body.price_id) return c.json({ error: 'price_id_required' }, 400);
+
+  const found = await findCatalogProductByPriceId(c.env, body.price_id);
+  if (!found || !found.price.active || !found.product.active) {
+    return c.json({ error: 'invalid_price' }, 400);
+  }
+  if (found.product.kind !== 'alacarte') return c.json({ error: 'not_alacarte' }, 400);
+  if (found.price.type !== 'one_time' || found.price.unit_amount == null) {
+    return c.json({ error: 'price_not_one_time' }, 400);
+  }
+  const featureKey = (found.product.metadata.feature_key || '').trim();
+  if (!featureKey) return c.json({ error: 'feature_key_missing' }, 400);
+  // unlock_days: positive int → time-bounded; absent/0 → permanent.
+  const rawDays = Number(found.product.metadata.unlock_days);
+  const unlockDays = Number.isFinite(rawDays) && rawDays > 0 ? String(Math.floor(rawDays)) : '0';
+
+  const nonce = safeNonce(body.nonce);
+  const customer = await ensurePaymentsCustomer(c.env, user);
+  return createPaymentIntent(c, {
+    customer,
+    amount: found.price.unit_amount,
+    currency: found.price.currency,
+    idempotencyKey: `pi:${user.id}:alacarte_${found.price.id}:${nonce}`,
+    user,
+    metadata: {
+      kind: 'alacarte',
+      feature_key: featureKey,
+      unlock_days: unlockDays,
+      price_id: found.price.id,
+    },
+    description: `À la carte: ${found.product.name}`.slice(0, 500),
+  });
+});
+
+payments.get('/alacarte/unlocks', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureFeatureUnlockSchema(c.env);
+  const unlocks = await listActiveUnlocks(c.env, user.id);
+  return c.json({ unlocks });
 });
 
 export default payments;

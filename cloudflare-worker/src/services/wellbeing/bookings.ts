@@ -8,14 +8,18 @@
  * Flow:
  *   1. Founder hits POST /api/wellbeing/experts/:uid/book with a service_uid.
  *   2. We insert an expert_bookings row with status='pending_payment'.
- *   3. We mint a Stripe Checkout session with metadata.kind='expert_booking'
- *      and a 15% (default, configurable) application fee on transfer to the
- *      expert's connected account. Free-priced services skip Stripe.
+ *   3. We create a Stripe PaymentIntent with metadata.kind='expert_booking'
+ *      and a 15% (default, configurable) application fee on a destination
+ *      transfer to the expert's connected account, and hand the client_secret
+ *      back so the founder pays via the embedded Axal terminal (Stripe Elements)
+ *      without leaving the app. Free-priced services skip Stripe.
  *   4. Webhook flips the row to 'confirmed', writes a calendar_events row,
  *      mints a Meet link, notifies both sides + Slack channel.
  */
 import type { Env } from '../../types';
 import { stripeCall } from '../../routes/billing';
+import { ensurePaymentsCustomer } from '../../routes/payments';
+import type { TierUser } from '../../middleware/requireTier';
 import { notify } from '../notify';
 import { onAxalSessionCreated } from '../calendar/sync';
 
@@ -60,10 +64,6 @@ export interface BookingRowMin {
   meet_link: string | null;
 }
 
-function appUrl(env: Env): string {
-  return (env as any).APP_URL || 'https://axal.vc';
-}
-
 function feePct(env: Env, expert: ExpertRowMin): number {
   const envDefault = Number((env as any).EXPERT_APPLICATION_FEE_PCT);
   const fallback = Number.isFinite(envDefault) ? envDefault : DEFAULT_APPLICATION_FEE_PCT;
@@ -76,64 +76,78 @@ function jitsiMeet(uid: string): string {
   return `https://meet.jit.si/axal-${uid}`;
 }
 
-/** Mint Stripe Checkout for a paid booking. Throws on failure. */
-export async function createBookingCheckout(
+/**
+ * Create a Stripe PaymentIntent for a paid booking and return its
+ * `client_secret` so the founder pays via the embedded Axal terminal (Stripe
+ * Elements) — no Checkout redirect. The Connect destination-charge mechanics
+ * are preserved: `application_fee_amount` keeps Axal's platform fee and
+ * `transfer_data[destination]` routes the remainder to the expert's connected
+ * account. Throws on failure.
+ */
+export async function createBookingPaymentIntent(
   env: Env,
   expert: ExpertRowMin,
   service: ServiceRowMin,
   booking: BookingRowMin,
-  founderEmail: string | null,
-): Promise<{ url: string; session_id: string; application_fee_cents: number }> {
+  founderUser: TierUser,
+): Promise<{ client_secret: string; payment_intent_id: string; application_fee_cents: number }> {
   if (!env.STRIPE_SECRET_KEY) throw new Error('stripe_not_configured');
   if (!expert.stripe_account_id) throw new Error('expert_connect_missing');
   if (!expert.stripe_charges_enabled) throw new Error('expert_connect_not_ready');
 
   const pct = feePct(env, expert);
   const applicationFeeCents = Math.round(service.price_cents * (pct / 100));
-  const base = appUrl(env);
+  // Card-on-file via the platform customer, matching /api/payments/intent. This
+  // is a destination charge (no on_behalf_of), so the customer + saved card
+  // live on the platform account — no Connect gotcha.
+  const customer = await ensurePaymentsCustomer(env, founderUser);
 
   const params: Record<string, string> = {
-    mode: 'payment',
-    'line_items[0][price_data][currency]': service.currency || 'usd',
-    'line_items[0][price_data][product_data][name]':
-      `${service.title} · ${expert.name}`.slice(0, 250),
-    'line_items[0][price_data][unit_amount]': String(service.price_cents),
-    'line_items[0][quantity]': '1',
-    'payment_intent_data[application_fee_amount]': String(applicationFeeCents),
-    'payment_intent_data[transfer_data][destination]': expert.stripe_account_id,
-    success_url: `${base}/wellbeing?booking=${encodeURIComponent(booking.uid)}&paid=1`,
-    cancel_url: `${base}/wellbeing/expert/${encodeURIComponent(expert.uid)}?cancelled=1`,
+    amount: String(service.price_cents),
+    currency: service.currency || 'usd',
+    customer,
+    'automatic_payment_methods[enabled]': 'true',
+    setup_future_usage: 'off_session',
+    application_fee_amount: String(applicationFeeCents),
+    'transfer_data[destination]': expert.stripe_account_id,
+    description: `${service.title} · ${expert.name}`.slice(0, 500),
     'metadata[kind]': 'expert_booking',
     'metadata[booking_uid]': booking.uid,
     'metadata[booking_id]': String(booking.id),
     'metadata[expert_id]': String(expert.id),
     'metadata[user_id]': String(booking.user_id),
-    client_reference_id: `expert_booking:${booking.uid}`,
   };
-  if (founderEmail) params.customer_email = founderEmail;
 
-  const session = await stripeCall<{ url: string; id: string }>(
-    env, '/checkout/sessions', params,
+  const intent = await stripeCall<{ id: string; client_secret: string }>(
+    env, '/payment_intents', params,
+    { idempotencyKey: `pi:booking:${booking.uid}` },
   );
-  return { url: session.url, session_id: session.id, application_fee_cents: applicationFeeCents };
+  return {
+    client_secret: intent.client_secret,
+    payment_intent_id: intent.id,
+    application_fee_cents: applicationFeeCents,
+  };
 }
 
 /**
- * Webhook fulfilment hook. Called from billing.ts on
- * checkout.session.completed when metadata.kind === 'expert_booking'.
- * Idempotent — re-running on a confirmed booking is a no-op.
+ * Shared booking-confirmation core. Flips the row to confirmed/paid (idempotent
+ * on an already-confirmed booking), mirrors to the calendar and fans out
+ * notifications. Callers map the Stripe object's fields onto these args because
+ * a Checkout Session (`amount_total`, has its own `id`) and a PaymentIntent
+ * (`amount_received`, no session id) carry different shapes.
  */
-export async function confirmBookingFromStripe(
+async function applyBookingConfirmed(
   env: Env,
-  obj: Record<string, unknown>,
+  args: {
+    bookingUid: string | undefined;
+    paymentIntentId: string | null;
+    amount: number | null;
+    currency: string | null;
+    sessionId: string | null;
+  },
 ): Promise<void> {
-  const meta = (obj.metadata as Record<string, string> | undefined) ?? {};
-  const bookingUid = meta.booking_uid;
+  const bookingUid = args.bookingUid;
   if (!bookingUid) return;
-  const paymentIntent = (obj.payment_intent as string | null) ?? null;
-  const amount = Number(obj.amount_total);
-  const currency = (obj.currency as string | null) ?? 'usd';
-  const sessionId = (obj.id as string | null) ?? null;
 
   const row = await env.DB.prepare(
     `SELECT id, uid, expert_id, user_id, service_id, scheduled_at, duration_minutes,
@@ -145,6 +159,7 @@ export async function confirmBookingFromStripe(
   if (row.status === 'confirmed' && row.payment_status === 'paid') return; // idempotent
 
   const meetLink = row.meet_link || jitsiMeet(row.uid);
+  const amount = args.amount != null && Number.isFinite(args.amount) ? args.amount : null;
   await env.DB.prepare(
     `UPDATE expert_bookings
         SET status = 'confirmed',
@@ -156,13 +171,52 @@ export async function confirmBookingFromStripe(
             meet_link = COALESCE(meet_link, ?)
       WHERE uid = ?`,
   ).bind(
-    sessionId, paymentIntent,
-    Number.isFinite(amount) ? amount : null,
-    currency, meetLink, bookingUid,
+    args.sessionId, args.paymentIntentId, amount, args.currency, meetLink, bookingUid,
   ).run();
 
   await mirrorBookingToCalendar(env, row.id);
   await fanoutBookingNotifications(env, row.id, 'confirmed');
+}
+
+/**
+ * Webhook fulfilment hook for the new embedded-terminal path. Called from
+ * billing.ts on `payment_intent.succeeded` when metadata.kind ===
+ * 'expert_booking'. Idempotent — re-running on a confirmed booking is a no-op.
+ */
+export async function confirmBookingFromPaymentIntent(
+  env: Env,
+  pi: Record<string, unknown>,
+): Promise<void> {
+  const meta = (pi.metadata as Record<string, string> | undefined) ?? {};
+  const received = Number(pi.amount_received);
+  const amount = Number.isFinite(received) ? received : Number(pi.amount);
+  await applyBookingConfirmed(env, {
+    bookingUid: meta.booking_uid,
+    paymentIntentId: (pi.id as string | null) ?? null,
+    amount,
+    currency: (pi.currency as string | null) ?? 'usd',
+    sessionId: null,
+  });
+}
+
+/**
+ * Legacy webhook fulfilment hook. Called from billing.ts on
+ * checkout.session.completed when metadata.kind === 'expert_booking' — retained
+ * to settle any Checkout sessions still in flight from before the embedded
+ * terminal migration. Idempotent.
+ */
+export async function confirmBookingFromStripe(
+  env: Env,
+  obj: Record<string, unknown>,
+): Promise<void> {
+  const meta = (obj.metadata as Record<string, string> | undefined) ?? {};
+  await applyBookingConfirmed(env, {
+    bookingUid: meta.booking_uid,
+    paymentIntentId: (obj.payment_intent as string | null) ?? null,
+    amount: Number(obj.amount_total),
+    currency: (obj.currency as string | null) ?? 'usd',
+    sessionId: (obj.id as string | null) ?? null,
+  });
 }
 
 /** Insert / update calendar_events row + trigger G/Outlook sync. */

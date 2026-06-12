@@ -48,8 +48,9 @@ import {
 import { ensureSeededExperts } from '../services/wellbeing/seedExperts';
 import { userMeetsTier, type TierUser } from '../middleware/requireTier';
 import {
-  createBookingCheckout, mirrorBookingToCalendar, fanoutBookingNotifications,
+  createBookingPaymentIntent, mirrorBookingToCalendar, fanoutBookingNotifications,
 } from '../services/wellbeing/bookings';
+import { hasFeatureUnlock } from '../services/featureUnlocks';
 import { stripeCall } from './billing';
 import { clampLimit } from '../util/pagination';
 
@@ -952,13 +953,18 @@ wellbeing.get('/experts/:uid', async (c) => {
     if (!seen) {
       const used = await countMonthlyProfileViews(c.env, user.id);
       if (used >= FREE_TIER_PROFILE_VIEWS_PER_MONTH) {
-        return c.json({
-          error: 'tier_required',
-          required: 'growth',
-          message: `Free tier is capped at ${FREE_TIER_PROFILE_VIEWS_PER_MONTH} matched expert profile views per month. Upgrade to Growth for unlimited matches.`,
-          plan: { tier: 'growth', price_label: '$79 / month' },
-          checkout_path: '/api/billing/tier/checkout',
-        }, 402);
+        // À la carte escape hatch: an active feature unlock bypasses the tier
+        // cap without requiring a Growth subscription (additive — tier OR unlock).
+        const unlocked = await hasFeatureUnlock(c.env, user.id, 'wellbeing_expert_views');
+        if (!unlocked) {
+          return c.json({
+            error: 'tier_required',
+            required: 'growth',
+            message: `Free tier is capped at ${FREE_TIER_PROFILE_VIEWS_PER_MONTH} matched expert profile views per month. Upgrade to Growth for unlimited matches.`,
+            plan: { tier: 'growth', price_label: '$79 / month' },
+            checkout_path: '/api/billing/tier/checkout',
+          }, 402);
+        }
       }
     }
   }
@@ -1139,7 +1145,9 @@ wellbeing.post('/experts/:uid/book', async (c) => {
     return c.json({ detail: 'Booking failed — please try again.' }, 500);
   }
 
-  // Stripe Checkout path. On failure we surface 502; the caller can retry.
+  // Embedded-terminal path: create a PaymentIntent and hand back the
+  // client_secret so the founder pays via Stripe Elements in-app (no Checkout
+  // redirect). On failure we surface 502; the caller can retry.
   if (canChargeStripe && service) {
     try {
       const row = await c.env.DB.prepare(
@@ -1148,7 +1156,7 @@ wellbeing.post('/experts/:uid/book', async (c) => {
                 stripe_session_id, stripe_payment_intent_id, meet_link
            FROM expert_bookings WHERE uid = ? LIMIT 1`,
       ).bind(bookingUid).first<any>();
-      const checkout = await createBookingCheckout(
+      const intent = await createBookingPaymentIntent(
         c.env,
         {
           id: expert.id, uid: expert.uid, user_id: expert.user_id ?? null, name: expert.name,
@@ -1160,22 +1168,23 @@ wellbeing.post('/experts/:uid/book', async (c) => {
           duration_minutes: service.duration_minutes, price_cents: service.price_cents,
           currency: service.currency },
         row,
-        (user as any).email || null,
+        user as TierUser,
       );
       await c.env.DB.prepare(
         `UPDATE expert_bookings
-            SET stripe_session_id = ?, application_fee_cents = ?
+            SET stripe_payment_intent_id = ?, application_fee_cents = ?
           WHERE uid = ?`,
-      ).bind(checkout.session_id, checkout.application_fee_cents, bookingUid).run();
+      ).bind(intent.payment_intent_id, intent.application_fee_cents, bookingUid).run();
       return c.json({
         booking_uid: bookingUid,
-        checkout_url: checkout.url,
+        client_secret: intent.client_secret,
+        payment_intent_id: intent.payment_intent_id,
         status: 'pending_payment',
         amount_cents: service.price_cents,
         currency: service.currency,
       });
     } catch (e: any) {
-      console.warn('[wellbeing] stripe checkout failed:', String(e?.message || e));
+      console.warn('[wellbeing] stripe payment intent failed:', String(e?.message || e));
       await c.env.DB.prepare(`DELETE FROM expert_bookings WHERE uid = ?`).bind(bookingUid).run();
       return c.json({ detail: 'Payment setup failed. Please try again.' }, 502);
     }

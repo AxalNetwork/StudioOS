@@ -1606,6 +1606,15 @@ export const api = {
   // Response: { kind:'subscription'|'payment', client_secret, ... }
   paymentIntent: (body) =>
     request('/payments/intent', { method: 'POST', body: JSON.stringify(body || {}) }),
+  // Task #7 — à la carte feature unlock. Creates a one-time PaymentIntent for a
+  // SKU with metadata.kind='alacarte'; on success the webhook grants the
+  // feature_unlock the product's metadata.feature_key maps to. Body:
+  //   { price_id, nonce? } → { kind:'payment', client_secret, payment_intent_id, ... }
+  alacarteIntent: (body) =>
+    request('/payments/alacarte/intent', { method: 'POST', body: JSON.stringify(body || {}) }),
+  // The caller's active (non-expired) feature unlocks:
+  //   → { unlocks: [{ feature_key, expires_at }] }
+  alacarteUnlocks: () => request('/payments/alacarte/unlocks'),
   // Mirrored Stripe catalog (read). `kind` filters: subscription | incorporation
   // | session | alacarte. Returns { products: [{ id, name, kind, prices: [...] }] }.
   catalogProducts: (kind) =>

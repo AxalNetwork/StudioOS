@@ -350,6 +350,24 @@ export async function findCatalogPriceById(
 }
 
 /**
+ * Lookup the product (carrying `kind` + `metadata`) that owns a given Stripe
+ * price id, alongside the matched price. Used by the à la carte purchase path
+ * to read `metadata.feature_key` / `metadata.unlock_days` and assert the SKU is
+ * actually an `alacarte` product. Returns `null` when the price isn't mirrored.
+ */
+export async function findCatalogProductByPriceId(
+  env: Env,
+  priceId: string,
+): Promise<{ product: CatalogProduct; price: CatalogPrice } | null> {
+  const products = await getCatalog(env);
+  for (const product of products) {
+    const price = product.prices.find((pr) => pr.id === priceId);
+    if (price) return { product, price };
+  }
+  return null;
+}
+
+/**
  * Plan-keyed price lookup. Resolves the active product whose Stripe metadata
  * carries `metaKey === metaValue`, then returns its price for the requested
  * recurring `interval` ('month' | 'year' | ...). This is how the subscription

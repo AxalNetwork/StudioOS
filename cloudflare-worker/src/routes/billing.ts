@@ -780,6 +780,32 @@ async function handleStripeEvent(
       }
       return;
     }
+    case 'payment_intent.succeeded': {
+      // Task #7 — embedded-terminal fulfilment. Dispatch STRICTLY on
+      // metadata.kind: generic PaymentIntents (no kind) are a no-op, and legacy
+      // Checkout-session bookings carry metadata on the SESSION (not the PI), so
+      // their PaymentIntent lacks `kind` and won't double-fulfil here.
+      if (meta.kind === 'expert_booking') {
+        const { confirmBookingFromPaymentIntent } = await import('../services/wellbeing/bookings');
+        await confirmBookingFromPaymentIntent(env, obj);
+        return;
+      }
+      if (meta.kind === 'alacarte') {
+        const featureKey = (meta.feature_key || '').trim();
+        const userId = Number(meta.user_id);
+        const piId = (obj.id as string | null) ?? null;
+        if (!featureKey || !userId || !piId) return;
+        const { writeFeatureUnlock } = await import('../services/featureUnlocks');
+        await writeFeatureUnlock(env, {
+          userId,
+          featureKey,
+          paymentIntentId: piId,
+          unlockDays: Number(meta.unlock_days),
+        });
+        return;
+      }
+      return;
+    }
     default:
       return;
   }

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Star, Globe, Calendar, ExternalLink, FileText, ArrowLeft, Shield } from 'lucide-react';
 import { api } from '../lib/api';
+import AxalCheckout from '../components/AxalCheckout';
 
 function StarRow({ value }) {
   const v = Math.round((Number(value) || 0) * 2) / 2;
@@ -22,6 +23,7 @@ export default function ExpertProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [bookingState, setBookingState] = useState({ status: 'idle', message: '' });
+  const [payIntent, setPayIntent] = useState(null);
   const [selectedService, setSelectedService] = useState(null);
   const [bookerNote, setBookerNote] = useState('');
 
@@ -49,13 +51,22 @@ export default function ExpertProfilePage() {
   async function handleBook() {
     if (!expert) return;
     setBookingState({ status: 'pending', message: '' });
+    setPayIntent(null);
     try {
       const data = {};
       if (selectedService) data.service_uid = selectedService;
       if (bookerNote.trim()) data.booker_note = bookerNote.trim().slice(0, 1000);
       const res = await api.wellbeingExpertBook(expert.uid, data);
-      if (res?.checkout_url) {
-        window.location.href = res.checkout_url;
+      if (res?.client_secret) {
+        // Paid session — pay inline via the embedded Axal terminal (no redirect
+        // to Stripe). The Connect destination transfer to the expert is baked
+        // into the server-created PaymentIntent.
+        setPayIntent({
+          clientSecret: res.client_secret,
+          amountCents: res.amount_cents,
+          currency: res.currency,
+        });
+        setBookingState({ status: 'pay', message: '' });
         return;
       }
       setBookingState({ status: 'ok', message: res?.message || 'Booking submitted.' });
@@ -247,18 +258,45 @@ export default function ExpertProfilePage() {
             <div className="mt-3 flex items-center justify-between flex-wrap gap-2">
               <div className="text-xs text-slate-500 dark:text-slate-400">
                 {acceptsPayments
-                  ? 'Paid sessions use secure Stripe checkout. A 15% platform fee is applied.'
+                  ? 'Paid sessions are charged securely in-app via Stripe — you never leave Axal. A 15% platform fee is applied.'
                   : 'Free intro or external scheduler — no payment required here.'}
               </div>
-              <button
-                onClick={handleBook}
-                disabled={bookingState.status === 'pending'}
-                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {bookingState.status === 'pending' ? 'Working…' : 'Book this expert'}
-                <ExternalLink size={14} />
-              </button>
+              {bookingState.status !== 'pay' && (
+                <button
+                  onClick={handleBook}
+                  disabled={bookingState.status === 'pending'}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {bookingState.status === 'pending' ? 'Working…' : 'Book this expert'}
+                  <ExternalLink size={14} />
+                </button>
+              )}
             </div>
+
+            {bookingState.status === 'pay' && payIntent && (
+              <div className="mt-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                <div className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-200">
+                  {payIntent.amountCents != null
+                    ? `Complete payment · ${(payIntent.amountCents / 100).toLocaleString(undefined, { style: 'currency', currency: (payIntent.currency || 'usd').toUpperCase() })}`
+                    : 'Complete payment'}
+                </div>
+                <AxalCheckout
+                  clientSecret={payIntent.clientSecret}
+                  submitLabel={payIntent.amountCents != null
+                    ? `Pay ${(payIntent.amountCents / 100).toLocaleString(undefined, { style: 'currency', currency: (payIntent.currency || 'usd').toUpperCase() })}`
+                    : 'Pay now'}
+                  onSuccess={() => {
+                    setPayIntent(null);
+                    setBookingState({
+                      status: 'ok',
+                      message: 'Payment successful — your session is confirmed. Check your email for the meeting link.',
+                    });
+                  }}
+                  onError={(err) => setBookingState({ status: 'err', message: err?.message || 'Payment failed. Please try again.' })}
+                />
+              </div>
+            )}
+
             {bookingState.message && (
               <div className={`mt-3 text-sm ${bookingState.status === 'err' ? 'text-red-600' : 'text-emerald-700'}`}>
                 {bookingState.message}
