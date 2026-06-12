@@ -33,6 +33,14 @@ export function wordsAndMinutes(md: string): { words: number; minutes: number } 
   return { words, minutes: Math.max(1, Math.round(words / 220)) };
 }
 
+// Inline-image filenames are minted by POST /api/articles/:id/image as
+// `img-<uuid>.<ext>`. The GET serving route validates the path segment against
+// this exact shape so a crafted filename can't escape the article's R2 prefix
+// (the integer :id + this anchored pattern together block path traversal).
+export function isValidArticleImageName(name: string): boolean {
+  return typeof name === 'string' && /^img-[0-9a-f-]+\.(jpg|png|webp|gif)$/i.test(name);
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -49,11 +57,15 @@ function inline(s: string): string {
   let out = s;
   out = out.replace(/`([^`]+)`/g, (_, code) => `<code>${code}</code>`);
   out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, url) => {
-    if (!/^https?:\/\//i.test(url)) return '';
+    // Allow absolute http(s) OR root-relative ("/api/articles/:id/image/…")
+    // URLs only. The (?!\/) guard rejects protocol-relative "//evil.com".
+    if (!/^https?:\/\//i.test(url) && !/^\/(?!\/)/.test(url)) return '';
     return `<img alt="${alt}" src="${url}" loading="lazy" />`;
   });
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, text, url) => {
-    if (!/^https?:\/\//i.test(url) && !url.startsWith('/')) return text;
+    // Same URL policy as images — the (?!\/) closes the protocol-relative
+    // ("//evil.com") bypass that a bare startsWith('/') previously allowed.
+    if (!/^https?:\/\//i.test(url) && !/^\/(?!\/)/.test(url)) return text;
     return `<a href="${url}" rel="noopener nofollow" target="_blank">${text}</a>`;
   });
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -197,6 +209,21 @@ export async function bustArticleEdgeCache(env: Env, slug: string, id: number, a
     await cache.delete(new Request(`${base}/api/news`));
     await cache.delete(new Request(`${base}/api/news/${slug}`));
     await cache.delete(new Request(`${base}/api/news/cover/${id}`));
+    // Inline body images are cached per-file at /api/articles/:id/image/:name.
+    // Their filenames can't be derived from the slug, so list the article's R2
+    // prefix and purge each image's edge key. Best-effort + bounded; combined
+    // with the short image TTL this stops retracted content lingering public.
+    try {
+      const listed = await env.FILES?.list?.({ prefix: `articles/${id}/` });
+      for (const obj of listed?.objects || []) {
+        const fname = obj.key.split('/').pop();
+        if (fname && fname.startsWith('img-')) {
+          await cache.delete(new Request(`${base}/api/articles/${id}/image/${fname}`));
+        }
+      }
+    } catch (e) {
+      console.warn('[newsRender] image cache purge failed:', (e as Error).message);
+    }
     if (authorUserId) {
       await cache.delete(new Request(`${base}/api/articles/by-author/${authorUserId}`));
     }
