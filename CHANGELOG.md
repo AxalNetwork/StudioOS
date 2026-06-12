@@ -10,6 +10,17 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Personal-Values Assessment (Task #12)
+
+- `cloudflare-worker/sql/migrations/094_user_values.sql`: new table `user_values` (user_id, dimension_id, score, confidence, updated_at) with `idx_user_values_user` index.
+- `cloudflare-worker/src/services/skillsTaxonomySchema.ts`: lazy bootstrap `user_values` CREATE TABLE + index on cold path (self-healing pattern).
+- `cloudflare-worker/src/routes/values.ts`: Hono route at `/api/values` with `GET /survey` (paired-statement questionnaire), `POST /submit` (deterministic vector scoring + upsert), `GET /me` (vector + plain-English summary). 90-day retake window enforced server-side.
+- `cloudflare-worker/src/index.ts`: import and mount `valuesRoutes` at `/api/values`.
+- `frontend/src/lib/api.js`: `api.values.getSurvey()`, `api.values.submit()`, `api.values.getMe()`.
+- `frontend/src/pages/ValuesAssessmentPage.jsx`: survey UI with 5-step slider, progress bar, results summary (top 3 + secondary), full vector view, 90-day retake gate.
+- `frontend/src/App.jsx`: route `/values` (auth-gated, all roles).
+- `frontend/src/sidebarConfig.js`: "Values Assessment" entry added under Account group for all roles.
+
 ## Author Dashboard & Public Profile (Task #5)
 
 Authors get a personal "My Articles" dashboard with status, view counts, and edit links. Reader pages now show author profiles and an Edit button when the viewer is the author or an admin.

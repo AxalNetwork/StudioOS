@@ -2036,6 +2036,14 @@ export const api = {
     getMyAggregate: () => request('/skills/me/aggregate'),
     getUserAggregate: (userId) => request(`/skills/users/${userId}/aggregate`),
   },
+
+  // Task #12 — Personal-Values Assessment. Worker-only (dev FastAPI lacks /api/values).
+  values: {
+    getSurvey: () => request('/values/survey'),
+    submit: (responses) =>
+      request('/values/submit', { method: 'POST', body: JSON.stringify({ responses }) }),
+    getMe: () => request('/values/me'),
+  },
 };
 
 // Task #3 — Due Diligence module. Admin/partner/investor/mentor only;

@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your personal values
+
+A new "Values Assessment" under the Account menu lets you answer a short paired-statement survey (about 25 questions) that captures what drives you across 15 dimensions. After completing it, you receive a summary of your top 3 dominant values plus a secondary one. Your results feed into future matching features so you can find founders, partners, and investors who share your priorities. You can retake the survey every 90 days.
+
+---
+
 ## Your author dashboard
 
 Every article you write now has a home page. In **My Articles** you can see every draft, submission, and published piece in one list, with badges showing its status (Draft, In Review, Changes Requested, etc.), when you last updated it, how many words it has, and how many times it has been read. Published articles get a quick "View live" link and an Edit button so you can fix a typo without hunting around.

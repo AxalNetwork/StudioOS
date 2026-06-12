@@ -101,6 +101,16 @@ export async function ensureSkillsTaxonomySchema(env: Env): Promise<void> {
       )`),
       env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_value_dimensions_family
         ON value_dimensions (family, display_order)`),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS user_values (
+        user_id     INTEGER NOT NULL,
+        dimension_id INTEGER NOT NULL,
+        score       REAL NOT NULL,
+        confidence  REAL NOT NULL,
+        updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (user_id, dimension_id)
+      )`),
+      env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_user_values_user
+        ON user_values (user_id, updated_at)`),
     ]);
     _ready = true;
   } catch (err) {

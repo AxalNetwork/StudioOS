@@ -154,6 +154,7 @@ import complianceRoutes from './routes/compliance';
 import captableRoutes from './routes/captable';
 import cofounderRoutes from './routes/cofounder';
 import skillsRoutes from './routes/skills';
+import valuesRoutes from './routes/values';
 import spinoutLabRoutes from './routes/spinout_lab';
 // T13/T14/T15 — port of FastAPI mentors/partner_office_hours/watchlist/journal/
 // portfolio_health/references/comarketing/company/needs/insights routers.
@@ -626,6 +627,8 @@ app.route('/api/cofounder', cofounderRoutes);
 // Task #11 — User Skill Profile (self ratings + connection-gated endorsements
 // + blended aggregate + cacheable taxonomy). Reuses cofounder_connections.
 app.route('/api/skills', skillsRoutes);
+// Task #12 — Personal-Values Assessment (survey, submit, vector + summary).
+app.route('/api/values', valuesRoutes);
 // Spin-Out Lab — guided 4-week sprint for pre-incorporation founders.
 app.route('/api/spinout-lab', spinoutLabRoutes);
 // T13 — Mentors + Partner Office Hours.
