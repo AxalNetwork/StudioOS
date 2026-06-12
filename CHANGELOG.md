@@ -17,8 +17,11 @@
 - `backend/app/models/entities.py`: added `accepting_intros: int = 1` to `Partner` model.
 - `backend/app/schemas/scoring.py`: added `intent` field to `MatchPartnersRequest`.
 - `backend/app/api/routes/partners.py`: updated `recommend_partners` and `match_partners` to filter `accepting_intros == 1`. Added `POST /match` intent-scoped endpoint (keyword-only fallback; no radar in dev).
-- `frontend/src/lib/api.js`: added `api.matchPartners(intent)`.
+- `frontend/src/lib/api.js`: added `api.matchPartners(intent)` and `api.partnerPortal.setAcceptingIntros(value)`.
 - `frontend/src/pages/PartnersPage.jsx`: added intent dropdown (8 radar axes) alongside the existing sector search. Displays ranked results with per-component score breakdowns and reasons. Intent selection clears sector input and vice versa.
+- `cloudflare-worker/src/routes/partner_portal.ts`: `GET /my-deal` now returns `partner` (id, accepting_intros) so the portal UI can render the opt-out toggle. Added `PATCH /accepting-intros` so partners can toggle their own availability.
+- `backend/app/api/routes/partners.py`: added `PATCH /{partner_id}/accepting-intros` for backend parity.
+- `frontend/src/pages/PartnerDealPortal.jsx`: added availability toggle card with `Toggle` component. Partners can opt out/in of introductions in real time.
 
 ## Radar / Spider-Graph Service (Task #13)
 

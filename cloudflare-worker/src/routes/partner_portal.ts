@@ -145,13 +145,30 @@ portal.get('/my-deal', async (c) => {
     });
   }
 
+  // Partner profile state (accepting_intros) for the opt-out toggle.
+  const partnerRow: any = await c.env.DB.prepare(
+    `SELECT id, accepting_intros FROM partners WHERE id = (SELECT partner_id FROM users WHERE id = ?)`
+  ).bind(user.id).first();
+
   return c.json({
     deal: { ...deal, proposal: safeJsonObject(deal.proposal_json), proposal_json: undefined },
     redemptions_count: redemptionsCount,
     redemptions: redemptions.results || [],
     revshare_attribution_days: isRevshare ? ATTRIBUTION_DAYS : null,
     next_milestones: milestones,
+    partner: partnerRow ? { id: partnerRow.id, accepting_intros: partnerRow.accepting_intros } : null,
   });
+});
+
+portal.patch('/accepting-intros', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json();
+  const value = body.accepting_intros === true || body.accepting_intros === 1 ? 1 : 0;
+  const row: any = await c.env.DB.prepare(
+    `UPDATE partners SET accepting_intros = ? WHERE id = (SELECT partner_id FROM users WHERE id = ?) RETURNING id, accepting_intros`,
+  ).bind(value, user.id).first();
+  if (!row) return c.json({ error: 'Partner not found' }, 404);
+  return c.json({ partner_id: row.id, accepting_intros: row.accepting_intros });
 });
 
 export default portal;

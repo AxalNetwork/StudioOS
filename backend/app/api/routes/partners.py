@@ -20,6 +20,20 @@ def _partner_dto(p: Partner, viewer: User) -> dict:
     return data
 
 
+@router.patch("/{partner_id}/accepting-intros")
+def update_accepting_intros(partner_id: int, data: dict, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    partner = session.get(Partner, partner_id)
+    if not partner:
+        raise HTTPException(status_code=404, detail="Partner not found")
+    if not can_view_personal_contact(user, subject_partner_id=partner.id):
+        raise HTTPException(status_code=403, detail="Not allowed")
+    partner.accepting_intros = 1 if data.get("accepting_intros", True) in (1, True) else 0
+    session.add(partner)
+    session.commit()
+    session.refresh(partner)
+    return _partner_dto(partner, user)
+
+
 @router.get("/")
 def list_partners(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     rows = session.exec(select(Partner).order_by(Partner.created_at.desc())).all()

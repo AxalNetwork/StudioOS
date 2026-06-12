@@ -509,6 +509,7 @@ export const api = {
   // Task #9 (X-2) — Authenticated partner deal portal.
   partnerPortal: {
     myDeal: () => request('/partner-portal/my-deal'),
+    setAcceptingIntros: (value) => request('/partner-portal/accepting-intros', { method: 'PATCH', body: JSON.stringify({ accepting_intros: value }) }),
   },
 
   // Task #10 (AC-1) — Personal advisor (dashboard chatbot + write-router).

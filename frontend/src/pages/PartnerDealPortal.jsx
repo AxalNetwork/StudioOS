@@ -234,6 +234,30 @@ export default function PartnerDealPortal() {
               </div>
             </Card>
           )}
+
+          {/* Task #15 — Partner opt-out toggle */}
+          {data.partner && (
+            <Card title="Availability" icon={<Users size={15} className="text-violet-600" />}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm">
+                  <div className="font-medium text-gray-900 dark:text-gray-100">Accept new introductions</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">Founders can request a match when this is on</div>
+                </div>
+                <Toggle
+                  checked={data.partner.accepting_intros === 1}
+                  onChange={async (val) => {
+                    try {
+                      await api.partnerPortal.setAcceptingIntros(val);
+                      setData((prev) => ({ ...prev, partner: { ...prev.partner, accepting_intros: val ? 1 : 0 } }));
+                      showToast({ kind: 'success', msg: val ? 'Open to introductions' : 'Not accepting introductions' });
+                    } catch (e) {
+                      showToast({ kind: 'error', msg: 'Update failed' });
+                    }
+                  }}
+                />
+              </div>
+            </Card>
+          )}
         </div>
       </div>
 
@@ -245,6 +269,26 @@ export default function PartnerDealPortal() {
         </div>
       )}
     </div>
+  );
+}
+
+function Toggle({ checked, onChange }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
+        checked ? 'bg-violet-600' : 'bg-gray-300 dark:bg-gray-700'
+      }`}
+    >
+      <span
+        className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform translate-y-1 ${
+          checked ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </button>
   );
 }
 
