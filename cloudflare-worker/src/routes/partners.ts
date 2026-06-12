@@ -95,24 +95,36 @@ partners.post('/referral/:code/use', async (c) => {
 });
 
 partners.get('/matchmaking/recommend', async (c) => {
-  await requireAuth(c);
+  const me = await requireAuth(c);
   const sector = c.req.query('sector');
   const sql = getSQL(c.env);
   const rows = sector
-    ? await sql`SELECT * FROM partners WHERE status = 'active' AND accepting_intros = 1 AND specialization LIKE ${'%' + sector + '%'}`
-    : await sql`SELECT * FROM partners WHERE status = 'active' AND accepting_intros = 1`;
+    ? await sql`SELECT p.*, u.id AS user_id FROM partners p LEFT JOIN users u ON u.partner_id = p.id WHERE p.status = 'active' AND p.accepting_intros = 1 AND p.specialization LIKE ${'%' + sector + '%'}`
+    : await sql`SELECT p.*, u.id AS user_id FROM partners p LEFT JOIN users u ON u.partner_id = p.id WHERE p.status = 'active' AND p.accepting_intros = 1`;
   await sql.end();
-  return c.json({ matches: rows, count: rows.length });
+  // Task #19 — hard consent filter: drop linked-user partners not opted into
+  // matching; keep directory-only partners (no linked user). Strip the joined
+  // user_id so the response shape is unchanged.
+  const optedIn = await filterOptedInUserIds(c.env, (rows as any[]).map((r) => Number(r.user_id)));
+  const matches = (rows as any[])
+    .filter((r) => !r.user_id || optedIn.has(Number(r.user_id)))
+    .map(({ user_id, ...rest }: any) => rest);
+  await logMatchListGeneration(c.env, me as any, 'partner_matchmaking_recommend', { result_count: matches.length });
+  return c.json({ matches, count: matches.length });
 });
 
 partners.post('/matchPartners', async (c) => {
-  await requireAuth(c);
+  const me = await requireAuth(c);
   const data = await c.req.json();
   const sql = getSQL(c.env);
-  const allPartners = await sql`SELECT * FROM partners WHERE status = 'active' AND accepting_intros = 1`;
+  const allPartners = await sql`SELECT p.*, u.id AS user_id FROM partners p LEFT JOIN users u ON u.partner_id = p.id WHERE p.status = 'active' AND p.accepting_intros = 1`;
   await sql.end();
 
-  const ranked = allPartners.map((p: any) => {
+  // Task #19 — hard consent filter (see /matchmaking/recommend above).
+  const optedIn = await filterOptedInUserIds(c.env, (allPartners as any[]).map((p) => Number(p.user_id)));
+  const visiblePartners = (allPartners as any[]).filter((p) => !p.user_id || optedIn.has(Number(p.user_id)));
+
+  const ranked = visiblePartners.map((p: any) => {
     let score = 10;
     const reasons: string[] = [];
     if (data.sector && p.specialization) {
@@ -127,6 +139,9 @@ partners.post('/matchPartners', async (c) => {
     if (p.referrals_count > 0) { score += Math.min(p.referrals_count * 5, 20); reasons.push(`Referral track record: ${p.referrals_count}`); }
     return { partner_id: p.id, name: p.name, company: p.company, specialization: p.specialization, match_score: Math.min(score, 100), reasons, referral_code: p.referral_code };
   }).sort((a: any, b: any) => b.match_score - a.match_score);
+
+  // Task #19 — audit when an admin generates this partner match list (no-op otherwise).
+  await logMatchListGeneration(c.env, me as any, 'partner_match_legacy', { result_count: ranked.length });
 
   return c.json({ startup_id: data.startup_id, matches: ranked, total_matched: ranked.length });
 });

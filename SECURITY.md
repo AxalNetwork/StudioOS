@@ -142,11 +142,10 @@ are keyed on the taxonomy version, so a taxonomy change invalidates them
 on the next request.
 
 **Sharing.** Match lists are visible only to the requesting member
-(their own matches) and to admins. When an admin generates a
-cross-member match list, we write an audit-log entry
-(`activity_logs`, action `match_list_generated`) recording the actor,
-the kind of list, and the result count. Founder/member self-service
-match requests are not audited.
+(their own matches) and to admins. Every match-list endpoint records an
+audit-log entry (`activity_logs`, action `match_list_generated`) when
+the caller is an admin — capturing the actor, the kind of list, and the
+result count. Member self-service match requests are not audited.
 
 **Retention.** Consent preferences and taxonomy stamps persist with the
 member's profile and are removed on account deletion. Cached radars
