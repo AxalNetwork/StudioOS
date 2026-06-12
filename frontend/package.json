@@ -13,6 +13,8 @@
     "@react-pdf/renderer": "^4.5.1",
     "@replit/connectors-sdk": "^0.4.1",
     "@simplewebauthn/browser": "^13.3.0",
+    "@stripe/react-stripe-js": "^3.10.0",
+    "@stripe/stripe-js": "^7.9.0",
     "framer-motion": "^12.40.0",
     "fuse.js": "^7.4.2",
     "html2canvas": "^1.4.1",
@@ -24,9 +26,9 @@
     "react-is": "^19.2.7",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.17.0",
-    "remark-gfm": "^4.0.1",
     "react-window": "^2.2.7",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

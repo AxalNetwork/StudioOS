@@ -16,6 +16,8 @@ import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadg
 import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
 // Task #8 (IH) — Data Imports tab (Settings → Data Imports).
 import DataImportsTab from '../components/DataImportsTab';
+// Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
+import AxalCheckout from '../components/AxalCheckout';
 
 // Task #4 (Y-2) — small reusable trust score on the profile surface so
 // the user can see their compliance posture without bouncing to the
@@ -3334,7 +3336,100 @@ function FounderBillingPanel({ data, flash }) {
           Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
         </div>
       </Card>
+
+      <EmbeddedCheckoutCard flash={flash} onPaid={() => api.tierStatus().then(setStatus).catch(() => {})} />
     </>
+  );
+}
+
+// Task #4 — Axal-branded embedded checkout, rendered inside Settings → Billing.
+// Lists the mirrored Stripe subscription catalog and lets the user pay inline
+// with Stripe Elements (no redirect to checkout.stripe.com). Works for any
+// price id returned by the catalog. Hidden entirely when payments aren't
+// configured (no publishable key) or the catalog is empty.
+function EmbeddedCheckoutCard({ flash, onPaid }) {
+  const [prices, setPrices] = useState(null); // null = loading, [] = none
+  const [selected, setSelected] = useState(null); // { id, label }
+
+  useEffect(() => {
+    let cancelled = false;
+    api.catalogProducts('subscription')
+      .then((res) => {
+        if (cancelled) return;
+        const list = [];
+        for (const p of res?.products || []) {
+          for (const pr of p.prices || []) {
+            if (pr.active === false) continue;
+            list.push({
+              id: pr.id,
+              product: p.name,
+              amount: pr.unit_amount,
+              currency: pr.currency,
+              interval: pr.interval || (pr.type === 'recurring' ? 'mo' : null),
+              nickname: pr.nickname,
+            });
+          }
+        }
+        setPrices(list);
+      })
+      .catch(() => { if (!cancelled) setPrices([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) return null;
+  if (prices == null) {
+    return (
+      <Card title="Pay by card" description="Upgrade without leaving Axal.">
+        <div className="text-sm text-gray-500 dark:text-gray-400">Loading plans…</div>
+      </Card>
+    );
+  }
+  if (prices.length === 0) return null;
+
+  const fmt = (amt, cur) =>
+    amt == null ? '—' : new Intl.NumberFormat(undefined, { style: 'currency', currency: (cur || 'usd').toUpperCase() }).format(amt / 100);
+
+  return (
+    <Card title="Pay by card" description="Complete your upgrade inline — no redirect to Stripe.">
+      {!selected ? (
+        <div className="space-y-2">
+          {prices.map((pr) => (
+            <div key={pr.id}
+              className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+              <div>
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{pr.product}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  {fmt(pr.amount, pr.currency)}{pr.interval ? ` / ${pr.interval}` : ''}
+                  {pr.nickname ? ` · ${pr.nickname}` : ''}
+                </div>
+              </div>
+              <button type="button"
+                onClick={() => setSelected({ id: pr.id, label: `${pr.product} — ${fmt(pr.amount, pr.currency)}` })}
+                className="px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium">
+                Select
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{selected.label}</div>
+            <button type="button" onClick={() => setSelected(null)}
+              className="text-xs text-gray-500 dark:text-gray-400 hover:underline">
+              Change plan
+            </button>
+          </div>
+          <AxalCheckout
+            priceId={selected.id}
+            submitLabel="Subscribe"
+            description={selected.label}
+            onSuccess={() => { flash?.('Payment successful — your plan is being activated.'); onPaid?.(); }}
+            onError={(e) => flash?.(e?.message || 'Payment failed', 'error')}
+          />
+        </div>
+      )}
+    </Card>
   );
 }
 

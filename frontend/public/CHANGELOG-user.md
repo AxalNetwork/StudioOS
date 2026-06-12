@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Pay for upgrades without leaving Axal
+
+You can now complete an upgrade right inside **Settings → Billing**. A new **Pay by card** section lets you pick a plan and enter your card on an Axal-branded form — no more jumping out to a separate Stripe page. It matches the app's light and dark themes, and if your bank asks for extra verification, that step appears right there in the same window. Your card details are handled securely by Stripe and never touch Axal's servers.
+
+---
+
 ## Download the Portfolio Coverage heatmap as a PDF
 
 The **Portfolio Coverage** dashboard now has an **Export PDF** button next to Export CSV. It produces a print-ready, colour-coded version of the heatmap — every company with its score in each skill area, gap markers, flagged companies highlighted, and the portfolio-average row at the bottom — that looks just like what's on screen. Like the CSV, it matches your selected fund and current sort. It's ideal for dropping into LP updates and partner-meeting decks where a clean, branded page reads better than a spreadsheet.

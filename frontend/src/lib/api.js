@@ -1597,6 +1597,20 @@ export const api = {
     request('/billing/tier/checkout', { method: 'POST', body: JSON.stringify({ tier }) }),
   tierPortal: () => request('/billing/tier/portal', { method: 'POST' }),
 
+  // ---------- Task #4 — Axal-branded embedded checkout (Stripe Elements) ----------
+  // Server creates a PaymentIntent / incomplete Subscription and hands back a
+  // `client_secret`; the SPA confirms the card in-app via Stripe Elements so
+  // the user never leaves for checkout.stripe.com. Shapes:
+  //   { price_id, quantity?, nonce?, description? }  → price-driven (sub or one-time)
+  //   { amount, currency?, quantity?, nonce?, description? } → ad-hoc one-time charge
+  // Response: { kind:'subscription'|'payment', client_secret, ... }
+  paymentIntent: (body) =>
+    request('/payments/intent', { method: 'POST', body: JSON.stringify(body || {}) }),
+  // Mirrored Stripe catalog (read). `kind` filters: subscription | incorporation
+  // | session | alacarte. Returns { products: [{ id, name, kind, prices: [...] }] }.
+  catalogProducts: (kind) =>
+    request(`/catalog/products${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`),
+
   // ---------- Task #7 (W-2) — Investor paywall (3-tier: free / pro / inst) ----------
   // Mirrors `/api/billing/investor/*` + `/api/investor-seats/*` +
   // `/api/introductions/quota`. The 402 `{required, message, …}` shape from

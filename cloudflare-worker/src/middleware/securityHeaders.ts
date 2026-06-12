@@ -75,13 +75,21 @@ export function securityHeadersMiddleware() {
     // the modern OWASP-recommended pattern. `'unsafe-inline'` is included as
     // a fallback ONLY for browsers that don't understand nonces; nonce-aware
     // browsers ignore it (CSP3 §6.6.2.5).
+    // Task #4 — Stripe embedded checkout (Stripe Elements). The Payment Element
+    // loads `js.stripe.com` (script + iframe) and renders 3DS / SCA challenges in
+    // `*.stripe.network` + `hooks.stripe.com` iframes. `script-src` already
+    // permits `https:` (so js.stripe.com is covered), but we name it explicitly
+    // for clarity; `connect-src` already allows `api.stripe.com`. We ADD a
+    // `frame-src` directive (none existed before) for the Stripe iframes — this
+    // does not weaken any existing directive.
     h.set(
       'Content-Security-Policy',
       `default-src 'self'; ` +
-        `script-src 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline' https:; ` +
+        `script-src 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline' https: https://js.stripe.com; ` +
         `style-src 'self' 'unsafe-inline'; ` +
         `img-src 'self' data: https:; ` +
         `connect-src 'self' https://axal.vc https://app.axal.vc https://www.axal.vc https://api.stripe.com https://*.cloudflareaccess.com; ` +
+        `frame-src https://js.stripe.com https://hooks.stripe.com https://*.stripe.network; ` +
         `frame-ancestors 'none'; ` +
         `base-uri 'self'; ` +
         `form-action 'self'; ` +

@@ -10,6 +10,16 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Axal-branded embedded checkout component (Task #4)
+
+- `frontend/package.json`: added `@stripe/stripe-js` + `@stripe/react-stripe-js` (browser Elements libraries).
+- `frontend/src/lib/stripe.js`: new. `getStripe()` memoises a single `loadStripe(VITE_STRIPE_PUBLISHABLE_KEY)` promise (returns `null` when the publishable key is unset so callers can render a graceful "not configured" state). `buildAppearance(isDark)` produces a Stripe Elements `appearance` object read live from Axal's CSS variables (`--color-brand`, `--app-input-bg/-text/-border`, `--app-text-muted`) so the Payment Element matches Settings light/dark. Stripe only reads `appearance` at Elements creation, so callers must re-mount on theme flip.
+- `frontend/src/components/AxalCheckout.jsx`: new reusable embedded-checkout component. Accepts `priceId` (recurring → subscription, one-time → charge) OR ad-hoc `amount`/`currency`, plus `quantity`/`description`/`submitLabel`/`onSuccess`/`onError`. Fetches a `client_secret` from `POST /api/payments/intent` (stable per-mount `nonce` so retries reuse the server idempotency key), mounts `<Elements>` keyed on `clientSecret:theme`, renders `<PaymentElement>` with a loading skeleton (`CheckoutSkeleton`, mirrors the final layout), and confirms via `stripe.confirmPayment({ redirect: 'if_required' })` so 3DS/SCA challenges surface inline (no redirect to checkout.stripe.com). `elements.submit()` validates first; success/processing/requires_capture fire `onSuccess`, terminal errors fire `onError`. Card data only ever lives inside Stripe Elements (PCI SAQ A).
+- `frontend/src/lib/api.js`: added `paymentIntent(body)` (`POST /payments/intent`) and `catalogProducts(kind)` (`GET /catalog/products?kind=`).
+- `frontend/src/pages/SettingsPage.jsx`: `FounderBillingPanel` now renders a new `EmbeddedCheckoutCard` ("Pay by card") below the Plans card. It lists the mirrored Stripe `subscription` catalog (active prices) and lets the user pay inline with `<AxalCheckout>` for the selected price id — no redirect. Self-hides when `VITE_STRIPE_PUBLISHABLE_KEY` is unset or the catalog is empty; on success it flashes and refreshes tier status.
+- `cloudflare-worker/src/middleware/securityHeaders.ts`: CSP now names `https://js.stripe.com` in `script-src` and adds a new `frame-src https://js.stripe.com https://hooks.stripe.com https://*.stripe.network` directive for the Stripe Payment Element + 3DS challenge iframes. `connect-src` already allowed `api.stripe.com`; no existing directive was weakened.
+- `frontend/.env.example`: documented `VITE_STRIPE_PUBLISHABLE_KEY` (public key; secret stays on the Worker).
+
 ## Refactor subscription checkout to use the catalog
 
 - `cloudflare-worker/src/services/catalog.ts`: new `priceForPlanMetadata(env, metaKey, metaValue, interval?)` — resolves the active `stripe_products` row whose Stripe `metadata[metaKey] === metaValue`, then returns its price for the requested recurring `interval`. `interval` accepts a string ('month'|'year') for an exact match, `null` for a one-time price, or `undefined` to take the product's single recurring price (used by the founder tiers whose plan key doesn't encode an interval). Returns `null` when nothing matches (callers treat that like an unconfigured price).
