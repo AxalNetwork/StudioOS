@@ -10,6 +10,16 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Partner Matching (Task #15)
+
+- `cloudflare-worker/sql/migrations/095_partner_accepting_intros.sql`: adds `accepting_intros` column to `partners` (default 1) + composite index on `(accepting_intros, status)`. Also updated `cloudflare-worker/sql/schema.sql`.
+- `cloudflare-worker/src/routes/partners.ts`: new `POST /api/partners/match` endpoint. Intent-scoped matching with weights: domain_fit (0.50), track_record (0.25), values_alignment (0.15), availability_capacity (0.10). Domain fit uses `computeRadar` for the requested axis when the partner has a linked user account; otherwise keyword fallback against `specialization`. Excludes partners with `accepting_intros = 0`. Also updated existing `GET /matchmaking/recommend` and `POST /matchPartners` to respect `accepting_intros`.
+- `backend/app/models/entities.py`: added `accepting_intros: int = 1` to `Partner` model.
+- `backend/app/schemas/scoring.py`: added `intent` field to `MatchPartnersRequest`.
+- `backend/app/api/routes/partners.py`: updated `recommend_partners` and `match_partners` to filter `accepting_intros == 1`. Added `POST /match` intent-scoped endpoint (keyword-only fallback; no radar in dev).
+- `frontend/src/lib/api.js`: added `api.matchPartners(intent)`.
+- `frontend/src/pages/PartnersPage.jsx`: added intent dropdown (8 radar axes) alongside the existing sector search. Displays ranked results with per-component score breakdowns and reasons. Intent selection clears sector input and vice versa.
+
 ## Radar / Spider-Graph Service (Task #13)
 
 - `cloudflare-worker/src/services/radar.ts`: shared computation module `computeRadar(env, userIds)` that reads blended skill scores (Task #11) and canonical 8-axis taxonomy (Task #10). Returns per-axis normalized scores (0–100), team coverage = max(member scores), and `gap_axes` where coverage < 60. Deterministic output; explicit `has_data` fallback when no profile data exists.

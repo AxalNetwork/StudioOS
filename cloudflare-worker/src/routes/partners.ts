@@ -2,8 +2,28 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
+import { computeRadar } from '../services/radar';
+import { RADAR_AXES } from '../services/skillsTaxonomySchema';
 
 const partners = new Hono<{ Bindings: Env }>();
+const RADAR_AXIS_SLUGS: readonly string[] = RADAR_AXES.map((a) => a.slug);
+
+function cosineSimilarity(a: Record<number, number>, b: Record<number, number>): number {
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  const ids = new Set<number>([...Object.keys(a).map(Number), ...Object.keys(b).map(Number)]);
+  for (const id of ids) {
+    const av = a[id] || 0;
+    const bv = b[id] || 0;
+    dot += av * bv;
+    na += av * av;
+    nb += bv * bv;
+  }
+  const denom = Math.sqrt(na) * Math.sqrt(nb);
+  if (denom === 0) return 0;
+  return dot / denom;
+}
 
 // Listing returns each partner row. Admins additionally get linked-user
 // metadata (email, KYC, active, verified) so they can open the full
@@ -77,8 +97,8 @@ partners.get('/matchmaking/recommend', async (c) => {
   const sector = c.req.query('sector');
   const sql = getSQL(c.env);
   const rows = sector
-    ? await sql`SELECT * FROM partners WHERE status = 'active' AND specialization LIKE ${'%' + sector + '%'}`
-    : await sql`SELECT * FROM partners WHERE status = 'active'`;
+    ? await sql`SELECT * FROM partners WHERE status = 'active' AND accepting_intros = 1 AND specialization LIKE ${'%' + sector + '%'}`
+    : await sql`SELECT * FROM partners WHERE status = 'active' AND accepting_intros = 1`;
   await sql.end();
   return c.json({ matches: rows, count: rows.length });
 });
@@ -87,7 +107,7 @@ partners.post('/matchPartners', async (c) => {
   await requireAuth(c);
   const data = await c.req.json();
   const sql = getSQL(c.env);
-  const allPartners = await sql`SELECT * FROM partners WHERE status = 'active'`;
+  const allPartners = await sql`SELECT * FROM partners WHERE status = 'active' AND accepting_intros = 1`;
   await sql.end();
 
   const ranked = allPartners.map((p: any) => {
@@ -107,6 +127,201 @@ partners.post('/matchPartners', async (c) => {
   }).sort((a: any, b: any) => b.match_score - a.match_score);
 
   return c.json({ startup_id: data.startup_id, matches: ranked, total_matched: ranked.length });
+});
+
+// ---------------------------------------------------------------------------
+// Task #15 — Intent-scoped partner matching.
+// ---------------------------------------------------------------------------
+// Weights:
+//   domain_fit          0.50
+//   track_record        0.25
+//   values_alignment    0.15
+//   availability_capacity 0.10
+//
+// Domain fit uses the radar axis for the requested intent when the partner
+// has a linked user account (skills taxonomy + endorsements). Otherwise it
+// falls back to a keyword match against the partner's specialization.
+// ---------------------------------------------------------------------------
+
+partners.post('/match', async (c) => {
+  const me = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({}));
+  const intent = (body.intent || '') as string;
+  if (!RADAR_AXIS_SLUGS.includes(intent)) {
+    return c.json({ error: 'Invalid intent. Must be one of: ' + RADAR_AXIS_SLUGS.join(', ') }, 400);
+  }
+
+  const sql = getSQL(c.env);
+
+  // Load only active partners that are accepting intros.
+  const allPartners = await sql`
+    SELECT p.id, p.name, p.company, p.email, p.specialization, p.referral_code,
+           p.referrals_count, u.id AS user_id
+      FROM partners p
+      LEFT JOIN users u ON u.partner_id = p.id
+     WHERE p.status = 'active'
+       AND p.accepting_intros = 1
+     ORDER BY p.id
+  `;
+
+  // Load founder's values vector for alignment computation.
+  const founderValuesRows = await sql`
+    SELECT v.dimension_id, v.score, v.confidence
+      FROM user_values v
+     WHERE v.user_id = ${me.id}
+  `;
+  const founderValues: Record<number, number> = {};
+  for (const r of founderValuesRows) {
+    founderValues[Number(r.dimension_id)] = Number(r.score) * Number(r.confidence);
+  }
+
+  // Pre-compute radar for every partner that has a linked user account.
+  const partnerWithUser = allPartners.filter((p: any) => p.user_id);
+  const radarByUserId = new Map<number, number>(); // user_id → axis score (0-100)
+  for (const p of partnerWithUser) {
+    const uid = Number(p.user_id);
+    const radar = await computeRadar(c.env, [uid]);
+    const axis = radar.axes.find((a) => a.slug === intent);
+    radarByUserId.set(uid, axis?.score ?? 0);
+  }
+
+  // Load partner values for alignment computation.
+  const userIds = partnerWithUser.map((p: any) => Number(p.user_id));
+  const partnerValuesMap = new Map<number, Record<number, number>>(); // user_id → dim→score
+  if (userIds.length > 0) {
+    const ph = userIds.map(() => '?').join(',');
+    const valuesRows = await sql.unsafe(
+      `SELECT user_id, dimension_id, score, confidence FROM user_values WHERE user_id IN (${ph})`,
+      userIds,
+    );
+    for (const r of valuesRows) {
+      const uid = Number(r.user_id);
+      const dim = Number(r.dimension_id);
+      const score = Number(r.score) * Number(r.confidence);
+      let m = partnerValuesMap.get(uid);
+      if (!m) { m = {}; partnerValuesMap.set(uid, m); }
+      m[dim] = score;
+    }
+  }
+
+  // Load partner endorsement counts for track_record.
+  const endorsementMap = new Map<number, number>(); // user_id → count
+  if (userIds.length > 0) {
+    const ph = userIds.map(() => '?').join(',');
+    const endRows = await sql.unsafe(
+      `SELECT endorsee_id, COUNT(*) AS n FROM skill_endorsements WHERE endorsee_id IN (${ph}) GROUP BY endorsee_id`,
+      userIds,
+    );
+    for (const r of endRows) {
+      endorsementMap.set(Number(r.endorsee_id), Number(r.n));
+    }
+  }
+
+  // Load partner profile capacity for availability_capacity.
+  // partner_profiles is keyed by invitation_id; it has a user_id FK that
+  // links to users.id, and users.partner_id links to partners.id. Query by
+  // user_id instead since we already have the partner-linked user_ids.
+  const partnerWithUserIds = allPartners.filter((p: any) => p.user_id);
+  const partnerUserIds = partnerWithUserIds.map((p: any) => Number(p.user_id));
+  const userIdToPartnerId = new Map<number, number>();
+  for (const p of partnerWithUserIds) userIdToPartnerId.set(Number(p.user_id), Number(p.id));
+  const capacityMap = new Map<number, number>(); // partner_id → capacity 0-100
+  if (partnerUserIds.length > 0) {
+    const ph = partnerUserIds.map(() => '?').join(',');
+    const capRows = await sql.unsafe(
+      `SELECT user_id, capacity_per_month FROM partner_profiles WHERE user_id IN (${ph})`,
+      partnerUserIds,
+    );
+    for (const r of capRows) {
+      const uid = Number(r.user_id);
+      const pid = userIdToPartnerId.get(uid);
+      if (pid == null) continue;
+      const raw = String(r.capacity_per_month || '').toLowerCase().trim();
+      let score = 50;
+      if (raw === 'full-time') score = 100;
+      else if (raw === 'part-time') score = 60;
+      else if (raw === 'advisory') score = 30;
+      else if (raw === 'project') score = 40;
+      else if (raw === 'none') score = 0;
+      else if (raw === 'limited') score = 20;
+      else if (raw.includes('10+')) score = 90;
+      else if (raw.includes('5-10')) score = 70;
+      else if (raw.includes('1-5')) score = 50;
+      else if (raw.includes('0-1')) score = 20;
+      capacityMap.set(pid, score);
+    }
+  }
+
+  await sql.end();
+
+  const results = allPartners.map((p: any) => {
+    const reasons: string[] = [];
+
+    // 1. domain_fit (0-100)
+    let domainScore = 0;
+    const uid = p.user_id ? Number(p.user_id) : null;
+    if (uid && radarByUserId.has(uid)) {
+      domainScore = radarByUserId.get(uid)!;
+      if (domainScore > 0) reasons.push(`Domain fit on ${intent}: ${domainScore}`);
+    }
+    // Fallback: keyword match against specialization when radar is 0 or absent.
+    if (domainScore === 0 && intent && p.specialization) {
+      const intentKeywords = RADAR_AXES.find((a) => a.slug === intent)?.legacy || [intent];
+      const spec = p.specialization.toLowerCase();
+      for (const kw of intentKeywords) {
+        if (spec.includes(kw.toLowerCase())) {
+          domainScore = 60;
+          reasons.push(`Keyword match: ${kw}`);
+          break;
+        }
+      }
+    }
+
+    // 2. track_record (0-100) — referral count + endorsements
+    let trackScore = 0;
+    const refBonus = Math.min(p.referrals_count * 10, 40);
+    const endorseCount = uid ? (endorsementMap.get(uid) || 0) : 0;
+    const endBonus = Math.min(endorseCount * 5, 20);
+    trackScore = Math.min(refBonus + endBonus, 100);
+    reasons.push(`Track record: ${p.referrals_count} referrals${endorseCount > 0 ? `, ${endorseCount} endorsements` : ''}`);
+
+    // 3. values_alignment (0-100) — cosine similarity of user_values vectors
+    let valuesScore = 0;
+    if (uid && partnerValuesMap.has(uid) && Object.keys(founderValues).length > 0) {
+      const pv = partnerValuesMap.get(uid)!;
+      valuesScore = Math.round(cosineSimilarity(founderValues, pv) * 100);
+      if (valuesScore > 0) reasons.push(`Values alignment: ${valuesScore}`);
+    }
+
+    // 4. availability_capacity (0-100)
+    const availScore = capacityMap.get(Number(p.id)) ?? 50;
+    if (availScore > 0) reasons.push(`Availability: ${availScore}`);
+
+    const overall = Math.round(
+      domainScore * 0.50 +
+      trackScore * 0.25 +
+      valuesScore * 0.15 +
+      availScore * 0.10,
+    );
+
+    return {
+      partner_id: p.id,
+      name: p.name,
+      company: p.company,
+      specialization: p.specialization,
+      referral_code: p.referral_code,
+      match_score: overall,
+      breakdown: {
+        domain_fit: domainScore,
+        track_record: trackScore,
+        values_alignment: valuesScore,
+        availability_capacity: availScore,
+      },
+      reasons,
+    };
+  }).sort((a: any, b: any) => b.match_score - a.match_score);
+
+  return c.json({ intent, matches: results, total_matched: results.length });
 });
 
 export default partners;

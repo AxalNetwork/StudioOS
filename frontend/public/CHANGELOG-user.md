@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Intent-based partner matching
+
+The Partner Matchmaking panel now lets you search by **intent** instead of just sector. Choose from eight focus areas (Product, Engineering, Design, GTM / Sales, Marketing / Brand, Finance / Ops, Legal / Compliance, or Capital / Network) and the system ranks partners by how well they fit that specific need. Every result shows a match score and a breakdown of why it was ranked that way, including domain fit, track record, values alignment, and availability. Partners can also opt out of introductions at any time, so you only see people who are actively open to new connections.
+
+---
+
 ## Radar and team skill coverage
 
 The new Radar service under the hood computes a 8-axis skill spider for any user or team. It blends self-assessed and peer-endorsed skills into a single score per axis, normalised 0–100. For teams it also surfaces coverage gaps — axes where the strongest member is below 60. Downstream features (co-founder matching, spin-out deck, partner coverage) will consume this so every surface shows the same, consistent picture.

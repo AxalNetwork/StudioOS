@@ -195,6 +195,7 @@ class MatchPartnersRequest(BaseModel):
     capital_needed: Optional[float] = None
     expertise_needed: Optional[str] = None
     startup_id: Optional[int] = None
+    intent: Optional[str] = None
 
 
 class GenerateMemoRequest(BaseModel):

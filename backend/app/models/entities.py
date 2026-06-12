@@ -368,6 +368,7 @@ class Partner(SQLModel, table=True):
     referral_code: Optional[str] = Field(default=None, unique=True)
     referrals_count: int = 0
     status: str = "active"
+    accepting_intros: int = 1
     created_at: datetime = Field(default_factory=datetime.utcnow)
     # Task #36 — Service provider marketplace (additive; migration adds columns to legacy rows).
     headline: Optional[str] = None              # e.g. "Fractional CFO for late-seed SaaS"

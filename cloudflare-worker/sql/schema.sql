@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS partners (
     referral_code TEXT UNIQUE,
     referrals_count INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'active',
+    accepting_intros INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

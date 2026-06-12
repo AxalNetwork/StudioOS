@@ -13,6 +13,17 @@ import { useAuth } from '../hooks/useAuthSync';
 const PARTNER_ROW_HEIGHT = 64;
 const PARTNER_GRID = 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 90px';
 
+const RADAR_INTENTS = [
+  { slug: 'product',          label: 'Product' },
+  { slug: 'engineering',      label: 'Engineering' },
+  { slug: 'design',           label: 'Design' },
+  { slug: 'gtm_sales',        label: 'GTM / Sales' },
+  { slug: 'marketing_brand',  label: 'Marketing / Brand' },
+  { slug: 'finance_ops',      label: 'Finance / Ops' },
+  { slug: 'legal_compliance', label: 'Legal / Compliance' },
+  { slug: 'capital_network',  label: 'Capital / Network' },
+];
+
 export default function PartnersPage() {
   const { user } = useAuth();
   const [partners, setPartners] = useState([]);
@@ -20,6 +31,7 @@ export default function PartnersPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', company: '', specialization: '' });
   const [matchSector, setMatchSector] = useState('');
+  const [matchIntent, setMatchIntent] = useState('');
   const [matches, setMatches] = useState(null);
   // openPartner: row from /partners (now augmented with user_id via LEFT JOIN).
   // We open the shared UserDetailModal when a linked user account exists.
@@ -43,7 +55,9 @@ export default function PartnersPage() {
 
   const runMatch = async () => {
     try {
-      const res = await api.recommendPartners(matchSector);
+      const res = matchIntent
+        ? await api.matchPartners(matchIntent)
+        : await api.recommendPartners(matchSector);
       setMatches(res);
     } catch (e) { alert(e.message); }
   };
@@ -88,18 +102,52 @@ export default function PartnersPage() {
           <Search size={14} className="text-violet-600" /> Partner Matchmaking
         </h3>
         {/* T21 — Enter inside the input now submits the form. */}
-        <form onSubmit={(e) => { e.preventDefault(); runMatch(); }} className="flex gap-3">
-          <input type="text" placeholder="Sector (e.g. AI, Blockchain)..." value={matchSector}
-            onChange={e => setMatchSector(e.target.value)}
-            className="flex-1 bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:text-gray-100" />
-          <button type="submit" className="px-4 py-2 bg-violet-600 rounded-lg text-sm text-white">Find Matches</button>
+        <form onSubmit={(e) => { e.preventDefault(); runMatch(); }} className="flex flex-col gap-3">
+          <div className="flex gap-3">
+            <select value={matchIntent} onChange={e => { setMatchIntent(e.target.value); setMatchSector(''); }}
+              className="flex-none bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:text-gray-100 dark:bg-gray-800">
+              <option value="">Select intent...</option>
+              {RADAR_INTENTS.map(i => <option key={i.slug} value={i.slug}>{i.label}</option>)}
+            </select>
+            <input type="text" placeholder="Sector (e.g. AI, Blockchain)..." value={matchSector}
+              onChange={e => { setMatchSector(e.target.value); setMatchIntent(''); }}
+              className="flex-1 bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:text-gray-100" />
+            <button type="submit" className="px-4 py-2 bg-violet-600 rounded-lg text-sm text-white">Find Matches</button>
+          </div>
         </form>
         {matches && (
           <div className="mt-3 text-sm text-gray-600">
-            Found <span className="text-gray-900 font-medium dark:text-gray-100">{matches.count}</span> matching partner(s)
-            {matches.matches.map(m => (
-              <div key={m.id} className="mt-2 px-3 py-2 bg-gray-100 rounded-lg">
-                <span className="text-gray-900 dark:text-gray-100">{m.name}</span> — {m.company} ({m.specialization})
+            {matches.intent ? (
+              <>
+                <div className="mb-2 text-gray-900 font-medium dark:text-gray-100">Intent: {matches.intent}</div>
+                <div className="text-gray-500 mb-1">Found <span className="text-gray-900 font-medium dark:text-gray-100">{matches.total_matched}</span> matching partner(s)</div>
+              </>
+            ) : (
+              <div className="text-gray-500 mb-1">Found <span className="text-gray-900 font-medium dark:text-gray-100">{matches.count}</span> matching partner(s)</div>
+            )}
+            {matches.matches && matches.matches.map(m => (
+              <div key={m.partner_id || m.id} className="mt-2 px-3 py-2 bg-gray-100 rounded-lg dark:bg-gray-800">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-900 font-medium dark:text-gray-100">{m.name}</span>
+                  {m.match_score !== undefined && (
+                    <span className="text-xs text-violet-600 font-semibold bg-violet-50 rounded px-2 py-0.5 dark:bg-violet-900/20">{m.match_score}</span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5">{m.company} — {m.specialization}</div>
+                {m.breakdown && (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {Object.entries(m.breakdown).map(([k, v]) => (
+                      <span key={k} className="text-[10px] text-gray-600 bg-gray-200 rounded px-1.5 py-0.5 dark:bg-gray-700 dark:text-gray-300">
+                        {k.replace(/_/g, ' ')}: {v}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {m.reasons && m.reasons.length > 0 && (
+                  <div className="text-[11px] text-gray-500 mt-1">
+                    {m.reasons.join(' · ')}
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -567,6 +567,7 @@ export const api = {
   listPartners: () => request('/partners'),
   createPartner: (data) => request('/partners', { method: 'POST', body: JSON.stringify(data) }),
   recommendPartners: (sector) => request(`/partners/matchmaking/recommend${sector ? `?sector=${sector}` : ''}`),
+  matchPartners: (intent) => request('/partners/match', { method: 'POST', body: JSON.stringify({ intent }) }),
 
   listInvestors: () => request('/capital/investors'),
   createInvestor: (data) => request('/capital/investors', { method: 'POST', body: JSON.stringify(data) }),
@@ -590,7 +591,7 @@ export const api = {
   listUsers: (role) => request(`/users${role ? `?role=${role}` : ''}`),
   createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
 
-  matchPartners: (data) => request('/partners/matchPartners', { method: 'POST', body: JSON.stringify(data) }),
+  matchPartnersLegacy: (data) => request('/partners/matchPartners', { method: 'POST', body: JSON.stringify(data) }),
   generateMemo: (data) => request('/scoring/generateMemo', { method: 'POST', body: JSON.stringify(data) }),
   capitalCall: (data) => request('/capital/capitalCall', { method: 'POST', body: JSON.stringify(data) }),
 
