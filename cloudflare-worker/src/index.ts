@@ -155,6 +155,7 @@ import captableRoutes from './routes/captable';
 import cofounderRoutes from './routes/cofounder';
 import skillsRoutes from './routes/skills';
 import valuesRoutes from './routes/values';
+import radarRoutes from './routes/radar';
 import spinoutLabRoutes from './routes/spinout_lab';
 // T13/T14/T15 — port of FastAPI mentors/partner_office_hours/watchlist/journal/
 // portfolio_health/references/comarketing/company/needs/insights routers.
@@ -629,6 +630,8 @@ app.route('/api/cofounder', cofounderRoutes);
 app.route('/api/skills', skillsRoutes);
 // Task #12 — Personal-Values Assessment (survey, submit, vector + summary).
 app.route('/api/values', valuesRoutes);
+// Task #13 — Radar / Spider-Graph Service (8-axis radar, team coverage, gap analysis).
+app.route('/api/radar', radarRoutes);
 // Spin-Out Lab — guided 4-week sprint for pre-incorporation founders.
 app.route('/api/spinout-lab', spinoutLabRoutes);
 // T13 — Mentors + Partner Office Hours.

@@ -10,6 +10,13 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Radar / Spider-Graph Service (Task #13)
+
+- `cloudflare-worker/src/services/radar.ts`: shared computation module `computeRadar(env, userIds)` that reads blended skill scores (Task #11) and canonical 8-axis taxonomy (Task #10). Returns per-axis normalized scores (0–100), team coverage = max(member scores), and `gap_axes` where coverage < 60. Deterministic output; explicit `has_data` fallback when no profile data exists.
+- `cloudflare-worker/src/routes/radar.ts`: Hono route at `/api/radar` with `GET /me` (caller radar) and `POST /team` (ad-hoc team by user id list). 5-minute KV cache keyed on SHA-256 hash of user set + taxonomy version. Worker-only; dev FastAPI lacks `/api/radar`.
+- `cloudflare-worker/src/index.ts`: import and mount `radarRoutes` at `/api/radar`.
+- `frontend/src/lib/api.js`: `api.radar.me()` and `api.radar.team(userIds)`.
+
 ## Personal-Values Assessment (Task #12)
 
 - `cloudflare-worker/sql/migrations/094_user_values.sql`: new table `user_values` (user_id, dimension_id, score, confidence, updated_at) with `idx_user_values_user` index.

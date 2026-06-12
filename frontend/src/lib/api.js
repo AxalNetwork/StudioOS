@@ -2044,6 +2044,13 @@ export const api = {
       request('/values/submit', { method: 'POST', body: JSON.stringify({ responses }) }),
     getMe: () => request('/values/me'),
   },
+
+  // Task #13 — Radar / Spider-Graph Service. Worker-only (dev FastAPI lacks /api/radar).
+  radar: {
+    me: () => request('/radar/me'),
+    team: (userIds) =>
+      request('/radar/team', { method: 'POST', body: JSON.stringify({ user_ids: userIds }) }),
+  },
 };
 
 // Task #3 — Due Diligence module. Admin/partner/investor/mentor only;

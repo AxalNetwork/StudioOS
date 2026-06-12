@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Radar and team skill coverage
+
+The new Radar service under the hood computes a 8-axis skill spider for any user or team. It blends self-assessed and peer-endorsed skills into a single score per axis, normalised 0–100. For teams it also surfaces coverage gaps — axes where the strongest member is below 60. Downstream features (co-founder matching, spin-out deck, partner coverage) will consume this so every surface shows the same, consistent picture.
+
+---
+
 ## Your personal values
 
 A new "Values Assessment" under the Account menu lets you answer a short paired-statement survey (about 25 questions) that captures what drives you across 15 dimensions. After completing it, you receive a summary of your top 3 dominant values plus a secondary one. Your results feed into future matching features so you can find founders, partners, and investors who share your priorities. You can retake the survey every 90 days.
