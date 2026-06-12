@@ -1611,6 +1611,31 @@ export const api = {
     request('/billing/tier/checkout', { method: 'POST', body: JSON.stringify({ tier }) }),
   tierPortal: () => request('/billing/tier/portal', { method: 'POST' }),
 
+  // ---------- Task #5 — In-app billing dashboard (replaces Stripe portal) ----------
+  // `scope` is 'founder' (founder-tier customer) or 'investor' (investor
+  // customer). Overview returns active subs, cards, upcoming + recent invoices.
+  // Cancel/resume toggle cancel_at_period_end; swap previews proration then
+  // confirms the plan change — all server-side via the Stripe REST wrapper.
+  billingOverview: (scope) =>
+    request(`/billing/overview${scope ? `?scope=${encodeURIComponent(scope)}` : ''}`),
+  billingCancelSubscription: (subscription_id, scope) =>
+    request('/billing/subscription/cancel', { method: 'POST', body: JSON.stringify({ subscription_id, scope }) }),
+  billingResumeSubscription: (subscription_id, scope) =>
+    request('/billing/subscription/resume', { method: 'POST', body: JSON.stringify({ subscription_id, scope }) }),
+  billingSwapPreview: (subscription_id, price_id, scope) =>
+    request('/billing/subscription/swap/preview', { method: 'POST', body: JSON.stringify({ subscription_id, price_id, scope }) }),
+  billingSwapConfirm: (subscription_id, price_id, scope) =>
+    request('/billing/subscription/swap/confirm', { method: 'POST', body: JSON.stringify({ subscription_id, price_id, scope }) }),
+  // In-app payment-method management (scope-aware; step-up gated server-side).
+  // setup-intent returns a SetupIntent client_secret the SPA confirms via Stripe
+  // Elements `confirmSetup` so raw card data never touches our servers.
+  billingPaymentMethodSetup: (scope) =>
+    request('/billing/payment-method/setup-intent', { method: 'POST', body: JSON.stringify({ scope }) }),
+  billingPaymentMethodDefault: (payment_method_id, scope) =>
+    request('/billing/payment-method/default', { method: 'POST', body: JSON.stringify({ payment_method_id, scope }) }),
+  billingPaymentMethodDetach: (payment_method_id, scope) =>
+    request('/billing/payment-method/detach', { method: 'POST', body: JSON.stringify({ payment_method_id, scope }) }),
+
   // ---------- Task #4 — Axal-branded embedded checkout (Stripe Elements) ----------
   // Server creates a PaymentIntent / incomplete Subscription and hands back a
   // `client_secret`; the SPA confirms the card in-app via Stripe Elements so

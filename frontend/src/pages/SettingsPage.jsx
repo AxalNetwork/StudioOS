@@ -18,6 +18,7 @@ import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
 import DataImportsTab from '../components/DataImportsTab';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
 import AxalCheckout from '../components/AxalCheckout';
+import BillingDashboard from '../components/BillingDashboard';
 
 // Task #4 (Y-2) — small reusable trust score on the profile surface so
 // the user can see their compliance posture without bouncing to the
@@ -3263,14 +3264,7 @@ function FounderBillingPanel({ data, flash }) {
     finally { setBusy(null); }
   };
 
-  const portal = async () => {
-    setBusy('portal');
-    try {
-      const res = await api.tierPortal();
-      if (res?.url) window.location.href = res.url;
-    } catch (e) { flash?.(e.message || 'Could not open billing portal', 'error'); }
-    finally { setBusy(null); }
-  };
+  const refreshStatus = () => { api.tierStatus().then(setStatus).catch(() => {}); };
 
   const TIER_LABEL = { free: 'Free', growth: 'Growth — $79/mo', studio: 'Studio — $249/mo' };
   const ladder = ['free', 'growth', 'studio'];
@@ -3293,51 +3287,59 @@ function FounderBillingPanel({ data, flash }) {
                 {renews ? <> · Renews {new Date(renews).toLocaleDateString()}</> : null}
               </div>
             </div>
-            {hasCustomer && (
-              <button type="button" disabled={busy === 'portal'} onClick={portal}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg text-sm font-medium disabled:opacity-50">
-                {busy === 'portal' ? 'Opening…' : 'Manage subscription'}
-              </button>
-            )}
           </div>
         )}
       </Card>
 
-      <Card title="Plans" description="Upgrade any time. Downgrade or cancel from Manage subscription.">
-        <div className="grid gap-3 sm:grid-cols-3">
-          {ladder.map((t) => {
-            const current = t === tier;
-            const upgradable = RANK[t] > RANK[tier];
-            return (
-              <div key={t}
-                className={`rounded-lg border p-4 ${current ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
-                <div className="font-semibold text-gray-900 dark:text-gray-100 capitalize">{t}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {t === 'free' && '1 project · 5 interviews · 3 OKRs'}
-                  {t === 'growth' && '$79/mo · Unlimited builds, deck, scoring, mentors'}
-                  {t === 'studio' && '$249/mo · + Capital, legal, partner tools'}
-                </div>
-                <div className="mt-3">
-                  {current && (
-                    <span className="text-xs uppercase tracking-wider text-violet-700 dark:text-violet-300 font-semibold">Current plan</span>
-                  )}
-                  {upgradable && (
-                    <button type="button" disabled={busy === t} onClick={() => upgrade(t)}
-                      className="w-full px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium disabled:opacity-50">
-                      {busy === t ? 'Opening checkout…' : `Upgrade to ${t}`}
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-          Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
-        </div>
-      </Card>
+      {/* Task #5 — active subscribers manage everything in-app (cancel, resume,
+          plan swap with proration, payment methods, invoices). Free users see
+          the plan ladder + inline checkout to subscribe. */}
+      {hasCustomer && tier !== 'free' ? (
+        <Card title="Manage subscription" description="Change plan, cancel, and review invoices without leaving Axal.">
+          <BillingDashboard scope="founder" flash={flash} onChanged={refreshStatus} />
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+            Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
+          </div>
+        </Card>
+      ) : (
+        <>
+          <Card title="Plans" description="Upgrade any time. Manage or cancel from this page once subscribed.">
+            <div className="grid gap-3 sm:grid-cols-3">
+              {ladder.map((t) => {
+                const current = t === tier;
+                const upgradable = RANK[t] > RANK[tier];
+                return (
+                  <div key={t}
+                    className={`rounded-lg border p-4 ${current ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
+                    <div className="font-semibold text-gray-900 dark:text-gray-100 capitalize">{t}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {t === 'free' && '1 project · 5 interviews · 3 OKRs'}
+                      {t === 'growth' && '$79/mo · Unlimited builds, deck, scoring, mentors'}
+                      {t === 'studio' && '$249/mo · + Capital, legal, partner tools'}
+                    </div>
+                    <div className="mt-3">
+                      {current && (
+                        <span className="text-xs uppercase tracking-wider text-violet-700 dark:text-violet-300 font-semibold">Current plan</span>
+                      )}
+                      {upgradable && (
+                        <button type="button" disabled={busy === t} onClick={() => upgrade(t)}
+                          className="w-full px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium disabled:opacity-50">
+                          {busy === t ? 'Opening checkout…' : `Upgrade to ${t}`}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+              Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
+            </div>
+          </Card>
 
-      <EmbeddedCheckoutCard flash={flash} onPaid={() => api.tierStatus().then(setStatus).catch(() => {})} />
+          <EmbeddedCheckoutCard flash={flash} onPaid={refreshStatus} />
+        </>
+      )}
     </>
   );
 }
@@ -3489,15 +3491,6 @@ function InvestorBillingPanel({ data, flash }) {
     finally { setBusy(null); }
   };
 
-  const portal = async () => {
-    setBusy('portal');
-    try {
-      const res = await api.investorPortal();
-      if (res?.url) window.location.href = res.url;
-    } catch (e) { flash?.(e.message || 'Could not open billing portal', 'error'); }
-    finally { setBusy(null); }
-  };
-
   const TIER_LABEL = {
     free: 'Free',
     professional: billingCycle === 'yearly' ? 'Professional — $1,490/yr' : 'Professional — $149/mo',
@@ -3536,12 +3529,6 @@ function InvestorBillingPanel({ data, flash }) {
                 {rawTier !== tier && <> · Effective tier: {tier}</>}
               </div>
             </div>
-            {hasCustomer && (
-              <button type="button" disabled={busy === 'portal'} onClick={portal}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg text-sm font-medium disabled:opacity-50">
-                {busy === 'portal' ? 'Opening…' : 'Manage subscription'}
-              </button>
-            )}
           </div>
         )}
       </Card>
@@ -3567,49 +3554,61 @@ function InvestorBillingPanel({ data, flash }) {
         </div>
       </Card>
 
-      <Card title="Plans" description="Switch plan or change billing cycle. Cancel anytime from Manage subscription.">
-        <div className="flex justify-end mb-3">
-          <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 bg-white dark:bg-gray-900 text-xs">
-            {[{id:'monthly',label:'Monthly'},{id:'yearly',label:'Annual · save 2 mo'}].map((b) => (
-              <button key={b.id} type="button" onClick={() => setBillingCycle(b.id)}
-                className={`px-3 py-1 rounded-md transition-colors ${
-                  billingCycle === b.id ? 'bg-violet-600 text-white font-medium' : 'text-gray-600 dark:text-gray-300'
-                }`}>{b.label}</button>
-            ))}
+      {/* Task #5 — active subscribers manage plan changes, cancellation,
+          payment methods, and invoices in-app; free users see the plan ladder
+          + inline checkout to subscribe. */}
+      {hasCustomer && tier !== 'free' ? (
+        <Card title="Manage subscription" description="Change plan, cancel, and review invoices without leaving Axal.">
+          <BillingDashboard scope="investor" flash={flash} onChanged={refresh} />
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+            See full feature comparison on the <a className="text-violet-700 hover:underline" href="/pricing/investor">investor pricing page</a>.
           </div>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {ladder.map((t) => {
-            const current = t === tier;
-            const upgradable = t !== 'free' && RANK[t] !== RANK[tier];
-            return (
-              <div key={t}
-                className={`rounded-lg border p-4 ${current ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
-                <div className="font-semibold text-gray-900 dark:text-gray-100">{TIER_LABEL[t] || t}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {t === 'free' && '3 intros/qtr · 1 deal room · browse only'}
-                  {t === 'professional' && '25 intros/qtr · 5 deal rooms · MI exports · calendar'}
-                  {t === 'institutional' && '100 intros/qtr · unlimited deal rooms · 4 seats · Carta sync'}
+        </Card>
+      ) : (
+        <Card title="Plans" description="Switch plan or change billing cycle. Manage or cancel from this page once subscribed.">
+          <div className="flex justify-end mb-3">
+            <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 bg-white dark:bg-gray-900 text-xs">
+              {[{id:'monthly',label:'Monthly'},{id:'yearly',label:'Annual · save 2 mo'}].map((b) => (
+                <button key={b.id} type="button" onClick={() => setBillingCycle(b.id)}
+                  className={`px-3 py-1 rounded-md transition-colors ${
+                    billingCycle === b.id ? 'bg-violet-600 text-white font-medium' : 'text-gray-600 dark:text-gray-300'
+                  }`}>{b.label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {ladder.map((t) => {
+              const current = t === tier;
+              const upgradable = t !== 'free' && RANK[t] !== RANK[tier];
+              return (
+                <div key={t}
+                  className={`rounded-lg border p-4 ${current ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
+                  <div className="font-semibold text-gray-900 dark:text-gray-100">{TIER_LABEL[t] || t}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {t === 'free' && '3 intros/qtr · 1 deal room · browse only'}
+                    {t === 'professional' && '25 intros/qtr · 5 deal rooms · MI exports · calendar'}
+                    {t === 'institutional' && '100 intros/qtr · unlimited deal rooms · 4 seats · Carta sync'}
+                  </div>
+                  <div className="mt-3">
+                    {current && (
+                      <span className="text-xs uppercase tracking-wider text-violet-700 dark:text-violet-300 font-semibold">Current plan</span>
+                    )}
+                    {upgradable && (
+                      <button type="button" disabled={busy === t} onClick={() => upgrade(t)}
+                        className="w-full px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium disabled:opacity-50">
+                        {busy === t ? 'Opening checkout…' : (RANK[t] > RANK[tier] ? `Upgrade to ${t}` : `Switch to ${t}`)}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="mt-3">
-                  {current && (
-                    <span className="text-xs uppercase tracking-wider text-violet-700 dark:text-violet-300 font-semibold">Current plan</span>
-                  )}
-                  {upgradable && (
-                    <button type="button" disabled={busy === t} onClick={() => upgrade(t)}
-                      className="w-full px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium disabled:opacity-50">
-                      {busy === t ? 'Opening checkout…' : (RANK[t] > RANK[tier] ? `Upgrade to ${t}` : `Switch to ${t}`)}
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-          See full feature comparison on the <a className="text-violet-700 hover:underline" href="/pricing/investor">investor pricing page</a>.
-        </div>
-      </Card>
+              );
+            })}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+            See full feature comparison on the <a className="text-violet-700 hover:underline" href="/pricing/investor">investor pricing page</a>.
+          </div>
+        </Card>
+      )}
 
       <Card title="Compare plans" description="What you get at each tier.">
         <InvestorROITable currentTier={tier} />

@@ -25,6 +25,12 @@ Some features can now be unlocked on their own with a one-time purchase, without
 
 ---
 
+## Manage your subscription right inside Axal
+
+**Settings → Billing** is now a full self-service billing dashboard — no more being sent off to a separate Stripe page. You can see your active plan, switch to a different plan (with a clear preview of any prorated charge or credit before you confirm), cancel (you keep access until the end of the period you've paid for) or undo a scheduled cancellation, and see your upcoming and past invoices with downloadable receipts. You can also manage your cards right here: add a new card on an Axal-branded form, choose which card is your default for future charges, and remove a card you no longer use — your card details are handled securely by Stripe and never touch Axal's servers. This works for both founder and investor plans.
+
+---
+
 ## Pay for upgrades without leaving Axal
 
 You can now complete an upgrade right inside **Settings → Billing**. A new **Pay by card** section lets you pick a plan and enter your card on an Axal-branded form — no more jumping out to a separate Stripe page. It matches the app's light and dark themes, and if your bank asks for extra verification, that step appears right there in the same window. Your card details are handled securely by Stripe and never touch Axal's servers.

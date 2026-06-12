@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, requireFactor, requireStepUp } from '../auth';
 import { ensureMiPaywallSchema, MI_PRO_PRODUCTS, userHasMiPro } from '../middleware/miAccess';
@@ -11,7 +12,7 @@ import {
   type InvestorUser,
 } from '../middleware/requireInvestorTier';
 import { upsertPlanFromStripeSubscription } from '../services/subscriptionPlans';
-import { priceForPlanMetadata } from '../services/catalog';
+import { priceForPlanMetadata, getCatalog } from '../services/catalog';
 
 // Epic 6 — Market Intel Pro billing surface.
 //
@@ -459,6 +460,480 @@ billing.all('/investor/dev-upgrade', async (c) => {
     return c.redirect(`${appUrl}/settings?tab=billing&investor_upgraded=1`);
   }
   return c.json({ ok: true, tier: cfg.tier, renews_at: renewsAt });
+});
+
+// ---------------------------------------------------------------------------
+// Task #5 — In-app billing dashboard.
+//
+//   GET  /api/billing/overview?scope=founder|investor
+//        → { has_customer, subscriptions, payment_methods, upcoming_invoice,
+//            invoices } — everything the dashboard needs in one round trip.
+//   POST /api/billing/subscription/cancel   { subscription_id, scope }
+//   POST /api/billing/subscription/resume   { subscription_id, scope }
+//   POST /api/billing/subscription/swap/preview  { subscription_id, price_id, scope }
+//   POST /api/billing/subscription/swap/confirm  { subscription_id, price_id, scope }
+//
+// Replaces the Stripe Customer Portal redirect: users manage subscriptions,
+// payment methods, and invoices without leaving StudioOS. All Stripe access is
+// server-side via the `stripeCall` wrapper — the secret key never reaches the
+// SPA. Every mutation re-fetches the subscription from Stripe and verifies it
+// belongs to the caller's customer before acting.
+// ---------------------------------------------------------------------------
+
+type BillingScope = 'founder' | 'investor';
+
+function billingScope(v: unknown): BillingScope {
+  return v === 'investor' ? 'investor' : 'founder';
+}
+
+function resolveScopeCustomer(user: TierUser & InvestorUser, scope: BillingScope): string | null {
+  return scope === 'investor'
+    ? user.investor_stripe_customer_id ?? null
+    : user.stripe_customer_id ?? null;
+}
+
+// Minimal Stripe shapes (only the fields we read / surface).
+interface StripeList<T> { data: T[]; has_more?: boolean }
+interface StripeSubItem {
+  id: string;
+  quantity?: number;
+  current_period_end?: number;
+  price?: {
+    id: string;
+    unit_amount: number | null;
+    currency: string;
+    nickname: string | null;
+    recurring?: { interval: string; interval_count: number } | null;
+    product?: string;
+  };
+}
+interface StripeSubscription {
+  id: string;
+  customer: string;
+  status: string;
+  cancel_at_period_end?: boolean;
+  current_period_end?: number;
+  cancel_at?: number | null;
+  canceled_at?: number | null;
+  items?: { data: StripeSubItem[] };
+}
+interface StripePaymentMethod {
+  id: string;
+  card?: { brand: string; last4: string; exp_month: number; exp_year: number };
+}
+interface StripeCustomer {
+  id: string;
+  invoice_settings?: { default_payment_method?: string | null };
+}
+interface StripeInvoiceLine { amount: number; proration?: boolean; description?: string | null }
+interface StripeInvoice {
+  id?: string;
+  number?: string | null;
+  status?: string | null;
+  currency: string;
+  total?: number;
+  amount_due?: number;
+  amount_paid?: number;
+  created?: number;
+  period_start?: number;
+  period_end?: number;
+  next_payment_attempt?: number | null;
+  hosted_invoice_url?: string | null;
+  invoice_pdf?: string | null;
+  lines?: { data: StripeInvoiceLine[] };
+}
+
+function subPeriodEnd(sub: StripeSubscription): string | null {
+  const unix = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? null;
+  return unix ? new Date(unix * 1000).toISOString() : null;
+}
+
+function normSub(sub: StripeSubscription) {
+  return {
+    id: sub.id,
+    status: sub.status,
+    cancel_at_period_end: !!sub.cancel_at_period_end,
+    current_period_end: subPeriodEnd(sub),
+    cancel_at: sub.cancel_at ? new Date(sub.cancel_at * 1000).toISOString() : null,
+    items: (sub.items?.data ?? []).map((it) => ({
+      id: it.id,
+      quantity: it.quantity ?? 1,
+      price_id: it.price?.id ?? null,
+      product_id: it.price?.product ?? null,
+      amount: it.price?.unit_amount ?? null,
+      currency: it.price?.currency ?? null,
+      interval: it.price?.recurring?.interval ?? null,
+      nickname: it.price?.nickname ?? null,
+    })),
+  };
+}
+
+function normInvoice(inv: StripeInvoice) {
+  return {
+    id: inv.id ?? null,
+    number: inv.number ?? null,
+    status: inv.status ?? null,
+    currency: inv.currency,
+    total: inv.total ?? inv.amount_due ?? 0,
+    amount_paid: inv.amount_paid ?? 0,
+    created: inv.created ? new Date(inv.created * 1000).toISOString() : null,
+    period_end: inv.period_end ? new Date(inv.period_end * 1000).toISOString() : null,
+    hosted_invoice_url: inv.hosted_invoice_url ?? null,
+    invoice_pdf: inv.invoice_pdf ?? null,
+  };
+}
+
+// Fetch a subscription and assert it belongs to `customer`. Throws a Response
+// (403 / 404) the global handler returns as-is, so callers stay terse.
+async function fetchOwnedSub(env: Env, subId: string, customer: string): Promise<StripeSubscription> {
+  const sub = await stripeCall<StripeSubscription>(
+    env, `/subscriptions/${subId}`, { 'expand[0]': 'items.data.price' }, { method: 'GET' },
+  );
+  if (!sub || sub.customer !== customer) {
+    throw new Response(JSON.stringify({ error: 'subscription_not_found' }), {
+      status: 404, headers: { 'content-type': 'application/json' },
+    });
+  }
+  return sub;
+}
+
+// Validate a client-supplied Stripe price id against the mirrored catalog and
+// the request scope, returning the destination tier. This is the server-side
+// authorization gate for plan swaps: the client may only switch to an ACTIVE,
+// RECURRING subscription price whose product carries metadata for the SAME
+// scope it is acting in (founder → metadata.tier; investor →
+// metadata.investor_tier). Anything else (unknown id, inactive/one-time price,
+// non-subscription product, or a cross-scope price) returns null so the caller
+// rejects the request BEFORE any Stripe mutation — preventing both entitlement
+// drift (Stripe changed but D1 tier columns stale) and unintended switches to
+// hidden/cross-scope internal prices.
+async function resolveScopePrice(
+  env: Env, scope: BillingScope, priceId: string,
+): Promise<{ tier?: string; investorTier?: string } | null> {
+  const products = await getCatalog(env);
+  for (const p of products) {
+    if (p.kind !== 'subscription' || p.active === false) continue;
+    const price = p.prices.find((pr) => pr.id === priceId);
+    if (!price) continue;
+    if (price.active === false || price.type !== 'recurring') return null;
+    if (scope === 'investor') {
+      return p.metadata.investor_tier ? { investorTier: p.metadata.investor_tier } : null;
+    }
+    return p.metadata.tier ? { tier: p.metadata.tier } : null;
+  }
+  return null;
+}
+
+billing.get('/overview', async (c) => {
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  const scope = billingScope(c.req.query('scope'));
+  const customer = resolveScopeCustomer(user, scope);
+  const base = { scope, has_customer: !!customer, stripe_configured: !!c.env.STRIPE_SECRET_KEY };
+  if (!customer || !c.env.STRIPE_SECRET_KEY) {
+    return c.json({ ...base, subscriptions: [], payment_methods: [], upcoming_invoice: null, invoices: [] });
+  }
+  try {
+    const [subsRes, pmRes, customerObj, invoicesRes] = await Promise.all([
+      stripeCall<StripeList<StripeSubscription>>(c.env, '/subscriptions', {
+        customer, status: 'all', limit: '10', 'expand[0]': 'data.items.data.price',
+      }, { method: 'GET' }),
+      stripeCall<StripeList<StripePaymentMethod>>(c.env, '/payment_methods', {
+        customer, type: 'card', limit: '10',
+      }, { method: 'GET' }),
+      stripeCall<StripeCustomer>(c.env, `/customers/${customer}`, {}, { method: 'GET' }),
+      stripeCall<StripeList<StripeInvoice>>(c.env, '/invoices', {
+        customer, limit: '12',
+      }, { method: 'GET' }),
+    ]);
+    // Upcoming invoice 404s when nothing is scheduled — treat as "none".
+    let upcoming: StripeInvoice | null = null;
+    try {
+      upcoming = await stripeCall<StripeInvoice>(c.env, '/invoices/upcoming', { customer }, { method: 'GET' });
+    } catch {
+      upcoming = null;
+    }
+    const defaultPm = customerObj?.invoice_settings?.default_payment_method ?? null;
+    // Surface only active-ish subscriptions in the dashboard (hide fully
+    // cancelled/incomplete-expired rows) so the UI shows what the user pays for.
+    const liveSubs = (subsRes.data ?? []).filter(
+      (s) => !['canceled', 'incomplete_expired'].includes(s.status),
+    );
+    return c.json({
+      ...base,
+      subscriptions: liveSubs.map(normSub),
+      payment_methods: (pmRes.data ?? []).map((pm) => ({
+        id: pm.id,
+        brand: pm.card?.brand ?? 'card',
+        last4: pm.card?.last4 ?? '••••',
+        exp_month: pm.card?.exp_month ?? null,
+        exp_year: pm.card?.exp_year ?? null,
+        is_default: pm.id === defaultPm,
+      })),
+      upcoming_invoice: upcoming
+        ? {
+            currency: upcoming.currency,
+            total: upcoming.total ?? upcoming.amount_due ?? 0,
+            amount_due: upcoming.amount_due ?? 0,
+            next_attempt: upcoming.next_payment_attempt
+              ? new Date(upcoming.next_payment_attempt * 1000).toISOString()
+              : (upcoming.period_end ? new Date(upcoming.period_end * 1000).toISOString() : null),
+          }
+        : null,
+      invoices: (invoicesRes.data ?? []).map(normInvoice),
+    });
+  } catch (e) {
+    return c.json({ error: 'overview_failed', detail: (e as Error).message }, 502);
+  }
+});
+
+async function setCancelAtPeriodEnd(c: Context<{ Bindings: Env }>, value: boolean) {
+  // Billing mutations are step-up gated, mirroring the (now-removed) Stripe
+  // portal endpoints — never run a subscription change on an SMS-only or stale
+  // session. The SPA auto-prompts for a fresh TOTP on the 403 and retries.
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  const body = await c.req.json().catch(() => ({} as { subscription_id?: string; scope?: string }));
+  const scope = billingScope(body.scope);
+  const customer = resolveScopeCustomer(user, scope);
+  const subId = String(body.subscription_id || '');
+  if (!customer || !subId) return c.json({ error: 'no_subscription' }, 400);
+  await fetchOwnedSub(c.env, subId, customer);
+  try {
+    const updated = await stripeCall<StripeSubscription>(
+      c.env, `/subscriptions/${subId}`,
+      { cancel_at_period_end: value ? 'true' : 'false', 'expand[0]': 'items.data.price' },
+    );
+    return c.json({ ok: true, subscription: normSub(updated) });
+  } catch (e) {
+    return c.json({ error: value ? 'cancel_failed' : 'resume_failed', detail: (e as Error).message }, 502);
+  }
+}
+
+// Cancel = schedule at period end (keeps access until renews_at); the
+// subscription.deleted webhook flips the D1 tier→free when Stripe ends it.
+billing.post('/subscription/cancel', (c) => setCancelAtPeriodEnd(c, true));
+billing.post('/subscription/resume', (c) => setCancelAtPeriodEnd(c, false));
+
+billing.post('/subscription/swap/preview', async (c) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  const body = await c.req.json().catch(() => ({} as { subscription_id?: string; price_id?: string; scope?: string }));
+  const scope = billingScope(body.scope);
+  const customer = resolveScopeCustomer(user, scope);
+  const subId = String(body.subscription_id || '');
+  const priceId = String(body.price_id || '');
+  if (!customer || !subId || !priceId) return c.json({ error: 'invalid_request' }, 400);
+  // Authorize the destination price for THIS scope before touching Stripe.
+  if (!(await resolveScopePrice(c.env, scope, priceId))) {
+    return c.json({ error: 'invalid_price' }, 400);
+  }
+  const sub = await fetchOwnedSub(c.env, subId, customer);
+  const itemId = sub.items?.data?.[0]?.id;
+  if (!itemId) return c.json({ error: 'no_subscription_item' }, 400);
+  try {
+    const upcoming = await stripeCall<StripeInvoice>(c.env, '/invoices/upcoming', {
+      customer,
+      subscription: subId,
+      'subscription_items[0][id]': itemId,
+      'subscription_items[0][price]': priceId,
+      subscription_proration_behavior: 'create_prorations',
+    }, { method: 'GET' });
+    const prorationLines = (upcoming.lines?.data ?? []).filter((l) => l.proration);
+    const prorationAmount = prorationLines.reduce((s, l) => s + (l.amount || 0), 0);
+    return c.json({
+      currency: upcoming.currency,
+      proration_amount: prorationAmount, // can be negative (credit) on downgrade
+      amount_due: upcoming.amount_due ?? 0,
+      total: upcoming.total ?? 0,
+      new_price_id: priceId,
+    });
+  } catch (e) {
+    return c.json({ error: 'preview_failed', detail: (e as Error).message }, 502);
+  }
+});
+
+billing.post('/subscription/swap/confirm', async (c) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  const body = await c.req.json().catch(() => ({} as { subscription_id?: string; price_id?: string; scope?: string }));
+  const scope = billingScope(body.scope);
+  const customer = resolveScopeCustomer(user, scope);
+  const subId = String(body.subscription_id || '');
+  const priceId = String(body.price_id || '');
+  if (!customer || !subId || !priceId) return c.json({ error: 'invalid_request' }, 400);
+
+  // Authorize the destination price for THIS scope BEFORE any Stripe mutation.
+  // A valid result is required: it is both the access-control gate (only active,
+  // recurring, same-scope catalog prices are switchable) AND the source for the
+  // entitlement tier we tag on Stripe metadata + sync to D1. Refusing unmapped
+  // prices prevents the drift where Stripe billing changes but the D1 tier
+  // columns stay stale.
+  const mapped = await resolveScopePrice(c.env, scope, priceId);
+  if (!mapped) return c.json({ error: 'invalid_price' }, 400);
+
+  const sub = await fetchOwnedSub(c.env, subId, customer);
+  const itemId = sub.items?.data?.[0]?.id;
+  if (!itemId) return c.json({ error: 'no_subscription_item' }, 400);
+
+  const params: Record<string, string> = {
+    'items[0][id]': itemId,
+    'items[0][price]': priceId,
+    proration_behavior: 'create_prorations',
+    'expand[0]': 'items.data.price',
+  };
+  if (scope === 'investor' && mapped?.investorTier) {
+    params['metadata[kind]'] = 'investor';
+    params['metadata[investor_tier]'] = mapped.investorTier;
+  } else if (scope === 'founder' && mapped?.tier) {
+    params['metadata[kind]'] = 'tier';
+    params['metadata[tier]'] = mapped.tier;
+  }
+
+  try {
+    const updated = await stripeCall<StripeSubscription>(c.env, `/subscriptions/${subId}`, params);
+    // Align D1 immediately (webhook will re-affirm). Scoped to the calling user.
+    if (scope === 'investor' && mapped?.investorTier) {
+      const t = mapped.investorTier as InvestorTier;
+      const dealroomMax = INVESTOR_QUOTAS[t]?.dealroom_max ?? INVESTOR_QUOTAS.free.dealroom_max;
+      await c.env.DB.prepare(
+        `UPDATE users SET investor_tier = ?, investor_dealroom_max = ? WHERE id = ?`,
+      ).bind(t, dealroomMax, user.id).run();
+    } else if (scope === 'founder' && mapped?.tier) {
+      await c.env.DB.prepare(
+        `UPDATE users SET subscription_tier = ? WHERE id = ?`,
+      ).bind(mapped.tier, user.id).run();
+    }
+    return c.json({ ok: true, subscription: normSub(updated) });
+  } catch (e) {
+    return c.json({ error: 'swap_failed', detail: (e as Error).message }, 502);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// In-app payment-method management. Removing the Stripe Customer Portal means
+// the dashboard is now the ONLY place a user can add / replace / remove a card,
+// so these endpoints must exist for BOTH scopes. They reuse `stripeCall` (secret
+// stays server-side) and the Stripe SetupIntent flow — raw card data is captured
+// exclusively by Stripe Elements in the SPA, never touching the worker.
+//
+// All three MUTATE billing state and are therefore step-up gated, exactly like
+// cancel/resume/swap. `resolveScopeCustomer` pins every call to the calling
+// user's own founder/investor customer; default/detach additionally re-fetch the
+// payment method and assert `pm.customer === customer` so a caller can never act
+// on a card that isn't theirs.
+
+// Resolve the scope customer or throw the standard JSON Response the global
+// handler returns verbatim. Used by the mutating PM endpoints below.
+function requireScopeCustomer(user: TierUser & InvestorUser, scope: BillingScope): string {
+  const customer = resolveScopeCustomer(user, scope);
+  if (!customer) {
+    throw new Response(JSON.stringify({ error: 'no_customer' }), {
+      status: 404, headers: { 'content-type': 'application/json' },
+    });
+  }
+  return customer;
+}
+
+// Fetch a payment method and assert it belongs to `customer`. Throws 404 on a
+// foreign / missing card so default/detach can't touch another user's card.
+async function fetchOwnedPaymentMethod(
+  env: Env, pmId: string, customer: string,
+): Promise<{ id: string; customer?: string | null }> {
+  const pm = await stripeCall<{ id: string; customer?: string | null }>(
+    env, `/payment_methods/${pmId}`, {}, { method: 'GET' },
+  );
+  if (!pm || pm.customer !== customer) {
+    throw new Response(JSON.stringify({ error: 'payment_method_not_found' }), {
+      status: 404, headers: { 'content-type': 'application/json' },
+    });
+  }
+  return pm;
+}
+
+const PM_ID_RE = /^pm_[A-Za-z0-9]+$/;
+
+// Create a SetupIntent for the scope's customer so the SPA can collect & save a
+// new card via Stripe Elements (`confirmSetup`). Returns only a client_secret.
+billing.post('/payment-method/setup-intent', async (c) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — recent TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  const body = await c.req.json().catch(() => ({} as { scope?: string }));
+  const scope = billingScope(body.scope);
+  const customer = requireScopeCustomer(user, scope);
+  try {
+    const intent = await stripeCall<{ id: string; client_secret: string; status: string }>(
+      c.env, '/setup_intents', {
+        customer,
+        usage: 'off_session',
+        'payment_method_types[0]': 'card',
+        'metadata[user_id]': String(user.id),
+        'metadata[uid]': user.uid,
+        'metadata[scope]': scope,
+      },
+    );
+    return c.json({ client_secret: intent.client_secret, setup_intent_id: intent.id, status: intent.status });
+  } catch (e) {
+    return c.json({ error: 'setup_intent_failed', detail: (e as Error).message }, 502);
+  }
+});
+
+// Make an existing (owned) card the customer's default for future invoices, and
+// re-point any live subscriptions at it so the next renewal charges the new card.
+billing.post('/payment-method/default', async (c) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — recent TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  const body = await c.req.json().catch(() => ({} as { scope?: string; payment_method_id?: string }));
+  const scope = billingScope(body.scope);
+  const customer = requireScopeCustomer(user, scope);
+  const pmId = String(body.payment_method_id || '');
+  if (!PM_ID_RE.test(pmId)) return c.json({ error: 'invalid_payment_method' }, 400);
+  await fetchOwnedPaymentMethod(c.env, pmId, customer);
+  try {
+    await stripeCall(c.env, `/customers/${customer}`, {
+      'invoice_settings[default_payment_method]': pmId,
+    });
+    // Re-point live subscriptions so the next renewal uses the new default.
+    const subsRes = await stripeCall<StripeList<StripeSubscription>>(
+      c.env, '/subscriptions', { customer, status: 'all', limit: '10' }, { method: 'GET' },
+    );
+    const liveSubs = (subsRes.data ?? []).filter(
+      (s) => !['canceled', 'incomplete_expired'].includes(s.status),
+    );
+    for (const s of liveSubs) {
+      await stripeCall(c.env, `/subscriptions/${s.id}`, { default_payment_method: pmId });
+    }
+    return c.json({ ok: true, default_payment_method: pmId });
+  } catch (e) {
+    return c.json({ error: 'set_default_failed', detail: (e as Error).message }, 502);
+  }
+});
+
+// Detach an owned card. Stripe refuses to detach a subscription's only/last card
+// that is still required, surfacing as a 502 the SPA shows to the user.
+billing.post('/payment-method/detach', async (c) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — recent TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  const body = await c.req.json().catch(() => ({} as { scope?: string; payment_method_id?: string }));
+  const scope = billingScope(body.scope);
+  const customer = requireScopeCustomer(user, scope);
+  const pmId = String(body.payment_method_id || '');
+  if (!PM_ID_RE.test(pmId)) return c.json({ error: 'invalid_payment_method' }, 400);
+  await fetchOwnedPaymentMethod(c.env, pmId, customer);
+  try {
+    await stripeCall(c.env, `/payment_methods/${pmId}/detach`, {});
+    return c.json({ ok: true, detached: pmId });
+  } catch (e) {
+    return c.json({ error: 'detach_failed', detail: (e as Error).message }, 502);
+  }
 });
 
 // Stripe webhook. Signature verification is required when STRIPE_WEBHOOK_SECRET
