@@ -62,6 +62,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'admin', label: 'Admin', items: [
       { to: '/admin', icon: Shield, label: 'Admin Console' },
       { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
+      { to: '/portfolio/coverage', icon: Network, label: 'Portfolio Coverage' },
       { to: '/monitoring', icon: Activity, label: 'Monitoring' },
     ]},
     { key: 'core', label: 'Core', items: [
@@ -228,6 +229,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
       { to: '/payouts', icon: Wallet, label: 'Payouts' },
       { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
+      { to: '/portfolio/coverage', icon: Network, label: 'Portfolio Coverage' },
       { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
     ]},
     { key: 'legal', label: 'Legal & Compliance', items: [

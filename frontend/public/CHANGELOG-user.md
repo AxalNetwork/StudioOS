@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## See where your whole portfolio is strong — and where the gaps are
+
+Partners and admins have a new **Portfolio Coverage** dashboard. It lays out every portfolio company as a row and the eight key skill areas — product, engineering, design, sales, marketing, finance, legal, and capital — as columns, colour-coded so weak spots jump out at a glance. You can sort by any area to see which companies are thinnest, and any company missing three or more areas is automatically flagged for attention. A bottom row shows the portfolio-wide average for each area, and you can narrow the view to a single fund.
+
+---
+
 ## Admin console is reachable again in the preview environment
 
 The Admin Console now works when previewing the app outside of production. There's a one-click "Sign in as demo admin" option on the sign-in screen (preview only) so administrators can open the console and see real data — users, monitoring, legal templates, and more — instead of empty screens and errors. A few admin sections that only run in the live environment (such as due diligence cases and the IRS-style forms) now show a clear note explaining they're available once the app is deployed, rather than an error.

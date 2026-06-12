@@ -10,6 +10,14 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Partner Coverage Analytics (Task #18)
+
+- `cloudflare-worker/src/routes/portfolio.ts`: new `GET /coverage[?fund_id=N]` (admin/partner only, else 403). Builds a portfolio-wide skill-coverage heatmap: for each in-scope project it resolves the team (`users.founder_id` == `project.founder_id` with `is_active=1`, plus active `cofounder_connections`), calls `computeRadar(env, teamUserIds)` (after `ensureSkillsTaxonomySchema`/`ensureSkillProfileSchema`), and emits the 8 `RADAR_AXES` scores (0–100). Gap axis = score < `GAP_THRESHOLD` (60); a company is `flagged` when it has ≥ `MIN_GAP_AXES_TO_FLAG` (3) gap axes. `fund_id` scopes via `fund_reserve_allocations(fund_id, project_id)` JOIN with fund name from `vc_funds`. Aggregate row = mean of per-company axis scores (2dp). Returns `{axes, companies[], aggregate, fund, company_count, flagged_count, gap_threshold}`. Worker-only (D1); 404s in dev FastAPI by design.
+- `frontend/src/lib/api.js`: added `portfolioCoverage(fundId)` → `GET /portfolio/coverage`.
+- `frontend/src/pages/PortfolioCoveragePage.jsx`: new admin/partner dashboard — companies × 8-axis heatmap with graduated colour ramp, sortable columns (any axis, company name, gap count), per-company flag (≥3 gaps), summary cards, fund selector (`api.fundsList()`), and a portfolio-average footer row. On a 404 in dev it shows the standard amber "unavailable in this environment" banner; `dark:` variants throughout.
+- `frontend/src/App.jsx`: lazy import + `<Route path="/portfolio/coverage" element={guard(['admin','partner'], …)} />`.
+- `frontend/src/sidebarConfig.js`: "Portfolio Coverage" nav entry (admin group after Due Diligence; partner Capital group after Portfolio Health).
+
 ## Restore admin console reachability in dev
 
 - `backend/app/services/demo_seed.py`: seed a dev-only `demo-admin@axal.test` (role ADMIN) alongside the existing demo investor/founder so the Admin Console (`/admin`) is reachable AND its API calls authorize in the dev FastAPI backend. `_ensure_user` now assigns the well-known TOTP secret to ADMIN as well as INVESTOR so both quick-login and manual `/login` TOTP work. `_ensure_onboarding_complete` marks the admin onboarded. Gated by the existing `is_production()` check.

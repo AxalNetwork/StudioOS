@@ -17,6 +17,9 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { isAdmin, isInvestor, isPartner, isFounder, mapError, nowIso, todayIso, newUid, jload } from './_t13t14t15_helpers';
+import { computeRadar } from '../services/radar';
+import { RADAR_AXES, ensureSkillsTaxonomySchema } from '../services/skillsTaxonomySchema';
+import { ensureSkillProfileSchema } from '../services/skillProfileSchema';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -205,6 +208,148 @@ r.post('/health/recompute/:uid', async (c) => {
     if (!project) return c.json({ detail: 'Project not found' }, 404);
     const row = await upsertSnapshot(c.env, project);
     return c.json(snapDto(row, project));
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// Task #18 — Partner Coverage Analytics.
+//
+// GET /coverage[?fund_id=N]
+//   Admin/partner-only portfolio-wide skill-gap dashboard. Composes a per-
+//   company 8-axis radar (from the radar service, built on each company's
+//   founding team) plus a portfolio-level aggregate.
+//
+//   - Each company's per-axis value is the radar axis `score` (0–100). This is
+//     uniform across solo founders and multi-member teams so the aggregate is
+//     a clean mean of per-company values.
+//   - A "gap axis" is any axis whose score < GAP_THRESHOLD (60), matching the
+//     radar service's own coverage-gap cutoff. Companies with ≥3 gap axes are
+//     flagged.
+//   - The portfolio aggregate per axis = mean of all companies' axis scores
+//     (sanity check: aggregate[axis] === mean(companies[].axes[axis])).
+// ---------------------------------------------------------------------------
+const GAP_THRESHOLD = 60;
+const MIN_GAP_AXES_TO_FLAG = 3;
+
+/**
+ * Resolve the founding-team user ids for a project: the user(s) linked via
+ * `users.founder_id` plus any active cofounder connections. Deterministic
+ * (sorted, de-duped). May be empty when no user is linked to the project.
+ */
+async function projectTeamUserIds(env: Env, project: { id: number; founder_id: number | null }): Promise<number[]> {
+  const ids = new Set<number>();
+  if (project.founder_id != null) {
+    const rows = await env.DB.prepare('SELECT id FROM users WHERE founder_id = ? AND is_active = 1')
+      .bind(project.founder_id).all<{ id: number }>().catch(() => ({ results: [] as { id: number }[] }));
+    for (const u of (rows.results || [])) ids.add(Number(u.id));
+  }
+  // Expand with active cofounder connections of the founding user(s).
+  if (ids.size > 0) {
+    const seed = [...ids];
+    const ph = seed.map(() => '?').join(',');
+    const conns = await env.DB.prepare(
+      `SELECT user_a_id, user_b_id FROM cofounder_connections
+       WHERE status = 'active' AND (user_a_id IN (${ph}) OR user_b_id IN (${ph}))`
+    ).bind(...seed, ...seed).all<{ user_a_id: number; user_b_id: number }>().catch(() => ({ results: [] as any[] }));
+    for (const cc of (conns.results || [])) {
+      ids.add(Number(cc.user_a_id));
+      ids.add(Number(cc.user_b_id));
+    }
+  }
+  return [...ids].sort((a, b) => a - b);
+}
+
+r.get('/coverage', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!isAdmin(user) && !isPartner(user)) {
+      return c.json({ detail: 'Admin/partner only' }, 403);
+    }
+    await ensureSkillsTaxonomySchema(c.env);
+    await ensureSkillProfileSchema(c.env);
+
+    // Optional fund scoping via fund_reserve_allocations(fund_id, project_id).
+    const fundIdRaw = c.req.query('fund_id');
+    // Validate explicitly rather than silently treating garbage as unscoped:
+    // a malformed fund_id is a client error, not "all companies".
+    if (fundIdRaw !== undefined && fundIdRaw !== '' && !/^\d+$/.test(fundIdRaw)) {
+      return c.json({ detail: 'fund_id must be a positive integer' }, 400);
+    }
+    const fundId = fundIdRaw ? parseInt(fundIdRaw, 10) : 0;
+    let fund: { id: number; name: string } | null = null;
+    let projects: { id: number; uid: string; name: string; sector: string | null; stage: string | null; founder_id: number | null }[];
+
+    if (fundId) {
+      const f = await c.env.DB.prepare('SELECT id, name FROM vc_funds WHERE id = ?')
+        .bind(fundId).first<{ id: number; name: string }>();
+      if (!f) return c.json({ detail: 'Fund not found' }, 404);
+      fund = { id: f.id, name: f.name };
+      const rows = await c.env.DB.prepare(
+        `SELECT DISTINCT p.id, p.uid, p.name, p.sector, p.stage, p.founder_id
+         FROM projects p
+         JOIN fund_reserve_allocations fra ON fra.project_id = p.id
+         WHERE fra.fund_id = ? AND p.deleted_at IS NULL
+         ORDER BY p.name`
+      ).bind(fundId).all<any>();
+      projects = (rows.results || []) as any[];
+    } else {
+      const rows = await c.env.DB.prepare(
+        `SELECT id, uid, name, sector, stage, founder_id
+         FROM projects WHERE deleted_at IS NULL ORDER BY name`
+      ).all<any>();
+      projects = (rows.results || []) as any[];
+    }
+
+    const axisMeta = RADAR_AXES.map((a) => ({ slug: a.slug, label: a.label }));
+    const companies: any[] = [];
+    // Running sums for the portfolio aggregate (mean per axis).
+    const axisSums: Record<string, number> = {};
+    for (const a of RADAR_AXES) axisSums[a.slug] = 0;
+
+    for (const p of projects) {
+      const teamIds = await projectTeamUserIds(c.env, p);
+      const radar = await computeRadar(c.env, teamIds);
+      // Map axis slug -> score (0–100), preserving canonical axis order.
+      const bySlug = new Map(radar.axes.map((ax) => [ax.slug, ax.score]));
+      const axes: Record<string, number> = {};
+      const gapAxes: string[] = [];
+      for (const a of RADAR_AXES) {
+        const score = Math.round(bySlug.get(a.slug) ?? 0);
+        axes[a.slug] = score;
+        axisSums[a.slug] += score;
+        if (score < GAP_THRESHOLD) gapAxes.push(a.slug);
+      }
+      companies.push({
+        project_id: p.id,
+        uid: p.uid,
+        name: p.name,
+        sector: p.sector || null,
+        stage: p.stage || null,
+        team_size: teamIds.length,
+        has_data: radar.has_data,
+        axes,
+        gap_axes: gapAxes,
+        gap_count: gapAxes.length,
+        flagged: gapAxes.length >= MIN_GAP_AXES_TO_FLAG,
+        overall: radar.overall,
+      });
+    }
+
+    const n = companies.length;
+    const aggregate: Record<string, number> = {};
+    for (const a of RADAR_AXES) {
+      aggregate[a.slug] = n > 0 ? Math.round((axisSums[a.slug] / n) * 100) / 100 : 0;
+    }
+
+    return c.json({
+      axes: axisMeta,
+      companies,
+      aggregate,
+      fund,
+      company_count: n,
+      flagged_count: companies.filter((x) => x.flagged).length,
+      gap_threshold: GAP_THRESHOLD,
+    });
   } catch (e) { return mapError(c, e); }
 });
 

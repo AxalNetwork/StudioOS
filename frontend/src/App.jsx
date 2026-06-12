@@ -84,6 +84,7 @@ const CofounderPage = lazy(() => import('./pages/CofounderPage'));
 const SkillsProfilePage = lazy(() => import('./pages/SkillsProfilePage'));
 const ValuesAssessmentPage = lazy(() => import('./pages/ValuesAssessmentPage'));
 const PortfolioHealthPage = lazy(() => import('./pages/PortfolioHealthPage'));
+const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
 const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
 const ReferEarnPage = lazy(() => import('./pages/ReferEarnPage'));
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
@@ -1120,6 +1121,8 @@ function AppInner() {
       {/* Task #12 — Personal-Values Assessment. */}
       <Route path="/values" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ValuesAssessmentPage />)} />
       <Route path="/portfolio/health" element={guard(['admin', 'founder', 'partner', 'investor'], <PortfolioHealthPage />)} />
+      {/* Task #18 — Partner Coverage Analytics (admin/partner-only internal dashboard). */}
+      <Route path="/portfolio/coverage" element={guard(['admin', 'partner'], <PortfolioCoveragePage />)} />
       <Route path="/watchlist" element={guard(['admin', 'partner', 'investor'], <WatchlistJournalPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
