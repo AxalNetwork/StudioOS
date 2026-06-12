@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Download the Portfolio Coverage heatmap as a PDF
+
+The **Portfolio Coverage** dashboard now has an **Export PDF** button next to Export CSV. It produces a print-ready, colour-coded version of the heatmap — every company with its score in each skill area, gap markers, flagged companies highlighted, and the portfolio-average row at the bottom — that looks just like what's on screen. Like the CSV, it matches your selected fund and current sort. It's ideal for dropping into LP updates and partner-meeting decks where a clean, branded page reads better than a spreadsheet.
+
+---
+
 ## Export the Portfolio Coverage view for reports
 
 The **Portfolio Coverage** dashboard now has an **Export CSV** button. It downloads exactly what you're looking at — every company with its score in each skill area, how many gaps it has, whether it's flagged, and the portfolio-average row at the bottom. If you've narrowed the view to a single fund or sorted by a column, the file matches that. Drop it straight into an LP update or open it in a spreadsheet for partner meetings.

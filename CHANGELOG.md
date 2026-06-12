@@ -10,6 +10,11 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Portfolio Coverage PDF export (Task #33)
+
+- `frontend/src/lib/coveragePdf.js`: new. `exportCoveragePdf(data, companies)` builds a print-ready, branded **vector** PDF of the coverage heatmap with jsPDF (landscape A4, lazy `import('jspdf')` so the lib stays out of the initial bundle) and triggers the download. Drawn directly (filled rects + centred score text) rather than via html2canvas — the live table uses sticky columns, dark-mode classes, and horizontal scroll that rasterise poorly. Mirrors the on-screen ramp via `scoreColors(score)` (RGB equivalents of `cellStyle()` — keep the two in sync), draws gap axes with a rose outline, washes flagged rows rose with a `!` name prefix, and renders the portfolio-average footer row (whole numbers plain, fractions 1dp). Header band is redrawn on page breaks for large portfolios. Exports `coverageScopeToken`/`coveragePdfFilename` (`portfolio-coverage-<scope>-<YYYY-MM-DD>.pdf`).
+- `frontend/src/pages/PortfolioCoveragePage.jsx`: added an **Export PDF** button beside Export CSV (admin/partner page, already gated). New `pdfBusy` state shows a "Generating…" label and disables the button during generation; errors route through `reportError` + the existing error banner. Feeds the already-sorted `sortedCompanies` and the loaded `GET /portfolio/coverage` payload, so the PDF respects the selected fund and current sort exactly like the CSV (no new endpoint).
+
 ## Portfolio coverage scoring tests (Task #30)
 
 - `cloudflare-worker/src/routes/portfolio.ts`: extracted the coverage heatmap's regression-sensitive rules into pure, exported helpers so they're unit-testable without auth/D1/radar plumbing — `coverageGapAxes(axes, threshold)` (gap = score < `GAP_THRESHOLD`), `isFlagged(gapCount)` (flagged at `MIN_GAP_AXES_TO_FLAG` = 3), `aggregateAxes(companyAxesList, slugs)` (per-axis mean, 2dp, zeros on empty), and `validateFundId(raw)`. The `/coverage` route now calls these; behavior is unchanged. `GAP_THRESHOLD`/`MIN_GAP_AXES_TO_FLAG` are now exported.

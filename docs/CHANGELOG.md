@@ -10,6 +10,12 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Portfolio coverage scoring tests (Task #30)
+
+- `cloudflare-worker/src/routes/portfolio.ts`: extracted the coverage heatmap's regression-sensitive rules into pure, exported helpers so they're unit-testable without auth/D1/radar plumbing — `coverageGapAxes(axes, threshold)` (gap = score < `GAP_THRESHOLD`), `isFlagged(gapCount)` (flagged at `MIN_GAP_AXES_TO_FLAG` = 3), `aggregateAxes(companyAxesList, slugs)` (per-axis mean, 2dp, zeros on empty), and `validateFundId(raw)`. The `/coverage` route now calls these; behavior is unchanged. `GAP_THRESHOLD`/`MIN_GAP_AXES_TO_FLAG` are now exported.
+- `cloudflare-worker/test/portfolio_coverage.test.ts`: new. (A) unit tests for the pure rules incl. the `aggregate[axis] === mean(companies[].axes[axis])` sanity check and the 60-is-not-a-gap boundary; (B) integration tests driving the real Hono app via `app.request()` with a minted HS256 JWT + in-memory D1 stub — admin/partner gating (403 for founder/investor/mentor/guest), invalid `fund_id` → 400, empty portfolio → zeros, and a teamless company → all-gap + flagged end-to-end.
+- `package.json`: added the new `.ts` test to the `test:drift` strip-types batch so it runs pre-merge.
+
 ## Export portfolio coverage heatmap (CSV)
 
 - `frontend/src/pages/PortfolioCoveragePage.jsx`: added an "Export CSV" control (next to Refresh, admin/partner-only page) that downloads the current scope as a CSV. New pure helpers `csvCell` (RFC-4180 escaping), `buildCoverageCsv(data, companies)` (header + one row per company in the on-screen sort order + a "Portfolio average" footer row), and `downloadTextFile`. Columns: Company, Sector, Stage, Team size, one per radar axis (label), Gap count, Flagged (yes/no). The average row mirrors the table's `aggregate` (integers plain, fractions to 1dp). Export is client-side from the already-loaded `GET /portfolio/coverage` payload, so it respects the selected fund and current sort with no new endpoint. Filename: `portfolio-coverage-<scope>-<YYYY-MM-DD>.csv` (scope = fund slug or `all-companies`). Button disabled while loading or when there are no companies in scope.

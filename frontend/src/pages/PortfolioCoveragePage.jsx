@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Network, RefreshCw, AlertTriangle, ChevronDown, Info, Download } from 'lucide-react';
+import { Network, RefreshCw, AlertTriangle, ChevronDown, Info, Download, FileDown } from 'lucide-react';
 import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
 import { reportError } from '../lib/log';
+import { exportCoveragePdf } from '../lib/coveragePdf';
 
 // Task #18 — Partner Coverage Analytics.
 //
@@ -104,6 +105,7 @@ export default function PortfolioCoveragePage() {
   // FastAPI backend simply not having the worker-only route at all.
   const [endpointLive, setEndpointLive] = useState(false);
   const [sort, setSort] = useState({ field: 'name', dir: 'asc' });
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   // Fund list is best-effort — the selector just narrows the heatmap. A
   // failure here (e.g. dev backend) leaves the "All companies" view intact.
@@ -153,6 +155,19 @@ export default function PortfolioCoveragePage() {
       `portfolio-coverage-${scope}-${stamp}.csv`,
       buildCoverageCsv(data, sortedCompanies),
     );
+  }
+
+  async function exportPdf() {
+    if (!data || !sortedCompanies.length || pdfBusy) return;
+    setPdfBusy(true);
+    try {
+      await exportCoveragePdf(data, sortedCompanies);
+    } catch (e) {
+      reportError('PortfolioCoveragePage:exportPdf', e);
+      setErr('Failed to generate PDF.');
+    } finally {
+      setPdfBusy(false);
+    }
   }
 
   const sortedCompanies = useMemo(() => {
@@ -209,6 +224,15 @@ export default function PortfolioCoveragePage() {
           >
             <Download className="w-3.5 h-3.5" />
             Export CSV
+          </button>
+          <button
+            onClick={exportPdf}
+            disabled={loading || pdfBusy || !data || !sortedCompanies.length}
+            title="Export the current scope as a print-ready, colour-coded PDF (companies × axes, gaps, flagged, and the portfolio average)"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 dark:text-slate-200"
+          >
+            <FileDown className={`w-3.5 h-3.5 ${pdfBusy ? 'animate-pulse' : ''}`} />
+            {pdfBusy ? 'Generating…' : 'Export PDF'}
           </button>
           <button
             onClick={load}
