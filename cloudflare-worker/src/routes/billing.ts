@@ -11,6 +11,7 @@ import {
   type InvestorUser,
 } from '../middleware/requireInvestorTier';
 import { upsertPlanFromStripeSubscription } from '../services/subscriptionPlans';
+import { priceForPlanMetadata } from '../services/catalog';
 
 // Epic 6 — Market Intel Pro billing surface.
 //
@@ -33,11 +34,6 @@ interface MiUserCols {
   mi_stripe_customer_id?: string | null;
 }
 type MiUser = User & MiUserCols;
-
-const PLAN_TO_PRICE_ENV: Record<string, keyof Env> = {
-  mi_pro_monthly: 'STRIPE_PRICE_MI_PRO_MONTHLY' as keyof Env,
-  mi_pro_annual:  'STRIPE_PRICE_MI_PRO_ANNUAL'  as keyof Env,
-};
 
 function isValidPlan(p: unknown): p is 'mi_pro_monthly' | 'mi_pro_annual' {
   return p === 'mi_pro_monthly' || p === 'mi_pro_annual';
@@ -96,13 +92,12 @@ billing.post('/mi-pro/checkout', async (c) => {
   if (!isValidPlan(plan)) return c.json({ error: 'invalid_plan' }, 400);
 
   const stripeKey = c.env.STRIPE_SECRET_KEY;
-  const priceEnvKey = PLAN_TO_PRICE_ENV[plan];
-  // Cast through `unknown` because the `Env` type doesn't carry an index
-  // signature for these dynamically-named price-id vars (STRIPE_PRICE_*).
-  // Going via `unknown` is the TS-recommended escape hatch when two types
-  // don't sufficiently overlap. (Epic 11 — needed to keep `tsc --noEmit`
-  // green so the new CI lint gate stays green on day 1.)
-  const priceId = (c.env as unknown as Record<string, unknown>)[priceEnvKey] as string | undefined;
+  // Resolve the SKU from the catalog (mirrored from Stripe) instead of a
+  // hardcoded STRIPE_PRICE_* env var. The MI Pro product carries
+  // `metadata.plan === 'mi_pro'`; the plan string encodes the interval.
+  const interval = plan === 'mi_pro_annual' ? 'year' : 'month';
+  const price = stripeKey ? await priceForPlanMetadata(c.env, 'plan', 'mi_pro', interval) : null;
+  const priceId = price?.id;
   const appUrl = c.env.APP_URL || 'http://localhost:5000';
 
   // Dev fallback — no Stripe configured. Return a URL to the dev-upgrade
@@ -201,11 +196,6 @@ billing.all('/mi-pro/dev-upgrade', async (c) => {
 // both a Tier sub (Growth/Studio) and an MI Pro sub side-by-side.
 // ---------------------------------------------------------------------------
 
-const TIER_PRICE_ENV: Record<string, keyof Env> = {
-  growth: 'STRIPE_PRICE_GROWTH' as keyof Env,
-  studio: 'STRIPE_PRICE_STUDIO' as keyof Env,
-};
-
 function isValidTier(t: unknown): t is 'growth' | 'studio' {
   return t === 'growth' || t === 'studio';
 }
@@ -218,8 +208,11 @@ billing.post('/tier/checkout', async (c) => {
   if (!isValidTier(tier)) return c.json({ error: 'invalid_tier' }, 400);
 
   const stripeKey = c.env.STRIPE_SECRET_KEY;
-  const priceEnvKey = TIER_PRICE_ENV[tier];
-  const priceId = (c.env as unknown as Record<string, unknown>)[priceEnvKey] as string | undefined;
+  // Resolve the SKU from the catalog instead of STRIPE_PRICE_GROWTH/STUDIO.
+  // Each founder-tier product carries `metadata.tier === 'growth' | 'studio'`
+  // and a single recurring price (interval not encoded in the tier string).
+  const price = stripeKey ? await priceForPlanMetadata(c.env, 'tier', tier) : null;
+  const priceId = price?.id;
   const appUrl = c.env.APP_URL || 'http://localhost:5000';
 
   // Dev fallback — no Stripe configured. Mirrors mi-pro/dev-upgrade.
@@ -308,11 +301,15 @@ billing.all('/tier/dev-upgrade', async (c) => {
 // ($149/mo or yearly) → Institutional ($599/mo or yearly).
 // ---------------------------------------------------------------------------
 
-const INVESTOR_PLAN_TO_PRICE: Record<string, { tier: InvestorTier; envKey: keyof Env }> = {
-  investor_pro_monthly:  { tier: 'professional',  envKey: 'STRIPE_PRICE_INVESTOR_PRO_MONTHLY'  as keyof Env },
-  investor_pro_yearly:   { tier: 'professional',  envKey: 'STRIPE_PRICE_INVESTOR_PRO_YEARLY'   as keyof Env },
-  investor_inst_monthly: { tier: 'institutional', envKey: 'STRIPE_PRICE_INVESTOR_INST_MONTHLY' as keyof Env },
-  investor_inst_yearly:  { tier: 'institutional', envKey: 'STRIPE_PRICE_INVESTOR_INST_YEARLY'  as keyof Env },
+// The investor `plan` string encodes both the tier (professional |
+// institutional) and the billing interval (month | year). Each investor
+// product in the catalog carries `metadata.investor_tier === cfg.tier`; the
+// interval selects the matching recurring price on that product.
+const INVESTOR_PLAN_TO_PRICE: Record<string, { tier: InvestorTier; interval: 'month' | 'year' }> = {
+  investor_pro_monthly:  { tier: 'professional',  interval: 'month' },
+  investor_pro_yearly:   { tier: 'professional',  interval: 'year'  },
+  investor_inst_monthly: { tier: 'institutional', interval: 'month' },
+  investor_inst_yearly:  { tier: 'institutional', interval: 'year'  },
 };
 
 function isValidInvestorPlan(p: unknown): p is keyof typeof INVESTOR_PLAN_TO_PRICE {
@@ -335,7 +332,13 @@ billing.post('/investor/checkout', async (c) => {
 
   const cfg = INVESTOR_PLAN_TO_PRICE[plan];
   const stripeKey = c.env.STRIPE_SECRET_KEY;
-  const priceId = (c.env as unknown as Record<string, unknown>)[cfg.envKey] as string | undefined;
+  // Resolve the SKU from the catalog instead of STRIPE_PRICE_INVESTOR_*.
+  // The investor product carries `metadata.investor_tier === cfg.tier`; the
+  // plan-derived interval selects the matching recurring price.
+  const price = stripeKey
+    ? await priceForPlanMetadata(c.env, 'investor_tier', cfg.tier, cfg.interval)
+    : null;
+  const priceId = price?.id;
   const appUrl = c.env.APP_URL || 'http://localhost:5000';
 
   // Dev fallback — flips the user into the requested tier without Stripe.

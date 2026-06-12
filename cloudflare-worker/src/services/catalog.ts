@@ -329,3 +329,39 @@ export async function priceForProductAndInterval(
   );
   return match ?? null;
 }
+
+/**
+ * Plan-keyed price lookup. Resolves the active product whose Stripe metadata
+ * carries `metaKey === metaValue`, then returns its price for the requested
+ * recurring `interval` ('month' | 'year' | ...). This is how the subscription
+ * checkout routes map their plan/tier strings onto a SKU without any hardcoded
+ * `STRIPE_PRICE_*` env var — the catalog (mirrored from Stripe) is the source
+ * of truth.
+ *
+ * `interval`:
+ *   - a string ('month' | 'year') → match that recurring interval exactly
+ *   - `null`                       → match a one-time price
+ *   - omitted (`undefined`)        → match the product's single recurring price
+ *     (used by single-price tiers whose plan key doesn't encode an interval)
+ *
+ * Returns `null` when no product/price matches (callers treat that the same as
+ * an unconfigured price: they fall back to the dev-upgrade path).
+ */
+export async function priceForPlanMetadata(
+  env: Env,
+  metaKey: string,
+  metaValue: string,
+  interval?: string | null,
+): Promise<CatalogPrice | null> {
+  const products = await getCatalog(env);
+  const product = products.find((p) => p.active && p.metadata[metaKey] === metaValue);
+  if (!product) return null;
+  const active = product.prices.filter((pr) => pr.active);
+  if (interval === undefined) {
+    return active.find((pr) => pr.type === 'recurring') ?? active[0] ?? null;
+  }
+  return (
+    active.find((pr) => (interval === null ? pr.interval === null : pr.interval === interval)) ??
+    null
+  );
+}
