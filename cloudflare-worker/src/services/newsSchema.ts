@@ -56,6 +56,9 @@ export async function ensureNewsSchema(env: Env): Promise<void> {
     if (!names.has('canonical_url')) {
       await env.DB.exec('ALTER TABLE articles ADD COLUMN canonical_url TEXT').catch(() => {});
     }
+    if (!names.has('views')) {
+      await env.DB.exec('ALTER TABLE articles ADD COLUMN views INTEGER NOT NULL DEFAULT 0').catch(() => {});
+    }
     _ready = true;
   } catch (e) {
     console.warn('[newsSchema] ensure failed:', (e as Error).message);

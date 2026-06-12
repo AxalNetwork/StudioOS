@@ -125,6 +125,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
       { to: '/articles/draft', icon: PenLine, label: 'Write an Article' },
+      { to: '/articles/mine', icon: FileText, label: 'My Articles' },
       { to: '/skills', icon: Target, label: 'Skills Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
@@ -183,6 +184,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
       { to: '/articles/draft', icon: PenLine, label: 'Write an Article' },
+      { to: '/articles/mine', icon: FileText, label: 'My Articles' },
       { to: '/skills', icon: Target, label: 'Skills Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
@@ -234,6 +236,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
       { to: '/articles/draft', icon: PenLine, label: 'Write an Article' },
+      { to: '/articles/mine', icon: FileText, label: 'My Articles' },
       { to: '/skills', icon: Target, label: 'Skills Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
@@ -279,6 +282,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
       { to: '/articles/draft', icon: PenLine, label: 'Write an Article' },
+      { to: '/articles/mine', icon: FileText, label: 'My Articles' },
       { to: '/skills', icon: Target, label: 'Skills Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
@@ -300,6 +304,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
       { to: '/articles/draft', icon: PenLine, label: 'Write an Article' },
+      { to: '/articles/mine', icon: FileText, label: 'My Articles' },
       { to: '/skills', icon: Target, label: 'Skills Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },

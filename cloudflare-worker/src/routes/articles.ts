@@ -93,6 +93,7 @@ function publicArticleShape(row: any) {
     published_at: row.published_at,
     word_count: row.word_count,
     read_minutes: row.read_minutes,
+    views: row.views ?? 0,
     author: row.author_name || null,
     author_user_id: row.author_user_id ?? null,
     author_handle: row.author_handle ?? null,
@@ -127,6 +128,7 @@ function authorArticleShape(row: any) {
     rejection_reason: row.rejection_reason,
     word_count: row.word_count,
     read_minutes: row.read_minutes,
+    views: row.views ?? 0,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -287,6 +289,12 @@ articles.get('/:slug', async (c) => {
   await ensureNewsSchema(c.env);
   await ensureAuthorWebsites(c.env);
   const seededCover = await ensureArticleCovers(c.env);
+  // Task #5 — increment view count for every request, even cache hits.
+  // Fire-and-forget using the slug so we don't need to block on a DB read.
+  c.executionCtx?.waitUntil?.(
+    c.env.DB.prepare("UPDATE articles SET views = views + 1 WHERE slug = ? AND status = 'published'")
+      .bind(slug).run().catch(() => {}),
+  );
   const cached = seededCover ? null : await cacheLookup(c);
   if (cached) return cached;
   const row: any = await c.env.DB.prepare(

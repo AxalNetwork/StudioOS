@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, FileText, Mail, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Loader2, FileText, Mail, ChevronRight, Pencil } from 'lucide-react';
 import { articles as api } from '../lib/api';
 import { reportError } from '../lib/log';
+import { useAuth } from '../hooks/useAuthSync';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
 
@@ -240,6 +241,8 @@ export default function ArticleReaderPage() {
   const bodyRef = useRef(null);
   const progress = useReadingProgress();
   const { items, activeId } = useTOC(bodyRef, a?.body_html);
+  const { user } = useAuth();
+  const canEdit = !!(user && a && (user.id === a.author_user_id || user.role === 'admin'));
 
   useEffect(() => {
     setLoading(true); setErr(null); setRecs([]);
@@ -363,7 +366,11 @@ export default function ArticleReaderPage() {
                       {a.author && (
                         <>
                           <span className="font-medium text-slate-800 dark:text-slate-200">
-                            {a.author_website ? (
+                            {a.author_user_id ? (
+                              <Link to={`/authors/${a.author_user_id}`} className="hover:text-violet-700 hover:underline">
+                                {a.author}
+                              </Link>
+                            ) : a.author_website ? (
                               <a href={a.author_website} target="_blank" rel="noopener noreferrer" className="hover:text-violet-700 hover:underline">
                                 {a.author}
                               </a>
@@ -391,9 +398,17 @@ export default function ArticleReaderPage() {
                         </>
                       )}
                     </div>
-                    {/* Top share bar */}
-                    <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800">
+                    {/* Top share bar + Edit button */}
+                    <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-3 justify-between">
                       <ShareBar title={a.title} compact />
+                      {canEdit && (
+                        <Link
+                          to={`/articles/edit/${a.id}`}
+                          className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 bg-violet-600 text-white rounded hover:bg-violet-700 transition"
+                        >
+                          <Pencil className="w-3.5 h-3.5" /> Edit
+                        </Link>
+                      )}
                     </div>
                   </header>
 

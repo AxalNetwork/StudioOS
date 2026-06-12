@@ -50,6 +50,8 @@ const AdminX = lazy(() => import('./pages/admin/AdminX'));
 const ArticlesPage = lazy(() => import('./pages/ArticlesPage'));
 const ArticleReaderPage = lazy(() => import('./pages/ArticleReaderPage'));
 const ArticleAuthorPage = lazy(() => import('./pages/ArticleAuthorPage'));
+const MyArticlesPage = lazy(() => import('./pages/MyArticlesPage'));
+const AuthorProfilePage = lazy(() => import('./pages/AuthorProfilePage'));
 const ArticlesQueuePage = lazy(() => import('./pages/admin/ArticlesQueuePage'));
 const AdminPublicationNew = lazy(() => import('./pages/admin/PublicationNew'));
 const AdminPublicationDetail = lazy(() => import('./pages/admin/PublicationDetail'));
@@ -1077,6 +1079,8 @@ function AppInner() {
       <Route path="/articles" element={<ArticlesPage />} />
       <Route path="/articles/draft" element={authOnly(<ArticleAuthorPage />)} />
       <Route path="/articles/edit/:id" element={authOnly(<ArticleAuthorPage />)} />
+      <Route path="/articles/mine" element={authOnly(<MyArticlesPage />)} />
+      <Route path="/authors/:userId" element={<AuthorProfilePage />} />
       <Route path="/admin/articles" element={guard(['admin'], <ArticlesQueuePage />)} />
       <Route path="/articles/:slug" element={<ArticleReaderPage />} />
       <Route path="/admin/publications" element={guard(['admin'], <AdminPublications />)} />

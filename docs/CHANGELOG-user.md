@@ -5,6 +5,14 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your author dashboard
+
+Every article you write now has a home page. In **My Articles** you can see every draft, submission, and published piece in one list, with badges showing its status (Draft, In Review, Changes Requested, etc.), when you last updated it, how many words it has, and how many times it has been read. Published articles get a quick "View live" link and an Edit button so you can fix a typo without hunting around.
+
+Reader pages now link the author name to a public profile page that shows all of that author's published articles, so readers can discover more of their work. If you are the author of an article, or an admin, you will see an **Edit** button right at the top of the reader page.
+
+---
+
 ## A better article editor
 
 The article editor is now a split-pane writing surface: the left side is a markdown editor with drag-and-drop image upload, and the right side shows a live preview of how the article will look when published. You can also paste an image straight into the editor to insert it at the cursor.

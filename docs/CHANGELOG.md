@@ -10,6 +10,19 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Author Dashboard & Public Profile (Task #5)
+
+Authors get a personal "My Articles" dashboard with status, view counts, and edit links. Reader pages now show author profiles and an Edit button when the viewer is the author or an admin.
+
+- `cloudflare-worker/sql/migrations/093_article_views.sql`: ALTER TABLE articles ADD views INTEGER NOT NULL DEFAULT 0.
+- `cloudflare-worker/src/services/newsSchema.ts`: `ensureNewsSchema` backfills `views` column via PRAGMA check.
+- `cloudflare-worker/src/routes/articles.ts`: `publicArticleShape` and `authorArticleShape` include `views` (default 0). GET `/:slug` increments views via fire-and-forget `waitUntil` so reads never block.
+- `frontend/src/pages/MyArticlesPage.jsx`: authenticated list over `api.articles.mine()` with status badges, word count, view count, "View live" link (published only), and Edit link.
+- `frontend/src/pages/AuthorProfilePage.jsx`: public profile page at `/authors/:userId` that loads `api.articles.byAuthor(userId)`; shows author name/role/website + published article cards.
+- `frontend/src/pages/ArticleReaderPage.jsx`: author name is now a deep-link to `/authors/:userId`; Edit button visible to author or admin, routes to `/articles/edit/:id`.
+- `frontend/src/App.jsx`: routes `/articles/mine` (authOnly) and `/authors/:userId` (public).
+- `frontend/src/sidebarConfig.js`: "My Articles" entry added under the Account group for all roles.
+
 ## Pro Article Editor Upgrades (Task #4)
 
 Split-pane markdown editor with live preview, inline image upload, SEO fields, live slug preview, debounced autosave, and live word/reading-time stats.
