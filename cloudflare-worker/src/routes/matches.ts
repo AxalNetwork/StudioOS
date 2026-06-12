@@ -351,6 +351,321 @@ matches.post('/score', async (c) => {
 
 // --------- Admin ---------
 
+// --------- Investor matching (Task #16) ---------
+
+function safeJsonArray(s: any): string[] {
+  try { const j = JSON.parse(s); return Array.isArray(j) ? j.map((x: any) => String(x)) : []; } catch { return []; }
+}
+
+function safeJsonObject(s: any): Record<string, unknown> {
+  try { const j = JSON.parse(s); return (j && typeof j === 'object' && !Array.isArray(j)) ? j : {}; } catch { return {}; }
+}
+
+function safeJsonNumber(s: any, def: number): number {
+  const n = typeof s === 'number' ? s : parseFloat(String(s));
+  return Number.isNaN(n) ? def : n;
+}
+
+// Cosine similarity of two dimension-score maps.
+function cosineSimilarityVectors(a: Record<number, number>, b: Record<number, number>): number {
+  let dot = 0, na = 0, nb = 0;
+  const ids = new Set<number>([...Object.keys(a).map(Number), ...Object.keys(b).map(Number)]);
+  for (const id of ids) {
+    const av = a[id] || 0;
+    const bv = b[id] || 0;
+    dot += av * bv;
+    na += av * av;
+    nb += bv * bv;
+  }
+  const denom = Math.sqrt(na) * Math.sqrt(nb);
+  if (denom === 0) return 0;
+  return dot / denom;
+}
+
+// Normalize a ticket band to a midpoint dollar value.
+function ticketMidpoint(band: string | null): number | null {
+  const map: Record<string, number> = {
+    '<$10k': 5_000,
+    '$10k-$50k': 30_000,
+    '$50k-$250k': 150_000,
+    '$250k-$1M': 625_000,
+    '$1M+': 2_500_000,
+  };
+  return band && map[band] ? map[band] : null;
+}
+
+// Check if a company raise size is within the investor's check range.
+function checkSizeFits(projectFunding: number | null, investorMin: number | null, investorMax: number | null): { fits: boolean; reason?: string } {
+  if (projectFunding == null) return { fits: true };
+  if (investorMin != null && projectFunding < investorMin) return { fits: false, reason: 'Below minimum check size' };
+  if (investorMax != null && projectFunding > investorMax) return { fits: false, reason: 'Above maximum check size' };
+  return { fits: true };
+}
+
+matches.post('/investor-match', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+
+  let body: any;
+  try { body = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+  if (!body || typeof body !== 'object') return c.json({ error: 'Body must be an object' }, 400);
+  const projectId = body.project_id != null ? Number(body.project_id) : null;
+  if (!projectId || !Number.isFinite(projectId)) return c.json({ error: 'project_id required' }, 400);
+  const userRole = (user.role || '').toLowerCase();
+  if (!['founder', 'admin'].includes(userRole)) return c.json({ error: 'founder_required' }, 403);
+
+  // Fetch project details with ownership check
+  const projects = await sql`
+    SELECT * FROM projects
+    WHERE id = ${projectId}
+      AND (user_id = ${user.id} OR founder_id = ${user.founder_id || 0} OR ${user.role === 'admin' ? 1 : 0} = 1)
+  `;
+  if (!projects.length) return c.json({ error: 'Project not found' }, 404);
+  const project: any = projects[0];
+
+  // Fetch all investor profiles with linked users
+  const investorRows = await sql`
+    SELECT
+      ip.user_id,
+      ip.investor_type,
+      ip.sectors_json,
+      ip.stages_json,
+      ip.geos_json,
+      ip.ticket_band,
+      ip.ticket_min_usd,
+      ip.ticket_max_usd,
+      ip.thesis_text,
+      ip.thesis_keywords_json,
+      ip.anti_thesis_sectors_json,
+      ip.anti_thesis_stages_json,
+      ip.value_weights_json,
+      u.id as user_id,
+      u.name as user_name,
+      u.email as user_email,
+      i.id as investor_table_id,
+      i.investor_type as legacy_investor_type,
+      i.check_size_min,
+      i.check_size_max,
+      i.sector_focus,
+      i.stage_focus
+    FROM investor_profiles ip
+    JOIN users u ON u.id = ip.user_id
+    LEFT JOIN investors i ON i.user_id = u.id
+    WHERE u.role = 'investor'
+    ORDER BY ip.user_id
+  `;
+
+  // Fetch founder's values vector
+  const founderValuesRows = await sql`
+    SELECT v.dimension_id, v.score, v.confidence
+    FROM user_values v
+    WHERE v.user_id = ${user.id}
+  `;
+  const founderValues: Record<number, number> = {};
+  for (const r of founderValuesRows as any[]) {
+    founderValues[Number(r.dimension_id)] = Number(r.score) * Number(r.confidence);
+  }
+
+  // Fetch investor values vectors (all investors in one query)
+  const investorUserIds = (investorRows as any[]).map((r) => Number(r.user_id)).filter(Boolean);
+  const investorValuesMap = new Map<number, Record<number, number>>();
+  if (investorUserIds.length > 0) {
+    const ph = investorUserIds.map(() => '?').join(',');
+    const valuesRows = await sql.unsafe(
+      `SELECT user_id, dimension_id, score, confidence FROM user_values WHERE user_id IN (${ph})`,
+      investorUserIds,
+    );
+    for (const r of valuesRows as any[]) {
+      const uid = Number(r.user_id);
+      if (!investorValuesMap.has(uid)) investorValuesMap.set(uid, {});
+      investorValuesMap.get(uid)![Number(r.dimension_id)] = Number(r.score) * Number(r.confidence);
+    }
+  }
+
+  // Fetch introduction history for network warmth (warmth = any past interaction)
+  const introRows = await sql`
+    SELECT investor_user_id, COUNT(*) as n
+    FROM investor_introductions
+    WHERE (founder_user_id = ${user.id} OR founder_id = ${user.founder_id || 0})
+      AND status IN ('pending', 'accepted', 'completed')
+    GROUP BY investor_user_id
+  `;
+  const introMap = new Map<number, number>();
+  for (const r of introRows as any[]) introMap.set(Number(r.investor_user_id), Number(r.n));
+
+  await sql.end();
+
+  // Scoring weights
+  const W = {
+    thesis_fit: 0.45,
+    traction_fit: 0.20,
+    values_alignment: 0.20,
+    network_warmth: 0.15,
+  };
+
+  const projectSector = String(project.sector || '').trim().toLowerCase();
+  const projectStage = String(project.stage || '').trim().toLowerCase();
+  const projectFunding = project.funding_needed != null ? Number(project.funding_needed) : null;
+
+  const scored = (investorRows as any[]).map((inv) => {
+    const invUid = Number(inv.user_id);
+    const invName = inv.user_name || inv.email || 'Investor';
+    const sectors = safeJsonArray(inv.sectors_json);
+    const stages = safeJsonArray(inv.stages_json);
+    const antiSectors = safeJsonArray(inv.anti_thesis_sectors_json);
+    const antiStages = safeJsonArray(inv.anti_thesis_stages_json);
+    const valueWeights = safeJsonObject(inv.value_weights_json);
+    const thesisKeywords = safeJsonArray(inv.thesis_keywords_json);
+    const invMin = safeJsonNumber(inv.ticket_min_usd, safeJsonNumber(inv.check_size_min, 0));
+    const invMax = safeJsonNumber(inv.ticket_max_usd, safeJsonNumber(inv.check_size_max, 5_000_000));
+    const invMid = ticketMidpoint(inv.ticket_band);
+    const effectiveMin = invMin || invMid || 0;
+    const effectiveMax = invMax || invMid || 5_000_000;
+
+    // ---- 1. Anti-thesis hard exclusion ----
+    let antiHit = false;
+    let antiReason = '';
+    if (antiSectors.length && projectSector) {
+      const hit = antiSectors.some((s) => projectSector.includes(s.toLowerCase()) || s.toLowerCase().includes(projectSector));
+      if (hit) { antiHit = true; antiReason = `Anti-thesis sector: ${project.sector}`; }
+    }
+    if (antiStages.length && projectStage) {
+      const hit = antiStages.some((s) => projectStage.includes(s.toLowerCase()) || s.toLowerCase().includes(projectStage));
+      if (hit) { antiHit = true; antiReason = antiReason || `Anti-thesis stage: ${project.stage}`; }
+    }
+    if (antiHit) {
+      return {
+        investor_id: inv.investor_table_id,
+        user_id: invUid,
+        name: invName,
+        excluded: true,
+        reason: antiReason,
+        match_score: 0,
+        breakdown: { thesis_fit: 0, traction_fit: 0, values_alignment: 0, network_warmth: 0 },
+      };
+    }
+
+    // ---- 2. Check-size band gate (hard exclude) ----
+    const cs = checkSizeFits(projectFunding, effectiveMin, effectiveMax);
+    if (!cs.fits) {
+      return {
+        investor_id: inv.investor_table_id,
+        user_id: invUid,
+        name: invName,
+        excluded: true,
+        reason: cs.reason,
+        match_score: 0,
+        breakdown: { thesis_fit: 0, traction_fit: 0, values_alignment: 0, network_warmth: 0 },
+      };
+    }
+
+    // ---- 3. Thesis fit (0-100) ----
+    let thesisScore = 0;
+    const reasons: string[] = [];
+    if (sectors.length && projectSector) {
+      const sectorHit = sectors.some((s) => projectSector.includes(s.toLowerCase()) || s.toLowerCase().includes(projectSector));
+      if (sectorHit) { thesisScore += 40; reasons.push(`Sector match: ${project.sector}`); }
+      else { thesisScore -= 10; reasons.push(`Sector mismatch: ${project.sector}`); }
+    }
+    if (stages.length && projectStage) {
+      const stageHit = stages.some((s) => projectStage.includes(s.toLowerCase()) || s.toLowerCase().includes(projectStage));
+      if (stageHit) { thesisScore += 30; reasons.push(`Stage match: ${project.stage}`); }
+      else { thesisScore -= 5; reasons.push(`Stage mismatch: ${project.stage}`); }
+    }
+    if (thesisKeywords.length && (project.problem_statement || project.solution)) {
+      const text = `${project.problem_statement || ''} ${project.solution || ''}`.toLowerCase();
+      const kwHits = thesisKeywords.filter((k) => text.includes(k.toLowerCase()));
+      if (kwHits.length) { thesisScore += 20; reasons.push(`Thesis keyword hits: ${kwHits.length}`); }
+      else { thesisScore -= 5; }
+    }
+    // Bonus for investor explicitly caring about mission-driven founders
+    const missionWeight = safeJsonNumber(valueWeights['mission_driven'], 0);
+    if (missionWeight > 0.5 && project.why_now) {
+      const missionText = String(project.why_now).toLowerCase();
+      const missionWords = ['mission', 'impact', 'sustainable', 'climate', 'health', 'education', 'social'];
+      if (missionWords.some((w) => missionText.includes(w))) {
+        thesisScore += 15;
+        reasons.push('Mission-driven founder bonus');
+      }
+    }
+    thesisScore = Math.max(0, Math.min(100, thesisScore));
+
+    // ---- 4. Traction fit (0-100) ----
+    let tractionScore = 0;
+    const rev = safeJsonNumber(project.revenue, 0);
+    const users = safeJsonNumber(project.users_count, 0);
+    const totalFunding = safeJsonNumber(project.total_funding, 0);
+    if (project.status === 'tier_1') { tractionScore += 40; reasons.push('Tier-1 vetted'); }
+    else if (project.status === 'tier_2') { tractionScore += 25; reasons.push('Tier-2 vetted'); }
+    else if (project.status === 'active') { tractionScore += 15; }
+    if (rev > 0) { tractionScore += 20; reasons.push('Revenue traction'); }
+    if (users > 0) { tractionScore += 10; reasons.push('User traction'); }
+    if (totalFunding > 0) { tractionScore += 10; reasons.push('Prior funding'); }
+    tractionScore = Math.max(0, Math.min(100, tractionScore));
+
+    // ---- 5. Values alignment (0-100) ----
+    let valuesScore = 0;
+    if (investorValuesMap.has(invUid) && Object.keys(founderValues).length > 0) {
+      const invVec = investorValuesMap.get(invUid)!;
+      valuesScore = Math.round(cosineSimilarityVectors(founderValues, invVec) * 100);
+      if (valuesScore > 0) reasons.push(`Values alignment: ${valuesScore}`);
+    }
+
+    // ---- 6. Network warmth (0-100) ----
+    let networkScore = 0;
+    const introCount = introMap.get(invUid) || 0;
+    if (introCount > 0) {
+      networkScore = Math.min(100, introCount * 20 + 20);
+      reasons.push(`Network warmth: ${introCount} past intro(s)`);
+    }
+
+    // ---- Overall ----
+    const overall = Math.round(
+      thesisScore * W.thesis_fit +
+      tractionScore * W.traction_fit +
+      valuesScore * W.values_alignment +
+      networkScore * W.network_warmth,
+    );
+
+    return {
+      investor_id: inv.investor_table_id,
+      user_id: invUid,
+      name: invName,
+      excluded: false,
+      match_score: overall,
+      breakdown: {
+        thesis_fit: thesisScore,
+        traction_fit: tractionScore,
+        values_alignment: valuesScore,
+        network_warmth: networkScore,
+      },
+      reasons: reasons.slice(0, 6),
+      thesis: {
+        sectors,
+        stages,
+        ticket_band: inv.ticket_band,
+        check_size_min: effectiveMin,
+        check_size_max: effectiveMax,
+      },
+    };
+  });
+
+  // Separate ranked and excluded
+  const ranked = scored.filter((s) => !s.excluded).sort((a, b) => b.match_score - a.match_score);
+  const excluded = scored.filter((s) => s.excluded);
+
+  return c.json({
+    project_id: projectId,
+    project_name: project.name,
+    ranked,
+    excluded: excluded.slice(0, 10),
+    total_investors: scored.length,
+  });
+});
+
+// --------- Admin ---------
+
 matches.get('/admin/all', async (c) => {
   await requireAdmin(c);
   await ensureSchema(c.env);

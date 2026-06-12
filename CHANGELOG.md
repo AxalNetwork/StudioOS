@@ -10,6 +10,18 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Investor Matching (Task #16)
+
+- `cloudflare-worker/sql/migrations/096_investor_thesis.sql`: adds `anti_thesis_sectors_json`, `anti_thesis_stages_json`, `value_weights_json` to `investor_profiles` (idempotent, SQLite/D1 safe). Also updated `cloudflare-worker/sql/schema.sql`.
+- `cloudflare-worker/src/routes/investor_signals.ts`: extended `ProfileRow` interface, `emptyProfile()`, `shapeProfile()`, and `PUT /me` to accept, persist, and return anti-thesis + value_weights. Lazy-bootstrap `ALTER TABLE ADD COLUMN` fallback in `ensureSchema` for tables created before migration 096.
+- `cloudflare-worker/src/routes/matches.ts`: new `POST /api/matches/investor-match` endpoint. Scores investors for a given project_id using weights: thesis_fit (0.45), traction_fit (0.20), values_alignment (0.20), network_warmth (0.15). Hard anti-thesis exclusion (sector/stage) before scoring. Check-size band gate using ticket_band midpoint or min/max bounds. Uses `user_values` for cosine-similarity values alignment and `investor_introductions` for network warmth. Returns ranked results + excluded list with per-component breakdown.
+- `backend/app/api/routes/investor_signals.py`: backend parity. `PUT /me` now parses and persists `anti_thesis_sectors`, `anti_thesis_stages`, and `value_weights` (clamped 0-1). `_empty_profile` returns default values for the new fields.
+- `frontend/src/lib/api.js`: added `api.matchInvestors(projectId)` (POST /api/matches/investor-match).
+- `frontend/src/pages/MatchesPage.jsx`: added "Investor Match" tab (founder-only, visible when `role === 'founder'`). Displays project selector, ranked investors with score pills, per-component breakdown (thesis/traction/values/network), and an excluded list with reasons. Uses existing `DealCard`/`ScorePill`/`Loading`/`Empty` patterns.
+- `frontend/src/components/OnboardingWizard.jsx`: added `SliderField` export (range 0-1, step 0.05, percentage display).
+- `frontend/src/pages/OnboardingInvestorPage.jsx`: added two new wizard steps: "Anti-thesis" (sector/stage exclusions) and "Value weights" (mission_driven, technical_depth, growth_trajectory, team_diversity, market_timing sliders). Persists `anti_thesis_sectors`, `anti_thesis_stages`, and `value_weights` on `saveInvestorProfile`.
+- `frontend/src/pages/SettingsPage.jsx`: added `InvestorThesisEditorCard` in Privacy tab. Investors can toggle anti-thesis sectors/stages and adjust value-weight sliders. Save calls `api.saveInvestorProfile` with all fields.
+
 ## Partner Matching (Task #15)
 
 - `cloudflare-worker/sql/migrations/095_partner_accepting_intros.sql`: adds `accepting_intros` column to `partners` (default 1) + composite index on `(accepting_intros, status)`. Also updated `cloudflare-worker/sql/schema.sql`.

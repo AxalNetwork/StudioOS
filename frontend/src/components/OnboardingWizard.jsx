@@ -263,3 +263,24 @@ export function MultiChoiceField({ label, options, value, onChange }) {
     </div>
   );
 }
+
+export function SliderField({ label, value, onChange }) {
+  const v = typeof value === 'number' ? value : 0.5;
+  return (
+    <label className="block">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{label}</span>
+        <span className="text-xs text-gray-500">{Math.round(v * 100)}%</span>
+      </div>
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.05"
+        value={v}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-violet-600"
+      />
+    </label>
+  );
+}

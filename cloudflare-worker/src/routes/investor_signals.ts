@@ -60,6 +60,9 @@ async function ensureSchema(env: Env): Promise<void> {
         thesis_text TEXT,
         thesis_keywords_json TEXT NOT NULL DEFAULT '[]',
         contribute_to_signals INTEGER NOT NULL DEFAULT 1,
+        anti_thesis_sectors_json TEXT NOT NULL DEFAULT '[]',
+        anti_thesis_stages_json TEXT NOT NULL DEFAULT '[]',
+        value_weights_json TEXT NOT NULL DEFAULT '{}',
         completed_at TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )`,
@@ -67,6 +70,17 @@ async function ensureSchema(env: Env): Promise<void> {
     await env.DB.prepare(
       `CREATE INDEX IF NOT EXISTS idx_investor_profiles_contribute ON investor_profiles(contribute_to_signals)`,
     ).run();
+    // Lazy-bootstrap: add columns for Task #16 if the table was created before
+    // migration 096. D1/SQLite ALTER TABLE ADD COLUMN errors harmlessly on
+    // duplicates; we catch and continue so the bootstrap is idempotent.
+    const bootstrapCols = [
+      `ALTER TABLE investor_profiles ADD COLUMN anti_thesis_sectors_json TEXT NOT NULL DEFAULT '[]'`,
+      `ALTER TABLE investor_profiles ADD COLUMN anti_thesis_stages_json TEXT NOT NULL DEFAULT '[]'`,
+      `ALTER TABLE investor_profiles ADD COLUMN value_weights_json TEXT NOT NULL DEFAULT '{}'`,
+    ];
+    for (const colSql of bootstrapCols) {
+      try { await env.DB.prepare(colSql).run(); } catch { /* already exists */ }
+    }
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS investor_signals_snapshots (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,6 +143,9 @@ interface ProfileRow {
   thesis_text: string | null;
   thesis_keywords_json: string;
   contribute_to_signals: number;
+  anti_thesis_sectors_json: string;
+  anti_thesis_stages_json: string;
+  value_weights_json: string;
   completed_at: string | null;
   updated_at: string;
 }
@@ -146,6 +163,9 @@ function emptyProfile(userId: number): ProfileRow {
     thesis_text: null,
     thesis_keywords_json: '[]',
     contribute_to_signals: 1,
+    anti_thesis_sectors_json: '[]',
+    anti_thesis_stages_json: '[]',
+    value_weights_json: '{}',
     completed_at: null,
     updated_at: new Date().toISOString(),
   };
@@ -157,6 +177,15 @@ function safeJsonArray(s: string): string[] {
     return Array.isArray(j) ? j.map(x => String(x)) : [];
   } catch {
     return [];
+  }
+}
+
+function safeJsonObject(s: string): Record<string, unknown> {
+  try {
+    const j: unknown = JSON.parse(s);
+    return (j && typeof j === 'object' && !Array.isArray(j)) ? j as Record<string, unknown> : {};
+  } catch {
+    return {};
   }
 }
 
@@ -173,6 +202,9 @@ function shapeProfile(row: ProfileRow) {
     thesis_text: row.thesis_text,
     thesis_keywords: safeJsonArray(row.thesis_keywords_json),
     contribute_to_signals: !!row.contribute_to_signals,
+    anti_thesis_sectors: safeJsonArray(row.anti_thesis_sectors_json),
+    anti_thesis_stages: safeJsonArray(row.anti_thesis_stages_json),
+    value_weights: safeJsonObject(row.value_weights_json),
     completed_at: row.completed_at,
     updated_at: row.updated_at,
   };
@@ -195,6 +227,9 @@ interface ProfileUpsertBody {
   ticket_band?: unknown;
   thesis_text?: unknown;
   contribute_to_signals?: unknown;
+  anti_thesis_sectors?: unknown;
+  anti_thesis_stages?: unknown;
+  value_weights?: unknown;
 }
 
 investorProfile.put('/me', async (c) => {
@@ -218,6 +253,17 @@ investorProfile.put('/me', async (c) => {
   const thesis_keywords = thesis_text ? extractKeywords(thesis_text) : [];
   const contribute_to_signals = body.contribute_to_signals === undefined
     ? 1 : (body.contribute_to_signals ? 1 : 0);
+  const anti_thesis_sectors = asStrArr(body.anti_thesis_sectors, SECTOR_OPTIONS);
+  const anti_thesis_stages = asStrArr(body.anti_thesis_stages, STAGE_OPTIONS);
+  const value_weights = (() => {
+    if (!body.value_weights || typeof body.value_weights !== 'object' || Array.isArray(body.value_weights)) return {};
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(body.value_weights)) {
+      const n = typeof v === 'number' ? v : parseFloat(String(v));
+      if (!Number.isNaN(n)) out[k] = Math.max(0, Math.min(1, n));
+    }
+    return out;
+  })();
 
   const isComplete = !!(investor_type && sectors.length && stages.length && ticket_band);
   const completed_at = isComplete ? new Date().toISOString() : null;
@@ -227,8 +273,9 @@ investorProfile.put('/me', async (c) => {
       user_id, investor_type, sectors_json, stages_json, geos_json,
       ticket_band, ticket_min_usd, ticket_max_usd,
       thesis_text, thesis_keywords_json, contribute_to_signals,
+      anti_thesis_sectors_json, anti_thesis_stages_json, value_weights_json,
       completed_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT completed_at FROM investor_profiles WHERE user_id = ?)), CURRENT_TIMESTAMP)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT completed_at FROM investor_profiles WHERE user_id = ?)), CURRENT_TIMESTAMP)
     ON CONFLICT(user_id) DO UPDATE SET
       investor_type = excluded.investor_type,
       sectors_json = excluded.sectors_json,
@@ -240,6 +287,9 @@ investorProfile.put('/me', async (c) => {
       thesis_text = excluded.thesis_text,
       thesis_keywords_json = excluded.thesis_keywords_json,
       contribute_to_signals = excluded.contribute_to_signals,
+      anti_thesis_sectors_json = excluded.anti_thesis_sectors_json,
+      anti_thesis_stages_json = excluded.anti_thesis_stages_json,
+      value_weights_json = excluded.value_weights_json,
       completed_at = COALESCE(excluded.completed_at, investor_profiles.completed_at),
       updated_at = CURRENT_TIMESTAMP`,
   ).bind(
@@ -247,12 +297,13 @@ investorProfile.put('/me', async (c) => {
     JSON.stringify(sectors), JSON.stringify(stages), JSON.stringify(geos),
     ticket_band, ticket_min_usd, ticket_max_usd,
     thesis_text, JSON.stringify(thesis_keywords), contribute_to_signals,
+    JSON.stringify(anti_thesis_sectors), JSON.stringify(anti_thesis_stages), JSON.stringify(value_weights),
     completed_at, user.id,
   ).run();
 
   try {
     const sql = getSQL(c.env);
-    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('investor_profile_updated', ${`Investor profile updated (sectors=${sectors.length}, stages=${stages.length}, contribute=${contribute_to_signals})`}, ${await hashEmail(user.email)}, ${user.id})`;
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('investor_profile_updated', ${`Investor profile updated (sectors=${sectors.length}, stages=${stages.length}, anti=${anti_thesis_sectors.length}, contribute=${contribute_to_signals})`}, ${await hashEmail(user.email)}, ${user.id})`;
   } catch {}
 
   const row = await c.env.DB.prepare(

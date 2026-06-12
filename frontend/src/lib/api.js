@@ -593,6 +593,8 @@ export const api = {
   createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
 
   matchPartnersLegacy: (data) => request('/partners/matchPartners', { method: 'POST', body: JSON.stringify(data) }),
+  // Task #16 — investor matching for founders
+  matchInvestors: (projectId) => request('/matches/investor-match', { method: 'POST', body: JSON.stringify({ project_id: projectId }) }),
   generateMemo: (data) => request('/scoring/generateMemo', { method: 'POST', body: JSON.stringify(data) }),
   capitalCall: (data) => request('/capital/capitalCall', { method: 'POST', body: JSON.stringify(data) }),
 

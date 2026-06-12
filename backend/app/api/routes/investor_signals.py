@@ -28,21 +28,18 @@ investor_signals = APIRouter(prefix="/investor-signals", tags=["investor-signals
 MIN_CELL_SIZE = 5
 
 SECTOR_OPTIONS = {
-    "ai_ml", "fintech", "climate", "biotech", "healthtech", "saas",
-    "consumer", "marketplace", "deeptech", "robotics", "crypto_web3",
-    "edtech", "proptech", "logistics", "cybersecurity", "developer_tools",
-    "media_content", "energy", "manufacturing", "agtech", "other",
+    "AI/ML", "Climate", "Fintech", "Healthtech", "Consumer",
+    "Enterprise SaaS", "Crypto", "Bio", "Defense", "Robotics", "Energy",
 }
-STAGE_OPTIONS = {"pre_seed", "seed", "series_a", "series_b", "series_c_plus", "growth"}
-GEO_OPTIONS = {"north_america", "europe", "uk", "latam", "mena", "africa", "apac", "global"}
-TICKET_BANDS = {"<25k", "25-100k", "100-500k", "500k-2m", "2-10m", "10m+"}
+STAGE_OPTIONS = {"Pre-seed", "Seed", "Series A", "Series B+", "Growth"}
+GEO_OPTIONS = {"North America", "Europe", "LATAM", "APAC", "MENA", "Africa"}
+TICKET_BANDS = {"<$10k", "$10k-$50k", "$50k-$250k", "$250k-$1M", "$1M+"}
 TICKET_RANGES = {
-    "<25k": (0, 25_000),
-    "25-100k": (25_000, 100_000),
-    "100-500k": (100_000, 500_000),
-    "500k-2m": (500_000, 2_000_000),
-    "2-10m": (2_000_000, 10_000_000),
-    "10m+": (10_000_000, 50_000_000),
+    "<$10k": (0, 10_000),
+    "$10k-$50k": (10_000, 50_000),
+    "$50k-$250k": (50_000, 250_000),
+    "$250k-$1M": (250_000, 1_000_000),
+    "$1M+": (1_000_000, 5_000_000),
 }
 
 _schema_ready = False
@@ -80,6 +77,9 @@ def _empty_profile(user_id: int) -> dict:
         "thesis_text": None,
         "thesis_keywords": [],
         "contribute_to_signals": True,
+        "anti_thesis_sectors": [],
+        "anti_thesis_stages": [],
+        "value_weights": {},
         "completed_at": None,
         "updated_at": None,
     }
@@ -164,6 +164,14 @@ def update_my_profile(payload: dict, session: Session = Depends(get_session), us
     existing = _load(session, user.id)
     completed_at = existing.get("completed_at") or (datetime.utcnow().isoformat(timespec="seconds") if is_complete else None)
 
+    anti_sectors = _filter_set(body.get("anti_thesis_sectors"), SECTOR_OPTIONS)
+    anti_stages = _filter_set(body.get("anti_thesis_stages"), STAGE_OPTIONS)
+    value_weights = body.get("value_weights") or {}
+    if not isinstance(value_weights, dict):
+        value_weights = {}
+    else:
+        value_weights = {k: min(1.0, max(0.0, float(v))) for k, v in value_weights.items() if isinstance(v, (int, float, str))}
+
     next_payload = {
         "user_id": user.id,
         "investor_type": investor_type,
@@ -176,6 +184,9 @@ def update_my_profile(payload: dict, session: Session = Depends(get_session), us
         "thesis_text": thesis_text,
         "thesis_keywords": _extract_keywords(thesis_text or ""),
         "contribute_to_signals": contribute,
+        "anti_thesis_sectors": anti_sectors,
+        "anti_thesis_stages": anti_stages,
+        "value_weights": value_weights,
     }
     try:
         session.exec(text("""

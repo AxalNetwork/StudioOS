@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import OnboardingWizard, { TextField, TextArea, ChoiceField, MultiChoiceField } from '../components/OnboardingWizard';
+import OnboardingWizard, { TextField, TextArea, ChoiceField, MultiChoiceField, SliderField } from '../components/OnboardingWizard';
 import { api } from '../lib/api';
 
 // Phase 0.2 / Task #23 — Investor onboarding wizard.
@@ -139,6 +139,41 @@ export default function OnboardingInvestorPage() {
       ),
     },
     {
+      key: 'anti-thesis',
+      title: 'Anti-thesis (hard exclusions)',
+      description: 'We will NEVER match you with projects that fall in these sectors or stages.',
+      render: ({ values, set }) => (
+        <div className="space-y-4">
+          <MultiChoiceField
+            label="Sectors you actively avoid"
+            options={SECTORS}
+            value={values.anti_thesis_sectors || []}
+            onChange={(x) => set('anti_thesis_sectors', x)}
+          />
+          <MultiChoiceField
+            label="Stages you actively avoid"
+            options={STAGES}
+            value={values.anti_thesis_stages || []}
+            onChange={(x) => set('anti_thesis_stages', x)}
+          />
+        </div>
+      ),
+    },
+    {
+      key: 'value-weights',
+      title: 'What matters most to you',
+      description: 'Weight how much each dimension matters in founder-investor matching. Weights are auto-normalized.',
+      render: ({ values, set }) => (
+        <div className="space-y-4">
+          <SliderField label="Mission-driven founders" value={values.mission_driven || 0.5} onChange={(x) => set('mission_driven', x)} />
+          <SliderField label="Technical depth" value={values.technical_depth || 0.5} onChange={(x) => set('technical_depth', x)} />
+          <SliderField label="Growth trajectory" value={values.growth_trajectory || 0.5} onChange={(x) => set('growth_trajectory', x)} />
+          <SliderField label="Team diversity" value={values.team_diversity || 0.5} onChange={(x) => set('team_diversity', x)} />
+          <SliderField label="Market timing" value={values.market_timing || 0.5} onChange={(x) => set('market_timing', x)} />
+        </div>
+      ),
+    },
+    {
       key: 'lp_intent',
       title: 'LP commitment intent',
       description: 'Are you exploring an LP commitment to the Axal main fund?',
@@ -172,6 +207,13 @@ export default function OnboardingInvestorPage() {
     // feed the anonymized Axal Investor Signals aggregate. Failure must
     // never block onboarding completion — it's a soft enrichment.
     try {
+      const value_weights = {
+        mission_driven: values.mission_driven ?? 0.5,
+        technical_depth: values.technical_depth ?? 0.5,
+        growth_trajectory: values.growth_trajectory ?? 0.5,
+        team_diversity: values.team_diversity ?? 0.5,
+        market_timing: values.market_timing ?? 0.5,
+      };
       await api.saveInvestorProfile({
         investor_type: values.investor_type || null,
         sectors: values.sectors || [],
@@ -180,6 +222,9 @@ export default function OnboardingInvestorPage() {
         ticket_band: values.check_size || null,
         thesis_text: values.thesis_text || null,
         contribute_to_signals: values.contribute_to_signals !== false,
+        anti_thesis_sectors: values.anti_thesis_sectors || [],
+        anti_thesis_stages: values.anti_thesis_stages || [],
+        value_weights,
       });
     } catch {
       // Surfacing this in the wizard would be confusing; the user can

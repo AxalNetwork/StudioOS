@@ -7,7 +7,7 @@ import {
   User, Globe, Mail, ShieldCheck, Bell, Lock, Briefcase, Users,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
   Plus, X, KeyRound, Palette, Plug, CreditCard, UserCog,
-  Sun, Moon, ChevronDown, Check, Database,
+  Sun, Moon, ChevronDown, Check, Database, Ban, Scale, Loader2,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
@@ -291,6 +291,7 @@ export default function SettingsPage() {
             <>
               <PrivacyCoreCard flash={flash} />
               <InvestorSignalsContributionCard flash={flash} role={data?.role} />
+              <InvestorThesisEditorCard flash={flash} role={data?.role} />
               <MarketIntelContributionCard flash={flash} />
               <PrivacySection data={data} patch={patch} flash={flash} reload={() => api.getSettings().then(setData)} hideAccountDelete />
             </>
@@ -2884,6 +2885,159 @@ function InvestorSignalsContributionCard({ flash, role }) {
         <p className="text-xs text-gray-500 dark:text-gray-400">
           Opting out removes your contribution within 6 hours, the next time the aggregator runs.
         </p>
+      </div>
+    </Card>
+  );
+}
+
+// Task #16 — Investor thesis editor (anti-thesis + value weights). Lives
+// in Privacy alongside the Investor Signals toggle. Only investors see it.
+function InvestorThesisEditorCard({ flash, role }) {
+  const [profile, setProfile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getInvestorProfile()
+      .then(r => { if (!cancelled) setProfile(r.profile); })
+      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const save = async (next) => {
+    if (!profile) return;
+    setBusy(true);
+    try {
+      const r = await api.saveInvestorProfile({
+        investor_type: profile.investor_type,
+        sectors: profile.sectors,
+        stages: profile.stages,
+        geos: profile.geos,
+        ticket_band: profile.ticket_band,
+        thesis_text: profile.thesis_text,
+        contribute_to_signals: profile.contribute_to_signals !== false,
+        anti_thesis_sectors: next.anti_thesis_sectors,
+        anti_thesis_stages: next.anti_thesis_stages,
+        value_weights: next.value_weights,
+      });
+      setProfile(r.profile);
+      flash('Investor thesis updated');
+    } catch (e) {
+      flash(e.message || 'Failed to save', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const isInvestor = String(role || '').toLowerCase() === 'investor';
+  if (!isInvestor && !profile?.completed_at) return null;
+
+  if (err) return <Card title="Investor Thesis"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (!profile) return <Card title="Investor Thesis"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
+
+  const SECTOR_OPTIONS = ['AI/ML','Climate','Fintech','Healthtech','Consumer','Enterprise SaaS','Crypto','Bio','Defense','Robotics','Energy'];
+  const STAGE_OPTIONS  = ['Pre-seed','Seed','Series A','Series B+','Growth'];
+  const antiSectors = profile.anti_thesis_sectors || [];
+  const antiStages = profile.anti_thesis_stages || [];
+  const vw = profile.value_weights || {};
+
+  const toggleAnti = (key, val) => {
+    const arr = (profile[key] || []).includes(val)
+      ? (profile[key] || []).filter(x => x !== val)
+      : [...(profile[key] || []), val];
+    setProfile({ ...profile, [key]: arr });
+  };
+
+  const setWeight = (dim, val) => {
+    setProfile({ ...profile, value_weights: { ...vw, [dim]: val } });
+  };
+
+  return (
+    <Card
+      title="Investor Thesis & Matching"
+      description="Anti-thesis exclusions and value weights used to score founder-investor matches."
+    >
+      <div className="space-y-5">
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Ban size={14} className="text-red-500" />
+            <h4 className="text-xs font-semibold text-gray-800 dark:text-gray-200">Anti-thesis (hard exclusions)</h4>
+          </div>
+          <p className="text-xs text-gray-500 mb-2 dark:text-gray-400">We will NEVER match you with projects in these sectors or stages.</p>
+          <div className="space-y-3">
+            <div>
+              <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Sectors you avoid</span>
+              <div className="flex flex-wrap gap-2">
+                {SECTOR_OPTIONS.map(s => (
+                  <button key={s} onClick={() => toggleAnti('anti_thesis_sectors', s)}
+                    className={`text-xs px-2.5 py-1 rounded-full border ${antiSectors.includes(s) ? 'bg-red-100 text-red-700 border-red-300' : 'bg-white text-gray-700 border-gray-300 hover:border-red-300'}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Stages you avoid</span>
+              <div className="flex flex-wrap gap-2">
+                {STAGE_OPTIONS.map(s => (
+                  <button key={s} onClick={() => toggleAnti('anti_thesis_stages', s)}
+                    className={`text-xs px-2.5 py-1 rounded-full border ${antiStages.includes(s) ? 'bg-red-100 text-red-700 border-red-300' : 'bg-white text-gray-700 border-gray-300 hover:border-red-300'}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Scale size={14} className="text-violet-500" />
+            <h4 className="text-xs font-semibold text-gray-800 dark:text-gray-200">Value weights</h4>
+          </div>
+          <p className="text-xs text-gray-500 mb-2 dark:text-gray-400">How much each dimension matters in matching. Weights are auto-normalised.</p>
+          <div className="space-y-3">
+            {[
+              { key: 'mission_driven', label: 'Mission-driven founders' },
+              { key: 'technical_depth', label: 'Technical depth' },
+              { key: 'growth_trajectory', label: 'Growth trajectory' },
+              { key: 'team_diversity', label: 'Team diversity' },
+              { key: 'market_timing', label: 'Market timing' },
+            ].map(({ key, label }) => {
+              const v = typeof vw[key] === 'number' ? vw[key] : 0.5;
+              return (
+                <label key={key} className="block">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-gray-700 dark:text-gray-300">{label}</span>
+                    <span className="text-xs text-gray-500">{Math.round(v * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={v}
+                    onChange={(e) => setWeight(key, Number(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-violet-600"
+                  />
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={() => save({
+            anti_thesis_sectors: profile.anti_thesis_sectors,
+            anti_thesis_stages: profile.anti_thesis_stages,
+            value_weights: profile.value_weights,
+          })} disabled={busy}
+            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
+            {busy ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
+            {busy ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
       </div>
     </Card>
   );

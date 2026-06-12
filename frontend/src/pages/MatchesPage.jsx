@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, Target, TrendingUp, Users, Settings, Loader2, Save, RefreshCw, Brain, ChevronDown } from 'lucide-react';
+import { Sparkles, Target, TrendingUp, Users, Settings, Loader2, Save, RefreshCw, Brain, ChevronDown, Building2 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
 
 const SECTORS = ['AI', 'Fintech', 'Climate', 'Health', 'B2B SaaS', 'Consumer', 'Crypto', 'DevTools', 'Marketplaces', 'Hardware'];
 const STAGES = ['idea', 'mvp', 'traction_review', 'spinout_ready', 'tier_1', 'tier_2'];
 const ROLES = ['Lead Investor', 'Co-Investor', 'Operator', 'Advisor', 'Board Member'];
 
 export default function MatchesPage() {
+  const { role } = useAuth();
   const [tab, setTab] = useState('deal-flow');
   const [prefs, setPrefs] = useState(null);
   const [editPrefs, setEditPrefs] = useState(false);
@@ -27,6 +29,18 @@ export default function MatchesPage() {
     } finally { setSavingPrefs(false); }
   };
 
+  const isFounder = String(role || '').toLowerCase() === 'founder';
+  const tabs = [
+    { id: 'deal-flow', label: 'Deal Flow', icon: Target, investorOnly: true },
+    { id: 'co-invest', label: 'Co-Investment', icon: TrendingUp, investorOnly: true },
+    { id: 'referrals', label: 'Referral Quality', icon: Users, investorOnly: true },
+    { id: 'investor-match', label: 'Investor Match', icon: Building2, founderOnly: true },
+  ].filter(t => {
+    if (t.investorOnly && isFounder) return false;
+    if (t.founderOnly && !isFounder) return false;
+    return true;
+  });
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -37,13 +51,15 @@ export default function MatchesPage() {
             <p className="text-sm text-gray-600">Personalized deal flow, co-investment, and referral signals — scored by Cloudflare Workers AI.</p>
           </div>
         </div>
-        <button onClick={() => setEditPrefs(true)}
-          className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-sm text-gray-700 px-3 py-2 rounded-lg dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
-          <Settings size={14} /> Investor Preferences
-        </button>
+        {!isFounder && (
+          <button onClick={() => setEditPrefs(true)}
+            className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-sm text-gray-700 px-3 py-2 rounded-lg dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
+            <Settings size={14} /> Investor Preferences
+          </button>
+        )}
       </div>
 
-      {prefs && !prefs.investment_focus?.length && !editPrefs && (
+      {prefs && !isFounder && !prefs.investment_focus?.length && !editPrefs && (
         <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 mb-6 text-xs text-amber-800 flex items-center justify-between">
           <span>Set your investment preferences to get high-signal matches.</span>
           <button onClick={() => setEditPrefs(true)} className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium px-3 py-1 rounded">Configure</button>
@@ -51,11 +67,7 @@ export default function MatchesPage() {
       )}
 
       <div className="border-b border-gray-200 mb-6 flex gap-1 dark:border-gray-800">
-        {[
-          { id: 'deal-flow', label: 'Deal Flow', icon: Target },
-          { id: 'co-invest', label: 'Co-Investment', icon: TrendingUp },
-          { id: 'referrals', label: 'Referral Quality', icon: Users },
-        ].map(t => {
+        {tabs.map(t => {
           const Icon = t.icon;
           return (
             <button key={t.id} onClick={() => setTab(t.id)}
@@ -71,11 +83,133 @@ export default function MatchesPage() {
       {tab === 'deal-flow' && <DealFlow />}
       {tab === 'co-invest' && <CoInvest />}
       {tab === 'referrals' && <ReferralScores />}
+      {tab === 'investor-match' && <InvestorMatch />}
 
       {editPrefs && prefs && (
         <PreferencesModal initial={prefs} onClose={() => setEditPrefs(false)} onSave={savePrefs} saving={savingPrefs} />
       )}
     </div>
+  );
+}
+
+function InvestorMatch() {
+  const [projects, setProjects] = useState([]);
+  const [projectId, setProjectId] = useState(null);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = (await api.listProjects()) || [];
+        const safe = Array.isArray(list) ? list : (list?.projects || []);
+        setProjects(safe);
+        if (safe.length === 1) setProjectId(safe[0].id);
+      } catch {}
+    })();
+  }, []);
+
+  const run = async () => {
+    if (!projectId) return;
+    setLoading(true); setError(''); setData(null);
+    try { setData(await api.matchInvestors(projectId)); }
+    catch (e) { setError(e.message || 'Failed to match'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4">
+        <div className="relative flex-1">
+          <select value={projectId || ''} onChange={e => setProjectId(Number(e.target.value))}
+            className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 pr-9 py-2 text-sm text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
+            <option value="">Select a project to match</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name} ({p.sector || 'Other'})</option>)}
+          </select>
+          <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        </div>
+        <button onClick={run} disabled={!projectId || loading}
+          className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
+          {loading ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
+          {loading ? 'Matching…' : 'Run Match'}
+        </button>
+      </div>
+
+      {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 mb-4">{error}</div>}
+
+      {data && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-500">
+              {data.ranked?.length || 0} ranked • {data.excluded?.length || 0} excluded • {data.total_investors} total investors
+            </p>
+            <button onClick={run} className="text-xs text-violet-600 hover:underline flex items-center gap-1"><RefreshCw size={12} /> Refresh</button>
+          </div>
+
+          {data.ranked?.length > 0 && (
+            <div className="space-y-3">
+              {data.ranked.map((it, i) => (
+                <div key={it.user_id} className="bg-white border border-gray-200 rounded-xl p-5 flex gap-5 items-start dark:bg-gray-900 dark:border-gray-800">
+                  <div className="flex-shrink-0">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${
+                      i === 0 ? 'bg-amber-400 text-white' : i < 3 ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-gray-700'
+                    }`}>{i + 1}</div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-3 mb-1">
+                      <h3 className="font-semibold text-gray-900 truncate dark:text-gray-100">{it.name}</h3>
+                      <ScorePill score={it.match_score} />
+                    </div>
+                    <div className="text-xs text-gray-500 mb-2">
+                      {it.thesis?.sectors?.join(', ') || 'No sectors'} • {it.thesis?.stages?.join(', ') || 'No stages'} • {it.thesis?.ticket_band || 'No ticket band'}
+                    </div>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      <BreakdownPill label="Thesis" value={it.breakdown?.thesis_fit} weight={0.45} />
+                      <BreakdownPill label="Traction" value={it.breakdown?.traction_fit} weight={0.20} />
+                      <BreakdownPill label="Values" value={it.breakdown?.values_alignment} weight={0.20} />
+                      <BreakdownPill label="Network" value={it.breakdown?.network_warmth} weight={0.15} />
+                    </div>
+                    <p className="text-xs text-gray-600 leading-relaxed dark:text-gray-400">
+                      {it.reasons?.slice(0, 4).join(' • ')}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {data.excluded?.length > 0 && (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+              <h4 className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-300">Excluded ({data.excluded.length})</h4>
+              <div className="space-y-2">
+                {data.excluded.slice(0, 5).map(ex => (
+                  <div key={ex.user_id} className="text-xs text-gray-500 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-300" />
+                    {ex.name} — <span className="text-red-600">{ex.reason}</span>
+                  </div>
+                ))}
+                {data.excluded.length > 5 && (
+                  <div className="text-xs text-gray-400">…and {data.excluded.length - 5} more</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!data.ranked?.length && !data.excluded?.length && (
+            <Empty text="No investors available for matching right now." />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BreakdownPill({ label, value, weight }) {
+  return (
+    <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded dark:bg-gray-800 dark:text-gray-400">
+      {label} {Math.round(value || 0)} × {weight}
+    </span>
   );
 }
 
