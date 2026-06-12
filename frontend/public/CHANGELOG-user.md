@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Spin-out decks now show your real team coverage
+
+The team chart on the spin-out demo-day deck now reflects your actual founding team instead of a placeholder. It maps your team's strengths across eight areas — product, engineering, design, sales, marketing, finance, legal, and capital — and overlays a dashed "ideal coverage" guide so investors can see at a glance where you're strong and where there are gaps. Any gap areas are highlighted with two suggested roles to hire, so the deck doubles as a hiring signal.
+
+---
+
 ## Investor matching for founders
 
 Founders can now see which investors are the best fit for their project. The new **Investor Match** tab on the AI Matching Engine page lets you pick one of your projects and run a scored match against every investor on the platform. Each investor gets a composite score based on thesis fit, traction fit, values alignment, and how warm your existing network connection is. Results are ranked, and any investors excluded by hard anti-thesis rules (e.g. they avoid your sector or stage) are shown separately so you know why they didn't appear.

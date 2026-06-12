@@ -237,6 +237,17 @@ export type MentorProfile = {
   company?: string;
 };
 export type SkillAxis = { label: string; value: number };
+// Task #17 — real 8-axis founding-team coverage radar. `value`/`ideal` are
+// 0..1 fractions plotted directly by the SVG TeamCoverageRadar.
+export type TeamRadarAxis = { slug: string; label: string; value: number; gap: boolean };
+export type TeamRadarGap = { slug: string; label: string; roles: string[] };
+export type TeamRadar = {
+  axes: TeamRadarAxis[];
+  ideal: number;
+  has_data: boolean;
+  gaps: TeamRadarGap[];
+  member_count: number;
+};
 export type NetworkCategory = { category: string; count: number };
 export type DealAccess = {
   deal_room_url: string;
@@ -287,6 +298,7 @@ export type SpinoutDemoDayData = {
     profiles: MentorProfile[];
     skill_coverage: SkillAxis[];
     network: NetworkCategory[];
+    team_radar: TeamRadar | null;
   };
   product_demo: {
     eyebrow: string; headline: string; body: string;
@@ -368,7 +380,7 @@ export const SAMPLE_DATA: SpinoutDemoDayData = {
   mentor_network: {
     eyebrow: '10 · Mentors & network', headline: 'Who is around the table.',
     body: '', mentors: [], network_signals: [],
-    profiles: [], skill_coverage: [], network: [],
+    profiles: [], skill_coverage: [], network: [], team_radar: null,
   },
   product_demo: {
     eyebrow: '06 · Product demo', headline: 'See it in motion.',
@@ -710,6 +722,7 @@ function hydrate(raw: unknown): SpinoutDemoDayData {
       profiles: parseJsonField<MentorProfile[]>(d.mn_profiles_json, []),
       skill_coverage: parseJsonField<SkillAxis[]>(d.mn_skill_coverage_json, []),
       network: parseJsonField<NetworkCategory[]>(d.mn_network_json, []),
+      team_radar: parseJsonField<TeamRadar | null>(d.mn_team_radar_json, null),
     },
     product_demo: {
       eyebrow: asStr(d.product_demo_eyebrow, base.product_demo.eyebrow),
@@ -2145,7 +2158,12 @@ const Slide_MentorNetwork: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
           )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {m.skill_coverage && m.skill_coverage.length >= 3 ? (
+          {m.team_radar && m.team_radar.has_data && m.team_radar.axes.length >= 3 ? (
+            <div style={{ ...cardStyle(V), padding: 12, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 4 }}>Team coverage</div>
+              <TeamCoverageRadar radar={m.team_radar} size={200} />
+            </div>
+          ) : m.skill_coverage && m.skill_coverage.length >= 3 ? (
             <div style={{ ...cardStyle(V), padding: 12, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', fontWeight: 600, color: V.accent, fontFamily: V.mono, marginBottom: 4, alignSelf: 'flex-start' }}>Skill coverage</div>
               <SkillsSpider axes={m.skill_coverage} size={200} />
@@ -2660,6 +2678,87 @@ const SkillsSpider: React.FC<{ axes: SkillAxis[]; size?: number }> = ({ axes, si
   );
 };
 
+/**
+ * Task #17 — TeamCoverageRadar. Pure-SVG 8-axis radar of the real founding
+ * team's "best-of" coverage, overlaid with a dashed ideal-coverage reference
+ * polygon (constant per axis). Gap-axis vertices + labels are highlighted in
+ * the warn colour, and the suggested-hire chips render below as styled HTML
+ * (the chart itself stays vector-clean for PDF/export). Renders nothing when
+ * there are fewer than 3 axes.
+ */
+const TeamCoverageRadar: React.FC<{ radar: TeamRadar; size?: number }> = ({ radar, size = 200 }) => {
+  const V = useV();
+  const axes = radar.axes || [];
+  const N = axes.length;
+  if (N < 3) return null;
+  const r = size / 2 - 28;
+  const cx = size / 2;
+  const cy = size / 2;
+  const pt = (i: number, val: number): [number, number] => {
+    const angle = -Math.PI / 2 + (i / N) * Math.PI * 2;
+    const rr = r * Math.max(0, Math.min(1, val));
+    return [cx + Math.cos(angle) * rr, cy + Math.sin(angle) * rr];
+  };
+  const ring = (frac: number) => Array.from({ length: N }).map((_, i) => pt(i, frac).join(',')).join(' ');
+  const teamPts = axes.map((a, i) => pt(i, a.value).join(',')).join(' ');
+  const idealPts = Array.from({ length: N }).map((_, i) => pt(i, radar.ideal).join(',')).join(' ');
+  return (
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+      <svg viewBox={`0 0 ${size} ${size}`} style={{ width: '100%', maxWidth: size, display: 'block' }}>
+        {[0.33, 0.66, 1].map((f, i) => (
+          <polygon key={i} points={ring(f)} fill="none" stroke={V.line} strokeOpacity={0.5} />
+        ))}
+        {/* dashed "ideal coverage" reference polygon (constant per axis) */}
+        <polygon points={idealPts} fill="none" stroke={V.textMuted} strokeOpacity={0.8} strokeWidth={1} strokeDasharray="3 3" />
+        {/* real team "best-of" coverage polygon */}
+        <polygon points={teamPts} fill={V.accent} fillOpacity={0.25} stroke={V.accent} strokeWidth={1.5} />
+        {/* gap-axis vertices highlighted */}
+        {axes.map((a, i) => {
+          if (!a.gap) return null;
+          const [x, y] = pt(i, a.value);
+          return <circle key={i} cx={x} cy={y} r={2.6} fill={V.gold} />;
+        })}
+        {axes.map((a, i) => {
+          const [lx, ly] = pt(i, 1.16);
+          return (
+            <text key={i} x={lx} y={ly} textAnchor="middle" fontFamily={V.mono}
+              fontSize="8" fill={a.gap ? V.gold : V.textMuted} letterSpacing="0.08em">
+              {a.label}
+            </text>
+          );
+        })}
+      </svg>
+      <div style={{ display: 'flex', gap: 14, fontSize: 8.5, color: V.textMuted, fontFamily: V.mono, textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 12, borderTop: `2px solid ${V.accent}` }} /> Team
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 12, borderTop: `2px dashed ${V.textMuted}` }} /> Ideal
+        </span>
+      </div>
+      {radar.gaps && radar.gaps.length > 0 && (
+        <div style={{ width: '100%', marginTop: 2 }}>
+          <div style={{ fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.18em', color: V.textMuted, fontFamily: V.mono, marginBottom: 6 }}>
+            Coverage gaps · suggested hires
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {radar.gaps.map((g, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 10.5, fontFamily: V.display, fontWeight: 700, color: V.ink }}>{g.label}</span>
+                {g.roles.map((role, j) => (
+                  <span key={j} style={{ fontSize: 9, padding: '2px 7px', borderRadius: 999, background: V.cardSoft, color: V.textSoft, fontFamily: V.mono, border: `1px solid ${V.line}` }}>
+                    {role}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 /** ProfileCard — compact mentor card with name/role/skills. */
 const ProfileCard: React.FC<{ p: MentorProfile }> = ({ p }) => {
   const V = useV();
@@ -2891,7 +2990,12 @@ const Slide_TeamNetwork: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
             <GroupLabel>Readiness · {vr.tier || DASH}</GroupLabel>
             <ScoreBars items={vr.breakdown} />
           </div>
-          {m.skill_coverage && m.skill_coverage.length >= 3 ? (
+          {m.team_radar && m.team_radar.has_data && m.team_radar.axes.length >= 3 ? (
+            <div style={{ ...cardStyle(V), padding: 12, display: 'flex', flexDirection: 'column' }}>
+              <GroupLabel>Team coverage</GroupLabel>
+              <TeamCoverageRadar radar={m.team_radar} size={170} />
+            </div>
+          ) : m.skill_coverage && m.skill_coverage.length >= 3 ? (
             <div style={{ ...cardStyle(V), padding: 12, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <GroupLabel>Skill coverage</GroupLabel>
               <SkillsSpider axes={m.skill_coverage} size={170} />

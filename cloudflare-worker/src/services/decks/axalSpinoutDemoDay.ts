@@ -43,6 +43,9 @@ import {
   ensureNetworkProfilesSchema,
   SKILL_CATALOG,
 } from '../networkProfilesSchema';
+import { computeRadar, type RadarResult } from '../radar';
+import { RADAR_AXES, ensureSkillsTaxonomySchema } from '../skillsTaxonomySchema';
+import { ensureSkillProfileSchema } from '../skillProfileSchema';
 
 /**
  * Task #1 — Load admin-managed mentor/partner network profiles.
@@ -180,6 +183,84 @@ const WEEK_CATALOG: Array<{
   ] },
 ];
 
+/**
+ * Task #17 — founding-team coverage radar shape, mirrored in the adapter.
+ * `value`/`ideal` are 0..1 fractions so the SVG radar plots them directly.
+ */
+export type TeamRadarAxis = {
+  slug: string;
+  label: string;
+  value: number;   // 0..1 — team "best-of" coverage on this axis
+  gap: boolean;    // true when coverage falls below the gap threshold
+};
+export type TeamRadarGap = {
+  slug: string;
+  label: string;
+  roles: string[]; // up to 2 suggested roles to hire for this gap axis
+};
+export type TeamRadar = {
+  axes: TeamRadarAxis[];
+  ideal: number;       // 0..1 — dashed reference polygon (constant per axis)
+  has_data: boolean;
+  gaps: TeamRadarGap[];
+  member_count: number;
+};
+
+/**
+ * Task #17 — static axis-slug → suggested hiring roles map. Used to label
+ * gap-axis chips on the deck radar. Keyed by the canonical RADAR_AXES slugs;
+ * the top 2 are surfaced. Richer suggestions (co-founder complement scoring)
+ * can replace this later without changing the deck contract.
+ */
+const GAP_AXIS_ROLES: Record<string, string[]> = {
+  product:          ['Head of Product', 'Senior PM'],
+  engineering:      ['Founding Engineer', 'CTO'],
+  design:           ['Lead Product Designer', 'Design Engineer'],
+  gtm_sales:        ['Head of Sales', 'GTM Lead'],
+  marketing_brand:  ['Head of Marketing', 'Growth Lead'],
+  finance_ops:      ['Head of Finance', 'Ops Lead'],
+  legal_compliance: ['General Counsel', 'Compliance Lead'],
+  capital_network:  ['Head of Fundraising', 'Talent Lead'],
+};
+
+// Dashed "ideal coverage" reference: a constant target per axis (0–100).
+const IDEAL_COVERAGE = 70;
+// Coverage below this (0–100) flags an axis as a hiring gap. Mirrors the
+// radar service's own gap_axes threshold so deck + profile views agree.
+const GAP_THRESHOLD = 60;
+
+/**
+ * Map a RadarResult (single-user or team) into the deck's TeamRadar shape.
+ * For teams (≥2 members) we plot per-axis `coverage` (best-of member); for a
+ * solo founder we plot their own axis `score`. Gap axes get role chips.
+ */
+function buildTeamRadar(radar: RadarResult, memberCount: number): TeamRadar {
+  const isTeam = Array.isArray(radar.team) && radar.team.length > 0;
+  const gapSet = new Set(radar.gap_axes || []);
+  const axes: TeamRadarAxis[] = RADAR_AXES.map((ax) => {
+    let cov = 0;
+    if (isTeam) {
+      const t = radar.team!.find((x) => x.slug === ax.slug);
+      cov = t ? t.coverage : 0;
+    } else {
+      const a = radar.axes.find((x) => x.slug === ax.slug);
+      cov = a ? a.score : 0;
+    }
+    const gap = isTeam ? gapSet.has(ax.slug) : cov < GAP_THRESHOLD;
+    return { slug: ax.slug, label: ax.label, value: Math.round(cov) / 100, gap };
+  });
+  const gaps: TeamRadarGap[] = axes
+    .filter((a) => a.gap)
+    .map((a) => ({ slug: a.slug, label: a.label, roles: (GAP_AXIS_ROLES[a.slug] || []).slice(0, 2) }));
+  return {
+    axes,
+    ideal: IDEAL_COVERAGE / 100,
+    has_data: radar.has_data,
+    gaps,
+    member_count: memberCount,
+  };
+}
+
 /** Public output shape — mirrors SpinoutDemoDayData in the adapter. */
 export type SpinoutDemoDayData = {
   meta: {
@@ -280,6 +361,10 @@ export type SpinoutDemoDayData = {
     // recruiting / …) so the "operating partners on call" panel renders
     // honest counts rather than fixed pills.
     network: Array<{ category: string; count: number }>;
+    // Task #17 — real 8-axis founding-team coverage radar (from the live
+    // skills taxonomy via computeRadar). Null when the taxonomy/profile
+    // tables are unavailable; has_data=false when nobody has rated skills.
+    team_radar: TeamRadar | null;
   };
   cap_table: {
     eyebrow: string; headline: string;
@@ -894,6 +979,36 @@ export async function fillAxalSpinoutDemoDay(
   // old free-text vs the new curated source.
   void mentorBody; void networkSignals;
 
+  // ------ Task #17: real 8-axis founding-team coverage radar ----------
+  // The founding team = the Lab founder plus any active cofounder
+  // connections. We compute the radar directly off the live skills
+  // taxonomy (same source as /api/radar) and degrade to null on any
+  // schema/DB error so the slide falls back to the legacy skill_coverage
+  // spider rather than throwing.
+  let teamRadar: TeamRadar | null = null;
+  try {
+    const teamUserIds: number[] = [userId];
+    try {
+      const conns = await DB.prepare(`
+        SELECT user_a_id, user_b_id FROM cofounder_connections
+        WHERE status = 'active' AND (user_a_id = ? OR user_b_id = ?)
+      `).bind(userId, userId).all<{ user_a_id: number; user_b_id: number }>();
+      for (const cn of (conns?.results || [])) {
+        const other = Number(cn.user_a_id) === userId ? Number(cn.user_b_id) : Number(cn.user_a_id);
+        if (Number.isInteger(other) && other > 0 && !teamUserIds.includes(other)) {
+          teamUserIds.push(other);
+        }
+      }
+    } catch { /* cofounder_connections missing — solo founder radar */ }
+    await ensureSkillsTaxonomySchema(env);
+    await ensureSkillProfileSchema(env);
+    const radar = await computeRadar(env, teamUserIds);
+    teamRadar = buildTeamRadar(radar, teamUserIds.length);
+  } catch (err) {
+    console.warn('[axalSpinoutDemoDay] team radar compute failed', err);
+    teamRadar = null;
+  }
+
   // ------ Task #14 + Task #2: deal-room access payload --------------
   // Task #2 — `data_room_url` + `data_room_nda_required` live on the
   // project as the single source of truth (editable on Project detail
@@ -1056,6 +1171,7 @@ export async function fillAxalSpinoutDemoDay(
       profiles,
       skill_coverage: skillCoverage,
       network: networkBreakdown,
+      team_radar: teamRadar,
     },
 
     cap_table: {
@@ -1367,6 +1483,7 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         jsonField('mn_profiles_json', mn.profiles),
         jsonField('mn_skill_coverage_json', mn.skill_coverage),
         jsonField('mn_network_json', mn.network),
+        jsonField('mn_team_radar_json', mn.team_radar),
       ],
     },
     {

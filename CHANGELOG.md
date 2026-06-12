@@ -10,6 +10,12 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Spin-out Deck Radar Autofill (Task #17)
+
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`: the Axal spin-out demo-day deck now autofills a real 8-axis founding-team coverage radar. Resolves the team = founder (`userId`) + active `cofounder_connections` (status='active', user_a_id/user_b_id), then calls `computeRadar(env, teamUserIds)` (after `ensureSkillsTaxonomySchema`/`ensureSkillProfileSchema`) and maps it into a new `TeamRadar` shape via `buildTeamRadar()`. Team mode plots per-axis `coverage` (best-of member); solo founders plot their own axis `score`. Gap axes (coverage < 60) get up to 2 suggested hiring roles via the static `GAP_AXIS_ROLES` map. Constant ideal-coverage reference = 70/axis. Emitted as `mn_team_radar_json`; degrades to `null` on any DB/schema error so the slide falls back to the legacy skill_coverage spider. All wrapped in try-catch.
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx`: added `TeamRadar`/`TeamRadarAxis`/`TeamRadarGap` types, `team_radar` on `mentor_network` (type + SAMPLE_DATA + hydrate via `parseJsonField`), and a new pure-SVG `TeamCoverageRadar` component (team polygon + dashed ideal reference polygon + gold gap-axis vertices/labels + Team/Ideal legend + gap hiring chips as styled HTML below). Rendered in both the Mentor & Network slide (size 200) and the merged Team slide (size 170), preferring `team_radar.has_data && axes.length >= 3`, then the legacy `SkillsSpider`, then `NetworkConstellation`.
+- `DECK_AUTOFILL_AUDIT.md`: marked `mentor_network.team_radar.*` as AUTOFILLED (#17).
+
 ## Investor Matching (Task #16)
 
 - `cloudflare-worker/sql/migrations/096_investor_thesis.sql`: adds `anti_thesis_sectors_json`, `anti_thesis_stages_json`, `value_weights_json` to `investor_profiles` (idempotent, SQLite/D1 safe). Also updated `cloudflare-worker/sql/schema.sql`.

@@ -79,6 +79,20 @@ missing column (falls through to AI then placeholder).
 No ALTER required — every derived value comes from existing columns
 (`name`, `shares`, `kind`).
 
+## mentor_network.team_radar (8-axis founding-team coverage)
+
+| Source expression                | Status before #17 | Status after #17 | Where the value comes from |
+|----------------------------------|-------------------|------------------|----------------------------|
+| mentor_network.team_radar.axes   | PLACEHOLDER       | **AUTOFILLED (#17)** | `computeRadar()` over founder + active `cofounder_connections`, blended skills taxonomy |
+| mentor_network.team_radar.ideal  | n/a               | **AUTOFILLED (#17)** | Constant 70/axis ideal-coverage reference polygon |
+| mentor_network.team_radar.gaps   | n/a               | **AUTOFILLED (#17)** | Gap axes (coverage < 60) → top 2 roles via static `GAP_AXIS_ROLES` map |
+
+The deck radar now plots the real team's best-of per-axis coverage (team
+mode) or the solo founder's axis score, overlaid with a dashed ideal
+polygon and gap-axis hiring chips. Renders pure SVG (vector-clean for
+PDF/export). Degrades to the legacy `skill_coverage` spider, then the
+`NetworkConstellation`, when no radar data exists.
+
 ## metrics_snapshots, rounds
 
 Templates do not currently bind to these tables (all financial values
