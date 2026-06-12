@@ -228,8 +228,61 @@ r.post('/health/recompute/:uid', async (c) => {
 //   - The portfolio aggregate per axis = mean of all companies' axis scores
 //     (sanity check: aggregate[axis] === mean(companies[].axes[axis])).
 // ---------------------------------------------------------------------------
-const GAP_THRESHOLD = 60;
-const MIN_GAP_AXES_TO_FLAG = 3;
+export const GAP_THRESHOLD = 60;
+export const MIN_GAP_AXES_TO_FLAG = 3;
+
+// ---------------------------------------------------------------------------
+// Pure scoring helpers (exported for unit tests in test/portfolio_coverage.test.ts).
+// These encode the heatmap's regression-sensitive rules so a change to the
+// radar service, thresholds, or aggregate math is caught pre-merge by the
+// drift gate rather than silently breaking the dashboard.
+// ---------------------------------------------------------------------------
+
+/** A "gap axis" is any axis whose score is strictly below `threshold`.
+ *  Iterates the axes object in insertion order so callers building `axes`
+ *  in canonical RADAR_AXES order get a canonically-ordered gap list. */
+export function coverageGapAxes(
+  axes: Record<string, number>,
+  threshold: number = GAP_THRESHOLD,
+): string[] {
+  const out: string[] = [];
+  for (const [slug, score] of Object.entries(axes)) {
+    if (score < threshold) out.push(slug);
+  }
+  return out;
+}
+
+/** A company is flagged when it has at least `minToFlag` gap axes. */
+export function isFlagged(gapCount: number, minToFlag: number = MIN_GAP_AXES_TO_FLAG): boolean {
+  return gapCount >= minToFlag;
+}
+
+/** Portfolio aggregate: per-axis mean across all companies, rounded to 2dp.
+ *  Returns 0 per axis for an empty portfolio (no divide-by-zero). */
+export function aggregateAxes(
+  companyAxesList: Array<Record<string, number>>,
+  slugs: string[],
+): Record<string, number> {
+  const n = companyAxesList.length;
+  const out: Record<string, number> = {};
+  for (const slug of slugs) {
+    if (n === 0) { out[slug] = 0; continue; }
+    let sum = 0;
+    for (const axes of companyAxesList) sum += axes[slug] ?? 0;
+    out[slug] = Math.round((sum / n) * 100) / 100;
+  }
+  return out;
+}
+
+/** Validate the optional `fund_id` query param. Empty/undefined means
+ *  "all companies" (fundId 0). A non-numeric value is a client error. */
+export function validateFundId(
+  raw: string | undefined,
+): { ok: true; fundId: number } | { ok: false } {
+  if (raw === undefined || raw === '') return { ok: true, fundId: 0 };
+  if (!/^\d+$/.test(raw)) return { ok: false };
+  return { ok: true, fundId: parseInt(raw, 10) };
+}
 
 /**
  * Resolve the founding-team user ids for a project: the user(s) linked via
@@ -269,13 +322,13 @@ r.get('/coverage', async (c) => {
     await ensureSkillProfileSchema(c.env);
 
     // Optional fund scoping via fund_reserve_allocations(fund_id, project_id).
-    const fundIdRaw = c.req.query('fund_id');
     // Validate explicitly rather than silently treating garbage as unscoped:
     // a malformed fund_id is a client error, not "all companies".
-    if (fundIdRaw !== undefined && fundIdRaw !== '' && !/^\d+$/.test(fundIdRaw)) {
+    const parsedFund = validateFundId(c.req.query('fund_id'));
+    if (!parsedFund.ok) {
       return c.json({ detail: 'fund_id must be a positive integer' }, 400);
     }
-    const fundId = fundIdRaw ? parseInt(fundIdRaw, 10) : 0;
+    const fundId = parsedFund.fundId;
     let fund: { id: number; name: string } | null = null;
     let projects: { id: number; uid: string; name: string; sector: string | null; stage: string | null; founder_id: number | null }[];
 
@@ -301,10 +354,8 @@ r.get('/coverage', async (c) => {
     }
 
     const axisMeta = RADAR_AXES.map((a) => ({ slug: a.slug, label: a.label }));
+    const axisSlugs = RADAR_AXES.map((a) => a.slug);
     const companies: any[] = [];
-    // Running sums for the portfolio aggregate (mean per axis).
-    const axisSums: Record<string, number> = {};
-    for (const a of RADAR_AXES) axisSums[a.slug] = 0;
 
     for (const p of projects) {
       const teamIds = await projectTeamUserIds(c.env, p);
@@ -312,13 +363,10 @@ r.get('/coverage', async (c) => {
       // Map axis slug -> score (0–100), preserving canonical axis order.
       const bySlug = new Map(radar.axes.map((ax) => [ax.slug, ax.score]));
       const axes: Record<string, number> = {};
-      const gapAxes: string[] = [];
       for (const a of RADAR_AXES) {
-        const score = Math.round(bySlug.get(a.slug) ?? 0);
-        axes[a.slug] = score;
-        axisSums[a.slug] += score;
-        if (score < GAP_THRESHOLD) gapAxes.push(a.slug);
+        axes[a.slug] = Math.round(bySlug.get(a.slug) ?? 0);
       }
+      const gapAxes = coverageGapAxes(axes, GAP_THRESHOLD);
       companies.push({
         project_id: p.id,
         uid: p.uid,
@@ -330,16 +378,13 @@ r.get('/coverage', async (c) => {
         axes,
         gap_axes: gapAxes,
         gap_count: gapAxes.length,
-        flagged: gapAxes.length >= MIN_GAP_AXES_TO_FLAG,
+        flagged: isFlagged(gapAxes.length),
         overall: radar.overall,
       });
     }
 
     const n = companies.length;
-    const aggregate: Record<string, number> = {};
-    for (const a of RADAR_AXES) {
-      aggregate[a.slug] = n > 0 ? Math.round((axisSums[a.slug] / n) * 100) / 100 : 0;
-    }
+    const aggregate = aggregateAxes(companies.map((x) => x.axes), axisSlugs);
 
     return c.json({
       axes: axisMeta,
