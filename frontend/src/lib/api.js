@@ -856,6 +856,20 @@ export const api = {
   },
   adminGetContract: (uid) => request(`/admin/contracts/${uid}`),
   adminResendContract: (uid) => request(`/admin/contracts/${uid}/resend`, { method: 'POST' }),
+  // Task #9 — Promo Code admin CRUD. List is a plain admin read; create/toggle/
+  // delete are money-adjacent so the server enforces TOTP + step-up (the global
+  // `request` helper auto-handles the 403 `step_up_required` challenge).
+  //   adminListPromos()           → { promos: [PromoView] }
+  //   adminCreatePromo(body)      → { ok, promo_id, code }
+  //   adminSetPromoActive(id, on) → { ok, promo_id, active }
+  //   adminDeletePromo(id)        → { ok, promo_id }
+  adminListPromos: () => request('/admin/promos'),
+  adminCreatePromo: (body) =>
+    request('/admin/promos', { method: 'POST', body: JSON.stringify(body || {}) }),
+  adminSetPromoActive: (id, active) =>
+    request(`/admin/promos/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ active }) }),
+  adminDeletePromo: (id) =>
+    request(`/admin/promos/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   adminVoidContract: (uid) => request(`/admin/contracts/${uid}/void`, { method: 'POST' }),
   adminDownloadContractUrl: (uid) => `/api/admin/contracts/${uid}/download`,
   adminIssueContractShareLink: (uid, ttl_seconds = 300) =>
@@ -1615,6 +1629,13 @@ export const api = {
   // The caller's active (non-expired) feature unlocks:
   //   → { unlocks: [{ feature_key, expires_at }] }
   alacarteUnlocks: () => request('/payments/alacarte/unlocks'),
+  // Task #9 — preview a promo code against a catalog price. Server validates the
+  // code against the product allow-list + usage limit and recomputes the
+  // discount (never trusts a client amount). Body: { code, price_id }.
+  // → { valid:true, code, percent_off, amount_off, currency, original_amount,
+  //     discount_cents, discounted_amount, free } | { valid:false, reason }
+  validatePromo: (body) =>
+    request('/payments/promo/validate', { method: 'POST', body: JSON.stringify(body || {}) }),
   // Mirrored Stripe catalog (read). `kind` filters: subscription | incorporation
   // | session | alacarte. Returns { products: [{ id, name, kind, prices: [...] }] }.
   catalogProducts: (kind) =>

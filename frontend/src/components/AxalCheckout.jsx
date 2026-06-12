@@ -36,6 +36,32 @@ import Skeleton from './Skeleton';
  *   onSuccess(result) — fired after a successful / processing confirmation
  *   onError(error)    — fired on a terminal payment error
  */
+// Task #9 — friendly copy for each server-side promo rejection `reason`.
+const PROMO_REASONS = {
+  not_found: "That code isn't valid.",
+  inactive: 'This code is no longer active.',
+  expired: 'This code has expired.',
+  product_not_eligible: "This code doesn't apply to this item.",
+  usage_limit_reached: 'This code has reached its usage limit.',
+  currency_mismatch: "This code can't be used for this purchase.",
+  amount_below_minimum: 'This code lowers the total below the minimum we can process.',
+};
+function promoReasonText(reason) {
+  return PROMO_REASONS[reason] || "That code can't be applied to this purchase.";
+}
+
+function formatMoney(cents, currency) {
+  const amt = (Number(cents) || 0) / 100;
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: (currency || 'usd').toUpperCase(),
+    }).format(amt);
+  } catch {
+    return `${amt.toFixed(2)} ${(currency || '').toUpperCase()}`.trim();
+  }
+}
+
 export default function AxalCheckout(props) {
   const { priceId, amount, currency, quantity, description, clientSecret: providedClientSecret } = props;
   const { effectiveTheme } = useSettings();
@@ -45,6 +71,19 @@ export default function AxalCheckout(props) {
   const [clientSecret, setClientSecret] = useState(providedClientSecret || null);
   const [intentKind, setIntentKind] = useState(providedClientSecret ? 'payment' : null);
   const [loadError, setLoadError] = useState(null);
+  // Task #9 — applied promo (the validate-preview result) + free-order state.
+  const [appliedPromo, setAppliedPromo] = useState(null);
+  // A 100%-off (free) promo activates the purchase the instant we fetch the
+  // intent, so we gate that behind an explicit confirm click instead of
+  // auto-fetching like the paid path does.
+  const [freeConfirm, setFreeConfirm] = useState(false);
+  const [freeResult, setFreeResult] = useState(null);
+  const promoCode = appliedPromo?.code || '';
+  const promoFree = !!appliedPromo?.free;
+  // Keep onSuccess out of the effect deps (its identity can change every
+  // render) — call through a ref so the free-activation fires exactly once.
+  const onSuccessRef = useRef(props.onSuccess);
+  onSuccessRef.current = props.onSuccess;
   // Stable nonce per mount so retries of the same purchase reuse the
   // server-side idempotency key instead of creating duplicate intents.
   const nonceRef = useRef(null);
@@ -68,6 +107,15 @@ export default function AxalCheckout(props) {
       setLoadError('Nothing to pay for.');
       return;
     }
+    // Free promo applied but not yet confirmed — don't fetch the intent (that
+    // would activate the subscription / grant the unlock immediately). Render
+    // the explicit "Complete free order" button instead.
+    if (promoCode && promoFree && !freeConfirm) {
+      setClientSecret(null);
+      setLoadError(null);
+      setFreeResult(null);
+      return;
+    }
     let cancelled = false;
     setClientSecret(null);
     setLoadError(null);
@@ -79,11 +127,21 @@ export default function AxalCheckout(props) {
     }
     if (quantity != null) body.quantity = quantity;
     if (description) body.description = description;
+    // Promo code flows into the idempotency key server-side, so applying or
+    // removing a code re-fetches a fresh discounted (or full-price) intent.
+    if (promoCode) body.promo_code = promoCode;
 
     api
       .paymentIntent(body)
       .then((res) => {
         if (cancelled) return;
+        // Zero-due (100%-off) order — no PaymentIntent to confirm; the server
+        // already activated the subscription / granted the unlock.
+        if (res?.free) {
+          setFreeResult(res);
+          onSuccessRef.current?.({ ...res, free: true, kind: res.kind });
+          return;
+        }
         if (!res?.client_secret) {
           setLoadError('Could not start checkout. Please try again.');
           return;
@@ -98,7 +156,7 @@ export default function AxalCheckout(props) {
     return () => {
       cancelled = true;
     };
-  }, [stripePromise, priceId, amount, currency, quantity, description, providedClientSecret]);
+  }, [stripePromise, priceId, amount, currency, quantity, description, providedClientSecret, promoCode, promoFree, freeConfirm]);
 
   // No publishable key configured → graceful unavailable state.
   if (!STRIPE_PUBLISHABLE_KEY || !stripePromise) {
@@ -110,35 +168,172 @@ export default function AxalCheckout(props) {
     );
   }
 
-  if (loadError) {
-    return (
+  // Promo codes only apply to catalog-priced purchases (a raw ad-hoc amount has
+  // no product to scope the allow-list against, and the server rejects it).
+  const showPromo = priceId != null && !providedClientSecret;
+  const promoField = showPromo ? (
+    <PromoField
+      priceId={priceId}
+      applied={appliedPromo}
+      onApply={(preview) => {
+        setAppliedPromo(preview);
+        setFreeConfirm(false);
+        setFreeResult(null);
+        setLoadError(null);
+      }}
+      onRemove={() => {
+        setAppliedPromo(null);
+        setFreeConfirm(false);
+        setFreeResult(null);
+        setLoadError(null);
+      }}
+    />
+  ) : null;
+
+  let body;
+  if (freeResult) {
+    body = (
+      <div className="rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 p-4 text-sm text-green-700 dark:text-green-300 flex items-start gap-2">
+        <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+        <span>Order complete — your code covered the full amount. Thank you!</span>
+      </div>
+    );
+  } else if (loadError) {
+    body = (
       <div className="rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-300 flex items-start gap-2">
         <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
         <span>{loadError}</span>
       </div>
     );
+  } else if (promoCode && promoFree && !freeConfirm) {
+    body = (
+      <button
+        type="button"
+        onClick={() => setFreeConfirm(true)}
+        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium transition-colors"
+      >
+        Complete free order
+      </button>
+    );
+  } else if (!clientSecret) {
+    body = <CheckoutSkeleton />;
+  } else {
+    const appearance = buildAppearance(isDark);
+    body = (
+      // Re-mount Elements when the client secret or theme changes — Stripe only
+      // reads `appearance` at Elements creation time.
+      <Elements
+        key={`${clientSecret}:${effectiveTheme}`}
+        stripe={stripePromise}
+        options={{ clientSecret, appearance }}
+      >
+        <CheckoutForm
+          {...props}
+          intentKind={intentKind}
+          clientSecret={clientSecret}
+        />
+      </Elements>
+    );
   }
-
-  if (!clientSecret) {
-    return <CheckoutSkeleton />;
-  }
-
-  const appearance = buildAppearance(isDark);
 
   return (
-    // Re-mount Elements when the client secret or theme changes — Stripe only
-    // reads `appearance` at Elements creation time.
-    <Elements
-      key={`${clientSecret}:${effectiveTheme}`}
-      stripe={stripePromise}
-      options={{ clientSecret, appearance }}
-    >
-      <CheckoutForm
-        {...props}
-        intentKind={intentKind}
-        clientSecret={clientSecret}
-      />
-    </Elements>
+    <div className="space-y-4">
+      {promoField}
+      {body}
+    </div>
+  );
+}
+
+/**
+ * Task #9 — promo code entry + live preview. "Apply" calls
+ * `POST /api/payments/promo/validate` which validates the code against the
+ * product allow-list + usage limit and recomputes the discount server-side
+ * (the client amount is never trusted). On success the parent re-fetches a
+ * discounted intent; rejections surface inline with a friendly message.
+ */
+function PromoField({ priceId, applied, onApply, onRemove }) {
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const apply = async () => {
+    const trimmed = code.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await api.validatePromo({ code: trimmed, price_id: priceId });
+      if (!res?.valid) {
+        setErr(promoReasonText(res?.reason));
+        setBusy(false);
+        return;
+      }
+      onApply(res);
+      setBusy(false);
+    } catch (e) {
+      setErr(e?.message || "Couldn't check that code. Please try again.");
+      setBusy(false);
+    }
+  };
+
+  if (applied) {
+    const savings = applied.free
+      ? 'your order is free'
+      : applied.percent_off
+        ? `${applied.percent_off}% off applied`
+        : `${formatMoney(applied.amount_off, applied.currency)} off`;
+    return (
+      <div className="rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 p-3 text-sm text-green-700 dark:text-green-300 flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 min-w-0">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span className="truncate">
+            Code <strong>{applied.code}</strong> — {savings}
+          </span>
+        </span>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="shrink-0 text-xs font-medium text-green-700 dark:text-green-300 underline hover:no-underline"
+        >
+          Remove
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor="promo-code" className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+        Promo code
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="promo-code"
+          type="text"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              apply();
+            }
+          }}
+          placeholder="Enter code"
+          autoComplete="off"
+          autoCapitalize="characters"
+          className="flex-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+        />
+        <button
+          type="button"
+          onClick={apply}
+          disabled={busy || !code.trim()}
+          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+        </button>
+      </div>
+      {err && <p className="text-xs text-red-600 dark:text-red-400">{err}</p>}
+    </div>
   );
 }
 

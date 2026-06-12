@@ -5,6 +5,14 @@ import { stripeCall } from './billing';
 import { ensureTierSchema, type TierUser } from '../middleware/requireTier';
 import { findCatalogPriceById, findCatalogProductByPriceId } from '../services/catalog';
 import { ensureFeatureUnlockSchema, listActiveUnlocks } from '../services/featureUnlocks';
+import {
+  validatePromoForProduct,
+  fulfilFreeUnlock,
+  computeDiscount,
+  normalizeCode,
+  STRIPE_MIN_CHARGE_CENTS,
+  type PromoRow,
+} from '../services/promos';
 
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 //
@@ -61,6 +69,16 @@ interface IntentBody {
   quantity?: number;
   nonce?: string;
   description?: string;
+  promo_code?: string;
+}
+
+/**
+ * Idempotency-key fragment for a promo code. Applying/removing a promo MUST
+ * change the key so Stripe doesn't replay the pre-discount intent for 24h.
+ */
+function promoIdemPart(code?: string): string {
+  if (!code) return 'none';
+  return normalizeCode(code).replace(/[^A-Z0-9_-]/g, '').slice(0, 64) || 'none';
 }
 
 payments.post('/intent', async (c) => {
@@ -79,7 +97,26 @@ payments.post('/intent', async (c) => {
   if (body.price_id) {
     const price = await findCatalogPriceById(c.env, body.price_id);
     if (!price || !price.active) return c.json({ error: 'invalid_price' }, 400);
-    const idempotencyKey = `pi:${user.id}:${price.id}:${nonce}`;
+
+    // Optional promo code — validated server-side against the product
+    // allow-list (NEVER trust a client-supplied amount). On failure we return
+    // the rejection reason so the SPA can render a precise message.
+    const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
+    let promo: PromoRow | undefined;
+    if (promoCode) {
+      const found = await findCatalogProductByPriceId(c.env, price.id);
+      if (!found) return c.json({ error: 'invalid_price' }, 400);
+      const v = await validatePromoForProduct(
+        c.env,
+        promoCode,
+        found.product.id,
+        price.unit_amount ?? 0,
+        price.currency,
+      );
+      if (!v.ok) return c.json({ error: 'promo_invalid', reason: v.reason }, 400);
+      promo = v.promo;
+    }
+    const idempotencyKey = `pi:${user.id}:${price.id}:${promoIdemPart(promoCode)}:${nonce}`;
 
     // Recurring price → create an incomplete Subscription and hand back the
     // first invoice's PaymentIntent client_secret. The SPA confirms the card
@@ -96,6 +133,12 @@ payments.post('/intent', async (c) => {
         'metadata[uid]': user.uid,
         'metadata[price_id]': price.id,
       };
+      // Subscriptions redeem the promotion code NATIVELY — Stripe applies the
+      // coupon per its `duration` and enforces applies_to[products] itself.
+      if (promo) {
+        subParams['discounts[0][promotion_code]'] = promo.id;
+        subParams['metadata[promo_code_id]'] = promo.id;
+      }
       try {
         const sub = await stripeCall<{
           id: string;
@@ -103,7 +146,22 @@ payments.post('/intent', async (c) => {
           latest_invoice?: { id?: string; payment_intent?: { client_secret?: string; id?: string } };
         }>(c.env, '/subscriptions', subParams, { idempotencyKey });
         const clientSecret = sub.latest_invoice?.payment_intent?.client_secret;
-        if (!clientSecret) return c.json({ error: 'no_client_secret' }, 502);
+        if (!clientSecret) {
+          // A 100%-off (or otherwise zero-due) first invoice has NO
+          // PaymentIntent — the subscription is already active/trialing. Treat
+          // it as a successful free activation rather than an error.
+          if (sub.status === 'active' || sub.status === 'trialing') {
+            return c.json({
+              kind: 'subscription',
+              free: true,
+              subscription_id: sub.id,
+              status: sub.status,
+              customer,
+              price_id: price.id,
+            });
+          }
+          return c.json({ error: 'no_client_secret' }, 502);
+        }
         return c.json({
           kind: 'subscription',
           client_secret: clientSecret,
@@ -119,19 +177,37 @@ payments.post('/intent', async (c) => {
 
     // One-time price → PaymentIntent for unit_amount * quantity.
     if (price.unit_amount == null) return c.json({ error: 'price_has_no_amount' }, 400);
-    const amount = price.unit_amount * quantity;
+    let amount = price.unit_amount * quantity;
+    const metadata: Record<string, string> = { price_id: price.id };
+    if (promo) {
+      // One-time PaymentIntents can't carry a coupon — recompute the discount
+      // from the catalog amount and stamp the promo id so the webhook records
+      // the redemption. This generic one-time path has NO fulfilment hook, so a
+      // free (sub-minimum) result has nothing to grant → reject explicitly.
+      const { discountedAmount } = computeDiscount(promo, amount);
+      if (discountedAmount < STRIPE_MIN_CHARGE_CENTS) {
+        return c.json({ error: 'promo_amount_below_minimum', reason: 'amount_below_minimum' }, 400);
+      }
+      amount = discountedAmount;
+      metadata.promo_code_id = promo.id;
+    }
     return createPaymentIntent(c, {
       customer,
       amount,
       currency: price.currency,
       idempotencyKey,
       user,
-      metadata: { price_id: price.id },
+      metadata,
       description: body.description,
     });
   }
 
   // ---- Raw amount path: ad-hoc one-time charge (always a PaymentIntent). ----
+  // Raw amounts have no catalog product to scope a promo's allow-list against,
+  // so reject any promo here rather than silently ignoring it.
+  if (typeof body.promo_code === 'string' && body.promo_code.trim()) {
+    return c.json({ error: 'promo_not_supported_for_raw_amount', reason: 'raw_amount' }, 400);
+  }
   const rawAmount = body.amount;
   if (!Number.isInteger(rawAmount) || (rawAmount as number) <= 0) {
     return c.json({ error: 'invalid_amount' }, 400);
@@ -197,6 +273,38 @@ async function createPaymentIntent(
     return c.json({ error: 'intent_failed', detail: (e as Error).message }, 502);
   }
 }
+
+// POST /api/payments/promo/validate { code, price_id } → preview only.
+// Auth'd + rate-limited (see middleware/rateLimit.ts `promo_validate` bucket)
+// so the code space can't be enumerated. Returns 200 with { valid:false,
+// reason } on rejection so the SPA can render a friendly message; never applies
+// or reserves anything.
+payments.post('/promo/validate', async (c) => {
+  await requireAuth(c);
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  const body = (await c.req.json().catch(() => ({}))) as { code?: string; price_id?: string };
+  const code = typeof body.code === 'string' ? body.code.trim() : '';
+  if (!code) return c.json({ valid: false, reason: 'not_found' });
+  if (!body.price_id) return c.json({ error: 'price_id_required' }, 400);
+  const found = await findCatalogProductByPriceId(c.env, body.price_id);
+  if (!found || !found.price.active || !found.product.active) {
+    return c.json({ error: 'invalid_price' }, 400);
+  }
+  const amount = found.price.unit_amount ?? 0;
+  const v = await validatePromoForProduct(c.env, code, found.product.id, amount, found.price.currency);
+  if (!v.ok || !v.promo) return c.json({ valid: false, reason: v.reason });
+  return c.json({
+    valid: true,
+    code: v.promo.code,
+    percent_off: v.promo.percent_off,
+    amount_off: v.promo.amount_off,
+    currency: v.promo.currency,
+    original_amount: amount,
+    discount_cents: v.discountCents,
+    discounted_amount: v.discountedAmount,
+    free: v.free,
+  });
+});
 
 payments.post('/setup-intent', async (c) => {
   const user = (await requireAuth(c)) as TierUser;
@@ -303,7 +411,11 @@ payments.post('/alacarte/intent', async (c) => {
   await ensureTierSchema(c.env);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
 
-  const body = (await c.req.json().catch(() => ({}))) as { price_id?: string; nonce?: string };
+  const body = (await c.req.json().catch(() => ({}))) as {
+    price_id?: string;
+    nonce?: string;
+    promo_code?: string;
+  };
   if (!body.price_id) return c.json({ error: 'price_id_required' }, 400);
 
   const found = await findCatalogProductByPriceId(c.env, body.price_id);
@@ -320,20 +432,52 @@ payments.post('/alacarte/intent', async (c) => {
   const rawDays = Number(found.product.metadata.unlock_days);
   const unlockDays = Number.isFinite(rawDays) && rawDays > 0 ? String(Math.floor(rawDays)) : '0';
 
+  // Optional promo code — validated against THIS product's allow-list.
+  const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
+  let promo: PromoRow | undefined;
+  let amount = found.price.unit_amount;
+  if (promoCode) {
+    const v = await validatePromoForProduct(
+      c.env,
+      promoCode,
+      found.product.id,
+      found.price.unit_amount,
+      found.price.currency,
+    );
+    if (!v.ok || !v.promo) return c.json({ error: 'promo_invalid', reason: v.reason }, 400);
+    promo = v.promo;
+    if (v.free) {
+      // 100%-off / sub-minimum → no PaymentIntent. Grant the unlock directly
+      // (idempotent per user, usage-capped). `false` means the global usage
+      // limit was exhausted between validate and reserve.
+      const granted = await fulfilFreeUnlock(c.env, {
+        promo,
+        userId: user.id,
+        featureKey,
+        unlockDays: unlockDays === '0' ? null : Number(unlockDays),
+      });
+      if (!granted) return c.json({ error: 'promo_invalid', reason: 'usage_limit_reached' }, 400);
+      return c.json({ kind: 'payment', free: true, feature_key: featureKey });
+    }
+    amount = v.discountedAmount!;
+  }
+
   const nonce = safeNonce(body.nonce);
   const customer = await ensurePaymentsCustomer(c.env, user);
+  const metadata: Record<string, string> = {
+    kind: 'alacarte',
+    feature_key: featureKey,
+    unlock_days: unlockDays,
+    price_id: found.price.id,
+  };
+  if (promo) metadata.promo_code_id = promo.id;
   return createPaymentIntent(c, {
     customer,
-    amount: found.price.unit_amount,
+    amount,
     currency: found.price.currency,
-    idempotencyKey: `pi:${user.id}:alacarte_${found.price.id}:${nonce}`,
+    idempotencyKey: `pi:${user.id}:alacarte_${found.price.id}:${promoIdemPart(promoCode)}:${nonce}`,
     user,
-    metadata: {
-      kind: 'alacarte',
-      feature_key: featureKey,
-      unlock_days: unlockDays,
-      price_id: found.price.id,
-    },
+    metadata,
     description: `À la carte: ${found.product.name}`.slice(0, 500),
   });
 });

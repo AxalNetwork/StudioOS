@@ -75,6 +75,7 @@ import advisory from './routes/advisory';
 import activity from './routes/activity';
 import admin from './routes/admin';
 import adminBilling from './routes/admin_billing';
+import adminPromos from './routes/admin_promos';
 import adminContracts from './routes/admin_contracts';
 // Task #9 — Hardcoded IRS-style forms (SS-4, 8821, Faxed-EIN, Confirmation).
 import adminForms from './routes/admin_forms';
@@ -390,6 +391,9 @@ const COOL_OFF_PREFIXES = [
   // Task #11 (II) — admin refunds are money-movement; pause them too so a
   // freshly-recovered admin account can't issue refunds during cool-off.
   '/api/admin/billing',
+  // Task #9 — minting promo codes (incl. 100%-off) is money-adjacent; pause
+  // promo admin during a freshly-recovered admin's cool-off window.
+  '/api/admin/promos',
 ];
 for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
@@ -551,6 +555,8 @@ app.route('/api/admin/billing', adminBilling);
 // Task — Stripe product catalog admin sync. Mounted BEFORE the catch-all
 // /api/admin so /api/admin/catalog/* resolves here. requireAdmin per-route.
 app.route('/api/admin/catalog', adminCatalog);
+// Task #9 — promo-code admin CRUD; mount before the `/api/admin` catch-all.
+app.route('/api/admin/promos', adminPromos);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);

@@ -5,6 +5,14 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Promo codes at checkout
+
+You can now enter a promo code when paying inside Axal. Type your code on the payment form and the discount is applied instantly — you'll see the updated price before you pay. If a code is 100% off, your order completes for free with a single click, no card needed. Codes can be limited to specific products and to a set number of uses, so some may not apply to every purchase.
+
+Administrators get a new **Promo Codes** area in the Admin Console to create and manage discounts — percentage-off or a fixed amount, optionally restricted to certain products, with an optional usage limit and expiry date. Codes can be switched off or deleted at any time.
+
+---
+
 ## Pay for mentor sessions without leaving Axal
 
 Booking a paid session with a mentor or expert now happens entirely inside Axal. Instead of being sent to a separate payment page, you enter your card on an Axal-branded form right on the expert's profile — matching the app's light and dark themes, with any extra bank verification appearing in the same window. Your expert is still paid automatically, and your card details are handled securely by Stripe and never touch Axal's servers.

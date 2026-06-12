@@ -43,7 +43,7 @@ export async function stripeCall<T>(
   env: Env,
   path: string,
   body: Record<string, string>,
-  opts?: { idempotencyKey?: string; method?: 'GET' | 'POST' },
+  opts?: { idempotencyKey?: string; method?: 'GET' | 'POST' | 'DELETE' },
 ): Promise<T> {
   const key = env.STRIPE_SECRET_KEY;
   if (!key) throw new Error('stripe_not_configured');
@@ -56,11 +56,12 @@ export async function stripeCall<T>(
   // recurs — protects money-movement calls (e.g. /refunds) from double-submits
   // and retries. Only sent when a caller opts in (existing callers unaffected).
   if (opts?.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey;
-  // GET (list/read) endpoints take query params; POST (mutations) take a
-  // form-encoded body. Catalog reads use GET; all existing callers stay POST.
+  // GET (list/read) + DELETE (resource removal, e.g. /coupons/:id) carry query
+  // params with no body; POST (mutations) take a form-encoded body. Catalog
+  // reads use GET; all existing callers stay POST.
   let url = `https://api.stripe.com/v1${path}`;
   let reqBody: string | undefined;
-  if (method === 'GET') {
+  if (method === 'GET' || method === 'DELETE') {
     const qs = params.toString();
     if (qs) url += `?${qs}`;
   } else {
@@ -781,6 +782,21 @@ async function handleStripeEvent(
       return;
     }
     case 'payment_intent.succeeded': {
+      // Task #9 — record a promo redemption for ANY PI that carries a
+      // promo_code_id (à la carte or generic one-time; subscriptions redeem
+      // natively via Stripe). Idempotent on the PI id, and independent of the
+      // kind dispatch below, so it runs even for kinds that return early.
+      const promoCodeId = (meta.promo_code_id || '').trim();
+      const promoUserId = Number(meta.user_id);
+      const promoPiId = (obj.id as string | null) ?? null;
+      if (promoCodeId && promoUserId && promoPiId) {
+        const { recordPaidRedemption } = await import('../services/promos');
+        await recordPaidRedemption(env, {
+          promoId: promoCodeId,
+          userId: promoUserId,
+          paymentIntentId: promoPiId,
+        });
+      }
       // Task #7 — embedded-terminal fulfilment. Dispatch STRICTLY on
       // metadata.kind: generic PaymentIntents (no kind) are a no-op, and legacy
       // Checkout-session bookings carry metadata on the SESSION (not the PI), so

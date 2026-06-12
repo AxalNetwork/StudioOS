@@ -32,6 +32,16 @@ const BUCKETS: Bucket[] = [
       p.startsWith('/api/monitoring/anomalies'),
     scope: 'user',
   },
+  // Task #9 — promo-code validation. Stricter than the default user bucket so
+  // the redeemable-code space can't be enumerated at checkout. 20/min/user is
+  // ample for a shopper typing and re-typing a code.
+  {
+    name: 'promo_validate',
+    limit: 20,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && p === '/api/payments/promo/validate',
+    scope: 'user',
+  },
   // 60 requests/min per user — default
   {
     name: 'user',
