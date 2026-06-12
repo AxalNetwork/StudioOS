@@ -186,6 +186,8 @@ import { requireTier } from './middleware/requireTier';
 import billing from './routes/billing';
 // Task — Stripe-backed product catalog (read + admin sync over the D1 mirror).
 import catalog, { adminCatalog } from './routes/catalog';
+// PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
+import payments from './routes/payments';
 import { Jobs } from './models/jobs';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
 import { CRON_TRIGGERS } from './routes/infra';
@@ -376,6 +378,7 @@ app.route('/api/auth/passkey', authPasskey);
 // containment requires ALL contract-sensitive routes to be paused.
 const COOL_OFF_PREFIXES = [
   '/api/billing',
+  '/api/payments',
   '/api/contracts',
   '/api/esign',
   '/api/legal/esign',
@@ -399,6 +402,12 @@ app.route('/api/billing', billing);
 // the D1 mirror (admin sync lives at /api/admin/catalog/sync). Mounted as a
 // sibling of /api/billing so SKUs come from one source, not STRIPE_PRICE_*.
 app.route('/api/catalog', catalog);
+
+// PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
+// Server-side only — hands back Stripe `client_secret`s so the SPA can confirm
+// cards via Stripe Elements without ever seeing the Stripe secret key. Sibling
+// of /api/billing so SKUs resolve through the same catalog mirror.
+app.route('/api/payments', payments);
 
 // Task #6 — Studio-tier paywall mounts. Wildcards run BEFORE the route
 // registration so a 402 short-circuits the handler. Bypass roles

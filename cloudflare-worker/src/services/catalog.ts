@@ -331,6 +331,25 @@ export async function priceForProductAndInterval(
 }
 
 /**
+ * Lookup a single price by its Stripe price id across the mirrored catalog.
+ * Returns the normalised `CatalogPrice` (carrying `type`/`interval`/
+ * `unit_amount`/`currency`) so callers can branch one-time vs recurring and
+ * read the amount without a second Stripe round-trip. Returns `null` when the
+ * id isn't present in the mirror.
+ */
+export async function findCatalogPriceById(
+  env: Env,
+  priceId: string,
+): Promise<CatalogPrice | null> {
+  const products = await getCatalog(env);
+  for (const product of products) {
+    const match = product.prices.find((pr) => pr.id === priceId);
+    if (match) return match;
+  }
+  return null;
+}
+
+/**
  * Plan-keyed price lookup. Resolves the active product whose Stripe metadata
  * carries `metaKey === metaValue`, then returns its price for the requested
  * recurring `interval` ('month' | 'year' | ...). This is how the subscription
