@@ -71,7 +71,6 @@ run = ["bash", "run-deploy.sh"]
 GOOGLE_REDIRECT_URI = "https://developers.google.com/oauthplayground"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME = "StudioOS"
-JWT_SECRET = "2OwGoE9PCk6b9xP9VY9o_39hcehPwizPL-uz3KD57ZDnMTs5lguFqau1fSvc4XKo"
 
 [postMerge]
 path = "scripts/post-merge.sh"

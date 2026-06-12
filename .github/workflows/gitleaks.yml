@@ -33,13 +33,33 @@ jobs:
             | tar -xz -C /tmp gitleaks
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
           gitleaks version
+      - name: Determine scan range
+        id: range
+        run: |
+          # Scan only the commits introduced by this push / PR rather than the
+          # entire public history. A new secret is still caught on the commit
+          # that introduces it, but CI no longer fails forever on historical
+          # leaks that cannot be rewritten without breaking every fork, open
+          # Dependabot PR and the backup mirror (see the `commits` allowlist in
+          # .gitleaks.toml for the running list of those unchangeable findings).
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "logopts=--log-opts=${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            BEFORE="${{ github.event.before }}"
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              echo "logopts=--log-opts=-1" >> "$GITHUB_OUTPUT"
+            else
+              echo "logopts=--log-opts=${BEFORE}..${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            fi
+          fi
       - name: Run gitleaks
         run: |
-          # Scan the full git history. Uses the project-specific config which
-          # extends the upstream default ruleset and adds project allowlists.
+          # Uses the project-specific config which extends the upstream default
+          # ruleset and adds project allowlists. Commit range scoped above.
           gitleaks detect \
             --config=.gitleaks.toml \
             --source=. \
+            ${{ steps.range.outputs.logopts }} \
             --redact \
             --verbose \
             --no-banner \

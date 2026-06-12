@@ -1,0 +1,99 @@
+StudioOS Payments Overhaul — Replit Task Prompts
+Context
+You want every paid action in StudioOS — subscriptions, incorporation, compliance fees, mentorship/coaching, à la carte feature unlocks — to run through a single Axal-branded payment terminal. Stripe stays as the processor, but no user ever sees checkout.stripe.com or the Stripe Customer Portal. Add a unified Settings → Billing dashboard, a universal referral system that pays commission on any sold SKU, an admin promo-code panel, and Axal-branded invoice emails.
+Today the repo already has Stripe wired deeply (3 subscription tiers, Connect payouts for expert bookings + refer-earn, webhooks, Gmail email service). What's missing is: (a) embedded card UI, (b) a generalized product catalog, (c) checkout for incorporation / sessions / à la carte, (d) a generic promo code system, (e) referral attribution that works across all products, and (f) branded invoice delivery. This plan is a sequence of Replit task prompts that build this incrementally on top of the existing infrastructure.
+Architectural decisions to lock in up-front
+1. Card capture → Stripe Elements + PaymentIntents. Keeps PCI at SAQ A (Stripe.js iframes inputs) and gives full Axal-branded UI. Not embedded Checkout (Stripe branding leaks).
+2. Promo codes → native Stripe Coupons + Promotion Codes, mirrored in D1 for admin lookup. Survives proration, refunds, multi-currency.
+3. Catalog → Stripe Products + Prices is source of truth, D1 caches. Replaces today's hardcoded STRIPE_PRICE_* env vars in billing.ts.
+4. Customer Portal → internal /settings/billing that calls Stripe REST from the Worker. Secret key never reaches the SPA.
+5. Referral attribution → metadata.referral_code on every PaymentIntent, plus a D1 attribution table with 30-day window. Connect destination charges keep Axal as merchant of record.
+6. Invoicing → Stripe generates the PDF, we re-send via existing Gmail service with Axal HTML wrapper. Disable Stripe's customer emails.
+Cross-cutting risks / gotchas
+* PCI: Elements only; never log raw PANs; CSP whitelists js.stripe.com + *.stripe.network.
+* 3DS / SCA: PaymentIntent confirmation must handle requires_action via stripe.confirmCardPayment().
+* Webhook idempotency: every new event handler inserts into a webhook_events(stripe_event_id PRIMARY KEY) ledger before processing. Reuse the existing entrypoint at cloudflare-worker/src/routes/billing.ts /stripe/webhook.
+* Taxes/VAT: enable Stripe Tax (automatic_tax: { enabled: true }) on every PaymentIntent + Subscription.
+* Refund policy: incorporation = no refund after filing; sessions = 24h cancel window; subs = prorated. Encoded in admin refund tool.
+* Connect payouts: referral commissions and expert payouts must use separate transfers post-charge (not transfer_data at charge time) to allow clawback on refund.
+Reuse map
+* stripeCall<T>() in cloudflare-worker/src/routes/billing.ts — idempotency-keyed Stripe REST wrapper, use everywhere.
+* cloudflare-worker/src/services/email.ts — Gmail OAuth2 sender for invoice emails (reuse buildEmailHTML() pattern).
+* cloudflare-worker/src/services/referralPayouts.ts — Connect transfer mechanics.
+* cloudflare-worker/src/routes/admin_billing.ts — TOTP step-up + audit pattern for admin promo/refund endpoints.
+* cloudflare-worker/src/services/wellbeing/bookings.ts — booking + Connect destination charge reference.
+* Settings → Billing tab scaffolding already exists in frontend/src/pages/SettingsPage.jsx (FounderBillingPanel, InvestorBillingPanel).
+* Admin tab pattern in frontend/src/pages/AdminPage.jsx — add Promo Codes alongside existing 9 tabs.
+
+Task prompts (ordered, hand each as one Replit job)
+Phase 0 — Foundations
+Task 0 — Build a Stripe-backed Product Catalog service
+* In: services/stripeCatalog.ts lists Products + Prices from Stripe with 60s KV cache; D1 mirror stripe_products(id, name, kind enum subscription|incorporation|session|alacarte, active, metadata JSON, prices JSON, synced_at); admin sync endpoint.
+* Out: No UI; no payment flow changes.
+* Files: create cloudflare-worker/src/services/stripeCatalog.ts, cloudflare-worker/sql/migrations/084_stripe_catalog.sql, cloudflare-worker/src/routes/admin_catalog.ts; mount in cloudflare-worker/src/index.ts.
+* Endpoints: GET /api/catalog/products, POST /api/admin/catalog/sync.
+* Acceptance: Sync populates D1; GET /api/catalog/products?kind= subscription returns existing MI Pro / Founder / Investor tiers with no hardcoded STRIPE_PRICE_* reads.
+Task 1 — Refactor existing checkout routes to use the catalog
+* In: Replace PLAN_TO_PRICE_ENV lookups in routes/billing.ts with stripeCatalog.priceFor(productId, interval). Keep webhook and dev-upgrade fallback intact.
+* Out: No UI change; no new payment UX.
+* Files: modify cloudflare-worker/src/routes/billing.ts.
+* Acceptance: All three tier /checkout endpoints still return a valid Stripe Checkout URL; nothing reads STRIPE_PRICE_* env vars anymore.
+Phase 1 — Custom payment terminal
+Task 2 — PaymentIntent + SetupIntent endpoints (Elements-ready)
+* In: New routes/payments.ts with POST /api/payments/intent (returns client_secret for priceId|amount|currency|metadata), POST /api/payments/setup-intent (save card), GET /api/payments/methods, DELETE /api/payments/methods/:id. Server-side only; uses stripeCall.
+* Out: UI (Task 3); promo codes (Task 8).
+* Files: create cloudflare-worker/src/routes/payments.ts; mount in index.ts.
+* Acceptance: One-time price returns client_secret; recurring price creates a Subscription with payment_behavior=default_incomplete and returns the first invoice's payment_intent.client_secret. Idempotency keys userId+priceId+nonce.
+Task 3 — Axal-branded checkout React component
+* In: frontend/src/components/billing/AxalCheckout.jsx wrapping @stripe/react-stripe-js <Elements> + <PaymentElement> with Axal CSS variables; handles requires_action (3DS) inline; success/failure callbacks; loading skeleton matches existing Settings.
+* Out: Promo code field (Task 8); referral attribution (Task 7).
+* Files: create frontend/src/components/billing/AxalCheckout.jsx, frontend/src/components/billing/stripeAppearance.js; add @stripe/stripe-js + @stripe/react-stripe-js to frontend/package.json; update CSP for Stripe iframes.
+* Acceptance: Component renders inside Settings → Billing for any priceId; test-mode payment completes without redirecting to checkout.stripe.com; 3DS challenge surfaces inline.
+Task 4 — Replace Customer Portal with internal Billing dashboard
+* In: New endpoints GET /api/billing/overview (active subs, payment methods, upcoming invoice, last 12 invoices), POST /api/billing/subscriptions/:id/cancel, POST /api/billing/subscriptions/:id/resume, POST /api/billing/subscriptions/:id/swap (proration preview + confirm). Settings → Billing renders these in-app; remove "Manage subscription" Stripe redirect.
+* Files: modify cloudflare-worker/src/routes/billing.ts; modify frontend/src/pages/SettingsPage.jsx (FounderBillingPanel + InvestorBillingPanel); create frontend/src/components/billing/BillingDashboard.jsx.
+* Acceptance: Settings → Billing shows current plans; change-plan shows proration preview then confirms without leaving app; cancel sets cancel_at_period_end=true.
+Phase 2 — New product lines
+Task 5 — Incorporation purchase + ongoing compliance fees
+* In: Extend routes/legal.ts wizard to call /api/payments/intent with the per-jurisdiction incorporation Product on submit. Auto-create recurring "Registered Agent" subscription (annual) on success. Surface both in Billing dashboard. Add compliance-fee one-off SKUs (state taxes, annual reports) as à la carte products.
+* Files: modify cloudflare-worker/src/routes/legal.ts; new migration adding incorporation_orders if needed; modify wizard components in frontend/src/pages/.
+* Endpoints: POST /api/legal/incorporation/order creates intent + order row; webhook payment_intent.succeeded triggers filing workflow.
+* Acceptance: User completes incorporation, pays one-time + opts into RA annual sub via embedded terminal; both appear in Billing dashboard with separate invoices.
+Task 6 — Mentorship / coaching sessions + à la carte SKUs
+* In: Route services/wellbeing/bookings.ts through /api/payments/intent for collection (keep Connect destination transfer for expert payout). Add kind=session + kind=alacarte Products to catalog. À la carte purchase writes a feature_unlocks(user_id, feature_key, expires_at) row.
+* Files: modify cloudflare-worker/src/services/wellbeing/bookings.ts; new cloudflare-worker/src/routes/alacarte.ts; migration 085_feature_unlocks.sql.
+* Acceptance: Booking an expert charges through embedded UI; expert gets Connect payout; buying an à la carte unlock sets a row in feature_unlocks and gates the matching feature.
+Phase 3 — Referrals, promos, invoices
+Task 7 — Universal referral attribution + commission engine
+* In: New services/referrals/attribution.ts resolves a referral code from cookie/query-param on every PaymentIntent creation, stamps metadata.referral_code; on payment_intent.succeeded webhook computes commission from per-product commission_pct (catalog metadata) and queues a Connect transfer via existing services/referralPayouts.ts. Generalize routes/refer_earn.ts so any product (not just subs) earns.
+* Files: new cloudflare-worker/src/services/referrals/attribution.ts; modify cloudflare-worker/src/routes/refer_earn.ts; migration 086_referral_attribution.sql (code, user_id, first_touch_at, expires_at, converted_payment_intent).
+* Acceptance: Visitor with ?ref=ABC cookie purchases any SKU; commission row created; transfer to referrer's Connect account fires on success; refund (Task 10) reverses the transfer.
+Task 8 — Promo code admin + checkout integration
+* In: Admin tab "Promo Codes" in AdminPage.jsx calling new /api/admin/promos CRUD that proxies Stripe Coupons + Promotion Codes (percent / fixed amount / free-trial-days), with productIds allow-list in coupon metadata. Add promo input to AxalCheckout; backend validates allow-list before applying. Full-access mode = 100% coupon with usage_limit=1.
+* Files: new cloudflare-worker/src/routes/admin_promos.ts; modify frontend/src/pages/AdminPage.jsx (add tab); modify frontend/src/components/billing/AxalCheckout.jsx; migration 087_promo_mirror.sql.
+* Acceptance: Admin creates 25%-off code restricted to incorporation product; user typing it at checkout sees discount; code rejected on subscription checkout; usage_limit enforced.
+Task 9 — Branded invoices / receipts via Gmail
+* In: Webhook handlers for invoice.finalized and charge.succeeded (non-invoice payments) fetch invoice_pdf + hosted_invoice_url, render Axal HTML wrapper, send via services/email.ts. Disable Stripe's customer emails in dashboard.
+* Files: modify cloudflare-worker/src/routes/billing.ts webhook switch; new template file under cloudflare-worker/src/services/email/; migration 088_invoice_email_log.sql.
+* Acceptance: Every successful payment yields one Axal-branded email with PDF attachment; idempotency prevents duplicates on Stripe retries; log records sent_at per stripe_invoice_id.
+Phase 4 — Polish
+Task 10 — Refund + dispute admin tooling
+* In: Extend routes/admin_billing.ts for refund issuance, dispute evidence upload, and LTV view. Reverse Connect transfers on refund (claws back referral commission).
+* Files: modify cloudflare-worker/src/routes/admin_billing.ts; admin UI in frontend/src/pages/AdminPage.jsx.
+* Acceptance: Admin issues partial/full refund; referral commission is reversed; audit log entry written.
+Task 11 — End-to-end test pass + Stripe Tax enable
+* In: Playwright tests for each product line's checkout, webhook replay test, Stripe test-clock subscription lifecycle. Enable automatic_tax on all PaymentIntents + Subscriptions. Update GOTCHAS.md with payment debugging notes.
+* Files: frontend/tests/, cloudflare-worker/test/, GOTCHAS.md.
+* Acceptance: CI green; test-mode purchase across all four product kinds produces correct tax line, branded invoice email, dashboard entry, referral commission.
+
+Verification (end-to-end)
+After Task 11, a single test-mode walkthrough should cover everything:
+1. Catalog: GET /api/catalog/products returns all SKUs grouped by kind; admin sync re-pulls cleanly.
+2. Embedded terminal: subscribe to Founder Growth from Settings → Billing — no Stripe redirect; 3DS test card (4000 0027 6000 3184) triggers inline challenge.
+3. Multi-product: complete incorporation (one-time + RA recurring), book a mentorship session (Connect payout to expert), unlock an à la carte feature.
+4. Billing dashboard: all four purchases appear; cancel a sub with proration preview; swap plans mid-cycle.
+5. Promo code: admin creates LAUNCH25 restricted to incorporation; apply at checkout → 25% off; reject on subscription checkout.
+6. Referral: open the app with ?ref=<existing-user-code>; complete any purchase; verify attribution row + queued Connect transfer; check referrer Refer & Earn dashboard.
+7. Invoice email: confirm Axal-branded email lands in test inbox with Stripe PDF attached; replay the same webhook → no duplicate.
+8. Refund: admin refunds the incorporation payment → Connect transfer reversed, commission clawed back, audit log entry written.
+9. Stripe Tax: VAT line appears for an EU test address; US sales tax for a US address.
