@@ -28,6 +28,23 @@ import { notifyNews } from '../services/newsNotify';
 
 const adminNews = new Hono<{ Bindings: Env }>();
 
+// Task #3 — /api/admin/news is a DEPRECATED alias of /api/admin/articles (both
+// operate on the same `articles` table). Stamp every egress with RFC 8594
+// deprecation headers. Rebuild the response so the headers are mutable even on
+// cached/immutable responses. Registered before the routes so it wraps all.
+adminNews.use('*', async (c, next) => {
+  await next();
+  if (!c.res || c.res.headers.get('Deprecation') === 'true') return;
+  const res = new Response(c.res.body, {
+    status: c.res.status,
+    statusText: c.res.statusText,
+    headers: c.res.headers,
+  });
+  res.headers.set('Deprecation', 'true');
+  res.headers.set('Link', '</api/admin/articles>; rel="successor-version"');
+  c.res = res;
+});
+
 async function loadArticle(env: Env, id: number) {
   return env.DB.prepare(
     `SELECT a.*, u.name AS author_name, u.email AS author_email

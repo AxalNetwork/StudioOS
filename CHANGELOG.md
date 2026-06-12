@@ -10,6 +10,18 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Merge News & Articles admin queues into one Content Queue (Task #3)
+
+The duplicate admin "News Queue" (`/admin/news`) and "Articles Queue" (`/admin/articles`) — both operating over the SAME `articles` table — are consolidated into a single **Content Queue** at `/admin/articles`. Root cause of the duplication: `news.ts`/`admin_news.ts` (Task #2) and `articles.ts`/`admin_articles.ts` (Task #1) were built independently against the same tables; `articles.ts` is a strict superset of `news.ts`.
+
+- `frontend/src/sidebarConfig.js`: removed the `/admin/news` "News Queue" entry; renamed the `/admin/articles` entry "Articles Queue" → "Content Queue".
+- `frontend/src/pages/admin/ArticlesQueuePage.jsx`: status tabs expanded to All open / New submissions / In review / Changes requested / Ready to publish / **Published** / **Rejected** (the last two pass an explicit `status` to `/api/admin/articles/queue`, which already supports `a.status = ?`; no backend change). Header copy "Articles review queue" → "Content review queue".
+- `frontend/src/App.jsx`: dropped the `AdminNewsQueue` + `NewsAuthorPage` lazy imports; `/admin/news` now `<Navigate>`s to `/admin/articles` and `/news` to `/articles/draft` (the article editor — both retain access since `/articles/draft` is `authOnly`). Deleted `frontend/src/pages/admin/AdminNewsQueue.jsx` and `frontend/src/pages/NewsAuthorPage.jsx` (dead duplicates).
+- `cloudflare-worker/src/routes/news.ts` + `admin_news.ts`: kept as DEPRECATED aliases (same `articles` table). Added a `use('*')` middleware that rebuilds each response (cache HITs are immutable) to stamp `Deprecation: true` + `Link: </api/articles>; rel="successor-version"`. `/api/news/:slug` and `/api/news` keep working unchanged for the Jekyll/external public surface.
+- `cloudflare-worker/src/services/newsRender.ts`: `bustArticleEdgeCache` now ALSO deletes the legacy `/api/news`, `/api/news/:slug`, `/api/news/cover/:id` edge keys. Without this, once all publish/unpublish flows through `admin_articles`, an unpublished article would keep serving on the 60-day-cached deprecated `/api/news/:slug` URL. Fixes a latent cache-invalidation gap.
+- Kept the `news`/`adminNews` namespaces in `frontend/src/lib/api.js` and the `/api/news` + `/api/admin/news` worker mounts so the prefix-level drift checker stays green and back-compat holds.
+- Verified: frontend `npm run build`, `npm run test:drift` (dark-mode + API-drift + worker `tsc --noEmit`).
+
 ## Clear submit & PII feedback (Task #2)
 
 Submit rejections on the article author page now drive in-UI state instead of a generic toast. Root cause: `request()` in `frontend/src/lib/api.js` attaches the parsed error body to `e.data`/`e.status`, but `ArticleAuthorPage.jsx` read `e?.body?.*` (always undefined) so every 4xx fell through to "Submit failed".

@@ -38,6 +38,24 @@ import { renderMarkdown, slugify, snapshotRevision, wordsAndMinutes } from '../s
 
 const news = new Hono<{ Bindings: Env }>();
 
+// Task #3 — /api/news is a DEPRECATED alias of /api/articles (both serve the
+// same `articles` table). Stamp every egress with RFC 8594 deprecation headers
+// so consumers can migrate. The response is rebuilt rather than mutated in
+// place because cache HITs return a Workers Cache API Response with immutable
+// headers. Registered before the routes so it wraps every handler.
+news.use('*', async (c, next) => {
+  await next();
+  if (!c.res || c.res.headers.get('Deprecation') === 'true') return;
+  const res = new Response(c.res.body, {
+    status: c.res.status,
+    statusText: c.res.statusText,
+    headers: c.res.headers,
+  });
+  res.headers.set('Deprecation', 'true');
+  res.headers.set('Link', '</api/articles>; rel="successor-version"');
+  c.res = res;
+});
+
 // Public endpoints accept CORS from the Jekyll marketing site on axal.vc.
 news.use('/', cors({ origin: ['https://axal.vc', 'https://www.axal.vc'], credentials: false }));
 news.use('/:slug', cors({ origin: ['https://axal.vc', 'https://www.axal.vc'], credentials: false }));

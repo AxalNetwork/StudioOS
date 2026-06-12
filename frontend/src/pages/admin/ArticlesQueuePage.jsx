@@ -7,14 +7,17 @@ import { adminArticles as api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import { reportError } from '../../lib/log';
 
-// Task #1 — Admin /admin/articles review queue. Sister of AdminNewsQueue.
+// Admin /admin/articles review queue — the single "Content Queue" (Task #3
+// merged the former News + Articles admin queues). /admin/news redirects here.
 
 const STATUS_TABS = [
+  { id: '', label: 'All open' },
   { id: 'submitted', label: 'New submissions' },
   { id: 'in_review', label: 'In review' },
   { id: 'changes_requested', label: 'Changes requested' },
   { id: 'approved', label: 'Ready to publish' },
-  { id: '', label: 'All open' },
+  { id: 'published', label: 'Published' },
+  { id: 'rejected', label: 'Rejected' },
 ];
 
 function statusBadge(s) {
@@ -154,7 +157,7 @@ export default function ArticlesQueuePage() {
     <div className="max-w-7xl mx-auto p-6">
       <header className="mb-4">
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <FileText className="w-6 h-6 text-violet-600" /> Articles review queue
+          <FileText className="w-6 h-6 text-violet-600" /> Content review queue
         </h1>
         <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
           Review author-proposed articles. Approve → Publish bursts the 60-day edge cache.

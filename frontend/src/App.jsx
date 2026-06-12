@@ -46,8 +46,6 @@ const AdminTeam = lazy(() => import('./pages/admin/AdminTeam'));
 const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
 const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'));
 const AdminX = lazy(() => import('./pages/admin/AdminX'));
-const AdminNewsQueue = lazy(() => import('./pages/admin/AdminNewsQueue'));
-const NewsAuthorPage = lazy(() => import('./pages/NewsAuthorPage'));
 // Task #1 — Articles surfaces (public + author + admin queue).
 const ArticlesPage = lazy(() => import('./pages/ArticlesPage'));
 const ArticleReaderPage = lazy(() => import('./pages/ArticleReaderPage'));
@@ -1072,8 +1070,9 @@ function AppInner() {
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       <Route path="/admin/telegram" element={guard(['admin'], <AdminTelegram />)} />
       <Route path="/admin/x" element={guard(['admin'], <AdminX />)} />
-      <Route path="/admin/news" element={guard(['admin'], <AdminNewsQueue />)} />
-      <Route path="/news" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <NewsAuthorPage />)} />
+      {/* Task #3 — News & Articles admin queues merged into one Content Queue. Legacy routes redirect. */}
+      <Route path="/admin/news" element={<Navigate to="/admin/articles" replace />} />
+      <Route path="/news" element={<Navigate to="/articles/draft" replace />} />
       {/* Task #1 — Articles. Reader pages are public (no guard); author + admin gated. */}
       <Route path="/articles" element={<ArticlesPage />} />
       <Route path="/articles/draft" element={authOnly(<ArticleAuthorPage />)} />

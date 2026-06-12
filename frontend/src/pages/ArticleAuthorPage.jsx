@@ -9,9 +9,10 @@ import { articles as api } from '../lib/api';
 import { useToast } from '../components/useToast';
 import { reportError } from '../lib/log';
 
-// Task #1 — Article author dashboard. Sister page to NewsAuthorPage but
-// scoped to the /articles surface (role-aware list, dynamic sector
-// taxonomy from `/api/articles/sectors`, deep-linkable via /articles/edit/:id).
+// Task #1 — Article author dashboard, scoped to the /articles surface
+// (role-aware list, dynamic sector taxonomy from `/api/articles/sectors`,
+// deep-linkable via /articles/edit/:id). The legacy /news author page
+// redirects here (Task #3 — News & Articles merged).
 
 const MAX_COVER_MB = 5;
 

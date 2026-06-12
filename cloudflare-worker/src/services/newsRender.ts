@@ -191,6 +191,12 @@ export async function bustArticleEdgeCache(env: Env, slug: string, id: number, a
     await cache.delete(new Request(`${base}/api/articles?featured=1`));
     await cache.delete(new Request(`${base}/api/articles/${slug}`));
     await cache.delete(new Request(`${base}/api/articles/cover/${id}`));
+    // Task #3 — News & Articles queues merged; all publish/unpublish now flows
+    // through admin_articles. Also bust the DEPRECATED /api/news* edge keys so
+    // the legacy public URLs don't keep serving stale content (up to 60 days).
+    await cache.delete(new Request(`${base}/api/news`));
+    await cache.delete(new Request(`${base}/api/news/${slug}`));
+    await cache.delete(new Request(`${base}/api/news/cover/${id}`));
     if (authorUserId) {
       await cache.delete(new Request(`${base}/api/articles/by-author/${authorUserId}`));
     }

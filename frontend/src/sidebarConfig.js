@@ -120,8 +120,7 @@ export const SIDEBAR_GROUPS = {
       // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
       // Re-enable once X_CLIENT_ID/SECRET are bound on the prod worker.
       // { to: '/admin/x', icon: Megaphone, label: 'X (Twitter)' },
-      { to: '/admin/news', icon: FileText, label: 'News Queue' },
-      { to: '/admin/articles', icon: FileText, label: 'Articles Queue' },
+      { to: '/admin/articles', icon: FileText, label: 'Content Queue' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },

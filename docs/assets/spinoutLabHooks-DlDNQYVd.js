@@ -1,1 +1,0 @@
-import{p as e}from"./api-CuRhN12Z.js";import{l as t}from"./index-BEMXUL_f.js";async function n(n,r){if(!(!n||n.spinout_lab_active!==1)&&r)try{let t=await e.complete(r);try{window.dispatchEvent(new CustomEvent(`spinout-lab:advanced`,{detail:{state:t,milestoneKey:r}}))}catch{}}catch(e){t(`spinoutLabHooks:${r}`,e)}}export{n as t};

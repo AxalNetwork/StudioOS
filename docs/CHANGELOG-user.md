@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## One place to review content
+
+The admin sidebar had two near-identical review areas — "News Queue" and "Articles Queue" — that managed the very same content. They're now a single **Content Queue**. It has clearer tabs so you can jump straight to new submissions, drafts in review, changes you've requested, pieces ready to publish, and now also everything already **Published** or **Rejected**. The old links still work and quietly send you to the right place, and existing public article links keep working as before.
+
+---
+
 ## Clearer feedback when you submit an article
 
 When you submit an article for review, the page now tells you exactly what happened instead of a vague error. If your draft contains personal data — an email, phone number, ID, or a named person who hasn't opted in — the editor highlights each piece in red and shows a banner listing what to remove; click any item to jump straight to it. If you've reached your weekly submission limit, you'll see how many you've used and roughly when you can submit again. And when a submission goes through, a green panel confirms it's in review and walks you through what happens next — no refresh needed.
