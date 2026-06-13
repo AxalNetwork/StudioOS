@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Branded receipts for every payment
+
+Every time you pay for something on Axal, you'll now get a clean, Axal-branded receipt by email — with your invoice PDF attached for subscription and invoice payments, and a link to your receipt for one-off purchases. You'll receive just one receipt per payment, even if there's a hiccup behind the scenes, so no duplicates clutter your inbox.
+
+---
+
 ## Earn referral rewards on anything you refer
 
 Referrals now pay off on any purchase, not just subscriptions. When someone arrives through your referral link and later buys any eligible product, you earn a commission on that sale automatically. We remember the referral for 30 days from the first visit, so the reward still lands even if they buy a little later. Eligible products show a referral reward, and your earnings flow into your usual payouts.

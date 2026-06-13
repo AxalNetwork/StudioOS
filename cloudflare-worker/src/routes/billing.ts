@@ -1340,6 +1340,25 @@ async function handleStripeEvent(
       }
       return;
     }
+    // Task #10 — Branded receipt emails via Gmail. Invoice-backed payments fire
+    // `invoice.paid` (and `invoice.finalized`, which only sends once paid → PDF
+    // attached); non-invoice one-time charges fire `charge.succeeded` (no PDF →
+    // link the Stripe receipt). These are DEDICATED email events with no other
+    // fulfilment, so a Gmail send failure is allowed to throw → the webhook
+    // returns non-2xx → Stripe retries the event (idempotent: one email per
+    // invoice/charge id). Stripe's own customer emails are disabled (ops step)
+    // so buyers only ever see Axal branding.
+    case 'invoice.paid':
+    case 'invoice.finalized': {
+      const { handleInvoiceEvent } = await import('../services/invoiceEmails');
+      await handleInvoiceEvent(env, obj);
+      return;
+    }
+    case 'charge.succeeded': {
+      const { handleChargeSucceeded } = await import('../services/invoiceEmails');
+      await handleChargeSucceeded(env, obj);
+      return;
+    }
     default:
       return;
   }

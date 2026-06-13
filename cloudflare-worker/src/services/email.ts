@@ -758,3 +758,136 @@ ${noteBlock}
     return { ok: false, error: e?.message || 'Unknown error' };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Task #10 — Branded receipt / invoice email.
+// Sends an Axal-branded receipt for any successful payment, delivered through
+// the existing Gmail sender. For invoice-backed payments the Stripe invoice
+// PDF is attached; for non-invoice one-time charges (no PDF exists) we link to
+// the Stripe receipt instead. Stripe's own customer emails are disabled (ops
+// step) so the buyer only ever sees Axal branding.
+// ---------------------------------------------------------------------------
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+
+function formatMoney(amountCents: number, currency: string): string {
+  const amt = (Number(amountCents) || 0) / 100;
+  const cur = (currency || 'usd').toUpperCase();
+  if (cur === 'USD') return `$${amt.toFixed(2)}`;
+  return `${amt.toFixed(2)} ${cur}`;
+}
+
+export async function sendBrandedInvoiceEmail(
+  env: Env,
+  opts: {
+    to: string;
+    name?: string | null;
+    amountCents: number;
+    currency: string;
+    description?: string | null;
+    invoiceNumber?: string | null;
+    hostedInvoiceUrl?: string | null;
+    pdfBytes?: Uint8Array | null;
+    paidAt?: Date | null;
+  },
+): Promise<{ ok: boolean; error?: string }> {
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_REFRESH_TOKEN) {
+    return { ok: false, error: 'Gmail not configured on this environment' };
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const greet = (opts.name && opts.name.trim()) ? opts.name.trim() : (opts.to.split('@')[0] || 'there');
+    const safeGreet = escapeHtml(greet);
+    const safeAmount = escapeHtml(formatMoney(opts.amountCents, opts.currency));
+    const safeDesc = escapeHtml((opts.description && opts.description.trim()) || 'Axal StudioOS');
+    const d = opts.paidAt || new Date();
+    const dateStr = `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+    const numberRow = opts.invoiceNumber
+      ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:13px;">Receipt</td><td style="padding:6px 0;color:#111827;font-size:13px;font-weight:600;text-align:right;">${escapeHtml(opts.invoiceNumber)}</td></tr>`
+      : '';
+    const hostedBtn = opts.hostedInvoiceUrl
+      ? `<tr><td style="padding:8px 32px 4px;"><a href="${escapeHtml(opts.hostedInvoiceUrl)}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:11px 20px;border-radius:10px;">View invoice online</a></td></tr>`
+      : '';
+    const pdfNote = opts.pdfBytes
+      ? `<p style="font-size:13px;color:#6b7280;margin:14px 0 0;line-height:1.6;">Your invoice PDF is attached to this email.</p>`
+      : '';
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
+<tr><td align="center">
+<table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;">
+<tr><td style="padding:32px 32px 20px;border-bottom:1px solid #f3f4f6;">
+  <table cellpadding="0" cellspacing="0"><tr>
+    <td style="vertical-align:middle;padding-right:10px;">
+      <img src="https://axal.vc/axal-mark.png" alt="Axal VC" width="36" height="36" style="display:block;border:0;border-radius:8px;" />
+    </td>
+    <td style="vertical-align:middle;">
+      <span style="font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.01em;">Axal VC</span>
+      <div style="font-size:11px;color:#9ca3af;margin-top:2px;">Receipt</div>
+    </td>
+  </tr></table>
+</td></tr>
+<tr><td style="padding:28px 32px 0;">
+  <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">Thanks for your payment</h1>
+  <p style="font-size:14px;color:#6b7280;margin:0 0 18px;line-height:1.6;">Hi ${safeGreet},</p>
+  <p style="font-size:14px;color:#374151;margin:0 0 4px;line-height:1.65;">
+    We've received your payment. Here's your receipt for your records.
+  </p>
+</td></tr>
+<tr><td style="padding:0 32px;">
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:16px 18px;margin:18px 0 4px;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:6px 0;color:#6b7280;font-size:13px;">Description</td><td style="padding:6px 0;color:#111827;font-size:13px;font-weight:600;text-align:right;">${safeDesc}</td></tr>
+      ${numberRow}
+      <tr><td style="padding:6px 0;color:#6b7280;font-size:13px;">Date</td><td style="padding:6px 0;color:#111827;font-size:13px;font-weight:600;text-align:right;">${escapeHtml(dateStr)}</td></tr>
+      <tr><td style="padding:10px 0 0;color:#111827;font-size:15px;font-weight:700;border-top:1px solid #e5e7eb;">Amount paid</td><td style="padding:10px 0 0;color:#111827;font-size:15px;font-weight:700;text-align:right;border-top:1px solid #e5e7eb;">${safeAmount}</td></tr>
+    </table>
+  </div>
+  ${pdfNote}
+</td></tr>
+${hostedBtn}
+<tr><td style="padding:8px 32px 32px;">
+  <p style="font-size:11px;color:#9ca3af;margin:20px 0 0;line-height:1.6;">
+    This receipt was sent by Axal StudioOS. If you have any questions about this charge, just reply to this email.
+  </p>
+</td></tr>
+</table></td></tr></table></body></html>`;
+    const textLines = [
+      `Hi ${greet},`,
+      '',
+      `We've received your payment. Here's your receipt for your records.`,
+      '',
+      `Description: ${(opts.description && opts.description.trim()) || 'Axal StudioOS'}`,
+      opts.invoiceNumber ? `Receipt: ${opts.invoiceNumber}` : '',
+      `Date: ${dateStr}`,
+      `Amount paid: ${formatMoney(opts.amountCents, opts.currency)}`,
+      '',
+      opts.hostedInvoiceUrl ? `View invoice online: ${opts.hostedInvoiceUrl}` : '',
+      opts.pdfBytes ? `Your invoice PDF is attached.` : '',
+    ].filter(Boolean);
+    const text = textLines.join('\n');
+    const subject = `Your Axal receipt${opts.invoiceNumber ? ` — ${opts.invoiceNumber}` : ''}`;
+    const from = 'Axal VC <billing@axal.vc>';
+    const rawEmail = opts.pdfBytes
+      ? buildRawEmailWithAttachment(
+          opts.to, subject, html, text, from,
+          `${(opts.invoiceNumber || 'receipt').replace(/[^a-zA-Z0-9 _-]/g, '')}.pdf`,
+          opts.pdfBytes,
+        )
+      : buildRawEmail(opts.to, subject, html, text, from);
+    const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw }),
+    });
+    if (!res.ok) {
+      const err: any = await res.json().catch(() => ({}));
+      return { ok: false, error: err?.error?.message || err?.error || 'Gmail send failed' };
+    }
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'Unknown error' };
+  }
+}
