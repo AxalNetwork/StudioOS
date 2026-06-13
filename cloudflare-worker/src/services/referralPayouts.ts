@@ -470,6 +470,222 @@ export async function applyTransferFailed(
 }
 
 // -------------------------------------------------------------------------
+// Refund-driven commission clawback (Task #11)
+// -------------------------------------------------------------------------
+
+export interface ClawbackResult {
+  // 'reversed'        — a Connect transfer was reversed (money pulled back).
+  // 'voided'          — payout existed but hadn't paid out yet; cancelled so it never pays.
+  // 'no_commission'   — the refunded purchase never generated a referral commission.
+  // 'already_reversed'— the payout was already reversed (idempotent re-run).
+  // 'skipped'         — partial refund too small to reverse a whole-cent of transfer.
+  // 'error'           — Stripe/DB failure; refund still stands, surfaced to admin.
+  outcome: 'reversed' | 'voided' | 'no_commission' | 'already_reversed' | 'skipped' | 'error';
+  payout_id?: number;
+  transfer_id?: string | null;
+  reversal_id?: string;
+  reversed_amount_cents?: number;
+  detail?: string;
+}
+
+/**
+ * Clawback the referral commission tied to a refunded purchase.
+ *
+ * Called from the admin refund endpoint AFTER the customer refund lands.
+ * The customer's money has already moved, so this NEVER throws — it returns
+ * a structured result the caller surfaces + audits. A clawback failure must
+ * not imply the refund failed.
+ *
+ * Linkage: commissions.source_id = the originating PaymentIntent id (set by
+ * firePurchaseCommission), referral_payouts.redemption_id = commissions.id.
+ *
+ * Behaviour by payout state:
+ *  - status='paid' with a real Stripe transfer → reverse the transfer
+ *    (proportionally for a partial refund) to pull the commission back, then
+ *    flip payout→'reversed' and commission→'reversed'.
+ *  - status pending/approved/blocked (not yet paid out) → void it so it never
+ *    pays, flip commission→'reversed'. No Stripe call needed.
+ *  - already 'reversed' → idempotent no-op.
+ */
+export async function clawbackReferralCommissionForRefund(
+  env: Env,
+  args: {
+    paymentIntentId: string;
+    /** The amount of THIS refund (minor units) — sizes this reversal. */
+    refundedAmountCents: number;
+    /** Original charge total (minor units) — the proportional denominator. */
+    chargeAmountCents?: number | null;
+    /**
+     * Cumulative amount refunded on the charge AFTER this refund (Stripe's
+     * `charge.amount_refunded`). Drives BOTH the cumulative reversal target
+     * (`round(payout * refundedToDate / chargeTotal)` minus what's already
+     * reversed) and ledger finalization (flip payout/commission → 'reversed'
+     * once `refundedToDate >= chargeTotal`). Using the cumulative figure — not
+     * this refund alone — keeps sequential partial refunds free of rounding
+     * drift. Falls back to this refund's amount when unavailable.
+     */
+    chargeRefundedToDateCents?: number | null;
+    adminId?: number;
+    refundId: string;
+  },
+): Promise<ClawbackResult> {
+  try {
+    await ensureReferralPayoutsSchema(env);
+    if (!args.paymentIntentId) return { outcome: 'no_commission' };
+
+    const row = await env.DB.prepare(
+      `SELECT rp.id            AS payout_id,
+              rp.status        AS status,
+              rp.stripe_transfer_id AS transfer_id,
+              rp.amount_usd_cents   AS payout_amount_cents,
+              c.id             AS commission_id
+         FROM referral_payouts rp
+         JOIN commissions c ON c.id = rp.redemption_id
+        WHERE c.source_id = ? AND c.source_type = 'purchase'
+        LIMIT 1`,
+    ).bind(args.paymentIntentId).first<{
+      payout_id: number;
+      status: string;
+      transfer_id: string | null;
+      payout_amount_cents: number;
+      commission_id: number;
+    }>();
+
+    if (!row) return { outcome: 'no_commission' };
+    if (row.status === 'reversed') {
+      return { outcome: 'already_reversed', payout_id: row.payout_id, transfer_id: row.transfer_id };
+    }
+
+    // Not paid out yet — just void it so the queued payout never fires, and
+    // reverse the commission credit. No Stripe transfer to reverse.
+    if (row.status !== 'paid' || !row.transfer_id) {
+      await env.DB.prepare(
+        `UPDATE referral_payouts
+            SET status='reversed', reversed_at=CURRENT_TIMESTAMP,
+                failure_reason = ?
+          WHERE id = ? AND status != 'reversed'`,
+      ).bind(`refund_clawback:${args.refundId}`.slice(0, 300), row.payout_id).run();
+      await reverseCommissionCredit(env, row.commission_id);
+      return { outcome: 'voided', payout_id: row.payout_id, transfer_id: row.transfer_id };
+    }
+
+    // Paid out — reverse the Connect transfer. Size the reversal by the
+    // CUMULATIVE clawback target minus what's already been reversed, so a
+    // sequence of partial refunds neither over- nor under-claws from per-refund
+    // rounding. Target = round(payout * refundedToDate / chargeTotal), where
+    // refundedToDate is the charge's cumulative amount_refunded; the delta vs
+    // the transfer's existing amount_reversed is what we reverse now.
+    const chargeTotal = Number(args.chargeAmountCents || 0);
+    const thisRefund = Number(args.refundedAmountCents || 0);
+    if (!(chargeTotal > 0 && thisRefund > 0)) {
+      // Without the charge total we can't size the proportional reversal. Refuse
+      // to guess (a full reversal would over-claw) — surface for manual handling.
+      return {
+        outcome: 'skipped',
+        payout_id: row.payout_id,
+        transfer_id: row.transfer_id,
+        detail: 'charge total unknown — manual clawback required',
+      };
+    }
+    // Cumulative refunded on the charge (≥ thisRefund). Fall back to thisRefund
+    // when the cumulative figure couldn't be read, so a lone refund still works.
+    const refundedToDate = Math.max(Number(args.chargeRefundedToDateCents || 0), thisRefund);
+
+    // Authoritative "already reversed" from Stripe so we never request more than
+    // the transfer's remaining reversable balance (avoids a hard Stripe error
+    // and keeps cumulative rounding exact across sequential refunds).
+    let alreadyReversed = 0;
+    try {
+      const transfer = await stripeGet<{ amount_reversed?: number }>(env, `/transfers/${encodeURIComponent(row.transfer_id)}`);
+      alreadyReversed = Number(transfer.amount_reversed || 0);
+    } catch (e) {
+      return { outcome: 'error', payout_id: row.payout_id, transfer_id: row.transfer_id, detail: (e as Error).message || 'transfer_read_failed' };
+    }
+
+    // Target cumulative clawback for the refunded-to-date fraction, capped at
+    // the payout, then the delta still owed after prior reversals.
+    const targetCumulative = Math.min(Math.round((row.payout_amount_cents * refundedToDate) / chargeTotal), row.payout_amount_cents);
+    let reverseCents = targetCumulative - alreadyReversed;
+    reverseCents = Math.min(Math.max(reverseCents, 0), row.payout_amount_cents - alreadyReversed);
+    if (reverseCents <= 0) {
+      // Nothing new to reverse (e.g. an idempotent retry, or rounding already
+      // satisfied). If the charge is now fully refunded, still finalize below.
+      const fullyReversed = alreadyReversed >= row.payout_amount_cents || refundedToDate >= chargeTotal;
+      if (fullyReversed) {
+        await env.DB.prepare(
+          `UPDATE referral_payouts
+              SET status='reversed', reversed_at=CURRENT_TIMESTAMP, failure_reason = ?
+            WHERE id = ? AND status != 'reversed'`,
+        ).bind(`refund_clawback:${args.refundId}`.slice(0, 300), row.payout_id).run();
+        await reverseCommissionCredit(env, row.commission_id);
+        return { outcome: 'reversed', payout_id: row.payout_id, transfer_id: row.transfer_id, reversed_amount_cents: 0, detail: 'already fully reversed' };
+      }
+      return { outcome: 'skipped', payout_id: row.payout_id, transfer_id: row.transfer_id, detail: 'no additional clawback owed' };
+    }
+    // Finalize the ledger once the charge is FULLY refunded (cumulative refunded
+    // ≥ charge total) OR this reversal exhausts the payout.
+    const isFull = refundedToDate >= chargeTotal || (alreadyReversed + reverseCents) >= row.payout_amount_cents;
+
+    let reversalId = '';
+    try {
+      const reversal = await stripeForm<{ id: string; amount: number }>(
+        env,
+        `/transfers/${encodeURIComponent(row.transfer_id)}/reversals`,
+        {
+          amount: String(reverseCents),
+          'metadata[refund_id]': args.refundId,
+          'metadata[payout_id]': String(row.payout_id),
+          ...(args.adminId != null ? { 'metadata[admin_user_id]': String(args.adminId) } : {}),
+          description: `Clawback for refund ${args.refundId}`,
+        },
+        { idempotencyKey: `clawback-${row.transfer_id}-${args.refundId}` },
+      );
+      reversalId = reversal.id;
+    } catch (e) {
+      const detail = (e as Error).message || 'stripe_error';
+      return { outcome: 'error', payout_id: row.payout_id, transfer_id: row.transfer_id, detail };
+    }
+
+    // Only flip the ledger to fully-reversed on a full clawback. A partial
+    // clawback leaves the payout 'paid' (the referrer keeps the un-refunded
+    // share) but stamps the reversal in failure_reason for traceability.
+    if (isFull) {
+      await env.DB.prepare(
+        `UPDATE referral_payouts
+            SET status='reversed', reversed_at=CURRENT_TIMESTAMP,
+                failure_reason = ?
+          WHERE id = ? AND status != 'reversed'`,
+      ).bind(`refund_clawback:${args.refundId}`.slice(0, 300), row.payout_id).run();
+      await reverseCommissionCredit(env, row.commission_id);
+    } else {
+      await env.DB.prepare(
+        `UPDATE referral_payouts SET failure_reason = ? WHERE id = ?`,
+      ).bind(`partial_clawback:${args.refundId}:${reverseCents}c`.slice(0, 300), row.payout_id).run();
+    }
+
+    return {
+      outcome: 'reversed',
+      payout_id: row.payout_id,
+      transfer_id: row.transfer_id,
+      reversal_id: reversalId,
+      reversed_amount_cents: reverseCents,
+    };
+  } catch (e) {
+    return { outcome: 'error', detail: (e as Error).message || 'clawback_failed' };
+  }
+}
+
+// Reverse the commission credit so the referrer no longer earns on a refunded
+// purchase. Best-effort across dev/prod commission table shapes.
+async function reverseCommissionCredit(env: Env, commissionId: number): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `UPDATE commissions SET status='reversed', paid_at=NULL WHERE id = ? AND status != 'reversed'`,
+    ).bind(commissionId).run();
+  } catch { /* table-shape divergence in dev — non-fatal */ }
+}
+
+// -------------------------------------------------------------------------
 // US 1099-MISC tax summary
 // -------------------------------------------------------------------------
 

@@ -879,6 +879,25 @@ export const api = {
     request(`/admin/promos/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ active }) }),
   adminDeletePromo: (id) =>
     request(`/admin/promos/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  // Task #11 — admin billing: refunds (with per-product policy + referral
+  // commission clawback), dispute evidence, and customer LTV. All step-up
+  // gated server-side; the `request` helper auto-handles the step-up challenge.
+  //   adminBillingRefund(body)               → { ok, refund, policy, clawback }
+  //   adminBillingListDisputes(limit)        → { ok, disputes }
+  //   adminBillingGetDispute(id)             → { ok, dispute }
+  //   adminBillingSubmitEvidence(id, body)   → { ok, submitted, dispute }
+  //   adminBillingLTV(userId)                → { ok, ltv, charges, subscriptions }
+  adminBillingRefund: (body) =>
+    request('/admin/billing/refund', { method: 'POST', body: JSON.stringify(body || {}) }),
+  adminBillingListDisputes: (limit = 25) =>
+    request(`/admin/billing/disputes?limit=${encodeURIComponent(limit)}`),
+  adminBillingGetDispute: (id) =>
+    request(`/admin/billing/disputes/${encodeURIComponent(id)}`),
+  adminBillingSubmitEvidence: (id, body) =>
+    request(`/admin/billing/disputes/${encodeURIComponent(id)}/evidence`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  adminBillingLTV: (userId) =>
+    request(`/admin/billing/ltv?user_id=${encodeURIComponent(userId)}`),
   adminVoidContract: (uid) => request(`/admin/contracts/${uid}/void`, { method: 'POST' }),
   adminDownloadContractUrl: (uid) => `/api/admin/contracts/${uid}/download`,
   adminIssueContractShareLink: (uid, ttl_seconds = 300) =>

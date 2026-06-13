@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Refunds, disputes, and customer history for admins
+
+Admins have a new **Billing** area in the Admin Console. You can issue full or partial refunds in a few clicks — and when a refund applies to a referred purchase, any referral reward earned on that sale is automatically reversed, so the books stay correct. Each product follows its own refund rules (for example, incorporations can't be refunded once filing has started, and expert sessions have a 24-hour cancellation window), with a clear prompt if you need to override. You can also respond to card disputes by attaching evidence and submitting it to the payment processor, and look up any customer's lifetime spend with a list of their recent payments.
+
+---
+
 ## Branded receipts for every payment
 
 Every time you pay for something on Axal, you'll now get a clean, Axal-branded receipt by email — with your invoice PDF attached for subscription and invoice payments, and a link to your receipt for one-off purchases. You'll receive just one receipt per payment, even if there's a hiccup behind the scenes, so no duplicates clutter your inbox.
