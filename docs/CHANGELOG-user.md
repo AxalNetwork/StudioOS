@@ -5,6 +5,70 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Articles, all in one place
+
+Articles now live on a single page with two tabs. **Browse** shows everyone's published writing from across the Axal network — search it, or filter by author type and sector. **My Articles** is your own work: every draft, submission, and published piece with its status, word count, and view count, plus quick Edit and View live links. A **Write an article** button sits at the top right and opens the full editor whenever you're ready to start a new piece. Old links to your articles list still work and now drop you straight on the My Articles tab.
+
+---
+
+## Live filing status after incorporation payment
+
+After paying the incorporation fee, the Done screen now shows a live status pill that updates automatically — "Preparing documents", "Processing packet", or "Documents ready" — so you always know where your filing stands. If something goes wrong or the process takes too long, a clear panel appears with a support link and your order ID to quote. The same status information is now visible on the Legal page under a new "Pending Filings" section, so you're never left wondering even if you navigate away from the wizard.
+
+---
+
+## Accurate sales tax at checkout
+
+Checkout can now calculate and add the correct sales tax, VAT, or GST to subscriptions, plan upgrades, and company incorporation — based on your billing address — so your payment and receipt show the right total. This is ready to switch on once tax collection is configured for your regions; until then, totals are unchanged.
+
+---
+
+## Refunds, disputes, and customer history for admins
+
+Admins have a new **Billing** area in the Admin Console. You can issue full or partial refunds in a few clicks — and when a refund applies to a referred purchase, any referral reward earned on that sale is automatically reversed, so the books stay correct. Each product follows its own refund rules (for example, incorporations can't be refunded once filing has started, and expert sessions have a 24-hour cancellation window), with a clear prompt if you need to override. You can also respond to card disputes by attaching evidence and submitting it to the payment processor, and look up any customer's lifetime spend with a list of their recent payments.
+
+---
+
+## Branded receipts for every payment
+
+Every time you pay for something on Axal, you'll now get a clean, Axal-branded receipt by email — with your invoice PDF attached for subscription and invoice payments, and a link to your receipt for one-off purchases. You'll receive just one receipt per payment, even if there's a hiccup behind the scenes, so no duplicates clutter your inbox.
+
+---
+
+## Earn referral rewards on anything you refer
+
+Referrals now pay off on any purchase, not just subscriptions. When someone arrives through your referral link and later buys any eligible product, you earn a commission on that sale automatically. We remember the referral for 30 days from the first visit, so the reward still lands even if they buy a little later. Eligible products show a referral reward, and your earnings flow into your usual payouts.
+
+---
+
+## Pay to incorporate without leaving Axal
+
+Incorporating your company now finishes right inside Axal. After you pick a jurisdiction and confirm your details, you pay the one-time filing fee on an Axal-branded payment form — no being sent off to a separate checkout page. The moment your payment clears, we start preparing your founder documents.
+
+You can also add an annual **Registered Agent** service to stay compliant year-round, and pick up optional one-time compliance services — all paid in the same place. Each appears as its own receipt in your Billing area, and your card details are handled securely by Stripe and never touch Axal's servers.
+
+---
+
+## Promo codes at checkout
+
+You can now enter a promo code when paying inside Axal. Type your code on the payment form and the discount is applied instantly — you'll see the updated price before you pay. If a code is 100% off, your order completes for free with a single click, no card needed. Codes can be limited to specific products and to a set number of uses, so some may not apply to every purchase.
+
+Administrators get a new **Promo Codes** area in the Admin Console to create and manage discounts — percentage-off or a fixed amount, optionally restricted to certain products, with an optional usage limit and expiry date. Codes can be switched off or deleted at any time.
+
+---
+
+## Pay for mentor sessions without leaving Axal
+
+Booking a paid session with a mentor or expert now happens entirely inside Axal. Instead of being sent to a separate payment page, you enter your card on an Axal-branded form right on the expert's profile — matching the app's light and dark themes, with any extra bank verification appearing in the same window. Your expert is still paid automatically, and your card details are handled securely by Stripe and never touch Axal's servers.
+
+---
+
+## Unlock features individually
+
+Some features can now be unlocked on their own with a one-time purchase, without subscribing to a higher plan. Once your purchase goes through, the feature opens up right away — permanently or for a set period, depending on the option you chose.
+
+---
+
 ## Manage your subscription right inside Axal
 
 **Settings → Billing** is now a full self-service billing dashboard — no more being sent off to a separate Stripe page. You can see your active plan, switch to a different plan (with a clear preview of any prorated charge or credit before you confirm), cancel (you keep access until the end of the period you've paid for) or undo a scheduled cancellation, and see your upcoming and past invoices with downloadable receipts. You can also manage your cards right here: add a new card on an Axal-branded form, choose which card is your default for future charges, and remove a card you no longer use — your card details are handled securely by Stripe and never touch Axal's servers. This works for both founder and investor plans.

@@ -976,14 +976,25 @@ billing.post('/payment-method/detach', async (c) => {
   }
 });
 
+// Best-effort schema bootstrap for the webhook. A single schema hiccup (e.g.
+// the MI Pro columns hitting D1's hard 100-column limit on `users`) must NOT
+// abort the whole webhook and block fulfilment for every other product kind.
+// Fulfilment writes below still throw on genuinely-missing schema, so Stripe
+// simply retries those specific events — no silent data loss.
+async function safeEnsure(name: string, fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch (e) {
+    console.warn(`[billing] webhook ensure ${name} skipped:`, (e as Error).message);
+  }
+}
+
 // Stripe webhook. Signature verification is required when STRIPE_WEBHOOK_SECRET
 // is set; in dev with no secret we accept the body as-is so local testing works.
 billing.post('/stripe/webhook', async (c) => {
-  await ensureMiPaywallSchema(c.env);
-  await ensureTierSchema(c.env);
-  await ensureInvestorPaywallSchema(c.env);
-  const { ensureIncorporationsSchema } = await import('../services/incorporations');
-  await ensureIncorporationsSchema(c.env);
+  // SECURITY: verify the signature BEFORE doing any DB/DDL work. Doing schema
+  // bootstrap first let unauthenticated callers trigger DDL and surfaced as a
+  // 500 (which also made Stripe retry forever). Read raw body + verify first.
   const raw = await c.req.text();
   const sig = c.req.header('stripe-signature') ?? '';
   const secret = c.env.STRIPE_WEBHOOK_SECRET;
@@ -1011,6 +1022,14 @@ billing.post('/stripe/webhook', async (c) => {
   } catch {
     return c.json({ error: 'invalid_payload' }, 400);
   }
+  // Schema bootstrap AFTER verification, and non-fatal (see safeEnsure).
+  await safeEnsure('mi', () => ensureMiPaywallSchema(c.env));
+  await safeEnsure('tier', () => ensureTierSchema(c.env));
+  await safeEnsure('investor', () => ensureInvestorPaywallSchema(c.env));
+  await safeEnsure('incorporations', async () => {
+    const { ensureIncorporationsSchema } = await import('../services/incorporations');
+    await ensureIncorporationsSchema(c.env);
+  });
   await handleStripeEvent(c.env, event);
   // Task #9 — Refer & Earn Connect events. Same webhook endpoint, dispatched
   // by event type. `account.updated` mirrors the Connect account flags onto

@@ -592,7 +592,7 @@ function DoneStep({ jurisdiction, order, raOffer, complianceProducts, navigate }
             <div className="text-xs text-emerald-800 mt-0.5 dark:text-emerald-300">
               {isReady
                 ? 'Your founder document set is ready. Open Legal to view your documents.'
-                : 'We're preparing your founder document set now. It'll appear under your project in Legal shortly, and your receipt is in Billing.'}
+                : "We're preparing your founder document set now. It'll appear under your project in Legal shortly, and your receipt is in Billing."}
             </div>
           </div>
         </div>
