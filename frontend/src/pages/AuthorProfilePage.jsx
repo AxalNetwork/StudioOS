@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, FileText, Globe, UserCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, FileText, Globe, UserCircle, Twitter, Linkedin } from 'lucide-react';
 import { articles as api } from '../lib/api';
 import { reportError } from '../lib/log';
 import PublicNav from '../components/PublicNav';
@@ -68,6 +68,10 @@ export default function AuthorProfilePage() {
             name: first.author,
             role: first.author_role,
             website: first.author_website,
+            bio: first.author_bio ?? null,
+            twitter: first.author_twitter ?? null,
+            linkedin: first.author_linkedin ?? null,
+            photo_url: first.author_photo_url ?? null,
           });
         } else {
           setAuthor(null);
@@ -108,24 +112,50 @@ export default function AuthorProfilePage() {
           <div className="max-w-7xl mx-auto px-6 py-10">
             {/* Author header */}
             <div className="mb-10">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center">
-                  <UserCircle className="w-10 h-10 text-slate-400 dark:text-slate-600" />
+              <div className="flex items-start gap-4">
+                {/* Avatar: photo when set, UserCircle placeholder otherwise */}
+                <div className="w-16 h-16 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden">
+                  {author?.photo_url ? (
+                    <img
+                      src={author.photo_url}
+                      alt={author.name || 'Author'}
+                      className="w-16 h-16 object-cover"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }}
+                    />
+                  ) : null}
+                  {!author?.photo_url && (
+                    <UserCircle className="w-10 h-10 text-slate-400 dark:text-slate-600" />
+                  )}
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                   <h1 className="text-2xl font-bold">{author?.name || 'Unknown author'}</h1>
-                  <div className="mt-1 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                     {author?.role && (
                       <span className="px-2 py-0.5 text-xs rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                         {author.role}
                       </span>
                     )}
                     {author?.website && (
-                      <a href={author.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-violet-700 hover:underline">
+                      <a href={author.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-violet-700 dark:hover:text-violet-400 hover:underline">
                         <Globe className="w-3.5 h-3.5" /> Website
                       </a>
                     )}
+                    {author?.twitter && (
+                      <a href={author.twitter} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-violet-700 dark:hover:text-violet-400 hover:underline">
+                        <Twitter className="w-3.5 h-3.5" /> X / Twitter
+                      </a>
+                    )}
+                    {author?.linkedin && (
+                      <a href={author.linkedin} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-violet-700 dark:hover:text-violet-400 hover:underline">
+                        <Linkedin className="w-3.5 h-3.5" /> LinkedIn
+                      </a>
+                    )}
                   </div>
+                  {author?.bio && (
+                    <p className="mt-3 text-sm text-slate-600 dark:text-slate-400 max-w-2xl leading-relaxed">
+                      {author.bio}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

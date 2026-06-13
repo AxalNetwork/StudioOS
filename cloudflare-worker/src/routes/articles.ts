@@ -99,6 +99,10 @@ function publicArticleShape(row: any) {
     author_handle: row.author_handle ?? null,
     author_role: row.author_role ?? null,
     author_website: row.author_website ?? null,
+    author_bio: row.author_bio ?? null,
+    author_twitter: row.author_twitter ?? null,
+    author_linkedin: row.author_linkedin ?? null,
+    author_photo_url: row.author_photo_url ?? null,
   };
 }
 
@@ -203,7 +207,9 @@ articles.get('/', async (c) => {
                       a.cover_r2_key, a.published_at, a.word_count, a.read_minutes,
                       a.author_user_id, a.excerpt, a.seo_title, a.canonical_url,
                       u.name AS author_name, NULL AS author_handle, u.role AS author_role,
-                      aw.website_url AS author_website
+                      aw.website_url AS author_website,
+                      aw.bio AS author_bio, aw.twitter_url AS author_twitter,
+                      aw.linkedin_url AS author_linkedin, aw.photo_url AS author_photo_url
                  FROM articles a
                  LEFT JOIN users u ON u.id = a.author_user_id
                  LEFT JOIN author_websites aw ON aw.user_id = a.author_user_id
@@ -234,7 +240,9 @@ articles.get('/by-author/:user_id', async (c) => {
             a.cover_r2_key, a.published_at, a.word_count, a.read_minutes,
             a.author_user_id, a.excerpt, a.seo_title, a.canonical_url,
             u.name AS author_name, NULL AS author_handle, u.role AS author_role,
-            aw.website_url AS author_website
+            aw.website_url AS author_website,
+            aw.bio AS author_bio, aw.twitter_url AS author_twitter,
+            aw.linkedin_url AS author_linkedin, aw.photo_url AS author_photo_url
        FROM articles a
        LEFT JOIN users u ON u.id = a.author_user_id
        LEFT JOIN author_websites aw ON aw.user_id = a.author_user_id
@@ -299,7 +307,9 @@ articles.get('/:slug', async (c) => {
   if (cached) return cached;
   const row: any = await c.env.DB.prepare(
     `SELECT a.*, u.name AS author_name, NULL AS author_handle, u.role AS author_role,
-            aw.website_url AS author_website
+            aw.website_url AS author_website,
+            aw.bio AS author_bio, aw.twitter_url AS author_twitter,
+            aw.linkedin_url AS author_linkedin, aw.photo_url AS author_photo_url
        FROM articles a
        LEFT JOIN users u ON u.id = a.author_user_id
        LEFT JOIN author_websites aw ON aw.user_id = a.author_user_id
