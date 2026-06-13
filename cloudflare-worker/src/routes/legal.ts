@@ -676,6 +676,23 @@ legal.get('/incorporate/status', async (c) => {
   });
 });
 
+// Task #1 — list all incorporation orders for the current user that have
+// advanced past pending_payment (i.e. paid, processing, ready, failed).
+// Used by the Legal page to surface in-flight or failed orders even when
+// the user navigates away from the wizard DoneStep.
+legal.get('/incorporate/orders', async (c) => {
+  const user = await requireAuth(c);
+  await ensureIncorporationsSchema(c.env);
+  const rows = await c.env.DB.prepare(
+    `SELECT id, status, jurisdiction_id, company_name, amount_cents, currency, paid_at, created_at
+     FROM incorporations
+     WHERE user_id = ? AND status != 'pending_payment'
+     ORDER BY created_at DESC
+     LIMIT 20`,
+  ).bind(user.id).all<Record<string, unknown>>();
+  return c.json({ orders: rows.results ?? [] });
+});
+
 legal.post('/incorporate/dev-complete', async (c) => {
   // Fail-closed: only run in dev/test/preview/local environments.
   const envName = String((c.env as { ENVIRONMENT?: string }).ENVIRONMENT || '').toLowerCase();

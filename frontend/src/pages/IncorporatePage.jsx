@@ -9,6 +9,8 @@ import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import AxalCheckout from '../components/AxalCheckout';
+import { useIncorporationStatus } from '../hooks/useIncorporationStatus';
+import IncorporationStatusBadge from '../components/IncorporationStatusBadge';
 
 // Task #30 — Jurisdiction wizard + incorporation flow.
 //
@@ -546,21 +548,55 @@ function ComplianceAddons({ products }) {
 }
 
 function DoneStep({ jurisdiction, order, raOffer, complianceProducts, navigate }) {
+  const incorporationId = order?.incorporation_id;
+  const { status, timedOut } = useIncorporationStatus(incorporationId);
+
   if (!order) return null;
+
+  const isFailed = status === 'failed' || timedOut;
+  const isReady = status === 'packet_ready' || status === 'documents_ready';
+
   return (
     <div className="space-y-5">
-      <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex items-start gap-3 dark:bg-emerald-950/30 dark:border-emerald-900/50">
-        <CheckCircle2 className="text-emerald-600 flex-shrink-0 mt-0.5" size={20} />
-        <div>
-          <div className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
-            Payment received — {jurisdiction?.label} filing started
-          </div>
-          <div className="text-xs text-emerald-800 mt-0.5 dark:text-emerald-300">
-            We're preparing your founder document set now. It'll appear under your
-            project in Legal shortly, and your receipt is in Billing.
+      {isFailed ? (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3 dark:bg-red-950/30 dark:border-red-900/50">
+          <AlertTriangle className="text-red-600 flex-shrink-0 mt-0.5" size={20} />
+          <div>
+            <div className="text-sm font-semibold text-red-900 dark:text-red-200">
+              Something went wrong with your filing
+            </div>
+            <div className="text-xs text-red-800 mt-1 dark:text-red-300">
+              {timedOut
+                ? 'Your filing is taking longer than expected. Documents may still be on their way.'
+                : 'We could not prepare your founder document set.'}{' '}
+              Please{' '}
+              <a
+                href={`mailto:support@axal.vc?subject=Incorporation+issue&body=Order+ID:+${incorporationId}`}
+                className="font-semibold underline hover:no-underline"
+              >
+                contact support
+              </a>
+              {' '}and quote order ID{' '}
+              <span className="font-mono font-semibold">{incorporationId}</span>.
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex items-start gap-3 dark:bg-emerald-950/30 dark:border-emerald-900/50">
+          <CheckCircle2 className="text-emerald-600 flex-shrink-0 mt-0.5" size={20} />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-emerald-900 flex items-center flex-wrap gap-2 dark:text-emerald-200">
+              Payment received — {jurisdiction?.label} filing started
+              <IncorporationStatusBadge status={status} timedOut={false} />
+            </div>
+            <div className="text-xs text-emerald-800 mt-0.5 dark:text-emerald-300">
+              {isReady
+                ? 'Your founder document set is ready. Open Legal to view your documents.'
+                : 'We're preparing your founder document set now. It'll appear under your project in Legal shortly, and your receipt is in Billing.'}
+            </div>
+          </div>
+        </div>
+      )}
 
       <RegisteredAgentOptIn offer={raOffer} />
 
@@ -569,7 +605,11 @@ function DoneStep({ jurisdiction, order, raOffer, complianceProducts, navigate }
       <div className="flex items-center gap-2 pt-2">
         <button
           onClick={() => navigate('/legal')}
-          className="bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2 rounded-md inline-flex items-center gap-1.5"
+          className={`inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-md ${
+            isReady
+              ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+              : 'bg-violet-600 hover:bg-violet-700 text-white'
+          }`}
         >
           Open Legal <ArrowRight size={14} />
         </button>

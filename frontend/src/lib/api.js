@@ -349,6 +349,8 @@ export const api = {
     request('/legal/incorporation/order', { method: 'POST', body: JSON.stringify(data) }),
   legalIncorporateStatus: (id) =>
     request(`/legal/incorporate/status?id=${encodeURIComponent(id)}`),
+  legalIncorporationOrders: () =>
+    request('/legal/incorporate/orders'),
   // Legacy free wizard — still available for admin/back-compat (admin only).
   legalIncorporateWizard: (data) =>
     request('/legal/incorporate/wizard', { method: 'POST', body: JSON.stringify(data) }),

@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Live filing status after incorporation payment
+
+After paying the incorporation fee, the Done screen now shows a live status pill that updates automatically — "Preparing documents", "Processing packet", or "Documents ready" — so you always know where your filing stands. If something goes wrong or the process takes too long, a clear panel appears with a support link and your order ID to quote. The same status information is now visible on the Legal page under a new "Pending Filings" section, so you're never left wondering even if you navigate away from the wizard.
+
+---
+
 ## Accurate sales tax at checkout
 
 Checkout can now calculate and add the correct sales tax, VAT, or GST to subscriptions, plan upgrades, and company incorporation — based on your billing address — so your payment and receipt show the right total. This is ready to switch on once tax collection is configured for your regions; until then, totals are unchanged.

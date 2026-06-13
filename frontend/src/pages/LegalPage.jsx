@@ -3,8 +3,9 @@ import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
 import {
   FileText, Plus, Building, Eye, ChevronDown, Shield, Users,
-  Briefcase, Scale, AlertTriangle, BookOpen, Download
+  Briefcase, Scale, AlertTriangle, BookOpen, Download, Building2,
 } from 'lucide-react';
+import IncorporationStatusBadge from '../components/IncorporationStatusBadge';
 
 function ModernSelect({ value, onChange, children, ...props }) {
   return (
@@ -36,13 +37,16 @@ export default function LegalPage() {
   const [viewDoc, setViewDoc] = useState(null);
   const [activeLayer, setActiveLayer] = useState('all');
   const [previewTemplate, setPreviewTemplate] = useState(null);
+  const [incorporationOrders, setIncorporationOrders] = useState([]);
 
   const load = () => {
     setLoading(true);
     Promise.all([
-      api.listDocuments(), api.listTemplates(), api.listEntities(), api.listProjects()
-    ]).then(([d, t, e, p]) => {
+      api.listDocuments(), api.listTemplates(), api.listEntities(), api.listProjects(),
+      api.legalIncorporationOrders().catch(() => ({ orders: [] })),
+    ]).then(([d, t, e, p, inc]) => {
       setDocuments(d); setTemplates(t); setEntities(e); setProjects(p);
+      setIncorporationOrders(inc?.orders ?? []);
       if (t.length > 0 && !genForm.doc_type) {
         setGenForm(f => ({ ...f, doc_type: t[0].key }));
       }
@@ -93,6 +97,53 @@ export default function LegalPage() {
           <Plus size={14} /> Generate Document
         </button>
       </div>
+
+      {incorporationOrders.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6 dark:bg-gray-900 dark:border-gray-800">
+          <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 dark:border-gray-800">
+            <Building2 size={14} className="text-violet-600" />
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Pending Filings</h3>
+            <span className="text-xs text-gray-500 ml-auto">
+              {incorporationOrders.length} order{incorporationOrders.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+            {incorporationOrders.map((order) => (
+              <li key={order.id} className="px-4 py-3 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">
+                    {order.company_name}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    {order.jurisdiction_id?.replace(/_/g, ' ')} ·{' '}
+                    Order #{order.id}
+                    {order.paid_at && (
+                      <> · paid {new Date(order.paid_at).toLocaleDateString()}</>
+                    )}
+                  </div>
+                </div>
+                <IncorporationStatusBadge status={order.status} size="md" />
+                {(order.status === 'failed') && (
+                  <a
+                    href={`mailto:support@axal.vc?subject=Incorporation+issue&body=Order+ID:+${order.id}`}
+                    className="text-xs text-red-600 hover:underline flex-shrink-0"
+                  >
+                    Contact support
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+          <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-800">
+            <a
+              href="/incorporate"
+              className="text-xs text-violet-600 hover:text-violet-700 hover:underline"
+            >
+              + Start another incorporation
+            </a>
+          </div>
+        </div>
+      )}
 
       {showGen && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">

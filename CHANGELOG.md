@@ -10,6 +10,15 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Incorporation order status polling & failure surface (Task #1)
+
+- **`useIncorporationStatus` hook** (`frontend/src/hooks/useIncorporationStatus.js`): polls `GET /api/legal/incorporate/status?id=<id>` every 5 s, stops on terminal states (`packet_ready`, `documents_ready`, `failed`) or after 60 attempts (5 min). Returns `{ status, data, error, timedOut, polling }`.
+- **`IncorporationStatusBadge`** (`frontend/src/components/IncorporationStatusBadge.jsx`): compact status pill mapping each status to label + icon + color. Handles `null` (initial "Checking…"), in-progress (blue+spinner), ready (green), failed (red), and a `timedOut` amber override. Accepts `size` prop (`sm` | `md`).
+- **`DoneStep` in `IncorporatePage.jsx`**: replaced static success banner with live badge + dynamic copy driven by the hook. Failure panel (red) shows when `status === 'failed'` or `timedOut === true`, with a `mailto:support@axal.vc` link and the order ID to quote. "Open Legal" CTA turns emerald when documents are ready.
+- **`GET /api/legal/incorporate/orders`** (`cloudflare-worker/src/routes/legal.ts`): new owner-scoped endpoint returning up to 20 non-`pending_payment` orders for the current user (id, status, jurisdiction_id, company_name, amount_cents, currency, paid_at, created_at). Used by the Legal page.
+- **`LegalPage.jsx`**: loads incorporation orders on mount (parallel with existing fetches, errors silenced). Shows a "Pending Filings" card above the doc grid for any paid/processing/ready/failed orders, with `IncorporationStatusBadge` per row and a "Contact support" link on failed orders.
+- **`api.js`**: added `legalIncorporationOrders()` → `GET /legal/incorporate/orders`.
+
 ## E2E checkout pass + Stripe Tax (Task #12)
 
 - **Stripe Tax (`automatic_tax`) — flag-gated, default OFF.** New pure helper `cloudflare-worker/src/util/stripeTax.ts`: `stripeTaxEnabled(env)` (truthy `STRIPE_TAX_ENABLED` ∈ `1|true|yes|on`, case/space-insensitive) + `automaticTaxParams(enabled, {checkout, hasExistingCustomer})` returning `{}` when disabled (callers spread unconditionally), `{'automatic_tax[enabled]':'true'}` otherwise, plus `{'customer_update[address]':'auto'}` ONLY on the checkout surface WITH an existing `customer`. Added `STRIPE_TAX_ENABLED` to `Env` in `cloudflare-worker/src/types.ts`.
