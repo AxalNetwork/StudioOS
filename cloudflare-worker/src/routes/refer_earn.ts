@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, requireAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
+import { devPaymentFallbackAllowed } from '../util/paymentMode';
 import {
   ensureReferralPayoutsSchema,
   stripeForm,
@@ -57,6 +58,7 @@ refer.post('/connect/onboard', async (c) => {
   const key = c.env.STRIPE_SECRET_KEY;
   const appUrl = c.env.APP_URL || 'http://localhost:5000';
   if (!key) {
+    if (!devPaymentFallbackAllowed(c.env)) return c.json({ error: 'stripe_not_configured' }, 503);
     // Dev fallback so the UI flow is testable without real Stripe.
     return c.json({
       url: `${appUrl}/refer-earn?connect=dev`,
@@ -150,6 +152,7 @@ refer.post('/connect/login-link', async (c) => {
     return c.json({ error: 'connect_not_started' }, 400);
   }
   if (!c.env.STRIPE_SECRET_KEY) {
+    if (!devPaymentFallbackAllowed(c.env)) return c.json({ error: 'stripe_not_configured' }, 503);
     return c.json({ url: `${c.env.APP_URL || 'http://localhost:5000'}/refer-earn?login=dev`, dev: true });
   }
   try {
@@ -387,6 +390,7 @@ refer.post('/admin/payouts/:id/pay', async (c) => {
   }
 
   if (!c.env.STRIPE_SECRET_KEY) {
+    if (!devPaymentFallbackAllowed(c.env)) return c.json({ error: 'stripe_not_configured' }, 503);
     // Dev fallback — mark paid without firing a real Transfer so the
     // local UI flow round-trips end-to-end.
     const devTransferId = `tr_dev_${id}_${Date.now()}`;

@@ -14,6 +14,7 @@ import {
 import { upsertPlanFromStripeSubscription } from '../services/subscriptionPlans';
 import { priceForPlanMetadata, getCatalog } from '../services/catalog';
 import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
+import { devPaymentFallbackAllowed } from '../util/paymentMode';
 
 // Epic 6 — Market Intel Pro billing surface.
 //
@@ -103,13 +104,21 @@ billing.post('/mi-pro/checkout', async (c) => {
   const priceId = price?.id;
   const appUrl = c.env.APP_URL || 'http://localhost:5000';
 
-  // Dev fallback — no Stripe configured. Return a URL to the dev-upgrade
-  // endpoint so the UI flow is testable without real payment rails.
-  if (!stripeKey || !priceId) {
-    return c.json({
-      url: `${appUrl}/api/billing/mi-pro/dev-upgrade?plan=${plan}`,
-      dev: true,
-    });
+  // No resolvable SKU. In a keyless dev environment we hand back the simulated
+  // dev-upgrade URL so the UI flow stays testable; in production (or whenever a
+  // Stripe key is present) we FAIL LOUDLY instead of granting a free upgrade.
+  if (!priceId) {
+    if (devPaymentFallbackAllowed(c.env)) {
+      return c.json({
+        url: `${appUrl}/api/billing/mi-pro/dev-upgrade?plan=${plan}`,
+        dev: true,
+      });
+    }
+    if (!stripeKey) return c.json({ error: 'stripe_not_configured' }, 503);
+    return c.json(
+      { error: 'catalog_price_missing', detail: `No active Stripe price for plan=mi_pro interval=${interval}` },
+      502,
+    );
   }
 
   const params: Record<string, string> = {
@@ -176,8 +185,8 @@ billing.get('/mi-pro/status', async (c) => {
 // Dev-only: flip the user to active Pro without a real Stripe round-trip.
 // 404s when STRIPE_SECRET_KEY is set so prod can't accidentally expose this.
 billing.all('/mi-pro/dev-upgrade', async (c) => {
-  const stripeKey = c.env.STRIPE_SECRET_KEY;
-  if (stripeKey) return c.json({ error: 'not_found' }, 404);
+  // Simulated upgrade — reachable ONLY in a keyless, non-production env.
+  if (!devPaymentFallbackAllowed(c.env)) return c.json({ error: 'not_found' }, 404);
   const user = (await requireAuth(c)) as MiUser;
   await ensureMiPaywallSchema(c.env);
   const url = new URL(c.req.url);
@@ -224,12 +233,19 @@ billing.post('/tier/checkout', async (c) => {
   const priceId = price?.id;
   const appUrl = c.env.APP_URL || 'http://localhost:5000';
 
-  // Dev fallback — no Stripe configured. Mirrors mi-pro/dev-upgrade.
-  if (!stripeKey || !priceId) {
-    return c.json({
-      url: `${appUrl}/api/billing/tier/dev-upgrade?tier=${tier}`,
-      dev: true,
-    });
+  // No resolvable SKU. Keyless dev → simulated dev-upgrade; otherwise fail loud.
+  if (!priceId) {
+    if (devPaymentFallbackAllowed(c.env)) {
+      return c.json({
+        url: `${appUrl}/api/billing/tier/dev-upgrade?tier=${tier}`,
+        dev: true,
+      });
+    }
+    if (!stripeKey) return c.json({ error: 'stripe_not_configured' }, 503);
+    return c.json(
+      { error: 'catalog_price_missing', detail: `No active Stripe price for tier=${tier}` },
+      502,
+    );
   }
 
   const params: Record<string, string> = {
@@ -289,7 +305,7 @@ billing.get('/tier/status', async (c) => {
 });
 
 billing.all('/tier/dev-upgrade', async (c) => {
-  if (c.env.STRIPE_SECRET_KEY) return c.json({ error: 'not_found' }, 404);
+  if (!devPaymentFallbackAllowed(c.env)) return c.json({ error: 'not_found' }, 404);
   const user = (await requireAuth(c)) as TierUser;
   await ensureTierSchema(c.env);
   const url = new URL(c.req.url);
@@ -355,12 +371,19 @@ billing.post('/investor/checkout', async (c) => {
   const priceId = price?.id;
   const appUrl = c.env.APP_URL || 'http://localhost:5000';
 
-  // Dev fallback — flips the user into the requested tier without Stripe.
-  if (!stripeKey || !priceId) {
-    return c.json({
-      url: `${appUrl}/api/billing/investor/dev-upgrade?plan=${plan}`,
-      dev: true,
-    });
+  // No resolvable SKU. Keyless dev → simulated dev-upgrade; otherwise fail loud.
+  if (!priceId) {
+    if (devPaymentFallbackAllowed(c.env)) {
+      return c.json({
+        url: `${appUrl}/api/billing/investor/dev-upgrade?plan=${plan}`,
+        dev: true,
+      });
+    }
+    if (!stripeKey) return c.json({ error: 'stripe_not_configured' }, 503);
+    return c.json(
+      { error: 'catalog_price_missing', detail: `No active Stripe price for investor_tier=${cfg.tier} interval=${cfg.interval}` },
+      502,
+    );
   }
 
   const params: Record<string, string> = {
@@ -457,7 +480,7 @@ billing.get('/investor/status', async (c) => {
 });
 
 billing.all('/investor/dev-upgrade', async (c) => {
-  if (c.env.STRIPE_SECRET_KEY) return c.json({ error: 'not_found' }, 404);
+  if (!devPaymentFallbackAllowed(c.env)) return c.json({ error: 'not_found' }, 404);
   const user = (await requireAuth(c)) as InvestorUser;
   await ensureInvestorPaywallSchema(c.env);
   const url = new URL(c.req.url);

@@ -9,8 +9,9 @@ import { applyMergeFields } from '../services/mergeFields';
 import { checkCompanyName } from '../services/nameCheck';
 import { stripeCall } from './billing';
 import { ensurePaymentsCustomer } from './payments';
-import { findCatalogPriceById, getCatalog } from '../services/catalog';
+import { findCatalogPriceById, getCatalog, priceForPlanMetadata } from '../services/catalog';
 import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
+import { devPaymentFallbackAllowed, isProductionEnv } from '../util/paymentMode';
 import {
   ensureIncorporationsSchema,
   createPendingIncorporation,
@@ -375,32 +376,50 @@ legal.post('/incorporate/checkout', async (c) => {
 
   await sql.end();
 
-  const priceEnvKey = JURISDICTION_PRICE_ENV[j.id];
-  const priceId = (c.env as unknown as Record<string, unknown>)[priceEnvKey] as string | undefined;
   const appUrl = c.env.APP_URL || 'http://localhost:5000';
   const stripeKey = c.env.STRIPE_SECRET_KEY;
+  // Resolve the incorporation SKU from the catalog (single source of truth): an
+  // active product carrying `metadata.jurisdiction_id === j.id` with a one-time
+  // price. Legacy STRIPE_PRICE_INCORP_* env vars are consulted only as a
+  // non-production fallback during the catalog transition — never in prod.
+  let priceId: string | undefined;
+  if (stripeKey) {
+    const price = await priceForPlanMetadata(c.env, 'jurisdiction_id', j.id, null);
+    priceId = price?.id;
+    if (!priceId && !isProductionEnv(c.env)) {
+      priceId = (c.env as unknown as Record<string, unknown>)[JURISDICTION_PRICE_ENV[j.id]] as string | undefined;
+    }
+  }
 
-  // Dev fallback — when Stripe or price is not configured, redirect to the
-  // dev-complete endpoint so the UI flow is testable without real payment.
-  if (!stripeKey || !priceId) {
-    const devAmount = JURISDICTION_COSTS[j.id] ?? 0;
-    const devSessionId = `dev_session_${user.id}_${Date.now()}`;
-    const incId = await createPendingIncorporation(c.env, {
-      user_id: user.id,
-      project_id: project.id,
-      jurisdiction_id: j.id,
-      company_name: body.company_name.trim(),
-      registered_agent_name: body.registered_agent_name ?? null,
-      registered_agent_address: body.registered_agent_address ?? null,
-      amount_cents: devAmount,
-      currency: 'usd',
-      stripe_session_id: devSessionId,
-    });
-    return c.json({
-      url: `${appUrl}/api/legal/incorporate/dev-complete?id=${incId}`,
-      incorporation_id: incId,
-      dev: true,
-    });
+  // No resolvable SKU. In a keyless dev env we simulate via dev-complete so the
+  // UI flow stays testable; in production (or whenever a Stripe key is present)
+  // we FAIL LOUDLY instead of granting a free incorporation.
+  if (!priceId) {
+    if (devPaymentFallbackAllowed(c.env)) {
+      const devAmount = JURISDICTION_COSTS[j.id] ?? 0;
+      const devSessionId = `dev_session_${user.id}_${Date.now()}`;
+      const incId = await createPendingIncorporation(c.env, {
+        user_id: user.id,
+        project_id: project.id,
+        jurisdiction_id: j.id,
+        company_name: body.company_name.trim(),
+        registered_agent_name: body.registered_agent_name ?? null,
+        registered_agent_address: body.registered_agent_address ?? null,
+        amount_cents: devAmount,
+        currency: 'usd',
+        stripe_session_id: devSessionId,
+      });
+      return c.json({
+        url: `${appUrl}/api/legal/incorporate/dev-complete?id=${incId}`,
+        incorporation_id: incId,
+        dev: true,
+      });
+    }
+    if (!stripeKey) return c.json({ error: 'stripe_not_configured' }, 503);
+    return c.json(
+      { error: 'catalog_price_missing', detail: `No active Stripe price for jurisdiction=${j.id}` },
+      502,
+    );
   }
 
   const params: Record<string, string> = {
@@ -458,36 +477,37 @@ legal.post('/incorporate/checkout', async (c) => {
 interface IncorporationPrice { amountCents: number; currency: string; priceId?: string }
 
 /**
- * Resolve the incorporation fee for a jurisdiction. Prefers a configured Stripe
- * price (env id → catalog `incorporation` product tagged with the jurisdiction)
- * and falls back to the hardcoded cost table so the flow stays testable.
+ * Resolve the incorporation SKU for a jurisdiction from the Stripe catalog (the
+ * single source of truth): an active product carrying
+ * `metadata.jurisdiction_id === jurisdictionId` with a one-time price. Legacy
+ * `STRIPE_PRICE_INCORP_*` env ids are consulted ONLY as a non-production
+ * fallback during the catalog transition. Returns `null` when no catalog SKU is
+ * configured so callers fail closed (production) or simulate (keyless dev) —
+ * never charging the hardcoded `JURISDICTION_COSTS` amount against real Stripe.
  */
 async function resolveIncorporationPrice(
   env: Env,
   jurisdictionId: string,
-): Promise<IncorporationPrice> {
-  const fallback = JURISDICTION_COSTS[jurisdictionId] ?? 0;
-  // 1) Explicit env price id for this jurisdiction.
-  const priceEnvKey = JURISDICTION_PRICE_ENV[jurisdictionId];
-  const envPriceId = (env as unknown as Record<string, unknown>)[priceEnvKey] as string | undefined;
-  if (envPriceId) {
-    try {
-      const p = await findCatalogPriceById(env, envPriceId);
-      if (p && typeof p.unit_amount === 'number' && p.unit_amount > 0) {
-        return { amountCents: p.unit_amount, currency: p.currency || 'usd', priceId: p.id };
-      }
-    } catch { /* fall through to catalog/metadata + fallback */ }
+): Promise<IncorporationPrice | null> {
+  // 1) Catalog incorporation SKU tagged with this jurisdiction — prod-allowed.
+  const price = await priceForPlanMetadata(env, 'jurisdiction_id', jurisdictionId, null);
+  if (price && typeof price.unit_amount === 'number' && price.unit_amount > 0) {
+    return { amountCents: price.unit_amount, currency: price.currency || 'usd', priceId: price.id };
   }
-  // 2) Catalog incorporation product tagged with this jurisdiction.
-  try {
-    const products = await getCatalog(env, 'incorporation');
-    const prod = products.find((pp) => pp.active && pp.metadata.jurisdiction_id === jurisdictionId);
-    const oneTime = prod?.prices.find((pr) => pr.active && pr.type !== 'recurring' && typeof pr.unit_amount === 'number' && (pr.unit_amount as number) > 0);
-    if (oneTime) {
-      return { amountCents: oneTime.unit_amount as number, currency: oneTime.currency || 'usd', priceId: oneTime.id };
+  // 2) Legacy explicit env price id, resolved against the mirrored catalog —
+  //    non-production fallback only.
+  if (!isProductionEnv(env)) {
+    const envPriceId = (env as unknown as Record<string, unknown>)[JURISDICTION_PRICE_ENV[jurisdictionId]] as string | undefined;
+    if (envPriceId) {
+      try {
+        const p = await findCatalogPriceById(env, envPriceId);
+        if (p && typeof p.unit_amount === 'number' && p.unit_amount > 0) {
+          return { amountCents: p.unit_amount, currency: p.currency || 'usd', priceId: p.id };
+        }
+      } catch { /* fall through to null */ }
     }
-  } catch { /* fall through to fallback */ }
-  return { amountCents: fallback, currency: 'usd' };
+  }
+  return null;
 }
 
 interface RegisteredAgentOffer {
@@ -553,24 +573,28 @@ legal.post('/incorporation/order', async (c) => {
   }
   await sql.end();
 
-  const { amountCents, currency } = await resolveIncorporationPrice(c.env, j.id);
+  const resolved = await resolveIncorporationPrice(c.env, j.id);
   const raOffer = await resolveRegisteredAgentOffer(c.env);
 
-  const orderArgs = {
+  const buildOrderArgs = (amount_cents: number, currency: string) => ({
     user_id: user.id,
     project_id: project.id,
     jurisdiction_id: j.id,
     company_name: companyName,
     registered_agent_name: body.registered_agent_name ?? null,
     registered_agent_address: body.registered_agent_address ?? null,
-    amount_cents: amountCents,
+    amount_cents,
     currency,
-  };
+  });
 
-  // Dev fallback — no Stripe configured: persist the order and mark it paid so
-  // the wizard's embedded flow is testable without real payment.
-  if (!c.env.STRIPE_SECRET_KEY) {
-    const incId = await createPendingIncorporationOrder(c.env, orderArgs);
+  // Dev fallback — keyless non-production env only: persist the order and mark
+  // it paid so the wizard's embedded flow is testable without real payment. The
+  // hardcoded JURISDICTION_COSTS amount is used ONLY here (when no catalog SKU is
+  // configured); production never reaches this branch.
+  if (devPaymentFallbackAllowed(c.env)) {
+    const amountCents = resolved?.amountCents ?? (JURISDICTION_COSTS[j.id] ?? 0);
+    const currency = resolved?.currency ?? 'usd';
+    const incId = await createPendingIncorporationOrder(c.env, buildOrderArgs(amountCents, currency));
     await recordPaidIncorporationFromPaymentIntent(c.env, {
       id: `dev_pi_${incId}`,
       metadata: { incorporation_id: String(incId), user_id: String(user.id) },
@@ -587,7 +611,18 @@ legal.post('/incorporation/order', async (c) => {
     });
   }
 
-  const incId = await createPendingIncorporationOrder(c.env, orderArgs);
+  // Real Stripe path — REQUIRE a catalog-resolved SKU so a missing price fails
+  // closed instead of silently charging the hardcoded JURISDICTION_COSTS amount.
+  if (!resolved) {
+    if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+    return c.json(
+      { error: 'catalog_price_missing', detail: `No active Stripe price for jurisdiction=${j.id}` },
+      502,
+    );
+  }
+  const { amountCents, currency } = resolved;
+
+  const incId = await createPendingIncorporationOrder(c.env, buildOrderArgs(amountCents, currency));
   try {
     const customer = await ensurePaymentsCustomer(c.env, user as any);
     // 1) Create the invoice WITHOUT pulling other pending items.
@@ -694,11 +729,12 @@ legal.get('/incorporate/orders', async (c) => {
 });
 
 legal.post('/incorporate/dev-complete', async (c) => {
-  // Fail-closed: only run in dev/test/preview/local environments.
-  const envName = String((c.env as { ENVIRONMENT?: string }).ENVIRONMENT || '').toLowerCase();
-  const SOFT_ACCEPT_ENVS = new Set(['development', 'dev', 'test', 'local', 'preview']);
-  if (!SOFT_ACCEPT_ENVS.has(envName)) {
-    return c.json({ error: 'dev_only' }, 403);
+  // Fail-closed: only run in a keyless non-production env. With a Stripe key
+  // present (or in production) this simulated-payment endpoint is disabled so it
+  // can never mark an incorporation paid for free. The `/incorporate/checkout`
+  // dev branch only emits a link here under the same predicate.
+  if (!devPaymentFallbackAllowed(c.env)) {
+    return c.json({ error: 'not_found' }, 404);
   }
 
   const user = await requireAuth(c);
