@@ -492,6 +492,22 @@ export default function ArticleAuthorPage() {
     }
   };
 
+  // Declared before scheduleAutosave to avoid TDZ: useCallback dep-array
+  // is evaluated on mount, so all closed-over consts must be initialized first.
+  const isLocked = useMemo(() => article && ['in_review', 'submitted', 'approved', 'published'].includes(article.status), [article]);
+  const isEditable = useMemo(() => !isLocked, [isLocked]);
+  const dirty = useMemo(() => !!article && (
+    editing.title.trim() !== (article.title || '')
+    || editing.subtitle !== (article.subtitle || '')
+    || editing.body_markdown !== (article.body_markdown || '')
+    || (editing.sector || '') !== (article.sector || '')
+    || JSON.stringify(editing.tags || []) !== JSON.stringify(article.tags || [])
+    || editing.excerpt !== (article.excerpt || '')
+    || editing.seo_title !== (article.seo_title || '')
+    || editing.canonical_url !== (article.canonical_url || '')
+    || editing.slug !== (article.slug || '')
+  ), [article, editing]);
+
   // Task #4 — debounced autosave (~2.5s) when editable+dirty. No toast.
   // Guard against race: capture articleId at schedule time and compare to
   // the current article ref when the timer fires.
@@ -725,19 +741,6 @@ export default function ArticleAuthorPage() {
     }
   };
 
-  const isLocked = useMemo(() => article && ['in_review', 'submitted', 'approved', 'published'].includes(article.status), [article]);
-  const isEditable = useMemo(() => !isLocked, [isLocked]);
-  const dirty = useMemo(() => !!article && (
-    editing.title.trim() !== (article.title || '')
-    || editing.subtitle !== (article.subtitle || '')
-    || editing.body_markdown !== (article.body_markdown || '')
-    || (editing.sector || '') !== (article.sector || '')
-    || JSON.stringify(editing.tags || []) !== JSON.stringify(article.tags || [])
-    || editing.excerpt !== (article.excerpt || '')
-    || editing.seo_title !== (article.seo_title || '')
-    || editing.canonical_url !== (article.canonical_url || '')
-    || editing.slug !== (article.slug || '')
-  ), [article, editing]);
   const savedAt = lastSavedAt || (article ? article.updated_at : null);
   const liveStats = useMemo(() => {
     const { words, minutes } = wordsAndMinutes(editing.body_markdown || '');
