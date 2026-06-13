@@ -285,6 +285,32 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
     await sql.end();
     if (users.length === 0 || !users[0].is_active) return null;
     const u = users[0];
+    // MI Pro subscription state lives in the mi_pro_subscriptions side table
+    // (the `users` table is at D1's hard 100-column limit, and D1 also rejects
+    // any result set wider than 100 columns — so we cannot JOIN it into the
+    // SELECT * above). Hydrate it with a small keyed lookup so userHasMiPro()
+    // and the MI Pro routes keep reading user.mi_subscription_* unchanged.
+    // Best-effort: a missing row/table leaves the user on the free tier.
+    try {
+      const mi = await c.env.DB.prepare(
+        'SELECT status, subscription_id, plan, period_end, stripe_customer_id FROM mi_pro_subscriptions WHERE user_id = ?'
+      ).bind(payload.user_id).first<{
+        status: string | null; subscription_id: string | null; plan: string | null;
+        period_end: string | null; stripe_customer_id: string | null;
+      }>();
+      const mu = u as User & {
+        mi_subscription_status?: string | null; mi_subscription_id?: string | null;
+        mi_subscription_plan?: string | null; mi_subscription_period_end?: string | null;
+        mi_stripe_customer_id?: string | null;
+      };
+      mu.mi_subscription_status = mi?.status ?? 'free';
+      mu.mi_subscription_id = mi?.subscription_id ?? null;
+      mu.mi_subscription_plan = mi?.plan ?? null;
+      mu.mi_subscription_period_end = mi?.period_end ?? null;
+      mu.mi_stripe_customer_id = mi?.stripe_customer_id ?? null;
+    } catch (e) {
+      console.warn('[auth] mi_pro_subscriptions hydrate failed', (e as Error).message);
+    }
     // Epic 3 — global sign-out: reject tokens issued before users.jwt_min_iat.
     // Normalize ms→s for any legacy ms-based iat values.
     const minIat = u.jwt_min_iat ?? 0;

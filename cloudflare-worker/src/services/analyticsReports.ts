@@ -233,20 +233,22 @@ export async function loadOverview(
   `);
   const totalUsers = rows<SqlRow>(await sql`SELECT COUNT(*) AS c FROM users WHERE is_active = 1`);
   const paidUsers = rows<SqlRow>(await sql`
-    SELECT COUNT(*) AS c FROM users
-    WHERE mi_subscription_status = 'active' AND is_active = 1
+    SELECT COUNT(*) AS c FROM users u
+    JOIN mi_pro_subscriptions mi ON mi.user_id = u.id
+    WHERE mi.status = 'active' AND u.is_active = 1
   `);
   const paidByPlan = rows<SqlRow>(await sql`
-    SELECT mi_subscription_plan AS plan, COUNT(*) AS c
-    FROM users
-    WHERE mi_subscription_status = 'active' AND mi_subscription_plan IS NOT NULL
-    GROUP BY mi_subscription_plan
+    SELECT mi.plan AS plan, COUNT(*) AS c
+    FROM users u JOIN mi_pro_subscriptions mi ON mi.user_id = u.id
+    WHERE mi.status = 'active' AND mi.plan IS NOT NULL
+    GROUP BY mi.plan
   `);
   const churned = rows<SqlRow>(await sql`
-    SELECT COUNT(*) AS c FROM users
-    WHERE mi_subscription_status IN ('canceled','past_due','unpaid')
-      AND mi_subscription_period_end >= ${range.fromIso}
-      AND mi_subscription_period_end <= ${range.toIso}
+    SELECT COUNT(*) AS c FROM users u
+    JOIN mi_pro_subscriptions mi ON mi.user_id = u.id
+    WHERE mi.status IN ('canceled','past_due','unpaid')
+      AND mi.period_end >= ${range.fromIso}
+      AND mi.period_end <= ${range.toIso}
   `);
   const reqRollup = rows<SqlRow>(await sql`
     SELECT COUNT(*) AS total,
@@ -348,11 +350,12 @@ export async function loadCohorts(env: Env, granularity: 'week' | 'month', metri
   if (metric === 'revenue') {
     const r = rows<SqlRow>(await sql.unsafe(
       `SELECT ${fmtU} AS cohort, COUNT(*) AS signups,
-              SUM(CASE WHEN u.mi_subscription_status='active' THEN 1 ELSE 0 END) AS paying,
-              SUM(CASE WHEN u.mi_subscription_status='active'
+              SUM(CASE WHEN mi.status='active' THEN 1 ELSE 0 END) AS paying,
+              SUM(CASE WHEN mi.status='active'
                        THEN COALESCE(sp.monthly_price_usd, 0) ELSE 0 END) AS mrr_usd
          FROM users u
-         LEFT JOIN subscription_plans sp ON sp.plan_id = u.mi_subscription_plan
+         LEFT JOIN mi_pro_subscriptions mi ON mi.user_id = u.id
+         LEFT JOIN subscription_plans sp ON sp.plan_id = mi.plan
          WHERE u.created_at >= datetime('now','-12 months')
          GROUP BY cohort ORDER BY cohort ASC`,
     ));
@@ -379,7 +382,7 @@ export async function loadUsers(env: Env, opts: {
   const filters: string[] = ['u.is_active = 1'];
   const params: Array<string | number> = [];
   if (opts.role) { filters.push('u.role = ?'); params.push(opts.role); }
-  if (opts.tier) { filters.push('u.mi_subscription_plan = ?'); params.push(opts.tier); }
+  if (opts.tier) { filters.push('mi.plan = ?'); params.push(opts.tier); }
   if (opts.search) {
     filters.push('(LOWER(u.email) LIKE ? OR LOWER(u.name) LIKE ?)');
     const s = `%${opts.search.toLowerCase()}%`;
@@ -389,19 +392,20 @@ export async function loadUsers(env: Env, opts: {
   const priceMap = await loadPlanPriceMap(env);
   const raw = rows<SqlRow>(await sql.unsafe(
     `SELECT u.id, u.email, u.name, u.role, u.created_at,
-            u.mi_subscription_status AS sub_status,
-            u.mi_subscription_plan   AS sub_plan,
+            mi.status AS sub_status,
+            mi.plan   AS sub_plan,
             (SELECT MAX(last_seen_at) FROM user_sessions WHERE user_id = u.id) AS last_seen_at,
             (SELECT COUNT(*) FROM activity_logs a WHERE a.user_id = u.id
                  AND a.created_at >= datetime('now','-30 days')) AS sessions_30d,
             (SELECT COUNT(*) FROM projects p WHERE p.founder_id = u.founder_id) AS project_count
        FROM users u
+       LEFT JOIN mi_pro_subscriptions mi ON mi.user_id = u.id
        WHERE ${where}
        ORDER BY u.created_at DESC
        LIMIT ? OFFSET ?`,
     [...params, opts.limit, opts.offset],
   ));
-  const totalRow = rows<SqlRow>(await sql.unsafe(`SELECT COUNT(*) AS c FROM users u WHERE ${where}`, params));
+  const totalRow = rows<SqlRow>(await sql.unsafe(`SELECT COUNT(*) AS c FROM users u LEFT JOIN mi_pro_subscriptions mi ON mi.user_id = u.id WHERE ${where}`, params));
   const enriched = raw.map(r => ({
     id: num(r.id),
     email: str(r.email),
@@ -422,11 +426,12 @@ export async function loadUser(env: Env, id: number) {
   const sql = getSQL(env);
   const priceMap = await loadPlanPriceMap(env);
   const u = rows<SqlRow>(await sql`
-    SELECT id, email, name, role, created_at,
-           mi_subscription_status AS sub_status,
-           mi_subscription_plan AS sub_plan,
-           mi_subscription_period_end AS sub_period_end
-    FROM users WHERE id = ${id}
+    SELECT u.id, u.email, u.name, u.role, u.created_at,
+           mi.status AS sub_status,
+           mi.plan AS sub_plan,
+           mi.period_end AS sub_period_end
+    FROM users u LEFT JOIN mi_pro_subscriptions mi ON mi.user_id = u.id
+    WHERE u.id = ${id}
   `);
   if (u.length === 0) return null;
   const featureUsage = rows<SqlRow>(await sql`
@@ -519,10 +524,10 @@ export async function loadFinancial(env: Env, range: DateRange, currency?: strin
   const priceMap = await loadPlanPriceMap(env);
   const disp = await displayContext(env, currency);
   const byTier = rows<SqlRow>(await sql`
-    SELECT mi_subscription_plan AS plan, COUNT(*) AS subscribers
-    FROM users
-    WHERE mi_subscription_status = 'active' AND mi_subscription_plan IS NOT NULL
-    GROUP BY mi_subscription_plan
+    SELECT mi.plan AS plan, COUNT(*) AS subscribers
+    FROM users u JOIN mi_pro_subscriptions mi ON mi.user_id = u.id
+    WHERE mi.status = 'active' AND mi.plan IS NOT NULL
+    GROUP BY mi.plan
   `);
   const breakdown = byTier.map(r => {
     const plan = str(r.plan);
@@ -546,21 +551,21 @@ export async function loadFinancial(env: Env, range: DateRange, currency?: strin
   });
   const totalMrr = breakdown.reduce((a, r) => a + r.mrr_usd, 0);
   const newMrrRows = rows<SqlRow>(await sql`
-    SELECT mi_subscription_plan AS plan, COUNT(*) AS c
-    FROM users
-    WHERE mi_subscription_status = 'active'
-      AND mi_subscription_period_end >= ${range.fromIso}
-      AND mi_subscription_period_end <= ${range.toIso}
-    GROUP BY mi_subscription_plan
+    SELECT mi.plan AS plan, COUNT(*) AS c
+    FROM users u JOIN mi_pro_subscriptions mi ON mi.user_id = u.id
+    WHERE mi.status = 'active'
+      AND mi.period_end >= ${range.fromIso}
+      AND mi.period_end <= ${range.toIso}
+    GROUP BY mi.plan
   `);
   const newMrr = newMrrRows.reduce((a, r) => a + priceFor(priceMap, str(r.plan)) * num(r.c), 0);
   const churnRows = rows<SqlRow>(await sql`
-    SELECT mi_subscription_plan AS plan, COUNT(*) AS c
-    FROM users
-    WHERE mi_subscription_status IN ('canceled','past_due','unpaid')
-      AND mi_subscription_period_end >= ${range.fromIso}
-      AND mi_subscription_period_end <= ${range.toIso}
-    GROUP BY mi_subscription_plan
+    SELECT mi.plan AS plan, COUNT(*) AS c
+    FROM users u JOIN mi_pro_subscriptions mi ON mi.user_id = u.id
+    WHERE mi.status IN ('canceled','past_due','unpaid')
+      AND mi.period_end >= ${range.fromIso}
+      AND mi.period_end <= ${range.toIso}
+    GROUP BY mi.plan
   `);
   const churnMrr = churnRows.reduce((a, r) => a + priceFor(priceMap, str(r.plan)) * num(r.c), 0);
   // LTV by signup cohort: estimate as paying * avg_plan_price * 12 (1y proxy).
@@ -569,11 +574,12 @@ export async function loadFinancial(env: Env, range: DateRange, currency?: strin
   // `created_at` column.
   const cohortRows = rows<SqlRow>(await sql`
     SELECT strftime('%Y-%m', u.created_at) AS cohort, COUNT(*) AS signups,
-           SUM(CASE WHEN u.mi_subscription_status='active' THEN 1 ELSE 0 END) AS paying,
-           SUM(CASE WHEN u.mi_subscription_status='active'
+           SUM(CASE WHEN mi.status='active' THEN 1 ELSE 0 END) AS paying,
+           SUM(CASE WHEN mi.status='active'
                     THEN COALESCE(sp.monthly_price_usd, 0) ELSE 0 END) AS mrr_per_cohort
       FROM users u
-      LEFT JOIN subscription_plans sp ON sp.plan_id = u.mi_subscription_plan
+      LEFT JOIN mi_pro_subscriptions mi ON mi.user_id = u.id
+      LEFT JOIN subscription_plans sp ON sp.plan_id = mi.plan
       WHERE u.created_at >= datetime('now','-12 months')
       GROUP BY cohort ORDER BY cohort ASC
   `);

@@ -85,10 +85,10 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
               if (userId != null) {
                 try {
                   const row = await env.DB
-                    .prepare('SELECT mi_subscription_plan FROM users WHERE id = ?')
+                    .prepare('SELECT plan FROM mi_pro_subscriptions WHERE user_id = ?')
                     .bind(userId)
-                    .first<{ mi_subscription_plan: string | null }>();
-                  if (row?.mi_subscription_plan) tier = String(row.mi_subscription_plan);
+                    .first<{ plan: string | null }>();
+                  if (row?.plan) tier = String(row.plan);
                 } catch {}
               }
               ae.writeDataPoint({

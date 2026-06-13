@@ -205,7 +205,7 @@ export async function listPlansFull(env: Env): Promise<SubscriptionPlanRow[]> {
     const rows = (await sql`
       SELECT sp.plan_id, sp.monthly_price_usd, sp.display_name, sp.stripe_price_id,
              sp.is_active, sp.currency, sp.native_amount, sp.native_interval,
-             (SELECT COUNT(*) FROM users u WHERE u.mi_subscription_plan = sp.plan_id) AS subscriber_count
+             (SELECT COUNT(*) FROM mi_pro_subscriptions mi WHERE mi.plan = sp.plan_id) AS subscriber_count
         FROM subscription_plans sp
        ORDER BY sp.is_active DESC, sp.plan_id ASC
     `) as Array<SubscriptionPlanRow & {

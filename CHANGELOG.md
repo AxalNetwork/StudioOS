@@ -10,6 +10,47 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Market Intel Pro subscription state moved to a side table; multi-product webhook hardening (Task #6)
+
+- **Why:** the prod `users` table is at Cloudflare D1's hard 100-column limit, so
+  the `ALTER TABLE users ADD COLUMN` that used to bootstrap MI Pro's
+  `mi_subscription_*` columns always threw `too many columns` and re-threw out of
+  `routes/billing.ts::handleStripeEvent` — 500ing EVERY Stripe webhook and
+  blocking fulfilment for ALL products. D1 also rejects result sets wider than
+  100 columns, so MI Pro state cannot be JOINed into `SELECT * FROM users`. See
+  `.agents/memory/d1-users-column-limit.md`.
+- **New side table** `mi_pro_subscriptions(user_id PK, status, subscription_id,
+  plan, period_end, stripe_customer_id, updated_at)` (migration
+  `cloudflare-worker/sql/migrations/103_mi_pro_subscriptions.sql`) with a UNIQUE
+  index on `subscription_id`. `middleware/miAccess.ts::ensureMiPaywallSchema`
+  bootstraps the identical shape (incl. the UNIQUE index) — keep the two in
+  lockstep.
+- **`auth.ts::getCurrentUser`** keeps `SELECT * FROM users` (100 cols) then does a
+  SEPARATE keyed lookup into `mi_pro_subscriptions`, merged onto the user object
+  as `mi_subscription_*`/`mi_stripe_customer_id` (try/catch → `free`).
+- **`routes/billing.ts` webhook** — `checkout.session.completed` MI upserts by
+  `user_id`. `customer.subscription.created/updated` UPSERTs MI by `user_id`
+  (incl. `period_end`) when the event carries `kind=mi`, so an out-of-order
+  `created` arriving before checkout completes still creates the row WITH
+  `period_end`; legacy MI subs lacking metadata fall back to a
+  `subscription_id`-scoped update. `subscription.deleted` cancels by
+  `subscription_id`.
+- **Cross-product clobber fixed** — MI Pro and founder-tier Checkout now
+  propagate `subscription_data[metadata][kind|user_id|tier/plan]` (investor
+  already did) so `customer.subscription.*` events carry their product kind; the
+  founder-tier renewal fallback is gated `else if (isTier)` so MI/investor events
+  sharing a Stripe customer can no longer overwrite `users.subscription_*`. The MI
+  plan-catalog auto-register block runs only for confirmed MI events/rows.
+- **Reporting reads** (`services/analyticsReports.ts`,
+  `services/subscriptionPlans.ts`, `middleware/observability.ts`,
+  `routes/admin_billing.ts`, `routes/assistant.ts`) rewritten to JOIN/LEFT JOIN
+  `mi_pro_subscriptions` instead of reading `users.mi_subscription_*`.
+- Deployed to prod with Stripe TEST keys; migration applied to prod D1. Verified:
+  `/api/health` 200, unsigned webhook → 400 `invalid_signature` (not 500),
+  `mi-pro/status` unauth → 401. Webhook write lifecycle (incl. out-of-order
+  ordering + UNIQUE-safe resubscribe) and analytics JOINs validated directly
+  against prod D1 (no >100-col errors).
+
 ## Articles merged into one tabbed hub (Task #5)
 
 - **`frontend/src/pages/ArticlesPage.jsx`** is now a single Articles hub with two

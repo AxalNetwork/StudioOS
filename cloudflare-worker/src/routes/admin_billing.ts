@@ -519,12 +519,15 @@ adminBilling.get('/ltv', async (c) => {
   }
 
   const user = await c.env.DB.prepare(
-    `SELECT id, email, name,
-            stripe_customer_id, investor_stripe_customer_id, mi_stripe_customer_id,
-            subscription_tier, subscription_status,
-            investor_tier, investor_subscription_status,
-            mi_subscription_plan, mi_subscription_status
-       FROM users WHERE id = ? LIMIT 1`,
+    `SELECT u.id, u.email, u.name,
+            u.stripe_customer_id, u.investor_stripe_customer_id,
+            mi.stripe_customer_id AS mi_stripe_customer_id,
+            u.subscription_tier, u.subscription_status,
+            u.investor_tier, u.investor_subscription_status,
+            mi.plan AS mi_subscription_plan, mi.status AS mi_subscription_status
+       FROM users u
+       LEFT JOIN mi_pro_subscriptions mi ON mi.user_id = u.id
+       WHERE u.id = ? LIMIT 1`,
   ).bind(userId).first<Record<string, unknown>>().catch(() => null);
   if (!user) return c.json({ error: 'user_not_found', code: 'user_not_found' }, 404);
 

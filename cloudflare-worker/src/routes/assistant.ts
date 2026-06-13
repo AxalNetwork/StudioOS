@@ -842,11 +842,11 @@ export async function sweepExpiredConversations(env: Env): Promise<{ deleted_fre
   const KEEP = "(c.extended_retention = 1 OR COALESCE(u.assistant_retain_history, 0) = 1)";
   // Free tier (no active subscription, not extended) → 90 days.
   const free = await env.DB.prepare(
-    "DELETE FROM assistant_conversations WHERE id IN (SELECT c.id FROM assistant_conversations c JOIN users u ON u.id = c.user_id WHERE NOT " + KEEP + " AND c.updated_at < datetime('now','-90 days') AND COALESCE(u.mi_subscription_status,'') != 'active')"
+    "DELETE FROM assistant_conversations WHERE id IN (SELECT c.id FROM assistant_conversations c JOIN users u ON u.id = c.user_id LEFT JOIN mi_pro_subscriptions mi ON mi.user_id = u.id WHERE NOT " + KEEP + " AND c.updated_at < datetime('now','-90 days') AND COALESCE(mi.status,'') != 'active')"
   ).run().catch(() => null);
   // Paid tier → 1 year.
   const paid = await env.DB.prepare(
-    "DELETE FROM assistant_conversations WHERE id IN (SELECT c.id FROM assistant_conversations c JOIN users u ON u.id = c.user_id WHERE NOT " + KEEP + " AND c.updated_at < datetime('now','-1 year') AND COALESCE(u.mi_subscription_status,'') = 'active')"
+    "DELETE FROM assistant_conversations WHERE id IN (SELECT c.id FROM assistant_conversations c JOIN users u ON u.id = c.user_id LEFT JOIN mi_pro_subscriptions mi ON mi.user_id = u.id WHERE NOT " + KEEP + " AND c.updated_at < datetime('now','-1 year') AND COALESCE(mi.status,'') = 'active')"
   ).run().catch(() => null);
   // Extended retention (admin opt-in) → 5 years hard ceiling.
   await env.DB.prepare(

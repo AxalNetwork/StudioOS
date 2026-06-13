@@ -129,6 +129,15 @@ billing.post('/mi-pro/checkout', async (c) => {
     cancel_url: `${appUrl}/market-intel?upgrade_cancelled=1`,
     'metadata[user_id]': String(user.id),
     'metadata[plan]': plan,
+    'metadata[kind]': 'mi',                       // disambiguates from tier/investor in webhook
+    // Checkout session metadata does NOT cascade to the underlying Stripe
+    // Subscription. Propagate it via subscription_data[metadata] so the
+    // customer.subscription.created/updated webhook can identify MI Pro and
+    // upsert by user_id (incl. period_end) even when that event arrives
+    // before checkout.session.completed.
+    'subscription_data[metadata][kind]': 'mi',
+    'subscription_data[metadata][user_id]': String(user.id),
+    'subscription_data[metadata][plan]': plan,
     client_reference_id: String(user.id),
   };
   if (user.mi_stripe_customer_id) {
@@ -194,11 +203,12 @@ billing.all('/mi-pro/dev-upgrade', async (c) => {
   if (!isValidPlan(plan)) return c.json({ error: 'invalid_plan' }, 400);
   const periodEnd = new Date(Date.now() + 30 * 86400 * 1000).toISOString();
   await c.env.DB.prepare(
-    `UPDATE users SET mi_subscription_status = 'active',
-                       mi_subscription_plan = ?,
-                       mi_subscription_period_end = ?
-     WHERE id = ?`
-  ).bind(plan, periodEnd, user.id).run();
+    `INSERT INTO mi_pro_subscriptions (user_id, status, plan, period_end, updated_at)
+     VALUES (?, 'active', ?, ?, datetime('now'))
+     ON CONFLICT(user_id) DO UPDATE SET
+       status = 'active', plan = excluded.plan,
+       period_end = excluded.period_end, updated_at = datetime('now')`
+  ).bind(user.id, plan, periodEnd).run();
   // For browser-initiated flows (the dev checkout URL is opened in a new tab),
   // redirect back to the app instead of returning JSON.
   if (c.req.method === 'GET') {
@@ -257,6 +267,14 @@ billing.post('/tier/checkout', async (c) => {
     'metadata[user_id]': String(user.id),
     'metadata[tier]': tier,
     'metadata[kind]': 'tier',                     // disambiguates from MI Pro in webhook
+    // Checkout session metadata does NOT cascade to the underlying Stripe
+    // Subscription. Propagate via subscription_data[metadata] so the
+    // customer.subscription.created/updated webhook can positively identify
+    // a founder-tier event — without this the tier mirror cannot be scoped
+    // by kind and would clobber state shared on the same Stripe customer.
+    'subscription_data[metadata][kind]': 'tier',
+    'subscription_data[metadata][user_id]': String(user.id),
+    'subscription_data[metadata][tier]': tier,
     client_reference_id: `tier:${user.id}`,
   };
   if (user.stripe_customer_id) {
@@ -1142,13 +1160,18 @@ async function handleStripeEvent(
         return;
       }
       const plan = meta.plan ?? null;
+      // MI Pro state lives in the mi_pro_subscriptions side table (users is at
+      // D1's hard 100-column limit). Upsert by user_id.
       await env.DB.prepare(
-        `UPDATE users SET mi_subscription_status = 'active',
-                           mi_stripe_customer_id = COALESCE(?, mi_stripe_customer_id),
-                           mi_subscription_id = COALESCE(?, mi_subscription_id),
-                           mi_subscription_plan = COALESCE(?, mi_subscription_plan)
-         WHERE id = ?`
-      ).bind(customer, subscription, plan, userId).run();
+        `INSERT INTO mi_pro_subscriptions (user_id, status, subscription_id, plan, stripe_customer_id, updated_at)
+         VALUES (?, 'active', ?, ?, ?, datetime('now'))
+         ON CONFLICT(user_id) DO UPDATE SET
+           status = 'active',
+           subscription_id = COALESCE(excluded.subscription_id, mi_pro_subscriptions.subscription_id),
+           plan = COALESCE(excluded.plan, mi_pro_subscriptions.plan),
+           stripe_customer_id = COALESCE(excluded.stripe_customer_id, mi_pro_subscriptions.stripe_customer_id),
+           updated_at = datetime('now')`
+      ).bind(userId, subscription, plan, customer).run();
       return;
     }
     case 'customer.subscription.updated':
@@ -1206,8 +1229,11 @@ async function handleStripeEvent(
                              stripe_subscription_id = ?
            WHERE stripe_customer_id = ?`,
         ).bind(subTier, status, periodEnd, obj.id as string, customer).run();
-      } else {
-        // Status / renewal updates on a tier sub without explicit metadata.
+      } else if (isTier) {
+        // Founder-tier event whose subscription metadata didn't echo the tier
+        // string — update status/renewal only, leaving subscription_tier as set
+        // at checkout. Gated on isTier so MI Pro / investor events that share a
+        // Stripe customer can NEVER clobber the founder-tier columns.
         await env.DB.prepare(
           `UPDATE users SET subscription_status = ?,
                              subscription_renews_at = ?,
@@ -1215,34 +1241,67 @@ async function handleStripeEvent(
            WHERE stripe_customer_id = ?`,
         ).bind(status, periodEnd, obj.id as string, customer).run();
       }
-      // MI Pro mirror — unchanged behaviour for callers on mi_stripe_customer_id.
-      await env.DB.prepare(
-        `UPDATE users SET mi_subscription_status = ?,
-                           mi_subscription_id = ?,
-                           mi_subscription_period_end = ?
-         WHERE mi_stripe_customer_id = ?`
-      ).bind(status, obj.id as string, periodEnd, customer).run();
+      // MI Pro mirror — side table. When the event carries kind=mi metadata
+      // (propagated via subscription_data at checkout) UPSERT by user_id so an
+      // out-of-order customer.subscription.created — one that arrives BEFORE
+      // checkout.session.completed — still creates the row WITH period_end.
+      // Otherwise (legacy sub lacking kind metadata) fall back to a
+      // subscription_id-scoped update — but never for a tier/investor event, so
+      // those can never write an MI row that shares a Stripe customer.
+      const isMi = meta.kind === 'mi';
+      const miUserId = Number(meta.user_id);
+      // Tracks whether THIS event is actually an MI Pro event (so the
+      // MI-specific plan-catalog registration below only runs for MI events /
+      // rows — never for tier/investor or unknown-kind events).
+      let miRowTouched = false;
+      if (isMi && miUserId) {
+        await env.DB.prepare(
+          `INSERT INTO mi_pro_subscriptions (user_id, status, subscription_id, plan, period_end, stripe_customer_id, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(user_id) DO UPDATE SET
+             status = excluded.status,
+             subscription_id = COALESCE(excluded.subscription_id, mi_pro_subscriptions.subscription_id),
+             plan = COALESCE(excluded.plan, mi_pro_subscriptions.plan),
+             period_end = excluded.period_end,
+             stripe_customer_id = COALESCE(excluded.stripe_customer_id, mi_pro_subscriptions.stripe_customer_id),
+             updated_at = datetime('now')`
+        ).bind(miUserId, status, obj.id as string, meta.plan ?? null, periodEnd, customer).run();
+        miRowTouched = true;
+      } else if (!isTier && !isInvestor) {
+        const res = await env.DB.prepare(
+          `UPDATE mi_pro_subscriptions
+              SET status = ?, period_end = ?, updated_at = datetime('now')
+            WHERE subscription_id = ?`
+        ).bind(status, periodEnd, obj.id as string).run();
+        // Only a legacy MI sub (whose row actually exists) counts as MI here.
+        miRowTouched = ((res?.meta?.changes ?? 0) as number) > 0;
+      }
+      // Plan-catalog registration below is MI-Pro-specific. Run it ONLY for a
+      // confirmed MI event (kind=mi) or a legacy event that actually updated an
+      // MI row — never for tier/investor or unknown-kind events, so their price
+      // can never be auto-registered as an MI Pro plan.
+      if (!isMi && !miRowTouched) return;
       // Task #11 — auto-register the plan in `subscription_plans` so MRR/ARR
       // analytics include any plan launched in Stripe without a code change.
       // We pass the user's existing `mi_subscription_plan` as the preferred
-      // catalog key so the catalog row stays aligned with what's stored on
-      // the user (otherwise we could end up with users keyed on
-      // `mi_pro_monthly` while the catalog upsert keys on the Stripe
-      // `price.id`, leaving MRR at $0 for that user). When the user has no
+      // catalog key so the catalog row stays aligned with what's stored in the
+      // mi_pro_subscriptions side table (otherwise we could end up with the row
+      // keyed on `mi_pro_monthly` while the catalog upsert keys on the Stripe
+      // `price.id`, leaving MRR at $0 for that subscriber). When the row has no
       // plan yet (subscription event arriving before checkout.session.completed
-      // for some reason), we backfill `users.mi_subscription_plan` with the
-      // resolved plan_id so user + catalog stay in lockstep.
+      // for some reason), we backfill `mi_pro_subscriptions.plan` with the
+      // resolved plan_id so the side table + catalog stay in lockstep.
       // Wrapped because pricing-catalog upserts must never block billing state.
       try {
         const userRow = await env.DB.prepare(
-          'SELECT mi_subscription_plan FROM users WHERE mi_stripe_customer_id = ? LIMIT 1'
-        ).bind(customer).first<{ mi_subscription_plan: string | null }>();
-        const existingPlan = userRow?.mi_subscription_plan ?? null;
+          'SELECT plan FROM mi_pro_subscriptions WHERE subscription_id = ? LIMIT 1'
+        ).bind(obj.id as string).first<{ plan: string | null }>();
+        const existingPlan = userRow?.plan ?? null;
         // If Stripe is sending a price.id that doesn't match what the user's
         // existing catalog row was last seen with, treat it as a plan change
         // (e.g. upgrade/downgrade from the customer portal) — drop the
         // preferred-plan-id hint so the upsert keys on the new price.id and
-        // we re-align `users.mi_subscription_plan` below.
+        // we re-align `mi_pro_subscriptions.plan` below.
         let preferred: string | null = existingPlan;
         const itemPriceId = (((obj.items as { data?: Array<{ price?: { id?: string } }> } | undefined)?.data?.[0]?.price?.id)
           ?? ((obj.plan as { id?: string } | undefined)?.id)
@@ -1266,8 +1325,8 @@ async function handleStripeEvent(
         // the resolved plan_id falls back to the new price.id).
         if (resolvedPlan && resolvedPlan !== existingPlan) {
           await env.DB.prepare(
-            'UPDATE users SET mi_subscription_plan = ? WHERE mi_stripe_customer_id = ?'
-          ).bind(resolvedPlan, customer).run();
+            "UPDATE mi_pro_subscriptions SET plan = ?, updated_at = datetime('now') WHERE subscription_id = ?"
+          ).bind(resolvedPlan, obj.id as string).run();
         }
       } catch (e) {
         console.warn('[billing] plan catalog upsert failed:', (e as Error).message);
@@ -1282,9 +1341,9 @@ async function handleStripeEvent(
       // subscriptions (e.g. MI Pro + Investor Pro on the same customer)
       // only loses the entitlement that was actually cancelled.
       await env.DB.prepare(
-        `UPDATE users SET mi_subscription_status = 'cancelled'
-         WHERE mi_stripe_customer_id = ? AND mi_subscription_id = ?`
-      ).bind(customer, subId).run();
+        `UPDATE mi_pro_subscriptions SET status = 'cancelled', updated_at = datetime('now')
+         WHERE subscription_id = ?`
+      ).bind(subId).run();
       // Task #6 — drop the founder tier back to free when the tier sub ends.
       await env.DB.prepare(
         `UPDATE users SET subscription_tier = 'free',

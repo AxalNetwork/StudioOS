@@ -75,31 +75,34 @@ export function requireMiPro(c: Context<{ Bindings: Env }>, user: User | null, f
 
 let migrated = false;
 /**
- * Idempotent column bootstrap for D1. Each ALTER is wrapped individually
- * because SQLite throws "duplicate column" on re-add and we want the rest
- * of the statements to still run on first boot. The flag only flips after
- * every statement either succeeded or harmlessly failed on duplicate.
+ * Idempotent schema bootstrap for MI Pro. The `users` table is at D1's hard
+ * 100-column limit, so MI Pro subscription state CANNOT live as new columns on
+ * `users` (ALTER ADD COLUMN throws "too many columns" and used to 500 every
+ * Stripe webhook). It lives in its own side table keyed by user_id instead —
+ * hydrated onto the user object at auth time. See
+ * .agents/memory/d1-users-column-limit.md. CREATE ... IF NOT EXISTS is safe to
+ * re-run, so no per-statement try/catch is needed.
  */
 export async function ensureMiPaywallSchema(env: Env): Promise<void> {
   if (migrated) return;
   const stmts = [
-    `ALTER TABLE users ADD COLUMN mi_subscription_status TEXT NOT NULL DEFAULT 'free'`,
-    `ALTER TABLE users ADD COLUMN mi_subscription_id TEXT`,
-    `ALTER TABLE users ADD COLUMN mi_subscription_plan TEXT`,
-    `ALTER TABLE users ADD COLUMN mi_subscription_period_end TIMESTAMP`,
-    `ALTER TABLE users ADD COLUMN mi_stripe_customer_id TEXT`,
-    `CREATE INDEX IF NOT EXISTS idx_users_mi_status ON users(mi_subscription_status)`,
-    `CREATE INDEX IF NOT EXISTS idx_users_mi_customer ON users(mi_stripe_customer_id)`,
+    `CREATE TABLE IF NOT EXISTS mi_pro_subscriptions (
+       user_id INTEGER PRIMARY KEY,
+       status TEXT NOT NULL DEFAULT 'free',
+       subscription_id TEXT,
+       plan TEXT,
+       period_end TEXT,
+       stripe_customer_id TEXT,
+       updated_at TEXT DEFAULT (datetime('now'))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_mi_pro_customer ON mi_pro_subscriptions(stripe_customer_id)`,
+    // UNIQUE — must match migration 103. A Stripe subscription_id identifies at
+    // most one row; the webhook's subscription_id-scoped writes rely on it.
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_mi_pro_subscription ON mi_pro_subscriptions(subscription_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_mi_pro_status ON mi_pro_subscriptions(status)`,
   ];
   for (const s of stmts) {
-    try {
-      await env.DB.prepare(s).run();
-    } catch (e) {
-      const msg = (e as Error).message || '';
-      // SQLite emits "duplicate column name" once a column exists. Anything
-      // else is a real schema error and we want the next request to retry.
-      if (!/duplicate column/i.test(msg)) throw e;
-    }
+    await env.DB.prepare(s).run();
   }
   migrated = true;
 }
