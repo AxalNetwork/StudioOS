@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Accurate sales tax at checkout
+
+Checkout can now calculate and add the correct sales tax, VAT, or GST to subscriptions, plan upgrades, and company incorporation — based on your billing address — so your payment and receipt show the right total. This is ready to switch on once tax collection is configured for your regions; until then, totals are unchanged.
+
+---
+
 ## Refunds, disputes, and customer history for admins
 
 Admins have a new **Billing** area in the Admin Console. You can issue full or partial refunds in a few clicks — and when a refund applies to a referred purchase, any referral reward earned on that sale is automatically reversed, so the books stay correct. Each product follows its own refund rules (for example, incorporations can't be refunded once filing has started, and expert sessions have a 24-hour cancellation window), with a clear prompt if you need to override. You can also respond to card disputes by attaching evidence and submitting it to the payment processor, and look up any customer's lifetime spend with a list of their recent payments.

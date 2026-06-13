@@ -14,6 +14,7 @@ import {
   type PromoRow,
 } from '../services/promos';
 import { captureAndResolveAttribution, readRefCookie } from '../services/referralAttribution';
+import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
 
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 //
@@ -133,6 +134,10 @@ payments.post('/intent', async (c) => {
         'metadata[user_id]': String(user.id),
         'metadata[uid]': user.uid,
         'metadata[price_id]': price.id,
+        // Task #12 — Stripe Tax on the subscription (flag-gated; no-op when
+        // STRIPE_TAX_ENABLED is unset). Valid on Subscriptions; the customer
+        // must carry a tax-determinable address once the flag is on.
+        ...automaticTaxParams(stripeTaxEnabled(c.env)),
       };
       // Subscriptions redeem the promotion code NATIVELY — Stripe applies the
       // coupon per its `duration` and enforces applies_to[products] itself.

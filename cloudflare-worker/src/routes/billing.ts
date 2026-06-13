@@ -13,6 +13,7 @@ import {
 } from '../middleware/requireInvestorTier';
 import { upsertPlanFromStripeSubscription } from '../services/subscriptionPlans';
 import { priceForPlanMetadata, getCatalog } from '../services/catalog';
+import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
 
 // Epic 6 — Market Intel Pro billing surface.
 //
@@ -126,6 +127,12 @@ billing.post('/mi-pro/checkout', async (c) => {
   } else {
     params.customer_email = user.email;
   }
+  // Task #12 — Stripe Tax (flag-gated). Checkout collects the billing address;
+  // customer_update[address]=auto saves it back to an existing customer.
+  Object.assign(params, automaticTaxParams(stripeTaxEnabled(c.env), {
+    checkout: true,
+    hasExistingCustomer: !!params.customer,
+  }));
 
   try {
     const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params);
@@ -241,6 +248,11 @@ billing.post('/tier/checkout', async (c) => {
   } else {
     params.customer_email = user.email;
   }
+  // Task #12 — Stripe Tax (flag-gated).
+  Object.assign(params, automaticTaxParams(stripeTaxEnabled(c.env), {
+    checkout: true,
+    hasExistingCustomer: !!params.customer,
+  }));
 
   try {
     const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params);
@@ -383,6 +395,11 @@ billing.post('/investor/checkout', async (c) => {
   } else {
     params.customer_email = user.email;
   }
+  // Task #12 — Stripe Tax (flag-gated).
+  Object.assign(params, automaticTaxParams(stripeTaxEnabled(c.env), {
+    checkout: true,
+    hasExistingCustomer: !!params.customer,
+  }));
 
   try {
     const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params);

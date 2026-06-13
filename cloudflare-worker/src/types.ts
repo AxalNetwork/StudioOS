@@ -140,6 +140,15 @@ export interface Env {
   // falls back to a dev /dev-upgrade flow and Atlas calls are stubbed.
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
+  // Task #12 — master switch for Stripe Tax (automatic_tax). Default OFF.
+  // `automatic_tax[enabled]=true` is only valid on Checkout Sessions, Invoices
+  // and Subscriptions (NOT raw PaymentIntents) and only succeeds once Stripe
+  // Tax is activated in the dashboard (origin address + registrations) AND the
+  // customer has a tax-determinable address. Flipping this on before those ops
+  // steps are done makes Stripe reject the call → checkouts 502. Set to
+  // "1"/"true" via `wrangler secret put STRIPE_TAX_ENABLED --env production`
+  // only after Stripe Tax is live. See GOTCHAS.md "Stripe Tax".
+  STRIPE_TAX_ENABLED?: string;
   // Task #6 (DG) — Stripe Connect platform OAuth client id (`ca_…`).
   // Issued from the platform's Connect Settings page in the Stripe
   // dashboard. Together with STRIPE_SECRET_KEY this drives the founder

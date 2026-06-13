@@ -10,6 +10,7 @@ import { checkCompanyName } from '../services/nameCheck';
 import { stripeCall } from './billing';
 import { ensurePaymentsCustomer } from './payments';
 import { findCatalogPriceById, getCatalog } from '../services/catalog';
+import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
 import {
   ensureIncorporationsSchema,
   createPendingIncorporation,
@@ -415,6 +416,12 @@ legal.post('/incorporate/checkout', async (c) => {
     client_reference_id: `incorporation:${user.id}`,
   };
   if (user.email) params.customer_email = user.email;
+  // Task #12 — Stripe Tax (flag-gated). Checkout collects the billing address;
+  // this path uses customer_email so Checkout creates + addresses the customer.
+  Object.assign(params, automaticTaxParams(stripeTaxEnabled(c.env), {
+    checkout: true,
+    hasExistingCustomer: !!params.customer,
+  }));
 
   try {
     const session = await stripeCall<{ url: string; id: string; amount_total?: number }>(c.env, '/checkout/sessions', params);
@@ -594,6 +601,10 @@ legal.post('/incorporation/order', async (c) => {
       'metadata[incorporation_id]': String(incId),
       'metadata[user_id]': String(user.id),
       'metadata[jurisdiction_id]': j.id,
+      // Task #12 — Stripe Tax (flag-gated). Valid on Invoices; the finalized
+      // invoice's PaymentIntent then carries the computed tax in its amount.
+      // Requires the customer to have a tax-determinable address once enabled.
+      ...automaticTaxParams(stripeTaxEnabled(c.env)),
     });
     // 2) Add the incorporation fee as the sole line item on this invoice.
     await stripeCall(c.env, '/invoiceitems', {
