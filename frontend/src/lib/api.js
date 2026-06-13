@@ -101,6 +101,13 @@ export async function request(path, options = {}) {
           || currentPath === '/roadmap'
           || currentPath === '/about'
           || currentPath === '/contact'
+          // Task #5 — /articles is the public Articles hub (Browse tab is the
+          // default, anonymous-visible surface). Keep it reachable for signed-
+          // out visitors when a background fetch (settings/me) 401s. The
+          // auth-only sub-routes (/articles/mine, /articles/draft,
+          // /articles/edit/:id) are intentionally NOT listed so a genuine
+          // session expiry there still bounces to /login.
+          || currentPath === '/articles'
           || currentPath.startsWith('/pricing/')
           || currentPath.startsWith('/partner-onboarding/')
           || currentPath.startsWith('/partners/onboard')

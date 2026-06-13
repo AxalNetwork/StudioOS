@@ -10,6 +10,26 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Articles merged into one tabbed hub (Task #5)
+
+- **`frontend/src/pages/ArticlesPage.jsx`** is now a single Articles hub with two
+  tabs instead of a public-only feed. `BrowseTab` holds the former public feed
+  (search/role/sector filters, featured strip, pagination, `PAGE_SIZE=12`,
+  `ArticleCard`). `MyArticlesTab` folds in the former `MyArticlesPage` content
+  (status badges via `STATUS_LABEL`/`STATUS_BADGE`, View live, Edit). A
+  "Write an article" button (signed-in only) links to `/articles/draft`, which
+  still opens the unchanged full-screen `ArticleAuthorPage` editor.
+- Active tab is derived from the route, not internal state: `/articles` →
+  Browse, `/articles/mine` → My Articles. Tab clicks `navigate()` between the
+  two so tabs are deep-linkable. The My Articles tab + Write button only render
+  when `useAuth().user` is present.
+- **`frontend/src/App.jsx`** — `/articles/mine` now renders `authOnly(<ArticlesPage />)`
+  (was `MyArticlesPage`); the standalone `MyArticlesPage` lazy import is removed.
+- **Removed** `frontend/src/pages/MyArticlesPage.jsx` (folded into the hub).
+- No backend/API or routing (`wrangler.toml`) changes — `/articles/*` apex
+  routing already covers `/articles/mine`, and the `articles.list`/`articles.mine`
+  endpoints are unchanged.
+
 ## Incorporation order status polling & failure surface (Task #1)
 
 - **`useIncorporationStatus` hook** (`frontend/src/hooks/useIncorporationStatus.js`): polls `GET /api/legal/incorporate/status?id=<id>` every 5 s, stops on terminal states (`packet_ready`, `documents_ready`, `failed`) or after 60 attempts (5 min). Returns `{ status, data, error, timedOut, polling }`.

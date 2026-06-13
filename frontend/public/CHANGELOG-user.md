@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Articles, all in one place
+
+Articles now live on a single page with two tabs. **Browse** shows everyone's published writing from across the Axal network — search it, or filter by author type and sector. **My Articles** is your own work: every draft, submission, and published piece with its status, word count, and view count, plus quick Edit and View live links. A **Write an article** button sits at the top right and opens the full editor whenever you're ready to start a new piece. Old links to your articles list still work and now drop you straight on the My Articles tab.
+
+---
+
 ## Live filing status after incorporation payment
 
 After paying the incorporation fee, the Done screen now shows a live status pill that updates automatically — "Preparing documents", "Processing packet", or "Documents ready" — so you always know where your filing stands. If something goes wrong or the process takes too long, a clear panel appears with a support link and your order ID to quote. The same status information is now visible on the Legal page under a new "Pending Filings" section, so you're never left wondering even if you navigate away from the wizard.
