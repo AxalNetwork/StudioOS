@@ -1295,6 +1295,14 @@ async function handleStripeEvent(
         });
         return;
       }
+      // Task #6 — embedded-terminal incorporation fee. The invoice's PI carries
+      // metadata.kind='incorporation' + incorporation_id; mark the order paid and
+      // advance the filing workflow (enqueues the packet pipeline). Idempotent.
+      if (meta.kind === 'incorporation') {
+        const { recordPaidIncorporationFromPaymentIntent } = await import('../services/incorporations');
+        await recordPaidIncorporationFromPaymentIntent(env, obj as any);
+        return;
+      }
       return;
     }
     default:

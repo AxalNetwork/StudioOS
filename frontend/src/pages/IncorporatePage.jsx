@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { useNavigate } from 'react-router-dom';
 import {
-  Building2, Globe2, CheckCircle2, Circle, Loader2, ArrowRight, ArrowLeft,
-  AlertTriangle, ExternalLink, FileText, Sparkles, Scale, DollarSign, Clock,
+  Building2, Globe2, CheckCircle2, Loader2, ArrowRight, ArrowLeft,
+  AlertTriangle, Sparkles, Scale, DollarSign, Clock,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
+import AxalCheckout from '../components/AxalCheckout';
 
 // Task #30 — Jurisdiction wizard + incorporation flow.
 //
@@ -25,8 +26,21 @@ const STEPS = [
   { id: 'goals', label: 'Tell us your goals', icon: Sparkles },
   { id: 'compare', label: 'Compare jurisdictions', icon: Globe2 },
   { id: 'confirm', label: 'Company details', icon: Building2 },
+  { id: 'payment', label: 'Pay & file', icon: DollarSign },
   { id: 'done', label: 'Done', icon: CheckCircle2 },
 ];
+
+function formatMoney(cents, currency) {
+  const amt = (Number(cents) || 0) / 100;
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: (currency || 'usd').toUpperCase(),
+    }).format(amt);
+  } catch {
+    return `${amt.toFixed(2)} ${(currency || '').toUpperCase()}`.trim();
+  }
+}
 
 function recommend(answers) {
   // Tiny rules engine — favours fundraising-friendly jurisdictions when
@@ -376,65 +390,181 @@ function ConfirmStep({ jurisdiction, projects, form, setForm, nameCheck, nameChe
   );
 }
 
-function DoneStep({ result, navigate }) {
-  if (!result) return null;
-  const docs = result.documents || [];
-  const handoff = result.handoff || {};
+// Task #6 — embedded payment step. Renders the one-time incorporation fee in
+// the in-app Stripe terminal (no Checkout redirect). On success we advance to
+// the Done step; the `payment_intent.succeeded` webhook marks the order paid
+// server-side and enqueues the filing packet pipeline.
+function PaymentStep({ jurisdiction, order, onPaid }) {
+  if (!order) return null;
   return (
     <div className="space-y-5">
-      <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex items-start gap-3">
+      <div className="bg-violet-50 border border-violet-200 rounded-lg p-4 dark:bg-violet-950/30 dark:border-violet-900/50">
+        <div className="text-sm font-semibold text-violet-900 mb-1 flex items-center gap-2 dark:text-violet-200">
+          <DollarSign size={16} /> {jurisdiction?.label} incorporation fee
+        </div>
+        <div className="text-xs text-violet-800 dark:text-violet-300">
+          Pay the one-time filing fee below. We start preparing your founder
+          document set the moment payment clears — you'll never leave this page.
+        </div>
+        <div className="mt-2 text-lg font-bold text-violet-900 dark:text-violet-100">
+          {formatMoney(order.amount_cents, order.currency)}
+        </div>
+      </div>
+
+      <AxalCheckout
+        clientSecret={order.client_secret}
+        submitLabel={`Pay ${formatMoney(order.amount_cents, order.currency)}`}
+        onSuccess={onPaid}
+      />
+    </div>
+  );
+}
+
+// Task #6 — annual Registered Agent recurring opt-in, charged through the same
+// embedded terminal. Opt-in is optional and never blocks the founder.
+function RegisteredAgentOptIn({ offer }) {
+  const [opted, setOpted] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
+  if (!offer?.price_id) return null;
+
+  if (subscribed) {
+    return (
+      <div className="border border-emerald-200 rounded-lg p-4 bg-emerald-50 flex items-start gap-2 dark:border-emerald-900/50 dark:bg-emerald-950/30">
+        <CheckCircle2 className="text-emerald-600 flex-shrink-0 mt-0.5" size={18} />
+        <div className="text-sm text-emerald-900 dark:text-emerald-200">
+          You're enrolled in <strong>{offer.product_name}</strong>. It renews
+          automatically and appears as its own invoice in Billing.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-4 dark:border-gray-800">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            Add {offer.product_name}
+          </div>
+          <div className="text-xs text-gray-600 mt-0.5 dark:text-gray-400">
+            Stay compliant year-round. We act as your registered agent and handle
+            statutory mail and annual reminders.
+            {offer.amount_cents != null && (
+              <> {' '}<span className="font-semibold text-gray-800 dark:text-gray-200">
+                {formatMoney(offer.amount_cents, offer.currency)}/{offer.interval || 'year'}
+              </span>.</>
+            )}
+          </div>
+        </div>
+        {!opted && (
+          <button
+            type="button"
+            onClick={() => setOpted(true)}
+            className="flex-shrink-0 bg-violet-600 hover:bg-violet-700 text-white text-sm px-3 py-1.5 rounded-md"
+          >
+            Add
+          </button>
+        )}
+      </div>
+      {opted && (
+        <div className="mt-4">
+          <AxalCheckout
+            priceId={offer.price_id}
+            submitLabel="Subscribe"
+            onSuccess={() => setSubscribed(true)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Task #6 — compliance one-offs as à la carte catalog products, purchasable via
+// the embedded terminal. Read-only list until the founder picks one to buy.
+function ComplianceAddons({ products }) {
+  const [selected, setSelected] = useState(null);
+  const [bought, setBought] = useState({});
+  if (!products || products.length === 0) return null;
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-4 dark:border-gray-800">
+      <div className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2 dark:text-gray-300">
+        Compliance add-ons
+      </div>
+      <div className="text-xs text-gray-500 mb-3">
+        Optional one-time compliance services. Add any you need now or later.
+      </div>
+      <ul className="space-y-2">
+        {products.map((p) => {
+          const price = (p.prices || []).find((pr) => pr.active && pr.type !== 'recurring') || (p.prices || [])[0];
+          const isSelected = selected === p.id;
+          const isBought = bought[p.id];
+          return (
+            <li key={p.id} className="border border-gray-100 rounded-md p-3 dark:border-gray-800">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{p.name}</div>
+                  {p.description && <div className="text-xs text-gray-500 mt-0.5">{p.description}</div>}
+                  {price && (
+                    <div className="text-xs font-semibold text-gray-800 mt-1 dark:text-gray-200">
+                      {formatMoney(price.unit_amount, price.currency)}
+                    </div>
+                  )}
+                </div>
+                {isBought ? (
+                  <span className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                    <CheckCircle2 size={14} /> Added
+                  </span>
+                ) : price ? (
+                  <button
+                    type="button"
+                    onClick={() => setSelected(isSelected ? null : p.id)}
+                    className="flex-shrink-0 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm px-3 py-1.5 rounded-md dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                  >
+                    {isSelected ? 'Cancel' : 'Purchase'}
+                  </button>
+                ) : null}
+              </div>
+              {isSelected && price && !isBought && (
+                <div className="mt-3">
+                  <AxalCheckout
+                    priceId={price.id}
+                    submitLabel={`Pay ${formatMoney(price.unit_amount, price.currency)}`}
+                    onSuccess={() => {
+                      setBought((b) => ({ ...b, [p.id]: true }));
+                      setSelected(null);
+                    }}
+                  />
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function DoneStep({ jurisdiction, order, raOffer, complianceProducts, navigate }) {
+  if (!order) return null;
+  return (
+    <div className="space-y-5">
+      <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex items-start gap-3 dark:bg-emerald-950/30 dark:border-emerald-900/50">
         <CheckCircle2 className="text-emerald-600 flex-shrink-0 mt-0.5" size={20} />
         <div>
-          <div className="text-sm font-semibold text-emerald-900">
-            {result.entity?.reused ? 'Documents refreshed' : `${result.entity?.name} set up in ${result.jurisdiction?.label}`}
+          <div className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+            Payment received — {jurisdiction?.label} filing started
           </div>
-          <div className="text-xs text-emerald-800 mt-0.5">
-            {docs.length} document{docs.length === 1 ? '' : 's'} generated and attached to your project.
+          <div className="text-xs text-emerald-800 mt-0.5 dark:text-emerald-300">
+            We're preparing your founder document set now. It'll appear under your
+            project in Legal shortly, and your receipt is in Billing.
           </div>
         </div>
       </div>
 
-      {handoff.type === 'stripe_atlas' && handoff.url && (
-        <a
-          href={handoff.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block bg-violet-600 hover:bg-violet-700 text-white rounded-lg p-4 transition-colors"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold flex items-center gap-2">
-                Continue on Stripe Atlas
-                <ExternalLink size={14} />
-              </div>
-              <div className="text-xs opacity-90 mt-0.5">{handoff.summary}</div>
-            </div>
-            <ArrowRight size={20} />
-          </div>
-        </a>
-      )}
+      <RegisteredAgentOptIn offer={raOffer} />
 
-      {handoff.type === 'documents_only' && (handoff.next_steps || []).length > 0 && (
-        <div className="border border-gray-200 rounded-lg p-4 dark:border-gray-800">
-          <div className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2 dark:text-gray-300">Next steps</div>
-          <ul className="text-sm text-gray-800 space-y-1.5 list-decimal pl-5 dark:text-gray-200">
-            {handoff.next_steps.map((s) => <li key={s}>{s}</li>)}
-          </ul>
-        </div>
-      )}
-
-      <div>
-        <div className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2 dark:text-gray-300">Generated documents</div>
-        <ul className="space-y-1">
-          {docs.map((d) => (
-            <li key={d.id} className="flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200">
-              <FileText size={14} className="text-violet-600" />
-              <span>{d.title}</span>
-              {d.reused && <span className="text-[10px] text-gray-500 uppercase tracking-wide">existing</span>}
-            </li>
-          ))}
-        </ul>
-      </div>
+      <ComplianceAddons products={complianceProducts} />
 
       <div className="flex items-center gap-2 pt-2">
         <button
@@ -442,6 +572,12 @@ function DoneStep({ result, navigate }) {
           className="bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2 rounded-md inline-flex items-center gap-1.5"
         >
           Open Legal <ArrowRight size={14} />
+        </button>
+        <button
+          onClick={() => navigate('/billing')}
+          className="border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm px-4 py-2 rounded-md inline-flex items-center gap-1.5 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+        >
+          View Billing
         </button>
         <button
           onClick={() => navigate('/incorporate')}
@@ -463,7 +599,10 @@ export default function IncorporatePage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState(null);
+  // Task #6 — embedded-terminal order state (client_secret + RA offer) and the
+  // compliance à la carte catalog surfaced on the Done step.
+  const [order, setOrder] = useState(null);
+  const [complianceProducts, setComplianceProducts] = useState([]);
   // Task #10 — live company-name availability state.
   const [nameCheck, setNameCheck] = useState(null);
   const [nameChecking, setNameChecking] = useState(false);
@@ -573,16 +712,21 @@ export default function IncorporatePage() {
     }
     setBusy(true); setErr('');
     try {
-      // Task #11 — per-jurisdiction Stripe Checkout.
-      const res = await api.legalIncorporateCheckout({
+      // Task #6 — embedded-terminal order. Returns a PaymentIntent client_secret
+      // (confirmed in-app, no Checkout redirect) + an optional Registered Agent
+      // subscription offer. In dev (no Stripe key) the order is marked paid
+      // immediately, so we skip straight to Done.
+      const res = await api.legalIncorporationOrder({
         project_id: form.project_id,
         jurisdiction_id: selectedId,
         company_name: form.company_name.trim(),
         registered_agent_name: form.registered_agent_name || null,
         registered_agent_address: form.registered_agent_address || null,
       });
-      // Redirect to Stripe (or the dev-complete URL in dev).
-      window.location.href = res.url;
+      setOrder(res);
+      setBusy(false);
+      // Step 3 = payment, 4 = done. Dev fallback paid → jump to done.
+      setStep(res?.dev || res?.status === 'paid' ? 4 : 3);
     } catch (e) {
       const status = e?.status;
       const msg = (e?.message || '').toLowerCase();
@@ -594,6 +738,22 @@ export default function IncorporatePage() {
         setErr('Submission failed. Please retry in a moment, or contact support if it persists.');
       }
       setBusy(false);
+    }
+  };
+
+  // Task #6 — once payment clears in-app, advance to Done and lazily fetch the
+  // compliance à la carte catalog for the add-ons section. A failure here is
+  // non-blocking — the Done step simply omits the add-ons.
+  const handlePaid = async () => {
+    setStep(4);
+    try {
+      const res = await api.catalogProducts('alacarte');
+      const list = (res?.products || res || []).filter(
+        (p) => p?.active && (p?.metadata?.category === 'compliance'),
+      );
+      setComplianceProducts(list);
+    } catch {
+      setComplianceProducts([]);
     }
   };
 
@@ -648,7 +808,22 @@ export default function IncorporatePage() {
                 setSkipNameCheck={setSkipNameCheck}
               />
             )}
-            {step === 3 && <DoneStep result={result} navigate={navigate} />}
+            {step === 3 && (
+              <PaymentStep
+                jurisdiction={selected}
+                order={order}
+                onPaid={handlePaid}
+              />
+            )}
+            {step === 4 && (
+              <DoneStep
+                jurisdiction={selected}
+                order={order}
+                raOffer={order?.registered_agent}
+                complianceProducts={complianceProducts}
+                navigate={navigate}
+              />
+            )}
           </>
         )}
 

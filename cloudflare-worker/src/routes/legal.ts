@@ -8,9 +8,14 @@ import { getActiveTemplateBody } from '../services/legalTemplateStore';
 import { applyMergeFields } from '../services/mergeFields';
 import { checkCompanyName } from '../services/nameCheck';
 import { stripeCall } from './billing';
+import { ensurePaymentsCustomer } from './payments';
+import { findCatalogPriceById, getCatalog } from '../services/catalog';
 import {
   ensureIncorporationsSchema,
   createPendingIncorporation,
+  createPendingIncorporationOrder,
+  attachIncorporationPaymentIntent,
+  recordPaidIncorporationFromPaymentIntent,
   getIncorporationForUser,
 } from '../services/incorporations';
 
@@ -432,6 +437,211 @@ legal.post('/incorporate/checkout', async (c) => {
     return c.json({ url: session.url, incorporation_id: incId, session_id: session.id });
   } catch (e) {
     return c.json({ error: 'checkout_failed', detail: (e as Error).message }, 502);
+  }
+});
+
+// Task #6 — embedded-terminal incorporation order.
+//   POST /incorporation/order → creates a one-time Stripe Invoice (so the fee
+//   appears in the Billing dashboard) whose PaymentIntent is confirmed in-app
+//   via Stripe Elements (no Checkout redirect), plus a pending order row. The
+//   `payment_intent.succeeded` webhook marks the row paid + advances the filing
+//   workflow. Also returns an optional annual "Registered Agent" subscription
+//   offer the founder can opt into via the same embedded terminal.
+
+interface IncorporationPrice { amountCents: number; currency: string; priceId?: string }
+
+/**
+ * Resolve the incorporation fee for a jurisdiction. Prefers a configured Stripe
+ * price (env id → catalog `incorporation` product tagged with the jurisdiction)
+ * and falls back to the hardcoded cost table so the flow stays testable.
+ */
+async function resolveIncorporationPrice(
+  env: Env,
+  jurisdictionId: string,
+): Promise<IncorporationPrice> {
+  const fallback = JURISDICTION_COSTS[jurisdictionId] ?? 0;
+  // 1) Explicit env price id for this jurisdiction.
+  const priceEnvKey = JURISDICTION_PRICE_ENV[jurisdictionId];
+  const envPriceId = (env as unknown as Record<string, unknown>)[priceEnvKey] as string | undefined;
+  if (envPriceId) {
+    try {
+      const p = await findCatalogPriceById(env, envPriceId);
+      if (p && typeof p.unit_amount === 'number' && p.unit_amount > 0) {
+        return { amountCents: p.unit_amount, currency: p.currency || 'usd', priceId: p.id };
+      }
+    } catch { /* fall through to catalog/metadata + fallback */ }
+  }
+  // 2) Catalog incorporation product tagged with this jurisdiction.
+  try {
+    const products = await getCatalog(env, 'incorporation');
+    const prod = products.find((pp) => pp.active && pp.metadata.jurisdiction_id === jurisdictionId);
+    const oneTime = prod?.prices.find((pr) => pr.active && pr.type !== 'recurring' && typeof pr.unit_amount === 'number' && (pr.unit_amount as number) > 0);
+    if (oneTime) {
+      return { amountCents: oneTime.unit_amount as number, currency: oneTime.currency || 'usd', priceId: oneTime.id };
+    }
+  } catch { /* fall through to fallback */ }
+  return { amountCents: fallback, currency: 'usd' };
+}
+
+interface RegisteredAgentOffer {
+  price_id: string;
+  amount_cents: number | null;
+  currency: string;
+  interval: string | null;
+  product_name: string;
+}
+
+/**
+ * Resolve the annual Registered Agent subscription offer from the catalog: a
+ * `subscription` product whose metadata flags it as the registered-agent SKU
+ * (`metadata.category === 'registered_agent'` or `metadata.plan === 'registered_agent'`).
+ * Returns `null` when not configured so the wizard simply omits the opt-in.
+ */
+async function resolveRegisteredAgentOffer(env: Env): Promise<RegisteredAgentOffer | null> {
+  try {
+    const products = await getCatalog(env, 'subscription');
+    const prod = products.find(
+      (pp) => pp.active && (pp.metadata.category === 'registered_agent' || pp.metadata.plan === 'registered_agent'),
+    );
+    if (!prod) return null;
+    const recurring = prod.prices.filter((pr) => pr.active && pr.type === 'recurring');
+    const price = recurring.find((pr) => pr.interval === 'year') ?? recurring[0];
+    if (!price) return null;
+    return {
+      price_id: price.id,
+      amount_cents: price.unit_amount,
+      currency: price.currency || 'usd',
+      interval: price.interval,
+      product_name: prod.name,
+    };
+  } catch {
+    return null;
+  }
+}
+
+legal.post('/incorporation/order', async (c) => {
+  const user = await requireAuth(c);
+  await ensureIncorporationsSchema(c.env);
+  const body = await c.req.json<{
+    project_id: number;
+    jurisdiction_id: string;
+    company_name: string;
+    registered_agent_name?: string | null;
+    registered_agent_address?: string | null;
+  }>().catch(() => ({} as any));
+
+  const j = JURISDICTIONS.find((x) => x.id === body.jurisdiction_id);
+  if (!j) return c.json({ error: `Unknown jurisdiction: ${body.jurisdiction_id}` }, 400);
+  const companyName = body.company_name?.trim();
+  if (!companyName) return c.json({ error: 'company_name is required' }, 400);
+
+  const sql = getSQL(c.env);
+  const projRows = await sql`SELECT id, name, founder_id FROM projects WHERE id = ${body.project_id}`;
+  if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+  const project = projRows[0] as any;
+  // Ownership: admin/partner OR founder-owns-project. Investors blocked.
+  if (user.role !== 'admin' && user.role !== 'partner') {
+    const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
+    if (!ownsProject) { await sql.end(); return c.json({ error: 'Forbidden: you do not own this project' }, 403); }
+  }
+  await sql.end();
+
+  const { amountCents, currency } = await resolveIncorporationPrice(c.env, j.id);
+  const raOffer = await resolveRegisteredAgentOffer(c.env);
+
+  const orderArgs = {
+    user_id: user.id,
+    project_id: project.id,
+    jurisdiction_id: j.id,
+    company_name: companyName,
+    registered_agent_name: body.registered_agent_name ?? null,
+    registered_agent_address: body.registered_agent_address ?? null,
+    amount_cents: amountCents,
+    currency,
+  };
+
+  // Dev fallback — no Stripe configured: persist the order and mark it paid so
+  // the wizard's embedded flow is testable without real payment.
+  if (!c.env.STRIPE_SECRET_KEY) {
+    const incId = await createPendingIncorporationOrder(c.env, orderArgs);
+    await recordPaidIncorporationFromPaymentIntent(c.env, {
+      id: `dev_pi_${incId}`,
+      metadata: { incorporation_id: String(incId), user_id: String(user.id) },
+      amount: amountCents,
+      currency,
+    });
+    return c.json({
+      dev: true,
+      incorporation_id: incId,
+      status: 'paid',
+      amount_cents: amountCents,
+      currency,
+      registered_agent: raOffer,
+    });
+  }
+
+  const incId = await createPendingIncorporationOrder(c.env, orderArgs);
+  try {
+    const customer = await ensurePaymentsCustomer(c.env, user as any);
+    // 1) Create the invoice WITHOUT pulling other pending items.
+    const inv = await stripeCall<{ id: string }>(c.env, '/invoices', {
+      customer,
+      collection_method: 'charge_automatically',
+      auto_advance: 'false',
+      pending_invoice_items_behavior: 'exclude',
+      'payment_settings[payment_method_types][0]': 'card',
+      'metadata[kind]': 'incorporation',
+      'metadata[incorporation_id]': String(incId),
+      'metadata[user_id]': String(user.id),
+      'metadata[jurisdiction_id]': j.id,
+    });
+    // 2) Add the incorporation fee as the sole line item on this invoice.
+    await stripeCall(c.env, '/invoiceitems', {
+      customer,
+      invoice: inv.id,
+      amount: String(amountCents),
+      currency,
+      description: `Incorporation — ${j.label} — ${companyName}`,
+    });
+    // 3) Finalize → Stripe mints the PaymentIntent we confirm in-app.
+    const finalized = await stripeCall<{
+      id: string;
+      payment_intent: { id: string; client_secret: string } | string;
+    }>(c.env, `/invoices/${inv.id}/finalize`, { 'expand[0]': 'payment_intent' });
+
+    let piId: string;
+    let clientSecret: string;
+    if (typeof finalized.payment_intent === 'string') {
+      const piObj = await stripeCall<{ id: string; client_secret: string }>(
+        c.env, `/payment_intents/${finalized.payment_intent}`, {}, { method: 'GET' },
+      );
+      piId = piObj.id; clientSecret = piObj.client_secret;
+    } else {
+      piId = finalized.payment_intent.id;
+      clientSecret = finalized.payment_intent.client_secret;
+    }
+
+    // 4) Stamp metadata so `payment_intent.succeeded` dispatches to the
+    //    incorporation fulfilment branch (the invoice's PI doesn't inherit it).
+    await stripeCall(c.env, `/payment_intents/${piId}`, {
+      'metadata[kind]': 'incorporation',
+      'metadata[incorporation_id]': String(incId),
+      'metadata[user_id]': String(user.id),
+      'metadata[jurisdiction_id]': j.id,
+    });
+    await attachIncorporationPaymentIntent(c.env, incId, piId);
+
+    return c.json({
+      incorporation_id: incId,
+      client_secret: clientSecret,
+      payment_intent_id: piId,
+      invoice_id: inv.id,
+      amount_cents: amountCents,
+      currency,
+      registered_agent: raOffer,
+    });
+  } catch (e) {
+    return c.json({ error: 'order_failed', detail: (e as Error).message }, 502);
   }
 });
 

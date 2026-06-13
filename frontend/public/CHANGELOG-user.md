@@ -5,6 +5,14 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Pay to incorporate without leaving Axal
+
+Incorporating your company now finishes right inside Axal. After you pick a jurisdiction and confirm your details, you pay the one-time filing fee on an Axal-branded payment form — no being sent off to a separate checkout page. The moment your payment clears, we start preparing your founder documents.
+
+You can also add an annual **Registered Agent** service to stay compliant year-round, and pick up optional one-time compliance services — all paid in the same place. Each appears as its own receipt in your Billing area, and your card details are handled securely by Stripe and never touch Axal's servers.
+
+---
+
 ## Promo codes at checkout
 
 You can now enter a promo code when paying inside Axal. Type your code on the payment form and the discount is applied instantly — you'll see the updated price before you pay. If a code is 100% off, your order completes for free with a single click, no card needed. Codes can be limited to specific products and to a set number of uses, so some may not apply to every purchase.

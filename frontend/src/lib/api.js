@@ -338,6 +338,15 @@ export const api = {
   // Task #11 — per-jurisdiction Stripe Checkout (replaces free wizard submit).
   legalIncorporateCheckout: (data) =>
     request('/legal/incorporate/checkout', { method: 'POST', body: JSON.stringify(data) }),
+  // Task #6 — embedded-terminal incorporation order. Creates a one-time Stripe
+  // Invoice whose PaymentIntent is confirmed in-app (no Checkout redirect) plus
+  // a pending order row, and returns an optional annual Registered Agent
+  // subscription offer. Body: { project_id, jurisdiction_id, company_name,
+  // registered_agent_name?, registered_agent_address? } →
+  //   { incorporation_id, client_secret, payment_intent_id, invoice_id,
+  //     amount_cents, currency, registered_agent } | { dev:true, status:'paid', … }
+  legalIncorporationOrder: (data) =>
+    request('/legal/incorporation/order', { method: 'POST', body: JSON.stringify(data) }),
   legalIncorporateStatus: (id) =>
     request(`/legal/incorporate/status?id=${encodeURIComponent(id)}`),
   // Legacy free wizard — still available for admin/back-compat (admin only).
