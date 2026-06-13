@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Earn referral rewards on anything you refer
+
+Referrals now pay off on any purchase, not just subscriptions. When someone arrives through your referral link and later buys any eligible product, you earn a commission on that sale automatically. We remember the referral for 30 days from the first visit, so the reward still lands even if they buy a little later. Eligible products show a referral reward, and your earnings flow into your usual payouts.
+
+---
+
 ## Pay to incorporate without leaving Axal
 
 Incorporating your company now finishes right inside Axal. After you pick a jurisdiction and confirm your details, you pay the one-time filing fee on an Axal-branded payment form — no being sent off to a separate checkout page. The moment your payment clears, we start preparing your founder documents.

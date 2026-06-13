@@ -13,6 +13,7 @@ import {
   STRIPE_MIN_CHARGE_CENTS,
   type PromoRow,
 } from '../services/promos';
+import { captureAndResolveAttribution, readRefCookie } from '../services/referralAttribution';
 
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 //
@@ -252,6 +253,21 @@ async function createPaymentIntent(
     'metadata[uid]': args.user.uid,
   };
   for (const [k, v] of Object.entries(args.metadata)) params[`metadata[${k}]`] = v;
+
+  // Task #8 — universal referral attribution. Resolve the buyer's first-touch
+  // referral (from the `axal_ref` cookie / prior touch) and stamp it onto the
+  // PaymentIntent so the webhook can pay a commission on ANY sold SKU. This is
+  // best-effort: a missing/expired/self attribution simply leaves the PI
+  // unattributed and never blocks the charge.
+  const attribution = await captureAndResolveAttribution(
+    c.env,
+    args.user.id,
+    readRefCookie(c.req.header('Cookie')),
+  );
+  if (attribution) {
+    params['metadata[referral_code]'] = attribution.referralCode;
+    params['metadata[referrer_user_id]'] = String(attribution.referrerUserId);
+  }
   if (args.description) params.description = args.description.slice(0, 500);
   try {
     const intent = await stripeCall<{ id: string; client_secret: string; status: string }>(

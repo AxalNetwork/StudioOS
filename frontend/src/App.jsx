@@ -982,6 +982,24 @@ function AppInner() {
     window.location.href = '/';
   };
 
+  // Task #8 — Universal referral attribution. Capture a `?ref=CODE` from ANY
+  // entry point (not just /register) into the `axal_ref` cookie so a later
+  // purchase of ANY SKU can pay the referrer a commission. First-touch wins:
+  // we never overwrite an existing cookie. 30-day window, SameSite=Lax so it
+  // survives the cross-domain marketing → app hop.
+  useEffect(() => {
+    try {
+      const code = new URLSearchParams(window.location.search).get('ref');
+      if (!code) return;
+      const normalized = code.trim().toUpperCase().replace(/^AXAL[-_]?/, '').replace(/[^A-Z0-9]/g, '');
+      if (!normalized) return;
+      const already = document.cookie.split(';').some((c) => c.trim().startsWith('axal_ref='));
+      if (already) return; // first-touch wins
+      const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+      document.cookie = `axal_ref=${encodeURIComponent(normalized)}; path=/; max-age=2592000; SameSite=Lax${secure}`;
+    } catch { /* attribution must never break navigation */ }
+  }, []);
+
   // T20 — cross-tab `user` sync now lives inside AuthProvider; the
   // realUser mirror still lives here because it's only relevant to the
   // admin impersonation flow handled in this component.

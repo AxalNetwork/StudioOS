@@ -1272,6 +1272,41 @@ async function handleStripeEvent(
           paymentIntentId: promoPiId,
         });
       }
+      // Task #8 — universal referral commission. ANY PI stamped at creation
+      // with referral attribution (referral_code + referrer_user_id + price_id)
+      // earns the referrer a commission off the product's `commission_pct`
+      // catalog metadata. Runs BEFORE the kind dispatch so it fires even for
+      // kinds that return early (alacarte / booking / incorporation). Fully
+      // best-effort: any failure here must never block fulfilment.
+      try {
+        const refCode = (meta.referral_code || '').trim();
+        const referrerUserId = Number(meta.referrer_user_id);
+        const refPriceId = (meta.price_id || '').trim();
+        const buyerUserId = Number(meta.user_id);
+        const refPiId = (obj.id as string | null) ?? null;
+        if (refCode && referrerUserId && refPriceId && buyerUserId && refPiId) {
+          const { findCatalogProductByPriceId } = await import('../services/catalog');
+          const found = await findCatalogProductByPriceId(env, refPriceId);
+          const pct = Number(found?.product.metadata?.commission_pct);
+          if (found && Number.isFinite(pct) && pct > 0) {
+            const amountCents = Number(obj.amount_received ?? obj.amount ?? 0);
+            const currency = String(obj.currency || found.price.currency || 'usd');
+            const { firePurchaseCommission } = await import('./network');
+            await firePurchaseCommission(env, {
+              buyerUserId,
+              referrerUserId,
+              referralCode: refCode,
+              paymentIntentId: refPiId,
+              amountCents,
+              currency,
+              commissionPct: pct,
+              productName: found.product.name,
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('[refer-earn] purchase commission webhook failed:', (e as Error).message);
+      }
       // Task #7 — embedded-terminal fulfilment. Dispatch STRICTLY on
       // metadata.kind: generic PaymentIntents (no kind) are a no-op, and legacy
       // Checkout-session bookings carry metadata on the SESSION (not the PI), so

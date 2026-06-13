@@ -189,6 +189,102 @@ export async function fireCommissionEvent(
 }
 
 
+// Task #8 — Universal referral commission for PURCHASES (any SKU).
+//
+// Called from the billing `payment_intent.succeeded` webhook when a PI carries
+// `metadata.referral_code` + `metadata.referrer_user_id` (stamped at PI
+// creation from the buyer's first-touch attribution). Computes a commission
+// from the product's `commission_pct` catalog metadata, records a commission
+// row (idempotent on the PI id), and hands it to the post-charge Connect
+// payout pipeline so refunds can later reverse it. Unlike `fireCommissionEvent`
+// this is attribution-driven (cookie/query-param), not rule-keyed, so it does
+// not require a `commission_rules` row and is NOT limited to subscriptions.
+export async function firePurchaseCommission(
+  env: Env,
+  args: {
+    buyerUserId: number;
+    referrerUserId: number;
+    referralCode: string;
+    paymentIntentId: string;
+    amountCents: number;
+    currency?: string;
+    commissionPct: number;
+    productName?: string;
+  },
+): Promise<void> {
+  // Self-referral guard + sane inputs.
+  if (!args.referrerUserId || args.referrerUserId === args.buyerUserId) return;
+  if (!Number.isFinite(args.amountCents) || args.amountCents <= 0) return;
+  const pct = Number(args.commissionPct);
+  if (!Number.isFinite(pct) || pct <= 0) return;
+  const commissionCents = Math.round((args.amountCents * Math.min(pct, 100)) / 100);
+  if (commissionCents <= 0) return;
+
+  await ensureSchema(env);
+  const currency = (args.currency || 'USD').toUpperCase();
+  const description = args.productName
+    ? `Referral commission (${pct}% of ${args.productName})`
+    : `Referral commission (${pct}% of purchase)`;
+
+  // Idempotent on (user_id, source_type, source_id) — UNIQUE index seeded in
+  // ensureSchema. source_id is the PaymentIntent id so a webhook retry no-ops
+  // on the row itself; `isNew` gates the once-only side effects below.
+  const ins = await env.DB.prepare(
+    `INSERT OR IGNORE INTO commissions
+       (user_id, referral_id, amount_cents, currency, source_type, source_id, status, description)
+     VALUES (?, NULL, ?, ?, 'purchase', ?, 'accrued', ?)`,
+  ).bind(args.referrerUserId, commissionCents, currency, args.paymentIntentId, description).run();
+  const isNew = ((ins.meta?.changes ?? 0) as number) > 0;
+
+  // Resolve the commission row whether we just inserted it OR it already
+  // existed. We ALWAYS (re)attempt the payout handoff so a webhook retry can
+  // recover from a transient failure on the first delivery (the row insert
+  // would have succeeded but the payout creation could have thrown) — the
+  // handoff is itself idempotent via UNIQUE(redemption_id) inside the helper.
+  const row = await env.DB.prepare(
+    `SELECT id FROM commissions WHERE user_id = ? AND source_type = 'purchase' AND source_id = ? LIMIT 1`,
+  ).bind(args.referrerUserId, args.paymentIntentId).first<{ id: number }>();
+  if (!row?.id) return;
+
+  // Hand off to the post-charge Connect payout pipeline (clawback-able).
+  try {
+    const { createReferralPayoutForCommission } = await import('../services/referralPayouts');
+    await createReferralPayoutForCommission(env, {
+      commissionId: row.id,
+      referrerUserId: args.referrerUserId,
+      amountCents: commissionCents,
+      currency,
+    });
+  } catch (e) {
+    console.warn('[refer-earn] createReferralPayoutForCommission (purchase) failed:', (e as Error).message);
+  }
+
+  // Once-only side effects — only on the first delivery that created the row.
+  if (!isNew) return;
+
+  // Stamp the converting PI onto the buyer's attribution row (first-touch).
+  try {
+    const { markAttributionConverted } = await import('../services/referralAttribution');
+    await markAttributionConverted(env, args.buyerUserId, args.paymentIntentId);
+  } catch (e) {
+    console.warn('[refer-earn] markAttributionConverted failed:', (e as Error).message);
+  }
+
+  // Activity log for the referrer (best-effort).
+  try {
+    const referrerRow = await env.DB.prepare(`SELECT id, email FROM users WHERE id = ?`)
+      .bind(args.referrerUserId).first<{ id: number; email: string }>();
+    if (referrerRow?.email) {
+      const dollars = (commissionCents / 100).toFixed(2);
+      await env.DB.prepare(
+        `INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('commission_earned', ?, ?, ?)`,
+      ).bind(`You earned $${dollars} commission (${description})`, await hashEmail(referrerRow.email), referrerRow.id).run();
+    }
+  } catch (e) {
+    console.warn('[refer-earn] purchase commission activity log failed:', (e as Error).message);
+  }
+}
+
 // Task #10 — Notify every inviter whose still-unjoined invite to this
 // user's email is now eligible. Reads pending rows, stamps
 // joined_notified_at FIRST (so a concurrent re-entry can't double-fire),
