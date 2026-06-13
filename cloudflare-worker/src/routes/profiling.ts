@@ -5,6 +5,7 @@ import { requireAdmin, requireAuth } from '../auth';
 import { notifyOnboardingChat } from '../services/realtime';
 import { createAndSendEnvelope } from './esign';
 import { hashEmail } from '../util/hashEmail';
+import { run as aiRouterRun } from '../services/aiRouter';
 
 const profiling = new Hono<{ Bindings: Env }>();
 
@@ -128,31 +129,39 @@ profiling.post('/chat', async (c) => {
     return c.json({ error: 'User not found. Complete account creation first.' }, 404);
   }
 
-  const aiMessages = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    ...messages.slice(-12).map((m: any) => ({
-      role: m.role === 'user' ? 'user' : 'assistant',
-      content: String(m.content || '').slice(0, 2000),
-    })),
-  ];
+  // Trim to the last 12 turns; the shared AI router prepends SYSTEM_PROMPT
+  // itself, so we only pass the user/assistant turns here.
+  const chatMessages = messages.slice(-12).map((m: any) => ({
+    role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+    content: String(m.content || '').slice(0, 2000),
+  }));
 
+  // Route the turn through the shared resilient AI router (task
+  // 'advisor_turn' → MID_LLAMA primary, SMALL_LLAMA fallback) so a single
+  // transient model blip no longer hard-fails onboarding. On a router
+  // refusal / total-chain failure we degrade gracefully: the user gets a
+  // clear message and can still click "Save & continue".
   let assistantReply = '';
-  try {
-    const ai = (c.env as any).AI;
-    if (!ai) {
-      await sql.end();
-      return c.json({ error: 'AI service unavailable. Please try again later.' }, 503);
-    }
-    const out: any = await ai.run('@cf/meta/llama-3.1-8b-instruct', {
-      messages: aiMessages,
-      max_tokens: 256,
-    });
-    assistantReply = (out?.response || out?.result?.response || '').trim();
+  let degraded = false;
+  const result = await aiRouterRun(c.env, {
+    task: 'advisor_turn',
+    userId: authedUser.id,
+    systemPrompt: SYSTEM_PROMPT,
+    messages: chatMessages,
+    maxTokens: 256,
+  });
+  if (result.ok) {
+    assistantReply = String(result.output || '').trim();
     if (!assistantReply) assistantReply = 'Sorry, I had trouble processing that. Could you rephrase?';
-  } catch (e: any) {
-    console.error('[PROFILING] AI error:', e?.message || e);
-    await sql.end();
-    return c.json({ error: 'AI service error. Please try again.' }, 502);
+  } else {
+    degraded = true;
+    console.error('[PROFILING] chat AI router failed', {
+      task: 'advisor_turn',
+      model: result.usage?.model,
+      refusal: result.refusal,
+      error: result.error,
+    });
+    assistantReply = "I'm having trouble reaching the AI assistant right now — but no problem, your answers are saved. You can keep going and click \"Save & continue\" whenever you're ready, and an Axal admin will review your profile and follow up.";
   }
 
   await sql.end();
@@ -166,7 +175,7 @@ profiling.post('/chat', async (c) => {
   }
   await notifyOnboardingChat(c.env, users[0].id, { role: 'assistant', content: assistantReply });
 
-  return c.json({ reply: assistantReply });
+  return c.json({ reply: assistantReply, degraded });
 });
 
 profiling.post('/save', async (c) => {
@@ -193,17 +202,19 @@ profiling.post('/save', async (c) => {
   }
   const user = users[0];
 
-  // Ask AI to extract a structured JSON summary of the profile.
+  // Ask AI to extract a structured JSON summary of the profile. Routed
+  // through the shared AI router (task 'tool_call' → qwen-coder primary,
+  // MID/SMALL llama fallback) for the same resilience the chat turn gets.
+  // Best-effort: if the router refuses or the chain fails, the save still
+  // completes below with the raw transcript + pending-admin status.
   let extracted: any = {};
   try {
-    const ai = (c.env as any).AI;
-    if (ai) {
-      const transcript = messages
-        .map((m: any) => `${m.role === 'user' ? 'USER' : 'AI'}: ${m.content}`)
-        .join('\n')
-        .slice(0, 6000);
+    const transcript = messages
+      .map((m: any) => `${m.role === 'user' ? 'USER' : 'AI'}: ${m.content}`)
+      .join('\n')
+      .slice(0, 6000);
 
-      const extractionPrompt = `From the following onboarding conversation with a prospective Axal VC partner, extract a strict JSON object with these keys (use null when unknown):
+    const extractionPrompt = `From the following onboarding conversation with a prospective Axal VC partner, extract a strict JSON object with these keys (use null when unknown):
 {
   "persona": one of "Investor — LP" | "Investor — Syndicate" | "Investor — Co-Investor" | "Founder" | "Mentor" | "Operator / Advisor" | "Operating Partner" | "Legal Counsel" | "Technical Partner" | "Liquidity Provider" | null,
   "founder_track": for Founders only — "Spin-Out (New)" if starting a brand new venture for the 30-day engine, "Strategic Scale (Existing)" if they have an existing company seeking partnership/capital/scale, null otherwise,
@@ -225,20 +236,29 @@ Reply with ONLY the JSON object — no prose, no code fences.
 CONVERSATION:
 ${transcript}`;
 
-      const out: any = await ai.run('@cf/meta/llama-3.1-8b-instruct', {
-        messages: [
-          { role: 'system', content: 'You are a precise data-extraction engine. Output only valid JSON.' },
-          { role: 'user', content: extractionPrompt },
-        ],
-        max_tokens: 600,
-      });
-      const raw = (out?.response || '').trim();
+    const result = await aiRouterRun(c.env, {
+      task: 'tool_call',
+      userId: user.id,
+      systemPrompt: 'You are a precise data-extraction engine. Output only valid JSON.',
+      messages: [{ role: 'user', content: extractionPrompt }],
+      maxTokens: 600,
+      temperature: 0,
+    });
+    if (result.ok) {
+      const raw = String(result.output || '').trim();
       const match = raw.match(/\{[\s\S]*\}/);
       if (match) {
         try { extracted = JSON.parse(match[0]); } catch { extracted = { raw }; }
       } else {
         extracted = { raw };
       }
+    } else {
+      console.error('[PROFILING] extraction AI router failed', {
+        task: 'tool_call',
+        model: result.usage?.model,
+        refusal: result.refusal,
+        error: result.error,
+      });
     }
   } catch (e: any) {
     console.error('[PROFILING] extraction error:', e?.message || e);

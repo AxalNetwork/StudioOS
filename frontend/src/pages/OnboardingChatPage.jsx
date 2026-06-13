@@ -45,7 +45,7 @@ export default function OnboardingChatPage() {
       setMessages([...next, { role: 'assistant', content: res.reply }]);
     } catch (e) {
       setError(e.message);
-      setMessages([...next, { role: 'assistant', content: "I had trouble responding. Please try again, or click 'Save & continue' when ready." }]);
+      setMessages([...next, { role: 'assistant', content: "I'm having trouble reaching the AI assistant right now — but no problem, your answers are saved. You can keep going and click 'Save & continue' whenever you're ready, and an Axal admin will review your profile and follow up." }]);
     }
     setChatLoading(false);
   };

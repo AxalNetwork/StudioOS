@@ -10,6 +10,31 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Onboarding chat routed through the resilient AI router (Task #10)
+
+- **Why:** the `/profiling/chat` and `/profiling/save` endpoints called Workers AI
+  directly with a single model (`@cf/meta/llama-3.1-8b-instruct`) and no fallback,
+  so any transient model hiccup (capacity, timeout) hard-failed onboarding with
+  "AI service error. Please try again." — blocking new partners from completing
+  their profile. Every other AI feature already routes through
+  `services/aiRouter.ts` for automatic fallback, kill-switch/spend handling, and
+  usage logging.
+- **Chat turn** (`routes/profiling.ts` `/chat`) now calls `aiRouterRun` with
+  `task: 'advisor_turn'` (MID_LLAMA primary → SMALL_LLAMA fallback). System prompt,
+  last-12-message trimming, and the real-time admin tail are preserved. On a router
+  refusal / total-chain failure the handler no longer returns a 502: it returns
+  `200 { reply, degraded: true }` with a clear, non-blocking message so the user can
+  still click "Save & continue". The underlying reason (task, model, refusal, error)
+  is logged via `console.error`.
+- **Structured extraction** (`/save`) now routes through `aiRouterRun` with
+  `task: 'tool_call'` (qwen-coder → MID/SMALL llama fallback), keeping the existing
+  extraction prompt, JSON-parse logic, and best-effort behavior (save still completes
+  with raw transcript + pending-admin status if extraction yields nothing).
+- **Frontend** (`OnboardingChatPage.jsx`, `RegisterPage.jsx`) catch-block copy updated
+  to the same graceful message so users understand they can proceed.
+- Both onboarding entry points (Google-OAuth `OnboardingChatPage` and manual
+  `RegisterPage` step 2) hit the same updated `/profiling/*` endpoints.
+
 ## Market Intel Pro subscription state moved to a side table; multi-product webhook hardening (Task #6)
 
 - **Why:** the prod `users` table is at Cloudflare D1's hard 100-column limit, so
