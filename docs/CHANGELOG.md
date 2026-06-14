@@ -18,20 +18,51 @@
   protocol-relative `//host`, returning `undefined` so an unsafe value renders a
   non-navigable anchor. Applied to every anchor that binds a DB/AI-supplied URL
   straight into `href`: `CompanyProfilePanel.jsx` (`website`, `linkedin_url`),
-  `ProjectDetail.jsx` (`cb_url`), `CoMarketingPage.jsx` (`asset_url`),
-  `advisor/PersonalAdvisor.jsx` (`open_url`), and `AuthorProfilePage.jsx`
+  `ProjectDetail.jsx` (`cb_url` ×2, `website`), `CoMarketingPage.jsx`
+  (`asset_url`, `published_url` ×2), `advisor/PersonalAdvisor.jsx` (`open_url`),
+  and `AuthorProfilePage.jsx`
   (`website`, `twitter`, `linkedin`). Closes a stored-XSS vector where a
   `javascript:` URL persisted in profile/pitch data executes on click.
 - **Users API access control (`cloudflare-worker/src/routes/users.ts`):** `GET /`
-  now requires admin; `GET /:id` is admin-or-self (403 otherwise). Previously any
+  now requires admin; `GET /:id` is admin-or-self (403 otherwise) and rejects
+  non-integer / non-positive ids (400) before authorization. Previously any
   authenticated user could enumerate the full user list or read arbitrary records.
 - **Build fix (`AuthorProfilePage.jsx`):** lucide-react 1.x removed the `Twitter`
   and `Linkedin` brand glyphs, so the import hard-failed `npm run build`. Replaced
   with local inline SVGs mirroring lucide's stroke style — the same local-SVG
   pattern already used across the app for brand icons.
-- **Dev migration fix (`backend/app/models/migrations.py`):** the investor backfill
-  INSERT now sets `created_at`/`updated_at`, fixing a NOT NULL violation on every
-  FastAPI dev boot. Dev-only (FastAPI is never deployed).
+- **Worker typecheck fix (`cloudflare-worker/src/routes/auth_passkey.ts`):** cast the
+  passkey `userID` (`TextEncoder().encode(...)`) to `Uint8Array<ArrayBuffer>` to
+  satisfy `@simplewebauthn` under the TS 5.7 lib typings — runtime-unchanged
+  (TextEncoder always allocates a regular `ArrayBuffer`). Unblocks `npm run test:drift`.
+- **Dev migration fix (`backend/app/models/migrations.py`):** both investor-backfill
+  INSERTs (the idempotent sweep and the per-promoted-user path) now set
+  `created_at`/`updated_at`, fixing a NOT NULL violation on FastAPI dev boot.
+  Dev-only (FastAPI is never deployed).
+
+## Post-deploy live SPA smoke check (Task #16)
+
+- **Why:** Task #15 fixed the blank-page incident and added a build-time guard
+  that the Vite artifact (`docs/index.html` + `docs/assets/`) is complete, but
+  nothing verified the *live* site after `npm run deploy`. The original incident
+  shipped because no post-deploy check existed.
+- **`scripts/check-spa-live.mjs`** — runtime sibling to the build-time guard. For
+  each key route it asserts HTTP 200, `Content-Type: text/html`, the SPA mount
+  node `<div id="root">`, and a hashed `/assets/*.js` module script, and rejects
+  the worker's JSON 404 (`{"detail":"Not found"}`). Covers `/`, `/about`,
+  `/dashboard`, `/articles`, and the deep link `/articles/:slug` on both hosts.
+  Host-aware: on the `axal.vc` apex, `/` serves Jekyll (only 200 + HTML is
+  required there) while the zone-routed app paths must serve the SPA shell; on
+  the `app.axal.vc` custom domain every path must serve the shell. Retries with
+  backoff for deploy propagation; tunable via `SMOKE_HOSTS`/`SMOKE_SLUG`/
+  `SMOKE_RETRIES`/`SMOKE_RETRY_MS`/`SMOKE_TIMEOUT_MS`; `SKIP_LIVE_SMOKE=1`
+  bypasses (explicit + logged).
+- **`package.json`** — runs as the `postdeploy` lifecycle hook so `npm run deploy`
+  fails loudly if the deployed site is blank/broken; also exposed as
+  `npm run verify:live`.
+- **`.github/workflows/post-deploy-smoke.yml`** — synthetic/on-demand layer
+  (`workflow_dispatch` + 6-hourly cron) to catch a site that goes blank between
+  deploys. No secrets — plain public HTTPS.
 
 ## Stripe payment fulfilment regression test (gated, opt-in) (Task #12)
 
