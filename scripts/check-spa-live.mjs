@@ -16,6 +16,14 @@
  *   - Body contains `<div id="root">` (the SPA mount node)
  *   - Body contains a hashed module script `<script type="module" ...
  *     src="/assets/*.js">` (proof the built bundle is wired in, not a stub)
+ *   - Every hashed `/assets/*.{js,css}` the shell references actually
+ *     RESOLVES on the same host (HTTP 200 + a JS/CSS content-type, never
+ *     text/html). This is the check that catches the recurring blank page:
+ *     the Worker serves the newest `index.html`, but if GitHub Pages (which
+ *     serves the apex `/assets/*`) is a stale build, those hashed files 404
+ *     and the page renders blank even though the shell HTML looks fine. A
+ *     deploy that isn't followed by a `git push` (so Pages stays behind the
+ *     Worker) now fails here instead of silently shipping a blank site.
  *
  * Host model (see wrangler.toml + replit.md "Apex routing"):
  *   - app.axal.vc is a Workers Custom Domain: the Worker serves the SPA on
@@ -106,6 +114,91 @@ function assertShell(body) {
   return problems;
 }
 
+// Pull every hashed `/assets/*.{js,css}` the document references (entry
+// script, modulepreload chunks, stylesheet). These are the files the browser
+// must load for the page to render; if any 404s the page goes blank.
+function extractAssetRefs(body) {
+  const refs = new Set();
+  const re = /(?:src|href)="(\/assets\/[^"]+\.(?:js|css))"/g;
+  let m;
+  while ((m = re.exec(body)) !== null) refs.add(m[1]);
+  return refs;
+}
+
+// Lightweight metadata fetch: we only need status + content-type, so cancel
+// the body stream instead of downloading the (often 500KB+) bundle.
+async function fetchAssetMeta(url) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      redirect: 'follow',
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'axal-spa-smoke/1.0' },
+    });
+    try {
+      await res.body?.cancel();
+    } catch {
+      /* body already consumed/empty */
+    }
+    return { status: res.status, ctype: res.headers.get('content-type') || '' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Returns null on success, or a human-readable failure reason. A hashed asset
+// is healthy when it returns 200 with a JS/CSS content-type. A 404 means the
+// host serving `/assets/*` (GitHub Pages on the apex) is a stale build behind
+// the Worker; a 200 `text/html` means the SPA fallback served index.html in
+// place of the real file — both render a blank page.
+async function checkAsset(base, assetPath) {
+  const url = base.replace(/\/$/, '') + assetPath;
+  const isCss = /\.css(?:$|\?)/i.test(assetPath);
+  let lastErr = '';
+  for (let attempt = 1; attempt <= RETRIES; attempt++) {
+    try {
+      const { status, ctype } = await fetchAssetMeta(url);
+      const problems = [];
+      if (status !== 200) {
+        problems.push(
+          `HTTP ${status} (expected 200 — file missing on this host; ` +
+            'likely a stale GitHub Pages build behind the Worker. Did the ' +
+            'deploy get pushed to GitHub?)',
+        );
+      }
+      if (/text\/html/i.test(ctype)) {
+        problems.push(
+          'served as text/html (SPA-fallback/404 page, not the real asset — ' +
+            'Worker/Pages build skew)',
+        );
+      } else if (status === 200) {
+        const want = isCss ? /css/i : /(javascript|ecmascript)/i;
+        if (!ctype) {
+          problems.push(
+            `200 but missing Content-Type (expected ${isCss ? 'text/css' : 'a JS type'})`,
+          );
+        } else if (!want.test(ctype)) {
+          problems.push(
+            `unexpected Content-Type "${ctype}" (expected ${isCss ? 'text/css' : 'a JS type'})`,
+          );
+        }
+      }
+      if (problems.length === 0) return null;
+      lastErr = problems.join('; ');
+    } catch (err) {
+      lastErr = `request failed: ${err?.message || err}`;
+    }
+    if (attempt < RETRIES) {
+      console.log(
+        `[spa-live]   retry ${attempt}/${RETRIES - 1} for ${url} (${lastErr})`,
+      );
+      await sleep(RETRY_MS);
+    }
+  }
+  return lastErr;
+}
+
 async function fetchOnce(url) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -122,8 +215,10 @@ async function fetchOnce(url) {
   }
 }
 
-// Returns null on success, or a human-readable failure reason string.
-async function checkRoute(base, route) {
+// Returns null on success, or a human-readable failure reason string. On
+// success, any hashed `/assets/*.{js,css}` the document references are added to
+// `assetSink` so the caller can verify they actually resolve on this host.
+async function checkRoute(base, route, assetSink) {
   const url = base.replace(/\/$/, '') + route.path;
   let lastErr = '';
   for (let attempt = 1; attempt <= RETRIES; attempt++) {
@@ -142,7 +237,10 @@ async function checkRoute(base, route) {
       } else if (!/<html|<!doctype/i.test(body)) {
         problems.push('body is not an HTML document');
       }
-      if (problems.length === 0) return null;
+      if (problems.length === 0) {
+        if (assetSink) for (const ref of extractAssetRefs(body)) assetSink.add(ref);
+        return null;
+      }
       lastErr = problems.join('; ');
     } catch (err) {
       lastErr = `request failed: ${err?.message || err}`;
@@ -164,15 +262,30 @@ async function main() {
   const failures = [];
   for (const base of HOSTS) {
     const routes = routesForHost(base);
+    const assetSink = new Set();
     for (const route of routes) {
       const url = base.replace(/\/$/, '') + route.path;
-      const reason = await checkRoute(base, route);
+      const reason = await checkRoute(base, route, assetSink);
       if (reason) {
         console.error(`[spa-live] FAIL  ${url} — ${reason}`);
         failures.push(`${url} — ${reason}`);
       } else {
         const kind = route.shell ? 'SPA shell' : '200 + HTML';
         console.log(`[spa-live] PASS  ${url} (${kind})`);
+      }
+    }
+    // The shell HTML can look perfect while the hashed JS/CSS it points to
+    // 404s — the exact signature of the recurring blank page (Worker serves a
+    // newer build than the stale GitHub Pages that backs `/assets/*`). Verify
+    // every referenced asset actually resolves on this host.
+    for (const assetPath of assetSink) {
+      const url = base.replace(/\/$/, '') + assetPath;
+      const reason = await checkAsset(base, assetPath);
+      if (reason) {
+        console.error(`[spa-live] FAIL  ${url} — ${reason}`);
+        failures.push(`${url} — ${reason}`);
+      } else {
+        console.log(`[spa-live] PASS  ${url} (asset resolves)`);
       }
     }
   }
@@ -183,8 +296,12 @@ async function main() {
     );
     for (const f of failures) console.error(`  - ${f}`);
     console.error(
-      '\nThe deployed site is serving blank/broken pages or a JSON 404 instead\n' +
-        'of the SPA shell. Roll back or redeploy. (Set SKIP_LIVE_SMOKE=1 only if\n' +
+      '\nThe deployed site is serving blank/broken pages, a JSON 404, or hashed\n' +
+        'assets that 404. The most common cause is a Worker/GitHub-Pages build\n' +
+        'skew: `npm run deploy` updated the Worker but the build was never pushed\n' +
+        'to GitHub, so Pages still serves an older build and the new asset hashes\n' +
+        "404. Fix: push main to GitHub (`bash scripts/git-push.sh`) and wait for\n" +
+        'Pages to rebuild, then re-run this check. (Set SKIP_LIVE_SMOKE=1 only if\n' +
         'this host genuinely cannot reach production.)',
     );
     process.exit(1);

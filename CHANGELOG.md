@@ -10,6 +10,25 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Post-deploy guard: verify hashed assets actually resolve (blank-page recurrence)
+
+- **Symptom:** hard-loading a Worker-routed app path (e.g. `axal.vc/about`)
+  rendered a blank page even though the route returned a valid SPA shell. The
+  shell referenced `/assets/index-<hash>.js`, but that file 404'd on the apex.
+- **Root cause:** Worker/GitHub-Pages build skew. The apex serves `/assets/*`
+  from GitHub Pages (`docs/` on the remote `main` tip), while `npm run deploy`
+  ships the newest build to the Cloudflare Worker. Deploying without pushing
+  leaves Pages on an older build, so the Worker's fresh `index.html` points at
+  asset hashes that don't exist on Pages → 404 → blank. (Immediate fix is the
+  same as the apex-404: `bash scripts/git-push.sh` so Pages rebuilds.)
+- **Guard added** in `scripts/check-spa-live.mjs` (runs in the `postdeploy`
+  hook): after asserting the SPA shell, it now extracts every hashed
+  `/assets/*.{js,css}` the shell references and fetches each one on the same
+  host, failing the deploy if any returns a non-200 or `text/html` (the
+  SPA-fallback/404 signature). The prior check only confirmed the shell
+  *mentioned* an asset; it never confirmed the asset *loaded*. Failure output
+  now names the push remedy explicitly.
+
 ## Fix pitch deck PDF export (pdf_render_failed) (Task #33)
 
 - **Why:** the apex host (`axal.vc`) is a proxied Jekyll site; the Worker only
