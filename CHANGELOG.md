@@ -10,6 +10,20 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Articles sidebar collapsed to a single entry (Task #26)
+
+- The left sidebar listed three items for the same feature — **Articles**,
+  **Write an Article** (`/articles/draft`), and **My Articles** (`/articles/mine`)
+  — repeated across all five role groups in `frontend/src/sidebarConfig.js`. Since
+  `/articles` is already a tabbed hub (Browse + a My Articles tab) with a
+  "Write an article" button, the two extra items were redundant.
+- Removed the `Write an Article` and `My Articles` items from every role's
+  `account` group, keeping the single `Articles` entry; dropped the now-unused
+  `PenLine` lucide import.
+- No route changes — `/articles/draft` and `/articles/mine` still resolve
+  (`App.jsx` unchanged), so existing links/bookmarks keep working; only the
+  sidebar shortcuts were removed.
+
 ## Onboarding chatbot: admins exempt (Task #24)
 
 - **Why:** admins (and accounts created as a partner and later promoted to admin)

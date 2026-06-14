@@ -21,7 +21,7 @@ import {
   Globe, Brain, Activity, Shield, Code, ShieldCheck, Share2, Wallet,
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
-  BookOpen, Settings as SettingsIcon, PieChart as PieIcon, PenLine,
+  BookOpen, Settings as SettingsIcon, PieChart as PieIcon,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -125,8 +125,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
-      { to: '/articles/draft', icon: PenLine, label: 'Write an Article' },
-      { to: '/articles/mine', icon: FileText, label: 'My Articles' },
       { to: '/skills', icon: Target, label: 'Skills Profile' },
       { to: '/values', icon: Heart, label: 'Values Assessment' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
@@ -185,8 +183,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
-      { to: '/articles/draft', icon: PenLine, label: 'Write an Article' },
-      { to: '/articles/mine', icon: FileText, label: 'My Articles' },
       { to: '/skills', icon: Target, label: 'Skills Profile' },
       { to: '/values', icon: Heart, label: 'Values Assessment' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
@@ -239,8 +235,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
-      { to: '/articles/draft', icon: PenLine, label: 'Write an Article' },
-      { to: '/articles/mine', icon: FileText, label: 'My Articles' },
       { to: '/skills', icon: Target, label: 'Skills Profile' },
       { to: '/values', icon: Heart, label: 'Values Assessment' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
@@ -286,8 +280,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
-      { to: '/articles/draft', icon: PenLine, label: 'Write an Article' },
-      { to: '/articles/mine', icon: FileText, label: 'My Articles' },
       { to: '/skills', icon: Target, label: 'Skills Profile' },
       { to: '/values', icon: Heart, label: 'Values Assessment' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
@@ -309,8 +301,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
-      { to: '/articles/draft', icon: PenLine, label: 'Write an Article' },
-      { to: '/articles/mine', icon: FileText, label: 'My Articles' },
       { to: '/skills', icon: Target, label: 'Skills Profile' },
       { to: '/values', icon: Heart, label: 'Values Assessment' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
