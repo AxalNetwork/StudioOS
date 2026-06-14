@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { ChevronLeft, ChevronRight, Download, Loader2, Maximize2, Minimize2, Printer, X } from 'lucide-react';
 import { api } from '../lib/api';
+import { reportError } from '../lib/log';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 import { downloadRasterDeckPdf } from '../lib/deckRasterPdf';
 import ShareDeckCTA from '../components/ShareDeckCTA';
@@ -312,7 +313,10 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
           viewIdRef.current = d.view_id;
           startedAtRef.current = Date.now();
         }
-      } catch (e) { setError(e?.message || 'Failed to load'); }
+      } catch (e) {
+        setError(e?.message || 'Failed to load');
+        reportError('PitchDeckPrintPage:load', e);
+      }
     })();
   }, [id, token, shareMode, exportMode]);
 
@@ -536,8 +540,10 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
       // outside ProtectedLayout so the global toast context isn't
       // available). The toast offers a one-click fallback to the
       // browser's print pipeline so users are never stuck.
-      setExportError(e?.message || 'unknown error');
-      console.error('PitchDeckPrintPage: exportPdf failed', e);
+      // Task #33 — report the error so it reaches diagnostics.
+      const msg = e?.message || 'unknown error';
+      setExportError(msg);
+      reportError('PitchDeckPrintPage:exportPdf', { message: msg, error: e });
     } finally {
       setExporting(false);
       setExportProgress(null);
