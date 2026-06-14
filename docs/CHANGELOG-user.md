@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Admins skip the welcome chat
+
+The "Tell us about yourself" onboarding chat is meant only for brand-new members. Admins now go straight to the dashboard and are never sent into that chat — even if their account was first created as a partner and later upgraded to admin. New members signing up still get the welcome chat exactly as before.
+
+---
+
 ## Safer links across the app
 
 We added an extra safety check to the outbound links shown on company profiles, project pages, the co-marketing catalog, the advisor, and author profiles — so only genuine web links open and nothing unsafe can slip through. Author profile social links (website, X, LinkedIn) also display correctly again.

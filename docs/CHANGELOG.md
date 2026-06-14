@@ -10,6 +10,57 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Onboarding chatbot: admins exempt (Task #24)
+
+- **Why:** admins (and accounts created as a partner and later promoted to admin)
+  were being pinned to the onboarding chatbot at `/onboarding/chat`. The SPA gate
+  in `frontend/src/App.jsx` (RequireAuth) checked `user.role`, which comes from the
+  stale login-token / localStorage and is never refreshed, so a promoted admin's
+  client role stayed `partner` and the admin bypass failed. The leftover incomplete
+  `onboarding_progress` row (`flow='chat'`, `completed_at=NULL`) seeded at signup
+  also lingered after promotion.
+- **SPA gate** (`frontend/src/App.jsx`): RequireAuth now syncs the authoritative
+  `role` from `/api/me` into a `serverRole` state (and into stored `user`, alongside
+  the existing `kyc_status`/`access_level` sync) and the onboarding-chat bypass
+  evaluates against `effectiveRole = serverRole || user.role`, plus a belt-and-braces
+  `realUser?.role !== 'admin'` for impersonation sessions.
+- **Server guard** (`cloudflare-worker/src/routes/onboarding.ts`): `GET
+  /api/onboarding/progress` no longer reports an active `flow='chat'` for admin
+  accounts — a leftover incomplete chat row is returned as no active flow, so the
+  client gate can't pin an admin even with a stale local role.
+- **Signup seeding** (`cloudflare-worker/src/routes/auth.ts`): the chat gate row is
+  only seeded for non-admin signups. (Google signups are always `partner`, unchanged.)
+- **Dev mirror** (`backend/app/api/routes/onboarding.py`): same admin guard on
+  `GET /progress` so the SPA behaves identically against dev FastAPI.
+- **Data cleanup**: `cloudflare-worker/sql/migrations/104_release_admin_chat_onboarding.sql`
+  marks lingering incomplete `flow='chat'` rows complete for admin accounts, releasing
+  currently-stuck admins. Idempotent.
+
+## Onboarding profiling chatbot: FastAPI dev mirror (Task #10 follow-up)
+
+- **Why:** the onboarding chat ("Tell us about yourself") was Worker-only — the
+  prod `/profiling/chat` + `/profiling/save` route through Workers AI, and the dev
+  FastAPI mirror never implemented them. In the dev preview the SPA's
+  `POST /api/profiling/chat` 404'd, so every reply after the hardcoded greeting
+  threw and showed the "I'm having trouble reaching the AI assistant" fallback —
+  the chatbot could never get past the first question in dev.
+- **New `backend/app/api/routes/profiling.py`** (registered in `main.py` next to
+  `onboarding`): a deterministic, **scripted** persona-profiling flow (dev has no
+  LLM). `POST /profiling/chat` walks the same persona sequence the worker's
+  SYSTEM_PROMPT describes (founder new/existing tracks, investor LP/Syndicate/
+  Co-Investor, operator, and service-partner sub-types), returning `{reply,
+  degraded:false}`.
+- **`POST /profiling/save`** mirrors the worker's persistence: classifies the
+  persona + founder track from the transcript, upserts `partner_profiles`
+  (same columns), logs `profile_captured` to `activity_logs`, conservatively
+  promotes role (`partner → founder/investor`, never demotes), and releases the
+  onboarding-chatbot gate by writing `onboarding_progress` `flow='chat'` +
+  `completed_at` (the exact row App.jsx's RequireAuth checks). Body `email` is
+  accepted but ignored — the user is resolved from the session (worker Task #66
+  parity).
+- Dev-only; never deployed. Prod parity for the AI-driven flow stays the worker's
+  responsibility (unchanged).
+
 ## Security audit: external-link scheme validation, users API access control, build fix
 
 - **External-link XSS hardening:** added `frontend/src/lib/url.js` exporting

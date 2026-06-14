@@ -722,6 +722,11 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   const location = useLocation();
   const [kycStatus, setKycStatus] = useState(user?.kyc_status || null);
   const [accessLevel, setAccessLevel] = useState(user?.access_level || null);
+  // Task #24 — authoritative role from /api/me. The login token / stored
+  // `user` role is never refreshed, so an account created as a partner and
+  // later promoted to admin keeps a stale client role. The onboarding-chat
+  // bypass below must evaluate against this fresh role, not `user.role`.
+  const [serverRole, setServerRole] = useState(user?.role || null);
   const [primaryPersonaId, setPrimaryPersonaId] = useState(null);
   const [onboardingFlow, setOnboardingFlow] = useState(null);
   const [onboardingComplete, setOnboardingComplete] = useState(true);
@@ -736,10 +741,16 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
         if (cancelled) return;
         setKycStatus(me.kyc_status || 'not_started');
         setAccessLevel(me.access_level || null);
+        setServerRole(me.role || null);
         const stored = safeReadJSON('user', {});
-        if (stored.kyc_status !== me.kyc_status || stored.access_level !== me.access_level) {
+        if (
+          stored.kyc_status !== me.kyc_status ||
+          stored.access_level !== me.access_level ||
+          stored.role !== me.role
+        ) {
           localStorage.setItem('user', JSON.stringify({
             ...stored,
+            role: me.role,
             kyc_status: me.kyc_status,
             access_level: me.access_level || null,
           }));
@@ -788,13 +799,22 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   // `access_level='limited'` accounts. Existing pre-Task-#66 users have no
   // chat row, so `onboardingFlow !== 'chat'` and this gate does nothing
   // for them.
+  //
+  // Task #24 — evaluate the admin bypass against `serverRole` (the live
+  // role from /api/me), not `user.role` (the stale login-token role). An
+  // account created as a partner and later promoted to admin would
+  // otherwise keep being pinned to the chatbot. While impersonating,
+  // `realUser` is the admin and `user`/serverRole is the impersonated
+  // persona, so `!isImpersonating` already short-circuits that case.
+  const chatGateRole = serverRole || user.role;
   const onChatPath = location.pathname === '/onboarding/chat';
   if (
     onboardingLoaded &&
     onboardingFlow === 'chat' &&
     !onboardingComplete &&
     !onChatPath &&
-    user.role !== 'admin' &&
+    chatGateRole !== 'admin' &&
+    realUser?.role !== 'admin' &&
     !isImpersonating &&
     accessLevel !== 'limited'
   ) {

@@ -134,6 +134,14 @@ def get_progress(
     row = session.exec(text(
         "SELECT flow, step, total_steps, data, completed_at FROM onboarding_progress WHERE user_id = :uid"
     ), params={"uid": user.id}).mappings().first()
+    # Task #24 — admins are never subject to the onboarding chatbot. A
+    # leftover incomplete flow='chat' row (e.g. account created as a partner,
+    # then promoted) must not report as an active chat flow, or the SPA gate
+    # would pin the admin to /onboarding/chat. Treat it as no active flow.
+    role = getattr(user, "role", None)
+    role_str = (getattr(role, "value", role) or "").lower() if role else ""
+    if role_str == "admin" and row is not None and row["flow"] == "chat" and not row["completed_at"]:
+        return _row_to_dto(None)
     return _row_to_dto(row)
 
 

@@ -67,6 +67,14 @@ onboarding.get('/progress', async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT flow, step, total_steps, data, completed_at FROM onboarding_progress WHERE user_id = ?`
   ).bind((user as any).id).first<any>();
+  // Task #24 — admins are never subject to the onboarding chatbot. A
+  // leftover incomplete flow='chat' row (e.g. account created as a partner,
+  // then promoted) must not report as an active chat flow, or the SPA gate
+  // would pin the admin to /onboarding/chat. Treat it as no active flow.
+  const role = String((user as any).role || '').toLowerCase();
+  if (role === 'admin' && row?.flow === 'chat' && !row.completed_at) {
+    return c.json(rowToDto(null));
+  }
   return c.json(rowToDto(row));
 });
 
