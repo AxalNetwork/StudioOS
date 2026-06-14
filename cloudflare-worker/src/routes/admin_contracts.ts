@@ -1377,6 +1377,38 @@ adminContracts.delete('/templates/store/:slug', async (c) => {
   return c.json({ ok: true });
 });
 
+// GET /templates/store/:slug/preview.pdf — watermarked preview PDF (no signature block).
+// Task #31. Binary endpoint — kept OUT of the typed API drift surface.
+import { renderTemplatePreviewPdf } from '../services/pdf';
+import { resolveWithBrackets } from '../services/mergeFields';
+
+adminContracts.get('/templates/store/:slug/preview.pdf', async (c) => {
+  await requireAdmin(c);
+  const slug = c.req.param('slug');
+  const tpl = await storeGetTemplate(c.env, slug);
+  if (!tpl) return c.json({ error: 'Template not found', code: 'not_found', slug }, 404);
+
+  const resolve = c.req.query('resolve') || 'brackets';
+  const body = resolve === 'raw'
+    ? (tpl.body_md || '')
+    : resolveWithBrackets(tpl.body_md || '');
+
+  const pdf = await renderTemplatePreviewPdf({
+    documentTitle: tpl.title,
+    documentBody: body,
+  });
+
+  const filename = `${slug}-v${tpl.version}-preview.pdf`;
+  return new Response(pdf, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${filename}"`,
+      'Cache-Control': 'no-store',
+    },
+  });
+});
+
 // GET /api/admin/contracts/templates/:doc_type/usage — drill-down for a
 // single template card on Admin > Contracts > Templates. Returns the
 // template metadata, aggregate counters across the 4-source union for

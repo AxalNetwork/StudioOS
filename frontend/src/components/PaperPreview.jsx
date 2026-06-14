@@ -26,9 +26,9 @@ export default function PaperPreview({ title, body, resolveTokens = true }) {
 
   return (
     <div className="flex justify-center py-6">
-      <div className="bg-white shadow-lg w-[8.5in] max-w-full min-h-[11in] p-[0.75in] text-gray-900 font-serif">
+      <div className="bg-white shadow-lg w-[8.5in] max-w-full min-h-[11in] p-[0.75in] text-gray-900 font-serif dark:bg-gray-900 dark:text-gray-100">
         {/* Header strip */}
-        <div className="flex items-center justify-between border-b border-gray-300 pb-3 mb-6">
+        <div className="flex items-center justify-between border-b border-gray-300 pb-3 mb-6 dark:border-gray-700">
           <div className="text-violet-700 font-bold text-sm tracking-wider uppercase">AXAL VC</div>
           <Mail size={16} className="text-gray-400" />
         </div>
@@ -43,12 +43,12 @@ export default function PaperPreview({ title, body, resolveTokens = true }) {
         {/* Body — kept in DocumentBody so <pre> whitespace is preserved */}
         <DocumentBody
           text={displayedBody}
-          className="text-[12pt] leading-relaxed text-gray-900"
+          className="text-[12pt] leading-relaxed text-gray-900 dark:text-gray-100"
           emptyText="Nothing to preview yet."
         />
 
         {/* Footer */}
-        <div className="mt-10 pt-3 border-t border-gray-300 text-[9pt] text-gray-400 flex justify-between items-center font-sans">
+        <div className="mt-10 pt-3 border-t border-gray-300 text-[9pt] text-gray-400 flex justify-between items-center font-sans dark:border-gray-700">
           <div className="truncate max-w-[70%] font-mono">
             SHA-256: 0000000000000000000000000000000000000000000000000000000000000000
           </div>

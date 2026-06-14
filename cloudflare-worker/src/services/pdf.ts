@@ -10,7 +10,7 @@
  *   StandardFonts.Helvetica's per-glyph widths; good enough for legal text
  *   without pulling a full text-shaping engine.
  */
-import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, degrees, PDFFont, PDFPage } from 'pdf-lib';
 
 interface RenderOptions {
   envelopeUuid: string;
@@ -101,6 +101,67 @@ function drawFooter(page: PDFPage, font: PDFFont, pageNum: number, totalPages: n
   });
 }
 
+function drawWatermark(page: PDFPage, font: PDFFont, text: string) {
+  page.drawText(text, {
+    x: PAGE_WIDTH / 2 - font.widthOfTextAtSize(text, 48) / 2,
+    y: PAGE_HEIGHT / 2,
+    size: 48, font,
+    color: rgb(0.85, 0.85, 0.85),
+    opacity: 0.2,
+    rotate: degrees(45),
+  });
+}
+
+/**
+ * Shared pagination routine: wraps text, adds pages, draws title, and leaves a
+ * `reservedTailHeight` gap at the bottom of the last page for the caller to
+ * fill with a signature block (or nothing for preview PDFs). Returns the
+ * array of pages and the final y-coordinate on the last page.
+ */
+function paginateBody(
+  doc: PDFDocument,
+  lines: string[],
+  font: PDFFont,
+  boldFont: PDFFont,
+  documentTitle: string,
+  reservedTailHeight: number,
+): { pages: PDFPage[]; lastY: number } {
+  const usableTop = PAGE_HEIGHT - MARGIN_TOP - 40; // account for title on first page
+  const usableBottom = MARGIN_BOTTOM + 24;
+
+  let pages: PDFPage[] = [doc.addPage([PAGE_WIDTH, PAGE_HEIGHT])];
+  let y = usableTop;
+
+  // Title on page 1
+  pages[0].drawText(documentTitle, {
+    x: MARGIN_X, y, size: TITLE_FONT_SIZE, font: boldFont, color: rgb(0.07, 0.09, 0.15),
+  });
+  y -= 28;
+
+  for (const line of lines) {
+    if (y - BODY_LINE_HEIGHT < usableBottom) {
+      const p = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+      pages.push(p);
+      y = PAGE_HEIGHT - MARGIN_TOP;
+    }
+    if (line) {
+      pages[pages.length - 1].drawText(line, {
+        x: MARGIN_X, y, size: BODY_FONT_SIZE, font, color: rgb(0.13, 0.17, 0.22),
+      });
+    }
+    y -= BODY_LINE_HEIGHT;
+  }
+
+  // Ensure enough room for the caller's tail block.
+  if (y - reservedTailHeight < usableBottom) {
+    const p = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    pages.push(p);
+    y = PAGE_HEIGHT - MARGIN_TOP;
+  }
+
+  return { pages, lastY: y };
+}
+
 function dataUriToBytes(dataUri: string): Uint8Array {
   const comma = dataUri.indexOf(',');
   if (comma < 0) throw new Error('Invalid data URI');
@@ -127,43 +188,11 @@ export async function renderAgreementPdf(opts: RenderOptions): Promise<Uint8Arra
   const contentWidth = PAGE_WIDTH - 2 * MARGIN_X;
   const lines = wrapTextToWidth(opts.documentBody, font, BODY_FONT_SIZE, contentWidth);
 
-  // Reserve ~180pt at the end of the document for the signature block.
   const SIG_BLOCK_HEIGHT = 180;
-  const usableTop = PAGE_HEIGHT - MARGIN_TOP - 40; // account for title on first page
-  const usableBottom = MARGIN_BOTTOM + 24;
-
-  let pages: PDFPage[] = [doc.addPage([PAGE_WIDTH, PAGE_HEIGHT])];
-  let y = usableTop;
-
-  // Title on page 1
-  pages[0].drawText(opts.documentTitle, {
-    x: MARGIN_X, y, size: TITLE_FONT_SIZE, font: boldFont, color: rgb(0.07, 0.09, 0.15),
-  });
-  y -= 28;
-
-  for (const line of lines) {
-    if (y - BODY_LINE_HEIGHT < usableBottom) {
-      const p = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-      pages.push(p);
-      y = PAGE_HEIGHT - MARGIN_TOP;
-    }
-    if (line) {
-      pages[pages.length - 1].drawText(line, {
-        x: MARGIN_X, y, size: BODY_FONT_SIZE, font, color: rgb(0.13, 0.17, 0.22),
-      });
-    }
-    y -= BODY_LINE_HEIGHT;
-  }
-
-  // Signature block — always on the last page; if not enough room, add one.
-  if (y - SIG_BLOCK_HEIGHT < usableBottom) {
-    const p = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-    pages.push(p);
-    y = PAGE_HEIGHT - MARGIN_TOP;
-  }
+  const { pages, lastY } = paginateBody(doc, lines, font, boldFont, opts.documentTitle, SIG_BLOCK_HEIGHT);
 
   const lastPage = pages[pages.length - 1];
-  let sy = y - 20;
+  let sy = lastY - 20;
   lastPage.drawLine({
     start: { x: MARGIN_X, y: sy }, end: { x: PAGE_WIDTH - MARGIN_X, y: sy },
     thickness: 0.5, color: rgb(0.78, 0.78, 0.78),
@@ -179,7 +208,6 @@ export async function renderAgreementPdf(opts: RenderOptions): Promise<Uint8Arra
     const sigBytes = dataUriToBytes(opts.signatureDataUrl);
     const sigImg = await doc.embedPng(sigBytes);
     const sigDims = sigImg.scale(1);
-    // Scale to max 220x70.
     const maxW = 220, maxH = 70;
     const ratio = Math.min(maxW / sigDims.width, maxH / sigDims.height, 1);
     const w = sigDims.width * ratio;
@@ -214,11 +242,52 @@ export async function renderAgreementPdf(opts: RenderOptions): Promise<Uint8Arra
     x: MARGIN_X, y: sy, size: 8, font, color: rgb(0.5, 0.55, 0.6),
   });
 
-  // Decorate every page with header + footer (after we know totalPages).
   const total = pages.length;
   pages.forEach((p, i) => {
     drawHeader(p, font, boldFont, opts.documentTitle, opts.envelopeUuid);
     drawFooter(p, font, i + 1, total, opts.bodySha256);
+  });
+
+  return await doc.save();
+}
+
+/**
+ * Task #31 — Render a watermarked preview PDF for a template (no signature block).
+ * Always draws a diagonal "PREVIEW" watermark on every page. The envelope id is a
+ * placeholder, and the SHA-256 is computed from the body when not supplied.
+ */
+export interface PreviewRenderOptions {
+  documentTitle: string;
+  documentBody: string;
+  bodySha256?: string;
+  envelopeUuid?: string;
+}
+
+export async function renderTemplatePreviewPdf(opts: PreviewRenderOptions): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  doc.setTitle(opts.documentTitle);
+  doc.setAuthor('Axal VC');
+  doc.setSubject('Preview');
+  doc.setProducer('Axal StudioOS');
+  doc.setCreator('Axal StudioOS');
+  doc.setCreationDate(new Date());
+
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
+
+  const contentWidth = PAGE_WIDTH - 2 * MARGIN_X;
+  const lines = wrapTextToWidth(opts.documentBody, font, BODY_FONT_SIZE, contentWidth);
+
+  const bodySha = opts.bodySha256 || await sha256Hex(opts.documentBody);
+  const envelopeId = opts.envelopeUuid || 'PREVIEW-NOT-YET-SENT';
+
+  const { pages } = paginateBody(doc, lines, font, boldFont, opts.documentTitle, 0);
+
+  const total = pages.length;
+  pages.forEach((p, i) => {
+    drawHeader(p, font, boldFont, opts.documentTitle, envelopeId);
+    drawFooter(p, font, i + 1, total, bodySha);
+    drawWatermark(p, font, 'PREVIEW');
   });
 
   return await doc.save();

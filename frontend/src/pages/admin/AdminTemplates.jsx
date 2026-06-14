@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FileText, X, Plus, Save, Trash2, History, Loader2, AlertTriangle, RefreshCw, Eye } from 'lucide-react';
+import { FileText, X, Plus, Save, Trash2, History, Loader2, AlertTriangle, RefreshCw, Eye, Download } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { useEscapeClose } from '../../components/useEscapeClose';
@@ -173,6 +173,7 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [err, setErr] = useState('');
 
   const [slugInput, setSlugInput] = useState('');
@@ -249,6 +250,29 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
       reportError('AdminTemplates:delete', e);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const downloadPdf = async () => {
+    if (isNew || !slug) return;
+    setErr('');
+    setDownloading(true);
+    try {
+      const { url, filename } = await api.adminTemplateStorePreviewPdfBlob(slug, {
+        resolve: resolveTokens ? 'brackets' : 'raw',
+      });
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setErr(e.message || 'Failed to generate PDF.');
+      reportError('AdminTemplates:downloadPdf', e);
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -394,6 +418,16 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
             )}
           </div>
           <div className="flex items-center gap-2">
+            {!isNew && (
+              <button
+                type="button"
+                onClick={downloadPdf}
+                disabled={downloading || saving || loading}
+                data-testid="template-download-pdf"
+                className="text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 disabled:opacity-50 flex items-center gap-1">
+                {downloading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Download PDF
+              </button>
+            )}
             <button type="button" onClick={onClose} className="text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300">Cancel</button>
             <button
               type="button"

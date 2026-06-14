@@ -958,6 +958,24 @@ export const api = {
     const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `axal-form-${id}.pdf`;
     return { blob, url: URL.createObjectURL(blob), filename };
   },
+  // Task #31 — per-template preview PDF blob (binary endpoint, not typed drift).
+  adminTemplateStorePreviewPdfBlob: async (slug, { resolve = 'brackets' } = {}) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api/admin/contracts/templates/store/${encodeURIComponent(slug)}/preview.pdf?resolve=${resolve}`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      let detail = res.statusText || 'PDF generation failed';
+      try { const err = await res.json(); detail = err?.error || err?.detail || detail; } catch { /* non-JSON */ }
+      const e = new Error(detail);
+      e.status = res.status;
+      throw e;
+    }
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `${slug}-preview.pdf`;
+    return { blob, url: URL.createObjectURL(blob), filename };
+  },
   adminSendEnvelope: (payload) =>
     request('/legal/esign/send', { method: 'POST', body: JSON.stringify(payload) }),
   // Task #14 — forward signed PDF to legal partner(s).
