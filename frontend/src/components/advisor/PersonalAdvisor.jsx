@@ -732,7 +732,7 @@ function FullscreenView({
       role="dialog"
       aria-modal="true"
       aria-label="Personal Advisor"
-      className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-gray-900"
+      className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-gray-900 h-[100dvh] max-h-[100dvh] overflow-hidden"
     >
       <FullscreenHeader persona={persona} progress={progress} onExit={onExit} />
       {/* Responsive: single column on small screens (chat over a capped,
@@ -749,6 +749,7 @@ function FullscreenView({
             loadError={loadError}
             complete={complete}
             onCtaClick={onCtaClick}
+            minHClass="min-h-0 lg:min-h-[260px]"
           />
           {question && <CurrentQuestion q={question} onExplain={onExplain} />}
           <Composer
@@ -769,7 +770,7 @@ function FullscreenView({
             fullscreen so the progress widget is present at every width:
             a capped, independently-scrollable section stacked BELOW the
             chat on small screens, and a full-height side rail on large. */}
-        <aside className="flex-shrink-0 min-h-0 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-950/40 max-h-[38vh] border-t border-gray-100 dark:border-gray-800 lg:max-h-none lg:border-t-0 lg:w-80 xl:w-96">
+        <aside className="flex-shrink-0 min-h-0 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-950/40 max-h-[38dvh] border-t border-gray-100 dark:border-gray-800 lg:max-h-none lg:border-t-0 lg:w-80 xl:w-96">
           <FocusChips sectionStats={sectionStats} focusSection={focusSection} pickFocus={pickFocus} />
           <AdvisorProgressWidget
             focusSection={focusSection}
@@ -849,9 +850,9 @@ function FocusChips({ sectionStats, focusSection, pickFocus }) {
   );
 }
 
-const Transcript = React.forwardRef(function Transcript({ messages, tutor, onCloseTutor, loadError, complete, onCtaClick }, ref) {
+const Transcript = React.forwardRef(function Transcript({ messages, tutor, onCloseTutor, loadError, complete, onCtaClick, minHClass = 'min-h-[260px]' }, ref) {
   return (
-    <div ref={ref} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-[260px]">
+    <div ref={ref} className={`flex-1 overflow-y-auto px-4 py-3 space-y-3 ${minHClass}`}>
       {loadError && (
         <div className="text-xs text-red-700 bg-red-50 dark:bg-red-950/30 dark:text-red-300 border border-red-200 dark:border-red-900 rounded p-2">
           {loadError}
