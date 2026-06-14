@@ -10,6 +10,29 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Stripe payment fulfilment regression test (gated, opt-in) (Task #12)
+
+- **What:** new opt-in test `cloudflare-worker/test/billing_webhook_fulfilment.test.mjs`
+  boots the Worker via wrangler `unstable_dev` against a freshly seeded LOCAL D1
+  (`sql/schema.sql` + migrations `011_subscription_tiers`, `027_investor_paywall`,
+  `103_mi_pro_subscriptions`) with `ENVIRONMENT=test`, POSTs UNSIGNED Stripe events
+  to `/api/billing/stripe/webhook`, then asserts the final `mi_pro_subscriptions` state.
+- **Covers four fulfilment invariants:** (1) `checkout.session.completed` grants the
+  right plan + `active` status; (2) a REPLAYED checkout does not double-grant (upsert is
+  keyed on `user_id`); (3) an OUT-OF-ORDER `customer.subscription.created` arriving before
+  the checkout keeps `period_end` (the later checkout must not clobber it); (4)
+  `customer.subscription.deleted` scoped by `subscription_id` leaves a CO-EXISTING
+  subscription on the same Stripe customer intact.
+- **Gating:** skipped unless `RUN_BILLING_WEBHOOK_TEST=1` (wrangler cold-start + CLI seed
+  spawns add ~25s and need the wrangler binary). Intentionally NOT wired into `test:drift`.
+- **Why:** the webhook fan-out (checkout vs `subscription.*`, replays, out-of-order delivery,
+  multi-sub customers) silently regresses; this pins the observable end-state in D1.
+  Test-only — no runtime or user-facing change (no `CHANGELOG-user.md` line needed).
+- **Harness note:** bindings are wired via `unstable_dev` OPTIONS (`d1Databases` + `vars`),
+  not a `config` file — a `config` living in a temp dir makes wrangler resolve
+  `main`/node_modules relative to that dir and hang. The CLI seed/read uses a tiny config
+  sharing the same `database_id` + `persistTo` so both processes hit the same local sqlite.
+
 ## Onboarding chat routed through the resilient AI router (Task #10)
 
 - **Why:** the `/profiling/chat` and `/profiling/save` endpoints called Workers AI
