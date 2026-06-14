@@ -455,6 +455,8 @@ from backend.app.api.routes import search as _search  # noqa: E402
 app.include_router(_search.router, prefix="/api")
 from backend.app.api.routes import onboarding as _onboarding  # noqa: E402
 app.include_router(_onboarding.router, prefix="/api")
+from backend.app.api.routes import profiling as _profiling  # noqa: E402
+app.include_router(_profiling.router, prefix="/api")
 from backend.app.api.routes import kyc as _kyc  # noqa: E402
 app.include_router(_kyc.router, prefix="/api")
 from backend.app.database import get_session  # noqa: E402

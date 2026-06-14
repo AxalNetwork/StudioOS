@@ -10,6 +10,31 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Onboarding profiling chatbot: FastAPI dev mirror (Task #10 follow-up)
+
+- **Why:** the onboarding chat ("Tell us about yourself") was Worker-only — the
+  prod `/profiling/chat` + `/profiling/save` route through Workers AI, and the dev
+  FastAPI mirror never implemented them. In the dev preview the SPA's
+  `POST /api/profiling/chat` 404'd, so every reply after the hardcoded greeting
+  threw and showed the "I'm having trouble reaching the AI assistant" fallback —
+  the chatbot could never get past the first question in dev.
+- **New `backend/app/api/routes/profiling.py`** (registered in `main.py` next to
+  `onboarding`): a deterministic, **scripted** persona-profiling flow (dev has no
+  LLM). `POST /profiling/chat` walks the same persona sequence the worker's
+  SYSTEM_PROMPT describes (founder new/existing tracks, investor LP/Syndicate/
+  Co-Investor, operator, and service-partner sub-types), returning `{reply,
+  degraded:false}`.
+- **`POST /profiling/save`** mirrors the worker's persistence: classifies the
+  persona + founder track from the transcript, upserts `partner_profiles`
+  (same columns), logs `profile_captured` to `activity_logs`, conservatively
+  promotes role (`partner → founder/investor`, never demotes), and releases the
+  onboarding-chatbot gate by writing `onboarding_progress` `flow='chat'` +
+  `completed_at` (the exact row App.jsx's RequireAuth checks). Body `email` is
+  accepted but ignored — the user is resolved from the session (worker Task #66
+  parity).
+- Dev-only; never deployed. Prod parity for the AI-driven flow stays the worker's
+  responsibility (unchanged).
+
 ## Security audit: external-link scheme validation, users API access control, build fix
 
 - **External-link XSS hardening:** added `frontend/src/lib/url.js` exporting
