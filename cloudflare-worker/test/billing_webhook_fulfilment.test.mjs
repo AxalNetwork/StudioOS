@@ -123,6 +123,19 @@ function query(cfgPath, persistTo, sql) {
   return parsed[0]?.results ?? [];
 }
 
+// Like query() but for writes (seeding) where we don't care about the result
+// payload. The founder-tier / investor webhook branches UPDATE `users` WHERE
+// id = ?, so those rows must exist BEFORE the webhook fires (unlike MI Pro,
+// which INSERTs ... ON CONFLICT and needs no pre-seeded row).
+function execSql(cfgPath, persistTo, sql) {
+  runWrangler([
+    'd1', 'execute', DB_NAME,
+    '--config', cfgPath,
+    '--local', '--persist-to', persistTo,
+    '--command', sql,
+  ]);
+}
+
 /* ---------------------------- event factories --------------------------- */
 
 function checkoutEvent({ userId, plan = 'mi_pro_monthly', subscription, customer }) {
@@ -152,6 +165,33 @@ function subscriptionCreatedEvent({ subId, userId, plan = 'mi_pro_monthly', cust
 
 function subscriptionDeletedEvent({ subId, customer }) {
   return { type: 'customer.subscription.deleted', data: { object: { id: subId, customer } } };
+}
+
+// Founder-tier checkout — metadata.kind='tier' routes into the users
+// subscription_tier / stripe_* columns (NOT the MI Pro side table).
+function tierCheckoutEvent({ userId, tier = 'growth', subscription, customer }) {
+  return {
+    type: 'checkout.session.completed',
+    data: { object: { metadata: { kind: 'tier', user_id: String(userId), tier }, customer, subscription } },
+  };
+}
+
+// Investor checkout — metadata.kind='investor' routes into the users
+// investor_tier / investor_stripe_* columns and sets investor_dealroom_max.
+function investorCheckoutEvent({ userId, investorTier = 'professional', subscription, customer }) {
+  return {
+    type: 'checkout.session.completed',
+    data: { object: { metadata: { kind: 'investor', user_id: String(userId), investor_tier: investorTier }, customer, subscription } },
+  };
+}
+
+// Founder-tier subscription.updated — carries the renewal date; metadata.tier
+// echoes the tier so the handler re-aligns subscription_tier + renews_at.
+function tierSubscriptionUpdatedEvent({ subId, tier = 'growth', customer, periodEndUnix, status = 'active' }) {
+  return {
+    type: 'customer.subscription.updated',
+    data: { object: { id: subId, metadata: { kind: 'tier', tier }, customer, status, current_period_end: periodEndUnix } },
+  };
 }
 
 async function postWebhook(worker, event) {
@@ -287,4 +327,162 @@ test('Stripe webhook fulfilment invariants (MI Pro)', { skip: !process.env.RUN_B
     'active',
     'a co-existing subscription on the same Stripe customer must stay active',
   );
+});
+
+/* -------------------- founder-tier + investor pipes --------------------- */
+
+/**
+ * Task #21 — extend the fulfilment regression to the OTHER two paid pipes the
+ * same webhook handler fans out to via `metadata.kind`, both of which write to
+ * the `users` table (not the MI Pro side table):
+ *
+ *   kind='tier'     → founder tier  (subscription_tier / subscription_status /
+ *                                    stripe_customer_id / stripe_subscription_id)
+ *   kind='investor' → investor tier (investor_tier / investor_subscription_status /
+ *                                    investor_dealroom_max / investor_stripe_*)
+ *
+ * Invariants:
+ *   (1) a founder-tier checkout grants the tier + active status + stripe ids.
+ *   (2) an investor checkout grants the tier + active status + dealroom cap +
+ *       stripe ids — including the institutional cap (1_000_000) so a regression
+ *       in INVESTOR_QUOTAS routing is caught.
+ *   (3) CROSS-PIPE ISOLATION A: one customer with BOTH a founder-tier sub and an
+ *       MI Pro sub; deleting the MI Pro sub must NOT touch the founder columns.
+ *   (4) CROSS-PIPE ISOLATION B: the mirror — deleting the founder-tier sub must
+ *       drop the founder columns to free but leave the co-existing MI Pro row
+ *       active.
+ *   (5) a founder-tier customer.subscription.updated re-aligns the renewal date
+ *       on the tier columns (the created/updated branch, scoped to isTier).
+ */
+test('Stripe webhook fulfilment invariants (founder tier + investor)', { skip: !process.env.RUN_BILLING_WEBHOOK_TEST, timeout: 120000 }, async (t) => {
+  let unstable_dev;
+  try {
+    ({ unstable_dev } = await import('wrangler'));
+  } catch {
+    t.skip('wrangler unavailable in this environment');
+    return;
+  }
+  if (typeof unstable_dev !== 'function') {
+    t.skip('wrangler does not expose unstable_dev');
+    return;
+  }
+
+  const tmp = mkdtempSync(join(tmpdir(), 'billing-webhook-tier-'));
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+  const persistTo = join(tmp, 'state');
+  const cfgPath = writeTestConfig(tmp);
+
+  for (const f of SEED_FILES) seedFile(cfgPath, persistTo, f);
+
+  // The tier/investor branches UPDATE users WHERE id = ?, so the rows must
+  // exist first. (email + name are NOT NULL; everything else defaults.)
+  execSql(
+    cfgPath,
+    persistTo,
+    `INSERT INTO users (id, email, name) VALUES
+       (201, 'tier201@test.dev', 'Tier 201'),
+       (202, 'inv202@test.dev', 'Investor 202'),
+       (203, 'mixA203@test.dev', 'Mix A 203'),
+       (204, 'mixB204@test.dev', 'Mix B 204'),
+       (205, 'inv205@test.dev', 'Investor 205')`,
+  );
+
+  const worker = await unstable_dev(ENTRY, {
+    persistTo,
+    local: true,
+    ip: '127.0.0.1',
+    vars: { ENVIRONMENT: 'test' },
+    d1Databases: [{ binding: 'DB', database_name: DB_NAME, database_id: DB_ID }],
+    experimental: { disableExperimentalWarning: true },
+  });
+
+  const PERIOD_END_UNIX = 1800000000; // 2027-01-15T08:00:00.000Z
+  const PERIOD_END_ISO = new Date(PERIOD_END_UNIX * 1000).toISOString();
+  const ok = (res, msg) => assert.equal(res.status, 200, msg);
+
+  try {
+    // (1) founder-tier checkout.
+    ok(
+      await postWebhook(worker, tierCheckoutEvent({ userId: 201, tier: 'growth', subscription: 'sub_tier_201', customer: 'cus_201' })),
+      'webhook must soft-accept unsigned tier checkout in ENVIRONMENT=test',
+    );
+    // (5) founder-tier subscription.updated sets the renewal date.
+    ok(await postWebhook(worker, tierSubscriptionUpdatedEvent({
+      subId: 'sub_tier_201', tier: 'growth', customer: 'cus_201', periodEndUnix: PERIOD_END_UNIX,
+    })));
+
+    // (2) investor checkout — professional + institutional.
+    ok(await postWebhook(worker, investorCheckoutEvent({ userId: 202, investorTier: 'professional', subscription: 'sub_inv_202', customer: 'cus_202' })));
+    ok(await postWebhook(worker, investorCheckoutEvent({ userId: 205, investorTier: 'institutional', subscription: 'sub_inv_205', customer: 'cus_205' })));
+
+    // (3) ISOLATION A: user 203 has a founder-tier sub AND an MI Pro sub on the
+    // SAME Stripe customer. Delete the MI Pro sub → founder columns must survive.
+    ok(await postWebhook(worker, tierCheckoutEvent({ userId: 203, tier: 'studio', subscription: 'sub_tier_A', customer: 'cus_mixA' })));
+    ok(await postWebhook(worker, checkoutEvent({ userId: 203, subscription: 'sub_mi_A', customer: 'cus_mixA' })));
+    ok(await postWebhook(worker, subscriptionDeletedEvent({ subId: 'sub_mi_A', customer: 'cus_mixA' })));
+
+    // (4) ISOLATION B: the mirror — delete the founder-tier sub → founder columns
+    // drop to free, but the co-existing MI Pro row must stay active.
+    ok(await postWebhook(worker, tierCheckoutEvent({ userId: 204, tier: 'growth', subscription: 'sub_tier_B', customer: 'cus_mixB' })));
+    ok(await postWebhook(worker, checkoutEvent({ userId: 204, subscription: 'sub_mi_B', customer: 'cus_mixB' })));
+    ok(await postWebhook(worker, subscriptionDeletedEvent({ subId: 'sub_tier_B', customer: 'cus_mixB' })));
+  } finally {
+    await worker.stop();
+  }
+
+  const users = query(
+    cfgPath,
+    persistTo,
+    `SELECT id, subscription_tier, subscription_status, subscription_renews_at,
+            stripe_customer_id, stripe_subscription_id,
+            investor_tier, investor_subscription_status, investor_dealroom_max,
+            investor_stripe_customer_id, investor_stripe_subscription_id
+       FROM users ORDER BY id`,
+  );
+  const byId = Object.fromEntries(users.map((r) => [Number(r.id), r]));
+  const mi = query(
+    cfgPath,
+    persistTo,
+    'SELECT user_id, status, subscription_id FROM mi_pro_subscriptions ORDER BY user_id',
+  );
+  const miByUser = Object.fromEntries(mi.map((r) => [Number(r.user_id), r]));
+
+  // (1) founder-tier checkout landed in the tier columns.
+  assert.equal(byId[201].subscription_tier, 'growth', 'founder-tier checkout must set subscription_tier');
+  assert.equal(byId[201].subscription_status, 'active');
+  assert.equal(byId[201].stripe_customer_id, 'cus_201');
+  assert.equal(byId[201].stripe_subscription_id, 'sub_tier_201');
+  // ...and the tier checkout must NOT bleed into the MI Pro side table.
+  assert.equal(miByUser[201], undefined, 'a founder-tier checkout must not create an MI Pro row');
+
+  // (5) subscription.updated re-aligned the renewal date on the tier columns.
+  assert.equal(
+    byId[201].subscription_renews_at,
+    PERIOD_END_ISO,
+    'founder-tier subscription.updated must set subscription_renews_at',
+  );
+
+  // (2) investor checkout landed in the investor columns with the right cap.
+  assert.equal(byId[202].investor_tier, 'professional', 'investor checkout must set investor_tier');
+  assert.equal(byId[202].investor_subscription_status, 'active');
+  assert.equal(Number(byId[202].investor_dealroom_max), 5, 'professional dealroom cap');
+  assert.equal(byId[202].investor_stripe_customer_id, 'cus_202');
+  assert.equal(byId[202].investor_stripe_subscription_id, 'sub_inv_202');
+  assert.equal(miByUser[202], undefined, 'an investor checkout must not create an MI Pro row');
+  // institutional grant routes the higher dealroom cap.
+  assert.equal(byId[205].investor_tier, 'institutional');
+  assert.equal(Number(byId[205].investor_dealroom_max), 1_000_000, 'institutional dealroom cap');
+
+  // (3) ISOLATION A — deleting the MI Pro sub left the founder tier intact.
+  assert.equal(miByUser[203].status, 'cancelled', 'the deleted MI Pro sub must be cancelled');
+  assert.equal(byId[203].subscription_tier, 'studio', 'deleting an MI Pro sub must NOT clobber the founder tier');
+  assert.equal(byId[203].subscription_status, 'active');
+  assert.equal(byId[203].stripe_subscription_id, 'sub_tier_A', 'founder stripe_subscription_id must survive an MI Pro deletion');
+
+  // (4) ISOLATION B — deleting the founder-tier sub dropped the tier to free but
+  // left the co-existing MI Pro row active.
+  assert.equal(byId[204].subscription_tier, 'free', 'deleting the founder-tier sub must drop the tier to free');
+  assert.equal(byId[204].subscription_status, 'cancelled');
+  assert.equal(byId[204].stripe_subscription_id, null, 'founder stripe_subscription_id must be nulled on tier deletion');
+  assert.equal(miByUser[204].status, 'active', 'a co-existing MI Pro sub must survive a founder-tier deletion');
 });
