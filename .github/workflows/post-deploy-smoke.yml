@@ -1,0 +1,45 @@
+name: post-deploy SPA smoke
+
+# Task #16 — Runtime smoke check that the live site serves the rendered SPA
+# shell (HTTP 200 + `<div id="root">` + a hashed `/assets/*.js` module script)
+# instead of a blank page or the JSON 404. Task #15 added a BUILD-time guard;
+# this is the LIVE counterpart. The original blank-page incident shipped because
+# nothing verified the deployed site.
+#
+# Deploys happen via `npm run deploy` (which runs scripts/check-spa-live.mjs as
+# its `postdeploy` hook), so this workflow is the synthetic/on-demand layer:
+# - workflow_dispatch: re-run by hand right after a deploy.
+# - schedule: catch a site that goes blank between deploys (cache purge, asset
+#   rot, Worker rollback, etc.).
+#
+# No secrets required — it makes plain public HTTPS requests to the prod hosts.
+
+on:
+  workflow_dispatch:
+    inputs:
+      hosts:
+        description: 'Space/comma-separated base URLs to check'
+        required: false
+        default: 'https://axal.vc https://app.axal.vc'
+  schedule:
+    # Every 6 hours. Frequent enough to catch a blank prod fast, cheap enough
+    # to stay well inside free CI minutes.
+    - cron: '0 */6 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: live SPA smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Live SPA smoke check
+        env:
+          SMOKE_HOSTS: ${{ github.event.inputs.hosts }}
+        run: node scripts/check-spa-live.mjs

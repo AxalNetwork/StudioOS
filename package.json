@@ -10,6 +10,8 @@
     "test:e2e": "playwright test",
     "build": "cd frontend && npm run build",
     "deploy": "cd cloudflare-worker && npx wrangler deploy --config ../wrangler.toml --env production",
+    "postdeploy": "node scripts/check-spa-live.mjs",
+    "verify:live": "node scripts/check-spa-live.mjs",
     "deploy:preview": "cd cloudflare-worker && npx wrangler deploy --config ../wrangler.toml --env preview",
     "tail": "cd cloudflare-worker && npx wrangler tail --config ../wrangler.toml",
     "tail:preview": "cd cloudflare-worker && npx wrangler tail --config ../wrangler.toml --env preview",
