@@ -20,6 +20,23 @@ export function applyMergeFields(
   });
 }
 
+/**
+ * Task #29 — Turn `{{dotted.path}}` tokens into bracketed labels (e.g.
+ * `{{company.legal_name}}` -> `[COMPANY LEGAL NAME]`) for a "blank
+ * form" rendering of a legal template where no live merge context is
+ * available. Only tokens defined in the canonical merge schema are
+ * bracketed; unknown tokens pass through unchanged so reviewers still
+ * spot anything not yet modelled. Uses the same token regex as
+ * `applyMergeFields`.
+ */
+import { isKnownMergeToken, bracketLabel } from './legalMergeSchema';
+
+export function resolveWithBrackets(body: string): string {
+  return body.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (orig, path: string) => {
+    return isKnownMergeToken(path) ? bracketLabel(path) : orig;
+  });
+}
+
 function resolveDotted(scope: Record<string, unknown>, path: string): unknown {
   const parts = path.split('.');
   let cur: unknown = scope;

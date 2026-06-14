@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-"""Task #8 — Generate cloudflare-worker/sql/migrations/085_seed_legal_templates.sql
+"""Generate the D1 `legal_templates` seed + body-fill migrations.
 
-Seeds the D1 `legal_templates` store from three sources:
-  A. Dev FastAPI plain-text templates (backend/app/api/routes/legal.py TEMPLATES)
-     — full counsel-drafted bodies. {single_brace} placeholders are converted
-     to {{double_brace}} so the worker's applyMergeFields renders them uniformly.
-  B. Worker e-sign markdown bodies (cloudflare-worker/src/templates/legal/*.md)
-     — already use {{double_brace}}; stored under their public doc_type slug.
-  C. Stub catalog entries (is_stub=1, empty body) for every admin agreement
-     option and contract doc_type that has no body content yet, so the grid
-     lists the full catalog grouped by category.
+Two outputs:
+  * migration 085 (base seed) — only (re)written when the file is ABSENT, so the
+    already-deployed/applied 085 stays byte-frozen. Seeds the store from:
+      A. Dev FastAPI plain-text templates (backend/app/api/routes/legal.py)
+      B. Worker e-sign markdown bodies (cloudflare-worker/src/templates/legal/*.md)
+      C. Stub catalog entries (is_stub=1, empty body) for catalog completeness
+      D. Task #29 authored v1 bodies (FULL_BODY_V1), seeded as full bodies.
+  * migration 105 (Task #29 body-fill) — ALWAYS written. A stub-gated upsert of
+    the FULL_BODY_V1 bodies: `ON CONFLICT(slug) DO UPDATE ... WHERE is_stub = 1`,
+    so deployed stub rows pick up the authored bodies without clobbering rows an
+    admin has already edited (is_stub=0).
 
 Re-run after changing any source:
     .venv/bin/python scripts/gen-legal-templates-seed.py
 
-The generated SQL is idempotent (INSERT OR IGNORE on the unique slug).
+085 uses INSERT OR IGNORE (idempotent); 105 uses a stub-gated upsert.
 """
 import os
 import re
@@ -22,12 +24,18 @@ import json
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "cloudflare-worker", "sql", "migrations", "085_seed_legal_templates.sql")
+OUT_105 = os.path.join(ROOT, "cloudflare-worker", "sql", "migrations", "105_fill_legal_template_bodies.sql")
 MD_DIR = os.path.join(ROOT, "cloudflare-worker", "src", "templates", "legal")
 
 VALID_CATEGORIES = {"gp", "fund", "portfolio", "compliance"}
 
 # --- A. FastAPI content templates (slug == key, category == layer) ----------
-from backend.app.api.routes.legal import TEMPLATES as FASTAPI_TEMPLATES  # noqa: E402
+# Only needed for the (now dormant) 085 base-seed path; guarded so the 105
+# generation does not depend on the dev backend being importable.
+try:
+    from backend.app.api.routes.legal import TEMPLATES as FASTAPI_TEMPLATES  # noqa: E402
+except Exception:  # pragma: no cover - dev backend not importable
+    FASTAPI_TEMPLATES = {}
 
 # --- B. Worker e-sign markdown bodies, keyed by their public doc_type slug ---
 # (doc_type values mirror admin_contracts.ts TEMPLATES + DOC_TYPE_TO_TEMPLATE_KEY)
@@ -45,13 +53,10 @@ ESIGN_MD = [
 ]
 
 # --- C1. Contract doc_types present in the admin catalog without a body ------
+# Task #29 — the partner_* deal slugs and finders_fee_intro_agreement moved to
+# FULL_BODY_V1 below (they now have authored v1 bodies), so they are removed
+# from the stub catalog.
 CATALOG_STUBS = [
-    ("partner_nda_nonsolicit",       "Partner NDA + Non-Solicit",       "gp"),
-    ("partner_equity",               "Partner Equity Deal",             "gp"),
-    ("partner_revshare",             "Partner Revenue-Share Deal",      "gp"),
-    ("partner_capital",              "Partner Capital Deal",            "gp"),
-    ("partner_custom",               "Partner Custom Deal",             "gp"),
-    ("finders_fee_intro_agreement",  "Finder's Fee / Intro Agreement",  "gp"),
     ("ip_background_schedule",       "IP Background Schedule",          "portfolio"),
     ("data_access_acknowledgment_admin", "Data Access Acknowledgment (Admin)", "compliance"),
     ("investor_subscription_pro",    "Investor Subscription \u2014 Pro Tier",          "fund"),
@@ -60,6 +65,8 @@ CATALOG_STUBS = [
 
 # --- C2. Admin agreement dropdown options (AGREEMENT_OPTIONS) ---------------
 # slug == the literal option value; category per the dropdown group.
+# Task #29 — Venture Share (FAST), MSA + Equity-for-Services, Engagement Letter
+# (Spin-Out Package) and White-Label Service Agreement moved to FULL_BODY_V1.
 AGREEMENT_STUBS = [
     ("Subscription Booklet & LPA",              "Subscription Booklet & LPA (LP)",                 "fund"),
     ("SPV Joinder Agreement",                   "SPV Joinder Agreement (Syndicate)",               "fund"),
@@ -71,11 +78,37 @@ AGREEMENT_STUBS = [
     ("Technology Integration / JV Agreement",   "Technology Integration / JV (StudioOS AI)",       "portfolio"),
     ("Referral / Agency Agreement",             "Referral / Agency Agreement (Distribution / GTM)", "portfolio"),
     ("M&A Advisory Mandate",                    "M&A Advisory Mandate",                            "portfolio"),
-    ("Venture Share Agreement (FAST)",          "Venture Share Agreement / FAST (Advisor)",        "gp"),
-    ("MSA + Equity-for-Services",               "MSA + Equity-for-Services (Operating Partner)",   "gp"),
-    ("Engagement Letter (Spin-Out Package)",    "Engagement Letter (Legal Counsel)",               "gp"),
-    ("White-Label Service Agreement",           "White-Label Service Agreement (Technical Partner)", "gp"),
     ("Secondary Purchase Agreement",            "Secondary Purchase Agreement (Liquidity)",        "portfolio"),
+]
+
+# --- D. Task #29 — authored v1 bodies for the 21 previously-blank templates.
+# slug == the join-key literal (spaced slugs stay spaced); only the filename is
+# snake_cased. These are seeded as full bodies (is_stub=0) into the base seed
+# AND emitted as the stub-gated upsert migration 105 so already-deployed D1
+# stub rows pick them up without clobbering admin-edited (non-stub) rows.
+FULL_BODY_V1 = [
+    # slug,                                   md file,                                       title,                                              category
+    ("carried_interest",                      "carried_interest_v1.md",                      "Carried Interest / Partnership Agreement",         "gp"),
+    ("cofounder_agreement",                   "cofounder_agreement_v1.md",                   "Co-Founder Agreement",                             "portfolio"),
+    ("Engagement Letter (Spin-Out Package)",  "engagement_letter_spin_out_package_v1.md",    "Engagement Letter (Legal Counsel)",                "gp"),
+    ("finders_fee_intro_agreement",           "finders_fee_intro_agreement_v1.md",           "Finder's Fee / Intro Agreement",                   "gp"),
+    ("sg_first_directors_resolution",         "sg_first_directors_resolution_v1.md",         "First Directors' Resolution (Singapore)",          "gp"),
+    ("ee_founding_resolution",                "ee_founding_resolution_v1.md",                "Founding Resolution (Estonia O\u00dc)",            "gp"),
+    ("member_consent",                        "member_consent_v1.md",                        "Initial Member Written Consent",                   "gp"),
+    ("ic_charter",                            "ic_charter_v1.md",                            "Investment Committee Charter",                     "gp"),
+    ("MSA + Equity-for-Services",             "msa_equity_for_services_v1.md",               "MSA + Equity-for-Services (Operating Partner)",    "gp"),
+    ("mentor_engagement_disclaimer",          "mentor_engagement_disclaimer_v1.md",          "Mentor Engagement Disclaimer v1",                  "gp"),
+    ("mentor_nda_axal",                       "mentor_nda_axal_v1.md",                       "Mentor NDA (Axal) v1",                             "gp"),
+    ("operating_agreement",                   "operating_agreement_v1.md",                   "Operating Agreement (LLC)",                        "gp"),
+    ("partner_capital",                       "partner_capital_v1.md",                       "Partner Capital Deal",                             "gp"),
+    ("partner_custom",                        "partner_custom_v1.md",                        "Partner Custom Deal",                              "gp"),
+    ("partner_equity",                        "partner_equity_v1.md",                        "Partner Equity Deal",                              "gp"),
+    ("partner_nda_nonsolicit",                "partner_nda_nonsolicit_v1.md",                "Partner NDA + Non-Solicit",                        "gp"),
+    ("partner_revshare",                      "partner_revshare_v1.md",                      "Partner Revenue-Share Deal",                       "gp"),
+    ("partner_services",                      "partner_services_v1.md",                      "Partner Services / MSA v1",                        "gp"),
+    ("service_agreement",                     "service_agreement_v1.md",                     "Partner Service Agreement",                        "gp"),
+    ("Venture Share Agreement (FAST)",        "venture_share_agreement_fast_v1.md",          "Venture Share Agreement / FAST (Advisor)",         "gp"),
+    ("White-Label Service Agreement",         "white_label_service_agreement_v1.md",         "White-Label Service Agreement (Technical Partner)", "gp"),
 ]
 
 SINGLE_BRACE = re.compile(r"(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})")
@@ -108,7 +141,43 @@ def row_sql(slug, title, category, body, is_stub):
     )
 
 
-def main():
+def upsert_sql(slug, title, category, body):
+    """Stub-gated body-fill upsert for migration 105.
+
+    Inserts the authored body as a full (is_stub=0) row; if the slug already
+    exists, only updates it when the existing row is still a stub
+    (`WHERE legal_templates.is_stub = 1`) so admin-edited rows are protected.
+    """
+    assert category in VALID_CATEGORIES, f"bad category {category} for {slug}"
+    mf = json.dumps(merge_fields(body))
+    return (
+        "INSERT INTO legal_templates\n"
+        "  (slug, title, category, body_md, merge_fields, version, is_active, is_stub) VALUES\n"
+        f"  ('{esc(slug)}', '{esc(title)}', '{esc(category)}', '{esc(body)}', '{esc(mf)}', 1, 1, 0)\n"
+        "ON CONFLICT(slug) DO UPDATE SET\n"
+        "  title        = excluded.title,\n"
+        "  category     = excluded.category,\n"
+        "  body_md      = excluded.body_md,\n"
+        "  merge_fields = excluded.merge_fields,\n"
+        "  is_stub      = 0,\n"
+        "  version      = legal_templates.version + 1,\n"
+        "  updated_at   = CURRENT_TIMESTAMP\n"
+        "WHERE legal_templates.is_stub = 1;"
+    )
+
+
+def read_md(fname):
+    with open(os.path.join(MD_DIR, fname), "r", encoding="utf-8") as fh:
+        return fh.read()
+
+
+def gen_085():
+    """Base seed (sources A–D). Only written when 085 is absent — the applied
+    085 is frozen in prod, so re-running the generator must not mutate it."""
+    if os.path.exists(OUT):
+        print(f"Skip {os.path.relpath(OUT, ROOT)} (exists; frozen — not regenerated)")
+        return
+
     rows = []
     seen = set()
 
@@ -118,6 +187,10 @@ def main():
         seen.add(slug)
         rows.append(row_sql(slug, title, category, body, is_stub))
 
+    # D. Task #29 authored v1 bodies (full bodies, take precedence over stubs)
+    for slug, fname, title, category in FULL_BODY_V1:
+        add(slug, title, category, read_md(fname), 0)
+
     # A. FastAPI full-content templates
     for key, v in FASTAPI_TEMPLATES.items():
         body = to_double_brace(v.get("content", ""))
@@ -125,10 +198,7 @@ def main():
 
     # B. Worker e-sign markdown bodies
     for slug, fname, title, category in ESIGN_MD:
-        path = os.path.join(MD_DIR, fname)
-        with open(path, "r", encoding="utf-8") as fh:
-            body = fh.read()
-        add(slug, title, category, body, 0)
+        add(slug, title, category, read_md(fname), 0)
 
     # C1 + C2. Stub catalog entries (empty body)
     for slug, title, category in CATALOG_STUBS + AGREEMENT_STUBS:
@@ -147,6 +217,31 @@ def main():
 
     stubs = sum(1 for r in rows if r.rstrip().endswith("1);"))
     print(f"Wrote {len(rows)} template rows ({stubs} stubs) -> {os.path.relpath(OUT, ROOT)}")
+
+
+def gen_105():
+    """Task #29 — stub-gated body-fill for the 21 authored v1 templates."""
+    rows = [upsert_sql(slug, title, category, read_md(fname))
+            for slug, fname, title, category in FULL_BODY_V1]
+
+    header = (
+        "-- Task #29 — Fill the 21 previously-blank legal_templates with authored v1 bodies.\n"
+        "-- Source: scripts/gen-legal-templates-seed.py (FULL_BODY_V1) — DO NOT hand-edit.\n"
+        "-- Stub-gated upsert: existing rows are only overwritten when still a stub\n"
+        "-- (is_stub = 1), so admin-edited (is_stub = 0) rows are never clobbered.\n"
+        "-- Bodies are v1 drafts pending legal review.\n\n"
+    )
+    with open(OUT_105, "w", encoding="utf-8") as fh:
+        fh.write(header)
+        fh.write("\n\n".join(rows))
+        fh.write("\n")
+
+    print(f"Wrote {len(rows)} body-fill upserts -> {os.path.relpath(OUT_105, ROOT)}")
+
+
+def main():
+    gen_085()
+    gen_105()
 
 
 if __name__ == "__main__":
