@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Download a PDF of any legal template
+
+Admins can now download a PDF preview of any template in the legal catalog. Open a template in the editor, click the **Download PDF** button in the footer, and receive a watermarked preview file showing exactly how the document will look when generated — with merge fields replaced by their bracketed labels, and a "PREVIEW" watermark on every page so it can never be confused with a signed contract. The button respects the existing "Resolve merge fields" toggle, so you can also download a version showing the raw `{{tokens}}` for QA.
+
+---
+
 ## We're now "Axal VC" across the app
 
 You'll see our full brand name, **Axal VC**, throughout the platform — on page titles, the home-screen app name, receipts, contracts, your account settings, and across our written guides, terms, and privacy policy. It's the same platform you already know, simply shown under our complete brand name. How you sign in and use your account is unchanged.

@@ -10,6 +10,30 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Per-Template PDF Download (Task #31)
+
+- **Why:** reviewers can't get a real PDF of an unsigned template without
+  going through the e-sign flow.
+- **Shared pagination routine** extracted in `cloudflare-worker/src/services/pdf.ts`
+  (`paginateBody`) and refactored `renderAgreementPdf` to use it with a
+  `reservedTailHeight` for the signature block — output is unchanged.
+- **`renderTemplatePreviewPdf`** added — no signature block, placeholder
+  envelope `PREVIEW-NOT-YET-SENT`, body SHA-256 computed from body, and a
+  45° low-opacity `PREVIEW` watermark drawn on every page.
+- **Worker route** `GET /admin/contracts/templates/store/:slug/preview.pdf`
+  (`?resolve=brackets|raw`) added in `admin_contracts.ts`. Requires admin,
+  loads template via `storeGetTemplate`, applies `resolveWithBrackets` unless
+  `resolve=raw`, returns `application/pdf` with `Content-Disposition: inline`
+  filename and `Cache-Control: no-store`. Binary endpoint — kept OUT of the
+  typed API drift surface.
+- **Frontend blob helper** `adminTemplateStorePreviewPdfBlob` in `api.js`
+  mirrors `adminFormPreviewBlob` auth pattern.
+- **Download PDF button** in `AdminTemplates.jsx` modal footer, immediately
+  left of Cancel. Disabled when new/saving/loading. Respects the "Resolve
+  merge fields" toggle. Download via synthetic `<a download>` click. Errors
+  surface through existing `setErr`.
+- **Changelogs synced** in `CHANGELOG.md` and `frontend/public/CHANGELOG-user.md`.
+
 ## Rebrand bare "Axal" → "Axal VC" across frontend & user-facing literature (Task #28)
 
 - **Why:** the official brand is **Axal VC**, not "Axal" alone. Standalone brand
