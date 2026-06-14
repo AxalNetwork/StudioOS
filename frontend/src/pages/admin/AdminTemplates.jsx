@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { FileText, X, Plus, Save, Trash2, History, Loader2, AlertTriangle, RefreshCw, Eye } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { useEscapeClose } from '../../components/useEscapeClose';
+import DocumentBody from '../../components/DocumentBody';
 
 // Task #8 — Markdown template editor + full template catalog.
 //
@@ -329,7 +328,7 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
                 </div>
               )}
               <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 flex items-center justify-between">
-                <span>Markdown</span>
+                <span>Plain text</span>
                 {viewVersion && <span className="text-violet-600 normal-case font-normal">Previewing v{viewVersion.version} →</span>}
               </div>
               <textarea
@@ -337,7 +336,7 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
                 onChange={e => { setBody(e.target.value); setViewVersion(null); }}
                 spellCheck={false}
                 data-testid="template-body"
-                placeholder="# Heading&#10;&#10;Body text with {{merge_field}} tokens…"
+                placeholder="SECTION TITLE&#10;&#10;1.1  Clause text with {{merge_field}} tokens…&#10;&#10;Signed: ______________________"
                 className="flex-1 min-h-[280px] w-full px-4 py-3 text-[13px] font-mono leading-relaxed resize-none focus:outline-none bg-white dark:bg-gray-900 dark:text-gray-100" />
               {/* Merge fields (auto-detected from body) */}
               <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-2">
@@ -360,12 +359,11 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
               <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 sticky top-0 bg-gray-50 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-800">
                 {viewVersion ? `Preview · v${viewVersion.version} (read-only)` : 'Live preview'}
               </div>
-              <div className="px-5 py-4 prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold">
-                {previewBody.trim() ? (
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{previewBody}</ReactMarkdown>
-                ) : (
-                  <div className="text-gray-400 text-sm not-prose">Nothing to preview yet.</div>
-                )}
+              <div className="px-5 py-4">
+                <DocumentBody
+                  text={previewBody}
+                  className="font-sans text-[13.5px] leading-relaxed text-gray-800 dark:text-gray-200"
+                  emptyText="Nothing to preview yet." />
               </div>
             </div>
           </div>

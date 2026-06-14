@@ -10,6 +10,50 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Document template preview spacing fixed; one shared body renderer (Task #27)
+
+- **Why:** document templates (legal agreements, resolutions, etc.) are authored
+  as PLAIN TEXT — line breaks and blank lines carry the structure (CAPS section
+  headers, `1.1`/`2.2` numbering, `-` bullets, `______` fill-in blanks). The
+  admin template editor's **Live preview** ran the body through `react-markdown`
+  (`AdminTemplates.jsx`), which per Markdown rules collapses single newlines into
+  spaces and would mangle the underscores/dashes — so sections and clauses jammed
+  into run-on paragraphs and the preview did not match the finished document.
+- **New shared component** `frontend/src/components/DocumentBody.jsx` — renders a
+  document/template body as plain text with whitespace preserved
+  (`whitespace-pre-wrap`), dark-mode aware, with an optional `emptyText`. Tokens
+  (`{{merge_field}}`), underscores, and dashes are shown literally. `className`
+  lets each site keep its own font/size/colour so appearance is unchanged.
+- **`AdminTemplates.jsx`** — Live preview now renders via `DocumentBody` (dropped
+  `react-markdown`/`remark-gfm` imports and the `prose` wrapper, which styled the
+  `<pre>` like a code block). The editor preview now matches the e-signed/generated
+  document exactly (same `font-sans text-[13.5px]` look). The source-pane label
+  "Markdown" → "Plain text" and the placeholder now shows plain-text structure
+  (no `# Heading`), so authors aren't misled into expecting Markdown.
+- **`ESignPage.jsx`** and **`LegalPage.jsx`** — the e-signature document view and
+  the user-facing template preview now route through the same `DocumentBody`
+  (each passes its existing className), so the editor preview and the live output
+  share one rendering path and can't drift. No appearance change at these two.
+- **Out of scope (unchanged):** the article/news editors and pitch-deck print view
+  (`DocsLayout.jsx`, `PitchDeckPrintPage.jsx`) are a genuinely Markdown-based
+  system. The admin contract detail in `AdminPage.jsx` no longer inlines the body
+  (Security #8 — body lives in object storage, download-only), so there was no
+  body render to unify there.
+
+## Articles sidebar collapsed to a single entry (Task #26)
+
+- The left sidebar listed three items for the same feature — **Articles**,
+  **Write an Article** (`/articles/draft`), and **My Articles** (`/articles/mine`)
+  — repeated across all five role groups in `frontend/src/sidebarConfig.js`. Since
+  `/articles` is already a tabbed hub (Browse + a My Articles tab) with a
+  "Write an article" button, the two extra items were redundant.
+- Removed the `Write an Article` and `My Articles` items from every role's
+  `account` group, keeping the single `Articles` entry; dropped the now-unused
+  `PenLine` lucide import.
+- No route changes — `/articles/draft` and `/articles/mine` still resolve
+  (`App.jsx` unchanged), so existing links/bookmarks keep working; only the
+  sidebar shortcuts were removed.
+
 ## Onboarding chatbot: admins exempt (Task #24)
 
 - **Why:** admins (and accounts created as a partner and later promoted to admin)

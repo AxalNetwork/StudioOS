@@ -6,6 +6,7 @@ import {
   Briefcase, Scale, AlertTriangle, BookOpen, Download, Building2,
 } from 'lucide-react';
 import IncorporationStatusBadge from '../components/IncorporationStatusBadge';
+import DocumentBody from '../components/DocumentBody';
 
 function ModernSelect({ value, onChange, children, ...props }) {
   return (
@@ -479,7 +480,7 @@ function TemplatePreviewModal({ template, onClose, onGenerate }) {
             <div className="text-center text-gray-500 text-sm py-8">Loading template...</div>
           ) : (
             <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 dark:border-gray-800">
-              <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed dark:text-gray-300">{content}</pre>
+              <DocumentBody text={content} className="text-xs text-gray-700 font-mono leading-relaxed dark:text-gray-300" />
             </div>
           )}
         </div>

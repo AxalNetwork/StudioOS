@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Legal template previews now match the finished document
+
+When admins edit a legal template, the live preview on the right now shows the document exactly as it will look once it's generated and signed — section headings, numbered clauses, bullets, and signature lines each sit on their own lines with the spacing as typed, instead of being squashed into run-on paragraphs. The template body is plain text (labelled as such, no more "Markdown"), and every place a document appears — the editor preview, the template preview, and the e-signature page — now uses the same renderer, so what you see while editing always matches the real document.
+
+---
+
+## A tidier sidebar for Articles
+
+The sidebar used to show three separate Articles links — Articles, Write an Article, and My Articles. Now that everything lives on one page, the sidebar has a single **Articles** link. Open it and you'll find the **Browse** and **My Articles** tabs, plus the **Write an article** button, right there. Any links you'd saved before still work.
+
+---
+
 ## Admins skip the welcome chat
 
 The "Tell us about yourself" onboarding chat is meant only for brand-new members. Admins now go straight to the dashboard and are never sent into that chat — even if their account was first created as a partner and later upgraded to admin. New members signing up still get the welcome chat exactly as before.
