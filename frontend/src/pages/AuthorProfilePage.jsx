@@ -1,10 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, FileText, Globe, UserCircle, Twitter, Linkedin } from 'lucide-react';
+import { ArrowLeft, Loader2, FileText, Globe, UserCircle } from 'lucide-react';
 import { articles as api } from '../lib/api';
 import { reportError } from '../lib/log';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
+import { safeExternalUrl } from '../lib/url';
+
+// lucide-react 1.x dropped the brand glyphs; ship local inline SVGs (matching
+// lucide's stroke style) so the author social links render unchanged.
+function Twitter({ className, size = 24 }) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z" />
+    </svg>
+  );
+}
+function Linkedin({ className, size = 24 }) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
+      <rect width="4" height="12" x="2" y="9" />
+      <circle cx="4" cy="4" r="2" />
+    </svg>
+  );
+}
 
 function ArticleCard({ a }) {
   return (
@@ -136,17 +156,17 @@ export default function AuthorProfilePage() {
                       </span>
                     )}
                     {author?.website && (
-                      <a href={author.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-violet-700 dark:hover:text-violet-400 hover:underline">
+                      <a href={safeExternalUrl(author.website)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-violet-700 dark:hover:text-violet-400 hover:underline">
                         <Globe className="w-3.5 h-3.5" /> Website
                       </a>
                     )}
                     {author?.twitter && (
-                      <a href={author.twitter} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-violet-700 dark:hover:text-violet-400 hover:underline">
+                      <a href={safeExternalUrl(author.twitter)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-violet-700 dark:hover:text-violet-400 hover:underline">
                         <Twitter className="w-3.5 h-3.5" /> X / Twitter
                       </a>
                     )}
                     {author?.linkedin && (
-                      <a href={author.linkedin} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-violet-700 dark:hover:text-violet-400 hover:underline">
+                      <a href={safeExternalUrl(author.linkedin)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-violet-700 dark:hover:text-violet-400 hover:underline">
                         <Linkedin className="w-3.5 h-3.5" /> LinkedIn
                       </a>
                     )}

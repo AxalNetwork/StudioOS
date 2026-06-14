@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Safer links across the app
+
+We added an extra safety check to the outbound links shown on company profiles, project pages, the co-marketing catalog, the advisor, and author profiles — so only genuine web links open and nothing unsafe can slip through. Author profile social links (website, X, LinkedIn) also display correctly again.
+
+---
+
+## A smoother "Tell us about yourself" chat
+
+The onboarding chat is now more reliable. If the AI assistant ever has a momentary hiccup, the conversation keeps going instead of stopping with an error — and on the rare occasion it can't respond at all, you'll see a friendly note letting you know your answers are saved and you can click "Save & continue" to finish. An Axal admin reviews every profile, so you're never stuck.
+
+---
+
 ## Articles, all in one place
 
 Articles now live on a single page with two tabs. **Browse** shows everyone's published writing from across the Axal network — search it, or filter by author type and sector. **My Articles** is your own work: every draft, submission, and published piece with its status, word count, and view count, plus quick Edit and View live links. A **Write an article** button sits at the top right and opens the full editor whenever you're ready to start a new piece. Old links to your articles list still work and now drop you straight on the My Articles tab.

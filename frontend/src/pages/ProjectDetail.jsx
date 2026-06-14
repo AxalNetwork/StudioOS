@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { safeExternalUrl } from '../lib/url';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, FileText, Target, Building, Rocket, Pencil, Trash2, X, Database, Search, ExternalLink, AlertCircle } from 'lucide-react';
 import { api } from '../lib/api';
@@ -358,7 +359,7 @@ function CrunchbaseProfileCard({ project, snap, canEdit }) {
           <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
             <Database size={14} className="text-violet-600" /> Crunchbase profile
             {snap.cb_url && (
-              <a href={snap.cb_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline inline-flex items-center gap-1">
+              <a href={safeExternalUrl(snap.cb_url)} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline inline-flex items-center gap-1">
                 open <ExternalLink size={10} />
               </a>
             )}
@@ -416,7 +417,7 @@ function CrunchbaseProfileCard({ project, snap, canEdit }) {
                     {c.short_description && <div className="text-gray-600 truncate">{c.short_description}</div>}
                   </div>
                   {c.cb_url && (
-                    <a href={c.cb_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline inline-flex items-center gap-1 whitespace-nowrap">
+                    <a href={safeExternalUrl(c.cb_url)} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline inline-flex items-center gap-1 whitespace-nowrap">
                       open <ExternalLink size={10} />
                     </a>
                   )}
@@ -560,13 +561,13 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
                         <div className="flex items-center gap-2">
                           <div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{r.name}</div>
                           {r.cb_url && (
-                            <a href={r.cb_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline inline-flex items-center gap-0.5">
+                            <a href={safeExternalUrl(r.cb_url)} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline inline-flex items-center gap-0.5">
                               <ExternalLink size={10} />
                             </a>
                           )}
                         </div>
                         {r.website && (
-                          <a href={r.website} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline truncate block">
+                          <a href={safeExternalUrl(r.website)} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline truncate block">
                             {r.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
                           </a>
                         )}

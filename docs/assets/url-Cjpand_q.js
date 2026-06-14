@@ -1,0 +1,1 @@
+function e(e){if(typeof e!=`string`)return;let t=e.trim();if(t){if(/^https?:\/\//i.test(t)||/^\/(?!\/)/.test(t))return t;if(/^[a-z0-9-]+(\.[a-z0-9-]+)+([/?#].*)?$/i.test(t))return`https://${t}`}}export{e as t};

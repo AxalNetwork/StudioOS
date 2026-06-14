@@ -6,6 +6,7 @@
  *   - Anyone: published catalog of approved+live campaigns.
  */
 import { useEffect, useState } from 'react';
+import { safeExternalUrl } from '../lib/url';
 import {
   Megaphone, Send, CheckCircle, XCircle, Loader2, Globe, Copy, Plus, BarChart3,
 } from 'lucide-react';
@@ -203,7 +204,7 @@ function PartnerView() {
                       <span className="text-xs text-gray-500">UTM code:</span>
                       <CopyableCode code={p.attribution_code} />
                       {p.published_url && (
-                        <a href={p.published_url} target="_blank" rel="noreferrer"
+                        <a href={safeExternalUrl(p.published_url)} target="_blank" rel="noreferrer"
                           className="text-xs text-violet-600 hover:underline flex items-center gap-1">
                           <Globe size={12} /> Published
                         </a>
@@ -262,7 +263,7 @@ function AdminQueueRow({ pitch, onChange }) {
         {pitch.distribution_channels && <span>· Channels: {pitch.distribution_channels}</span>}
       </div>
       {pitch.asset_url && (
-        <a className="text-xs text-violet-600 hover:underline" href={pitch.asset_url} target="_blank" rel="noreferrer">View asset</a>
+        <a className="text-xs text-violet-600 hover:underline" href={safeExternalUrl(pitch.asset_url)} target="_blank" rel="noreferrer">View asset</a>
       )}
       <textarea rows={2} value={notes}
         onChange={(e) => setNotes(e.target.value)}
@@ -377,7 +378,7 @@ function PublishedFeed() {
           </div>
           <div className="text-sm text-gray-700 line-clamp-3 whitespace-pre-wrap dark:text-gray-300">{p.summary}</div>
           {p.published_url && (
-            <a href={p.published_url} target="_blank" rel="noreferrer"
+            <a href={safeExternalUrl(p.published_url)} target="_blank" rel="noreferrer"
               className="mt-2 inline-flex items-center gap-1 text-xs text-violet-600 hover:underline">
               <Globe size={12} /> View
             </a>

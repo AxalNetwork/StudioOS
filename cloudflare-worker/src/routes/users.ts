@@ -6,7 +6,8 @@ import { requireAuth, requireAdmin } from '../auth';
 const users = new Hono<{ Bindings: Env }>();
 
 users.get('/', async (c) => {
-  await requireAuth(c);
+  // Listing all users exposes emails/names/roles — admin only (matches POST /).
+  await requireAdmin(c);
   const role = c.req.query('role');
   const sql = getSQL(c.env);
   const rows = role
@@ -29,8 +30,15 @@ users.post('/', async (c) => {
 });
 
 users.get('/:id', async (c) => {
-  await requireAuth(c);
-  const id = parseInt(c.req.param('id'));
+  // A user may view their own record; viewing anyone else's is admin-only.
+  const caller = await requireAuth(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) {
+    return c.json({ error: 'Invalid user id' }, 400);
+  }
+  if (caller.role !== 'admin' && caller.id !== id) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
   const sql = getSQL(c.env);
   const rows = await sql`SELECT id, uid, email, name, role, is_active, email_verified, founder_id, partner_id, created_at FROM users WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'User not found' }, 404); }

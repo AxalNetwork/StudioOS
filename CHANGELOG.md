@@ -10,6 +10,36 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Security audit: external-link scheme validation, users API access control, build fix
+
+- **External-link XSS hardening:** added `frontend/src/lib/url.js` exporting
+  `safeExternalUrl()` — allows `http(s)://`, root-relative `/path`, and scheme-less
+  domains (prefixed to `https://`); rejects `javascript:`/`data:`/`vbscript:` and
+  protocol-relative `//host`, returning `undefined` so an unsafe value renders a
+  non-navigable anchor. Applied to every anchor that binds a DB/AI-supplied URL
+  straight into `href`: `CompanyProfilePanel.jsx` (`website`, `linkedin_url`),
+  `ProjectDetail.jsx` (`cb_url` ×2, `website`), `CoMarketingPage.jsx`
+  (`asset_url`, `published_url` ×2), `advisor/PersonalAdvisor.jsx` (`open_url`),
+  and `AuthorProfilePage.jsx`
+  (`website`, `twitter`, `linkedin`). Closes a stored-XSS vector where a
+  `javascript:` URL persisted in profile/pitch data executes on click.
+- **Users API access control (`cloudflare-worker/src/routes/users.ts`):** `GET /`
+  now requires admin; `GET /:id` is admin-or-self (403 otherwise) and rejects
+  non-integer / non-positive ids (400) before authorization. Previously any
+  authenticated user could enumerate the full user list or read arbitrary records.
+- **Build fix (`AuthorProfilePage.jsx`):** lucide-react 1.x removed the `Twitter`
+  and `Linkedin` brand glyphs, so the import hard-failed `npm run build`. Replaced
+  with local inline SVGs mirroring lucide's stroke style — the same local-SVG
+  pattern already used across the app for brand icons.
+- **Worker typecheck fix (`cloudflare-worker/src/routes/auth_passkey.ts`):** cast the
+  passkey `userID` (`TextEncoder().encode(...)`) to `Uint8Array<ArrayBuffer>` to
+  satisfy `@simplewebauthn` under the TS 5.7 lib typings — runtime-unchanged
+  (TextEncoder always allocates a regular `ArrayBuffer`). Unblocks `npm run test:drift`.
+- **Dev migration fix (`backend/app/models/migrations.py`):** both investor-backfill
+  INSERTs (the idempotent sweep and the per-promoted-user path) now set
+  `created_at`/`updated_at`, fixing a NOT NULL violation on FastAPI dev boot.
+  Dev-only (FastAPI is never deployed).
+
 ## Stripe payment fulfilment regression test (gated, opt-in) (Task #12)
 
 - **What:** new opt-in test `cloudflare-worker/test/billing_webhook_fulfilment.test.mjs`

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { safeExternalUrl } from '../lib/url';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
 import { Building2, Plus, Save, X, Search, UserPlus, Trash2, Loader2, Globe, Users, ChevronRight } from 'lucide-react';
@@ -111,8 +112,8 @@ function CompanyDetail({ company, onChange, canEdit }) {
           <Field label="Expansion goals">{company.expansion_goals || <Empty />}</Field>
           <Field label="Links">
             <div className="flex flex-wrap gap-3">
-              {company.website && <a href={company.website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-violet-600 hover:underline"><Globe size={14}/> website</a>}
-              {company.linkedin_url && <a href={company.linkedin_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-violet-600 hover:underline"><Linkedin size={14}/> linkedin</a>}
+              {company.website && <a href={safeExternalUrl(company.website)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-violet-600 hover:underline"><Globe size={14}/> website</a>}
+              {company.linkedin_url && <a href={safeExternalUrl(company.linkedin_url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-violet-600 hover:underline"><Linkedin size={14}/> linkedin</a>}
               {!company.website && !company.linkedin_url && <Empty />}
             </div>
           </Field>

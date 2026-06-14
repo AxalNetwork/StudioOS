@@ -433,8 +433,8 @@ def ensure_investor_role_split() -> None:
         try:
             session.exec(text(
                 f"""
-                INSERT INTO investors (uid, user_id, investor_type, accreditation_status)
-                SELECT {uuid_expr}, u.id, 'lp', 'verified'
+                INSERT INTO investors (uid, user_id, investor_type, accreditation_status, created_at, updated_at)
+                SELECT {uuid_expr}, u.id, 'lp', 'verified', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 FROM users u
                 WHERE upper({u_role_cast}) = 'INVESTOR'
                   AND NOT EXISTS (SELECT 1 FROM investors i WHERE i.user_id = u.id)
@@ -505,8 +505,8 @@ def ensure_investor_role_split() -> None:
                     try:
                         session.exec(text(
                             f"""
-                            INSERT INTO investors (uid, user_id, investor_type, accreditation_status)
-                            SELECT {uuid_expr}, :uid, 'lp', 'verified'
+                            INSERT INTO investors (uid, user_id, investor_type, accreditation_status, created_at, updated_at)
+                            SELECT {uuid_expr}, :uid, 'lp', 'verified', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                             WHERE NOT EXISTS (SELECT 1 FROM investors WHERE user_id = :uid)
                             """
                         ), {"uid": uid})

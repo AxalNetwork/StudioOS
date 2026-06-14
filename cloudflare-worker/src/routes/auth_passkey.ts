@@ -88,7 +88,7 @@ passkey.get('/register-options', async (c) => {
     const options = await generateRegistrationOptions({
       rpName: rpName(c.env),
       rpID: rpID(c.env),
-      userID: new TextEncoder().encode(String(user.id)),
+      userID: new TextEncoder().encode(String(user.id)) as Uint8Array<ArrayBuffer>,
       userName: user.email,
       userDisplayName: user.name || user.email,
       attestationType: 'none',

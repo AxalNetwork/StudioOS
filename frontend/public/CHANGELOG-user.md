@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Safer links across the app
+
+We added an extra safety check to the outbound links shown on company profiles, project pages, the co-marketing catalog, the advisor, and author profiles — so only genuine web links open and nothing unsafe can slip through. Author profile social links (website, X, LinkedIn) also display correctly again.
+
+---
+
 ## A smoother "Tell us about yourself" chat
 
 The onboarding chat is now more reliable. If the AI assistant ever has a momentary hiccup, the conversation keeps going instead of stopping with an error — and on the rare occasion it can't respond at all, you'll see a friendly note letting you know your answers are saved and you can click "Save & continue" to finish. An Axal admin reviews every profile, so you're never stuck.

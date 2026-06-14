@@ -32,6 +32,7 @@
  *   GET  /advisor/conversations/:id → { messages, answers, progress }
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { safeExternalUrl } from '../../lib/url';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Sparkles, Send, X, Maximize2, Minimize2, LayoutDashboard, HelpCircle,
@@ -905,7 +906,7 @@ function Bubble({ m, onCtaClick }) {
         {!isUser && m.open_url && !cta && (
           <div className="mt-2">
             <a
-              href={m.open_url}
+              href={safeExternalUrl(m.open_url)}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-violet-600 text-white text-xs font-medium hover:bg-violet-700 transition"
             >
               Open the page →

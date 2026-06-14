@@ -10,6 +10,118 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Security audit: external-link scheme validation, users API access control, build fix
+
+- **External-link XSS hardening:** added `frontend/src/lib/url.js` exporting
+  `safeExternalUrl()` — allows `http(s)://`, root-relative `/path`, and scheme-less
+  domains (prefixed to `https://`); rejects `javascript:`/`data:`/`vbscript:` and
+  protocol-relative `//host`, returning `undefined` so an unsafe value renders a
+  non-navigable anchor. Applied to every anchor that binds a DB/AI-supplied URL
+  straight into `href`: `CompanyProfilePanel.jsx` (`website`, `linkedin_url`),
+  `ProjectDetail.jsx` (`cb_url`), `CoMarketingPage.jsx` (`asset_url`),
+  `advisor/PersonalAdvisor.jsx` (`open_url`), and `AuthorProfilePage.jsx`
+  (`website`, `twitter`, `linkedin`). Closes a stored-XSS vector where a
+  `javascript:` URL persisted in profile/pitch data executes on click.
+- **Users API access control (`cloudflare-worker/src/routes/users.ts`):** `GET /`
+  now requires admin; `GET /:id` is admin-or-self (403 otherwise). Previously any
+  authenticated user could enumerate the full user list or read arbitrary records.
+- **Build fix (`AuthorProfilePage.jsx`):** lucide-react 1.x removed the `Twitter`
+  and `Linkedin` brand glyphs, so the import hard-failed `npm run build`. Replaced
+  with local inline SVGs mirroring lucide's stroke style — the same local-SVG
+  pattern already used across the app for brand icons.
+- **Dev migration fix (`backend/app/models/migrations.py`):** the investor backfill
+  INSERT now sets `created_at`/`updated_at`, fixing a NOT NULL violation on every
+  FastAPI dev boot. Dev-only (FastAPI is never deployed).
+
+## Stripe payment fulfilment regression test (gated, opt-in) (Task #12)
+
+- **What:** new opt-in test `cloudflare-worker/test/billing_webhook_fulfilment.test.mjs`
+  boots the Worker via wrangler `unstable_dev` against a freshly seeded LOCAL D1
+  (`sql/schema.sql` + migrations `011_subscription_tiers`, `027_investor_paywall`,
+  `103_mi_pro_subscriptions`) with `ENVIRONMENT=test`, POSTs UNSIGNED Stripe events
+  to `/api/billing/stripe/webhook`, then asserts the final `mi_pro_subscriptions` state.
+- **Covers four fulfilment invariants:** (1) `checkout.session.completed` grants the
+  right plan + `active` status; (2) a REPLAYED checkout does not double-grant (upsert is
+  keyed on `user_id`); (3) an OUT-OF-ORDER `customer.subscription.created` arriving before
+  the checkout keeps `period_end` (the later checkout must not clobber it); (4)
+  `customer.subscription.deleted` scoped by `subscription_id` leaves a CO-EXISTING
+  subscription on the same Stripe customer intact.
+- **Gating:** skipped unless `RUN_BILLING_WEBHOOK_TEST=1` (wrangler cold-start + CLI seed
+  spawns add ~25s and need the wrangler binary). Intentionally NOT wired into `test:drift`.
+- **Why:** the webhook fan-out (checkout vs `subscription.*`, replays, out-of-order delivery,
+  multi-sub customers) silently regresses; this pins the observable end-state in D1.
+  Test-only — no runtime or user-facing change (no `CHANGELOG-user.md` line needed).
+- **Harness note:** bindings are wired via `unstable_dev` OPTIONS (`d1Databases` + `vars`),
+  not a `config` file — a `config` living in a temp dir makes wrangler resolve
+  `main`/node_modules relative to that dir and hang. The CLI seed/read uses a tiny config
+  sharing the same `database_id` + `persistTo` so both processes hit the same local sqlite.
+
+## Onboarding chat routed through the resilient AI router (Task #10)
+
+- **Why:** the `/profiling/chat` and `/profiling/save` endpoints called Workers AI
+  directly with a single model (`@cf/meta/llama-3.1-8b-instruct`) and no fallback,
+  so any transient model hiccup (capacity, timeout) hard-failed onboarding with
+  "AI service error. Please try again." — blocking new partners from completing
+  their profile. Every other AI feature already routes through
+  `services/aiRouter.ts` for automatic fallback, kill-switch/spend handling, and
+  usage logging.
+- **Chat turn** (`routes/profiling.ts` `/chat`) now calls `aiRouterRun` with
+  `task: 'advisor_turn'` (MID_LLAMA primary → SMALL_LLAMA fallback). System prompt,
+  last-12-message trimming, and the real-time admin tail are preserved. On a router
+  refusal / total-chain failure the handler no longer returns a 502: it returns
+  `200 { reply, degraded: true }` with a clear, non-blocking message so the user can
+  still click "Save & continue". The underlying reason (task, model, refusal, error)
+  is logged via `console.error`.
+- **Structured extraction** (`/save`) now routes through `aiRouterRun` with
+  `task: 'tool_call'` (qwen-coder → MID/SMALL llama fallback), keeping the existing
+  extraction prompt, JSON-parse logic, and best-effort behavior (save still completes
+  with raw transcript + pending-admin status if extraction yields nothing).
+- **Frontend** (`OnboardingChatPage.jsx`, `RegisterPage.jsx`) catch-block copy updated
+  to the same graceful message so users understand they can proceed.
+- Both onboarding entry points (Google-OAuth `OnboardingChatPage` and manual
+  `RegisterPage` step 2) hit the same updated `/profiling/*` endpoints.
+
+## Market Intel Pro subscription state moved to a side table; multi-product webhook hardening (Task #6)
+
+- **Why:** the prod `users` table is at Cloudflare D1's hard 100-column limit, so
+  the `ALTER TABLE users ADD COLUMN` that used to bootstrap MI Pro's
+  `mi_subscription_*` columns always threw `too many columns` and re-threw out of
+  `routes/billing.ts::handleStripeEvent` — 500ing EVERY Stripe webhook and
+  blocking fulfilment for ALL products. D1 also rejects result sets wider than
+  100 columns, so MI Pro state cannot be JOINed into `SELECT * FROM users`. See
+  `.agents/memory/d1-users-column-limit.md`.
+- **New side table** `mi_pro_subscriptions(user_id PK, status, subscription_id,
+  plan, period_end, stripe_customer_id, updated_at)` (migration
+  `cloudflare-worker/sql/migrations/103_mi_pro_subscriptions.sql`) with a UNIQUE
+  index on `subscription_id`. `middleware/miAccess.ts::ensureMiPaywallSchema`
+  bootstraps the identical shape (incl. the UNIQUE index) — keep the two in
+  lockstep.
+- **`auth.ts::getCurrentUser`** keeps `SELECT * FROM users` (100 cols) then does a
+  SEPARATE keyed lookup into `mi_pro_subscriptions`, merged onto the user object
+  as `mi_subscription_*`/`mi_stripe_customer_id` (try/catch → `free`).
+- **`routes/billing.ts` webhook** — `checkout.session.completed` MI upserts by
+  `user_id`. `customer.subscription.created/updated` UPSERTs MI by `user_id`
+  (incl. `period_end`) when the event carries `kind=mi`, so an out-of-order
+  `created` arriving before checkout completes still creates the row WITH
+  `period_end`; legacy MI subs lacking metadata fall back to a
+  `subscription_id`-scoped update. `subscription.deleted` cancels by
+  `subscription_id`.
+- **Cross-product clobber fixed** — MI Pro and founder-tier Checkout now
+  propagate `subscription_data[metadata][kind|user_id|tier/plan]` (investor
+  already did) so `customer.subscription.*` events carry their product kind; the
+  founder-tier renewal fallback is gated `else if (isTier)` so MI/investor events
+  sharing a Stripe customer can no longer overwrite `users.subscription_*`. The MI
+  plan-catalog auto-register block runs only for confirmed MI events/rows.
+- **Reporting reads** (`services/analyticsReports.ts`,
+  `services/subscriptionPlans.ts`, `middleware/observability.ts`,
+  `routes/admin_billing.ts`, `routes/assistant.ts`) rewritten to JOIN/LEFT JOIN
+  `mi_pro_subscriptions` instead of reading `users.mi_subscription_*`.
+- Deployed to prod with Stripe TEST keys; migration applied to prod D1. Verified:
+  `/api/health` 200, unsigned webhook → 400 `invalid_signature` (not 500),
+  `mi-pro/status` unauth → 401. Webhook write lifecycle (incl. out-of-order
+  ordering + UNIQUE-safe resubscribe) and analytics JOINs validated directly
+  against prod D1 (no >100-col errors).
+
 ## Articles merged into one tabbed hub (Task #5)
 
 - **`frontend/src/pages/ArticlesPage.jsx`** is now a single Articles hub with two

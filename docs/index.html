@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>
+    // Theme init — runs before first paint so the background is always correct.
+    // Reads axal_appearance_v1 from localStorage (same key + shape as
+    // SettingsContext). Falls back to 'light' (the app default).
+    // 'system' was a legacy tri-state value; it collapses to 'light' here too,
+    // matching normalizeTheme() in SettingsContext.jsx.
+    (function () {
+      try {
+        var raw = localStorage.getItem('axal_appearance_v1');
+        var theme = 'light';
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          if (parsed && parsed.theme === 'dark') theme = 'dark';
+        }
+        if (theme === 'dark') {
+          document.documentElement.dataset.theme = 'dark';
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) { /* localStorage blocked or JSON invalid — stay light */ }
+    })();
+  </script>
+  <script>
+    // Dev-only: unregister any stale service worker + clear caches BEFORE any
+    // module loads. The SW precaches '/' and serves stale HTML referencing old
+    // Vite optimizer dep hashes, causing "Outdated Optimize Dep" 504s after
+    // restarts. Runs only in dev (vite serves index.html with /@vite/client).
+    (function () {
+      try {
+        var isDev = !!document.querySelector('script[src="/@vite/client"]') ||
+                    /[?&](localhost|replit\.dev|replit\.app|repl\.co)/.test(window.location.host) ||
+                    window.location.port === '5000';
+        if (!isDev || !('serviceWorker' in navigator)) return;
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          var hadSW = regs && regs.length > 0;
+          regs.forEach(function (r) { try { r.unregister(); } catch (e) {} });
+          if (window.caches && caches.keys) {
+            caches.keys().then(function (keys) {
+              var pending = keys.map(function (k) { return caches.delete(k); });
+              Promise.all(pending).then(function () {
+                if (hadSW && !window.__swKilled) {
+                  window.__swKilled = true;
+                  window.location.reload();
+                }
+              });
+            });
+          }
+        });
+      } catch (e) { /* no-op */ }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Global Venture Partner Network — partners, capital & founders</title>
+  <meta name="description" content="GVPN connects partners, LPs, and founders across borders. Spin-Out Lab takes companies from idea to funded in 30 days." />
+  <meta name="keywords" content="global venture partner network, GVPN, venture network, LP portal, partner matchmaking, capital calls, deal flow, spin-out lab, venture studio" />
+  <meta name="author" content="Axal Management, LLC" />
+  <meta name="theme-color" content="#7c3aed" />
+  <link rel="canonical" href="https://axal.vc/" />
+
+  <!-- Task #57 — PWA install + iOS standalone -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Axal" />
+  <meta name="application-name" content="Axal StudioOS" />
+  <link rel="apple-touch-icon" sizes="192x192" href="/axal-mark.png" />
+  <link rel="apple-touch-icon" sizes="512x512" href="/axal-logo.png" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://axal.vc/" />
+  <meta property="og:title" content="Global Venture Partner Network" />
+  <meta property="og:description" content="One network connecting partners, capital, and founders. Spin-Out Lab included." />
+  <meta property="og:image" content="https://axal.vc/og.png" />
+  <meta property="og:site_name" content="Global Venture Partner Network" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Global Venture Partner Network" />
+  <meta name="twitter:description" content="One network connecting partners, capital, and founders." />
+  <meta name="twitter:image" content="https://axal.vc/og.png" />
+
+  <link rel="icon" href="/favicon.ico" type="image/x-icon" sizes="any" />
+  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <script>
+    // GitHub Pages SPA — restore path encoded by 404.html
+    (function() {
+      var q = window.location.search;
+      if (q && q.indexOf('?p=') === 0) {
+        var decoded = decodeURIComponent(q.slice(3)).replace('~and~', '?');
+        var hash = window.location.hash || '';
+        window.history.replaceState(null, null, decoded + hash);
+      }
+    })();
+  </script>
+  <script type="module" crossorigin src="/assets/index-BORutyky.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/chunk-QTnfLwEv.js">
+  <link rel="modulepreload" crossorigin href="/assets/preload-helper-zJ_50EbN.js">
+  <link rel="modulepreload" crossorigin href="/assets/jsx-runtime-BWRPWl8p.js">
+  <link rel="modulepreload" crossorigin href="/assets/createLucideIcon-C8hgb8-2.js">
+  <link rel="modulepreload" crossorigin href="/assets/api-DoT_P7yn.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-jzKgybew.css">
+</head>
+<body class="bg-white text-gray-900">
+  <div id="root"></div>
+</body>
+</html>
