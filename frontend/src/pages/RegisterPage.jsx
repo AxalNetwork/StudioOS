@@ -222,7 +222,7 @@ export default function RegisterPage() {
       setChatMessages([...newMessages, { role: 'assistant', content: res.reply }]);
     } catch (e) {
       setError(e.message);
-      setChatMessages([...newMessages, { role: 'assistant', content: "I'm having trouble reaching the AI assistant right now — but no problem, your answers are saved. You can keep going and click 'Save profile & continue' whenever you're ready, and an Axal admin will review your profile and follow up." }]);
+      setChatMessages([...newMessages, { role: 'assistant', content: "I'm having trouble reaching the AI assistant right now — but no problem, your answers are saved. You can keep going and click 'Save profile & continue' whenever you're ready, and an Axal VC admin will review your profile and follow up." }]);
     }
     setChatLoading(false);
   };
@@ -316,7 +316,7 @@ export default function RegisterPage() {
   const downloadRecoveryCodes = () => {
     const codes = totpData?.recovery_codes;
     if (!codes || !codes.length) return;
-    const txt = `Axal — TOTP recovery codes (${form.email})\nGenerated ${new Date().toISOString()}\n\n${codes.join('\n')}\n\nEach code can be used exactly once if you lose access to your authenticator app.\nDo not share these. Store somewhere safe (password manager, sealed envelope, etc.).\n`;
+    const txt = `Axal VC — TOTP recovery codes (${form.email})\nGenerated ${new Date().toISOString()}\n\n${codes.join('\n')}\n\nEach code can be used exactly once if you lose access to your authenticator app.\nDo not share these. Store somewhere safe (password manager, sealed envelope, etc.).\n`;
     const blob = new Blob([txt], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -432,7 +432,7 @@ export default function RegisterPage() {
                 <Sparkles size={18} className="text-violet-600" />
                 <h2 className="text-xl font-bold text-gray-900">Tell us about yourself</h2>
               </div>
-              <p className="text-sm text-gray-600 mb-4">Our AI assistant will profile your interest so an Axal admin can propose the right partnership agreement.</p>
+              <p className="text-sm text-gray-600 mb-4">Our AI assistant will profile your interest so an Axal VC admin can propose the right partnership agreement.</p>
 
               {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">{error}</div>}
 
@@ -504,7 +504,7 @@ export default function RegisterPage() {
                 <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-300 rounded-lg p-3 mb-4">
                   <Check size={16} className="text-emerald-600 shrink-0 mt-0.5" />
                   <p className="text-xs text-emerald-700">
-                    Profile captured. An Axal admin will review it and propose your partnership agreement once your email is verified.
+                    Profile captured. An Axal VC admin will review it and propose your partnership agreement once your email is verified.
                   </p>
                 </div>
               )}
@@ -625,7 +625,7 @@ export default function RegisterPage() {
                         'Open Authy and tap "Add Account" (or the + icon).',
                         'Tap "Enter Code Manually".',
                         'Paste the secret key above and tap the arrow.',
-                        'Account name: "Axal VC". Logo: search for "Axal" or skip. Tap "Save".',
+                        'Account name: "Axal VC". Logo: search for "Axal VC" or skip. Tap "Save".',
                         'Authy will show a 6-digit code — type it into the verification box below.',
                       ],
                     },

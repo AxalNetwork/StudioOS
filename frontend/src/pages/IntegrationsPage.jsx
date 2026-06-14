@@ -191,12 +191,12 @@ export default function IntegrationsPage() {
         };
       } else if (reason === 'google_already_linked_other_user') {
         // Task #1 — collision guard: same Google account is already
-        // attached to a different Axal user. Nothing was written.
+        // attached to a different Axal VC user. Nothing was written.
         tileGoogle = {
           kind: 'error',
           text: ge
-            ? `That Google account (${ge}) is already connected to another Axal user — disconnect it there first, then try again.`
-            : `That Google account is already connected to another Axal user — disconnect it there first, then try again.`,
+            ? `That Google account (${ge}) is already connected to another Axal VC user — disconnect it there first, then try again.`
+            : `That Google account is already connected to another Axal VC user — disconnect it there first, then try again.`,
         };
       } else if (reason === 'email_unverified') {
         tileGoogle = {
@@ -499,7 +499,7 @@ export default function IntegrationsPage() {
             icon={Calendar}
             title="Microsoft 365 — Outlook Calendar"
             type="calendar"
-            description="Two-way sync with Outlook / Microsoft 365 Calendar so Axal sessions land on your work calendar."
+            description="Two-way sync with Outlook / Microsoft 365 Calendar so Axal VC sessions land on your work calendar."
             capabilities={['Calendar', 'Two-way sync']}
             status={microsoftStatus}
             connectedLabel={microsoftStatus?.microsoft_email}
@@ -926,7 +926,7 @@ function TelegramJoinCard({ channels, requested, inlineError, onDismissError, on
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <div className="font-medium text-gray-900 dark:text-gray-100">Telegram — Axal channels</div>
+            <div className="font-medium text-gray-900 dark:text-gray-100">Telegram — Axal VC channels</div>
             {requested && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">Requested</span>
             )}

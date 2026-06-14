@@ -5,7 +5,7 @@
  *
  * Self-contained React + TypeScript + Tailwind + Framer Motion app.
  * No image assets — every product screen is a hand-built SVG mockup.
- * Designed to be bound to Axal platform rows via `heuristicSlides()`
+ * Designed to be bound to Axal VC platform rows via `heuristicSlides()`
  * (see `cloudflare-worker/src/routes/decks.ts`); the SAMPLE_DATA at the
  * bottom mirrors the exact field names the autofill layer writes.
  *
@@ -1521,13 +1521,13 @@ export const DemoDayDeckApp: React.FC<{ initial?: DemoDayData }> = ({ initial = 
 
 export default DemoDayDeckApp;
 
-/* ───────────────────────── sample data (Axal bind) ──────────────── */
+/* ───────────────────────── sample data (Axal VC bind) ──────────────── */
 /*
  * The exact field names below mirror the columns the autofill layer
  * writes from `cloudflare-worker/src/routes/decks.ts heuristicSlides()`
  * after the migration in Replit Prompt MD (`00xx_deck_autofill_fields.sql`).
  *
- * Mapping summary (Axal row → DemoDayData path):
+ * Mapping summary (Axal VC row → DemoDayData path):
  *   projects.name              → company.name
  *   projects.one_liner         → cover.headline / company.tagline
  *   projects.tagline           → cover.eyebrow

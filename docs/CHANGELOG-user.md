@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## We're now "Axal VC" across the app
+
+You'll see our full brand name, **Axal VC**, throughout the platform — on page titles, the home-screen app name, receipts, contracts, your account settings, and across our written guides, terms, and privacy policy. It's the same platform you already know, simply shown under our complete brand name. How you sign in and use your account is unchanged.
+
+---
+
 ## Legal template previews now match the finished document
 
 When admins edit a legal template, the live preview on the right now shows the document exactly as it will look once it's generated and signed — section headings, numbered clauses, bullets, and signature lines each sit on their own lines with the spacing as typed, instead of being squashed into run-on paragraphs. The template body is plain text (labelled as such, no more "Markdown"), and every place a document appears — the editor preview, the template preview, and the e-signature page — now uses the same renderer, so what you see while editing always matches the real document.
@@ -31,13 +37,13 @@ We added an extra safety check to the outbound links shown on company profiles, 
 
 ## A smoother "Tell us about yourself" chat
 
-The onboarding chat is now more reliable. If the AI assistant ever has a momentary hiccup, the conversation keeps going instead of stopping with an error — and on the rare occasion it can't respond at all, you'll see a friendly note letting you know your answers are saved and you can click "Save & continue" to finish. An Axal admin reviews every profile, so you're never stuck.
+The onboarding chat is now more reliable. If the AI assistant ever has a momentary hiccup, the conversation keeps going instead of stopping with an error — and on the rare occasion it can't respond at all, you'll see a friendly note letting you know your answers are saved and you can click "Save & continue" to finish. An Axal VC admin reviews every profile, so you're never stuck.
 
 ---
 
 ## Articles, all in one place
 
-Articles now live on a single page with two tabs. **Browse** shows everyone's published writing from across the Axal network — search it, or filter by author type and sector. **My Articles** is your own work: every draft, submission, and published piece with its status, word count, and view count, plus quick Edit and View live links. A **Write an article** button sits at the top right and opens the full editor whenever you're ready to start a new piece. Old links to your articles list still work and now drop you straight on the My Articles tab.
+Articles now live on a single page with two tabs. **Browse** shows everyone's published writing from across the Axal VC network — search it, or filter by author type and sector. **My Articles** is your own work: every draft, submission, and published piece with its status, word count, and view count, plus quick Edit and View live links. A **Write an article** button sits at the top right and opens the full editor whenever you're ready to start a new piece. Old links to your articles list still work and now drop you straight on the My Articles tab.
 
 ---
 
@@ -61,7 +67,7 @@ Admins have a new **Billing** area in the Admin Console. You can issue full or p
 
 ## Branded receipts for every payment
 
-Every time you pay for something on Axal, you'll now get a clean, Axal-branded receipt by email — with your invoice PDF attached for subscription and invoice payments, and a link to your receipt for one-off purchases. You'll receive just one receipt per payment, even if there's a hiccup behind the scenes, so no duplicates clutter your inbox.
+Every time you pay for something on Axal VC, you'll now get a clean, Axal VC-branded receipt by email — with your invoice PDF attached for subscription and invoice payments, and a link to your receipt for one-off purchases. You'll receive just one receipt per payment, even if there's a hiccup behind the scenes, so no duplicates clutter your inbox.
 
 ---
 
@@ -71,25 +77,25 @@ Referrals now pay off on any purchase, not just subscriptions. When someone arri
 
 ---
 
-## Pay to incorporate without leaving Axal
+## Pay to incorporate without leaving Axal VC
 
-Incorporating your company now finishes right inside Axal. After you pick a jurisdiction and confirm your details, you pay the one-time filing fee on an Axal-branded payment form — no being sent off to a separate checkout page. The moment your payment clears, we start preparing your founder documents.
+Incorporating your company now finishes right inside Axal VC. After you pick a jurisdiction and confirm your details, you pay the one-time filing fee on an Axal VC-branded payment form — no being sent off to a separate checkout page. The moment your payment clears, we start preparing your founder documents.
 
-You can also add an annual **Registered Agent** service to stay compliant year-round, and pick up optional one-time compliance services — all paid in the same place. Each appears as its own receipt in your Billing area, and your card details are handled securely by Stripe and never touch Axal's servers.
+You can also add an annual **Registered Agent** service to stay compliant year-round, and pick up optional one-time compliance services — all paid in the same place. Each appears as its own receipt in your Billing area, and your card details are handled securely by Stripe and never touch Axal VC's servers.
 
 ---
 
 ## Promo codes at checkout
 
-You can now enter a promo code when paying inside Axal. Type your code on the payment form and the discount is applied instantly — you'll see the updated price before you pay. If a code is 100% off, your order completes for free with a single click, no card needed. Codes can be limited to specific products and to a set number of uses, so some may not apply to every purchase.
+You can now enter a promo code when paying inside Axal VC. Type your code on the payment form and the discount is applied instantly — you'll see the updated price before you pay. If a code is 100% off, your order completes for free with a single click, no card needed. Codes can be limited to specific products and to a set number of uses, so some may not apply to every purchase.
 
 Administrators get a new **Promo Codes** area in the Admin Console to create and manage discounts — percentage-off or a fixed amount, optionally restricted to certain products, with an optional usage limit and expiry date. Codes can be switched off or deleted at any time.
 
 ---
 
-## Pay for mentor sessions without leaving Axal
+## Pay for mentor sessions without leaving Axal VC
 
-Booking a paid session with a mentor or expert now happens entirely inside Axal. Instead of being sent to a separate payment page, you enter your card on an Axal-branded form right on the expert's profile — matching the app's light and dark themes, with any extra bank verification appearing in the same window. Your expert is still paid automatically, and your card details are handled securely by Stripe and never touch Axal's servers.
+Booking a paid session with a mentor or expert now happens entirely inside Axal VC. Instead of being sent to a separate payment page, you enter your card on an Axal VC-branded form right on the expert's profile — matching the app's light and dark themes, with any extra bank verification appearing in the same window. Your expert is still paid automatically, and your card details are handled securely by Stripe and never touch Axal VC's servers.
 
 ---
 
@@ -99,15 +105,15 @@ Some features can now be unlocked on their own with a one-time purchase, without
 
 ---
 
-## Manage your subscription right inside Axal
+## Manage your subscription right inside Axal VC
 
-**Settings → Billing** is now a full self-service billing dashboard — no more being sent off to a separate Stripe page. You can see your active plan, switch to a different plan (with a clear preview of any prorated charge or credit before you confirm), cancel (you keep access until the end of the period you've paid for) or undo a scheduled cancellation, and see your upcoming and past invoices with downloadable receipts. You can also manage your cards right here: add a new card on an Axal-branded form, choose which card is your default for future charges, and remove a card you no longer use — your card details are handled securely by Stripe and never touch Axal's servers. This works for both founder and investor plans.
+**Settings → Billing** is now a full self-service billing dashboard — no more being sent off to a separate Stripe page. You can see your active plan, switch to a different plan (with a clear preview of any prorated charge or credit before you confirm), cancel (you keep access until the end of the period you've paid for) or undo a scheduled cancellation, and see your upcoming and past invoices with downloadable receipts. You can also manage your cards right here: add a new card on an Axal VC-branded form, choose which card is your default for future charges, and remove a card you no longer use — your card details are handled securely by Stripe and never touch Axal VC's servers. This works for both founder and investor plans.
 
 ---
 
-## Pay for upgrades without leaving Axal
+## Pay for upgrades without leaving Axal VC
 
-You can now complete an upgrade right inside **Settings → Billing**. A new **Pay by card** section lets you pick a plan and enter your card on an Axal-branded form — no more jumping out to a separate Stripe page. It matches the app's light and dark themes, and if your bank asks for extra verification, that step appears right there in the same window. Your card details are handled securely by Stripe and never touch Axal's servers.
+You can now complete an upgrade right inside **Settings → Billing**. A new **Pay by card** section lets you pick a plan and enter your card on an Axal VC-branded form — no more jumping out to a separate Stripe page. It matches the app's light and dark themes, and if your bank asks for extra verification, that step appears right there in the same window. Your card details are handled securely by Stripe and never touch Axal VC's servers.
 
 ---
 
@@ -335,7 +341,7 @@ For admins and operators:
 
 ## New: Public pages for Spin-Out Lab, About, Insights & the Directory
 
-Key parts of Axal are now public — no sign-in needed.
+Key parts of Axal VC are now public — no sign-in needed.
 - **Spin-Out Lab**, the **Directory**, a new **About** page (meet the team), and a new **Insights** page (market briefs and venture intelligence) all open directly from a shared link.
 - The top navigation and footer now link straight to About and Insights.
 - We tidied the homepage wording so it better reflects the whole network.
@@ -344,7 +350,7 @@ Key parts of Axal are now public — no sign-in needed.
 
 ## New: Easier, safer ways to sign in
 
-Signing in to Axal is now more flexible — and sensitive actions stay protected.
+Signing in to Axal VC is now more flexible — and sensitive actions stay protected.
 - **Passkeys** — sign in with Face ID, Touch ID, Windows Hello, or a security key, with no code to type. Add and manage your passkeys under Settings → Security.
 - **Email sign-in link** — no authenticator handy? We'll email you a one-time link that's good for 15 minutes.
 - **Extra check for sensitive actions** — when you sign in with an email link, things like billing and account changes will ask for your authenticator code first, so your account stays secure.
@@ -433,7 +439,7 @@ strip with related articles at the end.
 ## Updated: Our Team page is now an About page
 
 The "Team" link in the footer is now called "About". The page keeps the photo
-and introduces Axal VC's Managing Partner, with a short note on why Axal exists
+and introduces Axal VC's Managing Partner, with a short note on why Axal VC exists
 and how it helps founders turn ideas into businesses.
 
 ---
@@ -581,7 +587,7 @@ generate a fresh deck.
 
 ## Mentors & Partners — curate the network that shows up on your Demo Day deck
 
-Axal admins can now manage the mentor and partner network directly,
+Axal VC admins can now manage the mentor and partner network directly,
 and the Spin-Out Demo Day deck's "Mentors & Network" slide reflects
 that real roster instead of fragments pulled from your advisor
 answers.
@@ -643,7 +649,7 @@ The Demo Day deck has had a refresh. Highlights:
 - **The "Contact" slide is now "Review the deal"** with a clear
   call-to-action button that links to your deal room, plus NDA and
   data-room status badges.
-- **The Axal Signal slide has been retired** — the milestones now
+- **The Axal VC Signal slide has been retired** — the milestones now
   feed into "Review the deal" instead, so the story ends on the
   ask.
 
@@ -661,7 +667,7 @@ shaped around the lengths that actually fit on a pitch slide. Problem
 sits best between 35 and 60 words; Solution between 35 and 50. You can
 still save whatever you want — the bar is guidance, not a wall.
 
-The Axal Spin-Out demo-day deck now uses the same rule: if your
+The Axal VC Spin-Out demo-day deck now uses the same rule: if your
 Problem or Solution copy runs past the slide-friendly limit, the slide
 trims it to fit (with an ellipsis) and shows a small note pointing you
 back to the project to refine it — so the slide header never balloons
@@ -670,7 +676,7 @@ into a paragraph block.
 ## Help-widget chats and new tickets now show up in our Slack
 
 When you message us from the Help widget, or open a support ticket, it
-now lands in the right Axal team Slack channel automatically — chats in
+now lands in the right Axal VC team Slack channel automatically — chats in
 the Founders channel, tickets in the Review channel. We'll see and
 respond faster. Nothing changes on your end.
 
@@ -685,7 +691,7 @@ cards tell you the slide will populate cleanly. The grid only appears
 for the Spin-Out template — every other deck template works exactly as
 before.
 
-## Axal Spin-Out demo-day deck slides feel like a finished pitch from day one
+## Axal VC Spin-Out demo-day deck slides feel like a finished pitch from day one
 
 Every visual slide in the Spin-Out demo-day deck has been rebuilt with
 a two-column layout — your story on the left, a designed illustration
@@ -697,7 +703,7 @@ seed your cap table or set a raise amount, the placeholders quietly
 swap in for your real numbers without the slide jumping around. The ask
 slide now leads with "What we are raising — and what it buys."
 
-## Axal Spin-Out demo-day deck no longer has blank chart areas
+## Axal VC Spin-Out demo-day deck no longer has blank chart areas
 
 The Spin-Out demo-day pitch deck used to leave large empty spaces on
 slides where your project hadn't yet filled in market sizing, OKRs,
@@ -755,7 +761,7 @@ like before — newest three win.
 
 There's a 13th template in the pitch-deck picker: **Axal VC 30-day Spin-Out
 Lab — Demo Day**. It's a 14-slide deck shaped specifically for founders
-graduating the Lab and presenting to Axal-network investors and
+graduating the Lab and presenting to Axal VC network investors and
 partners. The deck reads directly from your Lab data — your discovery
 interviews, milestones, OKRs, score, cap table — so the numbers on
 screen are the numbers you actually logged. Where something's missing,
@@ -873,11 +879,11 @@ full sample decks again.
   your project data and falls back to polished sample content for
   anything you haven't filled in yet.
 - You can now **sign in with Google** in one click — the same Google
-  account stays linked to your Axal account across visits.
+  account stays linked to your Axal VC account across visits.
 - When connecting Google Calendar, Google's account picker now always
   shows up so you can pick the right account, and you can't
   accidentally link a Google identity that already belongs to a
-  different Axal user.
+  different Axal VC user.
 - The whole app now has a proper **dark mode**. Switch in Settings →
   Appearance (Light, Dark, or Follow system).
 - A **help widget** sits at the bottom-right of every page —
@@ -886,7 +892,7 @@ full sample decks again.
 - **Pitch decks shared via a one-time link** now respond to keyboard
   arrows in fullscreen on every browser. Press `f` to go fullscreen,
   arrow keys or space to advance.
-- New **in-app chat with the Axal team** for paid-tier members —
+- New **in-app chat with the Axal VC team** for paid-tier members —
   reach a human without leaving the app. Look for the chat button on
   the bottom-right; replies come back to the same thread.
 - Founders, investors, partners, and mentors can now **write and

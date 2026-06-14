@@ -41,7 +41,7 @@ const QUESTION_BANK = [
   { key: 'prior_deals', q: 'Notable prior deals or engagements? (optional)', placeholder: 'Brief list, links welcome', textarea: true,
     requires: ['deal_sourcing_revshare', 'capital_partnership', 'equity_partnership'] },
   // Universal close (always asked)
-  { key: 'motivation', q: 'Why do you want to partner with Axal?', placeholder: 'What you hope to build/learn/contribute', textarea: true, requires: null },
+  { key: 'motivation', q: 'Why do you want to partner with Axal VC?', placeholder: 'What you hope to build/learn/contribute', textarea: true, requires: null },
 ];
 
 // Hard contract: produce 6–10 questions. The bank has 7 unconditional
@@ -503,7 +503,7 @@ export default function PartnerOnboardPage() {
 
         {/* Stage 4 — done */}
         {completed && (
-          <Card title="Welcome to Axal" icon={<CheckCircle2 size={16} className="text-emerald-600" />}>
+          <Card title="Welcome to Axal VC" icon={<CheckCircle2 size={16} className="text-emerald-600" />}>
             <div className="text-center space-y-3 py-6">
               <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
                 <CheckCircle2 size={28} />

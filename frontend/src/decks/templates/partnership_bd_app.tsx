@@ -6,7 +6,7 @@
  *
  * Self-contained React + TypeScript + Tailwind + Framer Motion app.
  * Every diagram is hand-built SVG — no image assets.
- * Binds to Axal platform rows via `heuristicSlides()` in
+ * Binds to Axal VC platform rows via `heuristicSlides()` in
  * `cloudflare-worker/src/routes/decks.ts` (mapping documented above
  * SAMPLE_DATA at the bottom of this file).
  */
@@ -1578,7 +1578,7 @@ export const PartnershipBdDeckApp: React.FC<{ initial?: PartnershipData }> = ({ 
 
 export default PartnershipBdDeckApp;
 
-/* ──────────────────── sample data + Axal binding ────────────────── */
+/* ──────────────────── sample data + Axal VC binding ────────────────── */
 /*
  * Field names mirror what heuristicSlides() in
  * cloudflare-worker/src/routes/decks.ts writes after Replit Prompt MD's
@@ -1639,24 +1639,24 @@ export default PartnershipBdDeckApp;
 
 export const SAMPLE_DATA: PartnershipData = {
   meta: {
-    presenter_org: 'Axal Ventures',
+    presenter_org: 'Axal VC',
     partner_org: 'Northbridge Industries',
     presenter_logo_mark: 'A',
     partner_logo_mark: 'N',
     document_label: 'Strategic Partnership Proposal',
     confidential_label: 'CONFIDENTIAL · Executive Distribution',
     prepared_for: 'Northbridge Industries — Office of the COO',
-    prepared_by: 'Axal Partnerships Team',
+    prepared_by: 'Axal VC Partnerships Team',
     presented_on: 'May 2026',
   },
   executive_summary: {
     headline:
       'A joint operating model that unlocks $180M of value over three years across distribution, innovation, and operating leverage.',
-    sub: 'A defined partnership between Axal and Northbridge to combine Axal\'s technology platform with Northbridge\'s enterprise distribution. Built to compound, governed for accountability, structured for clear economics on both sides.',
+    sub: 'A defined partnership between Axal VC and Northbridge to combine Axal VC\'s technology platform with Northbridge\'s enterprise distribution. Built to compound, governed for accountability, structured for clear economics on both sides.',
     three_pillars: [
       {
         title: 'Combined market access',
-        detail: 'Northbridge channel + Axal product reaches 6× more enterprise buyers in the same fiscal year.',
+        detail: 'Northbridge channel + Axal VC product reaches 6× more enterprise buyers in the same fiscal year.',
       },
       {
         title: 'Operating leverage',
@@ -1862,7 +1862,7 @@ export const SAMPLE_DATA: PartnershipData = {
     model_label: 'Revenue share + co-sell',
     economics: [
       { line: 'Northbridge — channel', pct: 45, note: 'Recognized at deal-close, monthly settlement.' },
-      { line: 'Axal — platform', pct: 35, note: 'Subscription license, billed quarterly.' },
+      { line: 'Axal VC — platform', pct: 35, note: 'Subscription license, billed quarterly.' },
       { line: 'Joint — services', pct: 15, note: 'Shared delivery margin, 50/50 split.' },
       { line: 'Joint marketing fund', pct: 5, note: 'Reinvested in demand generation.' },
     ],
@@ -1886,7 +1886,7 @@ export const SAMPLE_DATA: PartnershipData = {
       {
         name: 'Executive Steering',
         cadence: 'Quarterly',
-        members: 'COO (NB) · CEO (Axal) · GC each side',
+        members: 'COO (NB) · CEO (Axal VC) · GC each side',
         mandate: 'Strategy, P&L review, escalations, scope changes.',
       },
       {
@@ -1936,7 +1936,7 @@ export const SAMPLE_DATA: PartnershipData = {
     headline: 'A 90-day path to a signed pilot, with three clear decisions in the next 14 days.',
     sub: 'We propose moving immediately to a contained pilot, with the option to expand based on documented success criteria.',
     pilot: {
-      name: 'Northbridge × Axal — Financial Services Pilot',
+      name: 'Northbridge × Axal VC — Financial Services Pilot',
       duration_label: '120 days',
       investment_usd: 1_400_000,
       success_criteria: [
@@ -1955,7 +1955,7 @@ export const SAMPLE_DATA: PartnershipData = {
       { week: 'W14', milestone: 'Go/no-go on Phase 2' },
     ],
     cta_line: 'Let\'s convert a $180M opportunity into a 90-day pilot — and a decade of joint advantage.',
-    contact_name: 'Guillaume Lauzier — CEO, Axal Ventures',
+    contact_name: 'Guillaume Lauzier — CEO, Axal VC',
     contact_email: 'guillaume@axal.vc',
   },
 };

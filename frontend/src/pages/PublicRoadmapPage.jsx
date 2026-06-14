@@ -107,7 +107,7 @@ export default function PublicRoadmapPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-6xl mx-auto px-6 py-12">
         <Link to="/" className="inline-flex items-center gap-2 text-violet-600 hover:text-violet-700 mb-8 min-h-[44px]">
-          <ArrowLeft size={16} aria-hidden="true" /> Back to Axal Ventures
+          <ArrowLeft size={16} aria-hidden="true" /> Back to Axal VC
         </Link>
 
         <header className="text-center max-w-2xl mx-auto mb-10">

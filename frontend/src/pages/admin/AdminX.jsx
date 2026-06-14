@@ -172,7 +172,7 @@ function XPreview({ handle, display, body, mediaPreviews }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm">
-            <span className="font-bold text-gray-900 dark:text-white">{display || handle || 'Axal'}</span>{' '}
+            <span className="font-bold text-gray-900 dark:text-white">{display || handle || 'Axal VC'}</span>{' '}
             <span className="text-gray-500 dark:text-gray-400">@{handle || 'axalvc'} · now</span>
           </div>
           <div className="mt-1 whitespace-pre-wrap text-sm text-gray-900 dark:text-white">

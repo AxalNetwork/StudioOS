@@ -219,7 +219,7 @@ const studioos = new StudioOSBridge(STUDIOOS_API);`;
 
 studioos:
   api_url: "${API_BASE}"
-  app_name: "Axal Ventures Portal"
+  app_name: "Axal VC Portal"
 
 # Then reference in templates:
 # {{ site.studioos.api_url }}`;

@@ -432,7 +432,7 @@ function CheckoutForm({ submitLabel, onSuccess, onError, intentKind }) {
           </button>
           <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center justify-center gap-1.5">
             <Lock className="w-3 h-3" />
-            Secured by Stripe · Your card details never touch Axal's servers.
+            Secured by Stripe · Your card details never touch Axal VC's servers.
           </p>
         </>
       )}

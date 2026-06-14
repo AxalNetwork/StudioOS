@@ -6,7 +6,7 @@ import { api } from '../lib/api';
 // Phase 0.2 / Task #23 — Investor onboarding wizard.
 // Task #4 (2026-05-10) — extended into a 6-step profiling chatbot whose
 // answers are also persisted to /api/investor-profile/me on finish so they
-// flow into the anonymized "Axal Investor Signals" aggregate.
+// flow into the anonymized "Axal VC Investor Signals" aggregate.
 export default function OnboardingInvestorPage() {
   const navigate = useNavigate();
 
@@ -84,7 +84,7 @@ export default function OnboardingInvestorPage() {
     {
       key: 'sectors',
       title: 'Sectors of interest',
-      description: 'Pick the areas you actively look at — we use these to surface relevant deals and to compute the anonymized Axal Investor Signals heatmap.',
+      description: 'Pick the areas you actively look at — we use these to surface relevant deals and to compute the anonymized Axal VC Investor Signals heatmap.',
       validate: (v) => (!v.sectors?.length ? 'Select at least one sector' : null),
       render: ({ values, set }) => (
         <div className="space-y-4">
@@ -133,7 +133,7 @@ export default function OnboardingInvestorPage() {
               onChange={(e) => set('contribute_to_signals', e.target.checked)}
               className="w-4 h-4 text-violet-600 rounded"
             />
-            Contribute my answers (fully anonymized, k≥5) to the Axal Investor Signals dashboard. You can change this later in Settings → Privacy.
+            Contribute my answers (fully anonymized, k≥5) to the Axal VC Investor Signals dashboard. You can change this later in Settings → Privacy.
           </label>
         </div>
       ),
@@ -176,7 +176,7 @@ export default function OnboardingInvestorPage() {
     {
       key: 'lp_intent',
       title: 'LP commitment intent',
-      description: 'Are you exploring an LP commitment to the Axal main fund?',
+      description: 'Are you exploring an LP commitment to the Axal VC main fund?',
       render: ({ values, set }) => (
         <div className="space-y-4">
           <ChoiceField
@@ -204,7 +204,7 @@ export default function OnboardingInvestorPage() {
 
   const handleFinish = async (values) => {
     // Mirror the chatbot answers to the investor-profile endpoint so they
-    // feed the anonymized Axal Investor Signals aggregate. Failure must
+    // feed the anonymized Axal VC Investor Signals aggregate. Failure must
     // never block onboarding completion — it's a soft enrichment.
     try {
       const value_weights = {

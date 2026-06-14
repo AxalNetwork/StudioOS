@@ -49,7 +49,7 @@ export default function InstallPrompt() {
           <Smartphone className="w-5 h-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-slate-900">Install Axal</div>
+          <div className="text-sm font-semibold text-slate-900">Install Axal VC</div>
           <div className="text-xs text-slate-600 mt-0.5">
             Add StudioOS to your home screen for faster access and offline reading.
           </div>
@@ -80,7 +80,7 @@ export default function InstallPrompt() {
           <Smartphone className="w-5 h-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-slate-900">Add Axal to Home Screen</div>
+          <div className="text-sm font-semibold text-slate-900">Add Axal VC to Home Screen</div>
           <div className="text-xs text-slate-600 mt-0.5">
             Tap <span className="font-semibold">Share</span> in Safari, then choose
             <span className="font-semibold"> "Add to Home Screen"</span>.

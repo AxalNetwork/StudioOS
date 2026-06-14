@@ -8,7 +8,7 @@
  * Self-contained React + TypeScript + Tailwind + Framer Motion + Recharts.
  * SVG-only diagrams (no image assets). 16:9 export-ready.
  *
- * Axal binding: SAMPLE_DATA mirrors what heuristicSlides() in
+ * Axal VC binding: SAMPLE_DATA mirrors what heuristicSlides() in
  * cloudflare-worker/src/routes/decks.ts will autofill. Mapping at the
  * bottom of this file.
  */
@@ -2353,7 +2353,7 @@ export const InvestorAppendixDeckApp: React.FC<{ initial?: InvestorData }> = ({ 
 
 export default InvestorAppendixDeckApp;
 
-/* ──────────────────── sample data + Axal binding ────────────────── */
+/* ──────────────────── sample data + Axal VC binding ────────────────── */
 /*
  * Mirrors field names heuristicSlides() in cloudflare-worker/src/routes/decks.ts
  * writes after Replit Prompt MD's additive migration plus the investor-deck

@@ -31,7 +31,7 @@ export default function ChangelogPage() {
 
   usePageMeta({
     title: 'Changelog',
-    description: 'What\'s new in Axal StudioOS — every shipped change, tagged by audience.',
+    description: 'What\'s new in Axal VC StudioOS — every shipped change, tagged by audience.',
     path: '/changelog',
   });
 
@@ -54,12 +54,12 @@ export default function ChangelogPage() {
     <div className="min-h-screen bg-white dark:bg-gray-900">
       <div className="max-w-3xl mx-auto px-6 py-12">
         <Link to="/" className="inline-flex items-center gap-2 text-violet-600 hover:text-violet-700 mb-8 min-h-[44px]">
-          <ArrowLeft size={16} aria-hidden="true" /> Back to Axal Ventures
+          <ArrowLeft size={16} aria-hidden="true" /> Back to Axal VC
         </Link>
 
         <header className="mb-10">
           <h1 className="text-4xl font-bold text-gray-900 mb-2 dark:text-gray-100">Changelog</h1>
-          <p className="text-gray-600">Every shipped change to Axal StudioOS — tagged by who it's for.</p>
+          <p className="text-gray-600">Every shipped change to Axal VC StudioOS — tagged by who it's for.</p>
         </header>
 
         {loading && (

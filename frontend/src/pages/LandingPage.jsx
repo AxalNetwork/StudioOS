@@ -223,7 +223,7 @@ function LatestArticles() {
         <div className="flex items-end justify-between mb-8">
           <div>
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100">Latest from the network</h2>
-            <p className="mt-2 text-sm text-gray-600">Long-form writing from Axal founders, investors, partners, and the studio.</p>
+            <p className="mt-2 text-sm text-gray-600">Long-form writing from Axal VC founders, investors, partners, and the studio.</p>
           </div>
           <Link to="/articles" className="hidden sm:inline-flex items-center gap-1 text-sm text-violet-700 hover:text-violet-800 font-medium">
             All articles <ChevronRight size={14} />

@@ -10,7 +10,7 @@ export default function TermsPage() {
       <PublicNav />
       <main className="flex-1 max-w-4xl mx-auto px-6 py-12 w-full">
         <Link to="/" className="flex items-center gap-2 text-violet-600 hover:text-violet-700 mb-8">
-          <ArrowLeft size={16} /> Back to Axal Ventures
+          <ArrowLeft size={16} /> Back to Axal VC
         </Link>
 
         <h1 className="text-4xl font-bold text-gray-900 mb-2">Terms of Service</h1>
@@ -26,7 +26,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mb-4">1. SCOPE OF SERVICE & NO ADVICE</h2>
             <ul className="list-disc list-inside space-y-2">
-              <li><strong>Platform Purpose:</strong> The Axal StudioOS platform (the "Platform") is operated by Axal VC Management LLC and is a proprietary technology tool for venture capital operations, deal flow management, and investor relations.</li>
+              <li><strong>Platform Purpose:</strong> The Axal VC StudioOS platform (the "Platform") is operated by Axal VC Management LLC and is a proprietary technology tool for venture capital operations, deal flow management, and investor relations.</li>
               <li><strong>No Investment Advice:</strong> The Platform is for informational and administrative purposes only. Axal VC Management LLC is not a registered broker-dealer or investment adviser. No content on the Platform constitutes a recommendation, solicitation, or offer to buy or sell any securities or financial instruments. Offers to invest in Axal VC Fund I, LP are made only by Axal VC GP LLC through the Fund's separate subscription documents.</li>
               <li><strong>High Risk:</strong> You acknowledge that venture capital investments are highly illiquid and carry a risk of 100% loss of principal.</li>
             </ul>
@@ -44,7 +44,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mb-4">3. PROPRIETARY RIGHTS & LICENSING</h2>
             <ul className="list-disc list-inside space-y-2">
-              <li><strong>Ownership:</strong> The Platform's software, design, copyrighted content, domain names (including <code>axal.vc</code>), and trademarks (including "Axal", "Axal VC", and "StudioOS") are the exclusive property of <strong>Axal VC Holdings LLC</strong> and are protected by intellectual property laws. Axal VC Holdings LLC licenses these assets to Axal VC Management LLC for operation of the Platform.</li>
+              <li><strong>Ownership:</strong> The Platform's software, design, copyrighted content, domain names (including <code>axal.vc</code>), and trademarks (including "Axal VC" and "StudioOS") are the exclusive property of <strong>Axal VC Holdings LLC</strong> and are protected by intellectual property laws. Axal VC Holdings LLC licenses these assets to Axal VC Management LLC for operation of the Platform.</li>
               <li><strong>License:</strong> Axal VC Management LLC grants you a limited, revocable, non-transferable license to use the Platform for its intended professional purpose. You may not scrape, "deep-link," or reverse-engineer any portion of the Platform.</li>
             </ul>
           </section>
@@ -52,7 +52,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mb-4">4. CONFIDENTIALITY & DATA PRIVACY</h2>
             <ul className="list-disc list-inside space-y-2">
-              <li><strong>Non-Disclosure:</strong> You will have access to "Confidential Information" (e.g., startup pitch decks, cap tables, and Axal VC Fund I, LP performance data). You agree to keep this information strictly confidential and use it solely for evaluating potential investments through the Axal network.</li>
+              <li><strong>Non-Disclosure:</strong> You will have access to "Confidential Information" (e.g., startup pitch decks, cap tables, and Axal VC Fund I, LP performance data). You agree to keep this information strictly confidential and use it solely for evaluating potential investments through the Axal VC network.</li>
               <li><strong>Data Handling:</strong> Axal VC Management LLC's use of your data is governed by our <Link to="/privacy" className="text-violet-600 hover:underline">Privacy Policy</Link>. You consent to the processing of your data in accordance with the Amended Regulation S-P (2026) regarding financial data protection.</li>
             </ul>
           </section>
@@ -62,7 +62,7 @@ export default function TermsPage() {
             <p className="mb-2">You agree not to:</p>
             <ul className="list-disc list-inside space-y-2">
               <li>Share your login credentials with any third party.</li>
-              <li>Use the Platform to solicit Axal's users for competing funds or services (Non-Solicitation).</li>
+              <li>Use the Platform to solicit Axal VC's users for competing funds or services (Non-Solicitation).</li>
               <li>Upload any malicious code or attempt to bypass the Platform's security layers.</li>
             </ul>
           </section>

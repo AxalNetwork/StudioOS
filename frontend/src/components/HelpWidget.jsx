@@ -9,7 +9,7 @@
  *   • Context-scoped mailto rows to security@ / legal@ / billing@.
  *
  * Studio / Institutional / Partner-tier users additionally get a
- * "Chat with the Axal team" entry that opens the CustomerChatWidget.
+ * "Chat with the Axal VC team" entry that opens the CustomerChatWidget.
  *
  * Hotkeys: ? opens (when no input focused), Esc closes.
  */
@@ -201,7 +201,7 @@ export default function HelpWidget() {
                 {showChat && (
                   <HelpRow
                     icon={<MessageSquare size={16} />}
-                    title="Chat with the Axal team"
+                    title="Chat with the Axal VC team"
                     hint="Connects you to Slack — usually replies within a business day."
                     onClick={() => setChatOpen(true)}
                   />
@@ -211,7 +211,7 @@ export default function HelpWidget() {
 
               {!showChat && (
                 <section className="mt-2 text-[11px] text-gray-500 border-t border-gray-100 dark:border-gray-800 pt-3">
-                  Live chat with the Axal team is included on the Studio, Institutional, and Partner plans.
+                  Live chat with the Axal VC team is included on the Studio, Institutional, and Partner plans.
                 </section>
               )}
             </div>

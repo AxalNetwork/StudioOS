@@ -408,7 +408,7 @@ export default function CoMarketingPage({ user }) {
         </h1>
         <PageExplainer pageKey="co_marketing" />
         <p className="text-sm text-gray-600 mt-1">
-          Pitch a webinar, blog post, or podcast. Once approved by Axal, the platform helps
+          Pitch a webinar, blog post, or podcast. Once approved by Axal VC, the platform helps
           run + distribute it, and inbound demand is attributed back to your partner profile.
         </p>
       </div>

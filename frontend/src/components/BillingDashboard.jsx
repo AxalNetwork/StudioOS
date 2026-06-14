@@ -13,7 +13,7 @@ import { getStripe, buildAppearance, STRIPE_PUBLISHABLE_KEY } from '../lib/strip
  * and recent invoices, plus controls to:
  *   - cancel a subscription (sets cancel_at_period_end; access kept till renewal)
  *   - resume a subscription scheduled to cancel
- *   - swap plans with a live proration preview, confirmed without leaving Axal
+ *   - swap plans with a live proration preview, confirmed without leaving Axal VC
  *   - add / replace a card (Stripe SetupIntent + Elements `confirmSetup`),
  *     set a saved card as default, and remove a saved card
  *
@@ -402,7 +402,7 @@ export default function BillingDashboard({ scope = 'founder', flash, onChanged }
 /**
  * Card collection via a Stripe SetupIntent. Fetches a SetupIntent client_secret
  * for the scope's customer (server-side, step-up gated), mounts Stripe Elements
- * with the Axal appearance, and confirms with `confirmSetup({ redirect:
+ * with the Axal VC appearance, and confirms with `confirmSetup({ redirect:
  * 'if_required' })` so 3DS surfaces inline and we never leave the app. Raw card
  * data is captured exclusively by Stripe Elements (PCI scope stays SAQ A).
  */
@@ -541,7 +541,7 @@ function SetupForm({ onSuccess, onCancel }) {
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center justify-center gap-1.5">
             <Lock className="w-3 h-3" />
-            Secured by Stripe · Your card details never touch Axal's servers.
+            Secured by Stripe · Your card details never touch Axal VC's servers.
           </p>
         </>
       )}

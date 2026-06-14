@@ -49,7 +49,7 @@ function ProfileTrustBadge() {
 // ---------- Reference data --------------------------------------------------
 
 // ISO 3166-1 alpha-2 + a couple of common alpha-3 codes — pared down to the
-// jurisdictions Axal LPs/founders typically operate in. The backend stores
+// jurisdictions Axal VC LPs/founders typically operate in. The backend stores
 // whatever 2/3-letter codes we send, so this is a UI-side curation.
 const JURISDICTIONS = [
   { code: 'US', name: 'United States' },
@@ -241,7 +241,7 @@ export default function SettingsPage() {
   return (
     <div className="max-w-5xl" data-testid="settings-page" data-active-section={safeActive}>
       <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">Settings</h1>
-      <p className="text-gray-600 dark:text-gray-400 mb-6">Profile, security, notifications, and role preferences for your Axal account.</p>
+      <p className="text-gray-600 dark:text-gray-400 mb-6">Profile, security, notifications, and role preferences for your Axal VC account.</p>
 
       {toast && (
         <div className={`mb-4 rounded-lg px-4 py-2.5 text-sm flex items-center gap-2 ${
@@ -580,7 +580,7 @@ function PersonalIdentityCard({ flash, onPctChange }) {
 
   return (
     <Card title="Identity"
-      description="Used to auto-fill contracts between you and Axal. Sensitive fields are encrypted at rest.">
+      description="Used to auto-fill contracts between you and Axal VC. Sensitive fields are encrypted at rest.">
       <div className="mb-4">
         <CompletionRing pct={r.profile_completion_pct}
           hint="Fill in legal name, DOB, address, country and tax ID to unlock contract auto-fill." />
@@ -753,7 +753,7 @@ function CorporateIdentityCard({ flash, onPctChange }) {
   return (
     <>
       <Card title="Legal entity"
-        description="Used to identify your company on Axal-VC contracts. Leave blank if you operate as an individual.">
+        description="Used to identify your company on Axal VC contracts. Leave blank if you operate as an individual.">
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Entity name">
             <input value={r.entity_name || ''} onChange={e => set('entity_name', e.target.value)}
@@ -949,7 +949,7 @@ function ProfileSection({ data, onSaved, flash, patch }) {
         </div>
       </Card>
 
-      <Card title="Social links" description="Optional. Public to other Axal members.">
+      <Card title="Social links" description="Optional. Public to other Axal VC members.">
         <div className="grid sm:grid-cols-2 gap-3">
           {['linkedin', 'twitter', 'website', 'github'].map(k => (
             <Field key={k} label={k[0].toUpperCase() + k.slice(1)}>
@@ -1355,7 +1355,7 @@ function TrustedContactsPanel({ flash }) {
 
   return (
     <Card title="Trusted contacts (recovery)"
-      description="Two trusted contacts together can vouch for you if you lose your authenticator. Both must sign in to Axal with their own two-factor to approve.">
+      description="Two trusted contacts together can vouch for you if you lose your authenticator. Both must sign in to Axal VC with their own two-factor to approve.">
       {err && <div className="text-sm text-red-600 mb-3">{err}</div>}
       {contacts === null ? (
         <div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div>
@@ -1375,7 +1375,7 @@ function TrustedContactsPanel({ flash }) {
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.contact_email}</div>
                     <div className="text-[10px] text-gray-400 mt-0.5">
-                      {c.status === 'active' ? 'Active Axal user' : 'Pending invite — they\'ll be linked once they sign up'}
+                      {c.status === 'active' ? 'Active Axal VC user' : 'Pending invite — they\'ll be linked once they sign up'}
                     </div>
                   </div>
                   <button onClick={() => remove(c.id)} disabled={busy}
@@ -1476,7 +1476,7 @@ function ConnectedAccountsPanel({ flash }) {
     if (err) {
       const copy = {
         already_linked: 'A Google account is already linked to this user.',
-        sub_owned_by_other: 'That Google account is linked to a different Axal user.',
+        sub_owned_by_other: 'That Google account is linked to a different Axal VC user.',
         caller_email_unverified: 'Verify your email before linking Google.',
         cancelled: 'Google linking cancelled.',
         provider_error: 'Google could not link the account. Please try again.',
@@ -1561,7 +1561,7 @@ function ConnectedAccountsPanel({ flash }) {
       </div>
       {google.connected && (
         <p className="mt-3 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-800 pt-3">
-          Heads up: signing out of Axal does <strong>not</strong> sign you out of Google
+          Heads up: signing out of Axal VC does <strong>not</strong> sign you out of Google
           globally. If you're on a shared device, also sign out of your Google account
           in the browser.
         </p>
@@ -1668,7 +1668,7 @@ function AuthSection({ data, flash }) {
 
   const downloadCodes = () => {
     if (!generatedCodes) return;
-    const txt = `Axal — TOTP recovery codes (${data.email})\nGenerated ${new Date().toISOString()}\n\n${generatedCodes.join('\n')}\n\nEach code can be used exactly once if you lose access to your authenticator app.\nDo not share these. Store somewhere safe (password manager, sealed envelope, etc.).\n`;
+    const txt = `Axal VC — TOTP recovery codes (${data.email})\nGenerated ${new Date().toISOString()}\n\n${generatedCodes.join('\n')}\n\nEach code can be used exactly once if you lose access to your authenticator app.\nDo not share these. Store somewhere safe (password manager, sealed envelope, etc.).\n`;
     const blob = new Blob([txt], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -2153,7 +2153,7 @@ function FounderPrefs({ data, patch }) {
           </Field>
         </div>
         <div className="mt-4">
-          <Field label="What you're looking for from Axal" hint="Free text. Used by partners reviewing your profile.">
+          <Field label="What you're looking for from Axal VC" hint="Free text. Used by partners reviewing your profile.">
             <textarea value={draft.notes || ''} onChange={e => save({ notes: e.target.value })} rows={3} className={inputCls} />
           </Field>
         </div>
@@ -2223,7 +2223,7 @@ function CofounderInvitesCard() {
 
   return (
     <Card title="Co-founder invites"
-      description={`Invite a co-founder, advisor, or operating partner to join your project on Axal. Up to ${cap} active invites at a time, each valid for 14 days.`}>
+      description={`Invite a co-founder, advisor, or operating partner to join your project on Axal VC. Up to ${cap} active invites at a time, each valid for 14 days.`}>
       {err && <div className="text-sm text-red-600 mb-3">{err}</div>}
 
       <div className="grid sm:grid-cols-3 gap-2 mb-3">
@@ -2799,7 +2799,7 @@ function PrivacyCoreCard({ flash }) {
         <Field label="Profile visibility">
           <select value={row.visibility || 'network'} onChange={e => save({ visibility: e.target.value })} disabled={busy} className={inputCls}>
             <option value="public">Public — anyone with the link</option>
-            <option value="network">Network only — Axal members</option>
+            <option value="network">Network only — Axal VC members</option>
             <option value="private">Private — admins only</option>
           </select>
         </Field>
@@ -2895,7 +2895,7 @@ function InvestorSignalsContributionCard({ flash, role }) {
   return (
     <Card
       title="Anonymized Investor Signals"
-      description="Your sector, stage, geography, ticket size and thesis can power the platform-wide Axal Investor Signals dashboard. We only ever publish a cell when at least 5 investors share the same answer."
+      description="Your sector, stage, geography, ticket size and thesis can power the platform-wide Axal VC Investor Signals dashboard. We only ever publish a cell when at least 5 investors share the same answer."
     >
       <div className="space-y-3">
         {!completed && (
@@ -3171,7 +3171,7 @@ function IntegrationsTab({ flash }) {
   return (
     <>
       <Card title="Connected accounts"
-        description="OAuth links to third-party services. Disconnecting revokes the stored refresh token; the provider may still show Axal as authorized until you remove it from their account settings.">
+        description="OAuth links to third-party services. Disconnecting revokes the stored refresh token; the provider may still show Axal VC as authorized until you remove it from their account settings.">
         <div className="divide-y divide-gray-100 dark:divide-gray-800">
           {(row.accounts || []).map(acct => (
             <div key={acct.provider} className="flex items-center justify-between py-3">
@@ -3295,7 +3295,7 @@ function FounderBillingPanel({ data, flash }) {
           plan swap with proration, payment methods, invoices). Free users see
           the plan ladder + inline checkout to subscribe. */}
       {hasCustomer && tier !== 'free' ? (
-        <Card title="Manage subscription" description="Change plan, cancel, and review invoices without leaving Axal.">
+        <Card title="Manage subscription" description="Change plan, cancel, and review invoices without leaving Axal VC.">
           <BillingDashboard scope="founder" flash={flash} onChanged={refreshStatus} />
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
             Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
@@ -3381,7 +3381,7 @@ function EmbeddedCheckoutCard({ flash, onPaid }) {
   if (!import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) return null;
   if (prices == null) {
     return (
-      <Card title="Pay by card" description="Upgrade without leaving Axal.">
+      <Card title="Pay by card" description="Upgrade without leaving Axal VC.">
         <div className="text-sm text-gray-500 dark:text-gray-400">Loading plans…</div>
       </Card>
     );
@@ -3558,7 +3558,7 @@ function InvestorBillingPanel({ data, flash }) {
           payment methods, and invoices in-app; free users see the plan ladder
           + inline checkout to subscribe. */}
       {hasCustomer && tier !== 'free' ? (
-        <Card title="Manage subscription" description="Change plan, cancel, and review invoices without leaving Axal.">
+        <Card title="Manage subscription" description="Change plan, cancel, and review invoices without leaving Axal VC.">
           <BillingDashboard scope="investor" flash={flash} onChanged={refresh} />
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
             See full feature comparison on the <a className="text-violet-700 hover:underline" href="/pricing/investor">investor pricing page</a>.

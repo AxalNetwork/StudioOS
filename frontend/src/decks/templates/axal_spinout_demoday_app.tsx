@@ -1,7 +1,7 @@
 /**
  * axal_spinout_demoday_app.tsx — Task #15
  *
- * Axal 30-day Spin-Out Lab — Demo Day deck (10 slides, 4 variants).
+ * Axal VC 30-day Spin-Out Lab — Demo Day deck (10 slides, 4 variants).
  *
  * Self-contained React + TS + Tailwind + Framer Motion adapter rendering
  * 10 fixed slides in the spec-required order:
@@ -45,7 +45,7 @@ import { trimPitchCopyToMax, getPitchCopyLengthStatus, extractPitchHeadline, HEA
 
 /* ─────────────────────────── variant tokens ─────────────────────────── */
 
-// Axal brand: violet (`#7c3aed` / `#8b5cf6` / `#a78bfa`). All four
+// Axal VC brand: violet (`#7c3aed` / `#8b5cf6` / `#a78bfa`). All four
 // variants pivot around these accents so the Spin-Out deck visually
 // belongs in the same family as the rest of the app.
 const PALETTES = {
@@ -331,7 +331,7 @@ export const SAMPLE_DATA: SpinoutDemoDayData = {
     eyebrow: 'Axal VC · 30-Day Spin-Out Lab · Demo Day',
     headline: 'Your story, in 10 slides.',
     sub: 'A pre-incorporation thesis, sharpened across 30 days of Discovery, OKRs, Scoring and Cap-Table prep.',
-    location: 'Axal Network · Demo Day',
+    location: 'Axal VC Network · Demo Day',
     activity_log: [],
   },
   problem: {
@@ -369,7 +369,7 @@ export const SAMPLE_DATA: SpinoutDemoDayData = {
   },
   brand_kit: { present: false, bg: '', accent: '', ink: '', fonts: '' },
   venture_readiness: {
-    eyebrow: '07 · Venture readiness', headline: 'Axal score — to be run in Week 2.',
+    eyebrow: '07 · Venture readiness', headline: 'Axal VC score — to be run in Week 2.',
     total_score: DASH, tier: DASH, is_sandbox: false,
     breakdown: [], ai_notes: DASH,
   },
@@ -398,7 +398,7 @@ export const SAMPLE_DATA: SpinoutDemoDayData = {
     raise_amount: DASH, runway: DASH, use_of_funds: [], next_milestones: [],
   },
   axal_signal: {
-    eyebrow: '12 · Axal signal', headline: 'Built across 30 days of Lab work.',
+    eyebrow: '12 · Axal VC signal', headline: 'Built across 30 days of Lab work.',
     body: DASH, lab_weeks: [],
   },
   contact: {
@@ -1496,7 +1496,7 @@ export const ProblemEcho: React.FC = () => {
 
 // 1920×1080 sibling frame — same primitive as sequoia_classic /
 // investor_appendix_app so the print/share/export pipelines (which
-// scroll-snap on `[data-slide-frame]`) treat each Axal slide as a
+// scroll-snap on `[data-slide-frame]`) treat each Axal VC slide as a
 // first-class page break.
 const SlideShell: React.FC<{ children: React.ReactNode; pad?: number }> = ({ children, pad = 96 }) => {
   const { pal, fonts } = useVariant();
@@ -2174,7 +2174,7 @@ const Slide_MentorNetwork: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
                 <NetworkConstellation />
               </div>
               <div style={{ marginTop: 8, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', textAlign: 'center', color: V.textMuted, fontFamily: V.mono }}>
-                Axal network · {mentors.length || '—'} mentors
+                Axal VC network · {mentors.length || '—'} mentors
               </div>
             </div>
           )}
@@ -3006,7 +3006,7 @@ const Slide_TeamNetwork: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
                 <NetworkConstellation />
               </div>
               <div style={{ marginTop: 8, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.22em', textAlign: 'center', color: V.textMuted, fontFamily: V.mono }}>
-                Axal network · {mentors.length || '—'} mentors
+                Axal VC network · {mentors.length || '—'} mentors
               </div>
             </div>
           )}
@@ -3110,7 +3110,7 @@ const Slide_ReviewTheDeal: React.FC<{ d: SpinoutDemoDayData }> = ({ d }) => {
 /* ─────────────────────────── slide registry ─────────────────────────── */
 
 type SlideEntry = { id: string; title: string; Component: React.FC<{ d: SpinoutDemoDayData }> };
-// 10 slides. Drops Axal Signal; product-demo media now lives on the
+// 10 slides. Drops Axal VC Signal; product-demo media now lives on the
 // Solution slide (no standalone Product Demo slide); merges Team & venture
 // readiness + Mentors & network into one Team & network people slide;
 // renames Contact → Review the deal. Legacy Slide_Team /

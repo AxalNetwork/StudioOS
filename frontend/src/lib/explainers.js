@@ -38,7 +38,7 @@ export const EXPLAINERS = {
     docPath: 'build/pitch-deck',
   },
   scoring: {
-    title: 'How Axal scores readiness',
+    title: 'How Axal VC scores readiness',
     body: 'A diligence engine that turns the data you’ve already entered — discovery, market, team, traction — into a ranked readiness score with explanations.',
     docPath: 'validate-grow/scoring',
   },
@@ -134,7 +134,7 @@ export const EXPLAINERS = {
   },
   marketplace: {
     title: 'Service-provider marketplace',
-    body: 'Curated lawyers, accountants, designers and infra providers — with rates Axal has pre-negotiated. Submit briefs and compare quotes here.',
+    body: 'Curated lawyers, accountants, designers and infra providers — with rates Axal VC has pre-negotiated. Submit briefs and compare quotes here.',
     docPath: 'network/marketplace',
   },
   partners: {
@@ -154,7 +154,7 @@ export const EXPLAINERS = {
   },
   calendar: {
     title: 'Unified calendar',
-    body: 'Connect Google or Outlook once and we surface every Axal commitment — office hours, board meetings, filings — alongside your personal events.',
+    body: 'Connect Google or Outlook once and we surface every Axal VC commitment — office hours, board meetings, filings — alongside your personal events.',
     docPath: 'account/notifications',
   },
   financials: {

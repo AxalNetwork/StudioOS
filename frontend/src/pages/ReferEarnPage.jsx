@@ -29,7 +29,7 @@ const LinkedinIcon = (props) => <LinkedinSvg {...props} />;
 
 const TEMPLATE_STORAGE_KEY = 'axal:invite_templates_v1';
 
-// Public Axal channels referenced in default share copy. Editing the templates
+// Public Axal VC channels referenced in default share copy. Editing the templates
 // in the UI overrides these — the constants are only used to build defaults.
 const AXAL_TELEGRAM_URL = 'https://t.me/axalvc';
 const AXAL_LINKEDIN_URL = 'https://www.linkedin.com/company/axalvc';
@@ -45,11 +45,11 @@ const DEFAULT_TEMPLATES = {
   whatsapp:
     "Hey — thought you'd find this interesting. @axalvc StudioOS turns ideas into funded companies in 30 days. My referral link: {{link}}\n\n#axalvc",
   telegram:
-    "Join me on @axalvc StudioOS — a venture studio that ships funded startups in 30 days. Sign up with my referral link: {{link}}\n\nAlso join the Axal community on Telegram: " + AXAL_TELEGRAM_URL + "\n\n#axalvc",
+    "Join me on @axalvc StudioOS — a venture studio that ships funded startups in 30 days. Sign up with my referral link: {{link}}\n\nAlso join the Axal VC community on Telegram: " + AXAL_TELEGRAM_URL + "\n\n#axalvc",
   email_subject:
-    "Quick intro to Axal StudioOS (@axalvc)",
+    "Quick intro to Axal VC StudioOS (@axalvc)",
   email_body:
-    "Hi,\n\nI wanted to share something I think you'd find useful — @axalvc StudioOS. It's a venture studio that uses AI scoring + automated incorporation to ship funded startups in 30 days, and they pay commissions when partners I refer hit milestones.\n\nIf you'd like to take a look, here's my referral link:\n{{link}}\n\nReferral code: {{code}}\n\nJoin the Axal community on Telegram: " + AXAL_TELEGRAM_URL + "\nFollow @axalvc on LinkedIn: " + AXAL_LINKEDIN_URL + "\n\n#axalvc\n\nLet me know what you think.\n\nThanks,",
+    "Hi,\n\nI wanted to share something I think you'd find useful — @axalvc StudioOS. It's a venture studio that uses AI scoring + automated incorporation to ship funded startups in 30 days, and they pay commissions when partners I refer hit milestones.\n\nIf you'd like to take a look, here's my referral link:\n{{link}}\n\nReferral code: {{code}}\n\nJoin the Axal VC community on Telegram: " + AXAL_TELEGRAM_URL + "\nFollow @axalvc on LinkedIn: " + AXAL_LINKEDIN_URL + "\n\n#axalvc\n\nLet me know what you think.\n\nThanks,",
 };
 
 function loadTemplates() {
@@ -265,7 +265,7 @@ export default function ReferEarnPage() {
     const wa = encodeURIComponent(fillTemplate(templates.whatsapp, link, code) + ' ' + link);
     // Telegram's share endpoint takes the URL plus an optional text body.
     // We pre-fill with the user's referral link AND a nudge to join the
-    // public Axal channel, so the recipient gets both calls-to-action.
+    // public Axal VC channel, so the recipient gets both calls-to-action.
     const tg = encodeURIComponent(fillTemplate(templates.telegram, link, code));
     const em_subject = encodeURIComponent(fillTemplate(templates.email_subject, link, code));
     const em_body = encodeURIComponent(fillTemplate(templates.email_body, link, code));
@@ -1012,7 +1012,7 @@ export default function ReferEarnPage() {
             <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between flex-wrap gap-3 dark:border-gray-800">
               <div className="text-xs text-gray-600 dark:text-gray-400">
                 {selected.size} of {imported.length} selected
-                <span className="text-gray-400"> · sent from your account, branded as Axal Network</span>
+                <span className="text-gray-400"> · sent from your account, branded as Axal VC Network</span>
               </div>
               <button
                 onClick={sendInvites}

@@ -60,7 +60,7 @@ const EXPLAINER_CARDS = [
         <li>Personal Advisor on every page — Workers AI Llama 3.3 70B FP8.</li>
         <li>Three warm investor introductions in Week 4 for qualified founders (three-way NDA gated).</li>
         <li>Mentor track matched by expertise, availability, language, time zone, rating.</li>
-        <li>Services partners (legal, design, recruiting, technical DD) at Axal-network rates.</li>
+        <li>Services partners (legal, design, recruiting, technical DD) at Axal VC network rates.</li>
         <li>Sector + investor + sentiment + TALC + atlas + capital-velocity intelligence.</li>
         <li>Document automation: incorporation, 83(b), cofounder agreement, SAFE, NDAs.</li>
         <li>Alumni community for life.</li>
@@ -110,7 +110,7 @@ const EXPLAINER_CARDS = [
     body: (
       <ul className="space-y-2 text-sm text-gray-700 leading-relaxed dark:text-gray-300">
         <li>Operating partners — legal, GTM, design, recruiting, data, technical DD, finance.</li>
-        <li>Investor signals from Axal's pipeline (anonymised until pairwise NDA signed).</li>
+        <li>Investor signals from Axal VC's pipeline (anonymised until pairwise NDA signed).</li>
         <li>Mentor pool with expertise tags and availability calendars.</li>
         <li>Co-marketing partners across the network for distribution.</li>
         <li>Alumni founders from previous cohorts.</li>

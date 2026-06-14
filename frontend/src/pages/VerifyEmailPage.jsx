@@ -261,7 +261,7 @@ export default function VerifyEmailPage() {
                       'Open Authy and tap "Add Account" (or the + icon).',
                       'Tap "Enter Code Manually".',
                       'Paste the secret key above and tap the arrow.',
-                      'Account name: "Axal VC". Logo: search for "Axal" or skip. Tap "Save".',
+                      'Account name: "Axal VC". Logo: search for "Axal VC" or skip. Tap "Save".',
                       'Authy will start showing a 6-digit code — you\'ll use it next time you sign in.',
                     ],
                   },

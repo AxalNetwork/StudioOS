@@ -39,9 +39,9 @@ export default function Confetti({ onDone }) {
       className="fixed inset-0 z-[200] pointer-events-none overflow-hidden"
       role="presentation"
     >
-      {/* "Welcome to Axal" banner */}
+      {/* "Welcome to Axal VC" banner */}
       <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-6 py-3 rounded-full shadow-2xl text-sm font-semibold animate-pulse">
-        🎉 Welcome to Axal — you're set up!
+        🎉 Welcome to Axal VC — you're set up!
       </div>
       {pieces.map((p) => (
         <span

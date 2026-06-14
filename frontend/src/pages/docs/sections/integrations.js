@@ -127,7 +127,7 @@ export default {
       id: 'google-signin',
       title: 'Continue with Google (sign-in)',
       overview:
-        "You can sign in to StudioOS with your Google account in one click. The Google identity stays linked to your Axal account across visits, and the same Google account can never be linked to two different Axal accounts — so you can\'t accidentally lock yourself out by signing in with the wrong one.",
+        "You can sign in to StudioOS with your Google account in one click. The Google identity stays linked to your Axal VC account across visits, and the same Google account can never be linked to two different Axal VC accounts — so you can\'t accidentally lock yourself out by signing in with the wrong one.",
       howto: [
         'On the sign-in page, click "Continue with Google".',
         'Pick the Google account you want to use — Google\'s account chooser always appears so you can switch accounts if needed.',
@@ -139,7 +139,7 @@ export default {
         'You can also manage which Google account is linked from Settings → Account.',
       ],
       pitfalls: [
-        'If the Google account you pick is already linked to a different Axal user, the sign-in fails with a clear message — disconnect there first, then try again.',
+        'If the Google account you pick is already linked to a different Axal VC user, the sign-in fails with a clear message — disconnect there first, then try again.',
         'Signing in with a personal Google when your work uses Google Workspace silently creates two separate sessions; pick the one you\'ll use day-to-day.',
       ],
       related: [

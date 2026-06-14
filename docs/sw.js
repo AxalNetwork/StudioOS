@@ -156,8 +156,8 @@ self.addEventListener('fetch', (event) => {
 // ---------------- Push ----------------
 self.addEventListener('push', (event) => {
   let data = {};
-  try { data = event.data ? event.data.json() : {}; } catch { data = { title: 'Axal', body: event.data ? event.data.text() : '' }; }
-  const title = data.title || 'Axal StudioOS';
+  try { data = event.data ? event.data.json() : {}; } catch { data = { title: 'Axal VC', body: event.data ? event.data.text() : '' }; }
+  const title = data.title || 'Axal VC StudioOS';
   const options = {
     body: data.body || '',
     icon: '/axal-mark.png',

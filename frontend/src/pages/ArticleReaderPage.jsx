@@ -100,7 +100,7 @@ function useTOC(bodyRef, html) {
 function ShareBar({ title, compact = false }) {
   const url = typeof window !== 'undefined' ? window.location.href : '';
   const u = encodeURIComponent(url);
-  const t = encodeURIComponent(title || 'Axal article');
+  const t = encodeURIComponent(title || 'Axal VC article');
   const targets = [
     { key: 'x', label: 'Share on X', Icon: XIcon, href: `https://twitter.com/intent/tweet?url=${u}&text=${t}` },
     { key: 'linkedin', label: 'Share on LinkedIn', Icon: LinkedinIcon, href: `https://www.linkedin.com/sharing/share-offsite/?url=${u}` },
@@ -258,14 +258,14 @@ export default function ArticleReaderPage() {
   // Task #4 — reader SEO surfacing
   useEffect(() => {
     if (!a) return;
-    const title = a.seo_title || a.title || 'Axal article';
+    const title = a.seo_title || a.title || 'Axal VC article';
     document.title = title;
     const metaDesc = document.querySelector('meta[name="description"]');
     if (metaDesc) metaDesc.setAttribute('content', a.excerpt || a.subtitle || '');
     const canonical = document.querySelector('link[rel="canonical"]');
     if (canonical) canonical.setAttribute('href', a.canonical_url || window.location.href);
     return () => {
-      document.title = 'Axal Studio';
+      document.title = 'Axal VC Studio';
       if (metaDesc) metaDesc.setAttribute('content', '');
     };
   }, [a]);

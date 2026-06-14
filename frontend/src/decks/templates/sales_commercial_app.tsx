@@ -9,7 +9,7 @@
  *
  * Self-contained React + TypeScript + Tailwind + Framer Motion app.
  * Every product screen and diagram is hand-built SVG.
- * Binds to Axal platform rows via `heuristicSlides()` in
+ * Binds to Axal VC platform rows via `heuristicSlides()` in
  * `cloudflare-worker/src/routes/decks.ts` (mapping at the bottom).
  */
 
@@ -1709,7 +1709,7 @@ export const SalesCommercialDeckApp: React.FC<{ initial?: SalesData }> = ({ init
 
 export default SalesCommercialDeckApp;
 
-/* ──────────────────── sample data + Axal binding ────────────────── */
+/* ──────────────────── sample data + Axal VC binding ────────────────── */
 /*
  * Mirrors field names heuristicSlides() in cloudflare-worker/src/routes/decks.ts
  * writes after Replit Prompt MD (00xx_deck_autofill_fields.sql) plus sales-deck
@@ -1769,19 +1769,19 @@ export default SalesCommercialDeckApp;
 
 export const SAMPLE_DATA: SalesData = {
   meta: {
-    vendor: 'Axal',
+    vendor: 'Axal VC',
     customer: 'Continental Bank',
     vendor_mark: 'A',
     customer_mark: 'C',
     doc_label: 'Solution Proposal',
     confidential: 'CONFIDENTIAL — Customer Evaluation',
     prepared_for: 'Continental Bank — Office of the COO',
-    prepared_by: 'Axal Customer Solutions Team',
+    prepared_by: 'Axal VC Customer Solutions Team',
     presented_on: 'May 2026',
   },
   executive: {
     headline: 'A unified operations platform that delivers measurable cost-to-serve reduction in 120 days.',
-    sub: 'Axal consolidates fragmented intake, approval, and provisioning workflows into a single, audit-grade platform — reducing cycle time, lowering cost-per-case, and surfacing risk before it materializes.',
+    sub: 'Axal VC consolidates fragmented intake, approval, and provisioning workflows into a single, audit-grade platform — reducing cycle time, lowering cost-per-case, and surfacing risk before it materializes.',
     outcomes: [
       { label: 'Cycle time', value: '−42%', note: 'Intake → fulfilment, blended.' },
       { label: 'Cost per case', value: '−38%', note: 'Year-1, attributable to platform.' },
@@ -1855,7 +1855,7 @@ export const SAMPLE_DATA: SalesData = {
     annual_loss_usd: 18_500_000,
   },
   solution: {
-    headline: 'Axal is a single operations platform with embedded AI, native compliance, and out-of-box integration.',
+    headline: 'Axal VC is a single operations platform with embedded AI, native compliance, and out-of-box integration.',
     sub: 'Six capabilities consolidate today\'s seven-tool footprint into one auditable surface, deployable in 12 weeks.',
     capabilities: [
       { title: 'Unified case record', detail: 'Canonical case object across intake channels with full lineage.' },
@@ -2004,7 +2004,7 @@ export const SAMPLE_DATA: SalesData = {
       {
         client: 'Northbridge Trust',
         sector: 'Banking',
-        outcome: 'Consolidated 9 servicing systems on Axal in 14 weeks; reduced cost-to-serve by 41% and lifted NPS by 12 points.',
+        outcome: 'Consolidated 9 servicing systems on Axal VC in 14 weeks; reduced cost-to-serve by 41% and lifted NPS by 12 points.',
         metric: 'Cost-to-serve',
         value: '−41%',
       },
@@ -2025,7 +2025,7 @@ export const SAMPLE_DATA: SalesData = {
     ],
   },
   competitive: {
-    headline: 'Axal leads on consolidation, audit posture, and time-to-value.',
+    headline: 'Axal VC leads on consolidation, audit posture, and time-to-value.',
     sub: 'Independent functional scoring across the criteria most often cited in your peer-group RFPs.',
     competitors: ['Incumbent A', 'Incumbent B', 'Build in-house'],
     criteria: [
@@ -2053,7 +2053,7 @@ export const SAMPLE_DATA: SalesData = {
         name: 'Pilot',
         duration: 'Weeks 3–8',
         milestones: ['Pilot scope live', 'First 1,000 cases processed', 'KPI baseline established'],
-        owner: 'Axal lead',
+        owner: 'Axal VC lead',
       },
       {
         name: 'Scale',
@@ -2178,7 +2178,7 @@ export const SAMPLE_DATA: SalesData = {
     headline: 'A 90-day path to a signed pilot, with three decisions in the next 14 days.',
     sub: 'We propose moving immediately to a contained pilot with documented success criteria — and an explicit decision point on full rollout.',
     pilot: {
-      name: 'Continental × Axal — Servicing Operations Pilot',
+      name: 'Continental × Axal VC — Servicing Operations Pilot',
       duration: '120 days',
       investment_usd: 280_000,
       success_criteria: [
@@ -2192,13 +2192,13 @@ export const SAMPLE_DATA: SalesData = {
       { week: 'W1', milestone: 'NDA + scope finalised', owner: 'Both' },
       { week: 'W2', milestone: 'Joint steering kickoff', owner: 'Both' },
       { week: 'W3', milestone: 'Pilot SOW signed', owner: 'Procurement' },
-      { week: 'W6', milestone: 'Pilot configuration complete', owner: 'Axal' },
+      { week: 'W6', milestone: 'Pilot configuration complete', owner: 'Axal VC' },
       { week: 'W8', milestone: 'Pilot go-live', owner: 'Both' },
       { week: 'W14', milestone: 'Go/no-go on Phase 2', owner: 'Steering' },
     ],
     closing_line:
       'A measurable pilot in 90 days. A consolidated operating platform in 18 weeks. Let\'s start the conversation that gets us there.',
-    contact_name: 'Guillaume Lauzier — CEO, Axal',
+    contact_name: 'Guillaume Lauzier — CEO, Axal VC',
     contact_email: 'guillaume@axal.vc',
   },
 };

@@ -80,7 +80,7 @@ export default function OnboardingFounderPage() {
     },
     {
       key: 'needs',
-      title: 'What do you need from Axal?',
+      title: 'What do you need from Axal VC?',
       render: ({ values, set }) => (
         <div className="space-y-4">
           <ChoiceField

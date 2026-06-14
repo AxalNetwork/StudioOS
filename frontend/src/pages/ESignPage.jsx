@@ -78,7 +78,7 @@ export default function ESignPage() {
     return <PageShell><InfoCard title="Already signed" message="This envelope has already been signed. A copy has been emailed to you." /></PageShell>;
   }
   if (envelope.status === 'rejected' || envelope.envelope_status === 'rejected') {
-    return <PageShell><InfoCard title="Signing declined" message="This signing request was previously declined. Please contact the Axal admin if this was unexpected." /></PageShell>;
+    return <PageShell><InfoCard title="Signing declined" message="This signing request was previously declined. Please contact the Axal VC admin if this was unexpected." /></PageShell>;
   }
 
   const submit = async (sigDataUrl) => {
@@ -129,7 +129,7 @@ export default function ESignPage() {
                 agreements until you complete identity verification. Please go to{' '}
                 <a href="/kyc" className="underline font-medium">Identity Verification</a>{' '}
                 to finish KYC, then return to this link to sign. If you believe this is in error,
-                contact Axal compliance.
+                contact Axal VC compliance.
               </p>
             </div>
           </div>
@@ -201,7 +201,7 @@ export default function ESignPage() {
               <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Decline this signing request?</h3>
               <button onClick={() => setShowRejectDialog(false)}><X className="w-4 h-4 text-gray-500" /></button>
             </div>
-            <p className="text-xs text-gray-600 mb-3">This action is permanent. The Axal team will be notified.</p>
+            <p className="text-xs text-gray-600 mb-3">This action is permanent. The Axal VC team will be notified.</p>
             <textarea
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
@@ -351,9 +351,9 @@ function PageShell({ children }) {
     <div className="min-h-screen bg-gray-50 py-10 px-4 sm:px-6">
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center gap-2 mb-6">
-          <img src="/axal-mark.png" alt="Axal" className="w-8 h-8 rounded-lg" onError={(e) => { e.target.style.display = 'none'; }} />
+          <img src="/axal-mark.png" alt="Axal VC" className="w-8 h-8 rounded-lg" onError={(e) => { e.target.style.display = 'none'; }} />
           <div>
-            <div className="text-base font-bold text-gray-900 leading-none dark:text-gray-100">Axal Deals</div>
+            <div className="text-base font-bold text-gray-900 leading-none dark:text-gray-100">Axal VC Deals</div>
             <div className="text-[11px] text-gray-500 mt-0.5">Secure electronic signature</div>
           </div>
         </div>

@@ -13,7 +13,7 @@
  * Self-contained React + TypeScript + Tailwind + Framer Motion app.
  * SVG-only artwork — no stock photos, no clipart, no data charts.
  *
- * Binds to Axal platform rows via `heuristicSlides()` in
+ * Binds to Axal VC platform rows via `heuristicSlides()` in
  * `cloudflare-worker/src/routes/decks.ts` — mapping at the bottom.
  */
 
@@ -1052,7 +1052,7 @@ export const NarrativeBrandDeckApp: React.FC<{ initial?: NarrativeData }> = ({ i
 
 export default NarrativeBrandDeckApp;
 
-/* ──────────────────── sample data + Axal binding ────────────────── */
+/* ──────────────────── sample data + Axal VC binding ────────────────── */
 /*
  * Field names mirror heuristicSlides() output after Prompt MD's
  * additive migration plus brand-narrative supporting tables

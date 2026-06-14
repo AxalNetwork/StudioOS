@@ -24,7 +24,7 @@ import { useEscapeClose } from '../components/useEscapeClose';
  *
  * Premium templates show a lock badge in the picker; clicking them opens
  * the paywall instead of applying. Free-tier exports always render the
- * Axal footer; Growth+ removes it; Studio may add a custom watermark.
+ * Axal VC footer; Growth+ removes it; Studio may add a custom watermark.
  */
 export default function PitchDeckPage() {
   useAuth();
@@ -715,8 +715,8 @@ export default function PitchDeckPage() {
                 </div>
                 <div className="text-xs text-gray-500 dark:text-slate-500 mb-2">
                   {canRemoveFooter
-                    ? 'Axal footer hidden on exports.'
-                    : 'Axal footer shown on free plan exports.'}
+                    ? 'Axal VC footer hidden on exports.'
+                    : 'Axal VC footer shown on free plan exports.'}
                 </div>
                 {canUploadWatermark ? (
                   <WatermarkEditor

@@ -156,7 +156,7 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
                 </div>
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   {[
-                    { k: 'studio_pct', label: 'Studio (Axal)', range: '5-30%' },
+                    { k: 'studio_pct', label: 'Studio (Axal VC)', range: '5-30%' },
                     { k: 'founders_pct', label: 'Founders', range: '50-85%' },
                     { k: 'option_pool_pct', label: 'Option Pool', range: '5-20%' },
                     { k: 'advisors_pct', label: 'Advisors', range: '0-5%' },

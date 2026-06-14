@@ -10,7 +10,7 @@ export default function PrivacyPage() {
       <PublicNav />
       <main className="flex-1 max-w-4xl mx-auto px-6 py-12 w-full">
         <Link to="/" className="flex items-center gap-2 text-violet-600 hover:text-violet-700 mb-8">
-          <ArrowLeft size={16} /> Back to Axal Ventures
+          <ArrowLeft size={16} /> Back to Axal VC
         </Link>
 
         <h1 className="text-4xl font-bold text-gray-900 mb-2">Privacy Policy</h1>
@@ -20,7 +20,7 @@ export default function PrivacyPage() {
         </p>
 
         <div className="prose prose-sm max-w-none text-gray-700 space-y-6">
-          <p><strong>Axal VC Management LLC</strong> ("Axal VC Management", "we", or "us") is the operator of the Axal StudioOS platform and the data controller for personal information collected through <code>axal.vc</code>. We recognize that our investors and founders entrust us with highly sensitive financial and personal information. This Privacy Policy explains how we collect, protect, and use your information in compliance with the Gramm-Leach-Bliley Act (GLBA), SEC Regulation S-P, and applicable state and international privacy laws (CCPA/GDPR).</p>
+          <p><strong>Axal VC Management LLC</strong> ("Axal VC Management", "we", or "us") is the operator of the Axal VC StudioOS platform and the data controller for personal information collected through <code>axal.vc</code>. We recognize that our investors and founders entrust us with highly sensitive financial and personal information. This Privacy Policy explains how we collect, protect, and use your information in compliance with the Gramm-Leach-Bliley Act (GLBA), SEC Regulation S-P, and applicable state and international privacy laws (CCPA/GDPR).</p>
 
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mb-4">0. WHO WE ARE</h2>

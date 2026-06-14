@@ -97,7 +97,7 @@ export default function Dashboard() {
       {googleNotice && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/40 dark:border-blue-900 text-sm text-blue-900 dark:text-blue-200 px-4 py-3 flex items-start justify-between gap-3">
           <div>
-            <strong>You're signed in with Google.</strong> Signing out of Axal will not
+            <strong>You're signed in with Google.</strong> Signing out of Axal VC will not
             sign you out of Google globally — if you're on a shared device, also sign
             out of your Google account in this browser. You can manage this anytime
             under <Link to="/settings/security" className="underline">Settings → Security → Connected accounts</Link>.

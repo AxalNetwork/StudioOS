@@ -17,7 +17,7 @@ const PLANS = {
     label: 'Free',
     monthly: '$0',
     yearly: '$0',
-    blurb: 'Browse and try Axal — 14-day Pro trial on signup.',
+    blurb: 'Browse and try Axal VC — 14-day Pro trial on signup.',
   },
   professional: {
     label: 'Professional',

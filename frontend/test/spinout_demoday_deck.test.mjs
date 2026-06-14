@@ -122,14 +122,14 @@ test('RatingDistribution — populated ratings show numeric avg and n', () => {
 test('SkillsSpider — fewer than 3 axes falls back to NetworkConstellation', () => {
   const html = render(EMPTY);
   assert.ok(!html.includes('Skill coverage'), 'skill radar header should be absent when <3 axes');
-  assert.ok(html.includes('Axal network ·'), 'constellation fallback label missing');
+  assert.ok(html.includes('Axal VC network ·'), 'constellation fallback label missing');
 });
 
 test('SkillsSpider — 3+ axes render the radar (no constellation fallback)', () => {
   const html = render(POPULATED);
   assert.ok(html.includes('Skill coverage'), 'skill radar header missing for populated axes');
   assert.ok(html.includes('GTM') && html.includes('Design'), 'radar axis labels missing');
-  assert.ok(!html.includes('Axal network ·'), 'constellation should not render when radar is shown');
+  assert.ok(!html.includes('Axal VC network ·'), 'constellation should not render when radar is shown');
 });
 
 test('Product Demo — no loop/screenshot shows the pending placeholder', () => {

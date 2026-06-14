@@ -1,7 +1,7 @@
 /**
  * Task #1 — Admin mentor & partner network profiles.
  *
- * Admin-only roster that feeds the Axal Spin-Out Demo Day deck's
+ * Admin-only roster that feeds the Axal VC Spin-Out Demo Day deck's
  * Mentors & Network slide. CRUD + photo upload + drag-to-reorder +
  * active toggle. Skills are picked from a fixed 12-axis catalog
  * (mirrors SKILL_CATALOG in cloudflare-worker/src/services/

@@ -1,5 +1,5 @@
 //
-// Binds to Axal platform data via `data` prop; falls back to
+// Binds to Axal VC platform data via `data` prop; falls back to
 // SAMPLE_DATA when rendered standalone.
 //
 // Requires: framer-motion (already in StudioOS deps; verify).
@@ -1462,7 +1462,7 @@ export const MinimalSeedDeckApp: React.FC<{
 };
 
 // ─────────────────────────────────────────────────────────────────
-// SAMPLE_DATA — replace at runtime with the merged Axal row shape:
+// SAMPLE_DATA — replace at runtime with the merged Axal VC row shape:
 //   { ...projects, ...financial_models, ...metrics_snapshots,
 //     ...rounds, founders: [...], milestones: [...] }
 // produced by cloudflare-worker/src/routes/decks.ts heuristicSlides().
@@ -1583,7 +1583,7 @@ export default MinimalSeedDeckApp;
 // directly.
 // Shape-aware merge — the slides call `.map` on `team`, `milestones`,
 // `roadmap`, `use_of_funds` and read `.value` / `.label` off
-// `problem_stat`. If Axal's `buildTemplateData` (or any legacy
+// `problem_stat`. If Axal VC's `buildTemplateData` (or any legacy
 // caller) passes a string where the slide expects an array, the
 // adapter would otherwise crash inside the ThumbnailBoundary. Drop
 // any incoming field whose runtime type doesn't match the sample

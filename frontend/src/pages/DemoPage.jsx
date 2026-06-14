@@ -15,7 +15,7 @@ import { usePageMeta } from '../lib/seo';
 
 const TOPICS = [
   { id: 'product', label: '30-min product demo', icon: Calendar, desc: 'Live walkthrough of the founder workspace and admin console.' },
-  { id: 'investor', label: 'Investor brief', icon: BarChart3, desc: 'How institutional investors use Axal for deal flow + LP reporting.' },
+  { id: 'investor', label: 'Investor brief', icon: BarChart3, desc: 'How institutional investors use Axal VC for deal flow + LP reporting.' },
   { id: 'partnership', label: 'Partnership intro', icon: Handshake, desc: 'For service providers, accelerators, and strategic partners.' },
 ];
 
@@ -120,7 +120,7 @@ export default function DemoPage() {
 
   usePageMeta({
     title: 'Book a demo',
-    description: 'See Axal StudioOS live — pick a product demo, investor brief, or partnership intro.',
+    description: 'See Axal VC StudioOS live — pick a product demo, investor brief, or partnership intro.',
     path: '/demo',
   });
 
@@ -128,7 +128,7 @@ export default function DemoPage() {
     <div className="min-h-screen bg-gradient-to-b from-violet-50/40 via-white to-white">
       <div className="max-w-5xl mx-auto px-6 py-12">
         <Link to="/" className="inline-flex items-center gap-2 text-violet-600 hover:text-violet-700 mb-8 min-h-[44px]">
-          <ArrowLeft size={16} aria-hidden="true" /> Back to Axal Ventures
+          <ArrowLeft size={16} aria-hidden="true" /> Back to Axal VC
         </Link>
 
         <header className="text-center max-w-2xl mx-auto mb-10">

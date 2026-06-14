@@ -20,7 +20,7 @@ export const LEGAL_ENTITIES = {
     short: "Management",
     jurisdiction: "Delaware",
     type: "LLC",
-    role: "Operating company. Operates the Axal StudioOS platform, employs personnel and contractors, signs customer/vendor/partner contracts, and is data controller under the privacy policy. Counterparty under Terms of Service and platform-level agreements.",
+    role: "Operating company. Operates the Axal VC StudioOS platform, employs personnel and contractors, signs customer/vendor/partner contracts, and is data controller under the privacy policy. Counterparty under Terms of Service and platform-level agreements.",
   },
   gp: {
     name: "Axal VC GP LLC",

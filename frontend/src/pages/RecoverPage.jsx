@@ -188,7 +188,7 @@ export default function RecoverPage() {
     setBusy(true); setError(''); setInfo('');
     try {
       const r = await post('/admin/escalate', { email: email.trim(), reason });
-      setInfo(`Submitted to Axal security (ticket #${r.ticket_id || '-'}). Two admins must co-sign; you'll get an email with a claim link once approved. This can take up to 48 hours.`);
+      setInfo(`Submitted to Axal VC security (ticket #${r.ticket_id || '-'}). Two admins must co-sign; you'll get an email with a claim link once approved. This can take up to 48 hours.`);
     } catch (e) { setError(e?.message || 'Could not submit.'); }
     finally { setBusy(false); }
   };
@@ -249,12 +249,12 @@ export default function RecoverPage() {
               <Card icon={Users} title="Trusted contacts (2 of 2)" friction="medium"
                 disabled={!layers.trusted_contact}
                 body={layers.trusted_contact
-                  ? 'Two of your trusted contacts (added in Settings → Security) confirm it\'s really you. They must each sign in with their own authenticator on Axal.'
+                  ? 'Two of your trusted contacts (added in Settings → Security) confirm it\'s really you. They must each sign in with their own authenticator on Axal VC.'
                   : 'Set up at least two trusted contacts before this option is available (Settings → Security).'}
                 cta="Ask my trusted contacts" onClick={() => setMode('trusted')} />
               <Card icon={ShieldAlert} title="Admin manual review" friction="slow"
-                body="Submit a ticket. Two Axal admins must co-sign and you'll get a one-time claim link by email. Used when no other option is available."
-                cta="Escalate to Axal security" onClick={() => setMode('admin')} />
+                body="Submit a ticket. Two Axal VC admins must co-sign and you'll get a one-time claim link by email. Used when no other option is available."
+                cta="Escalate to Axal VC security" onClick={() => setMode('admin')} />
             </div>
           )}
         </>
@@ -309,7 +309,7 @@ export default function RecoverPage() {
       {mode === 'trusted' && (
         <FlowBox onBack={() => setMode('intro')} title="Trusted contacts">
           <p className="text-xs text-gray-600 mb-3">
-            Both contacts must sign in to Axal with their own authenticator to attest. You'll get a one-time claim link by email when both have approved.
+            Both contacts must sign in to Axal VC with their own authenticator to attest. You'll get a one-time claim link by email when both have approved.
           </p>
           <button onClick={startTrusted} disabled={busy}
             className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white">
@@ -326,7 +326,7 @@ export default function RecoverPage() {
             className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-sm mb-3 dark:border-gray-700" />
           <button onClick={escalateAdmin} disabled={busy || !email.trim()}
             className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white">
-            {busy ? 'Submitting…' : 'Submit to Axal security'}
+            {busy ? 'Submitting…' : 'Submit to Axal VC security'}
           </button>
         </FlowBox>
       )}

@@ -79,12 +79,12 @@ export default function MarketIntelPage() {
     { key: 'private', label: 'Private Rounds', icon: Building2 },
     { key: 'conviction', label: 'High Conviction', icon: TrendingUp },
     { key: 'studio', label: 'Studio Benchmarks', icon: BarChart3 },
-    { key: 'investor_signals', label: 'Axal Investor Signals', icon: Users },
+    { key: 'investor_signals', label: 'Axal VC Investor Signals', icon: Users },
     // Task #4 (CF) — Platform Personas: anonymised composition of platform
     // users across all roles. Free callers see the donut + heatmap; the
     // remaining 6 charts gate behind Growth / Investor Pro.
     { key: 'platform_personas', label: 'Platform Personas', icon: Users },
-    // Task #1 (AT-2) — 8 new advisor-derived MI tabs (Axal Investor Signals
+    // Task #1 (AT-2) — 8 new advisor-derived MI tabs (Axal VC Investor Signals
     // above is the 9th, pre-existing). All read from AT-1 endpoints; cells
     // with n<5 are suppressed server-side and surface <MIInsufficientData />.
     { key: 'mi_sentiment', label: 'Founder Sentiment', icon: Activity },
@@ -463,7 +463,7 @@ export default function MarketIntelPage() {
   );
 }
 
-// ---------- Axal Investor Signals (Task #4) ----------------------------------
+// ---------- Axal VC Investor Signals (Task #4) ----------------------------------
 // Pulls the most recent k-anonymized snapshot. Cells with n<5 render as
 // "Insufficient data". Investors who haven't completed the chatbot see a
 // one-time prompt linking them back to the profiling flow.
@@ -524,7 +524,7 @@ function InvestorSignalsTab() {
 
   return (
     <div className="space-y-6">
-      <TabExplainer text="What investors across Axal are actively looking for, anonymized to k≥5. Cells where fewer than 5 investors share an answer are hidden as 'Insufficient data'." />
+      <TabExplainer text="What investors across Axal VC are actively looking for, anonymized to k≥5. Cells where fewer than 5 investors share an answer are hidden as 'Insufficient data'." />
 
       {showReprompt && (
         <div className="bg-violet-50 border border-violet-200 rounded-lg p-4 flex items-start gap-3">
@@ -2688,7 +2688,7 @@ function PlatformPersonasTab() {
 
   return (
     <div className="space-y-4">
-      <TabExplainer text="Anonymised composition of platform users — who is on Axal, by role, sector, stage, geography, and activity. Every cell needs ≥ 5 contributors before it's published, so cohorts under that threshold stay hidden." />
+      <TabExplainer text="Anonymised composition of platform users — who is on Axal VC, by role, sector, stage, geography, and activity. Every cell needs ≥ 5 contributors before it's published, so cohorts under that threshold stay hidden." />
 
       {data.tier === 'export' && data.exports && (
         <div className="flex items-center gap-2 flex-wrap">

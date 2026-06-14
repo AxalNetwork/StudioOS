@@ -4,7 +4,7 @@
 // to communicate the entire company in under three minutes.
 // Linear / Stripe / Notion / Figma aesthetic. One accent. SVG only.
 //
-// Binds to Axal platform data via the registry `data` prop (built by
+// Binds to Axal VC platform data via the registry `data` prop (built by
 // `PitchDeckPrintPage.buildTemplateData`); falls back to SAMPLE_DATA
 // per-field for anything the founder hasn't filled in yet.
 //
@@ -1566,7 +1566,7 @@ export const MinimalSeedDeckApp: React.FC<{
 //
 // Renders all 6 slides as a fragment for `PitchDeckPrintPage` (whose
 // keyboard nav + page-break + PDF export key off `data-slide-frame=""`
-// on each `SlideFrame` above). Merges incoming Axal `data` (built by
+// on each `SlideFrame` above). Merges incoming Axal VC `data` (built by
 // `buildTemplateData`) over `SAMPLE_DATA` field-by-field so unmapped
 // fields stay populated with sensible defaults.
 //
@@ -1575,11 +1575,11 @@ export const MinimalSeedDeckApp: React.FC<{
 // ─────────────────────────────────────────────────────────────────
 
 // `MinimalSeedData` fields whose value is a plain object (NOT an
-// array): partial Axal payloads for these get **deep-merged** over
+// array): partial Axal VC payloads for these get **deep-merged** over
 // the sample subfields so e.g. `problem_stat: { value: '$2B' }`
 // keeps the sample `.label` instead of nuking it. Arrays-of-objects
 // (`founders`, `milestones`, `roadmap`, `use_of_funds`, …) stay
-// "replace if provided" — a partial array from Axal means "render
+// "replace if provided" — a partial array from Axal VC means "render
 // exactly what I gave you," not zip-merge by index.
 const NESTED_OBJECT_FIELDS = new Set<keyof MinimalSeedData>(['problem_stat']);
 

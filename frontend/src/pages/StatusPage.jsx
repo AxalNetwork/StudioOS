@@ -47,7 +47,7 @@ export default function StatusPage() {
 
   usePageMeta({
     title: 'System status',
-    description: 'Real-time health of Axal StudioOS services, plus a 90-day uptime history.',
+    description: 'Real-time health of Axal VC StudioOS services, plus a 90-day uptime history.',
     path: '/status',
   });
 
@@ -77,13 +77,13 @@ export default function StatusPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-6 py-12">
         <Link to="/" className="inline-flex items-center gap-2 text-violet-600 hover:text-violet-700 mb-8 min-h-[44px]">
-          <ArrowLeft size={16} aria-hidden="true" /> Back to Axal Ventures
+          <ArrowLeft size={16} aria-hidden="true" /> Back to Axal VC
         </Link>
 
         <header className="mb-8 flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">System status</h1>
-            <p className="text-sm text-gray-600 mt-1">Live health of Axal StudioOS services.</p>
+            <p className="text-sm text-gray-600 mt-1">Live health of Axal VC StudioOS services.</p>
           </div>
           {!loading && !error && (
             <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${STATUS_PILL[overall].bg}`}>

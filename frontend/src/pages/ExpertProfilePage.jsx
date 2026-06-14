@@ -58,7 +58,7 @@ export default function ExpertProfilePage() {
       if (bookerNote.trim()) data.booker_note = bookerNote.trim().slice(0, 1000);
       const res = await api.wellbeingExpertBook(expert.uid, data);
       if (res?.client_secret) {
-        // Paid session — pay inline via the embedded Axal terminal (no redirect
+        // Paid session — pay inline via the embedded Axal VC terminal (no redirect
         // to Stripe). The Connect destination transfer to the expert is baked
         // into the server-created PaymentIntent.
         setPayIntent({
@@ -258,7 +258,7 @@ export default function ExpertProfilePage() {
             <div className="mt-3 flex items-center justify-between flex-wrap gap-2">
               <div className="text-xs text-slate-500 dark:text-slate-400">
                 {acceptsPayments
-                  ? 'Paid sessions are charged securely in-app via Stripe — you never leave Axal. A 15% platform fee is applied.'
+                  ? 'Paid sessions are charged securely in-app via Stripe — you never leave Axal VC. A 15% platform fee is applied.'
                   : 'Free intro or external scheduler — no payment required here.'}
               </div>
               {bookingState.status !== 'pay' && (

@@ -45,7 +45,7 @@ export default function OnboardingChatPage() {
       setMessages([...next, { role: 'assistant', content: res.reply }]);
     } catch (e) {
       setError(e.message);
-      setMessages([...next, { role: 'assistant', content: "I'm having trouble reaching the AI assistant right now — but no problem, your answers are saved. You can keep going and click 'Save & continue' whenever you're ready, and an Axal admin will review your profile and follow up." }]);
+      setMessages([...next, { role: 'assistant', content: "I'm having trouble reaching the AI assistant right now — but no problem, your answers are saved. You can keep going and click 'Save & continue' whenever you're ready, and an Axal VC admin will review your profile and follow up." }]);
     }
     setChatLoading(false);
   };
@@ -86,7 +86,7 @@ export default function OnboardingChatPage() {
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Tell us about yourself</h2>
         </div>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          Our AI assistant will profile your interest so an Axal admin can propose the right partnership agreement. Answer 5–8 quick questions, then save.
+          Our AI assistant will profile your interest so an Axal VC admin can propose the right partnership agreement. Answer 5–8 quick questions, then save.
         </p>
 
         {error && (

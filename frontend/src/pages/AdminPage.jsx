@@ -1517,14 +1517,14 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
                     {profile.company_established === 1
                       ? 'Company already incorporated'
                       : profile.company_established === 0
-                      ? 'Not yet incorporated — Axal will handle formation'
+                      ? 'Not yet incorporated — Axal VC will handle formation'
                       : 'Formation status not answered'}
                   </div>
                   {profile.existing_jurisdiction && (
                     <div className="text-xs text-gray-600 mt-1">Preferred jurisdiction: <span className="font-medium text-gray-900 dark:text-gray-100">{profile.existing_jurisdiction}</span></div>
                   )}
                   {profile.company_established === 0 && (
-                    <p className="text-xs text-amber-700 mt-2">This founder has not yet incorporated. The Axal 30-Day Spin-Out Engine will handle formation as part of their Closing Binder.</p>
+                    <p className="text-xs text-amber-700 mt-2">This founder has not yet incorporated. The Axal VC 30-Day Spin-Out Engine will handle formation as part of their Closing Binder.</p>
                   )}
                 </div>
               )}
@@ -1602,7 +1602,7 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
                 <span>
                   <span className="font-semibold text-amber-900">Send via DocuSign</span>
                   <span className="block text-amber-800 mt-0.5">
-                    Routes the envelope through the connected DocuSign account. The signer receives the agreement directly from DocuSign; signed PDFs are pulled back into Axal automatically.
+                    Routes the envelope through the connected DocuSign account. The signer receives the agreement directly from DocuSign; signed PDFs are pulled back into Axal VC automatically.
                   </span>
                 </span>
               </label>
@@ -1627,7 +1627,7 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
                 </div>
                 <div className="text-emerald-700">
                   {esignFlash.provider === 'docusign'
-                    ? <>DocuSign emailed the agreement directly to <span className="font-mono">{profile.email}</span>. Status updates flow back into Axal automatically.</>
+                    ? <>DocuSign emailed the agreement directly to <span className="font-mono">{profile.email}</span>. Status updates flow back into Axal VC automatically.</>
                     : esignFlash.emailSent
                       ? <>Email sent from <span className="font-mono">deal@axal.vc</span> to <span className="font-mono">{profile.email}</span>.</>
                       : <>Envelope created — email delivery did not confirm. Share this link manually:</>}
@@ -1694,8 +1694,8 @@ function fmtDate(iso) {
 // Used as a fallback if the backend omits `doc_type_label`. Must stay
 // in sync with `TEMPLATES` in cloudflare-worker/src/routes/admin_contracts.ts.
 const NEW_DOC_TYPE_LABELS = {
-  investor_nda_axal: 'Investor NDA (Axal)',
-  mentor_nda_axal: 'Mentor NDA (Axal)',
+  investor_nda_axal: 'Investor NDA (Axal VC)',
+  mentor_nda_axal: 'Mentor NDA (Axal VC)',
   mentor_engagement_disclaimer: 'Mentor Engagement Disclaimer',
   partner_nda_nonsolicit: 'Partner NDA + Non-Solicit',
   partner_equity: 'Partner Equity Deal',
@@ -1704,7 +1704,7 @@ const NEW_DOC_TYPE_LABELS = {
   partner_capital: 'Partner Capital Deal',
   partner_custom: 'Partner Custom Deal',
   finders_fee_intro_agreement: "Finder's Fee / Intro Agreement",
-  nda_3way_founder_investor_axal: '3-Way NDA (Founder ↔ Investor ↔ Axal)',
+  nda_3way_founder_investor_axal: '3-Way NDA (Founder ↔ Investor ↔ Axal VC)',
   ip_background_schedule: 'IP Background Schedule',
   data_access_acknowledgment_admin: 'Data Access Acknowledgment (Admin)',
   investor_subscription_pro: 'Investor Subscription — Pro',
@@ -1716,7 +1716,7 @@ const PARTY_ROLE_OPTIONS = [
   ['investor', 'Investor'],
   ['mentor', 'Mentor'],
   ['partner', 'Partner'],
-  ['axal', 'Axal'],
+  ['axal', 'Axal VC'],
 ];
 
 export function LegalPanel() {
@@ -1940,7 +1940,7 @@ function PairwiseNdasTable({ rows, statusFilter, onStatusFilter, intermediaryFil
   ];
   const RELATION_OPTIONS = [
     ['', 'All relations'],
-    ['axal', 'Via Axal'],
+    ['axal', 'Via Axal VC'],
     ['direct', 'Direct'],
     ['partner', 'Via Partner'],
   ];
@@ -2132,7 +2132,7 @@ function NewEnvelopeWizard({ onClose, onSent }) {
     let mergeFields;
     if (mergeFieldsRaw.trim()) {
       try { mergeFields = JSON.parse(mergeFieldsRaw); }
-      catch { setErr('Merge fields must be valid JSON (e.g. {"company_name":"Axal"}).'); return; }
+      catch { setErr('Merge fields must be valid JSON (e.g. {"company_name":"Axal VC"}).'); return; }
     }
     setBusy(true);
     setProgress({ done: 0, total: cleaned.length });

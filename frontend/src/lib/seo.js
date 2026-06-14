@@ -14,7 +14,7 @@
  */
 import { useEffect } from 'react';
 
-const SITE_NAME = 'Axal StudioOS';
+const SITE_NAME = 'Axal VC StudioOS';
 const SITE_URL = 'https://axal.vc';
 const DEFAULT_OG_IMAGE = `${SITE_URL}/og-default.png`;
 

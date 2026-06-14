@@ -22,8 +22,8 @@ export default function ShareDeckCTA({
     ? 'Tell the team what you think'
     : 'Want to review the deal?';
   const body = isCommercial
-    ? `Share structured feedback with ${projectName || 'the founders'} — what resonates, what doesn't, and whether you'd buy. Join the Axal network in 30 seconds; everything you share stays under NDA.`
-    : `Open the deal pack for ${projectName || 'this project'} — the SAFE, term sheet, and side letters are ready for your review. Join the Axal network in 30 seconds; everything is under NDA.`;
+    ? `Share structured feedback with ${projectName || 'the founders'} — what resonates, what doesn't, and whether you'd buy. Join the Axal VC network in 30 seconds; everything you share stays under NDA.`
+    : `Open the deal pack for ${projectName || 'this project'} — the SAFE, term sheet, and side letters are ready for your review. Join the Axal VC network in 30 seconds; everything is under NDA.`;
   const buttonLabel = isCommercial ? 'Join & give feedback' : 'Join & open the deal';
   const Icon = isCommercial ? MessageSquare : FileSignature;
   const accent = isCommercial
@@ -51,7 +51,7 @@ export default function ShareDeckCTA({
               {buttonLabel} <ArrowRight size={14} />
             </button>
             <p className="mt-3 text-[11px] text-gray-500">
-              By continuing you agree to the Axal terms and the project NDA.
+              By continuing you agree to the Axal VC terms and the project NDA.
             </p>
           </div>
         </div>

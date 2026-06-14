@@ -83,7 +83,7 @@ export default function PricingPage() {
     const payload = {
       '@context': 'https://schema.org',
       '@type': 'Product',
-      name: 'Axal StudioOS',
+      name: 'Axal VC StudioOS',
       description: 'Venture studio operating system — intake to portfolio monitoring.',
       offers: [
         ...FOUNDER_TIERS.map((t) => tierSchemaOffer(t, 'Founder')),
@@ -97,7 +97,7 @@ export default function PricingPage() {
     <div className="min-h-screen bg-gradient-to-b from-violet-50/40 via-white to-white">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-12">
         <Link to="/" className="inline-flex items-center gap-2 text-violet-600 hover:text-violet-700 mb-6 sm:mb-8 min-h-[44px] text-sm sm:text-base">
-          <ArrowLeft size={16} aria-hidden="true" /> Back to Axal Ventures
+          <ArrowLeft size={16} aria-hidden="true" /> Back to Axal VC
         </Link>
 
         <header className="text-center max-w-2xl mx-auto mb-8 sm:mb-10">

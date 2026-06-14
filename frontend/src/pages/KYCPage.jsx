@@ -175,13 +175,13 @@ export default function KYCPage() {
 
       {s === 'pending' && (
         <div className="bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-700 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-300">
-          Your submission is in queue. An Axal compliance reviewer typically approves within 1 business day. You will receive an email update at <strong>{authUser?.email || ''}</strong>.
+          Your submission is in queue. An Axal VC compliance reviewer typically approves within 1 business day. You will receive an email update at <strong>{authUser?.email || ''}</strong>.
         </div>
       )}
 
       {s === 'approved' && (
         <div className="bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-700 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-300">
-          You are fully verified. Submitted information is encrypted and only accessible to Axal compliance staff.
+          You are fully verified. Submitted information is encrypted and only accessible to Axal VC compliance staff.
         </div>
       )}
 
@@ -241,7 +241,7 @@ export default function KYCPage() {
             </label>
             <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
               <input type="checkbox" className="mt-1" checked={form.sanctions_acknowledged} onChange={e => setForm(f => ({ ...f, sanctions_acknowledged: e.target.checked }))} />
-              <span>I confirm I am not on any sanctions list (OFAC, UN, EU, UK) and the information above is accurate. I authorize Axal to verify my identity with third-party providers (Persona / Sumsub).</span>
+              <span>I confirm I am not on any sanctions list (OFAC, UN, EU, UK) and the information above is accurate. I authorize Axal VC to verify my identity with third-party providers (Persona / Sumsub).</span>
             </label>
           </div>
 

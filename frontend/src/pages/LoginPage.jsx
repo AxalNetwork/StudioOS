@@ -26,8 +26,8 @@ const GOOGLE_ERROR_COPY = {
   bad_state: 'Sign-in link expired. Please try again.',
   exchange_failed: 'Could not verify your Google account. Please try again.',
   email_unverified_at_google: 'Your Google email is not verified. Verify it with Google, then retry.',
-  link_blocked_unverified: 'An Axal account exists for that email but the address is unverified. Sign in with a magic link first to verify, then link Google in Settings → Security.',
-  account_inactive: 'Your Axal account is inactive. Contact support.',
+  link_blocked_unverified: 'An Axal VC account exists for that email but the address is unverified. Sign in with a magic link first to verify, then link Google in Settings → Security.',
+  account_inactive: 'Your Axal VC account is inactive. Contact support.',
   internal_error: 'Something went wrong on our side. Please try again.',
 };
 
@@ -37,7 +37,7 @@ const MAGIC_ERROR_COPY = {
   invalid: 'That sign-in link is invalid. Request a new one below.',
   expired: 'That sign-in link has expired or was already used. Request a new one below.',
   rate: 'Too many attempts. Please wait a minute and try again.',
-  inactive: 'Your Axal account is inactive. Contact support.',
+  inactive: 'Your Axal VC account is inactive. Contact support.',
   error: 'Something went wrong completing your sign-in. Please try again.',
 };
 

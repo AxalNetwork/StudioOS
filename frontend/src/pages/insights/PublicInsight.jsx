@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { publications } from '../../lib/api';
 
 const BRAND_TITLE_SUFFIX = 'Axal VC';
-const BRAND_SITE_NAME = 'Axal Venture Studio';
+const BRAND_SITE_NAME = 'Axal VC Venture Studio';
 
 export default function PublicInsight() {
   const { slug } = useParams();
@@ -166,16 +166,16 @@ export default function PublicInsight() {
             Methodology
           </h2>
           <p className="leading-relaxed">
-            Aggregates are computed by Axal's market-intelligence reconciliation
+            Aggregates are computed by Axal VC's market-intelligence reconciliation
             from anonymised, persona-tagged contributions. Cells with fewer than{' '}
             {data.k_min} distinct contributors are suppressed. The headline summary is drafted by an
-            AI editor from numeric aggregates only and reviewed by an Axal admin before publication.
+            AI editor from numeric aggregates only and reviewed by an Axal VC admin before publication.
           </p>
         </section>
       </main>
 
       <footer className="border-t mt-10 py-6 text-center text-xs text-gray-400">
-        © Axal Venture Studio · Confidential · {p.audience} distribution
+        © Axal VC Venture Studio · Confidential · {p.audience} distribution
       </footer>
     </div>
   );

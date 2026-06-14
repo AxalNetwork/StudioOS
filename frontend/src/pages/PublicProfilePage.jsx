@@ -285,7 +285,7 @@ export default function PublicProfilePage() {
       <header className="border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link to="/" className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
-            <ArrowLeft size={16} /> Axal StudioOS
+            <ArrowLeft size={16} /> Axal VC StudioOS
           </Link>
           <div className="flex items-center gap-3 text-sm">
             <Link to="/login" className="text-gray-600 hover:text-gray-900">Sign in</Link>

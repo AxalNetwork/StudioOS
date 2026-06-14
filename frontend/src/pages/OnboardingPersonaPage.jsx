@@ -148,7 +148,7 @@ export default function OnboardingPersonaPage() {
       {stage === 'intro' && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 dark:bg-gray-900 dark:border-gray-800">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            In one or two sentences, what brings you to Axal?
+            In one or two sentences, what brings you to Axal VC?
           </label>
           <textarea value={firstMessage} onChange={(e) => setFirstMessage(e.target.value)} rows={4}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-violet-500 dark:border-gray-700"

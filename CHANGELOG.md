@@ -10,6 +10,34 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Rebrand bare "Axal" → "Axal VC" across frontend & user-facing literature (Task #28)
+
+- **Why:** the official brand is **Axal VC**, not "Axal" alone. Standalone brand
+  mentions in the frontend and user-facing copy now read "Axal VC".
+- **Scope:** frontend + literature only (per user: backend/Worker/code out of
+  scope). ~246 automated replacements across 69 files via a case-sensitive,
+  word-boundary regex `\bAxal\b(?! VC)(?!\.[vV]c)(?!-)` → "Axal VC", plus manual
+  fixes for hyphenated literature (`Axal-branded` → `Axal VC-branded`,
+  `Axal-network` → `Axal VC network`, `Axal-VC` → `Axal VC`).
+- **Product/feature names also carry VC** (approved default): "Axal StudioOS" →
+  "Axal VC StudioOS", "Axal Signal" → "Axal VC Signal", etc. Touches
+  `index.html`, `manifest.webmanifest`, `offline.html`, `sw.js`, `lib/seo.js`,
+  `brand/gvpn.ts`, `lib/explainers.js`, `decks/templates/*.tsx`, and many
+  `pages/**` + `components/**`.
+- **Legacy company name collapsed:** "Axal Ventures" → "Axal VC" (not the
+  redundant "Axal VC Ventures") on legal back-links, `ApiBridgePage` app_name,
+  and sample deck data. `TermsPage` trademark list de-duplicated to
+  `"Axal VC" and "StudioOS"`.
+- **Intentionally retained (NOT changed):** code comments; the
+  `X-Axal-Signature` wire header (`IntegrationsPage`); the `Axal.vc` domain in
+  `RiskDisclosuresPage` legal text; all lowercase identifiers / domains
+  (`axal.vc`) / emails / filenames / localStorage keys; CamelCase identifiers
+  (`AxalCheckout`, `axal_spinout_demoday`); the `/^AXAL/` recovery-code prefix.
+  `lib/api.js` and `lib/stripe.js` skipped (their only `Axal` matches are
+  comments); `decks/templates/index.ts` left as-is (its one remaining bare
+  `Axal` is a comment — registry data uses lowercase ids). Backend/Worker
+  untouched.
+
 ## Document template preview spacing fixed; one shared body renderer (Task #27)
 
 - **Why:** document templates (legal agreements, resolutions, etc.) are authored

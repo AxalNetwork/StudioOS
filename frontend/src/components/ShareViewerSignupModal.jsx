@@ -133,7 +133,7 @@ export default function ShareViewerSignupModal({
         <div className="flex items-start justify-between border-b dark:border-slate-700 px-6 py-4 sticky top-0 bg-white dark:bg-slate-900 z-10">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-              {step === STEPS.SIGNUP && 'Join the Axal network'}
+              {step === STEPS.SIGNUP && 'Join the Axal VC network'}
               {step === STEPS.NDA && 'Review and sign the NDA'}
               {step === STEPS.POST_NDA && category === 'commercial' && 'Share your feedback'}
               {step === STEPS.POST_NDA && category === 'fundraising' && 'Review the deal pack'}
@@ -158,7 +158,7 @@ export default function ShareViewerSignupModal({
           {step === STEPS.SIGNUP && (
             <form onSubmit={submitSignup} className="space-y-3">
               <p className="text-sm text-gray-600 dark:text-slate-400 mb-2">
-                Create your Axal account to continue. We'll send a verification email later.
+                Create your Axal VC account to continue. We'll send a verification email later.
               </p>
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">Email</label>
@@ -217,7 +217,7 @@ export default function ShareViewerSignupModal({
                 <p className="text-gray-600 dark:text-slate-400">
                   You agree to keep all information disclosed in this deck and any subsequent
                   materials confidential. The full template will be sent to your email for your
-                  records, and is governed by the standard Axal investor NDA.
+                  records, and is governed by the standard Axal VC investor NDA.
                 </p>
               </div>
               <button
@@ -341,7 +341,7 @@ export default function ShareViewerSignupModal({
               <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
                 {category === 'commercial'
                   ? 'Your feedback has been delivered to the founders.'
-                  : 'The founder has been notified — you can track progress from your Axal dashboard.'}
+                  : 'The founder has been notified — you can track progress from your Axal VC dashboard.'}
               </p>
               <button
                 onClick={onClose}

@@ -39,7 +39,7 @@ export default function AdminPublications() {
             Publications
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Compose Axal-VC branded reports from Market Intelligence sections.
+            Compose Axal VC branded reports from Market Intelligence sections.
           </p>
         </div>
         <div className="flex items-center gap-2">

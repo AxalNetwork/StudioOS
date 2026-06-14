@@ -4,7 +4,7 @@
 // Figma/Stripe/Notion/Linear visual quality. Executive, data-centric.
 // SVG + Recharts (already in StudioOS deps). Framer Motion transitions.
 //
-// Binds to Axal platform data via `data` prop; falls back to
+// Binds to Axal VC platform data via `data` prop; falls back to
 // SAMPLE_DATA. Cloudflare Browser Rendering captures 16:9 for PDF.
 //
 // Requires: framer-motion + recharts (verify both in package.json).
@@ -1788,7 +1788,7 @@ export const SeriesAGrowthDeckApp: React.FC<{
 };
 
 // ─────────────────────────────────────────────────────────────────
-// SAMPLE_DATA — replace at runtime with the merged Axal row shape
+// SAMPLE_DATA — replace at runtime with the merged Axal VC row shape
 // produced server-side by cloudflare-worker/src/routes/decks.ts
 // heuristicSlides(). Many JSON columns referenced here depend on
 // the migration enumerated in earlier Prompt MD
@@ -2041,7 +2041,7 @@ export default SeriesAGrowthDeckApp;
 // next + dot pagination + motion) stays available via the
 // `SeriesAGrowthDeckApp` default export for callers that want it.
 //
-// Incoming Axal `data` (built by `PitchDeckPrintPage.buildTemplateData`)
+// Incoming Axal VC `data` (built by `PitchDeckPrintPage.buildTemplateData`)
 // is shallow-merged over `SAMPLE_DATA` so partial payloads keep the
 // sample's nested defaults populated.
 // ─────────────────────────────────────────────────────────────────
@@ -2051,7 +2051,7 @@ import { Slide16x9, type DeckProps as RegistryDeckProps } from '../DeckBase';
 // `hiring_plan`, `team`, etc. and dereference nested objects like
 // `revenue.series`. Drop any incoming field whose runtime type does
 // not match the sample (array-vs-non-array, object-vs-non-object)
-// so a legacy string-shaped payload from Axal cannot crash the
+// so a legacy string-shaped payload from Axal VC cannot crash the
 // adapter inside `ThumbnailBoundary`.
 function mergeShape(sample: SeriesAData, input: Record<string, any>): SeriesAData {
   const out: any = { ...sample };

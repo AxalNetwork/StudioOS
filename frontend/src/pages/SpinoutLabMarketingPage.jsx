@@ -78,7 +78,7 @@ const PLAYBOOK = [
       'Incorporate the entity, issue founder stock with vesting, file 83(b), sign cofounder agreement, lock the fundraise ask.',
     unlocks: ['Incorporate', 'Cap Table', 'Section 83(b)', 'Cofounder Agreement', 'Capital', 'Compliance', 'KYC'],
     unlocksTail:
-      ' (KYC is investor-side — your introductions complete it before any wire). Plus LP / partner introductions on Axal\u2019s network.',
+      ' (KYC is investor-side — your introductions complete it before any wire). Plus LP / partner introductions on Axal VC\u2019s network.',
     leaveWith:
       'Incorporated entity, signed cap table with vesting, 83(b) filed in window, fundraise plan + ask, three warm investor introductions.',
   },
@@ -88,12 +88,12 @@ const WHAT_YOU_GET = [
   {
     title: 'Personal Advisor on every page',
     body:
-      'Workers AI · Llama 3.3 70B FP8 via Axal\u2019s dedicated AI Gateway. Walks you through every screen — never a blank one.',
+      'Workers AI · Llama 3.3 70B FP8 via Axal VC\u2019s dedicated AI Gateway. Walks you through every screen — never a blank one.',
   },
   {
     title: 'Founder → Investor introductions',
     body:
-      'Gated by a three-way NDA (Founder + Investor + Axal). Three warm intros minimum in Week 4 for qualified founders.',
+      'Gated by a three-way NDA (Founder + Investor + Axal VC). Three warm intros minimum in Week 4 for qualified founders.',
   },
   {
     title: 'Mentor track',
@@ -103,7 +103,7 @@ const WHAT_YOU_GET = [
   {
     title: 'Services-for-equity / services-for-fee partners',
     body:
-      'Legal, design, recruiting, technical DD — pre-vetted, Axal-network rates.',
+      'Legal, design, recruiting, technical DD — pre-vetted, Axal VC network rates.',
   },
   {
     title: 'Market intelligence access',
@@ -155,7 +155,7 @@ const REASONS_WE_SAY_NO = [
 
 const NETWORK = [
   'Operating partners — legal, GTM, design, recruiting, data, technical DD, finance.',
-  'Investor signals from Axal\u2019s investor pipeline (anonymised until pairwise NDA signed).',
+  'Investor signals from Axal VC\u2019s investor pipeline (anonymised until pairwise NDA signed).',
   'Mentor pool with expertise tags and availability calendars.',
   'Co-marketing partners across the network for distribution.',
   'Alumni founders who graduated previous cohorts.',
@@ -380,7 +380,7 @@ export default function SpinoutLabMarketingPage() {
             Network.
           </h2>
           <p className="text-gray-600 text-center max-w-xl mx-auto mb-10">
-            Inside the Lab you tap the full Axal network.
+            Inside the Lab you tap the full Axal VC network.
           </p>
           <div className="bg-white border border-gray-200 rounded-2xl p-6">
             <ul className="space-y-3">

@@ -4,7 +4,7 @@
 // Snowflake / Datadog / Atlassian visual language. Data-rich, executive,
 // credible. SVG + Recharts. Framer Motion transitions.
 //
-// Binds to Axal platform data via `data` prop; falls back to
+// Binds to Axal VC platform data via `data` prop; falls back to
 // SAMPLE_DATA. Cloudflare Browser Rendering captures 16:9 for PDF.
 //
 // Requires: framer-motion + recharts (verify in package.json).
@@ -2631,7 +2631,7 @@ export const SeriesBDiligenceDeckApp: React.FC<{
 };
 
 // ─────────────────────────────────────────────────────────────────
-// SAMPLE_DATA — drop in the merged Axal row shape produced by
+// SAMPLE_DATA — drop in the merged Axal VC row shape produced by
 // cloudflare-worker/src/routes/decks.ts heuristicSlides() to hydrate.
 // JSON columns referenced here depend on the autofill migration
 // from earlier Prompt MD (DECK_AUTOFILL_AUDIT.md +

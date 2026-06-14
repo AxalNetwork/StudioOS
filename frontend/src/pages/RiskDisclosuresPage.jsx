@@ -10,7 +10,7 @@ export default function RiskDisclosuresPage() {
       <PublicNav />
       <main className="flex-1 max-w-4xl mx-auto px-6 py-12 w-full">
         <Link to="/" className="flex items-center gap-2 text-violet-600 hover:text-violet-700 mb-8">
-          <ArrowLeft size={16} /> Back to Axal Ventures
+          <ArrowLeft size={16} /> Back to Axal VC
         </Link>
 
         <h1 className="text-4xl font-bold text-gray-900 mb-2 dark:text-gray-100">Risk Disclosures & Disclaimers</h1>
@@ -36,7 +36,7 @@ export default function RiskDisclosuresPage() {
             <ul className="list-disc list-inside space-y-2">
               <li><strong>No Secondary Market:</strong> There is currently no active public market for the Securities.</li>
               <li><strong>Holding Period:</strong> You should expect to hold your investment for an indefinite period, often 7 to 10 years or more, until a "liquidity event" (such as an IPO or acquisition) occurs.</li>
-              <li><strong>Transfer Restrictions:</strong> The Securities are subject to legal and contractual restrictions on resale. You may be prohibited from selling your interest without the express consent of the Issuer or Axal.</li>
+              <li><strong>Transfer Restrictions:</strong> The Securities are subject to legal and contractual restrictions on resale. You may be prohibited from selling your interest without the express consent of the Issuer or Axal VC.</li>
             </ul>
           </section>
 
