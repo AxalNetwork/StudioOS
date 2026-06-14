@@ -4,6 +4,7 @@ import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { useEscapeClose } from '../../components/useEscapeClose';
 import DocumentBody from '../../components/DocumentBody';
+import PaperPreview from '../../components/PaperPreview';
 
 // Task #8 — Markdown template editor + full template catalog.
 //
@@ -182,6 +183,7 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
   const [versions, setVersions] = useState([]);
   const [showVersions, setShowVersions] = useState(false);
   const [viewVersion, setViewVersion] = useState(null); // a past version snapshot being previewed
+  const [resolveTokens, setResolveTokens] = useState(true);
 
   useEscapeClose(onClose);
 
@@ -356,15 +358,23 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
             </div>
             {/* Right: live preview */}
             <div className="md:w-1/2 min-h-0 overflow-y-auto bg-gray-50 dark:bg-gray-900/40">
-              <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 sticky top-0 bg-gray-50 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-800">
-                {viewVersion ? `Preview · v${viewVersion.version} (read-only)` : 'Live preview'}
+              <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 sticky top-0 bg-gray-50 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
+                <span>{viewVersion ? `Preview · v${viewVersion.version} (read-only)` : 'Live preview'}</span>
+                <label className="flex items-center gap-1.5 normal-case font-normal text-[10px] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={resolveTokens}
+                    onChange={e => setResolveTokens(e.target.checked)}
+                    className="w-3 h-3 accent-violet-600"
+                  />
+                  Resolve merge fields
+                </label>
               </div>
-              <div className="px-5 py-4">
-                <DocumentBody
-                  text={previewBody}
-                  className="font-sans text-[13.5px] leading-relaxed text-gray-800 dark:text-gray-200"
-                  emptyText="Nothing to preview yet." />
-              </div>
+              <PaperPreview
+                title={viewVersion ? viewVersion.title : title}
+                body={previewBody}
+                resolveTokens={resolveTokens}
+              />
             </div>
           </div>
         )}
