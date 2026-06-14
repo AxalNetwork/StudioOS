@@ -333,6 +333,15 @@ export default function PitchDeckPage() {
           await downloadDeckPdf({ title: deck.title, slides });
           return;
         }
+        // Task #33 — graceful fallback when server PDF render genuinely fails.
+        if (r.status === 502 && format === 'pdf') {
+          const err = await r.json().catch(() => ({}));
+          const msg = err.detail || err.message || 'Server PDF render failed';
+          addToast(`Server PDF render failed — using client renderer. (${msg})`, 'error');
+          reportError('PitchDeckPage:exportPdf:502', { detail: msg, status: err.status, deckId: deck.id });
+          await downloadDeckPdf({ title: deck.title, slides });
+          return;
+        }
         if (r.status === 503) {
           addToast(`Server ${format.toUpperCase()} export unavailable in this environment.`, 'error');
           return;

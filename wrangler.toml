@@ -506,6 +506,30 @@ zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/articles/*"
 zone_name  = "axal.vc"
+# Task #33 — deck print/export/share routes served by the SPA on the apex.
+# The headless Browser Rendering session hits `/deck/print-export/<token>`
+# from the apex; without these routes the apex Jekyll site intercepts it.
+# /deck/* covers authenticated print (/deck/:id/print) and legacy share
+# (/deck/share/:token). /share/deck/* covers the canonical share links.
+# Exact + wildcard pattern prevents hijacking similarly-prefixed paths.
+[[env.production.routes]]
+pattern    = "axal.vc/deck/print-export"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/deck/print-export/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/deck"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/deck/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/share/deck"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/share/deck/*"
+zone_name  = "axal.vc"
 
 [env.production.vars]
 # Task #5 — canonical-host flip. APP_URL/PUBLIC_BASE_URL now point at

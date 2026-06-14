@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## PDF export fixed for pitch decks
+
+Pitch deck PDF export used to fail in production with a generic "render failed" message. The root cause was a routing gap: the share and print pages were being sent to the marketing site instead of the app. We've corrected the routing so export works, and added a fallback so if the server render ever fails, the deck still downloads via the built-in browser renderer. PPTX export, which shares the same print path, is also repaired.
+
+---
+
 ## Download a PDF of any legal template
 
 Admins can now download a PDF preview of any template in the legal catalog. Open a template in the editor, click the **Download PDF** button in the footer, and receive a watermarked preview file showing exactly how the document will look when generated — with merge fields replaced by their bracketed labels, and a "PREVIEW" watermark on every page so it can never be confused with a signed contract. The button respects the existing "Resolve merge fields" toggle, so you can also download a version showing the raw `{{tokens}}` for QA.

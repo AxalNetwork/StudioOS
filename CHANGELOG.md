@@ -10,6 +10,24 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Fix pitch deck PDF export (pdf_render_failed) (Task #33)
+
+- **Why:** the apex host (`axal.vc`) is a proxied Jekyll site; the Worker only
+  serves the SPA for an explicit allowlist of paths. `/deck/...` and
+  `/share/deck/...` were NOT on that allowlist, so the headless Browser
+  Rendering session landed on Jekyll instead of the SPA print page, producing
+  a 404 render and the opaque `502 pdf_render_failed` response.
+- **Apex routes added** in `wrangler.toml` (both `[[routes]]` and
+  `[[env.production.routes]]`): `/deck/print-export`, `/deck/print-export/*`,
+  `/deck`, `/deck/*`, `/share/deck`, `/share/deck/*` (exact + wildcard pairs
+  to avoid hijacking similarly-prefixed Jekyll paths).
+- **Frontend error detail** surfaced in `PitchDeckPage.jsx`: the 502 JSON
+  response now includes `detail`/`message` in the toast and `reportError`,
+  so a genuine render failure is diagnosable instead of a bare error code.
+- **Graceful fallback** for 502 PDF errors: mirrors the existing 503 path
+  — `downloadDeckPdf` client-side renderer fires automatically with a toast
+  so the user is never fully blocked.
+
 ## Per-Template PDF Download (Task #31)
 
 - **Why:** reviewers can't get a real PDF of an unsigned template without
