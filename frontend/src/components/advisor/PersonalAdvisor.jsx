@@ -77,6 +77,36 @@ function useIsDesktop() {
   return desktop;
 }
 
+// Tracks the on-screen (visual) viewport so the fullscreen advisor dialog can
+// shrink when the soft keyboard opens. `100dvh` already handles Android Chrome
+// (further aided by `interactive-widget=resizes-content` in index.html), but
+// iOS Safari overlays the keyboard WITHOUT shrinking dvh — leaving the composer
+// hidden behind it. Binding the dialog height to `visualViewport.height` (and
+// shifting it by `offsetTop`) keeps the input bar + mic visible and tappable.
+// Returns null when the API is unavailable so we fall back to the CSS `100dvh`.
+function useVisualViewportStyle() {
+  const [style, setStyle] = useState(null);
+  useEffect(() => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (!vv) return undefined;
+    const apply = () => {
+      setStyle({
+        height: `${Math.round(vv.height)}px`,
+        maxHeight: `${Math.round(vv.height)}px`,
+        transform: vv.offsetTop ? `translateY(${Math.round(vv.offsetTop)}px)` : undefined,
+      });
+    };
+    apply();
+    vv.addEventListener('resize', apply);
+    vv.addEventListener('scroll', apply);
+    return () => {
+      vv.removeEventListener('resize', apply);
+      vv.removeEventListener('scroll', apply);
+    };
+  }, []);
+  return style;
+}
+
 export default function PersonalAdvisor() {
   const { user } = useAuth();
   const persisted = useMemo(() => safeReadJSON(STORAGE_KEY, {}) || {}, []);
@@ -727,11 +757,13 @@ function FullscreenView({
   pendingEvidence, labState, progressBumpToken, onPickQuestion,
 }) {
   useEscapeClose(onExit);
+  const vvStyle = useVisualViewportStyle();
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-label="Personal Advisor"
+      style={vvStyle || undefined}
       className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-gray-900 h-[100dvh] max-h-[100dvh] overflow-hidden"
     >
       <FullscreenHeader persona={persona} progress={progress} onExit={onExit} />
