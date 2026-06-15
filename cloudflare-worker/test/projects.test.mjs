@@ -277,3 +277,156 @@ test('GET /:id: existing project → 200 (404 is missing-only, not blanket)', as
   assert.equal(captured.status, 200);
   assert.equal(captured.b.id, 5);
 });
+
+/* ------------------------------------------------------------------ */
+/* POST /:projectId/spinout-deck — RBAC + data-source contract.       */
+/* (Task #41)                                                          */
+/*                                                                    */
+/* The deck is assembled from the PROJECT OWNER's user-scoped Lab data */
+/* (fillAxalSpinoutDemoDay reads founder profile, lab milestones,     */
+/* advisor answers, cap-table fallback, team graph by userId). The    */
+/* route MUST source from the owner, never the viewer — otherwise a   */
+/* staff member generating on behalf would leak their own data into a */
+/* founder's deck. We slice the real handler from source and inject   */
+/* stubbed deps, then assert WHICH userId reaches the assembler.      */
+/* ------------------------------------------------------------------ */
+async function loadSpinoutDeckHandler() {
+  const src = await readFile(resolve(__dirname, '../src/routes/projects.ts'), 'utf8');
+  const marker = "projects.post('/:projectId/spinout-deck', async (c) => {";
+  const i = src.indexOf(marker);
+  assert.notEqual(i, -1, "projects.post('/:projectId/spinout-deck', …) not found");
+  const bodyOpen = i + marker.length - 1; // index of the body-opening '{'
+  let depth = 0, close = -1;
+  for (let j = bodyOpen; j < src.length; j++) {
+    const ch = src[j];
+    if (ch === '{') depth++;
+    else if (ch === '}') { depth--; if (depth === 0) { close = j; break; } }
+  }
+  assert.notEqual(close, -1, 'failed to balance spinout-deck handler braces');
+  const body = src.slice(bodyOpen + 1, close);
+  const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js'))).default;
+  const wrapped = `const __run = async (c, __deps) => {
+    const { requireAuth, getSQL, ensureMethodAllowed, PREMIUM_METHOD_IDS, assembleSpinoutDeckData } = __deps;
+    ${body}
+  };`;
+  const { outputText } = ts.transpileModule(wrapped, {
+    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
+  });
+  return new Function(`${outputText}; return __run;`)();
+}
+
+/** A `sql` stub that routes by statement text (project lookup vs owner lookup). */
+function makeRoutedSql(routes) {
+  const sql = (strings, ...values) => {
+    const text = strings.join('?').replace(/\s+/g, ' ').trim();
+    for (const r of routes) if (r.test.test(text)) return Promise.resolve(r.rows);
+    return Promise.resolve([]);
+  };
+  sql.end = async () => {};
+  return sql;
+}
+
+const PROJECT_RE = /SELECT id, founder_id FROM projects WHERE id = \?/i;
+const OWNER_RE = /SELECT id FROM users WHERE founder_id = \? ORDER BY id ASC LIMIT 1/i;
+
+function runSpinoutDeck({ user, projectRows, ownerRows, methodThrows = false }) {
+  const calls = { assembleUserId: undefined, assembleProjectId: undefined };
+  const deps = {
+    requireAuth: async () => user,
+    ensureMethodAllowed: () => { if (methodThrows) { const e = new Error('PAYWALL'); throw e; } },
+    PREMIUM_METHOD_IDS: ['axal_spinout_demoday'],
+    getSQL: () => makeRoutedSql([
+      { test: PROJECT_RE, rows: projectRows },
+      { test: OWNER_RE, rows: ownerRows },
+    ]),
+    assembleSpinoutDeckData: async (_env, userId, projectId) => {
+      calls.assembleUserId = userId;
+      calls.assembleProjectId = projectId;
+      return { data: { ok: true }, notes: { cover: 'n' }, gaps: ['g1'], draft: true, programDay: 16 };
+    },
+  };
+  let captured;
+  const c = {
+    env: {},
+    req: { param: (k) => (k === 'projectId' ? '5' : undefined) },
+    json: (b, status) => { captured = { b, status: status ?? 200 }; return captured; },
+  };
+  return loadSpinoutDeckHandler().then((run) => run(c, deps)).then(() => ({ captured, calls }));
+}
+
+test('spinout-deck: founder-owner → 200, sources from the founder themselves', async () => {
+  const { captured, calls } = await runSpinoutDeck({
+    user: { id: 42, role: 'founder', founder_id: 7 },
+    projectRows: [{ id: 5, founder_id: 7 }],
+    ownerRows: [{ id: 42 }],
+  });
+  assert.equal(captured.status, 200);
+  assert.equal(captured.b.program_day, 16);
+  assert.deepEqual(captured.b.gaps, ['g1']);
+  assert.equal(captured.b.draft, true);
+  assert.equal(calls.assembleUserId, 42, 'owner sources from their own user id');
+  assert.equal(calls.assembleProjectId, 5);
+});
+
+test('spinout-deck: non-owner founder → 403, assembler never runs', async () => {
+  const { captured, calls } = await runSpinoutDeck({
+    user: { id: 99, role: 'founder', founder_id: 3 },
+    projectRows: [{ id: 5, founder_id: 7 }],
+    ownerRows: [{ id: 42 }],
+  });
+  assert.equal(captured.status, 403);
+  assert.equal(calls.assembleUserId, undefined, 'no deck assembled for a non-owner');
+});
+
+test('spinout-deck: admin on behalf → sources the OWNER id, not the admin', async () => {
+  const { captured, calls } = await runSpinoutDeck({
+    user: { id: 1, role: 'admin', founder_id: null },
+    projectRows: [{ id: 5, founder_id: 7 }],
+    ownerRows: [{ id: 42 }], // the founder's user account
+  });
+  assert.equal(captured.status, 200);
+  assert.equal(calls.assembleUserId, 42, 'staff-on-behalf must source the founder, not themselves');
+});
+
+test('spinout-deck: investor → 403 even though the paywall would let them pass', async () => {
+  const { captured, calls } = await runSpinoutDeck({
+    user: { id: 2, role: 'investor', founder_id: null },
+    projectRows: [{ id: 5, founder_id: 7 }],
+    ownerRows: [{ id: 42 }],
+    methodThrows: false, // investors bypass ensureMethodAllowed — AUTHZ must still block
+  });
+  assert.equal(captured.status, 403);
+  assert.equal(calls.assembleUserId, undefined, 'investor must not receive unmasked deck data');
+});
+
+test('spinout-deck: premium gate → 402 upgrade payload', async () => {
+  const { captured, calls } = await runSpinoutDeck({
+    user: { id: 50, role: 'founder', founder_id: 7 },
+    projectRows: [{ id: 5, founder_id: 7 }],
+    ownerRows: [{ id: 50 }],
+    methodThrows: true,
+  });
+  assert.equal(captured.status, 402);
+  assert.equal(captured.b.code, 'PAYWALL_PREMIUM_METHOD');
+  assert.equal(calls.assembleUserId, undefined);
+});
+
+test('spinout-deck: staff on behalf but project has no founder account → 409', async () => {
+  const { captured, calls } = await runSpinoutDeck({
+    user: { id: 1, role: 'admin', founder_id: null },
+    projectRows: [{ id: 5, founder_id: 7 }],
+    ownerRows: [], // no user linked to the founder
+  });
+  assert.equal(captured.status, 409);
+  assert.equal(calls.assembleUserId, undefined);
+});
+
+test('spinout-deck: missing project → 404', async () => {
+  const { captured, calls } = await runSpinoutDeck({
+    user: { id: 1, role: 'admin', founder_id: null },
+    projectRows: [], // not found
+    ownerRows: [],
+  });
+  assert.equal(captured.status, 404);
+  assert.equal(calls.assembleUserId, undefined);
+});

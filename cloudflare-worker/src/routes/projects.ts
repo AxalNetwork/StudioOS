@@ -5,6 +5,9 @@ import { getSQL } from '../db';
 import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
 import { runFullScore } from '../services/scoring';
 import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
+import { assembleSpinoutDeckData } from '../services/decks/spinoutDeckData';
+import { ensureMethodAllowed } from '../services/decks/branding';
+import { PREMIUM_METHOD_IDS } from '../services/decks/methods';
 
 const projects = new Hono<{ Bindings: Env }>();
 
@@ -569,6 +572,80 @@ projects.post('/:id/advance-week', async (c) => {
   const [updated] = await sql`SELECT * FROM projects WHERE id = ${id}`;
   await sql.end();
   return c.json(updated);
+});
+
+// Task #41 — assemble the NEW 10-slide Spin-Out Demo Day deck. Prod is a
+// Worker on D1, but the .pptx generator (frontend/src/decks/spinout/buildDeck.js)
+// runs in the BROWSER (it needs pptxgenjs). So this endpoint returns the
+// assembled DATA + NOTES + gaps[] as JSON and the browser renders/downloads
+// the file via buildDeck(data, { notes, draft }). Gated by the SAME premium
+// check as POST /api/decks/apply-method — a founder who can apply the
+// axal_spinout_demoday template can always generate its deck — then the same
+// owner RBAC as PUT /:id below.
+projects.post('/:projectId/spinout-deck', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = parseInt(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid project id' }, 400);
+
+  // Premium gate — mirrors /api/decks/apply-method's 402 upgrade payload.
+  try {
+    ensureMethodAllowed(user, 'axal_spinout_demoday', PREMIUM_METHOD_IDS);
+  } catch (_e) {
+    return c.json({
+      error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD',
+      method_id: 'axal_spinout_demoday', required_tier: 'growth',
+      message: 'The Spin-Out deck is part of the Growth plan. Upgrade to unlock.',
+    }, 402);
+  }
+
+  // Ownership + data-source resolution. The deck is sourced from the PROJECT
+  // OWNER's Lab data: fillAxalSpinoutDemoDay() reads user-scoped rows (founder
+  // profile, spinout_lab_milestones, advisor_answers, the project-null
+  // cap-table fallback, and the team graph) keyed by userId. We MUST pass the
+  // owner's user id, never the viewer's — otherwise a staff member generating
+  // on behalf would bleed their own Lab data into a founder's deck.
+  //   - Founder owns their project (founder_id match) → source = themselves.
+  //   - Studio staff (admin/partner) may generate on a founder's behalf →
+  //     source = the founder's user account, resolved from projects.founder_id
+  //     (same pattern as GET /:id).
+  //   - Investors and mentors are deliberately EXCLUDED here (tighter than the
+  //     generic canAccessFounderResource bypass): investor project views are
+  //     masked via maskFounderForInvestor, and a full demo-day deck would leak
+  //     unmasked founder data.
+  const sql = getSQL(c.env);
+  let project: any;
+  let ownerUserId: number | null = null;
+  try {
+    const rows = await sql`SELECT id, founder_id FROM projects WHERE id = ${projectId}`;
+    if (rows.length === 0) return c.json({ error: 'Project not found' }, 404);
+    project = rows[0];
+    if (project.founder_id != null) {
+      const owners = await sql`SELECT id FROM users WHERE founder_id = ${project.founder_id} ORDER BY id ASC LIMIT 1`;
+      if (owners.length) ownerUserId = Number(owners[0].id);
+    }
+  } finally {
+    await sql.end();
+  }
+  const isStaff = user.role === 'admin' || user.role === 'partner';
+  const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
+  if (!isStaff && !isOwner) {
+    return c.json({ detail: "Forbidden: you cannot generate this project's deck" }, 403);
+  }
+  // Founder generating their own deck sources from themselves (the verified
+  // happy path); staff-on-behalf sources from the resolved owner account.
+  const sourceUserId = isOwner ? Number(user.id) : ownerUserId;
+  if (sourceUserId == null) {
+    return c.json({ error: 'This project has no founder account to source deck data from' }, 409);
+  }
+
+  const bundle = await assembleSpinoutDeckData(c.env, sourceUserId, projectId);
+  return c.json({
+    data: bundle.data,
+    notes: bundle.notes,
+    gaps: bundle.gaps,
+    draft: bundle.draft,
+    program_day: bundle.programDay,
+  });
 });
 
 export default projects;

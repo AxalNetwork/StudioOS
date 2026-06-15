@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Generate your Spin-Out demo-day deck from your live data
+
+If you're in the Spin-Out Lab, you can now build your full demo-day slide deck straight from the work you've already done. Open your deck and choose **Export → PowerPoint**: we pull in your discovery interviews, market sizing, roadmap, team, cap table, and ask to fill all ten slides for you. Anything you haven't completed yet shows up as a short, friendly checklist — "complete these to finish your deck" — so you know exactly what to add next. While your project is still mid-program or has items left to fill, the file is marked as a draft so you never send an unfinished deck by mistake.
+
+---
+
 ## PDF export fixed for pitch decks
 
 Pitch deck PDF export used to fail in production with a generic "render failed" message. The root cause was a routing gap: the share and print pages were being sent to the marketing site instead of the app. We've corrected the routing so export works, and added a fallback so if the server render ever fails, the deck still downloads via the built-in browser renderer. PPTX export, which shares the same print path, is also repaired.

@@ -10,6 +10,45 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Autofill & wire the NEW Spin-Out demo-day deck (Task #41)
+
+- **What:** founders on a Spin-Out deck can now generate a fully-populated
+  10-slide `.pptx` from their live Lab data, with actionable "complete these to
+  finish your deck" gaps and a DRAFT marker while the project is mid-program.
+- **Worker assembler:** new `cloudflare-worker/src/services/decks/spinoutDeckData.ts`.
+  `mapToSpinoutDeckData(src: SpinoutDemoDayData) => { data, notes, gaps, draft, programDay }`
+  is a PURE remap of the existing `fillAxalSpinoutDemoDay()` output into the new
+  `buildDeck()` 10-slide contract (Task #40) — no second D1 read.
+  `assembleSpinoutDeckData(env, userId, projectId)` is the thin fill+map wrapper.
+  - `programDay = clamp(28 − meta.days_remaining, 0, 28)`; `draft = programDay < 28 || gaps.length > 0`.
+  - A slide pushes a `gap` only when its backing Lab module is empty (a fully
+    completed project ⇒ zero gaps). Narrative-only empty fields render as
+    `[draft — complete in <Module>]`; empty chart-bearing modules fall back to
+    neutral template figures (never a real company's numbers) so the slide still
+    renders, always paired with a gap. Speaker `NOTES` are static.
+- **Worker route:** `projects.post('/:projectId/spinout-deck')` in `routes/projects.ts`.
+  Premium-gated via `ensureMethodAllowed(user, 'axal_spinout_demoday', PREMIUM_METHOD_IDS)`
+  (mirrors `/api/decks/apply-method` → 402 paywall payload, NOT `ensureTier`), then
+  the same owner RBAC as `PUT /:id` (privileged bypass / founder owns ⇒ 404/403).
+  Returns `{ data, notes, gaps, draft, program_day }`. The `.pptx` is built in the
+  browser (pptxgenjs needs no Worker runtime).
+- **Dev mirror:** `POST /api/projects/{project_id}/spinout-deck` in
+  `backend/app/api/routes/projects.py` returns a deterministic, fully-populated
+  payload (keyed to the project name, `program_day=16`, two sample gaps, `draft=True`)
+  so the preview download is exercisable in dev. Never deployed.
+- **Frontend:** `api.spinoutDeck(projectId)` helper; `PitchDeckPage` PPTX export, when
+  `isSpinoutDeck`, calls it, dynamically imports `decks/spinout/buildDeck.js`, runs
+  `buildDeck(data, { notes, draft })`, downloads the blob (filename gets `-DRAFT`),
+  and renders the returned `gaps[]` in a "complete these to finish your deck" panel.
+  402 surfaces a clean upgrade nudge. Historical decks + the React registry entry +
+  per-slide reorder UI for non-spinout decks are untouched.
+- **Test:** `cloudflare-worker/test/spinoutDeckData.test.ts` (node:test) pins both
+  ends: a full Day-28 fixture ⇒ zero gaps, no `[draft …]` leak, `draft=false`; a
+  partial Day-16 fixture ⇒ `draft=true`, populated gaps, placeholders present; both
+  ⇒ structurally renderable (3 market rings, 4 solution steps with valid icon keys,
+  positive funnel max, finite signal series). Wired into `npm run test:drift`.
+  `check-deck-templates.mjs` stays green (no template/registry change).
+
 ## New Spin-Out demo-day deck generator — `buildDeck()` (Task #40)
 
 - **What:** ported the `axal_vc_spinout_deck` template into a browser-runnable

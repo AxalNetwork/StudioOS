@@ -50,6 +50,9 @@ export default function PitchDeckPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState('');
+  // Task #41 — actionable "complete these to finish your deck" gaps returned
+  // by the Spin-Out deck assembler, surfaced after a PowerPoint export.
+  const [deckGaps, setDeckGaps] = useState([]);
   const [shareUrl, setShareUrl] = useState('');
   const [engagement, setEngagement] = useState(null);
   const [dragIdx, setDragIdx] = useState(null);
@@ -325,6 +328,23 @@ export default function PitchDeckPage() {
     if (!deck?.id) return;
     setExporting(format); setExportMenuOpen(false);
     try {
+      // Task #41 — the NEW Spin-Out deck renders client-side so the .pptx
+      // matches the live React template exactly. The Worker assembles
+      // DATA + NOTES + gaps[]; buildDeck() (pptxgenjs) runs in the browser.
+      // DRAFT (programDay < 28 OR any gaps) only stamps the file metadata
+      // title — no slide visual change — and surfaces via filename + gaps list.
+      if (format === 'pptx' && isSpinoutDeck) {
+        if (!projectId) { addToast('Pick a project first', 'error'); return; }
+        const bundle = await api.spinoutDeck(projectId);
+        const buildDeck = (await import('../decks/spinout/buildDeck.js')).default;
+        const blob = await buildDeck(bundle.data, { notes: bundle.notes, draft: bundle.draft });
+        const fname = (deck.title || 'spinout-deck').replace(/[^A-Za-z0-9_-]+/g, '-')
+          + (bundle.draft ? '-DRAFT' : '') + '.pptx';
+        downloadBlob(blob, fname);
+        setDeckGaps(Array.isArray(bundle.gaps) ? bundle.gaps : []);
+        addToast(bundle.draft ? 'Exported PowerPoint (draft)' : 'Exported PowerPoint', 'success');
+        return;
+      }
       const r = await api.deckExport(deck.id, format);
       if (!r.ok) {
         // Server may signal client-fallback for missing browser binding (dev).
@@ -356,7 +376,13 @@ export default function PitchDeckPage() {
       downloadBlob(blob, fname);
       addToast(`Exported ${format.toUpperCase()}`, 'success');
     } catch (e) {
-      setError(e.message || 'Export failed'); reportError(e);
+      // Task #41 — a founder viewing a Spin-Out deck already passed the
+      // premium gate, but surface a clean upgrade nudge if the assembler 402s.
+      if (e?.status === 402) {
+        addToast('The Spin-Out deck is part of the Growth plan. Upgrade to unlock.', 'error');
+      } else {
+        setError(e.message || 'Export failed'); reportError(e);
+      }
     } finally { setExporting(''); }
   };
 
@@ -710,6 +736,21 @@ export default function PitchDeckPage() {
                   </div>
                 )}
               </div>
+
+              {isSpinoutDeck && deckGaps.length > 0 && (
+                <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-900 p-3" data-card>
+                  <div className="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-2">
+                    Complete these to finish your deck
+                  </div>
+                  <ul className="space-y-1.5">
+                    {deckGaps.map((g, i) => (
+                      <li key={i} className="text-xs text-amber-800 dark:text-amber-300 flex gap-2">
+                        <span aria-hidden>•</span><span>{g}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Task #53 — Engagement panel: shows aggregate views,
                   read-time, and a recent-impressions list (hashed). */}

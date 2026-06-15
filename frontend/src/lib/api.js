@@ -1290,6 +1290,11 @@ export const api = {
   // rail. 409 `no_method_id` means the deck was created before the new
   // fielded editor; client should direct the user to /apply-method first.
   deckAutofill: (id) => request(`/decks/${id}/autofill`, { method: 'POST', body: '{}' }),
+  // Task #41 — assemble the NEW 10-slide Spin-Out deck DATA + NOTES + gaps[]
+  // (the Worker remaps the live Lab data). The browser renders/downloads the
+  // .pptx from this via frontend/src/decks/spinout/buildDeck.js. Returns
+  // { data, notes, gaps, draft, program_day }.
+  spinoutDeck: (projectId) => request(`/projects/${projectId}/spinout-deck`, { method: 'POST', body: '{}' }),
   // Task #2 — server-side export, format ∈ {pdf, pptx}. PNG cover was
   // removed end-to-end (PDF + PPTX are both driven by Cloudflare Browser
   // Rendering against the live SPA print template).
