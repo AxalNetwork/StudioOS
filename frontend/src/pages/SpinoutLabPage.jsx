@@ -393,10 +393,15 @@ function DeckReadinessCard() {
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(true);
 
-  useEffect(() => {
-    let alive = true;
-    setPreviewLoading(true);
-    api.listProjects()
+  // Task #47 — keep the readiness card live. The deck preview is fetched once
+  // on mount, but a founder completing a milestone (or editing data) while on
+  // the Lab page would otherwise see stale gaps until a full reload. Re-fetch
+  // on the same `spinout-lab:advanced` signal the dashboard already listens to,
+  // plus on window focus. `fetchPreview` takes an `isAlive` getter so each run
+  // owns its own abort flag and a stale request can never overwrite a newer one.
+  const fetchPreview = useCallback((isAlive, { showLoading = false } = {}) => {
+    if (showLoading) setPreviewLoading(true);
+    return api.listProjects()
       .then((r) => {
         const list = Array.isArray(r) ? r : (r?.projects || []);
         const projectId = list[0]?.id;
@@ -404,7 +409,7 @@ function DeckReadinessCard() {
         return api.spinoutDeckPreview(projectId);
       })
       .then((r) => {
-        if (!alive) return;
+        if (!isAlive()) return;
         setPreview({
           gaps: Array.isArray(r?.gaps) ? r.gaps : [],
           draft: !!r?.draft,
@@ -412,13 +417,40 @@ function DeckReadinessCard() {
         });
       })
       .catch((e) => {
-        if (!alive) return;
+        if (!isAlive()) return;
         setPreview(null);
         if (e?.status !== 402 && !e?.silent) reportError('spinout-lab:deck-preview', e);
       })
+      .finally(() => { if (isAlive() && showLoading) setPreviewLoading(false); });
+  }, []);
+
+  // Initial load — shows the loading skeleton.
+  useEffect(() => {
+    let alive = true;
+    fetchPreview(() => alive, { showLoading: true })
       .finally(() => { if (alive) setPreviewLoading(false); });
     return () => { alive = false; };
-  }, []);
+  }, [fetchPreview]);
+
+  // Live refresh on milestone completion + window focus. These are silent
+  // re-fetches (no skeleton flicker); they only swap in fresher data. An
+  // in-flight refresh is guarded so a stale response can't clobber a newer one.
+  useEffect(() => {
+    let alive = true;
+    let inFlight = false;
+    const refreshPreview = () => {
+      if (!alive || inFlight) return;
+      inFlight = true;
+      fetchPreview(() => alive).finally(() => { inFlight = false; });
+    };
+    window.addEventListener('spinout-lab:advanced', refreshPreview);
+    window.addEventListener('focus', refreshPreview);
+    return () => {
+      alive = false;
+      window.removeEventListener('spinout-lab:advanced', refreshPreview);
+      window.removeEventListener('focus', refreshPreview);
+    };
+  }, [fetchPreview]);
 
   const readiness = deckReadinessState({ previewLoading, deckPreview: preview });
   if (readiness === 'hidden') return null;
