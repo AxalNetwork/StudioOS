@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Check, Loader2, Rocket, Sparkles, ArrowRight, BookOpen } from 'lucide-react';
-import { spinoutLab } from '../lib/api';
+import { api, spinoutLab } from '../lib/api';
+import { deckReadinessState } from '../lib/deckReadiness';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import SpinoutLabMarketingPage from './SpinoutLabMarketingPage';
@@ -382,6 +383,142 @@ function ExitSuccess({ onContinue, busy }) {
   );
 }
 
+// Task #45 — compact mirror of the Pitch Deck page's pre-flight readiness
+// panel, surfaced inside the Lab where founders spend most of their time.
+// Reuses api.spinoutDeckPreview + deckReadinessState (same data shape, same
+// draft/ready decision) so the two never drift. Resolves the founder's
+// project the same way the deck builder does (first project in the list),
+// and stays silent (renders nothing) on paywall/error/no-project.
+function DeckReadinessCard() {
+  const [preview, setPreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    setPreviewLoading(true);
+    api.listProjects()
+      .then((r) => {
+        const list = Array.isArray(r) ? r : (r?.projects || []);
+        const projectId = list[0]?.id;
+        if (!projectId) throw Object.assign(new Error('no-project'), { silent: true });
+        return api.spinoutDeckPreview(projectId);
+      })
+      .then((r) => {
+        if (!alive) return;
+        setPreview({
+          gaps: Array.isArray(r?.gaps) ? r.gaps : [],
+          draft: !!r?.draft,
+          programDay: Number.isFinite(r?.program_day) ? r.program_day : null,
+        });
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setPreview(null);
+        if (e?.status !== 402 && !e?.silent) reportError('spinout-lab:deck-preview', e);
+      })
+      .finally(() => { if (alive) setPreviewLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  const readiness = deckReadinessState({ previewLoading, deckPreview: preview });
+  if (readiness === 'hidden') return null;
+
+  const dayLabel = preview?.programDay != null ? `Day ${preview.programDay} of 28` : null;
+
+  if (readiness === 'loading') {
+    return (
+      <section
+        aria-label="Demo Day deck readiness"
+        className="rounded-2xl border border-gray-200 bg-white p-4 dark:bg-gray-900 dark:border-gray-800"
+      >
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+          <Loader2 className="w-4 h-4 animate-spin" /> Checking your Demo Day deck…
+        </div>
+      </section>
+    );
+  }
+
+  if (readiness === 'gaps') {
+    const n = preview.gaps.length;
+    return (
+      <section
+        aria-label="Demo Day deck readiness"
+        className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:bg-amber-950/30 dark:border-amber-900"
+      >
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+            Your Demo Day deck is {n} item{n === 1 ? '' : 's'} from ready
+          </div>
+          <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200/70 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+            Draft
+          </span>
+        </div>
+        {dayLabel && (
+          <div className="mt-1 text-[11px] text-amber-700/80 dark:text-amber-400/80">
+            Spin-Out Lab · {dayLabel}
+          </div>
+        )}
+        <ul className="mt-2 space-y-1">
+          {preview.gaps.slice(0, 4).map((g, i) => (
+            <li key={i} className="text-xs text-amber-800 dark:text-amber-300 flex gap-2">
+              <span aria-hidden>•</span><span>{g}</span>
+            </li>
+          ))}
+          {n > 4 && (
+            <li className="text-[11px] text-amber-700/70 dark:text-amber-400/70">
+              +{n - 4} more
+            </li>
+          )}
+        </ul>
+        <Link
+          to="/build/deck?method_id=axal_spinout_demoday"
+          className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-amber-800 hover:text-amber-900 dark:text-amber-200 dark:hover:text-amber-100"
+        >
+          Open the deck builder to fill these <ArrowRight size={13} />
+        </Link>
+      </section>
+    );
+  }
+
+  if (readiness === 'draft') {
+    return (
+      <section
+        aria-label="Demo Day deck readiness"
+        className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:bg-amber-950/30 dark:border-amber-900"
+      >
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 text-sm font-semibold text-amber-900 dark:text-amber-200">
+            <Check className="w-4 h-4" /> Every deck section is filled
+          </div>
+          <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200/70 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+            Draft
+          </span>
+        </div>
+        <div className="mt-1 text-[11px] text-amber-700/80 dark:text-amber-400/80">
+          {dayLabel
+            ? `Still in the Lab (${dayLabel}), so exports are marked as a draft until you finish the 28-day program.`
+            : 'Your program isn\u2019t complete yet, so exports are marked as a draft.'}
+        </div>
+      </section>
+    );
+  }
+
+  // ready
+  return (
+    <section
+      aria-label="Demo Day deck readiness"
+      className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:bg-emerald-950/30 dark:border-emerald-900"
+    >
+      <div className="flex items-center gap-2 text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+        <Check className="w-4 h-4" /> Your Demo Day deck is ready
+      </div>
+      <div className="mt-1 text-[11px] text-emerald-700/80 dark:text-emerald-400/80">
+        {dayLabel ? `Spin-Out Lab · ${dayLabel}. ` : ''}Every section is filled — export a final-quality deck.
+      </div>
+    </section>
+  );
+}
+
 function Dashboard({ state, onComplete, completing, completeError }) {
   const week = Math.max(1, Math.min(4, state.week || 1));
   const completedKeys = new Set((state.milestones || []).map((m) => m.key));
@@ -416,6 +553,8 @@ function Dashboard({ state, onComplete, completing, completeError }) {
       </header>
 
       <ProgressBar week={week} />
+
+      <DeckReadinessCard />
 
       {showDemoDayCta && (
         <section

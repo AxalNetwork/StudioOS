@@ -10,6 +10,105 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Pre-flight Spin-Out deck readiness checklist (Task #42)
+
+- **What:** the Spin-Out deck page now shows the live gaps[] checklist and
+  draft/ready status BEFORE a founder exports, turning export-time
+  disappointment into a pre-flight to-do list. The post-export panel stays as
+  confirmation (it's the same panel, refreshed from the built bundle).
+- **Worker:** `POST /api/projects/:projectId/spinout-deck?preview=1` now returns
+  only `{ gaps, draft, program_day }` — same assembler/gaps as the export, but
+  skips shipping the heavy `data` + `notes` payload. Same premium gate + owner
+  RBAC as the full export. See `cloudflare-worker/src/routes/projects.ts`.
+- **Dev mirror:** `backend/app/api/routes/projects.py` `spinout_deck()` gained a
+  `?preview=1` branch returning the same gaps-only shape.
+- **Frontend:** `frontend/src/lib/api.js` `spinoutDeckPreview(projectId)`;
+  `PitchDeckPage.jsx` replaces the post-export-only `deckGaps` state with a
+  unified `deckPreview` ({ gaps, draft, programDay }) fetched on Spin-Out deck
+  load and refreshed after export. Readiness state is computed by the pure
+  `frontend/src/lib/deckReadiness.js::deckReadinessState()` which honors the
+  backend `draft` flag (NOT gaps.length alone), so a no-gaps-but-mid-program
+  deck (program_day < 28) never reads as "ready". Four panel states: amber gaps
+  checklist, amber "all sections filled but still a draft", emerald ready, and a
+  loading spinner.
+- **Tests:** `cloudflare-worker/test/projects.test.mjs` gains a `?preview=1`
+  contract test (gaps-only payload, no data/notes, still owner-sourced) and the
+  handler mock now provides `c.req.query`. `frontend/test/deck_readiness.test.mjs`
+  unit-tests the state decision (incl. the draft=true + gaps=[] regression),
+  wired into `npm run test:decks`.
+
+## Autofill & wire the NEW Spin-Out demo-day deck (Task #41)
+
+- **What:** founders on a Spin-Out deck can now generate a fully-populated
+  10-slide `.pptx` from their live Lab data, with actionable "complete these to
+  finish your deck" gaps and a DRAFT marker while the project is mid-program.
+- **Worker assembler:** new `cloudflare-worker/src/services/decks/spinoutDeckData.ts`.
+  `mapToSpinoutDeckData(src: SpinoutDemoDayData) => { data, notes, gaps, draft, programDay }`
+  is a PURE remap of the existing `fillAxalSpinoutDemoDay()` output into the new
+  `buildDeck()` 10-slide contract (Task #40) — no second D1 read.
+  `assembleSpinoutDeckData(env, userId, projectId)` is the thin fill+map wrapper.
+  - `programDay = clamp(28 − meta.days_remaining, 0, 28)`; `draft = programDay < 28 || gaps.length > 0`.
+  - A slide pushes a `gap` only when its backing Lab module is empty (a fully
+    completed project ⇒ zero gaps). Narrative-only empty fields render as
+    `[draft — complete in <Module>]`; empty chart-bearing modules fall back to
+    neutral template figures (never a real company's numbers) so the slide still
+    renders, always paired with a gap. Speaker `NOTES` are static.
+- **Worker route:** `projects.post('/:projectId/spinout-deck')` in `routes/projects.ts`.
+  Premium-gated via `ensureMethodAllowed(user, 'axal_spinout_demoday', PREMIUM_METHOD_IDS)`
+  (mirrors `/api/decks/apply-method` → 402 paywall payload, NOT `ensureTier`), then
+  the same owner RBAC as `PUT /:id` (privileged bypass / founder owns ⇒ 404/403).
+  Returns `{ data, notes, gaps, draft, program_day }`. The `.pptx` is built in the
+  browser (pptxgenjs needs no Worker runtime).
+- **Dev mirror:** `POST /api/projects/{project_id}/spinout-deck` in
+  `backend/app/api/routes/projects.py` returns a deterministic, fully-populated
+  payload (keyed to the project name, `program_day=16`, two sample gaps, `draft=True`)
+  so the preview download is exercisable in dev. Never deployed.
+- **Frontend:** `api.spinoutDeck(projectId)` helper; `PitchDeckPage` PPTX export, when
+  `isSpinoutDeck`, calls it, dynamically imports `decks/spinout/buildDeck.js`, runs
+  `buildDeck(data, { notes, draft })`, downloads the blob (filename gets `-DRAFT`),
+  and renders the returned `gaps[]` in a "complete these to finish your deck" panel.
+  402 surfaces a clean upgrade nudge. Historical decks + the React registry entry +
+  per-slide reorder UI for non-spinout decks are untouched.
+- **Test:** `cloudflare-worker/test/spinoutDeckData.test.ts` (node:test) pins both
+  ends: a full Day-28 fixture ⇒ zero gaps, no `[draft …]` leak, `draft=false`; a
+  partial Day-16 fixture ⇒ `draft=true`, populated gaps, placeholders present; both
+  ⇒ structurally renderable (3 market rings, 4 solution steps with valid icon keys,
+  positive funnel max, finite signal series). Wired into `npm run test:drift`.
+  `check-deck-templates.mjs` stays green (no template/registry change).
+
+## New Spin-Out demo-day deck generator — `buildDeck()` (Task #40)
+
+- **What:** ported the `axal_vc_spinout_deck` template into a browser-runnable
+  generator at `frontend/src/decks/spinout/buildDeck.js`. Exports
+  `buildDeck(data, opts)` (returns the 10-slide `.pptx` as a Blob/Buffer),
+  plus `SAMPLE_DATA`/`SAMPLE_NOTES` (the template's bundled content, retained
+  as a fixture/fallback), `THEME`, and a `fmt` money/number helper. `THEME`
+  (colour + fonts), every slide's geometry/copy, the 10-slide order, and the
+  per-slide speaker `NOTES` are kept byte-for-byte.
+- **Platform deviations from the attached prompt (unavoidable here):**
+  generation runs in the **browser** via `pptxgenjs`, not server-side Node —
+  prod is a Cloudflare Worker (no Node runtime, no native binaries). Dropped
+  `sharp` + `react-icons` + `react-dom/server`: the five glyphs
+  (`ingest`/database, `score`/chart-line, `monitor`/eye, `act`/bolt, `check`)
+  are **pre-baked** to base64 PNG in `frontend/src/decks/spinout/icons.generated.js`
+  by `scripts/gen-spinout-icons.mjs` (ImageMagick rasterises clean geometric
+  SVGs; accent `2C4BE0` / white). No native deps, no async icon load.
+- **Refactor:** removed the module-level `pres` singleton and the top-level
+  IIFE/`writeFile`; the slide builders now take `(pres, data, notes, ICON)`
+  and read no globals. `opts.draft` stamps the file metadata title with
+  "DRAFT" (the autofill/wiring layer decides when to set it).
+- **Dep:** added `pptxgenjs@^4.0.1` to both root and `frontend/package.json`
+  (browser bundle). Did NOT add `sharp`/`react-icons`/`react-dom` for this.
+- **Test:** `frontend/test/spinout_pptx_build.test.mjs` renders the sample
+  fixture and asserts a valid, non-empty OOXML package (ZIP `PK\x03\x04`
+  signature, `[Content_Types].xml` + `ppt/presentation.xml`, exactly 10
+  `slideN.xml` entries, 10 `notesSlideN.xml` parts + a verbatim speaker-note
+  slice), plus `fmt`/`THEME`/fixture contract checks. Wired into `test:decks`
+  (so it runs under `test:drift`). The existing React `axal_spinout_demoday`
+  registry entry is left untouched.
+- **Out of scope (Task #41):** real project/milestone data, the HTTP endpoint,
+  the "Generate deck" button, and the `gaps[]` UI.
+
 ## Post-deploy guard: verify hashed assets actually resolve (blank-page recurrence)
 
 - **Symptom:** hard-loading a Worker-routed app path (e.g. `axal.vc/about`)

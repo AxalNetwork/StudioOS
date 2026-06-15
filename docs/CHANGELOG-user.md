@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## See what's missing before you download your deck
+
+Your Spin-Out deck now shows a readiness checklist right on the deck page — before you export. If anything's still empty (interviews, market sizing, cap table, your funding ask, and so on), you'll see a short "complete these before you export" list, a Draft tag, and how far you are into the 28-day program. Once everything's filled in, the panel turns green to tell you the deck is ready. That way you can finish the gaps first instead of finding out only after you've downloaded a draft.
+
+---
+
+## Generate your Spin-Out demo-day deck from your live data
+
+If you're in the Spin-Out Lab, you can now build your full demo-day slide deck straight from the work you've already done. Open your deck and choose **Export → PowerPoint**: we pull in your discovery interviews, market sizing, roadmap, team, cap table, and ask to fill all ten slides for you. Anything you haven't completed yet shows up as a short, friendly checklist — "complete these to finish your deck" — so you know exactly what to add next. While your project is still mid-program or has items left to fill, the file is marked as a draft so you never send an unfinished deck by mistake.
+
+---
+
 ## PDF export fixed for pitch decks
 
 Pitch deck PDF export used to fail in production with a generic "render failed" message. The root cause was a routing gap: the share and print pages were being sent to the marketing site instead of the app. We've corrected the routing so export works, and added a fallback so if the server render ever fails, the deck still downloads via the built-in browser renderer. PPTX export, which shares the same print path, is also repaired.
