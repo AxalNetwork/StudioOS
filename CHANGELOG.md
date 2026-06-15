@@ -10,6 +10,39 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## New Spin-Out demo-day deck generator — `buildDeck()` (Task #40)
+
+- **What:** ported the `axal_vc_spinout_deck` template into a browser-runnable
+  generator at `frontend/src/decks/spinout/buildDeck.js`. Exports
+  `buildDeck(data, opts)` (returns the 10-slide `.pptx` as a Blob/Buffer),
+  plus `SAMPLE_DATA`/`SAMPLE_NOTES` (the template's bundled content, retained
+  as a fixture/fallback), `THEME`, and a `fmt` money/number helper. `THEME`
+  (colour + fonts), every slide's geometry/copy, the 10-slide order, and the
+  per-slide speaker `NOTES` are kept byte-for-byte.
+- **Platform deviations from the attached prompt (unavoidable here):**
+  generation runs in the **browser** via `pptxgenjs`, not server-side Node —
+  prod is a Cloudflare Worker (no Node runtime, no native binaries). Dropped
+  `sharp` + `react-icons` + `react-dom/server`: the five glyphs
+  (`ingest`/database, `score`/chart-line, `monitor`/eye, `act`/bolt, `check`)
+  are **pre-baked** to base64 PNG in `frontend/src/decks/spinout/icons.generated.js`
+  by `scripts/gen-spinout-icons.mjs` (ImageMagick rasterises clean geometric
+  SVGs; accent `2C4BE0` / white). No native deps, no async icon load.
+- **Refactor:** removed the module-level `pres` singleton and the top-level
+  IIFE/`writeFile`; the slide builders now take `(pres, data, notes, ICON)`
+  and read no globals. `opts.draft` stamps the file metadata title with
+  "DRAFT" (the autofill/wiring layer decides when to set it).
+- **Dep:** added `pptxgenjs@^4.0.1` to both root and `frontend/package.json`
+  (browser bundle). Did NOT add `sharp`/`react-icons`/`react-dom` for this.
+- **Test:** `frontend/test/spinout_pptx_build.test.mjs` renders the sample
+  fixture and asserts a valid, non-empty OOXML package (ZIP `PK\x03\x04`
+  signature, `[Content_Types].xml` + `ppt/presentation.xml`, exactly 10
+  `slideN.xml` entries, 10 `notesSlideN.xml` parts + a verbatim speaker-note
+  slice), plus `fmt`/`THEME`/fixture contract checks. Wired into `test:decks`
+  (so it runs under `test:drift`). The existing React `axal_spinout_demoday`
+  registry entry is left untouched.
+- **Out of scope (Task #41):** real project/milestone data, the HTTP endpoint,
+  the "Generate deck" button, and the `gaps[]` UI.
+
 ## Post-deploy guard: verify hashed assets actually resolve (blank-page recurrence)
 
 - **Symptom:** hard-loading a Worker-routed app path (e.g. `axal.vc/about`)
