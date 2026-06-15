@@ -639,6 +639,18 @@ projects.post('/:projectId/spinout-deck', async (c) => {
   }
 
   const bundle = await assembleSpinoutDeckData(c.env, sourceUserId, projectId);
+  // Pre-flight preview (?preview=1): the deck page shows the live gaps
+  // checklist + draft/ready status BEFORE the founder exports, so missing
+  // sections (interviews, market sizing, cap table, …) can be filled in
+  // first. Same assembler/gaps as the export — we just skip shipping the
+  // heavy DATA + NOTES payload back over the wire.
+  if (c.req.query('preview') === '1') {
+    return c.json({
+      gaps: bundle.gaps,
+      draft: bundle.draft,
+      program_day: bundle.programDay,
+    });
+  }
   return c.json({
     data: bundle.data,
     notes: bundle.notes,

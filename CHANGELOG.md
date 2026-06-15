@@ -10,6 +10,33 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Pre-flight Spin-Out deck readiness checklist (Task #42)
+
+- **What:** the Spin-Out deck page now shows the live gaps[] checklist and
+  draft/ready status BEFORE a founder exports, turning export-time
+  disappointment into a pre-flight to-do list. The post-export panel stays as
+  confirmation (it's the same panel, refreshed from the built bundle).
+- **Worker:** `POST /api/projects/:projectId/spinout-deck?preview=1` now returns
+  only `{ gaps, draft, program_day }` — same assembler/gaps as the export, but
+  skips shipping the heavy `data` + `notes` payload. Same premium gate + owner
+  RBAC as the full export. See `cloudflare-worker/src/routes/projects.ts`.
+- **Dev mirror:** `backend/app/api/routes/projects.py` `spinout_deck()` gained a
+  `?preview=1` branch returning the same gaps-only shape.
+- **Frontend:** `frontend/src/lib/api.js` `spinoutDeckPreview(projectId)`;
+  `PitchDeckPage.jsx` replaces the post-export-only `deckGaps` state with a
+  unified `deckPreview` ({ gaps, draft, programDay }) fetched on Spin-Out deck
+  load and refreshed after export. Readiness state is computed by the pure
+  `frontend/src/lib/deckReadiness.js::deckReadinessState()` which honors the
+  backend `draft` flag (NOT gaps.length alone), so a no-gaps-but-mid-program
+  deck (program_day < 28) never reads as "ready". Four panel states: amber gaps
+  checklist, amber "all sections filled but still a draft", emerald ready, and a
+  loading spinner.
+- **Tests:** `cloudflare-worker/test/projects.test.mjs` gains a `?preview=1`
+  contract test (gaps-only payload, no data/notes, still owner-sourced) and the
+  handler mock now provides `c.req.query`. `frontend/test/deck_readiness.test.mjs`
+  unit-tests the state decision (incl. the draft=true + gaps=[] regression),
+  wired into `npm run test:decks`.
+
 ## Autofill & wire the NEW Spin-Out demo-day deck (Task #41)
 
 - **What:** founders on a Spin-Out deck can now generate a fully-populated

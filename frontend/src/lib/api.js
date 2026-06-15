@@ -1295,6 +1295,10 @@ export const api = {
   // .pptx from this via frontend/src/decks/spinout/buildDeck.js. Returns
   // { data, notes, gaps, draft, program_day }.
   spinoutDeck: (projectId) => request(`/projects/${projectId}/spinout-deck`, { method: 'POST', body: '{}' }),
+  // Task #42 — pre-flight readiness: same assembler/gaps as spinoutDeck but
+  // returns ONLY { gaps, draft, program_day } (skips the heavy DATA + NOTES
+  // payload) so the deck page can show what's still missing BEFORE export.
+  spinoutDeckPreview: (projectId) => request(`/projects/${projectId}/spinout-deck?preview=1`, { method: 'POST', body: '{}' }),
   // Task #2 — server-side export, format ∈ {pdf, pptx}. PNG cover was
   // removed end-to-end (PDF + PPTX are both driven by Cloudflare Browser
   // Rendering against the live SPA print template).

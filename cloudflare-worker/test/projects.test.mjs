@@ -329,7 +329,7 @@ function makeRoutedSql(routes) {
 const PROJECT_RE = /SELECT id, founder_id FROM projects WHERE id = \?/i;
 const OWNER_RE = /SELECT id FROM users WHERE founder_id = \? ORDER BY id ASC LIMIT 1/i;
 
-function runSpinoutDeck({ user, projectRows, ownerRows, methodThrows = false }) {
+function runSpinoutDeck({ user, projectRows, ownerRows, methodThrows = false, query = {} }) {
   const calls = { assembleUserId: undefined, assembleProjectId: undefined };
   const deps = {
     requireAuth: async () => user,
@@ -348,7 +348,10 @@ function runSpinoutDeck({ user, projectRows, ownerRows, methodThrows = false }) 
   let captured;
   const c = {
     env: {},
-    req: { param: (k) => (k === 'projectId' ? '5' : undefined) },
+    req: {
+      param: (k) => (k === 'projectId' ? '5' : undefined),
+      query: (k) => query[k],
+    },
     json: (b, status) => { captured = { b, status: status ?? 200 }; return captured; },
   };
   return loadSpinoutDeckHandler().then((run) => run(c, deps)).then(() => ({ captured, calls }));
@@ -366,6 +369,22 @@ test('spinout-deck: founder-owner → 200, sources from the founder themselves',
   assert.equal(captured.b.draft, true);
   assert.equal(calls.assembleUserId, 42, 'owner sources from their own user id');
   assert.equal(calls.assembleProjectId, 5);
+});
+
+test('spinout-deck: ?preview=1 → 200, gaps-only payload (no data/notes)', async () => {
+  const { captured, calls } = await runSpinoutDeck({
+    user: { id: 42, role: 'founder', founder_id: 7 },
+    projectRows: [{ id: 5, founder_id: 7 }],
+    ownerRows: [{ id: 42 }],
+    query: { preview: '1' },
+  });
+  assert.equal(captured.status, 200);
+  assert.deepEqual(captured.b.gaps, ['g1']);
+  assert.equal(captured.b.draft, true);
+  assert.equal(captured.b.program_day, 16);
+  assert.equal(captured.b.data, undefined, 'preview omits the heavy data payload');
+  assert.equal(captured.b.notes, undefined, 'preview omits the notes payload');
+  assert.equal(calls.assembleUserId, 42, 'preview still sources from the owner');
 });
 
 test('spinout-deck: non-owner founder → 403, assembler never runs', async () => {

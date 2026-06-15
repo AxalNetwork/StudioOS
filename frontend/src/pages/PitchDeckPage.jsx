@@ -9,6 +9,7 @@ import {
   GripVertical, Eye, Clock,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { deckReadinessState } from '../lib/deckReadiness';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 import { useAuth } from '../hooks/useAuthSync';
 import { useToast } from '../components/useToast';
@@ -50,9 +51,13 @@ export default function PitchDeckPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState('');
-  // Task #41 — actionable "complete these to finish your deck" gaps returned
-  // by the Spin-Out deck assembler, surfaced after a PowerPoint export.
-  const [deckGaps, setDeckGaps] = useState([]);
+  // Task #41/#42 — Spin-Out deck readiness: the actionable "complete these to
+  // finish your deck" gaps[] plus draft/program_day. Fetched live as a pre-flight
+  // checklist BEFORE export (Task #42) and refreshed from the bundle after a
+  // PowerPoint export so the panel doubles as post-export confirmation.
+  // Shape: { gaps: string[], draft: boolean, programDay: number } | null.
+  const [deckPreview, setDeckPreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const [engagement, setEngagement] = useState(null);
   const [dragIdx, setDragIdx] = useState(null);
@@ -188,6 +193,35 @@ export default function PitchDeckPage() {
       deck?.method_id === 'axal_spinout_demoday' ||
       slides.some((s) => s?.method_id === 'axal_spinout_demoday'),
     [deck, slides],
+  );
+
+  // Task #42 — pre-flight readiness. As soon as a Spin-Out deck loads, pull
+  // the live gaps[] + draft/program_day (no .pptx built) so the founder sees
+  // what's still empty BEFORE exporting. Re-runs when the project/deck changes;
+  // a 402 (paywall) or any error simply leaves the panel hidden.
+  useEffect(() => {
+    if (!isSpinoutDeck || !projectId) { setDeckPreview(null); return; }
+    let alive = true;
+    setPreviewLoading(true);
+    api.spinoutDeckPreview(projectId)
+      .then((r) => {
+        if (!alive) return;
+        setDeckPreview({
+          gaps: Array.isArray(r?.gaps) ? r.gaps : [],
+          draft: !!r?.draft,
+          programDay: Number.isFinite(r?.program_day) ? r.program_day : null,
+        });
+      })
+      .catch((e) => { if (alive) { setDeckPreview(null); if (e?.status !== 402) reportError(e); } })
+      .finally(() => { if (alive) setPreviewLoading(false); });
+    return () => { alive = false; };
+  }, [isSpinoutDeck, projectId]);
+
+  // Drives the readiness panel. Honors the backend `draft` flag (not just
+  // gaps.length) so a no-gaps-but-mid-program deck never reads as "ready".
+  const readinessState = useMemo(
+    () => deckReadinessState({ previewLoading, deckPreview }),
+    [previewLoading, deckPreview],
   );
 
   // ---------------- save (debounced) ----------------
@@ -341,7 +375,11 @@ export default function PitchDeckPage() {
         const fname = (deck.title || 'spinout-deck').replace(/[^A-Za-z0-9_-]+/g, '-')
           + (bundle.draft ? '-DRAFT' : '') + '.pptx';
         downloadBlob(blob, fname);
-        setDeckGaps(Array.isArray(bundle.gaps) ? bundle.gaps : []);
+        setDeckPreview({
+          gaps: Array.isArray(bundle.gaps) ? bundle.gaps : [],
+          draft: !!bundle.draft,
+          programDay: Number.isFinite(bundle.program_day) ? bundle.program_day : null,
+        });
         addToast(bundle.draft ? 'Exported PowerPoint (draft)' : 'Exported PowerPoint', 'success');
         return;
       }
@@ -737,18 +775,78 @@ export default function PitchDeckPage() {
                 )}
               </div>
 
-              {isSpinoutDeck && deckGaps.length > 0 && (
+              {/* Task #42 — pre-flight readiness checklist. Shows what's still
+                  empty (and the draft/ready + program-day status) BEFORE the
+                  founder clicks Export, then doubles as post-export confirmation
+                  (onExport refreshes deckPreview from the built bundle). */}
+              {isSpinoutDeck && readinessState === 'gaps' && (
+                // DRAFT — sections still empty. The clear, top-priority case.
                 <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-900 p-3" data-card>
-                  <div className="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-2">
-                    Complete these to finish your deck
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                      Complete these before you export
+                    </div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200/70 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+                      Draft
+                    </span>
                   </div>
+                  {deckPreview.programDay != null && (
+                    <div className="text-[11px] text-amber-700/80 dark:text-amber-400/80 mb-2">
+                      Spin-Out Lab · Day {deckPreview.programDay} of 28
+                    </div>
+                  )}
                   <ul className="space-y-1.5">
-                    {deckGaps.map((g, i) => (
+                    {deckPreview.gaps.map((g, i) => (
                       <li key={i} className="text-xs text-amber-800 dark:text-amber-300 flex gap-2">
                         <span aria-hidden>•</span><span>{g}</span>
                       </li>
                     ))}
                   </ul>
+                  <div className="text-[11px] text-amber-700/70 dark:text-amber-400/70 mt-2">
+                    You can still export now — it'll be marked as a draft.
+                  </div>
+                </div>
+              )}
+              {isSpinoutDeck && readinessState === 'draft' && (
+                // DRAFT with NO gaps — every section is filled but the deck is
+                // still mid-program (program_day < 28). Match the export, which
+                // stamps the file -DRAFT: do NOT claim it's final.
+                <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-900 p-3" data-card>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                      <Check className="w-4 h-4" /> All sections filled
+                    </div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200/70 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+                      Draft
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-amber-700/80 dark:text-amber-400/80">
+                    {deckPreview.programDay != null
+                      ? `Still in the Spin-Out Lab (Day ${deckPreview.programDay} of 28), so exports are marked as a draft. `
+                      : 'Your program isn\u2019t complete yet, so exports are marked as a draft. '}
+                    It\u2019ll be final once you finish the 28-day program.
+                  </div>
+                </div>
+              )}
+              {isSpinoutDeck && readinessState === 'ready' && (
+                // READY — no gaps AND not a draft. Safe to export final.
+                <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-lg border border-emerald-200 dark:border-emerald-900 p-3" data-card>
+                  <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                    <Check className="w-4 h-4" /> Deck is ready
+                  </div>
+                  <div className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80 mt-1.5">
+                    {deckPreview.programDay != null
+                      ? `Spin-Out Lab · Day ${deckPreview.programDay} of 28. `
+                      : ''}
+                    Every section is filled — export a final-quality deck.
+                  </div>
+                </div>
+              )}
+              {isSpinoutDeck && readinessState === 'loading' && (
+                <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
+                  <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Checking deck readiness…
+                  </div>
                 </div>
               )}
 

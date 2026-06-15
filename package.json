@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:drift": "node scripts/check-dark-mode.mjs && node scripts/check-api-drift.mjs && node --test cloudflare-worker/test/api_drift.test.mjs && node scripts/check-advisor-bank-drift.mjs && node scripts/check-statemachine-coverage.mjs && node scripts/check-deck-templates.mjs && npm run test:decks && node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/advisor.scenarios.test.ts cloudflare-worker/test/newsRender.test.ts cloudflare-worker/test/contact.test.ts cloudflare-worker/test/irsForms.test.ts cloudflare-worker/test/nameCheck.test.ts cloudflare-worker/test/incorporationPacket.test.ts cloudflare-worker/test/portfolio_coverage.test.ts cloudflare-worker/test/decks.team_radar.test.ts cloudflare-worker/test/spinoutDeckData.test.ts cloudflare-worker/test/articles_view_count.test.ts cloudflare-worker/test/stripeTax.test.ts && node --test cloudflare-worker/test/market_intel_personas.test.mjs && (cd cloudflare-worker && npx --no-install tsc --noEmit)",
-    "test:decks": "node --import ./frontend/test/_deck-loader.mjs --test frontend/test/spinout_demoday_deck.test.mjs frontend/test/deck_templates_missing_data.test.mjs frontend/test/spinout_pptx_build.test.mjs",
+    "test:decks": "node --import ./frontend/test/_deck-loader.mjs --test frontend/test/spinout_demoday_deck.test.mjs frontend/test/deck_templates_missing_data.test.mjs frontend/test/spinout_pptx_build.test.mjs frontend/test/deck_readiness.test.mjs",
     "test:e2e": "playwright test",
     "build": "cd frontend && npm run build",
     "deploy": "cd cloudflare-worker && npx wrangler deploy --config ../wrangler.toml --env production",

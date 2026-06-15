@@ -217,6 +217,7 @@ def _spinout_deck_payload(project: Project) -> dict:
 @router.post("/{project_id}/spinout-deck")
 def spinout_deck(
     project_id: int,
+    preview: int = 0,
     session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ):
@@ -225,12 +226,22 @@ def spinout_deck(
     Returns the assembled Spin-Out deck DATA + NOTES + gaps[] so the browser
     can build/download the .pptx in the Replit preview. Prod runs the real
     remap in the Worker; this dev route is a deterministic partial mirror.
+
+    `?preview=1` returns only the gaps[] + draft + program_day so the deck page
+    can show the pre-flight readiness checklist before the founder exports.
     """
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     ensure_founder_access(user, project.founder_id)
-    return _spinout_deck_payload(project)
+    payload = _spinout_deck_payload(project)
+    if preview == 1:
+        return {
+            "gaps": payload["gaps"],
+            "draft": payload["draft"],
+            "program_day": payload["program_day"],
+        }
+    return payload
 
 
 @router.get("/")
