@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Spin-Out Demo Day deck now shows your real data everywhere
+
+When you open or share your Spin-Out Demo Day deck, every slide now renders the actual information from your Lab — your company thesis, customer discovery findings, market sizing, team, cap table, and ask — instead of the built-in example data. Previously the live view was always showing the sample "Basepoint" placeholder copy even after you'd filled in your deck.
+
+---
+
 ## Press Enter to send your answer in the Personal Advisor
 
 You can now press Enter to send your answer in the Personal Advisor no matter what kind of question it is. Before, Enter only worked for short answers and left you stuck for long answers and other question types. Now it's the same everywhere: Enter sends, Shift+Enter still gives you a new line if you want one, and it won't jump the gun while you're composing in an Asian language input method.

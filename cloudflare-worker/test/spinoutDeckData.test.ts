@@ -21,7 +21,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mapToSpinoutDeckData } from '../src/services/decks/spinoutDeckData.ts';
+import { mapToSpinoutDeckData, flattenSpinoutDeckData } from '../src/services/decks/spinoutDeckData.ts';
+import type { SpinoutDeckData } from '../src/services/decks/spinoutDeckData.ts';
 import type { SpinoutDemoDayData } from '../src/services/decks/axalSpinoutDemoDay.ts';
 
 const SLIDE_KEYS = [
@@ -263,4 +264,64 @@ test('partial project => still structurally renderable (no NaN/empty charts)', (
 
   assert.ok(data.cover.signalY.length > 0, 'cover signalY non-empty even when empty');
   assert.ok(data.cover.signalY.every((n) => Number.isFinite(n)), 'cover signalY all finite even when empty');
+});
+
+// ─────────────────────────── Task #55 ───────────────────────────────────────
+// flattenSpinoutDeckData: dotted-key field map used by the print view's
+// hydrate() contract so live Lab data reaches the React template.
+
+test('flattenSpinoutDeckData: scalars become dotted keys, arrays become _json keys', () => {
+  const { data } = mapToSpinoutDeckData(makeFullSrc());
+  const fields = flattenSpinoutDeckData(data);
+
+  // Every key must contain a dot (section.field or section.field_json).
+  for (const k of Object.keys(fields)) {
+    assert.ok(k.includes('.'), `key "${k}" must be a dotted path`);
+  }
+
+  // Scalar string fields go out as-is.
+  assert.ok(typeof fields['cover.thesis'] === 'string' && fields['cover.thesis'].length > 0, 'cover.thesis is a string');
+
+  // Array fields get a _json suffix and parse back as arrays.
+  assert.ok('cover.meta_json' in fields, 'cover.meta (array) → cover.meta_json');
+  const meta = JSON.parse(fields['cover.meta_json']);
+  assert.ok(Array.isArray(meta) && meta.length > 0, 'cover.meta_json parses to a non-empty array');
+
+  // All SLIDE_KEYS sections present.
+  const sections = new Set(Object.keys(fields).map((k) => k.split('.')[0]));
+  for (const s of ['cover', 'problem', 'validation', 'market', 'solution', 'roadmap', 'team', 'captable', 'ask', 'deal']) {
+    assert.ok(sections.has(s), `section "${s}" present in flat fields`);
+  }
+});
+
+test('flattenSpinoutDeckData: mapToSpinoutDeckData.fields matches standalone call', () => {
+  // The bundle returned by mapToSpinoutDeckData must include fields that equal
+  // a standalone call to flattenSpinoutDeckData on the same data.
+  const bundle = mapToSpinoutDeckData(makeFullSrc());
+  const standalone = flattenSpinoutDeckData(bundle.data);
+  assert.deepEqual(bundle.fields, standalone, 'bundle.fields === flattenSpinoutDeckData(bundle.data)');
+});
+
+test('flattenSpinoutDeckData: prototype-pollution guard — __proto__ keys never emitted', () => {
+  // Craft a SpinoutDeckData with a forbidden key in a nested object.
+  const { data } = mapToSpinoutDeckData(makeFullSrc());
+  // Force a poisoned section onto the object — TypeScript widened via cast.
+  (data as any).__proto__ = { evil: 'yes' };
+  (data.cover as any)['__proto__'] = { x: 1 };
+  const fields = flattenSpinoutDeckData(data);
+  for (const k of Object.keys(fields)) {
+    assert.ok(!k.includes('__proto__'), `key "${k}" must not contain __proto__`);
+    assert.ok(!k.includes('evil'), `key "${k}" must not contain prototype-pollution payload`);
+  }
+});
+
+test('flattenSpinoutDeckData: empty strings and DASH placeholders are skipped', () => {
+  // A partial project has many empty strings — they should NOT appear in the
+  // flat map so that hydrate() falls back to SAMPLE_DATA for those slots.
+  const { data } = mapToSpinoutDeckData(makePartialSrc());
+  const fields = flattenSpinoutDeckData(data);
+  for (const [k, v] of Object.entries(fields)) {
+    if (k.endsWith('_json')) continue; // arrays/objects always emitted
+    assert.ok(typeof v === 'string' && v.length > 0 && v !== '—', `field "${k}" must be a non-empty non-DASH string`);
+  }
 });

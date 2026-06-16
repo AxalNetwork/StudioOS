@@ -10,6 +10,28 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Autofill the Spin-Out deck editor from live Lab data (Task #55)
+
+- **What:** The Spin-Out Demo Day deck print/share view was showing SAMPLE_DATA placeholders even
+  after a founder applied the template and ran autofill, because `buildTemplateData()` emits
+  underscore keys (`cover_eyebrow`, `problem_headline`, …) but the template's `hydrate()` only
+  processes dotted-path keys (`cover.eyebrow`, `problem.title`, …) and silently ignores the rest.
+  The live `SpinoutDeckData` fields are now emitted as a flat dotted-key map by the Worker/dev
+  FastAPI and merged into `buildTemplateData()`, so `hydrate()` always sees real Lab data.
+- **Worker:** `cloudflare-worker/src/services/decks/spinoutDeckData.ts` — added
+  `flattenSpinoutDeckData(data)` (walks the nested shape, emits scalars as `section.field` and
+  arrays/objects as `section.field_json`); `SpinoutDeckBundle` now includes `fields`; route
+  `POST /projects/:id/spinout-deck` returns `fields` in the JSON response.
+- **Dev FastAPI:** `backend/app/api/routes/projects.py` — `_flatten()` mirrors the same logic for
+  the dev preview; `_spinout_deck_payload()` returns `fields`.
+- **Frontend (print view):** `frontend/src/pages/PitchDeckPrintPage.jsx` — `spinoutFields` state
+  fetched from `api.spinoutDeck()` when `methodId === 'axal_spinout_demoday'`; `buildTemplateData()`
+  now accepts an optional `spinoutFields` dict whose dotted keys are merged into the output before
+  passing to the Template component; the `templateData` useMemo branches on `methodId`.
+- **Tests:** `cloudflare-worker/test/spinoutDeckData.test.ts` — added 3 tests for
+  `flattenSpinoutDeckData`: dotted keys + `_json` suffix contract, `__proto__` pollution guard,
+  and empty/DASH values are skipped.
+
 ## Press Enter to send answers in the Personal Advisor, for every question type (Task #54)
 
 - **What:** in the Personal Advisor chat, pressing Enter only sent the message
