@@ -181,6 +181,69 @@ test('multi-hop fallback chain reaches second sibling on cascading failure', asy
 });
 
 // --------------------------------------------------------------------------
+// Task #50 — gateway-resilient advisor calls.
+// When the advisor AI Gateway is configured but failing, a gateway-routed
+// task (`advisor_turn`) must retry the SAME model un-gatewayed before
+// declaring the model dead, so a single shared-gateway outage can no longer
+// dead-end the onboarding chat.
+// --------------------------------------------------------------------------
+// Workers AI stub that distinguishes gatewayed vs un-gatewayed calls via the
+// third `options.gateway` arg that callWorkersAI passes through.
+function makeGatewayAwareAI({ gatewayedFails }) {
+  const calls = [];
+  return {
+    calls,
+    async run(model, payload, options) {
+      const gatewayed = !!(options && options.gateway && options.gateway.id);
+      calls.push({ model, payload, gatewayed });
+      if (gatewayed && gatewayedFails) throw new Error('1015 authenticated gateway token required');
+      return { response: gatewayed ? 'via gateway' : 'via direct workers-ai', usage: { prompt_tokens: 8, completion_tokens: 6 } };
+    },
+  };
+}
+
+test('advisor_turn retries un-gatewayed when the advisor gateway is broken', async () => {
+  const { run, __resetForTest } = await loadRouter();
+  __resetForTest();
+  const ai = makeGatewayAwareAI({ gatewayedFails: true });
+  const kv = makeKV();
+  const db = makeDB();
+  const env = { ...baseEnv({ ai, kv, db }), CF_AI_GATEWAY_SLUG_ADVISOR: 'advisor-ongoing' };
+
+  const result = await run(env, { task: 'advisor_turn', userId: 5, messages: [{ role: 'user', content: 'hi' }] });
+
+  assert.equal(result.ok, true, `expected ok, got ${JSON.stringify(result)}`);
+  assert.equal(result.output, 'via direct workers-ai');
+  // Same primary model, no chain fallback — just the gateway bypass.
+  assert.equal(result.usage.model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+  assert.equal(result.usage.fallback_used, false);
+  // Two calls on the SAME model: first gatewayed (fails), then un-gatewayed.
+  assert.equal(ai.calls.length, 2);
+  assert.equal(ai.calls[0].gatewayed, true);
+  assert.equal(ai.calls[1].gatewayed, false);
+  assert.equal(ai.calls[0].model, ai.calls[1].model);
+  assert.equal(db._rows.length, 1);
+  assert.equal(db._rows[0].refusal, null);
+});
+
+test('advisor_turn uses the gateway and does NOT double-call when it is healthy', async () => {
+  const { run, __resetForTest } = await loadRouter();
+  __resetForTest();
+  const ai = makeGatewayAwareAI({ gatewayedFails: false });
+  const kv = makeKV();
+  const db = makeDB();
+  const env = { ...baseEnv({ ai, kv, db }), CF_AI_GATEWAY_SLUG_ADVISOR: 'advisor-ongoing' };
+
+  const result = await run(env, { task: 'advisor_turn', userId: 6, messages: [{ role: 'user', content: 'hi' }] });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.output, 'via gateway');
+  // Healthy gateway → exactly one call, gatewayed, no un-gatewayed retry.
+  assert.equal(ai.calls.length, 1);
+  assert.equal(ai.calls[0].gatewayed, true);
+});
+
+// --------------------------------------------------------------------------
 // Scenario 2 — budget exhaustion returns refusal.
 // Pre-seed the user's daily KV bucket above the configured cap and assert
 // run() refuses without invoking the model.

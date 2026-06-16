@@ -385,12 +385,25 @@ function gatewayOptionFor(env: Env, task: TaskClass): { gateway: { id: string } 
   return { gateway: { id: slug.trim() } };
 }
 
-async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed: boolean): Promise<ProviderResult> {
+// True when this task would normally route through the advisor AI Gateway
+// AND a slug is configured — i.e. there's a gateway hop that could fail
+// independently of the underlying Workers AI model.
+function isGatewayRouted(env: Env, task: TaskClass): boolean {
+  return gatewayOptionFor(env, task) !== undefined;
+}
+
+// Task #50 — when `bypassGateway` is set we skip the advisor AI Gateway and
+// hit Workers AI directly. Used as the resilience retry so a misconfigured
+// or unavailable `advisor-ongoing` gateway (e.g. Authenticated Gateway
+// toggled on, a hostile rate-limit/cache rule) can no longer dead-end the
+// onboarding chat — we lose only the separate advisor analytics namespace,
+// not the conversation itself.
+async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed: boolean, bypassGateway = false): Promise<ProviderResult> {
   const ai = (env as unknown as { AI?: WorkersAIBinding }).AI;
   if (!ai || typeof ai.run !== 'function') {
     return { ok: false, status: 0, error: 'AI binding not configured' };
   }
-  const gatewayOpt = gatewayOptionFor(env, opts.task);
+  const gatewayOpt = bypassGateway ? undefined : gatewayOptionFor(env, opts.task);
   try {
     if (isEmbed) {
       const text = opts.text ?? defaultContentBlob(opts);
@@ -564,9 +577,31 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   // body may legitimately exceed 8 s). Latency budget still applies to
   // the synchronous Workers AI handshake before the stream opens because
   // ai.run() resolves only once the upstream accepts the request.
-  const callWai = (model: string): Promise<ProviderResult> => {
-    if (opts.stream) return callWorkersAI(env, model, opts, !!route.isEmbed);
-    return withTimeout(callWorkersAI(env, model, opts, !!route.isEmbed), PRIMARY_TIMEOUT_MS);
+  const gatewayRouted = isGatewayRouted(env, opts.task);
+  const callWaiRaw = (model: string, bypassGateway: boolean): Promise<ProviderResult> => {
+    if (opts.stream) return callWorkersAI(env, model, opts, !!route.isEmbed, bypassGateway);
+    return withTimeout(callWorkersAI(env, model, opts, !!route.isEmbed, bypassGateway), PRIMARY_TIMEOUT_MS);
+  };
+  // Task #50 — gateway-resilient call. For gateway-routed advisor tasks we
+  // first hit the gatewayed path (keeps advisor analytics/cache/RL). If that
+  // fails — which a broken/misconfigured `advisor-ongoing` gateway would
+  // cause for EVERY model in the chain — we retry the SAME model un-gatewayed
+  // before declaring the model dead. So a single shared-gateway outage can no
+  // longer take onboarding down. Non-gateway tasks are unaffected (the first
+  // call is already un-gatewayed, so no extra call is made).
+  const callWai = async (model: string): Promise<ProviderResult> => {
+    const first = await callWaiRaw(model, false);
+    if (first.ok || !gatewayRouted) return first;
+    const retry = await callWaiRaw(model, true);
+    if (retry.ok) {
+      console.warn('[AI_ROUTER] advisor gateway bypassed after failure', {
+        task: opts.task,
+        model,
+        gatewayError: first.error,
+      });
+      return retry;
+    }
+    return first;
   };
 
   let attempt = await callWai(route.model);

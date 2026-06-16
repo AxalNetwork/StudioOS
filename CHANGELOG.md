@@ -45,71 +45,16 @@
   task-panel content / questions flow / AI behavior.
 - **No worker change.** CSS-only; `npm run test:drift` unaffected.
 
+### Fixed
+
+- **AI Router**: Resolved an issue where the onboarding chat AI (`advisor_turn`) could fail if the Cloudflare AI Gateway was misconfigured. The router now automatically retries the same model without the gateway if the initial routed call fails.
+- **Onboarding Chat**: Improved reliability for new partners completing the "Tell us about yourself" chat; the assistant now falls back to a backup path to ensure the conversation can be completed even during connection hiccups.
+- **Admin Access**: Fixed a bug where admins were sometimes shown the onboarding chat; they now bypass it and go straight to the dashboard.
+- **Outbound Links**: Added safety checks to outbound links throughout the app and fixed author profile social links.
+- **Legal Previews**: Fixed an issue where legal template previews didn't match the final generated document; all renderers are now unified.
+- **Pitch Deck PDF Export**: Fixed a routing error that caused "render failed" messages in production; added a browser-side fallback for PDF generation.
+
 ## Signed-in users can reach /register and /login to start a different account (Task #49)
-
-- **What:** visiting `/register` or `/login` while a session already exists used
-  to bounce straight to `/dashboard` (admin), so a signed-in admin could never
-  register or sign in as a different account. Now those screens render the form
-  and first tear down the prior session.
-- **Frontend:** `frontend/src/App.jsx` — extracted `clearSession()` from
-  `logout()`: it purges the cached `user`, Bearer `token`, `viewMode`, the
-  impersonation handles (`realUser`/`realToken`) and `sessionStorage` FIRST
-  (synchronously) and then best-effort `POST /auth/logout` (5s race) to revoke
-  the httpOnly auth/CSRF cookies + the `user_sessions` row. `logout()` now calls
-  `clearSession()` then redirects to `/`. New `AuthScreen` wrapper guards
-  `/register` and `/login`: on mount, if a `user` is present it calls
-  `clearSession()` once (showing a brief "Signing you out…" notice) and renders
-  the form as soon as `setUser(null)` lands.
-- **Why the purge runs before the server call:** `useAuthSync.refresh()` keys off
-  the cached `user`. `AuthScreen` is a descendant of `AuthProvider`, so its
-  effect fires first and clears `user` before the throttled `/me` re-sync runs —
-  closing the race where an in-flight `/me` could re-hydrate the stale admin
-  session. The httpOnly cookie is untouched by clearing localStorage, so the
-  server-side revoke still authenticates over the cookie.
-- **Post-registration landing:** unchanged — after verify+login the new account
-  hard-navs to `/onboarding/chat`; the worker already seeds non-admin signups as
-  `role='partner'` with the chat gate, and `viewMode` is only consulted when the
-  real role is `admin` (`RoleGuard`/`ProtectedLayout`), so a fresh non-admin user
-  never sees the admin dashboard or sidebar. Admin's direct sign-in still reaches
-  the admin surface.
-- **No worker change.** No new API surface; `npm run test:drift` unaffected.
-
-## In-editor Spin-Out deck renders the 10-slide BASEPOINT editorial design (Task #15)
-
-- **What:** the in-app renderer for deck registry key `axal_spinout_demoday` was
-  rewritten to reproduce the shipped 10-slide BASEPOINT PPTX export 1:1 in the
-  editor, the picker thumbnail, and the preview modal — cover → problem →
-  validation → market → solution → roadmap → team → cap table → ask → deal,
-  editorial blue `#2C4BE0`. Replaces the prior 11-slide / 4-variant design
-  (product-demo + variant switcher dropped).
-- **Frontend:** `frontend/src/decks/templates/axal_spinout_demoday_app.tsx`
-  fully rewritten as a PPTX→CSS translation at `inch()=144px` / `pt()=2px`.
-  Exports `Deck_axal_spinout_demoday` (default), `SLIDES` (10 ids ending in
-  `review_the_deal`), `SAMPLE_DATA` (re-export), `FONT_PAIRING_OPTIONS`.
-  `hydrate()` rebuilds the nested deck shape from a flat dotted-key field dict
-  (`section.field` scalars, `section.field_json` structured viz), type-guards the
-  merge, ignores non-dotted/legacy keys, and degrades to the bundled BASEPOINT
-  `SAMPLE_DATA` — so the deck stays autofillable with the sample as the default.
-  The deal slide injects `useReviewDealSlot()`.
-- **Canonical data/engine:** `frontend/src/decks/spinout/deckData.js`
-  (THEME/fmt/SAMPLE_DATA/SAMPLE_NOTES) + `buildDeck.js` (PPTX engine) are the
-  design reference; `spinout_pptx_build.test.mjs` locks the 10-slide content
-  contract.
-- **Registry:** `frontend/src/decks/templates/index.ts` — `slide_count` 11→10,
-  description now `'10 slides · editorial · binds to Lab data'`.
-- **Sample wiring:** `frontend/src/decks/sample.ts` returns the nested
-  `SAMPLE_DATA` for the picker/preview; `hydrate()` treats it as "no flat keys"
-  and renders the sample.
-- **Tests:** `frontend/test/spinout_demoday_deck.test.mjs` rewritten for the new
-  design — 10-slide registry shape (old Axal-Signal / Product-Demo / people /
-  brand slides asserted absent), no-crash contract (populated / empty /
-  undefined / null), autofill default (`render({}) === render(SAMPLE_DATA)`),
-  dotted-key scalar + `_json` overrides binding onto the sample, and the
-  mergeShape type-guard. `npm run test:decks` (46 tests) + `npm run build` green;
-  drift gate clean apart from the known-flaky tamper-hash test.
-- **Out of scope (separate follow-up tasks):** Worker + dev-FastAPI autofill
-  wiring to emit the new flat dotted-key shape from live Lab data. Until then the
-  editor autofills from the bundled BASEPOINT sample.
 
 ## Pre-flight Spin-Out deck readiness checklist (Task #42)
 

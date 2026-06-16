@@ -29,6 +29,12 @@ The Spin-Out demo-day deck has been redesigned with a cleaner, bolder editorial 
 
 ---
 
+## Onboarding chat fixed for new partners
+
+When you first join Axal and tell us about yourself in the welcome chat, the AI assistant now replies reliably with real follow-up questions. Previously some new partners kept getting a "having trouble reaching the AI assistant" message and couldn't get through the conversation. We've made the assistant fall back to a backup path automatically if its usual connection has a hiccup, so the chat keeps working and you can finish your profile and continue.
+
+---
+
 ## See what's missing before you download your deck
 
 Your Spin-Out deck now shows a readiness checklist right on the deck page — before you export. If anything's still empty (interviews, market sizing, cap table, your funding ask, and so on), you'll see a short "complete these before you export" list, a Draft tag, and how far you are into the 28-day program. Once everything's filled in, the panel turns green to tell you the deck is ready. That way you can finish the gaps first instead of finding out only after you've downloaded a draft.
