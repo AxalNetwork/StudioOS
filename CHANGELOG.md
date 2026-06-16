@@ -10,6 +10,32 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Fix stuck Personal Advisor answered counter (Task #57)
+
+- **What:** The Personal Advisor header showed `0/210 answered` and never moved, even after
+  answering many questions. Root cause: `refreshCounts()` counted a question as "answered" only
+  when `saved_status = 'saved'` (i.e. it mapped to a structured DB column). Most partner/advisor
+  persona questions are free-form reflection prompts that return `saved_status = 'noop'` from the
+  write-router — the answer **is** captured in `advisor_answers`, but `noop` was excluded from the
+  count. The denominator (210) counted the full visible bank while the numerator stayed at ~0.
+- **Fix — `refreshCounts()` (`cloudflare-worker/src/routes/advisor.ts:463`):** Changed the
+  `answered` SQL aggregate from `saved_status = 'saved'` to `saved_status IN ('saved', 'noop')`.
+  Both represent captured replies; only `skipped` / `paywalled` / `failed` / `needs_evidence` /
+  `invalid` are excluded. Because all progress surfaces (`/start`, `/answer`, `/skip`,
+  `/next-question`) read `answered_count` from `advisor_conversations` after `refreshCounts()`,
+  this single SQL change propagates the correct number to the header, the envelope's `progress`
+  field, and the websocket push.
+- **Fix — per-section / per-page rings (`/progress` endpoint, line ~1358):** Replaced the
+  `saved`-only `savedSet` query with `capturedSet` (`saved_status IN ('saved', 'noop')`) so
+  the right-rail progress rings advance in step with the header count. Also fixed the unused
+  `answered` variable (was `answeredQuestionIds` — kept for question dedup but not for
+  counting); now references `capturedSet.size` for the debug `_answered_in_conversation` field.
+- **Fix — realtime progress broadcast (line ~1069):** Broadened the `notifyAdvisorProgress`
+  condition from `result.status === 'saved'` to `isCaptured` (`saved || noop`) so the dashboard
+  ring updates live after reflection answers. `notifyAdvisorPageFill` (sparkle indicators) still
+  fires only on `saved` — per the task spec, field-source indicators remain tied to structured
+  saves only.
+
 ## Autofill the Spin-Out deck editor from live Lab data (Task #55)
 
 - **What:** The Spin-Out Demo Day deck print/share view was showing SAMPLE_DATA placeholders even

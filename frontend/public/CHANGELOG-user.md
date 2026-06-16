@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## The Personal Advisor progress counter now moves as you answer
+
+The answered counter in the Personal Advisor header (`X/210 answered`), the overall percentage, the dashboard ring, and the right-rail section rings were all stuck at zero — even after you'd answered many questions. They now advance in real time with each answer you submit, including free-form reflection questions (like "What is your biggest focus this quarter?") that don't map to a specific form field.
+
+---
+
 ## Spin-Out Demo Day deck now shows your real data everywhere
 
 When you open or share your Spin-Out Demo Day deck, every slide now renders the actual information from your Lab — your company thesis, customer discovery findings, market sizing, team, cap table, and ask — instead of the built-in example data. Previously the live view was always showing the sample "Basepoint" placeholder copy even after you'd filled in your deck.

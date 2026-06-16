@@ -459,10 +459,16 @@ async function syncBankTotal(env: Env, conv: ConversationRow, bankLen: number, p
 
 async function refreshCounts(env: Env, conversationId: number, currentQid: string | null): Promise<void> {
   try {
+    // Task #57 — "answered" means the user actually provided a reply that was
+    // captured, regardless of whether it mapped to a structured DB column.
+    // Both 'saved' (mapped to a field) and 'noop' (reflection / free-form, no
+    // structured mapping) are captured replies.  Statuses that are NOT
+    // counted: 'skipped' (separate counter), 'paywalled' / 'failed' /
+    // 'needs_evidence' / 'invalid' (no committed answer yet).
     const counts = await env.DB.prepare(
       `SELECT
-         SUM(CASE WHEN saved_status = 'saved'    THEN 1 ELSE 0 END) AS answered,
-         SUM(CASE WHEN saved_status = 'skipped'  THEN 1 ELSE 0 END) AS skipped
+         SUM(CASE WHEN saved_status IN ('saved', 'noop') THEN 1 ELSE 0 END) AS answered,
+         SUM(CASE WHEN saved_status = 'skipped'          THEN 1 ELSE 0 END) AS skipped
        FROM advisor_answers WHERE conversation_id = ?`,
     ).bind(conversationId).first<{ answered: number | null; skipped: number | null }>();
     await env.DB.prepare(
@@ -1062,20 +1068,30 @@ advisor.post('/answer', async (c) => {
   // /api/onboarding/ws/:user_id can re-hydrate its sparkle indicators
   // and the dashboard progress ring updates without polling. Best-effort
   // — failures are swallowed inside notify*.
-  if (result.status === 'saved') {
+  // Task #57 — broadcast for any captured reply ('saved' OR 'noop'), not
+  // only 'saved', so reflection answers advance the dashboard ring live.
+  // notifyAdvisorPageFill still only fires for 'saved' since field-source
+  // sparkle indicators are intentionally tied to structured saves only.
+  const isCaptured = result.status === 'saved' || result.status === 'noop';
+  if (isCaptured) {
     const total = conv.total_questions || bank.length || 0;
     const percent = total > 0 ? Math.round(((ans + skp) / total) * 100) : 0;
     // Both notify* swallow their own errors and Promise.allSettled
     // never rejects, so no outer try/catch is needed here.
-    await Promise.allSettled([
-      notifyAdvisorPageFill(c.env, user.id, q.page_target || null, {
-        question_id: q.id,
-        saved_to: result.saved_to || null,
-      }),
+    const tasks: Promise<unknown>[] = [
       notifyAdvisorProgress(c.env, user.id, {
         total, answered: ans, skipped: skp, percent,
       }),
-    ]);
+    ];
+    if (result.status === 'saved') {
+      tasks.push(
+        notifyAdvisorPageFill(c.env, user.id, q.page_target || null, {
+          question_id: q.id,
+          saved_to: result.saved_to || null,
+        }),
+      );
+    }
+    await Promise.allSettled(tasks);
   }
 
   const envelope: AnswerEnvelope = {
@@ -1339,13 +1355,17 @@ advisor.get('/progress', async (c) => {
   // Use the LATEST conversation regardless of state so the dashboard
   // ring keeps showing 100% / complete after the user finishes.
   const conv = await getLatestConversation(c.env, user);
-  const answered: Set<string> = conv ? await answeredQuestionIds(c.env, conv.id) : new Set();
-  const savedSet: Set<string> = new Set();
+  // Task #57 — use the same "captured reply" definition as refreshCounts():
+  // a question counts as answered when its saved_status is 'saved' OR 'noop'.
+  // The old 'saved'-only savedSet caused per-section rings to stay frozen at
+  // 0% for partner/advisor personas whose questions are mostly free-form
+  // reflection prompts that return 'noop' from the write-router.
+  const capturedSet: Set<string> = new Set();
   if (conv) {
     const rows = await c.env.DB.prepare(
-      `SELECT question_id FROM advisor_answers WHERE conversation_id = ? AND saved_status = 'saved'`,
+      `SELECT question_id FROM advisor_answers WHERE conversation_id = ? AND saved_status IN ('saved', 'noop')`,
     ).bind(conv.id).all<{ question_id: string }>();
-    for (const r of (rows.results || [])) savedSet.add(r.question_id);
+    for (const r of (rows.results || [])) capturedSet.add(r.question_id);
   }
 
   // Per-page progress.
@@ -1353,7 +1373,7 @@ advisor.get('/progress', async (c) => {
     page: g.page,
     doc_anchor: g.doc_anchor || null,
     total: g.ids.length,
-    answered: g.ids.filter((id) => savedSet.has(id)).length,
+    answered: g.ids.filter((id) => capturedSet.has(id)).length,
   })).map((g) => ({
     ...g,
     percent: g.total > 0 ? Math.round((g.answered / g.total) * 100) : 0,
@@ -1363,7 +1383,7 @@ advisor.get('/progress', async (c) => {
   const bySection = groupBySection(visibleBank).map((g) => ({
     section: g.section,
     total: g.ids.length,
-    answered: g.ids.filter((id) => savedSet.has(id)).length,
+    answered: g.ids.filter((id) => capturedSet.has(id)).length,
   })).map((g) => ({
     ...g,
     percent: g.total > 0 ? Math.round((g.answered / g.total) * 100) : 0,
@@ -1398,7 +1418,7 @@ advisor.get('/progress', async (c) => {
     complete: conv?.state === 'complete',
     current_question_id: conv?.current_question_id || null,
     // Surface answered count even for users with no /start yet.
-    _answered_in_conversation: answered.size,
+    _answered_in_conversation: capturedSet.size,
   });
 });
 
