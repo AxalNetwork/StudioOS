@@ -518,6 +518,17 @@ zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/contact/*"
 zone_name  = "axal.vc"
+# Audience-specific landing pages served by the SPA on the apex
+# (/lp/founder, /lp/customer-discovery, /lp/investor, /lp/partner,
+# /lp/spinout-demo-day). Exact + wildcard so the Jekyll site keeps every
+# other apex path; /lp/* covers all five audience routes and any future
+# additions under the same prefix.
+[[env.production.routes]]
+pattern    = "axal.vc/lp"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/lp/*"
+zone_name  = "axal.vc"
 # Task #28 — public article reader served by the SPA on the apex. The
 # author editor surfaces `https://axal.vc/articles/{slug}` as the public
 # share URL (copy-link / "View live"), so the apex must serve `/articles`

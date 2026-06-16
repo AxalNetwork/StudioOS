@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New welcome pages tailored to founders, investors, and partners
+
+There are now dedicated welcome pages for the different people who come to Axal — founders, people we're talking to during customer discovery, investors, partners, and anyone interested in our Spin-Out Demo Day. Each page explains what Axal offers that particular audience and points you straight to the right place to sign up or RSVP.
+
+---
+
 ## Billing is now in Settings for everyone — with receipts for one-off purchases
 
 The **Settings → Billing** tab is now available to everyone, not just founders and investors. Whatever your role, you'll find your saved cards, any subscription you have, your invoices, and a new **Payment history** list of one-off purchases — like company incorporation, feature unlocks, and expert sessions — each with a link to its receipt. If you've never bought anything, you'll simply see a friendly "no billing activity yet" note.

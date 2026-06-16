@@ -10,6 +10,14 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Five audience-specific public landing pages reachable on the apex (Task #34)
+
+- **What:** The five `/lp/*` audience landing pages — founder, customer discovery, investor, partner, and spin-out demo day — are now wired to resolve publicly on the apex, each funnelling into the correct registration lane.
+- **Pages — `frontend/src/pages/templates/*.jsx`:** `FounderHomePage`, `CustomerDiscoveryHomePage`, `InvestorDealflowHomePage`, `PartnerPartnershipHomePage`, `SpinoutDemoDayPage`, lazy-loaded and mounted at `/lp/founder`, `/lp/customer-discovery`, `/lp/investor`, `/lp/partner`, `/lp/spinout-demo-day` in `frontend/src/App.jsx`. Built from the shared template kit (`frontend/src/templates/brandKit.js` + `frontend/src/templates/components/*`) and forced into the light theme via `useForcedLightTheme`. Distinct from the in-app Brand Builder template feature.
+- **CTAs:** founder & customer-discovery → `/register?lane=founder`; investor → `/register?lane=lp`; partner → `/register?lane=partner`; spin-out demo day → RSVP to `/register?lane=founder`.
+- **Apex routing — `wrangler.toml`:** added `axal.vc/lp` + `axal.vc/lp/*` (exact + wildcard) to `[[env.production.routes]]`, alongside the other SPA-served public marketing pages, so a hard load of any `/lp/*` path is served by the Worker/SPA instead of falling through to the Jekyll apex. Config-only — takes effect on the next `npm run deploy`.
+- **Drift/unchanged:** no new SPA→worker API paths (`npm run test:drift` unaffected) and no dev FastAPI changes.
+
 ## Settings → Billing is available to every signed-in role, with one-off payment receipts (Task #39)
 
 - **What:** The **Settings → Billing** tab was gated to `roles: ['founder', 'investor']`, so admins, partners, mentors, and every other role never saw it — even though any role can hold saved cards and make one-off purchases (incorporation, à la carte unlocks, expert sessions) on the same general Stripe customer. Billing is now visible to all signed-in users, and the dashboard gained a "Payment history" section listing those one-off receipts.
