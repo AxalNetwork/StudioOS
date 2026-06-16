@@ -10,42 +10,155 @@
 > written for the people using the platform, not the engineers
 > building it.
 
-## In-editor Spin-Out deck renders the 10-slide BASEPOINT editorial design (Task #15)
+## Spin-Out Demo Day cover chart renders the founder's real discovery interviews in the builder preview (Task #65)
 
-- **What:** the in-app renderer for deck registry key `axal_spinout_demoday` was
-  rewritten to reproduce the shipped 10-slide BASEPOINT PPTX export 1:1 in the
-  editor, the picker thumbnail, and the preview modal — cover → problem →
-  validation → market → solution → roadmap → team → cap table → ask → deal,
-  editorial blue `#2C4BE0`. Replaces the prior 11-slide / 4-variant design
-  (product-demo + variant switcher dropped).
-- **Frontend:** `frontend/src/decks/templates/axal_spinout_demoday_app.tsx`
-  fully rewritten as a PPTX→CSS translation at `inch()=144px` / `pt()=2px`.
-  Exports `Deck_axal_spinout_demoday` (default), `SLIDES` (10 ids ending in
-  `review_the_deal`), `SAMPLE_DATA` (re-export), `FONT_PAIRING_OPTIONS`.
-  `hydrate()` rebuilds the nested deck shape from a flat dotted-key field dict
-  (`section.field` scalars, `section.field_json` structured viz), type-guards the
-  merge, ignores non-dotted/legacy keys, and degrades to the bundled BASEPOINT
-  `SAMPLE_DATA` — so the deck stays autofillable with the sample as the default.
-  The deal slide injects `useReviewDealSlot()`.
-- **Canonical data/engine:** `frontend/src/decks/spinout/deckData.js`
-  (THEME/fmt/SAMPLE_DATA/SAMPLE_NOTES) + `buildDeck.js` (PPTX engine) are the
-  design reference; `spinout_pptx_build.test.mjs` locks the 10-slide content
-  contract.
-- **Registry:** `frontend/src/decks/templates/index.ts` — `slide_count` 11→10,
-  description now `'10 slides · editorial · binds to Lab data'`.
-- **Sample wiring:** `frontend/src/decks/sample.ts` returns the nested
-  `SAMPLE_DATA` for the picker/preview; `hydrate()` treats it as "no flat keys"
-  and renders the sample.
-- **Tests:** `frontend/test/spinout_demoday_deck.test.mjs` rewritten for the new
-  design — 10-slide registry shape (old Axal-Signal / Product-Demo / people /
-  brand slides asserted absent), no-crash contract (populated / empty /
-  undefined / null), autofill default (`render({}) === render(SAMPLE_DATA)`),
-  dotted-key scalar + `_json` overrides binding onto the sample, and the
-  mergeShape type-guard. `npm run test:decks` (46 tests) + `npm run build` green;
-  drift gate clean apart from the known-flaky tamper-hash test.
-- **Out of scope (separate follow-up tasks):** Worker + dev-FastAPI autofill
-  wiring to emit the new flat dotted-key shape from live Lab data. Until then the
-  editor autofills from the bundled BASEPOINT sample.
+- **What:** The Spin-Out Demo Day deck's Slide 1 (Cover) "VALIDATION SIGNAL · 30-DAY SPRINT" area chart
+  (captioned "Cumulative discovery interviews") now renders the founder's REAL logged discovery
+  interviews in the template-picker BUILDER PREVIEW (thumbnail card + preview modal), instead of the
+  static sample curve that always ended at 42. The big top-right number is the true cumulative total.
+  Re-opening the picker re-fetches, so newly logged interviews appear automatically.
+- **Zero-state (worker source of truth) — `cloudflare-worker/src/services/decks/spinoutDeckData.ts`:**
+  When there are no logged interviews (`buildSignalSeries()` returns null) the cover now emits a flat-0
+  `signalY` (all zeros, 0 total) over the same D0..D30 sprint axis — an honest empty state — instead of
+  the old fabricated `[0,1,2,3,4,5,6]` fallback curve. The "log discovery interviews" gap + DRAFT
+  watermark are unchanged. Fixing it at the source keeps the builder preview, PPTX/PDF export, and
+  print/share all consistent.
+- **PPTX axis guard — `frontend/src/decks/spinout/buildDeck.js`:** `valAxisMaxVal` is now
+  `Math.max(1, Math.ceil(max*1.14))` so a flat-0 export doesn't produce a degenerate 0..0 value axis.
+- **Render-boundary override — `frontend/src/decks/Thumbnail.tsx`:** `Thumbnail` and `PreviewStage`
+  accept an optional `data` prop and render `data ?? previewDataFor(template.key)`. `previewDataFor()`
+  is untouched (still sample-only), so the other 11 templates are unaffected.
+- **Live wiring — `frontend/src/pages/PitchDeckPage.jsx`:** When the picker is open for a Spin-Out deck
+  (`pickerOpen && isSpinoutDeck && projectId`), it fetches `api.spinoutDeck(projectId).fields` and
+  threads the flat dotted-key field map through `MethodPicker` → `Thumbnail` / `TemplatePreviewModal` →
+  `PreviewStage`, but only for the `axal_spinout_demoday` card. A 402 (paywall) or any error falls back
+  to the sample. The dev FastAPI mirror is deterministic (28-interview series), which proves the wiring
+  in the Replit preview; the zero-state is pinned by the worker unit test.
+- **Tests — `cloudflare-worker/test/spinoutDeckData.test.ts`:** The empty/partial case now also asserts
+  the cover `signalY` is a flat-0 baseline (every value 0, last value 0) over a non-empty day axis.
+  `npm run test:drift` green.
+
+## Remove the pre-export checklist panel from the Pitch Deck builder
+
+- **What:** The amber "Complete these before you export" checklist panel (with the Spin-Out Lab
+  day badge, the per-section gaps list, and the "You can still export now — it'll be marked as a
+  draft" footer) was removed from the Pitch Deck builder's right-hand action column.
+- **Why:** The checklist created a visual barrier before the founder could interact with the deck
+  editor. It showed the same gaps list that the Spin-Out Lab sidebar already tracks.
+- **Where — `PitchDeckPage.jsx` (`frontend/src/pages/PitchDeckPage.jsx`):** Deleted the
+  `isSpinoutDeck && readinessState === 'gaps'` block. The `deckReadinessState()` function and the
+  `draft` / `ready` state cards remain intact. The `gaps` field is still computed and used by the
+  print / share views.
+
+## Add "Learn" doc link + consistent page link to advisor cards (Task #58)
+
+- **What:** Each Personal Advisor question card (Proposed / Pending / Completed buckets in the
+  right-rail and fullscreen progress widget) now shows up to two low-emphasis action links: a new
+  **"Learn"** link that deep-links to the matching in-app docs section, plus the existing
+  **"Open <page>"** link to where the answer is filled in.
+- **Where — `ItemCard` (`frontend/src/components/advisor/AdvisorProgressWidget.jsx`):** Replaced the
+  single page-link block with a flex action row rendering both links. "Learn" uses the question's
+  `doc_anchor` (already computed via `predictTarget(item.id || item.question_id)?.doc_anchor`) and
+  points at `/docs#${docAnchor}`, following the existing docs deep-link convention used by
+  `PageExplainer`/`PersonalAdvisor`. Each link renders only when its target exists: cards with no
+  anchor omit "Learn", cards with no page target omit the page link.
+- **Buckets:** Completed cards derive both `target` and `docAnchor` from the question id via
+  `predictTarget()` (the `completedItems` rows carry no `doc_anchor`), so all three buckets are
+  consistent. Frontend-only — no backend/worker/question-bank changes.
+
+## Fix stuck Personal Advisor answered counter (Task #57)
+
+- **What:** The Personal Advisor header showed `0/210 answered` and never moved, even after
+  answering many questions. Root cause: `refreshCounts()` counted a question as "answered" only
+  when `saved_status = 'saved'` (i.e. it mapped to a structured DB column). Most partner/advisor
+  persona questions are free-form reflection prompts that return `saved_status = 'noop'` from the
+  write-router — the answer **is** captured in `advisor_answers`, but `noop` was excluded from the
+  count. The denominator (210) counted the full visible bank while the numerator stayed at ~0.
+- **Fix — `refreshCounts()` (`cloudflare-worker/src/routes/advisor.ts:463`):** Changed the
+  `answered` SQL aggregate from `saved_status = 'saved'` to `saved_status IN ('saved', 'noop')`.
+  Both represent captured replies; only `skipped` / `paywalled` / `failed` / `needs_evidence` /
+  `invalid` are excluded. Because all progress surfaces (`/start`, `/answer`, `/skip`,
+  `/next-question`) read `answered_count` from `advisor_conversations` after `refreshCounts()`,
+  this single SQL change propagates the correct number to the header, the envelope's `progress`
+  field, and the websocket push.
+- **Fix — per-section / per-page rings (`/progress` endpoint, line ~1358):** Replaced the
+  `saved`-only `savedSet` query with `capturedSet` (`saved_status IN ('saved', 'noop')`) so
+  the right-rail progress rings advance in step with the header count. Also fixed the unused
+  `answered` variable (was `answeredQuestionIds` — kept for question dedup but not for
+  counting); now references `capturedSet.size` for the debug `_answered_in_conversation` field.
+- **Fix — realtime progress broadcast (line ~1069):** Broadened the `notifyAdvisorProgress`
+  condition from `result.status === 'saved'` to `isCaptured` (`saved || noop`) so the dashboard
+  ring updates live after reflection answers. `notifyAdvisorPageFill` (sparkle indicators) still
+  fires only on `saved` — per the task spec, field-source indicators remain tied to structured
+  saves only.
+
+## Autofill the Spin-Out deck editor from live Lab data (Task #55)
+
+- **What:** The Spin-Out Demo Day deck print/share view was showing SAMPLE_DATA placeholders even
+  after a founder applied the template and ran autofill, because `buildTemplateData()` emits
+  underscore keys (`cover_eyebrow`, `problem_headline`, …) but the template's `hydrate()` only
+  processes dotted-path keys (`cover.eyebrow`, `problem.title`, …) and silently ignores the rest.
+  The live `SpinoutDeckData` fields are now emitted as a flat dotted-key map by the Worker/dev
+  FastAPI and merged into `buildTemplateData()`, so `hydrate()` always sees real Lab data.
+- **Worker:** `cloudflare-worker/src/services/decks/spinoutDeckData.ts` — added
+  `flattenSpinoutDeckData(data)` (walks the nested shape, emits scalars as `section.field` and
+  arrays/objects as `section.field_json`); `SpinoutDeckBundle` now includes `fields`; route
+  `POST /projects/:id/spinout-deck` returns `fields` in the JSON response.
+- **Dev FastAPI:** `backend/app/api/routes/projects.py` — `_flatten()` mirrors the same logic for
+  the dev preview; `_spinout_deck_payload()` returns `fields`.
+- **Frontend (print view):** `frontend/src/pages/PitchDeckPrintPage.jsx` — `spinoutFields` state
+  fetched from `api.spinoutDeck()` when `methodId === 'axal_spinout_demoday'`; `buildTemplateData()`
+  now accepts an optional `spinoutFields` dict whose dotted keys are merged into the output before
+  passing to the Template component; the `templateData` useMemo branches on `methodId`.
+- **Tests:** `cloudflare-worker/test/spinoutDeckData.test.ts` — added 3 tests for
+  `flattenSpinoutDeckData`: dotted keys + `_json` suffix contract, `__proto__` pollution guard,
+  and empty/DASH values are skipped.
+
+## Press Enter to send answers in the Personal Advisor, for every question type (Task #54)
+
+- **What:** in the Personal Advisor chat, pressing Enter only sent the message
+  for `inputKind === 'short'` (or no kind). For `long` answer and other kinds
+  (e.g. `choice` / `select` options), Enter inserted a newline instead, forcing
+  the user to click the Send button. The user wants Enter to always send.
+- **Frontend:** `frontend/src/components/advisor/PersonalAdvisor.jsx` — in the
+  `Composer` component's `onKey` handler, removed the `inputKind === 'short' ||
+  !inputKind` gate so Enter sends on all input kinds. Added `!e.isComposing` guard
+  so Enter during an IME composition (e.g. Chinese/Japanese) does not fire
+  send. Shift+Enter remains the newline shortcut (unchanged). The `e.preventDefault()`
+  prevents the textarea from inserting a newline.
+- **Out of scope (unchanged):** send/submit logic, validation/evidence gates,
+  mic transcription, option chips, composer layout.
+- **No worker change.** `npm run test:drift` unaffected.
+
+## Personal Advisor card no longer leaves a blank gap below the task panel (Task #53)
+
+- **What:** in the embedded ("normal" card) Personal Advisor on the dashboard,
+  the desktop chat column had a `min-h` floor but no ceiling, so it stretched
+  taller as more questions were answered. The right rail (task panel) is capped
+  at `max-h-[640px]`, so once the chat outgrew it a large blank gap opened
+  beneath the tasks.
+- **Frontend:** `frontend/src/components/advisor/PersonalAdvisor.jsx` — added
+  `max-h-[640px]` to the desktop chat column (the `lg:col-span-2` flex column)
+  so it matches the right-rail aside's cap and the two grid columns stay the
+  same height. The column is already `flex flex-col`; the `Transcript`
+  (`flex-1 overflow-y-auto` with its own `min-h-[260px]`) shrinks and scrolls
+  internally while `CurrentQuestion` + `Composer` stay pinned at the bottom.
+  Auto-scroll-to-latest (`scrollerRef.scrollTop = scrollHeight`) is unaffected.
+- **Out of scope (unchanged):** the fullscreen takeover view (already
+  height/scroll-correct), the mobile card (already `max-h-[60vh]`), and the
+  task-panel content / questions flow / AI behavior.
+- **No worker change.** CSS-only; `npm run test:drift` unaffected.
+
+### Fixed
+
+- **AI Router**: Resolved an issue where the onboarding chat AI (`advisor_turn`) could fail if the Cloudflare AI Gateway was misconfigured. The router now automatically retries the same model without the gateway if the initial routed call fails.
+- **Onboarding Chat**: Improved reliability for new partners completing the "Tell us about yourself" chat; the assistant now falls back to a backup path to ensure the conversation can be completed even during connection hiccups.
+- **Admin Access**: Fixed a bug where admins were sometimes shown the onboarding chat; they now bypass it and go straight to the dashboard.
+- **Outbound Links**: Added safety checks to outbound links throughout the app and fixed author profile social links.
+- **Legal Previews**: Fixed an issue where legal template previews didn't match the final generated document; all renderers are now unified.
+- **Pitch Deck PDF Export**: Fixed a routing error that caused "render failed" messages in production; added a browser-side fallback for PDF generation.
+
+## Signed-in users can reach /register and /login to start a different account (Task #49)
 
 ## Pre-flight Spin-Out deck readiness checklist (Task #42)
 
