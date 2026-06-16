@@ -211,7 +211,41 @@ def _spinout_deck_payload(project: Project) -> dict:
         "The ask: add your next funding milestone in the Capital module.",
     ]
 
-    return {"data": data, "notes": notes, "gaps": gaps, "draft": True, "program_day": program_day}
+    def _flatten(data: dict) -> dict:
+        """Task #55 — mirror of the Worker's flattenSpinoutDeckData()."""
+        out = {}
+        forbidden = {"__proto__", "prototype", "constructor"}
+        sections = {"brand", "cover", "problem", "validation", "market", "solution", "roadmap", "team", "captable", "ask", "deal"}
+        dash = "\u2014"
+        def has(v):
+            return isinstance(v, str) and v.strip() and v.strip() != dash
+        def walk(prefix, value):
+            if value is None:
+                return
+            if isinstance(value, str):
+                if has(value):
+                    out[prefix] = value
+                return
+            if isinstance(value, (list, tuple)):
+                out[f"{prefix}_json"] = json.dumps(value)
+                return
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    if k in forbidden:
+                        continue
+                    walk(f"{prefix}.{k}", v)
+                return
+            # primitives
+            out[prefix] = str(value)
+        for section, section_data in data.items():
+            if section not in sections or section in forbidden:
+                continue
+            if section_data is None:
+                continue
+            walk(section, section_data)
+        return out
+
+    return {"data": data, "notes": notes, "gaps": gaps, "draft": True, "program_day": program_day, "fields": _flatten(data)}
 
 
 @router.post("/{project_id}/spinout-deck")

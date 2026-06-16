@@ -99,6 +99,8 @@ export interface SpinoutDeckBundle {
   gaps: string[];
   draft: boolean;
   programDay: number;
+  /** Task #55 — flat dotted-key field map for the editor's hydrate() contract. */
+  fields: Record<string, string>;
 }
 
 /* ---------------------------------------------------------------- helpers -- */
@@ -559,8 +561,67 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   };
 
   const draft = programDay < PROGRAM_DAYS || gaps.length > 0;
-  return { data, notes: NOTES, gaps, draft, programDay };
+  const fields = flattenSpinoutDeckData(data);
+  return { data, notes: NOTES, gaps, draft, programDay, fields };
 }
+
+/* ============================================================================
+ *  Task #55 — flatten SpinoutDeckData → dotted-key field map.
+ *
+ *  `hydrate()` in axal_spinout_demoday_app.tsx expects:
+ *    - scalar narrative fields  → key = dotted path, value = string
+ *    - structured viz fields    → key = dotted path + `_json`, value = JSON
+ *
+ *  We walk the nested SpinoutDeckData shape and emit exactly those keys.
+ *  Scalar strings that are empty or the DASH placeholder are skipped (honest
+ *  gaps — the editor falls back to sample data). Arrays and objects are always
+ *  emitted (even if empty) because the slide rendering needs them to exist.
+ * ========================================================================== */
+export function flattenSpinoutDeckData(data: SpinoutDeckData): Record<string, string> {
+  const out: Record<string, string> = {};
+  const shouldEmit = (v: unknown): boolean => {
+    if (typeof v === 'string') return has(v);
+    return v !== undefined && v !== null;
+  };
+
+  const walk = (prefix: string, value: unknown): void => {
+    if (value === undefined || value === null) return;
+    if (typeof value === 'string') {
+      if (has(value)) out[prefix] = value;
+      return;
+    }
+    if (Array.isArray(value)) {
+      out[`${prefix}_json`] = JSON.stringify(value);
+      return;
+    }
+    if (typeof value === 'object') {
+      // nested object (e.g. cover.founder, brand) — recurse with dotted path
+      for (const [k, v] of Object.entries(value)) {
+        if (FORBIDDEN_KEYS.has(k)) continue;
+        walk(`${prefix}.${k}`, v);
+      }
+      return;
+    }
+    // primitives (number, boolean) — stringify
+    out[prefix] = String(value);
+  };
+
+  const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+
+  for (const [section, sectionData] of Object.entries(data)) {
+    if (!SECTIONS.has(section)) continue;
+    if (FORBIDDEN_KEYS.has(section)) continue;
+    if (sectionData === undefined || sectionData === null) continue;
+    walk(section, sectionData);
+  }
+
+  return out;
+}
+
+const SECTIONS = new Set([
+  'brand', 'cover', 'problem', 'validation', 'market', 'solution',
+  'roadmap', 'team', 'captable', 'ask', 'deal',
+]);
 
 /* ============================================================================
  *  assembleSpinoutDeckData — env wrapper: fill from D1, then remap.

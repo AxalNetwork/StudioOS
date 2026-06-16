@@ -657,6 +657,7 @@ projects.post('/:projectId/spinout-deck', async (c) => {
     gaps: bundle.gaps,
     draft: bundle.draft,
     program_day: bundle.programDay,
+    fields: bundle.fields,
   });
 });
 
