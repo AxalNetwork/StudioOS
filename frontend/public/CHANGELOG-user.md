@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## The "pain frequency" slide in your Spin-Out deck now reflects your real interviews
+
+Slide 2 of your Spin-Out Demo Day deck — "Pain frequency across interviews" — now shows the pains you've actually logged, grouped into a few clear themes. When you log an interview, the pain box suggests pains you've used before so the same problem isn't split across slightly different wordings. On the Customer Discovery page there's a new "Pain themes" panel where you can rename a theme, move a pain into it, or start a new one — all without changing your interviews. Each bar shows how many of your interviews mention that theme. Haven't logged any pains yet? The slide shows neutral placeholders instead of made-up numbers, and the editor nudges you to log and group your pains.
+
+---
+
 ## Your Spin-Out cover chart now shows real numbers in the editor preview, shared links, and PDFs
 
 The "validation signal" chart on your Spin-Out Demo Day cover now shows your real logged discovery interviews everywhere — not just in the template picker. You now see a live preview of the cover right in the deck editor as you work, and anyone you share a link with (or any PDF you export) sees the same real running total instead of the sample curve. If you haven't logged any interviews yet, the chart honestly shows zero.

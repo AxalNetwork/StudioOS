@@ -33,9 +33,16 @@ from backend.app.models.entities import (
     Interview,
     MetricsSnapshot,
     OKR,
+    PainGroup,
+    PainGroupAlias,
     Project,
     User,
     UserRole,
+)
+from backend.app.services.pain_groups import (
+    get_pain_groups_view,
+    materialize_title_norm_aliases,
+    norm_phrase,
 )
 
 router = APIRouter(prefix="/progress", tags=["Discovery / Roadmap / Metrics"])
@@ -189,6 +196,162 @@ def delete_interview(
     session.delete(i)
     session.commit()
     return {"deleted": interview_id}
+
+
+# ---------------------------------------------------------------------------
+# Pain groups (Task #29) — founder-curated grouping of logged discovery pains
+# that feeds the Spin-Out deck's "PAIN FREQUENCY ACROSS INTERVIEWS" slide.
+# Dev mirror of the Worker's /progress/pain-groups/* routes. Logged pains stay
+# plain strings; these endpoints only manage the curation layer.
+# ---------------------------------------------------------------------------
+MAX_PAIN_TITLE = 120
+MAX_PAIN_PHRASE = 200
+
+
+class PainAssignIn(BaseModel):
+    phrase: str
+    group_id: Optional[int] = None
+    new_title: Optional[str] = None
+
+
+class PainGroupRename(BaseModel):
+    title: str
+
+
+@router.get("/pain-groups/{project_id}")
+def get_pain_groups(
+    project_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    p = _get_project_or_404(session, project_id)
+    _ensure_can_view(p, user)
+    return get_pain_groups_view(session, project_id)
+
+
+@router.post("/pain-groups/{project_id}/assign")
+def assign_pain(
+    project_id: int,
+    body: PainAssignIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Assign / re-assign a logged pain phrase to a group.
+
+      {phrase, group_id}   — move into an existing group
+      {phrase, new_title}  — create a group titled new_title + assign
+      {phrase}             — un-assign (revert to its own implicit theme)
+    """
+    p = _get_project_or_404(session, project_id)
+    _ensure_can_edit(p, user)
+
+    display = (body.phrase or "").strip()[:MAX_PAIN_PHRASE]
+    norm = norm_phrase(display)
+    if not display or not norm:
+        raise HTTPException(status_code=400, detail="phrase is required")
+
+    new_title = (body.new_title or "").strip()[:MAX_PAIN_TITLE] if body.new_title else None
+    has_group = body.group_id is not None
+    now = datetime.utcnow()
+
+    if not new_title and not has_group:
+        existing = session.exec(
+            select(PainGroupAlias).where(
+                PainGroupAlias.project_id == project_id, PainGroupAlias.phrase_norm == norm
+            )
+        ).first()
+        if existing:
+            session.delete(existing)
+            session.commit()
+        return get_pain_groups_view(session, project_id)
+
+    if new_title:
+        max_sort = session.exec(
+            select(PainGroup.sort_order)
+            .where(PainGroup.project_id == project_id)
+            .order_by(PainGroup.sort_order.desc())
+        ).first()
+        g = PainGroup(
+            project_id=project_id,
+            title=new_title,
+            sort_order=(max_sort + 1) if max_sort is not None else 0,
+        )
+        session.add(g)
+        session.commit()
+        session.refresh(g)
+        group_id = g.id
+    else:
+        group_id = body.group_id
+        g = session.get(PainGroup, group_id)
+        if not g or g.project_id != project_id:
+            raise HTTPException(status_code=404, detail="Group not found")
+
+    existing = session.exec(
+        select(PainGroupAlias).where(
+            PainGroupAlias.project_id == project_id, PainGroupAlias.phrase_norm == norm
+        )
+    ).first()
+    if existing:
+        existing.group_id = group_id
+        existing.display_phrase = display
+        existing.updated_at = now
+        session.add(existing)
+    else:
+        session.add(
+            PainGroupAlias(
+                project_id=project_id, group_id=group_id, phrase_norm=norm, display_phrase=display
+            )
+        )
+    session.commit()
+    return get_pain_groups_view(session, project_id)
+
+
+@router.patch("/pain-groups/{group_id}")
+def rename_pain_group(
+    group_id: int,
+    body: PainGroupRename,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    g = session.get(PainGroup, group_id)
+    if not g:
+        raise HTTPException(status_code=404, detail="Group not found")
+    p = _get_project_or_404(session, g.project_id)
+    _ensure_can_edit(p, user)
+    title = (body.title or "").strip()[:MAX_PAIN_TITLE]
+    if not title:
+        raise HTTPException(status_code=400, detail="title is required")
+    # Freeze title-norm memberships into explicit aliases before the title
+    # changes, so the rename doesn't silently move logged pains back to
+    # implicit themes.
+    if norm_phrase(title) != norm_phrase(g.title):
+        materialize_title_norm_aliases(session, g)
+    g.title = title
+    g.updated_at = datetime.utcnow()
+    session.add(g)
+    session.commit()
+    return get_pain_groups_view(session, g.project_id)
+
+
+@router.delete("/pain-groups/{group_id}")
+def delete_pain_group(
+    group_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    g = session.get(PainGroup, group_id)
+    if not g:
+        raise HTTPException(status_code=404, detail="Group not found")
+    p = _get_project_or_404(session, g.project_id)
+    _ensure_can_edit(p, user)
+    project_id = g.project_id
+    for a in session.exec(
+        select(PainGroupAlias).where(PainGroupAlias.group_id == group_id)
+    ).all():
+        session.delete(a)
+    session.delete(g)
+    session.commit()
+    return get_pain_groups_view(session, project_id)
 
 
 # ---------------------------------------------------------------------------

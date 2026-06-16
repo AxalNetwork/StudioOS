@@ -38,6 +38,7 @@
  */
 import type { Env } from '../../types';
 import { ensureDiscoveryValidationRatingColumns } from '../discoveryInterviewSchema';
+import { computePainThemes } from '../painGroups';
 import { ensureLandingPageBrandKitColumns } from '../landingPageSchema';
 import {
   ensureNetworkProfilesSchema,
@@ -866,23 +867,15 @@ export async function fillAxalSpinoutDemoDay(
     return out;
   })();
 
-  // ------ Task #14: pain themes (clustered pains for bars) ------------
-  const painThemeMap = new Map<string, number>();
-  const normTheme = (s: string): string =>
-    s.toLowerCase().trim().replace(/[\s.,!?;:"'`]+/g, ' ').slice(0, 60);
-  for (const it of interviewsList) {
-    try {
-      const arr = JSON.parse(it.pains_json || '[]');
-      if (Array.isArray(arr)) for (const x of arr) {
-        const k = normTheme(String(x || ''));
-        if (k) painThemeMap.set(k, (painThemeMap.get(k) || 0) + 1);
-      }
-    } catch {}
-  }
-  const painThemes = Array.from(painThemeMap.entries())
-    .map(([theme, mentions]) => ({ theme, mentions }))
-    .sort((a, b) => b.mentions - a.mentions)
-    .slice(0, 6);
+  // ------ Task #29: pain themes — founder-curated grouping -------------
+  // Replaces the legacy exact-normalized clustering (Task #14) with the
+  // shared resolver in services/painGroups.ts. Paraphrases collapse into a
+  // founder-curated group; `mentions` is the count of DISTINCT interviews
+  // per theme (matching the "n / total interviews" label). Output shape
+  // `[{theme, mentions}]` is unchanged, so the downstream mapper / flatten
+  // / export / share / print path stays identical. Empty real data yields
+  // no themes → the deck shows its honest placeholder, never BASEPOINT.
+  const painThemes = (await computePainThemes(env, projectId, interviewsList)).slice(0, 6);
 
   // ------ Task #14: ratings distribution + revenue proof --------------
   const ratings = interviewsList

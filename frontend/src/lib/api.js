@@ -749,6 +749,11 @@ export const api = {
   createInterview: (projectId, data) => request(`/progress/discovery/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   updateInterview: (id, data) => request(`/progress/discovery/interview/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteInterview: (id) => request(`/progress/discovery/interview/${id}`, { method: 'DELETE' }),
+  // Task #29 — pain-group curation for the Spin-Out deck Slide 2.
+  painGroups: (projectId) => request(`/progress/pain-groups/${projectId}`),
+  assignPain: (projectId, body) => request(`/progress/pain-groups/${projectId}/assign`, { method: 'POST', body: JSON.stringify(body) }),
+  renamePainGroup: (id, title) => request(`/progress/pain-groups/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
+  deletePainGroup: (id) => request(`/progress/pain-groups/${id}`, { method: 'DELETE' }),
   listOkrs: (projectId) => request(`/progress/roadmap/${projectId}`),
   createOkr: (projectId, data) => request(`/progress/roadmap/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   updateOkr: (id, data) => request(`/progress/roadmap/okr/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

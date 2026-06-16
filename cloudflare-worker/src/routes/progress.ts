@@ -40,6 +40,13 @@ import {
   ensureDiscoveryInterviewFeaturedColumn,
   ensureDiscoveryValidationRatingColumns,
 } from '../services/discoveryInterviewSchema';
+import {
+  ensurePainGroupsSchema,
+  getPainGroupsView,
+  materializeTitleNormAliases,
+  normPhrase,
+  type PainGroupRow,
+} from '../services/painGroups';
 
 const progress = new Hono<{ Bindings: Env }>();
 
@@ -382,6 +389,171 @@ progress.delete('/discovery/interview/:id', async (c) => {
 
   await c.env.DB.prepare('DELETE FROM discovery_interviews WHERE id = ?').bind(id).run();
   return c.json({ deleted: id });
+});
+
+// ---------------------------------------------------------------------------
+// Pain groups (Task #29) — founder-curated grouping of logged discovery
+// pains that feeds the Spin-Out deck's "PAIN FREQUENCY ACROSS INTERVIEWS"
+// slide. Logged pains stay plain strings; these endpoints only manage the
+// curation layer (theme titles + phrase→group aliases).
+// ---------------------------------------------------------------------------
+const MAX_PAIN_TITLE = 120;
+const MAX_PAIN_PHRASE = 200;
+
+function cleanPainTitle(raw: unknown): string | null {
+  const s = asStringOrNull(raw);
+  if (s == null) return null;
+  const t = s.trim();
+  if (!t) return null;
+  return t.slice(0, MAX_PAIN_TITLE);
+}
+
+async function loadPainGroup(env: Env, groupId: number): Promise<PainGroupRow | null> {
+  const row = await env.DB.prepare(
+    `SELECT id, project_id, title, sort_order, created_at, updated_at
+       FROM pain_groups WHERE id = ?`,
+  ).bind(groupId).first<PainGroupRow>();
+  return row || null;
+}
+
+async function nextPainSort(env: Env, projectId: number): Promise<number> {
+  const row = await env.DB.prepare(
+    'SELECT COALESCE(MAX(sort_order), -1) AS m FROM pain_groups WHERE project_id = ?',
+  ).bind(projectId).first<{ m: number }>();
+  return Number(row?.m ?? -1) + 1;
+}
+
+progress.get('/pain-groups/:projectId', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+
+  const project = await loadProject(c.env, projectId);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanView(project, user);
+
+  await ensureDiscoveryInterviewFeaturedColumn(c.env);
+  const view = await getPainGroupsView(c.env, projectId);
+  return c.json(view);
+});
+
+// Assign (or re-assign) a logged pain phrase to a group. Body:
+//   { phrase, group_id }            — move the phrase into an existing group
+//   { phrase, new_title }           — create a group titled new_title + assign
+//   { phrase }  /  { phrase, group_id: null } — un-assign (back to implicit)
+progress.post('/pain-groups/:projectId/assign', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+
+  const project = await loadProject(c.env, projectId);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+
+  const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+  if (!body || typeof body !== 'object') return c.json({ detail: 'Body required' }, 400);
+
+  const phraseRaw = asStringOrNull(body.phrase);
+  const display = (phraseRaw || '').trim().slice(0, MAX_PAIN_PHRASE);
+  const norm = normPhrase(display);
+  if (!display || !norm) return c.json({ detail: 'phrase is required' }, 400);
+
+  await ensurePainGroupsSchema(c.env);
+  const nowIso = new Date().toISOString();
+
+  const newTitle = cleanPainTitle(body.new_title);
+  const hasGroupId = Object.prototype.hasOwnProperty.call(body, 'group_id') && body.group_id != null;
+
+  if (!newTitle && !hasGroupId) {
+    // Un-assign: drop any explicit alias so the phrase reverts to its own
+    // implicit theme.
+    await c.env.DB.prepare(
+      'DELETE FROM pain_group_aliases WHERE project_id = ? AND phrase_norm = ?',
+    ).bind(projectId, norm).run();
+    return c.json(await getPainGroupsView(c.env, projectId));
+  }
+
+  let groupId: number;
+  if (newTitle) {
+    const sort = await nextPainSort(c.env, projectId);
+    const res = await c.env.DB.prepare(
+      `INSERT INTO pain_groups (project_id, title, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).bind(projectId, newTitle, sort, nowIso, nowIso).run();
+    groupId = lastInsertId(res);
+  } else {
+    groupId = Number(body.group_id);
+    if (!Number.isFinite(groupId)) return c.json({ detail: 'Invalid group_id' }, 400);
+    const g = await loadPainGroup(c.env, groupId);
+    if (!g || g.project_id !== projectId) return c.json({ detail: 'Group not found' }, 404);
+  }
+
+  // Upsert the alias (UNIQUE(project_id, phrase_norm) → exactly one group).
+  await c.env.DB.prepare(
+    `INSERT INTO pain_group_aliases
+       (project_id, group_id, phrase_norm, display_phrase, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(project_id, phrase_norm)
+       DO UPDATE SET group_id = excluded.group_id,
+                     display_phrase = excluded.display_phrase,
+                     updated_at = excluded.updated_at`,
+  ).bind(projectId, groupId, norm, display, nowIso, nowIso).run();
+
+  return c.json(await getPainGroupsView(c.env, projectId));
+});
+
+// Rename a pain group. Body: { title }
+progress.patch('/pain-groups/:groupId', async (c) => {
+  const user = await requireAuth(c);
+  const groupId = Number(c.req.param('groupId'));
+  if (!Number.isFinite(groupId)) return c.json({ detail: 'Invalid id' }, 400);
+
+  await ensurePainGroupsSchema(c.env);
+  const g = await loadPainGroup(c.env, groupId);
+  if (!g) return c.json({ detail: 'Group not found' }, 404);
+
+  const project = await loadProject(c.env, g.project_id);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+
+  const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+  const title = cleanPainTitle(body?.title);
+  if (!title) return c.json({ detail: 'title is required' }, 400);
+
+  // Before the title changes, freeze any logged pains that resolve to this
+  // group only via its current title-norm into explicit aliases, so the
+  // rename doesn't silently move them back to implicit themes.
+  if (normPhrase(title) !== normPhrase(g.title)) {
+    await materializeTitleNormAliases(c.env, g.project_id, g);
+  }
+
+  await c.env.DB.prepare(
+    'UPDATE pain_groups SET title = ?, updated_at = ? WHERE id = ?',
+  ).bind(title, new Date().toISOString(), groupId).run();
+
+  return c.json(await getPainGroupsView(c.env, g.project_id));
+});
+
+// Delete a pain group. Its aliases revert to implicit themes.
+progress.delete('/pain-groups/:groupId', async (c) => {
+  const user = await requireAuth(c);
+  const groupId = Number(c.req.param('groupId'));
+  if (!Number.isFinite(groupId)) return c.json({ detail: 'Invalid id' }, 400);
+
+  await ensurePainGroupsSchema(c.env);
+  const g = await loadPainGroup(c.env, groupId);
+  if (!g) return c.json({ detail: 'Group not found' }, 404);
+
+  const project = await loadProject(c.env, g.project_id);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+
+  // Explicit alias delete first — D1 may run with foreign_keys OFF, so we
+  // can't rely on ON DELETE CASCADE to clear the alias rows.
+  await c.env.DB.prepare('DELETE FROM pain_group_aliases WHERE group_id = ?').bind(groupId).run();
+  await c.env.DB.prepare('DELETE FROM pain_groups WHERE id = ?').bind(groupId).run();
+
+  return c.json(await getPainGroupsView(c.env, g.project_id));
 });
 
 // ---------------------------------------------------------------------------

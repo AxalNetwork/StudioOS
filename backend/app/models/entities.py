@@ -1222,6 +1222,36 @@ class Interview(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class PainGroup(SQLModel, table=True):
+    """Task #29 — founder-curated theme for the Spin-Out deck's pain-frequency
+    slide. Logged pains stay plain strings in ``interviews.pains_json``; this
+    table only holds the curation layer (the slide row label)."""
+    __tablename__ = "pain_groups"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="projects.id", index=True)
+    title: str
+    sort_order: int = 0
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PainGroupAlias(SQLModel, table=True):
+    """Task #29 — maps a normalized pain phrase to a group so paraphrases
+    collapse into one ranked theme. UNIQUE(project_id, phrase_norm) means a
+    phrase belongs to exactly one group."""
+    __tablename__ = "pain_group_aliases"
+    __table_args__ = (
+        UniqueConstraint("project_id", "phrase_norm", name="uq_pain_group_aliases_project_phrase"),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="projects.id", index=True)
+    group_id: int = Field(foreign_key="pain_groups.id", index=True)
+    phrase_norm: str = Field(index=True)
+    display_phrase: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class OKR(SQLModel, table=True):
     __tablename__ = "okrs"
     id: Optional[int] = Field(default=None, primary_key=True)

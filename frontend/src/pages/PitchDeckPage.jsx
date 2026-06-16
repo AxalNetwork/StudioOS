@@ -725,6 +725,18 @@ export default function PitchDeckPage() {
                   </p>
                 </div>
               )}
+              {/* Task #29 — live Slide 2 preview ("PAIN FREQUENCY ACROSS
+                  INTERVIEWS"). Renders the founder's REAL grouped discovery
+                  pains; falls back to neutral placeholders (with a nudge to
+                  log + group pains) until there's real data. */}
+              {isSpinoutDeck && (
+                <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
+                  <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2 flex items-center gap-1">
+                    <Eye className="w-3 h-3" /> Slide 2 preview — pain frequency
+                  </div>
+                  <SpinoutProblemPreview fields={spinoutFields} />
+                </div>
+              )}
               <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-6 min-h-[60vh]" data-card>
                 <div className="flex items-center justify-between mb-3 text-xs text-gray-500 dark:text-slate-400">
                   <span>Slide {activeIdx + 1} / {slides.length}</span>
@@ -1278,6 +1290,77 @@ function SpinoutCoverPreview({ fields }) {
     );
   }
   return <Thumb template={tplMeta} data={fields} />;
+}
+
+// Task #29 — `problem.pains_json` is a JSON array of [label, pct, count] rows.
+// The mapper falls back to neutral placeholders (count === '—', the em-dash
+// DASH sentinel shared by the Worker + dev FastAPI mappers) whenever the
+// founder has no grouped discovery pains yet. Detect that all-placeholder
+// state so the builder can nudge the founder instead of implying the slide
+// is "done". Returns true only when there's real grouped data to show.
+function spinoutHasRealPains(fields) {
+  const raw = fields?.['problem.pains_json'];
+  if (!raw) return false;
+  let rows;
+  try { rows = JSON.parse(raw); } catch { return false; }
+  if (!Array.isArray(rows) || rows.length === 0) return false;
+  // Real rows carry a numeric "n" or "n / total" count; placeholders use '—'.
+  return rows.some((r) => Array.isArray(r) && r[2] != null && String(r[2]).trim() !== '—');
+}
+
+// =====================================================================
+// Task #29 — in-builder live preview of Slide 2 ("PAIN FREQUENCY ACROSS
+// INTERVIEWS"). Same lazy-loaded <Thumbnail> as the cover preview, but
+// clipped to slideIndex={1} so the founder sees their REAL grouped
+// discovery pains (theme · % · n/total) while editing. When there's no
+// real grouped data yet the slide shows neutral placeholders, so we add a
+// one-line nudge pointing at the Customer Discovery curation panel.
+// =====================================================================
+function SpinoutProblemPreview({ fields }) {
+  const [Thumb, setThumb] = useState(null);
+  const [tplMeta, setTplMeta] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    loadThumbnailModule().then((m) => {
+      if (!alive) return;
+      if (m?.Thumbnail) setThumb(() => m.Thumbnail);
+      else setFailed(true);
+    });
+    loadTemplates().then((t) => {
+      if (!alive) return;
+      const meta = t?.record?.axal_spinout_demoday
+        || (t?.list || []).find((x) => x?.key === 'axal_spinout_demoday')
+        || null;
+      if (meta) setTplMeta(meta);
+      else setFailed(true);
+    });
+    return () => { alive = false; };
+  }, []);
+
+  if (failed) return null;
+  if (!Thumb || !tplMeta) {
+    return (
+      <div
+        className="w-full rounded bg-gray-100 dark:bg-slate-800 flex items-center justify-center"
+        style={{ aspectRatio: '16 / 9' }}
+      >
+        <Loader2 className="w-5 h-5 animate-spin text-violet-500" />
+      </div>
+    );
+  }
+  const hasReal = spinoutHasRealPains(fields);
+  return (
+    <>
+      <Thumb template={tplMeta} data={fields} slideIndex={1} />
+      <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-2">
+        {hasReal
+          ? 'Your top grouped discovery pains, ranked by how many interviews mention each — updates as you log and group pains.'
+          : 'Placeholder pains shown. Log discovery interviews and group their pains in Customer Discovery to populate this slide with real data.'}
+      </p>
+    </>
+  );
 }
 
 // =====================================================================

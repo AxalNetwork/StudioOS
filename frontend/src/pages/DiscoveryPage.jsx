@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Trash2, MessageSquare, CheckCircle2, XCircle, HelpCircle, AlertCircle, Save, X, FolderPlus, Star } from 'lucide-react';
+import { Plus, Trash2, MessageSquare, CheckCircle2, XCircle, HelpCircle, AlertCircle, Save, X, FolderPlus, Star, Layers, Pencil } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
@@ -36,6 +36,7 @@ export default function DiscoveryPage() {
   const [projectId, setProjectId] = useState(null);
   const [interviews, setInterviews] = useState([]);
   const [signals, setSignals] = useState(null);
+  const [painView, setPainView] = useState(null);
   const [editing, setEditing] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -80,17 +81,22 @@ export default function DiscoveryPage() {
     setLoading(true);
     setError(null);
     try {
-      const [r1, r2] = await Promise.all([
+      const [r1, r2, r3] = await Promise.all([
         api.listInterviews(projectId),
         api.getProgressSignals(projectId),
+        // Pain-group view is non-fatal: a failure here must not blank the
+        // interview log, so swallow it and fall back to no curation data.
+        api.painGroups(projectId).catch(() => null),
       ]);
       setInterviews(r1.interviews || []);
       setSignals(r2);
+      setPainView(r3);
     } catch (e) {
       const msg = (e?.message || '').toLowerCase();
       if (e?.status === 404 || msg.includes('not found')) {
         setInterviews([]);
         setSignals(null);
+        setPainView(null);
         setError(`Project #${projectId} is no longer available. Pick another project from the dropdown.`);
       } else {
         setError(e.message || 'Failed to load discovery data.');
@@ -187,6 +193,62 @@ export default function DiscoveryPage() {
       }
     }
   }
+
+  // Task #29 — pain-group curation. assign/rename/delete all return the
+  // freshly recomputed view, so we set it straight from the response (no
+  // extra round-trip). Failures surface in the shared error banner.
+  async function handleAssignPain(phrase, opts) {
+    try {
+      const view = await api.assignPain(projectId, { phrase, ...opts });
+      setPainView(view);
+    } catch (e) {
+      setError(e.message || 'Failed to update pain grouping.');
+    }
+  }
+
+  async function handleRenameGroup(id) {
+    const current = (painView?.groups || []).find((g) => g.id === id);
+    const title = prompt('Rename pain theme', current?.title || '');
+    if (title == null) return;
+    if (!title.trim()) return;
+    try {
+      const view = await api.renamePainGroup(id, title.trim());
+      setPainView(view);
+    } catch (e) {
+      setError(e.message || 'Failed to rename pain theme.');
+    }
+  }
+
+  async function handleDeleteGroup(id) {
+    if (!confirm('Delete this theme? Its pains revert to individual entries — no interviews are changed.')) return;
+    try {
+      const view = await api.deletePainGroup(id);
+      setPainView(view);
+    } catch (e) {
+      setError(e.message || 'Failed to delete pain theme.');
+    }
+  }
+
+  // Distinct, deduped suggestions for the "log interview" pains input:
+  // existing theme titles first (so paraphrases consolidate), then the
+  // phrases already seen across interviews.
+  const painSuggestions = useMemo(() => {
+    if (!painView) return [];
+    const out = [];
+    const seen = new Set();
+    const add = (s) => {
+      const t = (s || '').trim();
+      if (!t) return;
+      const k = t.toLowerCase();
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push(t);
+    };
+    for (const g of painView.groups || []) add(g.title);
+    for (const g of painView.groups || []) for (const p of (g.phrases || [])) add(p.display_phrase);
+    for (const u of painView.ungrouped || []) add(u.display_phrase);
+    return out;
+  }, [painView]);
 
   const stats = useMemo(() => {
     let v = 0, inv = 0, h = 0;
@@ -320,8 +382,134 @@ export default function DiscoveryPage() {
       </div>
       )}
 
-      {editing && <InterviewModal value={editing} onChange={setEditing} onSave={handleSave} onClose={() => setEditing(null)} />}
+      {hasProjects && !loading && (
+        <PainThemesPanel
+          view={painView}
+          onAssign={handleAssignPain}
+          onRename={handleRenameGroup}
+          onDelete={handleDeleteGroup}
+        />
+      )}
+
+      {editing && <InterviewModal value={editing} onChange={setEditing} onSave={handleSave} onClose={() => setEditing(null)} suggestions={painSuggestions} />}
     </div>
+  );
+}
+
+// Task #29 — pain-theme curation. Groups the founder's logged discovery pains
+// into the few themes that drive the Spin-Out deck Slide 2 ("PAIN FREQUENCY
+// ACROSS INTERVIEWS"). Grouping is deterministic + founder-curated (no AI):
+// rename a theme, move a paraphrase into a theme, ungroup it, or spin a new
+// theme — none of which edits the underlying interviews. Empty until the
+// founder logs pains, mirroring the slide's honest no-data state.
+function PainThemesPanel({ view, onAssign, onRename, onDelete }) {
+  const groups = view?.groups || [];
+  const ungrouped = view?.ungrouped || [];
+  const total = view?.interview_total || 0;
+  const hasAny = groups.length > 0 || ungrouped.length > 0;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+      <div className="flex items-center gap-2 mb-1">
+        <Layers size={16} className="text-violet-600" />
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Pain themes</h2>
+        {total > 0 && <span className="text-xs text-gray-400">· {total} interview{total === 1 ? '' : 's'}</span>}
+      </div>
+      <p className="text-xs text-gray-500 mb-3">
+        Groups the pains you log into the themes shown on the Spin-Out deck Slide 2. Merge paraphrases so the
+        same pain counts once per theme. Editing themes never changes your interviews.
+      </p>
+
+      {!hasAny && (
+        <div className="text-sm text-gray-500 border border-dashed border-gray-300 rounded-lg p-4 text-center dark:border-gray-700">
+          No pains logged yet. Add pain points when logging interviews — they’ll appear here to group into themes.
+        </div>
+      )}
+
+      {groups.length > 0 && (
+        <div className="space-y-3">
+          {groups.map((g) => (
+            <div key={g.id} className="border border-gray-200 rounded-lg p-3 dark:border-gray-800">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-medium text-sm text-gray-900 truncate dark:text-gray-100">{g.title}</span>
+                  <span className="text-xs text-gray-400 shrink-0">{(g.phrases || []).length} phrase{(g.phrases || []).length === 1 ? '' : 's'}</span>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => onRename(g.id)} title="Rename theme" aria-label="Rename theme" className="p-1 text-gray-400 hover:text-violet-600"><Pencil size={14} /></button>
+                  <button onClick={() => onDelete(g.id)} title="Delete theme" aria-label="Delete theme" className="p-1 text-gray-400 hover:text-rose-600"><Trash2 size={14} /></button>
+                </div>
+              </div>
+              {(g.phrases || []).length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {g.phrases.map((p) => (
+                    <PhraseChip key={p.phrase_norm} phrase={p.display_phrase} currentGroupId={g.id} groups={groups} onAssign={onAssign} />
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {ungrouped.length > 0 && (
+        <div className="mt-4">
+          <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Ungrouped pains</div>
+          <div className="flex flex-wrap gap-1.5">
+            {ungrouped.map((u) => (
+              <PhraseChip
+                key={u.phrase_norm}
+                phrase={u.display_phrase}
+                count={u.count}
+                currentGroupId={null}
+                groups={groups}
+                onAssign={onAssign}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// A single pain phrase with a "move to…" control. The native <select> stays
+// uncontrolled (value pinned to '') so it always reads as the placeholder
+// action after each pick. Options: every other theme, "ungroup" (only when
+// currently grouped), and "new theme…" (prompts for a title).
+function PhraseChip({ phrase, count, currentGroupId, groups, onAssign }) {
+  function onMove(e) {
+    const v = e.target.value;
+    e.target.value = '';
+    if (!v) return;
+    if (v === '__ungroup') { onAssign(phrase, {}); return; }
+    if (v === '__new') {
+      const title = prompt('New theme name', phrase);
+      if (title && title.trim()) onAssign(phrase, { new_title: title.trim() });
+      return;
+    }
+    const gid = Number(v);
+    if (Number.isFinite(gid)) onAssign(phrase, { group_id: gid });
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-full pl-2 pr-1 py-0.5 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900">
+      <span className="max-w-[14rem] truncate">{phrase}</span>
+      {typeof count === 'number' && <span className="text-amber-500/80">×{count}</span>}
+      <select
+        value=""
+        onChange={onMove}
+        aria-label={`Move "${phrase}" to a theme`}
+        title="Move to a theme"
+        className="bg-transparent text-amber-700 text-xs rounded border border-amber-200 px-1 py-0.5 cursor-pointer focus:outline-none dark:text-amber-300 dark:border-amber-900"
+      >
+        <option value="">Move…</option>
+        {groups.filter((g) => g.id !== currentGroupId).map((g) => (
+          <option key={g.id} value={g.id}>→ {g.title}</option>
+        ))}
+        {currentGroupId != null && <option value="__ungroup">Ungroup</option>}
+        <option value="__new">+ New theme…</option>
+      </select>
+    </span>
   );
 }
 
@@ -336,7 +524,7 @@ function Stat({ label, value, sub, tone = 'gray' }) {
   );
 }
 
-function InterviewModal({ value, onChange, onSave, onClose }) {
+function InterviewModal({ value, onChange, onSave, onClose, suggestions = [] }) {
   function setH(idx, patch) {
     const next = [...value.hypotheses];
     next[idx] = { ...next[idx], ...patch };
@@ -348,6 +536,16 @@ function InterviewModal({ value, onChange, onSave, onClose }) {
   function removeH(idx) {
     onChange({ ...value, hypotheses: value.hypotheses.filter((_, i) => i !== idx) });
   }
+  // Task #29 — one-tap pain suggestions (existing themes + already-seen
+  // phrases). Tapping a chip appends it to this interview's pains; chips for
+  // pains already added are hidden so the list shrinks as you pick.
+  function addPain(p) {
+    const cur = value.pains || [];
+    if (cur.some((x) => (x || '').trim().toLowerCase() === p.trim().toLowerCase())) return;
+    onChange({ ...value, pains: [...cur, p] });
+  }
+  const painSet = new Set((value.pains || []).map((p) => (p || '').trim().toLowerCase()));
+  const shownSuggestions = suggestions.filter((s) => !painSet.has(s.trim().toLowerCase())).slice(0, 12);
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
@@ -368,6 +566,19 @@ function InterviewModal({ value, onChange, onSave, onClose }) {
             </Field>
             <Field label="Pain points (comma-separated)">
               <input value={(value.pains || []).join(', ')} onChange={(e) => onChange({ ...value, pains: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
+              {shownSuggestions.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                  <span className="text-[11px] text-gray-400">Suggested:</span>
+                  {shownSuggestions.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => addPain(s)}
+                      className="text-[11px] bg-violet-50 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5 hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-900"
+                    >+ {s}</button>
+                  ))}
+                </div>
+              )}
             </Field>
           </div>
           <Field label="Notes (Mom-Test style — what they did, not what they say they'd do)">

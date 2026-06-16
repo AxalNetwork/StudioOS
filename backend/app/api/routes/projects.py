@@ -6,7 +6,8 @@ from sqlalchemy import text
 
 logger = logging.getLogger("studioos.projects")
 from backend.app.database import get_session
-from backend.app.models.entities import Project, Founder, ScoreSnapshot, Deal, ActivityLog, User
+from backend.app.models.entities import Project, Founder, ScoreSnapshot, Deal, ActivityLog, User, Interview
+from backend.app.services.pain_groups import compute_pain_bars
 from backend.app.schemas.scoring import ProjectCreate, ProjectUpdate, FounderSubmitRequest
 from backend.app.services.scoring import run_full_score
 from backend.app.services.score_integrity import assert_no_reserved_fields
@@ -22,7 +23,7 @@ def _ensure_can_edit(user: User, project: Project) -> None:
     ensure_founder_access(user, project.founder_id)
 
 
-def _spinout_deck_payload(project: Project) -> dict:
+def _spinout_deck_payload(project: Project, session: Session) -> dict:
     """Dev-only deterministic mirror of the Worker's Spin-Out deck assembler.
 
     Prod assembles this in the Cloudflare Worker
@@ -41,6 +42,28 @@ def _spinout_deck_payload(project: Project) -> dict:
     program_day = 16
     lab_status = f"Day {program_day} / 28"
 
+    # Task #29 — problem.pains from the founder's REAL grouped discovery pains
+    # (honest empty state, never the BASEPOINT sample). When there is no real
+    # data we mirror the Worker mapper's neutral FALLBACK placeholders + gap.
+    DASH = "\u2014"
+    pain_bars = compute_pain_bars(session, project.id)
+    interview_total = len(
+        list(session.exec(select(Interview.id).where(Interview.project_id == project.id)))
+    )
+    if pain_bars:
+        problem_pains = pain_bars
+        problem_framing = (
+            f"Synthesized from {interview_total} discovery "
+            f"interview{'s' if interview_total != 1 else ''} with target customers."
+        )
+    else:
+        problem_pains = [
+            ["Primary pain", 50, DASH],
+            ["Secondary pain", 38, DASH],
+            ["Tertiary pain", 26, DASH],
+        ]
+        problem_framing = "Log discovery interviews to surface your top customer pains."
+
     data = {
         "brand": {"lab": "AXAL VC · SPIN-OUT LAB", "footerRight": f"{upper} · CONFIDENTIAL", "network": "Axal VC"},
         "cover": {
@@ -56,15 +79,11 @@ def _spinout_deck_payload(project: Project) -> dict:
         "problem": {
             "eyebrow": "Problem", "idx": "02",
             "title": "The pains that surface in every customer conversation.",
-            "framing": "Synthesized from 28 discovery interviews with target customers.",
+            "framing": problem_framing,
             "quote": "We re-underwrite on data that's already three weeks old. By then the borrower has moved.",
             "quoteAttr": "Head of Credit · mid-market lender",
             "barsLabel": "PAIN FREQUENCY ACROSS INTERVIEWS",
-            "pains": [
-                ["Stale data at decision time", 82, "23 / 28"],
-                ["Manual, slow review cycles", 68, "19 / 28"],
-                ["Thin coverage of private borrowers", 54, "15 / 28"],
-            ],
+            "pains": problem_pains,
         },
         "validation": {
             "eyebrow": "Validation", "idx": "03",
@@ -210,6 +229,8 @@ def _spinout_deck_payload(project: Project) -> dict:
         "Team: add your founder profile in the Cofounder/Team module.",
         "The ask: add your next funding milestone in the Capital module.",
     ]
+    if not pain_bars:
+        gaps.append("Problem: cluster discovery pains in the Customer Discovery module.")
 
     def _flatten(data: dict) -> dict:
         """Task #55 — mirror of the Worker's flattenSpinoutDeckData()."""
@@ -268,7 +289,7 @@ def spinout_deck(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     ensure_founder_access(user, project.founder_id)
-    payload = _spinout_deck_payload(project)
+    payload = _spinout_deck_payload(project, session)
     if preview == 1:
         return {
             "gaps": payload["gaps"],

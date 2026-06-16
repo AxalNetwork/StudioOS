@@ -15,6 +15,13 @@ interface ThumbnailProps {
    * SAMPLE. Falls back to the sample preview when omitted/null.
    */
   data?: DeckData | null;
+  /**
+   * Which slide to clip to (0-based). Templates stack all N Slide16x9 children
+   * vertically; the 16:9 window shows exactly one. Defaults to 0 (the cover);
+   * pass e.g. 1 to preview Slide 2. The inner content is shifted up by
+   * `slideIndex * INNER_H * scale` so the requested slide lands at the top.
+   */
+  slideIndex?: number;
 }
 
 interface BoundaryState {
@@ -66,7 +73,7 @@ class ThumbnailBoundary extends React.Component<
   }
 }
 
-export const Thumbnail: React.FC<ThumbnailProps> = ({ template, data }) => {
+export const Thumbnail: React.FC<ThumbnailProps> = ({ template, data, slideIndex = 0 }) => {
   const Comp = template.Component;
   const wrapRef = useRef<HTMLDivElement>(null);
   // Sensible default so first paint isn't a microscopic dot before the
@@ -147,7 +154,7 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ template, data }) => {
               transform: `scale(${scale})`,
               transformOrigin: 'top left',
               position: 'absolute',
-              top: 0,
+              top: -(slideIndex * INNER_H * scale),
               left: 0,
             }}
           >

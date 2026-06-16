@@ -470,6 +470,38 @@ CREATE TABLE IF NOT EXISTS discovery_interviews (
 CREATE INDEX IF NOT EXISTS idx_discovery_interviews_project
     ON discovery_interviews (project_id);
 
+-- Task #29 — founder-curated grouping of logged discovery pains for the
+-- Spin-Out deck's "PAIN FREQUENCY ACROSS INTERVIEWS" slide. Logged pains
+-- stay plain strings in discovery_interviews.pains_json; these tables hold
+-- only the curation layer (theme titles + phrase→group aliases).
+CREATE TABLE IF NOT EXISTS pain_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_pain_groups_project
+    ON pain_groups (project_id);
+
+CREATE TABLE IF NOT EXISTS pain_group_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    group_id INTEGER NOT NULL REFERENCES pain_groups(id) ON DELETE CASCADE,
+    phrase_norm TEXT NOT NULL,
+    display_phrase TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pain_group_aliases_project_phrase
+    ON pain_group_aliases (project_id, phrase_norm);
+
+CREATE INDEX IF NOT EXISTS idx_pain_group_aliases_group
+    ON pain_group_aliases (group_id);
+
 CREATE TABLE IF NOT EXISTS roadmap_okrs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     -- Task #7 (AM) — ON DELETE CASCADE so admin hard-delete drops OKRs too.
