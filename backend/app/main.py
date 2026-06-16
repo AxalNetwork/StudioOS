@@ -95,6 +95,7 @@ async def lifespan(app: FastAPI):
             ensure_trust_layer_columns,
             ensure_mentor_tables,
             ensure_calendar_tables,
+            ensure_market_intel_tables,
             ensure_task54_tables,
             ensure_task46_tables,
             ensure_cofounder_tables,
@@ -153,6 +154,9 @@ async def lifespan(app: FastAPI):
         # Task #56 — unified calendar layer.
         ensure_calendar_tables()
         logger.info("StudioOS migrations: calendar tables ensured")
+        # Task #35 — Market Intelligence dev parity (watchlist + per-user flags).
+        ensure_market_intel_tables()
+        logger.info("StudioOS migrations: market intel tables ensured")
         # Task #54 — partner office hours + co-marketing pitches + attribution.
         ensure_task54_tables()
         logger.info("StudioOS migrations: task #54 tables ensured")

@@ -1116,6 +1116,51 @@ def ensure_service_catalogue_columns() -> None:
         session.commit()
 
 
+def ensure_market_intel_tables() -> None:
+    """Task #35 — dev parity for the Market Intelligence surfaces.
+
+    The production Worker stores per-user sector watchlists in
+    ``market_intel_watchlist`` and two per-user flags on ``users``
+    (``mi_digest_paused_until`` for the digest-pause window and
+    ``mi_contribution_optout`` for the advisor-contribution opt-out).
+    Dev FastAPI mirrors that schema so the Watchlist tab and the Settings
+    contribution toggle persist across requests. Idempotent; Postgres DDL.
+    """
+    with Session(engine) as session:
+        try:
+            session.exec(text(
+                """
+                CREATE TABLE IF NOT EXISTS market_intel_watchlist (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    sector VARCHAR NOT NULL,
+                    geo VARCHAR NOT NULL DEFAULT 'global',
+                    cadence VARCHAR NOT NULL DEFAULT 'weekly',
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uq_mi_watchlist_user_sector_geo UNIQUE (user_id, sector, geo)
+                )
+                """
+            ))
+            session.exec(text(
+                "CREATE INDEX IF NOT EXISTS ix_mi_watchlist_user ON market_intel_watchlist(user_id)"
+            ))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_market_intel_tables: watchlist table failed: %s", exc)
+            session.rollback()
+
+        for col, ddl in (
+            ("mi_digest_paused_until", "VARCHAR"),
+            ("mi_contribution_optout", "INTEGER NOT NULL DEFAULT 0"),
+        ):
+            try:
+                session.exec(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_market_intel_tables: users.%s failed: %s", col, exc)
+                session.rollback()
+
+
 def ensure_calendar_tables() -> None:
     """Task #56 — Unified calendar layer. Idempotent.
 
