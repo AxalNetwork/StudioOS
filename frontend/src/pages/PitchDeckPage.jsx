@@ -779,34 +779,6 @@ export default function PitchDeckPage() {
                   empty (and the draft/ready + program-day status) BEFORE the
                   founder clicks Export, then doubles as post-export confirmation
                   (onExport refreshes deckPreview from the built bundle). */}
-              {isSpinoutDeck && readinessState === 'gaps' && (
-                // DRAFT — sections still empty. The clear, top-priority case.
-                <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-900 p-3" data-card>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                      Complete these before you export
-                    </div>
-                    <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200/70 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
-                      Draft
-                    </span>
-                  </div>
-                  {deckPreview.programDay != null && (
-                    <div className="text-[11px] text-amber-700/80 dark:text-amber-400/80 mb-2">
-                      Spin-Out Lab · Day {deckPreview.programDay} of 28
-                    </div>
-                  )}
-                  <ul className="space-y-1.5">
-                    {deckPreview.gaps.map((g, i) => (
-                      <li key={i} className="text-xs text-amber-800 dark:text-amber-300 flex gap-2">
-                        <span aria-hidden>•</span><span>{g}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="text-[11px] text-amber-700/70 dark:text-amber-400/70 mt-2">
-                    You can still export now — it'll be marked as a draft.
-                  </div>
-                </div>
-              )}
               {isSpinoutDeck && readinessState === 'draft' && (
                 // DRAFT with NO gaps — every section is filled but the deck is
                 // still mid-program (program_day < 28). Match the export, which

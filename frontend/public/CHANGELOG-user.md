@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Removed the "complete these before you export" checklist from the Pitch Deck builder
+
+The amber pre-export checklist panel is no longer shown in the Pitch Deck builder. The deck editor is now unobstructed — you can edit slides directly without needing to dismiss or scroll past the gaps list.
+
+---
+
 ## "Learn" links on every Personal Advisor question
 
 Each question card in the Personal Advisor now has a "Learn" link that opens the relevant section of the in-app docs, so you can read up on what's being asked before you answer. It sits alongside the existing link that takes you straight to the page where you fill the answer in — so from any card you can either learn more or jump in and complete it.

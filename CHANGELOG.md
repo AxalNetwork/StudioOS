@@ -10,6 +10,18 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Remove the pre-export checklist panel from the Pitch Deck builder
+
+- **What:** The amber "Complete these before you export" checklist panel (with the Spin-Out Lab
+  day badge, the per-section gaps list, and the "You can still export now — it'll be marked as a
+  draft" footer) was removed from the Pitch Deck builder's right-hand action column.
+- **Why:** The checklist created a visual barrier before the founder could interact with the deck
+  editor. It showed the same gaps list that the Spin-Out Lab sidebar already tracks.
+- **Where — `PitchDeckPage.jsx` (`frontend/src/pages/PitchDeckPage.jsx`):** Deleted the
+  `isSpinoutDeck && readinessState === 'gaps'` block. The `deckReadinessState()` function and the
+  `draft` / `ready` state cards remain intact. The `gaps` field is still computed and used by the
+  print / share views.
+
 ## Add "Learn" doc link + consistent page link to advisor cards (Task #58)
 
 - **What:** Each Personal Advisor question card (Proposed / Pending / Completed buckets in the
