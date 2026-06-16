@@ -450,12 +450,12 @@ export function previewDataFor(templateKey: string): DeckData {
   if (templateKey === 'narrative_brand') {
     return NARRATIVE_BRAND_APP_SAMPLE as unknown as DeckData;
   }
-  // Axal VC Spin-Out (Task #15) — reads deeply nested shapes
-  // (`cover.*`, `validation.metrics[]`, `axal_signal.lab_weeks[]`,
-  // etc.). The generic SAMPLE_PREVIEW_DATA would crash hydrate's
-  // typed-field path; return the template's own SAMPLE_DATA so the
-  // picker thumbnail and preview modal render the canonical sample
-  // deck.
+  // Axal VC Spin-Out (Task #15) — the 10-slide BASEPOINT deck reads a
+  // deeply nested shape (`cover.*`, `problem.pains[]`, `validation.stages[]`,
+  // `captable.segments[]`, etc.). Passing this nested SAMPLE_DATA is
+  // equivalent to passing `{}`: `hydrate()` finds no flat dotted keys and
+  // returns the bundled sample, so the picker thumbnail and preview modal
+  // render the canonical BASEPOINT sample deck.
   if (templateKey === 'axal_spinout_demoday') {
     return AXAL_SPINOUT_APP_SAMPLE as unknown as DeckData;
   }

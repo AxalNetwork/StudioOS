@@ -17,7 +17,7 @@ import { Deck_partnership_bd } from './partnership_bd';
 import { Deck_one_pager_teaser } from './one_pager_teaser';
 import { Deck_investor_appendix } from './investor_appendix';
 import { Deck_narrative_brand } from './narrative_brand';
-// Task #15 — Axal 30-day Spin-Out Lab Demo Day deck (11 slides · 4 variants).
+// Task #15 — Axal 30-day Spin-Out Lab Demo Day deck (10 slides · editorial).
 import { Deck_axal_spinout_demoday } from './axal_spinout_demoday_app';
 
 export type TemplateCategory = 'commercial' | 'fundraising';
@@ -55,7 +55,7 @@ export const TEMPLATES: Record<string, TemplateMeta> = {
   minimal_seed:       { key: 'minimal_seed',       label: 'Minimal Seed — 6 slides',       description: '6 slides · stripped to essentials',                slide_count: 6,  required_tier: 'free',   category: 'fundraising', Component: Deck_minimal_seed,       brandTheme: 'accent_only' },
   investor_appendix:  { key: 'investor_appendix',  label: 'Investor + Appendix',           description: '12 core + 30 appendix (A–I) · editorial · with charts', slide_count: 42, required_tier: 'studio', category: 'fundraising', Component: Deck_investor_appendix,  brandTheme: 'accent_only' },
   demo_day:           { key: 'demo_day',           label: 'Demo Day — Product-first',      description: '12 slides · product-first · SVG mockups',          slide_count: 12, required_tier: 'growth', category: 'event',       Component: Deck_demo_day,           brandTheme: 'accent_only' },
-  axal_spinout_demoday: { key: 'axal_spinout_demoday', label: 'Axal VC Spin-Out', description: '11 slides · 4 variants (editorial / product-first / data-dense / manifesto) · binds to Lab data', slide_count: 11, required_tier: 'growth', category: 'event', Component: Deck_axal_spinout_demoday, brandTheme: 'accent_only' },
+  axal_spinout_demoday: { key: 'axal_spinout_demoday', label: 'Axal VC Spin-Out', description: '10 slides · editorial · binds to Lab data', slide_count: 10, required_tier: 'growth', category: 'event', Component: Deck_axal_spinout_demoday, brandTheme: 'accent_only' },
   // full — full palette override (bg, ink, accent, fonts)
   narrative_brand:    { key: 'narrative_brand',    label: 'Narrative — Brand-led',         description: '4 acts · 15 chapters + 4 dividers · cinematic · custom SVG artwork', slide_count: 19, required_tier: 'studio', category: 'commercial',  Component: Deck_narrative_brand,    brandTheme: 'full' },
   one_pager_teaser:   { key: 'one_pager_teaser',   label: 'One-Pager Teaser',              description: '1 page · cold outreach',                           slide_count: 1,  required_tier: 'free',   category: 'commercial',  Component: Deck_one_pager_teaser,   brandTheme: 'full' },

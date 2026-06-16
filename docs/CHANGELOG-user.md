@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your Spin-Out deck has a fresh new look
+
+The Spin-Out demo-day deck has been redesigned with a cleaner, bolder editorial style in Axal blue. It's now ten focused slides — cover, the problem, your validation, the market, your solution, the roadmap, your team, the cap table, your ask, and the deal — and every slide still comes filled in with sample content and stays fully editable. Open your deck to see the new design in the editor, the template picker, and the preview.
+
+---
+
 ## See what's missing before you download your deck
 
 Your Spin-Out deck now shows a readiness checklist right on the deck page — before you export. If anything's still empty (interviews, market sizing, cap table, your funding ask, and so on), you'll see a short "complete these before you export" list, a Draft tag, and how far you are into the 28-day program. Once everything's filled in, the panel turns green to tell you the deck is ready. That way you can finish the gaps first instead of finding out only after you've downloaded a draft.

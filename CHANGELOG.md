@@ -10,6 +10,43 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## In-editor Spin-Out deck renders the 10-slide BASEPOINT editorial design (Task #15)
+
+- **What:** the in-app renderer for deck registry key `axal_spinout_demoday` was
+  rewritten to reproduce the shipped 10-slide BASEPOINT PPTX export 1:1 in the
+  editor, the picker thumbnail, and the preview modal — cover → problem →
+  validation → market → solution → roadmap → team → cap table → ask → deal,
+  editorial blue `#2C4BE0`. Replaces the prior 11-slide / 4-variant design
+  (product-demo + variant switcher dropped).
+- **Frontend:** `frontend/src/decks/templates/axal_spinout_demoday_app.tsx`
+  fully rewritten as a PPTX→CSS translation at `inch()=144px` / `pt()=2px`.
+  Exports `Deck_axal_spinout_demoday` (default), `SLIDES` (10 ids ending in
+  `review_the_deal`), `SAMPLE_DATA` (re-export), `FONT_PAIRING_OPTIONS`.
+  `hydrate()` rebuilds the nested deck shape from a flat dotted-key field dict
+  (`section.field` scalars, `section.field_json` structured viz), type-guards the
+  merge, ignores non-dotted/legacy keys, and degrades to the bundled BASEPOINT
+  `SAMPLE_DATA` — so the deck stays autofillable with the sample as the default.
+  The deal slide injects `useReviewDealSlot()`.
+- **Canonical data/engine:** `frontend/src/decks/spinout/deckData.js`
+  (THEME/fmt/SAMPLE_DATA/SAMPLE_NOTES) + `buildDeck.js` (PPTX engine) are the
+  design reference; `spinout_pptx_build.test.mjs` locks the 10-slide content
+  contract.
+- **Registry:** `frontend/src/decks/templates/index.ts` — `slide_count` 11→10,
+  description now `'10 slides · editorial · binds to Lab data'`.
+- **Sample wiring:** `frontend/src/decks/sample.ts` returns the nested
+  `SAMPLE_DATA` for the picker/preview; `hydrate()` treats it as "no flat keys"
+  and renders the sample.
+- **Tests:** `frontend/test/spinout_demoday_deck.test.mjs` rewritten for the new
+  design — 10-slide registry shape (old Axal-Signal / Product-Demo / people /
+  brand slides asserted absent), no-crash contract (populated / empty /
+  undefined / null), autofill default (`render({}) === render(SAMPLE_DATA)`),
+  dotted-key scalar + `_json` overrides binding onto the sample, and the
+  mergeShape type-guard. `npm run test:decks` (46 tests) + `npm run build` green;
+  drift gate clean apart from the known-flaky tamper-hash test.
+- **Out of scope (separate follow-up tasks):** Worker + dev-FastAPI autofill
+  wiring to emit the new flat dotted-key shape from live Lab data. Until then the
+  editor autofills from the bundled BASEPOINT sample.
+
 ## Pre-flight Spin-Out deck readiness checklist (Task #42)
 
 - **What:** the Spin-Out deck page now shows the live gaps[] checklist and
