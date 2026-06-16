@@ -10,6 +10,22 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Press Enter to send answers in the Personal Advisor, for every question type (Task #54)
+
+- **What:** in the Personal Advisor chat, pressing Enter only sent the message
+  for `inputKind === 'short'` (or no kind). For `long` answer and other kinds
+  (e.g. `choice` / `select` options), Enter inserted a newline instead, forcing
+  the user to click the Send button. The user wants Enter to always send.
+- **Frontend:** `frontend/src/components/advisor/PersonalAdvisor.jsx` — in the
+  `Composer` component's `onKey` handler, removed the `inputKind === 'short' ||
+  !inputKind` gate so Enter sends on all input kinds. Added `!e.isComposing` guard
+  so Enter during an IME composition (e.g. Chinese/Japanese) does not fire
+  send. Shift+Enter remains the newline shortcut (unchanged). The `e.preventDefault()`
+  prevents the textarea from inserting a newline.
+- **Out of scope (unchanged):** send/submit logic, validation/evidence gates,
+  mic transcription, option chips, composer layout.
+- **No worker change.** `npm run test:drift` unaffected.
+
 ## Personal Advisor card no longer leaves a blank gap below the task panel (Task #53)
 
 - **What:** in the embedded ("normal" card) Personal Advisor on the dashboard,

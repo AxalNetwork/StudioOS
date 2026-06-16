@@ -1221,7 +1221,7 @@ function MicButton({ state, onToggle, busy, disabled }) {
 
 function Composer({ input, setInput, onSend, onSkip, busy, disabled, skipAllowed, inputKind, options, onPickOption }) {
   const onKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey && (inputKind === 'short' || !inputKind)) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
       onSend();
     }

@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Press Enter to send your answer in the Personal Advisor
+
+You can now press Enter to send your answer in the Personal Advisor no matter what kind of question it is. Before, Enter only worked for short answers and left you stuck for long answers and other question types. Now it's the same everywhere: Enter sends, Shift+Enter still gives you a new line if you want one, and it won't jump the gun while you're composing in an Asian language input method.
+
+---
+
 ## Personal Advisor stays a tidy, fixed size as your chat grows
 
 The Personal Advisor card on your dashboard used to stretch taller and taller the more questions you answered, leaving a large blank gap below the task panel on the right. Now the chat keeps a steady, comfortable height and scrolls on its own — your latest answer and the reply box stay in view — while the task panel beside it lines up neatly with no empty space underneath.
