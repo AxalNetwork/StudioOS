@@ -198,7 +198,7 @@ function normalizeBullets(key, value) {
 // field.key — exactly the shape Deck_sequoia_classic / Deck_yc_seed
 // read. metric_grid cells get exploded by their slug-ified label so
 // "TAM" → tam_usd, "MoM growth" → mom_growth, etc.
-function buildTemplateData(deck) {
+function buildTemplateData(deck, spinoutFields = null) {
   const out = {};
   const slides = Array.isArray(deck?.slides) ? deck.slides : [];
   for (const s of slides) {
@@ -257,6 +257,18 @@ function buildTemplateData(deck) {
       payback: lookup('payback', 'payback_months', 'payback_period'),
     };
   }
+
+  // Task #55 — merge the live flat dotted-key field map (from the
+  // spinoutDeck API) into the output so the spinout template's hydrate()
+  // sees real Lab data. The dotted keys take priority over the underscore
+  // keys already built from the slide fields.
+  if (spinoutFields && typeof spinoutFields === 'object') {
+    for (const [key, val] of Object.entries(spinoutFields)) {
+      if (val === undefined || val === null) continue;
+      out[key] = val;
+    }
+  }
+
   return out;
 }
 
@@ -280,6 +292,12 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
   const [Template, setTemplate] = useState(null);
   const [templateMeta, setTemplateMeta] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Task #55 — live SpinoutDeckData fields from the API. When the deck is a
+  // spinout template, buildTemplateData() produces underscore keys (cover_eyebrow,
+  // problem_headline, …) but the template's hydrate() expects dotted paths
+  // (cover.thesis, problem.title, …). We fetch the flattened dotted-key field
+  // map from the spinoutDeck endpoint so the print view renders real data.
+  const [spinoutFields, setSpinoutFields] = useState(null);
   // Task #11 — in fullscreen we render ONE slide at a time. `currentIdx`
   // drives the translateY transform on the slide track; `slideCount`
   // is reported up by PrintStage after first render so the keyboard
@@ -321,6 +339,28 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
   }, [id, token, shareMode, exportMode]);
 
   const methodId = useMemo(() => detectMethodId(deck), [deck]);
+
+  // Task #55 — when the deck is a spinout template, fetch live flat fields
+  // from the spinoutDeck API so the print view renders real Lab data.
+  useEffect(() => {
+    if (methodId !== 'axal_spinout_demoday' || !deck?.project_id || shareMode || exportMode) {
+      setSpinoutFields(null);
+      return;
+    }
+    let alive = true;
+    api.spinoutDeck(deck.project_id)
+      .then((r) => {
+        if (!alive) return;
+        setSpinoutFields(r?.fields || null);
+      })
+      .catch((e) => {
+        if (alive) {
+          setSpinoutFields(null);
+          reportError('PitchDeckPrintPage:spinoutFields', e);
+        }
+      });
+    return () => { alive = false; };
+  }, [methodId, deck?.project_id, shareMode, exportMode]);
 
   // Task #6 — lazy-load the templates registry whenever we have a
   // method_id, regardless of which one. Only decks with no recognisable
@@ -504,7 +544,16 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
     return () => document.removeEventListener('keydown', onKey);
   }, [toggleFullscreen]);
 
-  const templateData = useMemo(() => (isAdvanced && deck ? buildTemplateData(deck) : null), [isAdvanced, deck]);
+  // Task #55 — for spinout templates, merge the live flat dotted-key fields
+  // into the templateData so hydrate() sees real Lab data. For other
+  // templates, the existing buildTemplateData() shape is sufficient.
+  const templateData = useMemo(() => {
+    if (!isAdvanced || !deck) return null;
+    if (methodId === 'axal_spinout_demoday' && spinoutFields) {
+      return buildTemplateData(deck, spinoutFields);
+    }
+    return buildTemplateData(deck);
+  }, [isAdvanced, deck, methodId, spinoutFields]);
 
   const exportPdf = async () => {
     if (!deck) return;

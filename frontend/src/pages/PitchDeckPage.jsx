@@ -58,6 +58,10 @@ export default function PitchDeckPage() {
   // Shape: { gaps: string[], draft: boolean, programDay: number } | null.
   const [deckPreview, setDeckPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  // Task #55 — live SpinoutDeckData flat dotted-key field map. Fetched when a
+  // spinout deck is selected so the editor's slide preview renders real Lab
+  // data instead of SAMPLE_DATA placeholders.
+  const [spinoutFields, setSpinoutFields] = useState(null);
   const [shareUrl, setShareUrl] = useState('');
   const [engagement, setEngagement] = useState(null);
   const [dragIdx, setDragIdx] = useState(null);
@@ -137,6 +141,28 @@ export default function PitchDeckPage() {
       } catch (e) { setError(e.message || 'Failed to load decks'); reportError(e); }
     })();
   }, [projectId]);
+
+  // Task #55 — when the active deck is a spinout template, fetch live
+  // dotted-key fields so the editor slide preview renders real Lab data.
+  useEffect(() => {
+    if (!isSpinoutDeck || !projectId) {
+      setSpinoutFields(null);
+      return;
+    }
+    let alive = true;
+    api.spinoutDeck(projectId)
+      .then((r) => {
+        if (!alive) return;
+        setSpinoutFields(r?.fields || null);
+      })
+      .catch((e) => {
+        if (alive) {
+          setSpinoutFields(null);
+          reportError('PitchDeckPage:spinoutFields', e);
+        }
+      });
+    return () => { alive = false; };
+  }, [isSpinoutDeck, projectId]);
 
   // Task #17 — Auto-apply a template from the URL once everything is
   // ready. Fires when (a) we know which methods exist, (b) the
