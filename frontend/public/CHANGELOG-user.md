@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Sign in or register a different account, even while you're already signed in
+
+If you were already signed in and opened the sign-in or create-account page, the app used to send you straight back to your dashboard — so you could never start a different account. Now those pages sign you out of your current session first and show the form, so you can register or sign in as someone else cleanly. After you create and verify a new account, you land in that account's own experience, not your previous one.
+
+---
+
 ## Your Spin-Out deck has a fresh new look
 
 The Spin-Out demo-day deck has been redesigned with a cleaner, bolder editorial style in Axal blue. It's now ten focused slides — cover, the problem, your validation, the market, your solution, the roadmap, your team, the cap table, your ask, and the deal — and every slide still comes filled in with sample content and stays fully editable. Open your deck to see the new design in the editor, the template picker, and the preview.

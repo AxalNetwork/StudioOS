@@ -10,6 +10,35 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Signed-in users can reach /register and /login to start a different account (Task #49)
+
+- **What:** visiting `/register` or `/login` while a session already exists used
+  to bounce straight to `/dashboard` (admin), so a signed-in admin could never
+  register or sign in as a different account. Now those screens render the form
+  and first tear down the prior session.
+- **Frontend:** `frontend/src/App.jsx` — extracted `clearSession()` from
+  `logout()`: it purges the cached `user`, Bearer `token`, `viewMode`, the
+  impersonation handles (`realUser`/`realToken`) and `sessionStorage` FIRST
+  (synchronously) and then best-effort `POST /auth/logout` (5s race) to revoke
+  the httpOnly auth/CSRF cookies + the `user_sessions` row. `logout()` now calls
+  `clearSession()` then redirects to `/`. New `AuthScreen` wrapper guards
+  `/register` and `/login`: on mount, if a `user` is present it calls
+  `clearSession()` once (showing a brief "Signing you out…" notice) and renders
+  the form as soon as `setUser(null)` lands.
+- **Why the purge runs before the server call:** `useAuthSync.refresh()` keys off
+  the cached `user`. `AuthScreen` is a descendant of `AuthProvider`, so its
+  effect fires first and clears `user` before the throttled `/me` re-sync runs —
+  closing the race where an in-flight `/me` could re-hydrate the stale admin
+  session. The httpOnly cookie is untouched by clearing localStorage, so the
+  server-side revoke still authenticates over the cookie.
+- **Post-registration landing:** unchanged — after verify+login the new account
+  hard-navs to `/onboarding/chat`; the worker already seeds non-admin signups as
+  `role='partner'` with the chat gate, and `viewMode` is only consulted when the
+  real role is `admin` (`RoleGuard`/`ProtectedLayout`), so a fresh non-admin user
+  never sees the admin dashboard or sidebar. Admin's direct sign-in still reaches
+  the admin surface.
+- **No worker change.** No new API surface; `npm run test:drift` unaffected.
+
 ## In-editor Spin-Out deck renders the 10-slide BASEPOINT editorial design (Task #15)
 
 - **What:** the in-app renderer for deck registry key `axal_spinout_demoday` was

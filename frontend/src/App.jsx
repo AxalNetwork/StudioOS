@@ -918,6 +918,31 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
   return children;
 }
 
+// Task #49 — wrapper for the public auth screens (/register, /login). When an
+// already-signed-in user (typically an admin) lands here, treat it as intent
+// to use a different account: tear down the prior session instead of bouncing
+// them to the admin dashboard. clearSession() runs ONCE on mount and, because
+// it setUser(null)s synchronously, `user` flips to null and the form renders —
+// the server-side cookie/session revoke completes in the background. A signed-
+// out visitor renders the form immediately with no teardown.
+function AuthScreen({ user, clearSession, children }) {
+  const startedRef = React.useRef(false);
+  useEffect(() => {
+    if (user && !startedRef.current) {
+      startedRef.current = true;
+      clearSession();
+    }
+  }, [user, clearSession]);
+  if (user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen text-sm text-gray-500 dark:text-gray-400">
+        Signing you out of your previous session…
+      </div>
+    );
+  }
+  return children;
+}
+
 function AppInner() {
   // T20 — `user` is now sourced from AuthContext (re-synced on every route
   // change, throttled to once per 5 min). The legacy component-level
@@ -976,19 +1001,18 @@ function AppInner() {
     refresh({ force: true });
   };
 
-  const logout = async () => {
-    // T6 — call the server first so the httpOnly auth cookie is cleared and
-    // the user_sessions row is revoked. Failures are non-fatal: the local
-    // cleanup below still runs, so the user is always signed out client-side
-    // even if the network call dies. Awaiting up to ~5s avoids the race
-    // where the redirect below cancels an in-flight POST and leaves the
-    // cookie set on the browser.
-    try {
-      await Promise.race([
-        api.logout(),
-        new Promise((resolve) => setTimeout(resolve, 5000)),
-      ]);
-    } catch (e) { /* logout must never block the UI sign-out */ }
+  // Task #49 — full session teardown WITHOUT a redirect. Shared by logout()
+  // (which redirects afterwards) and the AuthScreen wrapper on /register and
+  // /login (which renders the form afterwards so an already-signed-in user —
+  // e.g. an admin — can start a different account instead of being bounced
+  // to the admin dashboard).
+  //
+  // Order matters: purge client state FIRST (synchronously) so a concurrent
+  // useAuthSync refresh() — which keys off the cached `user` — gates out and
+  // can't re-hydrate the stale session from /me while we're tearing it down.
+  // The httpOnly auth cookie is untouched by clearing localStorage, so the
+  // server-side revoke below still runs over the cookie.
+  const clearSession = useCallback(async () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('realUser');
@@ -998,8 +1022,21 @@ function AppInner() {
     try { sessionStorage.clear(); } catch (e) { /* ignore */ }
     setUser(null);
     setRealUser(null);
+    // T6 — revoke the server-side session + clear the httpOnly auth/CSRF
+    // cookies. Failures are non-fatal: the client is already signed out
+    // above. Time-boxed to ~5s so a dead network can't hang sign-out.
+    try {
+      await Promise.race([
+        api.logout(),
+        new Promise((resolve) => setTimeout(resolve, 5000)),
+      ]);
+    } catch (e) { /* logout must never block the UI sign-out */ }
+  }, [setUser]);
+
+  const logout = useCallback(async () => {
+    await clearSession();
     window.location.href = '/';
-  };
+  }, [clearSession]);
 
   // Task #8 — Universal referral attribution. Capture a `?ref=CODE` from ANY
   // entry point (not just /register) into the `axal_ref` cookie so a later
@@ -1053,8 +1090,8 @@ function AppInner() {
       <Route path="/" element={user ? <Navigate to={ROLE_DEFAULT_PATH[user.role] || '/dashboard'} replace /> : <LandingPage />} />
       <Route path="/spinout-lab" element={<SpinoutLabPage />} />
       <Route path="/pricing/investor" element={<InvestorPricingPage />} />
-      <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
-      <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
+      <Route path="/register" element={<AuthScreen user={user} clearSession={clearSession}><RegisterPage /></AuthScreen>} />
+      <Route path="/login" element={<AuthScreen user={user} clearSession={clearSession}><LoginPage /></AuthScreen>} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       {/* Task #50 — Lost-TOTP recovery. Catch-all subroute so /auth/recover,
           /auth/recover/email and /auth/recover/attest all land here. */}
