@@ -5,9 +5,15 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your Spin-Out cover chart now shows real numbers in the editor preview, shared links, and PDFs
+
+The "validation signal" chart on your Spin-Out Demo Day cover now shows your real logged discovery interviews everywhere — not just in the template picker. You now see a live preview of the cover right in the deck editor as you work, and anyone you share a link with (or any PDF you export) sees the same real running total instead of the sample curve. If you haven't logged any interviews yet, the chart honestly shows zero.
+
+---
+
 ## Your Spin-Out Demo Day deck's cover chart now shows your real discovery interviews
 
-The "validation signal" chart on the cover of your Spin-Out Demo Day deck — the one captioned "Cumulative discovery interviews" — now reflects the interviews you've actually logged, shown right in the deck builder's template preview. The big number in the corner is your true running total, and it updates automatically as you log more interviews and reopen the deck. If you haven't logged any interviews yet, the chart honestly shows a flat line at zero instead of a sample curve. Your exported PowerPoint, PDF, and printed or shared versions show the same live numbers.
+The "validation signal" chart on the cover of your Spin-Out Demo Day deck — the one captioned "Cumulative discovery interviews" — now reflects the interviews you've actually logged, shown right in the deck builder's template preview. The big number in the corner is your true running total, and it updates automatically as you log more interviews and reopen the deck. If you haven't logged any interviews yet, the chart honestly shows a flat line at zero instead of a sample curve.
 
 ---
 

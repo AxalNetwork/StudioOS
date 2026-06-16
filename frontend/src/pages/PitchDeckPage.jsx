@@ -12,6 +12,7 @@ import { api } from '../lib/api';
 import { deckReadinessState } from '../lib/deckReadiness';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 import { useAuth } from '../hooks/useAuthSync';
+import { useSpinoutDeckFields } from '../hooks/useSpinoutDeckFields';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
 
@@ -57,11 +58,6 @@ export default function PitchDeckPage() {
   // PowerPoint export so the panel doubles as post-export confirmation.
   // Shape: { gaps: string[], draft: boolean, programDay: number } | null.
   const [deckPreview, setDeckPreview] = useState(null);
-  // Task #65 — live cover-chart data for the template-picker preview. Holds the
-  // founder's assembled Spin-Out deck fields (flat dotted-key map incl
-  // cover.signalX/Y) so the picker thumbnail + preview modal render the REAL
-  // cumulative discovery-interview curve instead of the static SAMPLE.
-  const [spinoutPreviewFields, setSpinoutPreviewFields] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const [engagement, setEngagement] = useState(null);
@@ -200,6 +196,17 @@ export default function PitchDeckPage() {
     [deck, slides],
   );
 
+  // Task #28/#65 — live Spin-Out deck fields (flat dotted-key map incl
+  // cover.signalX/Y) sourced from the founder's REAL Lab data. Powers BOTH the
+  // in-builder cover preview AND the template-picker thumbnail/preview so they
+  // render the real cumulative discovery-interview curve instead of the bundled
+  // SAMPLE. Fetched once per project; a 402 (paywall) falls back to the sample.
+  // Returns the FULL field map so Task #29's slide-2 viz reuses it unchanged.
+  const { fields: spinoutFields } = useSpinoutDeckFields({
+    projectId,
+    enabled: isSpinoutDeck && !!projectId,
+  });
+
   // Task #42 — pre-flight readiness. As soon as a Spin-Out deck loads, pull
   // the live gaps[] + draft/program_day (no .pptx built) so the founder sees
   // what's still empty BEFORE exporting. Re-runs when the project/deck changes;
@@ -221,21 +228,6 @@ export default function PitchDeckPage() {
       .finally(() => { if (alive) setPreviewLoading(false); });
     return () => { alive = false; };
   }, [isSpinoutDeck, projectId]);
-
-  // Task #65 — when the template picker is open for a Spin-Out deck, fetch the
-  // founder's assembled deck fields so the picker thumbnail + preview modal can
-  // render the REAL cover validation-signal chart (cumulative discovery
-  // interviews over the 30-day sprint) instead of the bundled SAMPLE. Re-runs
-  // each time the picker reopens, so newly logged interviews show up
-  // automatically. A 402 (paywall) or any error falls back to the sample.
-  useEffect(() => {
-    if (!pickerOpen || !isSpinoutDeck || !projectId) { setSpinoutPreviewFields(null); return; }
-    let alive = true;
-    api.spinoutDeck(projectId)
-      .then((r) => { if (alive) setSpinoutPreviewFields(r?.fields || null); })
-      .catch((e) => { if (alive) { setSpinoutPreviewFields(null); if (e?.status !== 402) reportError(e); } });
-    return () => { alive = false; };
-  }, [pickerOpen, isSpinoutDeck, projectId]);
 
   // Drives the readiness panel. Honors the backend `draft` flag (not just
   // gaps.length) so a no-gaps-but-mid-program deck never reads as "ready".
@@ -717,7 +709,22 @@ export default function PitchDeckPage() {
             </div>
 
             {/* CENTER — slide editor */}
-            <div className="col-span-1 lg:col-span-6">
+            <div className="col-span-1 lg:col-span-6 space-y-3">
+              {/* Task #28 — live cover preview for the Spin-Out deck. Shows the
+                  founder's REAL "Validation Signal" curve (cumulative logged
+                  discovery interviews) so the builder is no longer blind to it;
+                  honest zero-baseline until the first interview is logged. */}
+              {isSpinoutDeck && (
+                <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
+                  <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2 flex items-center gap-1">
+                    <Eye className="w-3 h-3" /> Cover preview — live validation signal
+                  </div>
+                  <SpinoutCoverPreview fields={spinoutFields} />
+                  <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-2">
+                    Cumulative discovery interviews logged across your 30-day sprint — updates as you log more. Empty until your first interview.
+                  </p>
+                </div>
+              )}
               <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-6 min-h-[60vh]" data-card>
                 <div className="flex items-center justify-between mb-3 text-xs text-gray-500 dark:text-slate-400">
                   <span>Slide {activeIdx + 1} / {slides.length}</span>
@@ -883,7 +890,7 @@ export default function PitchDeckPage() {
           methods={methods}
           premiumIds={premiumIds}
           recommendation={recommendation}
-          spinoutFields={spinoutPreviewFields}
+          spinoutFields={spinoutFields}
           onClose={() => setPickerOpen(false)}
           onPick={applyMethod}
           busy={busy}
@@ -1225,6 +1232,52 @@ function loadThumbnailModule() {
     });
   }
   return _thumbnailModulePromise;
+}
+
+// =====================================================================
+// Task #28 — in-builder live cover preview for the Spin-Out deck. A 16:9
+// <Thumbnail> renders the template scaled-to-fit, which clips to exactly
+// the first slide (the cover), so the founder sees their REAL "Validation
+// Signal" area chart — cumulative logged discovery interviews — while
+// editing, instead of being blind to it (the center column is a form). A
+// founder with zero interviews sees the honest zero-baseline curve. Lazy-
+// loads the same Thumbnail module + templates registry the picker uses.
+// =====================================================================
+function SpinoutCoverPreview({ fields }) {
+  const [Thumb, setThumb] = useState(null);
+  const [tplMeta, setTplMeta] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    loadThumbnailModule().then((m) => {
+      if (!alive) return;
+      if (m?.Thumbnail) setThumb(() => m.Thumbnail);
+      else setFailed(true);
+    });
+    loadTemplates().then((t) => {
+      if (!alive) return;
+      const meta = t?.record?.axal_spinout_demoday
+        || (t?.list || []).find((x) => x?.key === 'axal_spinout_demoday')
+        || null;
+      if (meta) setTplMeta(meta);
+      else setFailed(true);
+    });
+    return () => { alive = false; };
+  }, []);
+
+  if (failed) return null;
+  if (!Thumb || !tplMeta) {
+    return (
+      <div
+        className="w-full rounded bg-gray-100 dark:bg-slate-800 flex items-center justify-center"
+        style={{ aspectRatio: '16 / 9' }}
+      >
+        <Loader2 className="w-5 h-5 animate-spin text-violet-500" />
+      </div>
+    );
+  }
+  return <Thumb template={tplMeta} data={fields} />;
 }
 
 // =====================================================================

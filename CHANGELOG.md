@@ -10,6 +10,14 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Spin-Out cover validation-signal chart shows real data in the in-builder editor preview, shared links, and PDF export (Task #28)
+
+- **What:** Task #65 rendered the founder's REAL cumulative discovery-interview series in the template-PICKER preview only. Two surfaces still showed the bundled SAMPLE curve: the deck builder's center column (a slide *form* with no live render) and the unauthenticated share (`/deck/share/:token`) + Browser-Rendering PDF export (`/deck/print-export/:token`) paths. This closes both gaps, so the cover's "VALIDATION SIGNAL · 30-DAY SPRINT" area chart shows real numbers everywhere — honest zero baseline when no interviews are logged.
+- **Reusable hook — `frontend/src/hooks/useSpinoutDeckFields.js` (new):** `{ projectId, enabled } → { fields, loading, error }`. Fetches `api.spinoutDeck(projectId).fields` (the flat dotted-key map) once per project; a 402 (paywall) is non-fatal (`fields=null` → template falls back to sample). Returns the FULL field map (not cover-only) so Task #29's slide-2 viz reuses it unchanged.
+- **In-builder live cover preview — `frontend/src/pages/PitchDeckPage.jsx`:** New `SpinoutCoverPreview` card above the slide editor (spinout decks only) renders the cover through the existing `<Thumbnail>` (16:9 box → clips to slide 1) with `data={fields}`. The page now drives BOTH this preview and the picker from the shared hook (`enabled: isSpinoutDeck && !!projectId`), replacing the old `pickerOpen`-gated `spinoutPreviewFields` state + effect.
+- **Worker server-bake — `cloudflare-worker/src/routes/decks.ts`:** New `bakeSpinoutFields(env,row)` resolves the PROJECT OWNER's user id (`projects.founder_id → users`, never the viewer — mirrors `POST /projects/:id/spinout-deck`), calls `assembleSpinoutDeckData()`, and attaches `spinout_fields` to the `/share/:token` and `/print-export/:token` JSON. Any failure → `null` (viewer degrades to sample, never errors). Token access boundary unchanged.
+- **Print page merge — `frontend/src/pages/PitchDeckPrintPage.jsx`:** In share/export mode `spinoutFields` now comes from the server-attached `deck.spinout_fields` (those viewers can't call the authed endpoint); `buildTemplateData()` merges the dotted keys as before. The authenticated print path (#55) and the PPTX export are unchanged.
+
 ## Spin-Out Demo Day cover chart renders the founder's real discovery interviews in the builder preview (Task #65)
 
 - **What:** The Spin-Out Demo Day deck's Slide 1 (Cover) "VALIDATION SIGNAL · 30-DAY SPRINT" area chart

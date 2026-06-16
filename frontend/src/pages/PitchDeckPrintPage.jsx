@@ -342,10 +342,22 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
 
   // Task #55 — when the deck is a spinout template, fetch live flat fields
   // from the spinoutDeck API so the print view renders real Lab data.
+  // Task #28 — share + PDF-export viewers are unauthenticated and CANNOT call
+  // the authed spinoutDeck endpoint, so the worker server-bakes the same flat
+  // dotted-key field map onto the read response (deck.spinout_fields). Use it
+  // directly in those modes; the authenticated viewer still fetches live.
   useEffect(() => {
-    if (methodId !== 'axal_spinout_demoday' || !deck?.project_id || shareMode || exportMode) {
+    if (methodId !== 'axal_spinout_demoday') {
       setSpinoutFields(null);
-      return;
+      return undefined;
+    }
+    if (shareMode || exportMode) {
+      setSpinoutFields(deck?.spinout_fields || null);
+      return undefined;
+    }
+    if (!deck?.project_id) {
+      setSpinoutFields(null);
+      return undefined;
     }
     let alive = true;
     api.spinoutDeck(deck.project_id)
@@ -360,7 +372,7 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
         }
       });
     return () => { alive = false; };
-  }, [methodId, deck?.project_id, shareMode, exportMode]);
+  }, [methodId, deck?.project_id, deck?.spinout_fields, shareMode, exportMode]);
 
   // Task #6 — lazy-load the templates registry whenever we have a
   // method_id, regardless of which one. Only decks with no recognisable

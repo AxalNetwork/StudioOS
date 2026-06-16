@@ -18,6 +18,7 @@ import { autofillDeck, toEditorSlides } from '../services/decks/autofill';
 // because the deck binds to Lab tables (interviews, milestones, OKRs)
 // that don't fit the project/financials/captable source shape.
 import { fillAxalSpinoutDemoDay, buildAxalSpinoutDemoDaySlides, buildAxalSpinoutCoverage } from '../services/decks/axalSpinoutDemoDay';
+import { assembleSpinoutDeckData } from '../services/decks/spinoutDeckData';
 import { recommendMethod, listOverrides, setOverride, deleteOverride } from '../services/decks/recommend';
 import { getDeckBrand, setStudioWatermark, ensureMethodAllowed, fetchLandingPageForProject, applyBrandKitToSlides } from '../services/decks/branding';
 import { renderDeckHTML, type RenderableDeck } from '../services/decks/render';
@@ -542,6 +543,43 @@ async function getDeckRow(env: Env, id: number): Promise<any> {
 
 // ---------------------------------------------------------------------
 // Task #2 — public, HMAC-token-gated deck payload for headless export.
+// ---------------------------------------------------------------------
+// Task #28 — server-bake the founder's REAL Spin-Out cover signal (and
+// the rest of the flat dotted-key field map) onto the unauthenticated
+// share / print-export read responses. Those viewers can't call the
+// authed /projects/:id/spinout-deck endpoint, so without this the print
+// page falls back to the template SAMPLE (6→42). We source strictly from
+// the PROJECT OWNER's Lab data (resolved via projects.founder_id → users),
+// never the viewer, mirroring POST /projects/:id/spinout-deck. Any failure
+// returns null so the viewer degrades to the sample instead of erroring.
+// ---------------------------------------------------------------------
+async function bakeSpinoutFields(env: Env, row: any): Promise<Record<string, string> | null> {
+  if (extractDeckMethodId(row) !== 'axal_spinout_demoday') return null;
+  const projectId = Number(row?.project_id);
+  if (!Number.isFinite(projectId)) return null;
+  let ownerUserId: number | null = null;
+  try {
+    const proj = await env.DB.prepare('SELECT founder_id FROM projects WHERE id = ?').bind(projectId).first<any>();
+    if (proj?.founder_id != null) {
+      const owner = await env.DB.prepare(
+        'SELECT id FROM users WHERE founder_id = ? ORDER BY id ASC LIMIT 1',
+      ).bind(proj.founder_id).first<any>();
+      if (owner?.id != null) ownerUserId = Number(owner.id);
+    }
+  } catch (e) {
+    console.error('[decks] spinout owner resolve failed:', (e as Error).message);
+    return null;
+  }
+  if (ownerUserId == null) return null;
+  try {
+    const bundle = await assembleSpinoutDeckData(env, ownerUserId, projectId);
+    return bundle.fields || null;
+  } catch (e) {
+    console.error('[decks] spinout fields bake failed:', (e as Error).message);
+    return null;
+  }
+}
+
 // Drives the SPA route /deck/print-export/:token from inside a
 // Cloudflare Browser Rendering session (which carries no auth cookies).
 // Returns the same JSON shape as deckGet() so the print page's existing
@@ -565,6 +603,7 @@ decks.get('/print-export/:token', async (c) => {
     method_id: methodId,
     project_id: Number(row.project_id) || null,
     project_name: projectName,
+    spinout_fields: await bakeSpinoutFields(c.env, row),
   });
 });
 
@@ -650,6 +689,7 @@ decks.get('/share/:token', async (c) => {
     method_id: methodId,
     project_id: Number(row.project_id) || null,
     project_name: projectName,
+    spinout_fields: await bakeSpinoutFields(c.env, row),
   });
 });
 
