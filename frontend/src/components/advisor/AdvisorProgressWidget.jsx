@@ -205,7 +205,7 @@ function ItemCard({
     <div
       data-qid={item.id || item.question_id}
       data-card-anim
-      className={`group relative p-2 rounded-lg border transition-all duration-300 ${
+      className={`p-2 rounded-lg border transition-all duration-300 ${
         locked
           ? 'border-amber-200 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/10'
           : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-violet-300 dark:hover:border-violet-700'
@@ -246,20 +246,7 @@ function ItemCard({
         </div>
       </button>
 
-      {/* Hover explainer + Learn more link */}
-      {(explainer || docAnchor) && (
-        <div className="hidden group-hover:block absolute z-20 left-0 right-0 top-full mt-1 p-2 rounded-md bg-gray-900 text-white text-[11px] shadow-lg dark:bg-gray-100 dark:text-gray-900">
-          {explainer && <div className="mb-1 leading-snug">{explainer}</div>}
-          {docAnchor && (
-            <Link
-              to={`/docs#${docAnchor}`}
-              className="inline-flex items-center gap-1 text-violet-300 dark:text-violet-700 hover:underline"
-            >
-              Learn more <ArrowRight size={10} />
-            </Link>
-          )}
-        </div>
-      )}
+      {/* Hover explainer removed — kept as title attr on the button above */}
 
       {/* Locked → Upgrade CTA */}
       {locked && (
