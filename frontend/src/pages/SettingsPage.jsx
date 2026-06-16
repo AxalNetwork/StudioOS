@@ -135,7 +135,7 @@ const SECTIONS = [
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'privacy', label: 'Privacy', icon: Lock },
   { id: 'integrations', label: 'Integrations', icon: Plug },
-  { id: 'billing', label: 'Billing', icon: CreditCard, roles: ['founder', 'investor'] },
+  { id: 'billing', label: 'Billing', icon: CreditCard },
   { id: 'appearance', label: 'Appearance', icon: Palette },
 ];
 
@@ -3214,10 +3214,37 @@ function IntegrationsTab({ flash }) {
 // Task #7 (W-2) — Investors hit the same tab but see InvestorBillingPanel
 // (Pro / Institutional plans, ROI quotas, seat management for institutional).
 function BillingTab({ data, flash }) {
-  if (String(data?.role) === 'investor') {
+  const role = String(data?.role || '').toLowerCase();
+  if (role === 'investor') {
     return <InvestorBillingPanel data={data} flash={flash} />;
   }
-  return <FounderBillingPanel data={data} flash={flash} />;
+  if (role === 'founder') {
+    return <FounderBillingPanel data={data} flash={flash} />;
+  }
+  // Task #39 — every signed-in role can reach Billing. Non-subscription roles
+  // (admin, partner, mentor, …) have no founder/investor plan ladder, but they
+  // can still hold saved cards and one-off purchase receipts on the same
+  // general Stripe customer used for à la carte buys. Show those without the
+  // founder plan-upgrade UI.
+  return <GenericBillingPanel flash={flash} />;
+}
+
+// Task #39 — billing surface for roles without a subscription plan ladder.
+// Reuses the in-app BillingDashboard (saved cards, any subscription, invoices,
+// and one-off payment history) in its "general" variant, which swaps the
+// subscription-centric empty-state copy for neutral wording. `scope="founder"`
+// reads the user's general `stripe_customer_id` — the same customer that backs
+// one-off purchases — so receipts for incorporation, expert sessions, and
+// other à la carte buys appear here.
+function GenericBillingPanel({ flash }) {
+  return (
+    <Card title="Billing" description="Your saved cards, payments, and receipts.">
+      <BillingDashboard scope="founder" variant="general" flash={flash} />
+      <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+        Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
+      </div>
+    </Card>
+  );
 }
 
 function FounderBillingPanel({ data, flash }) {

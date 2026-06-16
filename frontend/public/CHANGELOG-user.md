@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Billing is now in Settings for everyone — with receipts for one-off purchases
+
+The **Settings → Billing** tab is now available to everyone, not just founders and investors. Whatever your role, you'll find your saved cards, any subscription you have, your invoices, and a new **Payment history** list of one-off purchases — like company incorporation, feature unlocks, and expert sessions — each with a link to its receipt. If you've never bought anything, you'll simply see a friendly "no billing activity yet" note.
+
+---
+
 ## Signing out no longer flashes an error on the way to the login screen
 
 When you signed out, you might have briefly seen a red "this page hit an unexpected error" message before the sign-in screen appeared — usually right after we'd released a new version while your tab was open. Signing out now takes you straight to the sign-in screen cleanly. And if the app ever does need to refresh itself to pick up a new version, you'll see a calm "Updating to the latest version…" note for a moment instead of an error.

@@ -35,7 +35,7 @@ const fmtMoney = (amt, cur) =>
 
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString() : '—');
 
-export default function BillingDashboard({ scope = 'founder', flash, onChanged }) {
+export default function BillingDashboard({ scope = 'founder', variant = 'subscriber', flash, onChanged }) {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState([]);
@@ -178,7 +178,9 @@ export default function BillingDashboard({ scope = 'founder', flash, onChanged }
   if (overview && overview.has_customer === false) {
     return (
       <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-sm text-gray-500 dark:text-gray-400">
-        No active billing account yet. Subscribe to a plan to manage it here.
+        {variant === 'general'
+          ? 'No billing activity yet. When you make a purchase, your saved cards and receipts will appear here.'
+          : 'No active billing account yet. Subscribe to a plan to manage it here.'}
       </div>
     );
   }
@@ -194,7 +196,9 @@ export default function BillingDashboard({ scope = 'founder', flash, onChanged }
 
   return (
     <div className="space-y-5">
-      {/* Active subscriptions */}
+      {/* Active subscriptions — hidden for the general (non-subscription) variant
+          when there are none, so those roles get a clean cards/receipts view. */}
+      {(variant !== 'general' || subs.length > 0) && (
       <section className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Active subscriptions</h4>
         {subs.length === 0 ? (
@@ -260,6 +264,7 @@ export default function BillingDashboard({ scope = 'founder', flash, onChanged }
           </div>
         )}
       </section>
+      )}
 
       {/* Proration preview modal */}
       {preview && (
@@ -304,7 +309,11 @@ export default function BillingDashboard({ scope = 'founder', flash, onChanged }
           </button>
         </div>
         {(overview?.payment_methods || []).length === 0 ? (
-          <div className="text-sm text-gray-500 dark:text-gray-400">No card on file. Add one to keep your subscription active.</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            {variant === 'general'
+              ? 'No card on file. Add one to use for your purchases.'
+              : 'No card on file. Add one to keep your subscription active.'}
+          </div>
         ) : (
           <div className="space-y-2">
             {overview.payment_methods.map((pm) => (
@@ -395,6 +404,38 @@ export default function BillingDashboard({ scope = 'founder', flash, onChanged }
           </div>
         )}
       </section>
+
+      {/* Payment history — one-off (non-invoice) purchases such as incorporation,
+          à la carte unlocks, and expert sessions. These are Stripe charges (not
+          invoices), so they never appear in "Recent invoices"; each links to its
+          Stripe-hosted receipt. Only rendered when there are any. */}
+      {(overview?.charges || []).length > 0 && (
+        <section className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Payment history</h4>
+          <div className="border border-gray-100 dark:border-gray-800 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
+            {overview.charges.map((ch, idx) => (
+              <div key={ch.id || idx} className="flex items-center justify-between px-3 py-2 text-sm gap-3 flex-wrap">
+                <div className="text-gray-700 dark:text-gray-200">
+                  {fmtDate(ch.created)}
+                  {ch.description && <span className="text-gray-400 dark:text-gray-500"> · {ch.description}</span>}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-900 dark:text-gray-100">{fmtMoney(ch.amount, ch.currency)}</span>
+                  {ch.refunded
+                    ? <span className="text-xs text-amber-600 dark:text-amber-400">Refunded</span>
+                    : <span className="text-xs capitalize text-gray-500 dark:text-gray-400">{ch.status || 'paid'}</span>}
+                  {ch.receipt_url && (
+                    <a href={ch.receipt_url} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-violet-700 dark:text-violet-300 hover:underline text-xs">
+                      <FileText className="w-3.5 h-3.5" /> Receipt
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

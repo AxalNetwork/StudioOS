@@ -600,6 +600,20 @@ interface StripeInvoice {
   invoice_pdf?: string | null;
   lines?: { data: StripeInvoiceLine[] };
 }
+interface StripeCharge {
+  id: string;
+  amount: number;
+  amount_captured?: number;
+  amount_refunded?: number;
+  currency: string;
+  paid?: boolean;
+  refunded?: boolean;
+  status?: string | null;
+  description?: string | null;
+  receipt_url?: string | null;
+  invoice?: string | null;
+  created?: number;
+}
 
 function subPeriodEnd(sub: StripeSubscription): string | null {
   const unix = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? null;
@@ -638,6 +652,25 @@ function normInvoice(inv: StripeInvoice) {
     period_end: inv.period_end ? new Date(inv.period_end * 1000).toISOString() : null,
     hosted_invoice_url: inv.hosted_invoice_url ?? null,
     invoice_pdf: inv.invoice_pdf ?? null,
+  };
+}
+
+// Normalise a one-off (non-invoice) Stripe charge for the dashboard's
+// "Payment history" section. `amount` prefers the captured amount; the
+// Stripe-hosted `receipt_url` is the user-facing receipt for à la carte buys
+// (incorporation, feature unlocks, expert sessions) that never produce an
+// invoice/PDF.
+function normCharge(ch: StripeCharge) {
+  return {
+    id: ch.id,
+    amount: ch.amount_captured ?? ch.amount ?? 0,
+    amount_refunded: ch.amount_refunded ?? 0,
+    currency: ch.currency,
+    status: ch.status ?? (ch.paid ? 'paid' : null),
+    refunded: !!ch.refunded,
+    description: ch.description ?? null,
+    receipt_url: ch.receipt_url ?? null,
+    created: ch.created ? new Date(ch.created * 1000).toISOString() : null,
   };
 }
 
@@ -688,10 +721,17 @@ billing.get('/overview', async (c) => {
   const customer = resolveScopeCustomer(user, scope);
   const base = { scope, has_customer: !!customer, stripe_configured: !!c.env.STRIPE_SECRET_KEY };
   if (!customer || !c.env.STRIPE_SECRET_KEY) {
-    return c.json({ ...base, subscriptions: [], payment_methods: [], upcoming_invoice: null, invoices: [] });
+    return c.json({ ...base, subscriptions: [], payment_methods: [], upcoming_invoice: null, invoices: [], charges: [] });
   }
   try {
-    const [subsRes, pmRes, customerObj, invoicesRes] = await Promise.all([
+    // One-off (à la carte) purchases always live on the general payments
+    // customer — `users.stripe_customer_id`, the id `ensurePaymentsCustomer`
+    // creates — even when this dashboard is showing a different subscription
+    // scope (e.g. the investor scope reads `investor_stripe_customer_id`). Pull
+    // the charge history from the general customer so every role's "Payment
+    // history" reflects their actual buys, not just charges on the scope customer.
+    const chargesCustomer = user.stripe_customer_id ?? null;
+    const [subsRes, pmRes, customerObj, invoicesRes, chargesRes] = await Promise.all([
       stripeCall<StripeList<StripeSubscription>>(c.env, '/subscriptions', {
         customer, status: 'all', limit: '10', 'expand[0]': 'data.items.data.price',
       }, { method: 'GET' }),
@@ -702,6 +742,15 @@ billing.get('/overview', async (c) => {
       stripeCall<StripeList<StripeInvoice>>(c.env, '/invoices', {
         customer, limit: '12',
       }, { method: 'GET' }),
+      // Payment history is an additive enrichment, not core billing data. If the
+      // charge list specifically fails (e.g. a restricted key without charge:read),
+      // degrade to an empty history rather than 502-ing the whole overview and
+      // taking subscriptions/invoices/cards down with it.
+      chargesCustomer
+        ? stripeCall<StripeList<StripeCharge>>(c.env, '/charges', {
+            customer: chargesCustomer, limit: '20',
+          }, { method: 'GET' }).catch(() => ({ data: [] } as StripeList<StripeCharge>))
+        : Promise.resolve({ data: [] } as StripeList<StripeCharge>),
     ]);
     // Upcoming invoice 404s when nothing is scheduled — treat as "none".
     let upcoming: StripeInvoice | null = null;
@@ -738,6 +787,13 @@ billing.get('/overview', async (c) => {
           }
         : null,
       invoices: (invoicesRes.data ?? []).map(normInvoice),
+      // One-off (non-invoice) purchases for the "Payment history" section.
+      // Charges created by a subscription/invoice carry `invoice` and already
+      // surface under "Recent invoices", so we drop them to avoid duplication
+      // and only show paid à la carte buys (incorporation, unlocks, sessions).
+      charges: (chargesRes.data ?? [])
+        .filter((ch) => ch.paid && !ch.invoice)
+        .map(normCharge),
     });
   } catch (e) {
     return c.json({ error: 'overview_failed', detail: (e as Error).message }, 502);
