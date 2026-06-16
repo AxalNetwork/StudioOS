@@ -5,9 +5,87 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Signing out no longer flashes an error on the way to the login screen
+
+When you signed out, you might have briefly seen a red "this page hit an unexpected error" message before the sign-in screen appeared — usually right after we'd released a new version while your tab was open. Signing out now takes you straight to the sign-in screen cleanly. And if the app ever does need to refresh itself to pick up a new version, you'll see a calm "Updating to the latest version…" note for a moment instead of an error.
+
+---
+
+## The "review the deal" card on your Spin-Out deck now fits its slide
+
+When you share your Spin-Out Demo Day deck, the "Want to review the deal?" card sits right on the dark "Deal Readiness" slide. It used to look like a light box pasted on top, and part of it ran off the bottom of the slide. Now it's styled to match the slide and fits neatly inside it, so the heading, description, button, and fine print are all fully visible. This card only appears on shared links — your editor preview, thumbnails, and exported PDFs are unchanged.
+
+---
+
+## The "pain frequency" slide in your Spin-Out deck now reflects your real interviews
+
+Slide 2 of your Spin-Out Demo Day deck — "Pain frequency across interviews" — now shows the pains you've actually logged, grouped into a few clear themes. When you log an interview, the pain box suggests pains you've used before so the same problem isn't split across slightly different wordings. On the Customer Discovery page there's a new "Pain themes" panel where you can rename a theme, move a pain into it, or start a new one — all without changing your interviews. Each bar shows how many of your interviews mention that theme. Haven't logged any pains yet? The slide shows neutral placeholders instead of made-up numbers, and the editor nudges you to log and group your pains.
+
+---
+
+## Your Spin-Out cover chart now shows real numbers in the editor preview, shared links, and PDFs
+
+The "validation signal" chart on your Spin-Out Demo Day cover now shows your real logged discovery interviews everywhere — not just in the template picker. You now see a live preview of the cover right in the deck editor as you work, and anyone you share a link with (or any PDF you export) sees the same real running total instead of the sample curve. If you haven't logged any interviews yet, the chart honestly shows zero.
+
+---
+
+## Your Spin-Out Demo Day deck's cover chart now shows your real discovery interviews
+
+The "validation signal" chart on the cover of your Spin-Out Demo Day deck — the one captioned "Cumulative discovery interviews" — now reflects the interviews you've actually logged, shown right in the deck builder's template preview. The big number in the corner is your true running total, and it updates automatically as you log more interviews and reopen the deck. If you haven't logged any interviews yet, the chart honestly shows a flat line at zero instead of a sample curve.
+
+---
+
+## Removed the "complete these before you export" checklist from the Pitch Deck builder
+
+The amber pre-export checklist panel is no longer shown in the Pitch Deck builder. The deck editor is now unobstructed — you can edit slides directly without needing to dismiss or scroll past the gaps list.
+
+---
+
+## "Learn" links on every Personal Advisor question
+
+Each question card in the Personal Advisor now has a "Learn" link that opens the relevant section of the in-app docs, so you can read up on what's being asked before you answer. It sits alongside the existing link that takes you straight to the page where you fill the answer in — so from any card you can either learn more or jump in and complete it.
+
+---
+
+## The Personal Advisor progress counter now moves as you answer
+
+The answered counter in the Personal Advisor header (`X/210 answered`), the overall percentage, the dashboard ring, and the right-rail section rings were all stuck at zero — even after you'd answered many questions. They now advance in real time with each answer you submit, including free-form reflection questions (like "What is your biggest focus this quarter?") that don't map to a specific form field.
+
+---
+
+## Spin-Out Demo Day deck now shows your real data everywhere
+
+When you open or share your Spin-Out Demo Day deck, every slide now renders the actual information from your Lab — your company thesis, customer discovery findings, market sizing, team, cap table, and ask — instead of the built-in example data. Previously the live view was always showing the sample "Basepoint" placeholder copy even after you'd filled in your deck.
+
+---
+
+## Press Enter to send your answer in the Personal Advisor
+
+You can now press Enter to send your answer in the Personal Advisor no matter what kind of question it is. Before, Enter only worked for short answers and left you stuck for long answers and other question types. Now it's the same everywhere: Enter sends, Shift+Enter still gives you a new line if you want one, and it won't jump the gun while you're composing in an Asian language input method.
+
+---
+
+## Personal Advisor stays a tidy, fixed size as your chat grows
+
+The Personal Advisor card on your dashboard used to stretch taller and taller the more questions you answered, leaving a large blank gap below the task panel on the right. Now the chat keeps a steady, comfortable height and scrolls on its own — your latest answer and the reply box stay in view — while the task panel beside it lines up neatly with no empty space underneath.
+
+---
+
+## Sign in or register a different account, even while you're already signed in
+
+If you were already signed in and opened the sign-in or create-account page, the app used to send you straight back to your dashboard — so you could never start a different account. Now those pages sign you out of your current session first and show the form, so you can register or sign in as someone else cleanly. After you create and verify a new account, you land in that account's own experience, not your previous one.
+
+---
+
 ## Your Spin-Out deck has a fresh new look
 
 The Spin-Out demo-day deck has been redesigned with a cleaner, bolder editorial style in Axal blue. It's now ten focused slides — cover, the problem, your validation, the market, your solution, the roadmap, your team, the cap table, your ask, and the deal — and every slide still comes filled in with sample content and stays fully editable. Open your deck to see the new design in the editor, the template picker, and the preview.
+
+---
+
+## Onboarding chat fixed for new partners
+
+When you first join Axal and tell us about yourself in the welcome chat, the AI assistant now replies reliably with real follow-up questions. Previously some new partners kept getting a "having trouble reaching the AI assistant" message and couldn't get through the conversation. We've made the assistant fall back to a backup path automatically if its usual connection has a hiccup, so the chat keeps working and you can finish your profile and continue.
 
 ---
 
