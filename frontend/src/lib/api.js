@@ -97,6 +97,12 @@ export async function request(path, options = {}) {
           || currentPath === '/register'
           || currentPath === '/verify-email'
           || currentPath === '/spinout-lab'
+          // Audience-specific marketing landing pages (/lp/founder,
+          // /lp/investor, /lp/partner, /lp/customer-discovery,
+          // /lp/spinout-demo-day). Public surfaces: a background
+          // settings/me 401 for an anonymous visitor must not bounce
+          // them to /login.
+          || currentPath.startsWith('/lp/')
           || currentPath === '/directory'
           || currentPath === '/roadmap'
           || currentPath === '/about'
