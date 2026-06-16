@@ -264,6 +264,13 @@ test('partial project => still structurally renderable (no NaN/empty charts)', (
 
   assert.ok(data.cover.signalY.length > 0, 'cover signalY non-empty even when empty');
   assert.ok(data.cover.signalY.every((n) => Number.isFinite(n)), 'cover signalY all finite even when empty');
+
+  // Task #65 — honest zero-state: no logged interviews => a flat baseline at 0
+  // and a 0 total, NOT a fabricated rising curve. The day axis still spans the
+  // 30-day sprint so the chart renders.
+  assert.ok(data.cover.signalY.every((n) => n === 0), 'zero-interview cover signalY is a flat-0 baseline');
+  assert.equal(data.cover.signalY[data.cover.signalY.length - 1], 0, 'zero-interview total is 0');
+  assert.ok(data.cover.signalX.length > 0, 'zero-interview cover still has a day axis');
 });
 
 // ─────────────────────────── Task #55 ───────────────────────────────────────

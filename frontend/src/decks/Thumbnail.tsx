@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { TemplateMeta } from './templates';
+import type { DeckData } from './DeckBase';
 import { previewDataFor } from './sample';
 
 const INNER_W = 1920;
@@ -7,6 +8,13 @@ const INNER_H = 1080;
 
 interface ThumbnailProps {
   template: TemplateMeta;
+  /**
+   * Optional live data override. When provided it is passed straight to the
+   * template Component (which hydrate()s flat dotted-key field maps), so the
+   * picker card can render a project's REAL data instead of the bundled
+   * SAMPLE. Falls back to the sample preview when omitted/null.
+   */
+  data?: DeckData | null;
 }
 
 interface BoundaryState {
@@ -58,7 +66,7 @@ class ThumbnailBoundary extends React.Component<
   }
 }
 
-export const Thumbnail: React.FC<ThumbnailProps> = ({ template }) => {
+export const Thumbnail: React.FC<ThumbnailProps> = ({ template, data }) => {
   const Comp = template.Component;
   const wrapRef = useRef<HTMLDivElement>(null);
   // Sensible default so first paint isn't a microscopic dot before the
@@ -143,7 +151,7 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ template }) => {
               left: 0,
             }}
           >
-            <Comp data={previewDataFor(template.key)} editable={false} />
+            <Comp data={data ?? previewDataFor(template.key)} editable={false} />
           </div>
         )}
       </div>
@@ -159,6 +167,8 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ template }) => {
 // =====================================================================
 interface PreviewStageProps {
   template: TemplateMeta;
+  /** Optional live data override — see Thumbnail. Falls back to the sample. */
+  data?: DeckData | null;
   slideCount: number;
   currentIndex: number;
   onIndexChange: (i: number) => void;
@@ -168,6 +178,7 @@ interface PreviewStageProps {
 
 export const PreviewStage: React.FC<PreviewStageProps> = ({
   template,
+  data,
   slideCount,
   currentIndex,
   onIndexChange,
@@ -254,7 +265,7 @@ export const PreviewStage: React.FC<PreviewStageProps> = ({
                 left: 0,
               }}
             >
-              <Comp data={previewDataFor(template.key)} editable={false} />
+              <Comp data={data ?? previewDataFor(template.key)} editable={false} />
             </div>
           </div>
         </div>

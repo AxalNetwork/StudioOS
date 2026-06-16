@@ -98,7 +98,7 @@ function cover(pres, data, notes) {
     showLegend: false, showTitle: false,
     catAxisLabelColor: C.dfaint, catAxisLabelFontSize: 8, catAxisLineShow: false,
     valAxisHidden: true, valGridLine: { style: 'none' }, catGridLine: { style: 'none' },
-    valAxisMinVal: 0, valAxisMaxVal: Math.ceil(Math.max(...d.signalY) * 1.14),
+    valAxisMinVal: 0, valAxisMaxVal: Math.max(1, Math.ceil(Math.max(...d.signalY) * 1.14)),
   });
   s.addText(String(d.signalY[d.signalY.length - 1]), { x: 11.85, y: 2.62, w: 0.95, h: 0.35, margin: 0,
     align: 'right', fontFace: F.head, fontSize: 16, bold: true, color: C.accentLt });

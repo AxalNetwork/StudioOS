@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your Spin-Out Demo Day deck's cover chart now shows your real discovery interviews
+
+The "validation signal" chart on the cover of your Spin-Out Demo Day deck — the one captioned "Cumulative discovery interviews" — now reflects the interviews you've actually logged, shown right in the deck builder's template preview. The big number in the corner is your true running total, and it updates automatically as you log more interviews and reopen the deck. If you haven't logged any interviews yet, the chart honestly shows a flat line at zero instead of a sample curve. Your exported PowerPoint, PDF, and printed or shared versions show the same live numbers.
+
+---
+
 ## Removed the "complete these before you export" checklist from the Pitch Deck builder
 
 The amber pre-export checklist panel is no longer shown in the Pitch Deck builder. The deck editor is now unobstructed — you can edit slides directly without needing to dismiss or scroll past the gaps list.

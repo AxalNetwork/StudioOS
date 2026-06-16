@@ -250,7 +250,17 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   const sig = buildSignalSeries(src.cover?.activity_log);
   let signalX: string[]; let signalY: number[];
   if (sig) { signalX = sig.x; signalY = sig.y; }
-  else { signalX = FALLBACK.signalX; signalY = FALLBACK.signalY; gap('Cover: log discovery interviews to build the validation-signal chart.'); }
+  else {
+    // Task #65 — honest zero-state. With no logged discovery interviews the
+    // cover chart must read as a flat baseline at 0 across the 30-day sprint
+    // axis with a 0 total — never a fabricated rising curve. Always paired
+    // with a gap + DRAFT watermark. Keeping it at the source means every
+    // surface (builder preview, PPTX/PDF export, print/share) stays truthful
+    // and consistent.
+    signalX = FALLBACK.signalX;
+    signalY = FALLBACK.signalX.map(() => 0);
+    gap('Cover: log discovery interviews to build the validation-signal chart.');
+  }
 
   const cover: SpinoutDeckData['cover'] = {
     company: projectName.toUpperCase(),

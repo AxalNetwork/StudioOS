@@ -57,6 +57,11 @@ export default function PitchDeckPage() {
   // PowerPoint export so the panel doubles as post-export confirmation.
   // Shape: { gaps: string[], draft: boolean, programDay: number } | null.
   const [deckPreview, setDeckPreview] = useState(null);
+  // Task #65 — live cover-chart data for the template-picker preview. Holds the
+  // founder's assembled Spin-Out deck fields (flat dotted-key map incl
+  // cover.signalX/Y) so the picker thumbnail + preview modal render the REAL
+  // cumulative discovery-interview curve instead of the static SAMPLE.
+  const [spinoutPreviewFields, setSpinoutPreviewFields] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const [engagement, setEngagement] = useState(null);
@@ -216,6 +221,21 @@ export default function PitchDeckPage() {
       .finally(() => { if (alive) setPreviewLoading(false); });
     return () => { alive = false; };
   }, [isSpinoutDeck, projectId]);
+
+  // Task #65 — when the template picker is open for a Spin-Out deck, fetch the
+  // founder's assembled deck fields so the picker thumbnail + preview modal can
+  // render the REAL cover validation-signal chart (cumulative discovery
+  // interviews over the 30-day sprint) instead of the bundled SAMPLE. Re-runs
+  // each time the picker reopens, so newly logged interviews show up
+  // automatically. A 402 (paywall) or any error falls back to the sample.
+  useEffect(() => {
+    if (!pickerOpen || !isSpinoutDeck || !projectId) { setSpinoutPreviewFields(null); return; }
+    let alive = true;
+    api.spinoutDeck(projectId)
+      .then((r) => { if (alive) setSpinoutPreviewFields(r?.fields || null); })
+      .catch((e) => { if (alive) { setSpinoutPreviewFields(null); if (e?.status !== 402) reportError(e); } });
+    return () => { alive = false; };
+  }, [pickerOpen, isSpinoutDeck, projectId]);
 
   // Drives the readiness panel. Honors the backend `draft` flag (not just
   // gaps.length) so a no-gaps-but-mid-program deck never reads as "ready".
@@ -863,6 +883,7 @@ export default function PitchDeckPage() {
           methods={methods}
           premiumIds={premiumIds}
           recommendation={recommendation}
+          spinoutFields={spinoutPreviewFields}
           onClose={() => setPickerOpen(false)}
           onPick={applyMethod}
           busy={busy}
@@ -1212,7 +1233,7 @@ function loadThumbnailModule() {
 // keyboard; "Use this template" delegates to the picker's onPick (and is
 // disabled for locked templates, mirroring the picker grid rule).
 // =====================================================================
-function TemplatePreviewModal({ card, PreviewStage, onClose, onPick, busy }) {
+function TemplatePreviewModal({ card, PreviewStage, spinoutFields, onClose, onPick, busy }) {
   useEscapeClose(onClose);
   const [idx, setIdx] = useState(0);
   const slideCount = Math.max(1, card.slide_count || 1);
@@ -1289,6 +1310,7 @@ function TemplatePreviewModal({ card, PreviewStage, onClose, onPick, busy }) {
               <div style={{ width: '100%', aspectRatio: '16 / 9', maxHeight: '100%', margin: '0 auto' }}>
                 <PreviewStage
                   template={card.template}
+                  data={card.template.key === 'axal_spinout_demoday' ? spinoutFields : undefined}
                   slideCount={slideCount}
                   currentIndex={idx}
                   onIndexChange={setIdx}
@@ -1354,7 +1376,7 @@ function TemplatePreviewModal({ card, PreviewStage, onClose, onPick, busy }) {
   );
 }
 
-function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, busy }) {
+function MethodPicker({ methods, premiumIds, recommendation, spinoutFields, onClose, onPick, busy }) {
   const [filter, setFilter] = useState('all');
   const [templates, setTemplates] = useState(null); // { list, record, error? } | null
   const [Thumbnail, setThumbnail] = useState(null);
@@ -1492,7 +1514,7 @@ function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, bu
                     stops propagation so it never picks the card. */}
                 <div className="relative mb-3 rounded overflow-hidden">
                   {Thumbnail
-                    ? <Thumbnail template={c.template} />
+                    ? <Thumbnail template={c.template} data={c.template.key === 'axal_spinout_demoday' ? spinoutFields : undefined} />
                     : <div style={{ width: '100%', aspectRatio: '16 / 9', background: '#F1F5F9', borderRadius: 6 }} />}
                   <button
                     type="button"
@@ -1542,6 +1564,7 @@ function MethodPicker({ methods, premiumIds, recommendation, onClose, onPick, bu
           <TemplatePreviewModal
             card={previewCard}
             PreviewStage={PreviewStage}
+            spinoutFields={spinoutFields}
             onClose={() => setPreviewCard(null)}
             onPick={(key) => { setPreviewCard(null); onPick(key); }}
             busy={busy}

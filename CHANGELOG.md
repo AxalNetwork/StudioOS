@@ -10,6 +10,34 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Spin-Out Demo Day cover chart renders the founder's real discovery interviews in the builder preview (Task #65)
+
+- **What:** The Spin-Out Demo Day deck's Slide 1 (Cover) "VALIDATION SIGNAL · 30-DAY SPRINT" area chart
+  (captioned "Cumulative discovery interviews") now renders the founder's REAL logged discovery
+  interviews in the template-picker BUILDER PREVIEW (thumbnail card + preview modal), instead of the
+  static sample curve that always ended at 42. The big top-right number is the true cumulative total.
+  Re-opening the picker re-fetches, so newly logged interviews appear automatically.
+- **Zero-state (worker source of truth) — `cloudflare-worker/src/services/decks/spinoutDeckData.ts`:**
+  When there are no logged interviews (`buildSignalSeries()` returns null) the cover now emits a flat-0
+  `signalY` (all zeros, 0 total) over the same D0..D30 sprint axis — an honest empty state — instead of
+  the old fabricated `[0,1,2,3,4,5,6]` fallback curve. The "log discovery interviews" gap + DRAFT
+  watermark are unchanged. Fixing it at the source keeps the builder preview, PPTX/PDF export, and
+  print/share all consistent.
+- **PPTX axis guard — `frontend/src/decks/spinout/buildDeck.js`:** `valAxisMaxVal` is now
+  `Math.max(1, Math.ceil(max*1.14))` so a flat-0 export doesn't produce a degenerate 0..0 value axis.
+- **Render-boundary override — `frontend/src/decks/Thumbnail.tsx`:** `Thumbnail` and `PreviewStage`
+  accept an optional `data` prop and render `data ?? previewDataFor(template.key)`. `previewDataFor()`
+  is untouched (still sample-only), so the other 11 templates are unaffected.
+- **Live wiring — `frontend/src/pages/PitchDeckPage.jsx`:** When the picker is open for a Spin-Out deck
+  (`pickerOpen && isSpinoutDeck && projectId`), it fetches `api.spinoutDeck(projectId).fields` and
+  threads the flat dotted-key field map through `MethodPicker` → `Thumbnail` / `TemplatePreviewModal` →
+  `PreviewStage`, but only for the `axal_spinout_demoday` card. A 402 (paywall) or any error falls back
+  to the sample. The dev FastAPI mirror is deterministic (28-interview series), which proves the wiring
+  in the Replit preview; the zero-state is pinned by the worker unit test.
+- **Tests — `cloudflare-worker/test/spinoutDeckData.test.ts`:** The empty/partial case now also asserts
+  the cover `signalY` is a flat-0 baseline (every value 0, last value 0) over a non-empty day axis.
+  `npm run test:drift` green.
+
 ## Remove the pre-export checklist panel from the Pitch Deck builder
 
 - **What:** The amber "Complete these before you export" checklist panel (with the Spin-Out Lab
