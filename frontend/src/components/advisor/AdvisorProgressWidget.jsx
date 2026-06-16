@@ -260,17 +260,30 @@ function ItemCard({
         </div>
       )}
 
-      {/* Open page link, when the question maps to a page */}
-      {!locked && target && (
-        <div className="mt-1 text-right">
-          <Link
-            to={target}
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1 text-[10px] text-violet-700 dark:text-violet-300 hover:underline"
-            title={`Open ${pageLabel(target)}`}
-          >
-            Open {pageLabel(target)} <ArrowRight size={10} />
-          </Link>
+      {/* Action links: Learn (docs deep-link) + Open page. Each renders
+          only when its target exists; both omit gracefully otherwise. */}
+      {!locked && (docAnchor || target) && (
+        <div className="mt-1 flex items-center justify-end gap-3">
+          {docAnchor && (
+            <Link
+              to={`/docs#${docAnchor}`}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400 hover:text-violet-700 dark:hover:text-violet-300 hover:underline"
+              title="Learn about this in the docs"
+            >
+              <BookOpen size={10} /> Learn
+            </Link>
+          )}
+          {target && (
+            <Link
+              to={target}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 text-[10px] text-violet-700 dark:text-violet-300 hover:underline"
+              title={`Open ${pageLabel(target)}`}
+            >
+              Open {pageLabel(target)} <ArrowRight size={10} />
+            </Link>
+          )}
         </div>
       )}
     </div>

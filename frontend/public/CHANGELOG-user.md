@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## "Learn" links on every Personal Advisor question
+
+Each question card in the Personal Advisor now has a "Learn" link that opens the relevant section of the in-app docs, so you can read up on what's being asked before you answer. It sits alongside the existing link that takes you straight to the page where you fill the answer in — so from any card you can either learn more or jump in and complete it.
+
+---
+
 ## The Personal Advisor progress counter now moves as you answer
 
 The answered counter in the Personal Advisor header (`X/210 answered`), the overall percentage, the dashboard ring, and the right-rail section rings were all stuck at zero — even after you'd answered many questions. They now advance in real time with each answer you submit, including free-form reflection questions (like "What is your biggest focus this quarter?") that don't map to a specific form field.

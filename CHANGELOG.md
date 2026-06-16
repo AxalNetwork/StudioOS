@@ -10,6 +10,22 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Add "Learn" doc link + consistent page link to advisor cards (Task #58)
+
+- **What:** Each Personal Advisor question card (Proposed / Pending / Completed buckets in the
+  right-rail and fullscreen progress widget) now shows up to two low-emphasis action links: a new
+  **"Learn"** link that deep-links to the matching in-app docs section, plus the existing
+  **"Open <page>"** link to where the answer is filled in.
+- **Where — `ItemCard` (`frontend/src/components/advisor/AdvisorProgressWidget.jsx`):** Replaced the
+  single page-link block with a flex action row rendering both links. "Learn" uses the question's
+  `doc_anchor` (already computed via `predictTarget(item.id || item.question_id)?.doc_anchor`) and
+  points at `/docs#${docAnchor}`, following the existing docs deep-link convention used by
+  `PageExplainer`/`PersonalAdvisor`. Each link renders only when its target exists: cards with no
+  anchor omit "Learn", cards with no page target omit the page link.
+- **Buckets:** Completed cards derive both `target` and `docAnchor` from the question id via
+  `predictTarget()` (the `completedItems` rows carry no `doc_anchor`), so all three buckets are
+  consistent. Frontend-only — no backend/worker/question-bank changes.
+
 ## Fix stuck Personal Advisor answered counter (Task #57)
 
 - **What:** The Personal Advisor header showed `0/210 answered` and never moved, even after
