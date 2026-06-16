@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Signing out no longer flashes an error on the way to the login screen
+
+When you signed out, you might have briefly seen a red "this page hit an unexpected error" message before the sign-in screen appeared — usually right after we'd released a new version while your tab was open. Signing out now takes you straight to the sign-in screen cleanly. And if the app ever does need to refresh itself to pick up a new version, you'll see a calm "Updating to the latest version…" note for a moment instead of an error.
+
+---
+
 ## The "review the deal" card on your Spin-Out deck now fits its slide
 
 When you share your Spin-Out Demo Day deck, the "Want to review the deal?" card sits right on the dark "Deal Readiness" slide. It used to look like a light box pasted on top, and part of it ran off the bottom of the slide. Now it's styled to match the slide and fits neatly inside it, so the heading, description, button, and fine print are all fully visible. This card only appears on shared links — your editor preview, thumbnails, and exported PDFs are unchanged.

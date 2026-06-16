@@ -21,8 +21,10 @@ function isChunkLoadError(reason) {
     /Importing a module script failed/i.test(msg)
   );
 }
-function recoverFromStaleChunk(reason) {
-  if (!isChunkLoadError(reason)) return;
+// One-shot, SW-cache-clearing hard reload. sessionStorage guards against a
+// reload loop if the failure is permanent (CDN broken, etc.); the guard is
+// cleared on a successful load (below).
+function reloadOnceForStaleChunk() {
   try {
     if (sessionStorage.getItem('axal:chunk-reload') === '1') return;
     sessionStorage.setItem('axal:chunk-reload', '1');
@@ -45,8 +47,22 @@ function recoverFromStaleChunk(reason) {
     window.location.reload();
   }
 }
+function recoverFromStaleChunk(reason) {
+  if (!isChunkLoadError(reason)) return;
+  reloadOnceForStaleChunk();
+}
 window.addEventListener('error', (e) => recoverFromStaleChunk(e.error || e.message));
 window.addEventListener('unhandledrejection', (e) => recoverFromStaleChunk(e.reason));
+// Vite dispatches `vite:preloadError` when a dynamically-imported chunk fails
+// to load — the canonical stale-chunk-after-deploy signal (e.g. logging out
+// redirects into the lazy /login chunk whose hashed filename no longer exists
+// after a mid-session deploy). preventDefault() stops Vite's default rethrow;
+// we reload once to pick up the new asset manifest so the failure never reaches
+// the error boundary as a visible throw.
+window.addEventListener('vite:preloadError', (e) => {
+  try { e.preventDefault(); } catch { /* ignore */ }
+  reloadOnceForStaleChunk();
+});
 // Clear both chunk-reload guard flags once the app successfully renders,
 // so the next real chunk failure can trigger a fresh auto-recovery.
 window.addEventListener('load', () => {

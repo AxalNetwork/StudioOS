@@ -1035,7 +1035,16 @@ function AppInner() {
 
   const logout = useCallback(async () => {
     await clearSession();
-    window.location.href = '/';
+    // Full-document navigation to the sign-in screen (NOT client-side routing):
+    // a fresh load fetches the current index.html + chunks rather than relying
+    // on this tab's old in-memory module graph, and `replace` keeps the
+    // torn-down session out of history so Back can't land on a dead
+    // authenticated page. NOTE: clearSession() already flipped `user` to null,
+    // so RequireAuth may briefly client-side-redirect into the lazy /login
+    // chunk during the awaited teardown; the stale-chunk error from that is
+    // absorbed calmly by RouteErrorBoundary + the vite:preloadError reload
+    // (see main.jsx) — not by this navigation.
+    window.location.replace('/login');
   }, [clearSession]);
 
   // Task #8 — Universal referral attribution. Capture a `?ref=CODE` from ANY

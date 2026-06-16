@@ -50,11 +50,25 @@ const RELOAD_GUARD_KEY = 'axal:chunk-reload-boundary';
 class RouteErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { error: null, info: null };
+    this.state = { error: null, info: null, reloading: false };
   }
 
   static getDerivedStateFromError(error) {
-    return { error };
+    // Decide synchronously — before the first error render — whether this is a
+    // recoverable stale-chunk failure we're going to auto-reload from. When it
+    // is, we render a calm "updating" splash instead of the alarming error
+    // card, so the red card never flashes during the reload. The reload itself
+    // is fired from componentDidCatch; this stays side-effect-free and only
+    // reads the one-shot guard so its decision mirrors componentDidCatch's.
+    let reloading = false;
+    if (isChunkLoadError(error)) {
+      try {
+        reloading = sessionStorage.getItem(RELOAD_GUARD_KEY) !== '1';
+      } catch {
+        reloading = false; // sessionStorage blocked → can't auto-reload; show the card
+      }
+    }
+    return { error, reloading };
   }
 
   componentDidCatch(error, info) {
@@ -71,12 +85,21 @@ class RouteErrorBoundary extends React.Component {
     // The guard is cleared on a successful app load (see main.jsx), so
     // it only loops-stops if the chunk is permanently broken.
     if (isChunkLoadError(error)) {
+      let willReload = false;
       try {
         if (sessionStorage.getItem(RELOAD_GUARD_KEY) !== '1') {
           sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
+          willReload = true;
           window.location.reload();
         }
-      } catch { /* sessionStorage blocked — show the UI instead */ }
+      } catch { /* sessionStorage blocked / write failed — fall through to the card */ }
+      // If we are NOT actually reloading (guard already spent, sessionStorage
+      // blocked, or the write threw), don't strand the user on the calm
+      // "updating" splash that getDerivedStateFromError optimistically chose —
+      // flip back to the actionable error card with its explicit Reload button.
+      if (!willReload) {
+        this.setState({ reloading: false });
+      }
     }
   }
 
@@ -84,12 +107,12 @@ class RouteErrorBoundary extends React.Component {
     // Reset on route change so a user navigating away from the broken
     // page recovers cleanly without needing a hard reload.
     if (this.state.error && prevProps.pathname !== this.props.pathname) {
-      this.setState({ error: null, info: null });
+      this.setState({ error: null, info: null, reloading: false });
     }
   }
 
   handleRetry = () => {
-    this.setState({ error: null, info: null });
+    this.setState({ error: null, info: null, reloading: false });
   };
 
   handleChunkReload = () => {
@@ -99,6 +122,23 @@ class RouteErrorBoundary extends React.Component {
 
   render() {
     if (!this.state.error) return this.props.children;
+
+    // Recoverable stale-chunk failure: we're auto-reloading to pick up the
+    // freshly deployed build. Show a calm, neutral splash (matching the app's
+    // Suspense loading state) instead of the alarming red error card — the page
+    // reloads a beat later. The red card is reserved for failures we can't
+    // silently recover from (a real render error, or a chunk error where the
+    // one-shot reload guard is already spent / sessionStorage is blocked).
+    if (this.state.reloading) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-white dark:bg-gray-950 px-4 text-gray-500 dark:text-gray-400">
+          <RefreshCcw size={22} className="animate-spin" aria-hidden="true" />
+          <p className="text-sm" role="status" aria-live="polite">
+            Updating to the latest version…
+          </p>
+        </div>
+      );
+    }
 
     const msg = this.state.error?.message || String(this.state.error) || 'Unknown error';
     const isChunk = isChunkLoadError(this.state.error);
