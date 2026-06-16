@@ -10,6 +10,13 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Spin-Out deck Slide 10 "Want to review the deal?" share card restyled to belong to the dark "Deal Readiness" slide (Task #30)
+
+- **What:** The share-mode CTA injected into the Spin-Out deck's dark Slide 10 ("Deal Readiness") used the standalone card's light violet/white styling (gradient panel, white icon chip, light fine print) and overflowed the bottom of the slide frame, so it read as a pasted-on overlay. It now renders as part of the dark slide and sits fully within the frame.
+- **Embedded variant — `frontend/src/components/ShareDeckCTA.jsx`:** the `embedded` branch now uses a dark panel (`#171C25`) with a category-tinted accent border, white heading, muted body (`#9099A6`), fine print at `#828B99` (kept ≥4.5:1 on the dark panel rather than the slide's near-invisible `dfaint`), and a compact icon chip. The fundraising variant uses the slide's blue accent (`#2C4BE0`) so it matches the diligence/next-steps treatment; the commercial (feedback) variant stays emerald, tuned for the dark background. The card is also denser (smaller padding/type/spacing) so the full card — icon, heading, body, button, and "By continuing…" fine print — fits within the slide. The embedded body caps the project name (`>40` chars → ellipsised) and is `line-clamp-3`-bounded so an unbounded `projects.name` can't push the card past the brand label / off the slide. The standalone (non-embedded) end-of-deck card on every other deck is unchanged. The shared signup modal is rendered once for both variants.
+- **Placement — `frontend/src/decks/templates/axal_spinout_demoday_app.tsx`:** the injected card slot moves up from `top: 6.0in` to `5.9in` (width still the left column's `lw`), seating the card between the diligence list and the bottom brand label without clipping.
+- **Unchanged:** copy, the "Join & open the deal" flow / NDA modal, and all backend behavior. The card stays share-mode only (still absent from editor preview, thumbnail, and PDF export — `exporting` still suppresses it).
+
 ## Spin-Out deck Slide 2 ("PAIN FREQUENCY ACROSS INTERVIEWS") binds to the founder's real logged discovery pains, grouped into curated themes (Task #29)
 
 - **What:** Slide 2's pain-frequency bars previously came from an exact-string match over `discovery_interviews.pains_json`, so paraphrases ("slow onboarding" vs "onboarding is slow") never merged and the slide read as noise. The bars now reflect the founder's REAL logged pains grouped into a few curated themes — deterministic normalized-match + founder curation, NO AI. Each theme's frequency is the count of DISTINCT interviews mentioning it, over total interviews. Empty real data → honest neutral placeholders (never a sample).

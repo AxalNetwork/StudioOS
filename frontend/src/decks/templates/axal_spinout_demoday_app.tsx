@@ -830,7 +830,7 @@ const SlideReviewTheDeal: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
         <Ed l={rx} t={6.2} w={rw} h={0.4} size={12} valign="top" color={K.accentLt} value={dl.contact} path="deal.contact" editable={editable} onEdit={onEdit} />
 
         {dealSlot && (
-          <div style={{ position: 'absolute', left: inch(lx), top: inch(6.0), width: inch(6.0), zIndex: 6 }}>{dealSlot}</div>
+          <div style={{ position: 'absolute', left: inch(lx), top: inch(5.9), width: inch(lw), zIndex: 6 }}>{dealSlot}</div>
         )}
         <Txt l={ML} t={7.06} w={6} h={0.3} size={8} spacing={1} valign="middle" color={K.dfaint}>{d.brand.lab}</Txt>
       </div>

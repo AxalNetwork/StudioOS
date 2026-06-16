@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## The "review the deal" card on your Spin-Out deck now fits its slide
+
+When you share your Spin-Out Demo Day deck, the "Want to review the deal?" card sits right on the dark "Deal Readiness" slide. It used to look like a light box pasted on top, and part of it ran off the bottom of the slide. Now it's styled to match the slide and fits neatly inside it, so the heading, description, button, and fine print are all fully visible. This card only appears on shared links — your editor preview, thumbnails, and exported PDFs are unchanged.
+
+---
+
 ## The "pain frequency" slide in your Spin-Out deck now reflects your real interviews
 
 Slide 2 of your Spin-Out Demo Day deck — "Pain frequency across interviews" — now shows the pains you've actually logged, grouped into a few clear themes. When you log an interview, the pain box suggests pains you've used before so the same problem isn't split across slightly different wordings. On the Customer Discovery page there's a new "Pain themes" panel where you can rename a theme, move a pain into it, or start a new one — all without changing your interviews. Each bar shows how many of your interviews mention that theme. Haven't logged any pains yet? The slide shows neutral placeholders instead of made-up numbers, and the editor nudges you to log and group your pains.
