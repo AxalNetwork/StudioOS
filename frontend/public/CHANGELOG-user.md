@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Personal Advisor stays a tidy, fixed size as your chat grows
+
+The Personal Advisor card on your dashboard used to stretch taller and taller the more questions you answered, leaving a large blank gap below the task panel on the right. Now the chat keeps a steady, comfortable height and scrolls on its own — your latest answer and the reply box stay in view — while the task panel beside it lines up neatly with no empty space underneath.
+
+---
+
 ## Sign in or register a different account, even while you're already signed in
 
 If you were already signed in and opened the sign-in or create-account page, the app used to send you straight back to your dashboard — so you could never start a different account. Now those pages sign you out of your current session first and show the form, so you can register or sign in as someone else cleanly. After you create and verify a new account, you land in that account's own experience, not your previous one.

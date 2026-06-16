@@ -659,8 +659,13 @@ export default function PersonalAdvisor() {
       <div className={isDesktop ? 'grid grid-cols-1 lg:grid-cols-3' : 'flex flex-col'}>
         {/* Chat column. On mobile we cap the height to ~60vh so the chat
             transcript scrolls inside the card instead of pushing the rest
-            of the dashboard off screen. */}
-        <div className={isDesktop ? 'lg:col-span-2 flex flex-col border-r border-gray-100 dark:border-gray-800 min-h-[420px]' : 'flex flex-col min-h-0 max-h-[60vh]'}>
+            of the dashboard off screen. On desktop we cap it to max-h-[640px]
+            — matching the right-rail task panel's cap — so the two grid
+            columns stay the same height: the transcript (flex-1, its own
+            min-h-[260px] lets it shrink) scrolls internally while the
+            current-question line and composer stay pinned at the bottom,
+            and no blank gap opens beneath the task panel as the chat grows. */}
+        <div className={isDesktop ? 'lg:col-span-2 flex flex-col border-r border-gray-100 dark:border-gray-800 min-h-[420px] max-h-[640px]' : 'flex flex-col min-h-0 max-h-[60vh]'}>
           <Transcript
             ref={scrollerRef}
             messages={messages}

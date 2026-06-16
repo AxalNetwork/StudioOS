@@ -10,6 +10,25 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Personal Advisor card no longer leaves a blank gap below the task panel (Task #53)
+
+- **What:** in the embedded ("normal" card) Personal Advisor on the dashboard,
+  the desktop chat column had a `min-h` floor but no ceiling, so it stretched
+  taller as more questions were answered. The right rail (task panel) is capped
+  at `max-h-[640px]`, so once the chat outgrew it a large blank gap opened
+  beneath the tasks.
+- **Frontend:** `frontend/src/components/advisor/PersonalAdvisor.jsx` — added
+  `max-h-[640px]` to the desktop chat column (the `lg:col-span-2` flex column)
+  so it matches the right-rail aside's cap and the two grid columns stay the
+  same height. The column is already `flex flex-col`; the `Transcript`
+  (`flex-1 overflow-y-auto` with its own `min-h-[260px]`) shrinks and scrolls
+  internally while `CurrentQuestion` + `Composer` stay pinned at the bottom.
+  Auto-scroll-to-latest (`scrollerRef.scrollTop = scrollHeight`) is unaffected.
+- **Out of scope (unchanged):** the fullscreen takeover view (already
+  height/scroll-correct), the mobile card (already `max-h-[60vh]`), and the
+  task-panel content / questions flow / AI behavior.
+- **No worker change.** CSS-only; `npm run test:drift` unaffected.
+
 ## Signed-in users can reach /register and /login to start a different account (Task #49)
 
 - **What:** visiting `/register` or `/login` while a session already exists used
