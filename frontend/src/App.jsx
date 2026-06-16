@@ -118,6 +118,12 @@ const DocsPage = lazy(() => import('./pages/DocsPage'));
 const OnboardingPersonaPage = lazy(() => import('./pages/OnboardingPersonaPage'));
 const AcademyLessonPage = lazy(() => import('./pages/AcademyLessonPage'));
 const OnboardingFounderPage = lazy(() => import('./pages/OnboardingFounderPage'));
+// Template landing pages — audience-specific conversion surfaces.
+const FounderHomePage = lazy(() => import('./pages/templates/FounderHomePage'));
+const CustomerDiscoveryHomePage = lazy(() => import('./pages/templates/CustomerDiscoveryHomePage'));
+const InvestorDealflowHomePage = lazy(() => import('./pages/templates/InvestorDealflowHomePage'));
+const PartnerPartnershipHomePage = lazy(() => import('./pages/templates/PartnerPartnershipHomePage'));
+const SpinoutDemoDayPage = lazy(() => import('./pages/templates/SpinoutDemoDayPage'));
 const OnboardingInvestorPage = lazy(() => import('./pages/OnboardingInvestorPage'));
 const OnboardingPartnerPage = lazy(() => import('./pages/OnboardingPartnerPage'));
 const OnboardingChatPage = lazy(() => import('./pages/OnboardingChatPage'));
@@ -1260,6 +1266,12 @@ function AppInner() {
       <Route path="/roadmap" element={<PublicRoadmapPage />} />
       <Route path="/academy/:slug" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
       <Route path="/academy" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
+      {/* Audience-specific landing page templates. */}
+      <Route path="/lp/founder" element={<FounderHomePage />} />
+      <Route path="/lp/customer-discovery" element={<CustomerDiscoveryHomePage />} />
+      <Route path="/lp/investor" element={<InvestorDealflowHomePage />} />
+      <Route path="/lp/partner" element={<PartnerPartnershipHomePage />} />
+      <Route path="/lp/spinout-demo-day" element={<SpinoutDemoDayPage />} />
     </Routes>
 </RouteErrorBoundary>
 </Suspense>
