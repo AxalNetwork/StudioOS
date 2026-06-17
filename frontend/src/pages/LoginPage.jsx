@@ -41,6 +41,18 @@ const MAGIC_ERROR_COPY = {
   error: 'Something went wrong completing your sign-in. Please try again.',
 };
 
+// Honor a `?next=` return path (e.g. a paid event invitation that bounced the
+// user here to sign in) while refusing open redirects: only same-origin paths
+// that start with a single `/` are accepted, everything else falls through to
+// the default landing page chosen by the caller.
+function safeNextPath() {
+  try {
+    const n = new URLSearchParams(window.location.search).get('next');
+    if (n && n.startsWith('/') && !n.startsWith('//')) return n;
+  } catch { /* ignore */ }
+  return null;
+}
+
 export default function LoginPage() {
   useForcedLightTheme();
   const [email, setEmail] = useState('');
@@ -107,7 +119,7 @@ export default function LoginPage() {
       if (!res?.token || !res?.user) throw new Error('Invalid response from server.');
       localStorage.setItem('token', res.token);
       localStorage.setItem('user', JSON.stringify(res.user));
-      window.location.href = '/dashboard';
+      window.location.href = safeNextPath() || '/dashboard';
     } catch (e) {
       if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
         setError('Passkey sign-in was cancelled.');
@@ -120,7 +132,11 @@ export default function LoginPage() {
   const continueWithGoogle = async () => {
     setGoogleBusy(true); setError('');
     try {
-      const { url } = await api.googleStartUrl({ action: 'signin' });
+      // Preserve a `?next=` return path (e.g. a paid event invite) across the
+      // Google round-trip. The worker's /auth/google/start re-sanitizes the
+      // `redirect` param (absolute same-origin path only) before signing it
+      // into the OAuth state, so safeNextPath() here is defence-in-depth.
+      const { url } = await api.googleStartUrl({ action: 'signin', redirect: safeNextPath() || '/dashboard' });
       if (!url) throw new Error('No redirect URL returned.');
       window.location.href = url;
     } catch (e) {
@@ -228,7 +244,7 @@ export default function LoginPage() {
       // Relative path — stays on whichever canonical host the user signed in
       // on (axal.vc post-flip). The Worker serves the SPA on /dashboard for
       // both axal.vc and app.axal.vc per the apex routing table in wrangler.toml.
-      window.location.href = '/dashboard';
+      window.location.href = safeNextPath() || '/dashboard';
     } catch (e) {
       setError(e?.message || 'Sign in failed.');
       resetTurnstile();
