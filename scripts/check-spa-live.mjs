@@ -34,6 +34,18 @@
  *     still serves the Jekyll marketing site. So on axal.vc we assert the SPA
  *     shell on the routed app paths and only assert "200 + HTML" on `/`.
  *
+ * Apex `/api/*` routing assertion (the regression that took prod down):
+ *   The shell-HTML checks above can ALL pass while every `/api/*` fetch falls
+ *   through to Jekyll. On the proxied apex, if the `axal.vc/api/*` Worker route
+ *   isn't registered (stale/incomplete deploy, or a deploy that bound a route
+ *   table without the apex carve-out, or Cloudflare zone-route drift), GitHub
+ *   Pages answers `/api/*` with an HTML 404 — so the SPA's relative `/api/*`
+ *   XHRs 404 and every authenticated page breaks. This script now probes a
+ *   stable `/api/*` endpoint on each host and FAILS loudly when it returns an
+ *   HTML body instead of a Worker JSON response. A JSON response (a 200 from
+ *   /api/health, or even a JSON 401 from an authed probe) counts as HEALTHY —
+ *   it proves the request reached the Worker; auth state is irrelevant here.
+ *
  * Exit 0 when every check passes; exit 1 (loud) on the first host with any
  * failure, after reporting ALL failures.
  *
@@ -53,6 +65,8 @@
  *   SMOKE_RETRIES    attempts per request before failing (default 3)
  *   SMOKE_RETRY_MS   delay between attempts in ms (default 5000)
  *   SMOKE_TIMEOUT_MS per-request timeout in ms (default 15000)
+ *   SMOKE_API_PROBE  `/api/*` path probed to prove the Worker is reached
+ *                    (default /api/health — unauthenticated, always mounted)
  */
 
 const DEFAULT_HOSTS = ['https://axal.vc', 'https://app.axal.vc'];
@@ -61,6 +75,12 @@ const SLUG = process.env.SMOKE_SLUG || 'smoke-test-deeplink';
 const RETRIES = Number(process.env.SMOKE_RETRIES || 3);
 const RETRY_MS = Number(process.env.SMOKE_RETRY_MS || 5000);
 const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 15000);
+// Always-mounted, unauthenticated `/api/*` probe used to prove the Worker is
+// actually reached on each host (see checkApiRouting). `/api/health` is
+// registered directly on the Hono app (cloudflare-worker/src/index.ts) and
+// returns JSON on every deploy. An authed endpoint would also work — a JSON
+// 401 still proves the Worker answered — but health needs no credentials.
+const API_PROBE_PATH = process.env.SMOKE_API_PROBE || '/api/health';
 
 const hostsArg =
   process.argv.slice(2).filter((a) => !a.startsWith('-')).join(' ') ||
@@ -98,6 +118,14 @@ function routesForHost(base) {
 function looksLikeJsonNotFound(body) {
   const trimmed = body.trimStart();
   return trimmed.startsWith('{') && /"detail"\s*:\s*"Not found"/i.test(body);
+}
+
+// GitHub Pages / Jekyll serves an HTML document (its 404.html or a marketing
+// page) when an apex path isn't routed to the Worker. Detect an HTML body so
+// an `/api/*` probe that fell through to Pages is flagged even when the
+// Content-Type header is missing or unexpected.
+function looksLikeHtml(body) {
+  return /<!doctype html|<html[\s>]/i.test(body.trimStart().slice(0, 2048));
 }
 
 function assertShell(body) {
@@ -255,12 +283,81 @@ async function checkRoute(base, route, assetSink) {
   return lastErr;
 }
 
+// Returns null when the API probe reaches the Worker on `base`, else a
+// human-readable failure reason. HEALTHY = a JSON response: a 200 from
+// /api/health, or even a JSON 401 from an authed probe — both prove the
+// request reached the Worker. FAILURE = an HTML body / HTML 404, the exact
+// signature of `/api/*` falling through to the Jekyll/GitHub-Pages site
+// because the `axal.vc/api/*` Worker route isn't registered on this zone.
+async function checkApiRouting(base) {
+  const url = base.replace(/\/$/, '') + API_PROBE_PATH;
+  // axal.vc is the proxied apex (the Jekyll fall-through case); app.axal.vc is
+  // the Workers custom domain. Match the same detection routesForHost() uses
+  // (`//axal.vc` does not match `//app.axal.vc`) so the failure reason names
+  // the correct cause for each host.
+  const isApex = /\/\/axal\.vc/i.test(base);
+  let lastErr = '';
+  for (let attempt = 1; attempt <= RETRIES; attempt++) {
+    try {
+      const { status, ctype, body } = await fetchOnce(url);
+      const isHtml = /text\/html/i.test(ctype) || looksLikeHtml(body);
+      const isJson =
+        /application\/json/i.test(ctype) ||
+        (!isHtml && body.trimStart().startsWith('{'));
+      if (isHtml) {
+        lastErr = isApex
+          ? `apex /api/* fell through to the Jekyll/GitHub-Pages site ` +
+            `(HTTP ${status}, Content-Type "${ctype || '(none)'}", HTML body) ` +
+            `instead of reaching the Worker`
+          : `/api/* returned an HTML response ` +
+            `(HTTP ${status}, Content-Type "${ctype || '(none)'}", HTML body) ` +
+            `instead of Worker JSON — the Workers custom domain is not routing ` +
+            `to the Worker (Worker error page or custom-domain misconfig)`;
+      } else if (isJson) {
+        // Worker reached (any status — a JSON 401 still proves routing works).
+        return null;
+      } else {
+        lastErr =
+          `non-JSON API response (HTTP ${status}, ` +
+          `Content-Type "${ctype || '(none)'}") — expected a Worker JSON body`;
+      }
+    } catch (err) {
+      lastErr = `request failed: ${err?.message || err}`;
+    }
+    if (attempt < RETRIES) {
+      console.log(
+        `[spa-live]   retry ${attempt}/${RETRIES - 1} for ${url} (${lastErr})`,
+      );
+      await sleep(RETRY_MS);
+    }
+  }
+  return lastErr;
+}
+
 async function main() {
   console.log(
     `[spa-live] Checking ${HOSTS.length} host(s): ${HOSTS.join(', ')}`,
   );
   const failures = [];
+  let apexApiRoutingFailed = false;
   for (const base of HOSTS) {
+    // Apex API-routing assertion FIRST: prove `/api/*` actually reaches the
+    // Worker on this host. The shell-HTML + asset checks below can all pass
+    // while every `/api/*` fetch falls through to Jekyll (an HTML 404) — the
+    // exact regression that took prod down on axal.vc. Catch it loudly before
+    // anything else.
+    {
+      const apiUrl = base.replace(/\/$/, '') + API_PROBE_PATH;
+      const reason = await checkApiRouting(base);
+      if (reason) {
+        console.error(`[spa-live] FAIL  ${apiUrl} — ${reason}`);
+        failures.push(`${apiUrl} — ${reason}`);
+        if (/\/\/axal\.vc/i.test(base)) apexApiRoutingFailed = true;
+      } else {
+        console.log(`[spa-live] PASS  ${apiUrl} (API reaches Worker)`);
+      }
+    }
+
     const routes = routesForHost(base);
     const assetSink = new Set();
     for (const route of routes) {
@@ -295,6 +392,22 @@ async function main() {
       `\n[spa-live] ✖ ${failures.length} live route check(s) failed after deploy:`,
     );
     for (const f of failures) console.error(`  - ${f}`);
+    if (apexApiRoutingFailed) {
+      console.error(
+        '\nAn `/api/*` probe returned an HTML 404 (the Jekyll/GitHub-Pages site)\n' +
+          'instead of a Worker JSON response. The `axal.vc/api/*` Worker route is\n' +
+          'NOT registered on the apex zone, so the SPA\'s relative `/api/*` fetches\n' +
+          'all fall through to Pages and every authenticated page 404s — the same\n' +
+          'outage as before.\n' +
+          'Fix: redeploy with `npm run deploy` (it passes `--env production`). Note\n' +
+          'a plain `wrangler deploy` binds the TOP-LEVEL `[[routes]]` block, so the\n' +
+          'apex carve-out (`axal.vc/api/*`, `/dashboard`, `/login`, …) must be kept\n' +
+          'in lockstep in BOTH `[[routes]]` and `[[env.production.routes]]` in\n' +
+          'wrangler.toml. If `/api/*` still 404s after a correct deploy, reattach\n' +
+          'the `axal.vc/*` Worker routes on the `axal.vc` zone in the Cloudflare\n' +
+          'dashboard (zone-route drift).',
+      );
+    }
     console.error(
       '\nThe deployed site is serving blank/broken pages, a JSON 404, or hashed\n' +
         'assets that 404. The most common cause is a Worker/GitHub-Pages build\n' +
