@@ -54,6 +54,21 @@ export interface EmailAttachment {
   content: string;
 }
 
+/** A calendar meeting invite (.ics) to embed (Task #15). When present the ICS
+ *  is emitted BOTH as an inline `text/calendar; method=…` alternative (so
+ *  Gmail/Outlook render accept/decline) AND as a downloadable `.ics`
+ *  attachment. The MIME `method=` always mirrors the ICS `METHOD:` so the two
+ *  never disagree. */
+export interface CalendarInvite {
+  /** ICS METHOD — typically `'REQUEST'` for an invitation. Mirrored into the
+   *  MIME `text/calendar; method=` parameter. */
+  method: string;
+  /** Raw ICS body (NOT pre-encoded). */
+  content: string;
+  /** Download filename for the attachment fallback. Defaults to `invite.ics`. */
+  filename?: string;
+}
+
 export interface RawEmailOpts {
   to: string;
   subject: string;
@@ -66,8 +81,10 @@ export interface RawEmailOpts {
   extraHeaders?: Record<string, string>;
   /** Optional file parts. When present the body becomes a multipart/mixed
    *  envelope wrapping the multipart/alternative text+html part plus each
-   *  attachment (used for the `.ics` on event invites). */
+   *  attachment. */
   attachments?: EmailAttachment[];
+  /** Optional calendar meeting invite — see {@link CalendarInvite}. */
+  calendarInvite?: CalendarInvite;
 }
 
 /** Scrub a value destined for a quoted MIME parameter (filename="…"). */
@@ -75,10 +92,23 @@ function safeFilename(s: string): string {
   return stripHeaderInjection(s).replace(/["\\]/g, '').slice(0, 200) || 'attachment';
 }
 
+/** Normalise an ICS `METHOD` for use as a MIME `method=` parameter: uppercase
+ *  letters only (so it can never inject extra MIME params). */
+function safeCalendarMethod(m: string): string {
+  return String(m || '').toUpperCase().replace(/[^A-Z]/g, '') || 'PUBLISH';
+}
+
 /** The text/plain + text/html multipart/alternative block (no leading/closing
- *  envelope boundary — caller frames it). */
-function alternativeBlock(boundary: string, text: string, html: string): string {
-  return [
+ *  envelope boundary — caller frames it). When `calendar` is supplied a
+ *  `text/calendar; method=…` part is appended so clients render the message as
+ *  an actionable meeting invite (accept/decline) rather than a plain email. */
+function alternativeBlock(
+  boundary: string,
+  text: string,
+  html: string,
+  calendar?: { method: string; content: string },
+): string {
+  const parts = [
     `--${boundary}`,
     `Content-Type: text/plain; charset="UTF-8"`,
     `Content-Transfer-Encoding: base64`,
@@ -91,68 +121,112 @@ function alternativeBlock(boundary: string, text: string, html: string): string 
     ``,
     b64encode(html),
     ``,
-    `--${boundary}--`,
-  ].join('\r\n');
+  ];
+  if (calendar) {
+    parts.push(
+      `--${boundary}`,
+      `Content-Type: text/calendar; method=${calendar.method}; charset="UTF-8"`,
+      `Content-Transfer-Encoding: base64`,
+      ``,
+      b64encode(calendar.content),
+      ``,
+    );
+  }
+  parts.push(`--${boundary}--`);
+  return parts.join('\r\n');
+}
+
+/**
+ * Assemble the raw RFC822 message (before base64url). Pure + exported so the
+ * MIME shape — in particular that a calendar invite's `method=` matches the ICS
+ * `METHOD:` — is unit-testable without the Gmail network round-trip.
+ *
+ * Envelopes:
+ *  - no attachments + no calendar → multipart/alternative (legacy, unchanged).
+ *  - otherwise → multipart/mixed wrapping the alternative part and the file
+ *    parts. A calendar invite additionally rides INSIDE the alternative as a
+ *    `text/calendar; method=…` part (so Gmail/Outlook render accept/decline)
+ *    AND as a downloadable `.ics` attachment (the fallback for clients that
+ *    only scan attachments, e.g. Apple Mail). Both carry the same `method=`.
+ */
+export function buildRawMimeMessage(opts: RawEmailOpts): string {
+  const altBoundary = `alt_${crypto.randomUUID().replace(/-/g, '')}`;
+  const safeTo      = stripHeaderInjection(opts.to);
+  const safeFrom    = stripHeaderInjection(opts.from);
+  const safeReply   = stripHeaderInjection(opts.replyTo);
+  const safeSubject = stripHeaderInjection(opts.subject);
+  const subjectEnc  = `=?UTF-8?B?${btoa(unescape(encodeURIComponent(safeSubject)))}?=`;
+
+  const headers: string[] = [
+    `To: ${safeTo}`,
+    `From: ${safeFrom}`,
+    `Reply-To: ${safeReply}`,
+    `Subject: ${subjectEnc}`,
+    `MIME-Version: 1.0`,
+  ];
+  if (opts.extraHeaders) {
+    for (const [k, v] of Object.entries(opts.extraHeaders)) {
+      if (!k || !v) continue;
+      headers.push(`${stripHeaderInjection(k)}: ${stripHeaderInjection(v)}`);
+    }
+  }
+
+  const cal = opts.calendarInvite && opts.calendarInvite.content
+    ? {
+        method: safeCalendarMethod(opts.calendarInvite.method),
+        content: opts.calendarInvite.content,
+        filename: safeFilename(opts.calendarInvite.filename || 'invite.ics'),
+      }
+    : null;
+  const attachments = (opts.attachments || []).filter((a) => a && a.content);
+
+  // Nothing to wrap → the legacy multipart/alternative envelope, unchanged.
+  if (!cal && attachments.length === 0) {
+    headers.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`);
+    return [...headers, ``, alternativeBlock(altBoundary, opts.text, opts.html)].join('\r\n');
+  }
+
+  const mixedBoundary = `mixed_${crypto.randomUUID().replace(/-/g, '')}`;
+  headers.push(`Content-Type: multipart/mixed; boundary="${mixedBoundary}"`);
+  const parts: string[] = [
+    ...headers,
+    ``,
+    `--${mixedBoundary}`,
+    `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
+    ``,
+    alternativeBlock(altBoundary, opts.text, opts.html, cal ? { method: cal.method, content: cal.content } : undefined),
+    ``,
+  ];
+  if (cal) {
+    parts.push(
+      `--${mixedBoundary}`,
+      `Content-Type: text/calendar; method=${cal.method}; charset="UTF-8"; name="${cal.filename}"`,
+      `Content-Transfer-Encoding: base64`,
+      `Content-Disposition: attachment; filename="${cal.filename}"`,
+      ``,
+      b64encode(cal.content),
+      ``,
+    );
+  }
+  for (const att of attachments) {
+    parts.push(
+      `--${mixedBoundary}`,
+      `Content-Type: ${stripHeaderInjection(att.contentType)}; name="${safeFilename(att.filename)}"`,
+      `Content-Transfer-Encoding: base64`,
+      `Content-Disposition: attachment; filename="${safeFilename(att.filename)}"`,
+      ``,
+      b64encode(att.content),
+      ``,
+    );
+  }
+  parts.push(`--${mixedBoundary}--`);
+  return parts.join('\r\n');
 }
 
 export async function sendRawEmail(env: Env, opts: RawEmailOpts): Promise<boolean> {
   try {
     const accessToken = await getGmailAccessToken(env);
-    const altBoundary = `alt_${crypto.randomUUID().replace(/-/g, '')}`;
-    const safeTo      = stripHeaderInjection(opts.to);
-    const safeFrom    = stripHeaderInjection(opts.from);
-    const safeReply   = stripHeaderInjection(opts.replyTo);
-    const safeSubject = stripHeaderInjection(opts.subject);
-    const subjectEnc  = `=?UTF-8?B?${btoa(unescape(encodeURIComponent(safeSubject)))}?=`;
-
-    const headers: string[] = [
-      `To: ${safeTo}`,
-      `From: ${safeFrom}`,
-      `Reply-To: ${safeReply}`,
-      `Subject: ${subjectEnc}`,
-      `MIME-Version: 1.0`,
-    ];
-    if (opts.extraHeaders) {
-      for (const [k, v] of Object.entries(opts.extraHeaders)) {
-        if (!k || !v) continue;
-        headers.push(`${stripHeaderInjection(k)}: ${stripHeaderInjection(v)}`);
-      }
-    }
-
-    const attachments = (opts.attachments || []).filter((a) => a && a.content);
-    let rawEmail: string;
-    if (attachments.length === 0) {
-      // Simple multipart/alternative — unchanged legacy envelope.
-      headers.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`);
-      rawEmail = [...headers, ``, alternativeBlock(altBoundary, opts.text, opts.html)].join('\r\n');
-    } else {
-      // multipart/mixed wrapping the alternative part + each attachment.
-      const mixedBoundary = `mixed_${crypto.randomUUID().replace(/-/g, '')}`;
-      headers.push(`Content-Type: multipart/mixed; boundary="${mixedBoundary}"`);
-      const parts: string[] = [
-        ...headers,
-        ``,
-        `--${mixedBoundary}`,
-        `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
-        ``,
-        alternativeBlock(altBoundary, opts.text, opts.html),
-        ``,
-      ];
-      for (const att of attachments) {
-        parts.push(
-          `--${mixedBoundary}`,
-          `Content-Type: ${stripHeaderInjection(att.contentType)}; name="${safeFilename(att.filename)}"`,
-          `Content-Transfer-Encoding: base64`,
-          `Content-Disposition: attachment; filename="${safeFilename(att.filename)}"`,
-          ``,
-          b64encode(att.content),
-          ``,
-        );
-      }
-      parts.push(`--${mixedBoundary}--`);
-      rawEmail = parts.join('\r\n');
-    }
-
+    const rawEmail = buildRawMimeMessage(opts);
     const raw = btoa(unescape(encodeURIComponent(rawEmail)))
       .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {

@@ -126,7 +126,36 @@ function toIcsStamp(value: string | null | undefined): string {
   return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 }
 
-function vevent(event: any, baseUrl: string): string[] {
+/** Options for {@link buildEventIcs}. */
+export interface EventIcsOptions {
+  /**
+   * Calendar `METHOD`. Defaults to `'PUBLISH'` — the right value for an
+   * add-to-calendar download or a published feed. Pass `'REQUEST'` for an
+   * emailed meeting invitation: it adds the `ORGANIZER`/`ATTENDEE` lines that
+   * make calendar clients (Outlook in particular) render accept/decline
+   * buttons. Task #15 — the email MIME part's `method=` parameter must mirror
+   * this so the file and the part never disagree.
+   */
+  method?: 'PUBLISH' | 'REQUEST';
+  /** REQUEST only — the inviting organizer. Should match the email From. */
+  organizer?: { email: string; name?: string | null };
+  /** REQUEST only — the invited attendee (the recipient mailbox). */
+  attendee?: { email: string; name?: string | null };
+}
+
+/** Quote an ICS parameter value (e.g. a CN) per RFC 5545 §3.1: strip CR/LF and
+ *  DQUOTE, then wrap in DQUOTEs so embedded `:;,` are safe. */
+function icsParamQuote(value: string): string {
+  return `"${String(value || '').replace(/[\r\n"]/g, ' ').trim()}"`;
+}
+
+/** Sanitise an address for a `mailto:` value — no CR/LF/whitespace or list/param
+ *  delimiters that could break the line. */
+function icsMailto(value: string): string {
+  return String(value || '').replace(/[\r\n\s,;:]/g, '').trim();
+}
+
+function vevent(event: any, baseUrl: string, opts: EventIcsOptions = {}): string[] {
   const uid = `event-${event.id}@axal.vc`;
   const dtStart = toIcsStamp(event.starts_at);
   const dtEnd = toIcsStamp(event.ends_at) || dtStart;
@@ -145,18 +174,37 @@ function vevent(event: any, baseUrl: string): string[] {
   }
   if (locationParts.length) lines.push(`LOCATION:${icsEscape(locationParts.join(' — '))}`);
   lines.push(`URL:${icsEscape(url)}`);
+  // Meeting-invite (REQUEST) extras. A scheduling invite needs an ORGANIZER and
+  // at least one ATTENDEE (with RSVP=TRUE) plus STATUS/SEQUENCE for clients to
+  // surface accept/decline. Omitted entirely for PUBLISH so add-to-calendar
+  // downloads stay byte-for-byte as before.
+  if (opts.method === 'REQUEST') {
+    if (opts.organizer?.email) {
+      const cn = opts.organizer.name ? `;CN=${icsParamQuote(opts.organizer.name)}` : '';
+      lines.push(`ORGANIZER${cn}:mailto:${icsMailto(opts.organizer.email)}`);
+    }
+    if (opts.attendee?.email) {
+      const cn = opts.attendee.name ? `;CN=${icsParamQuote(opts.attendee.name)}` : '';
+      lines.push(
+        `ATTENDEE${cn};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${icsMailto(opts.attendee.email)}`,
+      );
+    }
+    lines.push('STATUS:CONFIRMED');
+    lines.push('SEQUENCE:0');
+  }
   lines.push('END:VEVENT');
   return lines;
 }
 
-export function buildEventIcs(event: any, baseUrl = 'https://axal.vc'): string {
+export function buildEventIcs(event: any, baseUrl = 'https://axal.vc', opts: EventIcsOptions = {}): string {
+  const method = opts.method === 'REQUEST' ? 'REQUEST' : 'PUBLISH';
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
     'PRODID:-//Axal StudioOS//Events//EN',
     'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
-    ...vevent(event, baseUrl),
+    `METHOD:${method}`,
+    ...vevent(event, baseUrl, opts),
     'END:VCALENDAR',
   ];
   return lines.join('\r\n') + '\r\n';

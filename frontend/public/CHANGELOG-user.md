@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Event invitations now arrive as real calendar invites
+
+When you invite someone to an event, the email now shows up as a proper meeting invitation with Accept and Decline buttons in Gmail, Outlook, Apple Mail and other calendar apps — instead of a plain attachment some clients ignored. The invite still includes a downloadable calendar file as a fallback, so guests can add your event in one tap whatever app they use.
+
+---
+
 ## Track your 83(b) election deadline
 
 If you're incorporating, the Section 83(b) tracker now works on the live platform, not just in preview. Add your election details and StudioOS counts down the strict 30-day IRS filing window for you, shows a readiness checklist and step-by-step mailing instructions, and pre-fills your election document. Once you've mailed it, you can upload a photo or PDF of your certified-mail receipt and the tracker marks itself as filed — so your proof of the filing date is stored safely in one place.

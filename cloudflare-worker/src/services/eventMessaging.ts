@@ -140,7 +140,14 @@ ${messageHtml}
   };
 
   const rendered = wrap(tmpl, {}, { appUrl: base });
-  const ics = buildEventIcs(event, base);
+  // A meeting invite (METHOD:REQUEST) with ORGANIZER + ATTENDEE so clients
+  // render accept/decline. ORGANIZER is parsed from the email From so the .ics
+  // and the envelope agree (Outlook matches them); ATTENDEE is the recipient.
+  const ics = buildEventIcs(event, base, {
+    method: 'REQUEST',
+    organizer: parseEmailAddress(rendered.from),
+    attendee: { email: invite.email, name: invite.name },
+  });
 
   try {
     const { sendRawEmail } = await import('./email/gmail');
@@ -151,13 +158,27 @@ ${messageHtml}
       html: rendered.html,
       from: rendered.from,
       replyTo: rendered.replyTo,
-      attachments: [{
-        filename: `${event.slug || 'event'}.ics`,
-        contentType: 'text/calendar; method=REQUEST; charset="UTF-8"',
+      // The .ics METHOD and the MIME `method=` are both REQUEST — see
+      // buildRawMimeMessage, which emits it inline (accept/decline) plus an
+      // .ics attachment fallback.
+      calendarInvite: {
+        method: 'REQUEST',
         content: ics,
-      }],
+        filename: `${event.slug || 'event'}.ics`,
+      },
     });
   } catch (e: any) {
     console.warn('[eventMessaging] invite email failed', e?.message || e);
   }
+}
+
+/** Pull a `{ email, name }` out of a From header like `Axal VC <noreply@axal.vc>`
+ *  (falls back to treating the whole string as a bare address). */
+function parseEmailAddress(from: string): { email: string; name?: string } {
+  const m = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(String(from || ''));
+  if (m) {
+    const name = m[1].replace(/^"|"$/g, '').trim();
+    return { email: m[2].trim(), name: name || undefined };
+  }
+  return { email: String(from || '').trim() };
 }
