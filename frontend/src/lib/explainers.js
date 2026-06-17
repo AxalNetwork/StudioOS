@@ -17,6 +17,11 @@ export const EXPLAINERS = {
     body: 'A trading-card snapshot of your Scout Report. Download it as an image, or publish it to share a link. Publishing is optional — you can turn it off anytime.',
     docPath: 'getting-started/what-is-studioos',
   },
+  assessment_admin: {
+    title: 'Author the assessment games',
+    body: 'Build the games players take: chapters, decision items and their scoring, archetypes and badges. Preview a run without saving results, then publish — and watch reach, drop-off and outcomes in analytics.',
+    docPath: 'getting-started/what-is-studioos',
+  },
   dashboard: {
     title: 'Your studio at a glance',
     body: 'Quick stats across projects, capital, compliance and your network — pulled live so you can see what needs attention without opening every tab.',

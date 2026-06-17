@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Build and tune the founder assessments (for admins)
+
+Admins now have an **Assessment Studio** in the sidebar for creating and managing the game-style founder assessments. You can build a game from scratch — its chapters, the individual questions and how each answer scores, the resulting archetypes, and the badges players earn — then preview a full play-through to see the result without saving anything. Once a game is published, an analytics view shows how many people started and finished, where they drop off, which archetypes come up most, and how long answers take. Only admins can see this area.
+
+---
+
 ## Play to discover your founder archetype
 
 The interactive founder assessment is here. Look for **Discover** in the sidebar to play short, game-style rounds — quick choices, snap judgments, ranking and trade-off questions — that reveal your founder "archetype", a skills radar and where you lean across a few key tensions. You'll earn XP, level up and unlock badges as you go, and the results feed straight into the skills and values on your profile. When you're done, you get a shareable "founder card" you can download as an image or publish to share with a link — sharing is always optional and off by default.
