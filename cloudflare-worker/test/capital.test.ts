@@ -12,6 +12,11 @@
  *     call is NOT marked paid);
  *   - an admin still sees every call and can act on any call.
  *
+ * Task #20 extends the same per-investor scoping to the LP-record routes:
+ *   - GET /investors returns only the caller's own LP record(s) (admins: all);
+ *   - GET /investors/:id 404s for an LP the caller doesn't own, so neither the
+ *     LP record nor its capital_calls leak by guessing ids (admins: any).
+ *
  * Run with the strip-types loader (see package.json test:drift):
  *   node --experimental-strip-types --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/capital.test.ts
@@ -80,6 +85,24 @@ function makeEnv(user: any): any {
           const owns = LPS.some((lp) => lp.id === lpId && lp.user_id === uid);
           return { results: owns ? [{ '1': 1 }] : [] };
         }
+        // Investor list / detail (limited_partners JOIN vc_funds) — Task #20
+        // per-investor scoping. The detail query carries WHERE lp.id (and, for
+        // non-admins, AND lp.user_id); the list carries an optional WHERE
+        // lp.user_id for non-admins. Admin variants have no user_id filter.
+        if (s.includes('from limited_partners lp') && s.includes('join vc_funds')) {
+          if (s.includes('where lp.id')) {
+            const lpId = bound[0];
+            const uid = s.includes('and lp.user_id') ? bound[1] : null;
+            let row = LPS.find((lp) => lp.id === lpId);
+            if (uid != null && (!row || row.user_id !== uid)) row = undefined;
+            return { results: row ? [row] : [] };
+          }
+          if (s.includes('where lp.user_id')) {
+            const uid = bound[0];
+            return { results: LPS.filter((lp) => lp.user_id === uid) };
+          }
+          return { results: [...LPS] };
+        }
         // Non-admin scoped list (capital_calls JOIN limited_partners).
         if (s.includes('from capital_calls cc') && s.includes('join limited_partners')) {
           const uid = bound[0];
@@ -88,6 +111,11 @@ function makeEnv(user: any): any {
           let rows = calls.filter((cc) => ownLpIds.includes(cc.limited_partner_id));
           if (status) rows = rows.filter((cc) => cc.status === status);
           return { results: sortByCreatedDesc(rows) };
+        }
+        // Per-LP capital calls for the investor-detail route (Task #20).
+        if (s.includes('from capital_calls where limited_partner_id')) {
+          const lpId = bound[0];
+          return { results: calls.filter((cc) => cc.limited_partner_id === lpId) };
         }
         // Single call by id (pay route + post-update re-read).
         if (s.includes('from capital_calls where id')) {
@@ -194,4 +222,76 @@ test('pay: an admin can pay any capital call (200)', async () => {
   assert.equal(res.status, 200);
   const body = (await res.json()) as any;
   assert.equal(body.status, 'paid');
+});
+
+// --- GET /investors scoping (Task #20) -------------------------------------
+
+function listInvestors(env: any, token: string): Promise<Response> {
+  return capital.request('/investors', { headers: { Authorization: `Bearer ${token}` } }, env);
+}
+
+function getInvestor(env: any, token: string, id: number): Promise<Response> {
+  return capital.request(`/investors/${id}`, { headers: { Authorization: `Bearer ${token}` } }, env);
+}
+
+test('investors list: admin sees every LP record', async () => {
+  const token = await mintToken(ADMIN_ID, 'admin');
+  const env = makeEnv({ id: ADMIN_ID, role: 'admin', is_active: 1 });
+  const res = await listInvestors(env, token);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as any[];
+  assert.deepEqual(body.map((lp) => lp.id).sort((a, b) => a - b), [100, 200]);
+});
+
+test('investors list: a non-admin investor only sees their own LP record', async () => {
+  const token = await mintToken(OWNER_ID, 'investor');
+  const env = makeEnv({ id: OWNER_ID, role: 'investor', is_active: 1 });
+  const res = await listInvestors(env, token);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as any[];
+  assert.deepEqual(body.map((lp) => lp.id), [100]);
+  // Cross-tenant guard: the other investor's LP (#200) must NOT leak.
+  assert.ok(!body.some((lp) => lp.id === 200));
+});
+
+test('investors list: a different investor sees only their own (disjoint) LP', async () => {
+  const token = await mintToken(OTHER_ID, 'investor');
+  const env = makeEnv({ id: OTHER_ID, role: 'investor', is_active: 1 });
+  const res = await listInvestors(env, token);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as any[];
+  assert.deepEqual(body.map((lp) => lp.id), [200]);
+});
+
+// --- GET /investors/:id scoping (Task #20) ---------------------------------
+
+test('investor detail: an investor can read their own LP record + its calls', async () => {
+  const token = await mintToken(OWNER_ID, 'investor');
+  const env = makeEnv({ id: OWNER_ID, role: 'investor', is_active: 1 });
+  const res = await getInvestor(env, token, 100);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as any;
+  assert.equal(body.id, 100);
+  assert.deepEqual(body.capital_calls.map((cc: any) => cc.id), [1]);
+});
+
+test('investor detail: an investor canNOT read another LP record (404, no calls leaked)', async () => {
+  const token = await mintToken(OTHER_ID, 'investor');
+  const env = makeEnv({ id: OTHER_ID, role: 'investor', is_active: 1 });
+  // LP #100 belongs to OWNER_ID, not OTHER_ID — must 404 with no LP/calls data.
+  const res = await getInvestor(env, token, 100);
+  assert.equal(res.status, 404);
+  const body = (await res.json()) as any;
+  assert.equal(body.capital_calls, undefined);
+  assert.notEqual(body.id, 100);
+});
+
+test('investor detail: an admin can read any LP record + its calls', async () => {
+  const token = await mintToken(ADMIN_ID, 'admin');
+  const env = makeEnv({ id: ADMIN_ID, role: 'admin', is_active: 1 });
+  const res = await getInvestor(env, token, 200);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as any;
+  assert.equal(body.id, 200);
+  assert.deepEqual(body.capital_calls.map((cc: any) => cc.id), [2]);
 });

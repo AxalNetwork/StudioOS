@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your investor records stay private to you
+
+If you're an investor, the Capital area now shows only your own investor record and capital calls — never other investors' commitments or details. You'll review and manage your own information exactly as before, and administrators still see the full picture across all funds.
+
+---
+
 ## Pay for your ticket right from your invitation
 
 If you're invited to a paid event, accepting your invitation now walks you straight through payment instead of leaving you stuck. Accept the invite, sign in to your account if you aren't already, and pay for your ticket on the same page — no extra emails or hunting for a checkout link. Your seat is confirmed as soon as the payment goes through. Free events and complimentary invitations work exactly as before, with nothing extra to do.
