@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Pay for your ticket right from your invitation
+
+If you're invited to a paid event, accepting your invitation now walks you straight through payment instead of leaving you stuck. Accept the invite, sign in to your account if you aren't already, and pay for your ticket on the same page — no extra emails or hunting for a checkout link. Your seat is confirmed as soon as the payment goes through. Free events and complimentary invitations work exactly as before, with nothing extra to do.
+
+---
+
 ## Event invitations now arrive as real calendar invites
 
 When you invite someone to an event, the email now shows up as a proper meeting invitation with Accept and Decline buttons in Gmail, Outlook, Apple Mail and other calendar apps — instead of a plain attachment some clients ignored. The invite still includes a downloadable calendar file as a fallback, so guests can add your event in one tap whatever app they use.
