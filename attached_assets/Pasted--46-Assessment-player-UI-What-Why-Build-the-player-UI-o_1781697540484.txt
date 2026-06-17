@@ -1,0 +1,32 @@
+#46 - Assessment player UI
+What & Why
+Build the player UI over the A1 backend per design/GAMIFIED_ASSESSMENT_SYSTEM.md §9. This is the fun, game-like surface — one decision per screen, motion and reveal, not a survey. Mobile-first and swipeable.
+Done looks like
+* /play → AssessmentHubPage: the caller's track game, XP/level bar, badge wall, current archetype card, "Play / Continue" CTA.
+* /play/:gameSlug → AssessmentGamePage: full-screen player rendering each mechanic — dilemma (big choice cards), card_sort (drag deck, keep top N = config.pick_n), sjt ("which lever?" cards + optional confidence wager slider), speed (timed binary with countdown ring config.timer_ms, records latency), allocation (sliders summing to config.total), reflection (the Scout Report reveal — recharts radar fills in + archetype). Progress bar across chapters; XP pops + badge-unlock toasts via useToast.
+* /play/card → ProfileCardPage: shareable archetype trading card (radar + archetype + top values + top skills + badges) with PNG export, reusing the existing deck-share CTA.
+* Routes are lazy-loaded and wired in App.jsx with role guards; a "Play" entry is added to sidebarConfig.js.
+* After onboarding persona classification, a non-forced "Discover your {archetype}" CTA routes into the track game.
+* All new components carry dark: variants (dark-mode drift guard passes). npm run test:drift + cd cloudflare-worker && npx tsc --noEmitgreen. Both changelogs updated.
+Out of scope
+* Admin authoring/analytics (A3).
+* Any new backend route — consume only A1's assessment api.js namespace.
+* New data-fetching libraries — useEffect + useState + api.js only.
+Steps
+1. Hub page — build AssessmentHubPage with XP/level bar, badge wall, archetype card, play/continue CTA.
+2. Game player — build AssessmentGamePage with a per-mechanic renderer for all six mechanics, chapter progress, latency capture, XP/badge toasts, and the radar reveal.
+3. Profile card — build ProfileCardPage with radar + archetype + top values/skills/badges and PNG export reusing the deck-share CTA.
+4. Routing + nav + onboarding hook — lazy routes in App.jsx with role guards, sidebarConfig.js entry, and the post-onboarding "Discover your archetype" CTA.
+5. Polish + green gates — dark: variants everywhere, mobile-first; run drift + tsc; update both changelogs.
+Relevant files
+* frontend/src/App.jsx
+* frontend/src/sidebarConfig.js
+* frontend/src/lib/api.js
+* frontend/src/components/useToast.js
+* frontend/src/components/PageExplainer.jsx
+* frontend/src/pages/OnboardingChatPage.jsx
+* scripts/check-dark-mode.mjs
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md
+Dependencies
+#45 - Assessment engine backend (worker)
