@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Play to discover your founder archetype
+
+The interactive founder assessment is here. Look for **Discover** in the sidebar to play short, game-style rounds — quick choices, snap judgments, ranking and trade-off questions — that reveal your founder "archetype", a skills radar and where you lean across a few key tensions. You'll earn XP, level up and unlock badges as you go, and the results feed straight into the skills and values on your profile. When you're done, you get a shareable "founder card" you can download as an image or publish to share with a link — sharing is always optional and off by default.
+
+---
+
 ## Groundwork for a new interactive founder assessment
 
 We've started building a playful, game-style assessment that will help map your strengths, working style and founder "archetype" — and turn your answers into the skills and values shown on your profile. This update lays the behind-the-scenes foundation: the scoring, badges and results all work, with the interactive experience to follow. There's nothing new to click just yet.
