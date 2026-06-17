@@ -10,6 +10,12 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Scope capital-call data per investor (Task #12)
+- **Per-investor scoping (`cloudflare-worker/src/routes/capital.ts`):** `GET /api/capital/calls` previously returned every row in `capital_calls` to any caller passing the broad `canViewLpData` check (admin OR investor) — so any investor could read every LP's capital calls across all funds (IDOR / cross-tenant exposure). Admins still get the unscoped list; a non-admin investor's query now `JOIN`s `limited_partners` and filters on `lp.user_id = <caller>`, so they only see calls tied to their own LP record(s). The optional `status` filter is preserved on both branches.
+- **Ownership guard on pay (`capital.ts` — `POST /api/capital/calls/:id/pay`):** a non-admin caller may now only pay/mark a call that belongs to one of their own LP records; otherwise the route returns `404` (deliberately not `403`, so a non-owner can't enumerate which call ids exist). Admins remain exempt.
+- **Batched bulk creation (`capital.ts` — `POST /api/capital/capitalCall`):** replaced the per-active-investor `INSERT` loop (N+1) with a single `env.DB.batch(...)` round-trip, mirroring the `models/distributions.ts` pattern. Response shape unchanged.
+- **Tests (`cloudflare-worker/test/capital.test.ts`, wired into `npm run test:drift`):** route-level coverage with a minted JWT + in-memory D1 stub — investor sees only their own calls (status filter stays scoped), a different investor sees a disjoint set, an investor is blocked (`404`, call not mutated) from paying another's call, and admins see/act on everything.
+
 ## Fix broken nav & add 404 fallback (Task #11)
 - **Broken "View Billing" nav (`frontend/src/pages/IncorporatePage.jsx`):** the incorporation success card linked to a non-existent `/billing` route (dead-end blank page). Repointed to the real billing surface `/settings/billing` (the Billing tab in `SettingsPage`); every role that can reach `/incorporate` also passes the `/settings/:section` guard.
 - **Catch-all 404 (`frontend/src/App.jsx`, `frontend/src/pages/NotFoundPage.jsx`):** added a `path="*"` route as the LAST entry in the main route table rendering a new `NotFoundPage` (clear "Page not found" copy + "Back to home" link + "Go back"), so unmatched URLs no longer render a blank screen inside the layout. Placed last so it never shadows existing public/alias/guarded routes; React Router v6 ranking also keeps `*` lowest-priority.
