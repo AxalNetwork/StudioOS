@@ -9,7 +9,7 @@ API-first Venture Studio OS — manages startup lifecycle from intake to portfol
 ## Run & Operate
 - **Dev**: `npm run dev` (frontend) + `python backend/main.py` (FastAPI, dev-only).
 - **Build**: `npm run build` · **Deploy (prod)**: `npm run deploy` (Cloudflare Worker)
-- **Typecheck**: `npm run typecheck` · **Drift check**: `npm run test:drift` (required pre-merge)
+- **Typecheck**: runs inside `npm run test:drift` (`tsc --noEmit` in `cloudflare-worker/`; there is no standalone `npm run typecheck`) · **Drift check**: `npm run test:drift` (required pre-merge)
 - **Required env**: `JWT_SECRET`, `SCORING_HMAC_SECRET` (≥32 bytes, hard-required in prod), `AXAL_ENCRYPTION_SECRET` (falls back to JWT_SECRET), `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_CLAIM_EMAIL` (push).
 
 ### Sync Cheatsheet (PUSH_REJECTED from Replit's Sync UI — run in Shell, not the agent)

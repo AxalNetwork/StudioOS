@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Fewer dead ends
+
+We fixed a couple of navigation snags. The "View Billing" button on the incorporation confirmation screen now takes you straight to your Billing settings instead of a blank page. And if you ever land on a link that doesn't exist, you'll now see a friendly "Page not found" screen with a quick way back home, rather than an empty page.
+
+---
+
 ## Your archetype now shows up where it matters — plus smarter event picks
 
 Your founder archetype now travels with you across the platform. Once you publish your assessment result, a small archetype tag appears next to your name on event rosters and in the network's top-referrers list, so people can see your style at a glance. (If you haven't published, nothing is shown — it's entirely your choice.)
