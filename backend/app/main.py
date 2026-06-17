@@ -472,6 +472,11 @@ app.include_router(_kyc.router, prefix="/api")
 from backend.app.database import get_session  # noqa: E402
 from backend.app.api.routes import brand as _brand  # noqa: E402
 app.include_router(_brand.router, prefix="/api")
+# Task #38 — dev-only parity shims (Skills profile + Payouts/network).
+from backend.app.api.routes import skills as _skills  # noqa: E402
+app.include_router(_skills.router, prefix="/api")
+from backend.app.api.routes import network as _network  # noqa: E402
+app.include_router(_network.router, prefix="/api")
 
 # --- Public landing page HTML (Task #4 parity) ----------------------------
 # The dev backend serves HTML directly for /landing/:slug and

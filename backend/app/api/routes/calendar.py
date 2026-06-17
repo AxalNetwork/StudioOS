@@ -499,6 +499,55 @@ def google_sync(
 
 
 # ===========================================================================
+# Task #38 — DEV-ONLY Microsoft (Outlook) calendar + "push one" stubs.
+# ---------------------------------------------------------------------------
+# Production hosts these on the Worker (cloudflare-worker/src/routes/
+# calendar.ts). The dev backend has no Microsoft OAuth wiring, so the
+# Calendar page's loadMicrosoft() used to 404. We report the same
+# "not configured / not connected" posture Google uses in dev so the page
+# renders; connect/sync fail-loud with 503 (matching google_connect).
+# ===========================================================================
+@router.get("/microsoft/status")
+def microsoft_status(user: User = Depends(get_current_user)):
+    return {
+        "configured": False,
+        "available": False,  # back-compat alias
+        "connected": False,
+        "microsoft_email": None,
+        "last_synced_at": None,
+        "scope": None,
+    }
+
+
+@router.post("/microsoft/connect")
+def microsoft_connect(user: User = Depends(get_current_user)):
+    raise HTTPException(status_code=503, detail="Microsoft OAuth not configured on server")
+
+
+@router.post("/microsoft/sync")
+def microsoft_sync(user: User = Depends(get_current_user)):
+    raise HTTPException(status_code=503, detail="Microsoft OAuth not configured on server")
+
+
+@router.delete("/microsoft")
+def microsoft_disconnect(user: User = Depends(get_current_user)):
+    return {"ok": True}
+
+
+_PUSHABLE_KINDS = {"mentor_booking", "ic_meeting", "founder_checkin", "partner_office_hour"}
+
+
+@router.post("/push/{kind}/{source_id}")
+def push_one_to_external(kind: str, source_id: int, user: User = Depends(get_current_user)):
+    """Dev stub for "Add to my external calendar". No provider is connected
+    in dev, so nothing is actually pushed — but we validate the kind and
+    return a valid envelope so the per-event button doesn't 404."""
+    if kind not in _PUSHABLE_KINDS:
+        raise HTTPException(status_code=400, detail="Unsupported kind")
+    return {"ok": True, "pushed": {"google": False, "microsoft": False}}
+
+
+# ===========================================================================
 # Per-user Cal.com API key (mentor-only)
 # ===========================================================================
 class CalcomKeyBody(BaseModel):

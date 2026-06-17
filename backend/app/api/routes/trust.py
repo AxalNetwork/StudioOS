@@ -358,6 +358,27 @@ def trust_summary(
 
 
 # ===========================================================================
+# Task #38 — DEV-ONLY obligation matrix (/trust/me).
+# ---------------------------------------------------------------------------
+# Production hosts /trust/me on the Worker, backed by a legal_obligations
+# table seeded per role. The dev backend has no such table, so the Settings
+# ProfileTrustBadge + Trust Center used to 404. Return an empty-but-valid
+# matrix (no required obligations → fully compliant).
+# ===========================================================================
+@router.get("/me")
+def trust_me(
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    return {
+        "role": getattr(user.role, "value", user.role),
+        "obligations": [],
+        "required_open_count": 0,
+        "fully_compliant": True,
+    }
+
+
+# ===========================================================================
 # Task #41 — DEV-ONLY trust intro stubs
 # ---------------------------------------------------------------------------
 # The production Cloudflare Worker hosts /trust/intro/{request,status} with

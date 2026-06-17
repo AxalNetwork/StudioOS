@@ -1686,6 +1686,70 @@ def update_corporate_profile(payload: dict, session: Session = Depends(get_sessi
     return _corporate_view(next_corporate)
 
 
+# --- Identity (Task #38 dev parity) ----------------------------------------
+# Mirrors cloudflare-worker/src/routes/settings.ts GET/PUT /profile/identity.
+# Personal-half fields live in user_profile_extras.personal_data; the
+# settings-half (pronouns/profile_slug/timezone/locale) lives in
+# user_settings. Feeds the Settings page's ProfileCompletionBanner, which
+# 404'd in dev before this existed.
+_IDENTITY_SETTINGS_KEYS = ("pronouns", "profile_slug", "timezone", "locale")
+_REQUIRED_FIELD_LABELS = {
+    "full_legal_name": "Full legal name",
+    "date_of_birth": "Date of birth",
+    "nationality": "Nationality",
+    "tax_residency_country": "Tax residency",
+    "address_line1": "Address",
+    "city": "City",
+    "postal_code": "Postal code",
+    "country": "Country",
+}
+
+
+def _identity_view(personal: dict, settings_row: dict) -> dict:
+    pv = _personal_view(personal)
+    missing = [
+        {"key": f, "label": _REQUIRED_FIELD_LABELS.get(f, f)}
+        for f in _PERSONAL_COMPLETION_FIELDS if not personal.get(f)
+    ]
+    return {
+        "display_name": personal.get("display_name") or None,
+        "headline": personal.get("headline") or None,
+        "pronouns": settings_row.get("pronouns"),
+        "profile_slug": settings_row.get("profile_slug"),
+        "timezone": settings_row.get("timezone"),
+        "locale": settings_row.get("locale"),
+        "full_legal_name": personal.get("full_legal_name") or None,
+        "date_of_birth": personal.get("date_of_birth") or None,
+        "nationality": personal.get("nationality") or None,
+        "profile_completion_pct": pv["profile_completion_pct"],
+        "missing_required_fields": missing,
+    }
+
+
+@router.get("/profile/identity")
+def get_identity(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    extras = _load_extras(session, user.id)
+    settings_row = _get_user_settings(session, user.id)
+    return _identity_view(extras["personal"], settings_row)
+
+
+@router.put("/profile/identity")
+def update_identity(payload: dict, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    payload = payload or {}
+    settings_patch = {k: payload[k] for k in _IDENTITY_SETTINGS_KEYS if k in payload}
+    settings_row = (
+        _apply_user_settings_patch(session, user.id, settings_patch)
+        if settings_patch else _get_user_settings(session, user.id)
+    )
+    extras = _load_extras(session, user.id)
+    next_personal = _apply_personal_patch(extras["personal"], payload)
+    for k in ("display_name", "headline"):
+        if k in payload:
+            next_personal[k] = _trim(payload[k])
+    _save_extras_field(session, user.id, "personal_data", next_personal)
+    return _identity_view(next_personal, settings_row)
+
+
 # --- Page header explainers (Task #15) -------------------------------------
 
 import re as _re_explainer  # noqa: E402

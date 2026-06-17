@@ -9,6 +9,7 @@ from typing import Optional
 router = APIRouter(prefix="/activity", tags=["Activity Log"])
 
 
+@router.get("")
 @router.get("/")
 async def list_activity(
     project_id: Optional[int] = None,

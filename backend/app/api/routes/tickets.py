@@ -10,6 +10,7 @@ from datetime import datetime
 router = APIRouter(prefix="/tickets", tags=["Support"])
 
 
+@router.get("")
 @router.get("/")
 def list_tickets(
     status: str = None,
@@ -27,6 +28,7 @@ def list_tickets(
     return session.exec(stmt).all()
 
 
+@router.post("")
 @router.post("/")
 async def create_ticket(
     data: TicketCreate,
@@ -60,6 +62,22 @@ async def create_ticket(
         response["github_sync_status"] = "failed"
 
     return response
+
+
+@router.post("/sync")
+def sync_tickets(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Task #38 dev parity. The prod Worker pulls fresh issues from GitHub;
+    the dev backend has no such sync, so we simply return the caller's
+    current tickets. Declared before /{ticket_id} so POST /tickets/sync no
+    longer 405s by matching the int path param."""
+    stmt = select(Ticket).order_by(Ticket.created_at.desc())
+    if user.role != UserRole.ADMIN:
+        stmt = stmt.where(Ticket.user_id == user.id)
+    tickets = session.exec(stmt).all()
+    return {"tickets": tickets, "synced": 0}
 
 
 @router.get("/{ticket_id}")
