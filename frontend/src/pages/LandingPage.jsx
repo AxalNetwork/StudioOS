@@ -5,7 +5,7 @@ import {
   Handshake, Rocket, ArrowRight, ChevronRight,
   Hammer, Sparkles, GraduationCap, HeartHandshake,
   ShieldCheck, BadgeCheck, LockKeyhole, Cloud, Cpu, Archive,
-  UserPlus,
+  UserPlus, Calendar,
 } from 'lucide-react';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
@@ -257,6 +257,96 @@ function LatestArticles() {
           <Link to="/articles" className="inline-flex items-center gap-1 text-sm text-violet-700 hover:text-violet-800 font-medium">
             All articles <ChevronRight size={14} />
           </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// Task #7 — Landing teasers: "Discover your archetype" (→ assessment) and
+// "Upcoming events" (public feed). Public surface — the events half renders a
+// graceful empty state and never breaks the page on a fetch error.
+function DiscoverTeaser() {
+  const [events, setEvents] = React.useState(null);
+  React.useEffect(() => {
+    let alive = true;
+    import('../lib/api').then(({ eventsPublic }) =>
+      eventsPublic.list({ limit: 3 })
+        .then((r) => {
+          const list = Array.isArray(r) ? r
+            : Array.isArray(r?.events) ? r.events
+            : Array.isArray(r?.items) ? r.items
+            : [];
+          if (alive) setEvents(list);
+        })
+        .catch(() => { if (alive) setEvents([]); }),
+    );
+    return () => { alive = false; };
+  }, []);
+
+  const fmt = (v) => {
+    if (!v) return 'Date TBD';
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return v;
+    try { return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return v; }
+  };
+
+  return (
+    <section className="py-20 px-6 bg-gray-50 dark:bg-gray-900/40">
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Discover your archetype */}
+        <div className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-8 dark:border-violet-900/40 dark:from-violet-900/20 dark:to-gray-900">
+          <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center mb-5 dark:bg-violet-900/40">
+            <Sparkles size={22} className="text-violet-600 dark:text-violet-300" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Discover your archetype</h2>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+            A short, game-like assessment maps your values and skills to a founder archetype —
+            then tailors the people and events the network surfaces to you.
+          </p>
+          <Link
+            to="/play"
+            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-violet-600 hover:bg-violet-700 transition-all px-6 py-3 text-sm font-medium text-white shadow-lg shadow-violet-600/20"
+          >
+            Take the assessment <ArrowRight size={16} />
+          </Link>
+        </div>
+
+        {/* Upcoming events */}
+        <div className="rounded-2xl border border-gray-200 bg-white p-8 dark:border-gray-800 dark:bg-gray-900">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Upcoming events</h2>
+            <Link to="/events" className="inline-flex items-center gap-1 text-sm text-violet-700 hover:text-violet-800 font-medium dark:text-violet-300">
+              All events <ChevronRight size={14} />
+            </Link>
+          </div>
+          {events === null ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
+          ) : events.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No upcoming events right now — check back soon.</p>
+          ) : (
+            <ul className="space-y-3">
+              {events.map((ev) => (
+                <li key={ev.id || ev.slug}>
+                  <Link
+                    to={`/events/${ev.slug || ev.id}`}
+                    className="flex items-center gap-3 rounded-xl border border-gray-200 p-3 hover:border-violet-300 transition-colors dark:border-gray-800 dark:hover:border-violet-700"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0 dark:bg-violet-900/40">
+                      <Calendar size={18} className="text-violet-600 dark:text-violet-300" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{ev.title}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {fmt(ev.starts_at)}
+                        {ev.location_text ? ` · ${ev.location_text}` : (ev.location_kind ? ` · ${ev.location_kind}` : '')}
+                      </div>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </section>
@@ -574,6 +664,9 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* Task #7 — Discover-your-archetype + upcoming-events teasers (public surface). */}
+      <DiscoverTeaser />
 
       {/* Task #1 — Latest from the network (3 most recent published articles).
           Public surface; renders nothing on empty/fetch error so it never breaks the page. */}

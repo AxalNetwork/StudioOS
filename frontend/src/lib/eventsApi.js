@@ -44,6 +44,11 @@ export const eventsApi = {
   eligibility: (id) => request(`/events/${id}/eligibility`),
   // POST /:id/checkin/:code — QR check-in → attended.
   checkin: (id, code) => request(`/events/${id}/checkin/${encodeURIComponent(code)}`, { method: 'POST', body: JSON.stringify({}) }),
+  // Task #7 cross-system wiring:
+  // GET /suggested — archetype/track-aware upcoming event suggestions for the caller.
+  suggested: () => request('/events/suggested'),
+  // GET /:id/invite-suggestions — matching-ranked people to invite (host/admin).
+  inviteSuggestions: (id) => request(`/events/${id}/invite-suggestions`),
   // Direct file URLs (opened in a new tab / anchor href, not fetched via request()).
   icsUrl: (id) => `${BASE}/events/${id}/event.ics`,
   exportUrl: (id) => `${BASE}/events/${id}/export`,

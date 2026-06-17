@@ -6,7 +6,7 @@
 // role the event's audience_rules_json grants a free seat (design §7.1) — a
 // client-side hint; the authoritative comp minting happens server-side.
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { X, Search, Mail, Users, Gift } from 'lucide-react';
+import { X, Search, Mail, Users, Gift, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import { eventsApi } from '../../lib/eventsApi';
 import { useEscapeClose } from '../useEscapeClose';
@@ -25,6 +25,7 @@ function compsRole(rules, role) {
 
 export default function InvitePeopleModal({ eventId, audienceRules = {}, onClose, onInvited }) {
   const [candidates, setCandidates] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(() => new Set());
@@ -50,6 +51,21 @@ export default function InvitePeopleModal({ eventId, audienceRules = {}, onClose
     })();
     return () => { alive = false; };
   }, []);
+
+  // Task #7 — matching-ranked "suggested to invite" list (best-effort; the
+  // email + network picker still work if this 404s or returns nothing).
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await eventsApi.inviteSuggestions(eventId);
+        if (alive) setSuggestions(Array.isArray(res?.suggestions) ? res.suggestions : []);
+      } catch {
+        if (alive) setSuggestions([]);
+      }
+    })();
+    return () => { alive = false; };
+  }, [eventId]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -114,6 +130,47 @@ export default function InvitePeopleModal({ eventId, audienceRules = {}, onClose
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* Suggested to invite — matching-ranked (Task #7) */}
+          {suggestions.length > 0 && (
+            <div>
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                <Sparkles size={15} /> Suggested to invite
+              </div>
+              <div className="space-y-1 rounded-lg border border-violet-200 bg-violet-50/40 p-1.5 dark:border-violet-900/40 dark:bg-violet-900/10">
+                {suggestions.map((s) => {
+                  const comp = compsRole(audienceRules, s.role);
+                  return (
+                    <label
+                      key={s.user_id}
+                      className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 hover:bg-white dark:hover:bg-gray-800"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected.has(s.user_id)}
+                        onChange={() => toggle(s.user_id)}
+                        className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-violet-600 focus:ring-violet-500"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {s.name || `User #${s.user_id}`}
+                          {s.role ? <span className="font-normal text-gray-500 dark:text-gray-400"> · {s.role}</span> : null}
+                        </div>
+                        {s.reason ? (
+                          <div className="truncate text-xs text-violet-700 dark:text-violet-300">{s.reason}</div>
+                        ) : null}
+                      </div>
+                      {comp && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                          <Gift size={11} /> Free seat
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Network / connections picker */}
           <div>
             <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
