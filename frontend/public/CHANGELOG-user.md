@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## About page copy refresh
+
+The About page now opens with a clearer description of what Axal VC does, and the second paragraph is tighter and more direct.
+
+---
+
 ## Five new assessment tracks and smarter matching
 
 The gamified assessment now covers five more roles: **operators**, **investors**, **partners**, **mentors**, and **coaches**. Each has its own set of scenarios, archetypes, and badges. The matching engine that suggests cofounders, investors, mentors, and coaches now uses your assessment results — skills and values — to surface better fits, with clearer explanations of why someone is recommended and any potential watch-outs.

@@ -13,7 +13,8 @@ const ABOUT_TEXT =
 
 const MANIFESTO_PARAGRAPHS = [
   'Every age builds the tools it deserves. Ours is learning that intelligence alone is not enough: it must be connected, resilient, and accountable to the world it shapes.',
-  'Axal VC exists for the builders of what comes next: founders designing modular digital systems that adapt at the machine level, software that protects privacy and intellectual property, and AI that helps societies navigate complexity with greater clarity. We believe infrastructure should not stand apart from the world, but move with it: interconnected through IoT, responsive to change, and built to endure.',
+  'Axal VC is a global venture partner network, equipped with the tools, operating infrastructure, and capital resources to help founders build what comes next.',
+  'We back founders building modular digital systems that adapt at the machine level, software that protects privacy and intellectual property, and AI that helps societies navigate complexity with greater clarity. We believe infrastructure should not stand apart from the world, but move with it: interconnected through IoT, responsive to change, and built to endure.',
   'We also believe technology must remain in relationship with the living systems around it. Biodiversity is not a backdrop to progress; it is part of the same fabric. To preserve diversity is to preserve the conditions for future possibility.',
   'This is our investment thesis and our conviction: digital transformation in the age of AI, guided by structured execution, faster time to action, and intelligent decision-making\u2014not only for efficiency, but for continuity, stewardship, and the long future.',
 ];

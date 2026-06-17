@@ -12,6 +12,9 @@
 
 ## Assessment vectors feed matching + five new track seeds (Task #4)
 
+## About page copy refresh (Task #4b)
+- `TeamPage.jsx` manifesto: added "Axal VC is a global venture partner network..." paragraph; tightened "We back founders..." paragraph. No code changes.
+
 - **What:** Feed canonical assessment vectors (`user_values`, `user_skills`) into cofounder, investor, mentor, and coach matching surfaces. Author the 5 remaining assessment track item banks in migration 110.
 - **Matching math (`services/matchingVectors.ts`):** `loadUserValueMap`, `loadUserSkillMap`, `loadUserVectors` (reusable vector loaders); `cosineSimilarity`, `confidenceAdjustedAlignment` (cosine × mean confidence of overlapping dimensions), `skillComplementarity` (+ when viewer weak & candidate strong, − when both weak), `computeWatchOuts` (low-confidence signals, bipolar opposition, double skill gaps).
 - **Cofounder (`routes/cofounder.ts`):** `scoreMatch()` now combines legacy profile signals (skills, sectors, commitment, location, equity) with canonical assessment vectors. Values alignment uses `confidenceAdjustedAlignment`. Skill complementarity and watch-outs detection added. `watch_outs` + `breakdown` surfaced in `/browse` response.
