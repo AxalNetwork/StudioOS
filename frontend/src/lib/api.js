@@ -121,7 +121,11 @@ export async function request(path, options = {}) {
           || currentPath.startsWith('/deck/share/')
           || currentPath.startsWith('/share/deck/')
           || currentPath.startsWith('/insights')
-          || currentPath.startsWith('/settings/email/');
+          || currentPath.startsWith('/settings/email/')
+          // Task #5 — Public event surface (no auth)
+          || currentPath === '/events'
+          || currentPath.startsWith('/events/')
+          || currentPath.startsWith('/invite/');
         if (!isPublicPath) {
           window.location.href = '/login';
         }
@@ -2621,7 +2625,7 @@ export const eventsPublic = {
       method: 'POST',
       body: JSON.stringify({ action, turnstile_token, name }),
     }),
-  icsUrl: () => '/api/public/events.ics',
+  icsUrl: (slug) => slug ? `/api/public/events/${encodeURIComponent(slug)}/ics` : '/api/public/events.ics',
 };
 
 // Admin event review queue (§8.3).

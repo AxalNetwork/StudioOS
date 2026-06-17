@@ -10,6 +10,17 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Public Event Calendar + RSVP + Routing (Task #5)
+- Public event surface (no auth required): `PublicEventsPage.jsx`, `PublicEventDetailPage.jsx`, `InviteRsvpPage.jsx`.
+- `/events` list with type/date filters, search, `.ics` download, and register CTA.
+- `/events/:slug` detail with agenda, capacity, Turnstile-gated registration (waitlist when full, approval pending).
+- `/invite/:token` RSVP page with accept/decline and personal message display.
+- `eventsPublic` API namespace already present in `api.js` (no new methods added).
+- `PublicNav` adds "Events" link.
+- `isPublicPath` in `api.js` updated so 401s on `/events` and `/invite` don't bounce to login.
+- `wrangler.toml`: both `[[routes]]` and `[[env.production.routes]]` blocks updated with `/events` and `/invite` (exact + wildcard) for apex routing.
+- Drift tests: 110/111 pass (pre-existing hash-determinism flake, not related to event surface).
+
 ## Assessment vectors feed matching + five new track seeds (Task #4)
 
 ## About page copy refresh (Task #4b)

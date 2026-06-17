@@ -6,6 +6,7 @@ const LINKS = [
   { label: 'Network', href: '/#network' },
   { label: 'Platform', href: '/#platform' },
   { label: 'Lanes', href: '/#lanes' },
+  { label: 'Events', href: '/events' },
   { label: 'Spin-Out Lab', href: '/spinout-lab' },
   { label: 'Directory', href: '/directory' },
 ];

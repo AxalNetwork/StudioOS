@@ -111,6 +111,10 @@ const ContactPage = lazy(() => import('./pages/ContactPage'));
 const TeamPage = lazy(() => import('./pages/TeamPage'));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
 const RiskDisclosuresPage = lazy(() => import('./pages/RiskDisclosuresPage'));
+// Task #5 — Public event surface.
+const PublicEventsPage = lazy(() => import('./pages/events/PublicEventsPage'));
+const PublicEventDetailPage = lazy(() => import('./pages/events/PublicEventDetailPage'));
+const InviteRsvpPage = lazy(() => import('./pages/events/InviteRsvpPage'));
 // Task #4 (ID) — Public marketing surfaces.
 const PricingPage = lazy(() => import('./pages/PricingPage'));
 const DemoPage = lazy(() => import('./pages/DemoPage'));
@@ -1280,6 +1284,10 @@ function AppInner() {
       <Route path="/partners/:slug" element={<PublicPartnerProfilePage />} />
       {/* Task #55 — Public profile pages, unauthenticated, role-tailored. */}
       <Route path="/u/:handle" element={<PublicProfilePage />} />
+      {/* Task #5 — Public event surface (no auth). */}
+      <Route path="/events" element={<PublicEventsPage />} />
+      <Route path="/events/:slug" element={<PublicEventDetailPage />} />
+      <Route path="/invite/:token" element={<InviteRsvpPage />} />
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/contact" element={<ContactPage />} />

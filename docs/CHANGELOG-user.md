@@ -5,6 +5,24 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Public events calendar
+
+A new public events page is now live at `/events` — no sign-in required. Browse upcoming meetups, workshops, webinars, demo days, and more. You can filter by event type and date, search by keyword, and download a calendar file to add events to your own calendar. Click through to any event for full details, agenda, and a registration form (waitlist automatically kicks in when an event is full). If you receive an invitation link, you can accept or decline directly from the invitation page.
+
+---
+
+## About page copy refresh
+
+The About page now opens with a clearer description of what Axal VC does, and the second paragraph is tighter and more direct.
+
+---
+
+## Five new assessment tracks and smarter matching
+
+The gamified assessment now covers five more roles: **operators**, **investors**, **partners**, **mentors**, and **coaches**. Each has its own set of scenarios, archetypes, and badges. The matching engine that suggests cofounders, investors, mentors, and coaches now uses your assessment results — skills and values — to surface better fits, with clearer explanations of why someone is recommended and any potential watch-outs.
+
+---
+
 ## Build and tune the founder assessments (for admins)
 
 Admins now have an **Assessment Studio** in the sidebar for creating and managing the game-style founder assessments. You can build a game from scratch — its chapters, the individual questions and how each answer scores, the resulting archetypes, and the badges players earn — then preview a full play-through to see the result without saving anything. Once a game is published, an analytics view shows how many people started and finished, where they drop off, which archetypes come up most, and how long answers take. Only admins can see this area.

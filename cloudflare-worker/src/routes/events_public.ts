@@ -103,6 +103,26 @@ eventsPublic.get('/events/:slug', async (c) => {
   });
 });
 
+// ── GET /events/:slug/ics — single-event ICS download ──────────────────────
+eventsPublic.get('/events/:slug/ics', async (c) => {
+  const slug = c.req.param('slug');
+  const event: any = await c.env.DB.prepare(
+    `SELECT * FROM events
+       WHERE slug = ? AND status = 'published'
+         AND ((visibility = 'public' AND admin_published = 1) OR visibility = 'unlisted')`,
+  ).bind(slug).first();
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  // Lazy import to avoid circular reference if eventsCommon.ts is already loaded
+  const { buildEventIcs } = await import('../services/eventsCommon');
+  const ics = buildEventIcs(event);
+  return new Response(ics, {
+    headers: {
+      'content-type': 'text/calendar; charset=utf-8',
+      'content-disposition': `attachment; filename="${event.slug}.ics"`,
+    },
+  });
+});
+
 // ── POST /events/:slug/register — public register (Turnstile) ──────────────
 eventsPublic.post('/events/:slug/register', async (c) => {
   const slug = c.req.param('slug');

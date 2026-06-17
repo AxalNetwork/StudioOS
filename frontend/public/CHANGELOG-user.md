@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Public events calendar
+
+A new public events page is now live at `/events` — no sign-in required. Browse upcoming meetups, workshops, webinars, demo days, and more. You can filter by event type and date, search by keyword, and download a calendar file to add events to your own calendar. Click through to any event for full details, agenda, and a registration form (waitlist automatically kicks in when an event is full). If you receive an invitation link, you can accept or decline directly from the invitation page.
+
+---
+
 ## About page copy refresh
 
 The About page now opens with a clearer description of what Axal VC does, and the second paragraph is tighter and more direct.
