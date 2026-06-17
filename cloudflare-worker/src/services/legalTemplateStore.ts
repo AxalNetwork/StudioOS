@@ -198,8 +198,14 @@ export async function listVersions(
 }
 
 export class TemplateError extends Error {
-  constructor(public code: string, public status: 400 | 404 | 409, message: string) {
+  // Explicit fields (not TS parameter properties) so the worker source loads
+  // under node --experimental-strip-types in the test:drift gate.
+  code: string;
+  status: 400 | 404 | 409;
+  constructor(code: string, status: 400 | 404 | 409, message: string) {
     super(message);
+    this.code = code;
+    this.status = status;
   }
 }
 

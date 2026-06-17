@@ -20,6 +20,7 @@ import {
   recordPaidIncorporationFromPaymentIntent,
   getIncorporationForUser,
 } from '../services/incorporations';
+import legal83b from './legal_83b';
 
 const legal = new Hono<{ Bindings: Env }>();
 
@@ -952,5 +953,11 @@ legal.post('/entities', async (c) => {
   await sql.end();
   return c.json(entity, 201);
 });
+
+// Task #13 — Section 83(b) tracker routes (GET/POST /83b/trackers,
+// PATCH /83b/trackers/:id, POST /83b/trackers/:id/receipt). Defined in a
+// standalone sub-app so the route logic stays loadable by the strip-types
+// test gate without legal.ts's heavy import graph.
+legal.route('/', legal83b);
 
 export default legal;

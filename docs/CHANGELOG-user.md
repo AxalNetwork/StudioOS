@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your capital calls are now private to you
+
+If you're an investor, the Capital page now shows only the capital calls that belong to you — not everyone's. You can review and pay your own calls exactly as before, and administrators still see the full picture across all funds.
+
+---
+
 ## Fewer dead ends
 
 We fixed a couple of navigation snags. The "View Billing" button on the incorporation confirmation screen now takes you straight to your Billing settings instead of a blank page. And if you ever land on a link that doesn't exist, you'll now see a friendly "Page not found" screen with a quick way back home, rather than an empty page.
