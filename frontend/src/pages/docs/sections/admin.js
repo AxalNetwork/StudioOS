@@ -122,5 +122,58 @@ export default {
         { label: 'Audit log', href: '#admin/audit' },
       ],
     },
+    {
+      id: 'events-ops',
+      title: 'Events operations',
+      // Task #7 — admin runbook for the events system + its cross-system badges.
+      overview:
+        "The events system spans an admin-published public feed, host-run rosters with QR check-in, agendas, and invitations. Attendance and agenda membership also drive cross-system participation badges that feed each member's assessment XP and level.",
+      howto: [
+        'A new event is publicly visible only when it is public + published + admin-published — approve it from the admin events queue to set the admin gate.',
+        'Hosts manage their own roster (approve / decline / promote from waitlist) and run QR check-in from the Manage screen.',
+        'Check-in flips a registration to "attended". The first attended registration grants the member Founding Attendee; five or more grants Networker.',
+        'Adding a founder as a speaker on a Demo Day agenda grants that founder the Demo Day Presenter badge.',
+        'Invite suggestions on the Manage screen rank members by values alignment + complementary skills against the host; they exclude the host and anyone already on the roster or invited.',
+      ],
+      tips: [
+        'Badge grants are idempotent and best-effort: re-running a check-in never double-awards, and a badge failure never blocks check-in.',
+        'Event suggestions and invite suggestions only consider members who have completed an assessment (they need canonical value/skill vectors).',
+        'Use the type field deliberately — "demo_day" is what gates the Demo Day Presenter badge and steers founder/investor event suggestions.',
+      ],
+      pitfalls: [
+        'Adding a new top-level app route for events needs both wrangler route blocks updated and a fresh deploy — see the apex-routing notes.',
+        'Event-participation badges live in migration 112; if you stand up a fresh prod D1, apply it (and redeploy) or the badges silently never appear.',
+        'Suggestions are an enhancement layer — an empty list usually means too few assessed members, not a bug.',
+      ],
+      related: [
+        { label: 'Assessment & archetypes ops', href: '#admin/assessment-ops' },
+        { label: 'Feature flags & rollout', href: '#admin/feature-flags' },
+      ],
+    },
+    {
+      id: 'assessment-ops',
+      title: 'Assessment & archetypes ops',
+      // Task #7 — admin runbook for the assessment engine + how archetypes
+      // surface across the rest of the platform.
+      overview:
+        "The assessment engine scores each member into a values + skills vector, assigns a founder archetype, and awards XP/badges. Archetypes are consent-gated: a member's archetype is only visible to others once they publish their result.",
+      howto: [
+        'Members complete a track in the Play experience; scoring assigns an archetype and awards milestone badges + XP.',
+        'A member publishes a result to make their archetype visible on shared surfaces (event rosters, the network view).',
+        'Published archetypes appear automatically as a compact chip beside members on the event roster and Top Referrers list — no per-surface wiring.',
+        'Event suggestions read the member\'s latest track + archetype to bias which upcoming events surface first.',
+      ],
+      tips: [
+        'Encourage members to publish — an unpublished archetype is invisible to everyone but the member and admins, so cross-system surfacing stays empty.',
+        'Archetype chips and XP both derive from the same canonical vectors; there is one source of truth per member.',
+      ],
+      pitfalls: [
+        'Never link to a member\'s unpublished archetype from a shared surface — the consent gate returns nothing for non-owners, by design.',
+        'Assessment XP and event-badge XP share the same XP/level curve; event badges add to the same total rather than a separate tally.',
+      ],
+      related: [
+        { label: 'Events operations', href: '#admin/events-ops' },
+      ],
+    },
   ],
 };

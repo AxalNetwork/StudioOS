@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your archetype now shows up where it matters — plus smarter event picks
+
+Your founder archetype now travels with you across the platform. Once you publish your assessment result, a small archetype tag appears next to your name on event rosters and in the network's top-referrers list, so people can see your style at a glance. (If you haven't published, nothing is shown — it's entirely your choice.)
+
+Showing up to events now earns you badges automatically: you get a **Founding Attendee** badge the first time you check in, a **Networker** badge once you've checked in to five events, and founders who speak at a Demo Day earn a **Demo Day Presenter** badge. These add to your assessment XP, so taking part in the community helps you level up.
+
+Events are easier to discover too. Your events page now has a **"Suggested for you"** section that highlights upcoming events matched to your archetype and track. When you're inviting people to an event you host, a new **"Suggested to invite"** list recommends the best-matched members — by shared values and complementary skills — so you can fill the room with the right people in a couple of clicks.
+
+The home page now also lets visitors discover their archetype and browse upcoming events at a glance.
+
+---
+
 ## Event reminders, paid tickets & an admin events console
 
 Events just got a lot more capable. When an event is published, anyone who qualifies for a free (comp) spot now gets an invitation by email — complete with a calendar file — and an in-app notification, all sent once so nobody is bothered twice. Everyone who's registered also gets automatic reminders 24 hours and 1 hour before the event starts.

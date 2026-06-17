@@ -12,6 +12,7 @@ import { useToast } from '../../components/useToast';
 import PageExplainer from '../../components/PageExplainer';
 import InvitePeopleModal from '../../components/events/InvitePeopleModal';
 import CheckinScanner from '../../components/events/CheckinScanner';
+import ArchetypeBadge from '../../components/play/ArchetypeBadge';
 
 const REG_STATUS_STYLES = {
   registered: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
@@ -110,6 +111,7 @@ export default function EventManagePage() {
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{nameOf(r)}</span>
           <RegBadge status={r.status} />
+          {r.user_id ? <ArchetypeBadge userId={r.user_id} /> : null}
           {r.comp ? (
             <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">Free seat</span>
           ) : null}

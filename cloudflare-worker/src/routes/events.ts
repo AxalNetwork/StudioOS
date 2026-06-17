@@ -46,6 +46,15 @@ import {
   shapeAgendaItem,
   shapeEvent,
 } from '../services/eventsCommon';
+import {
+  loadUserVectors,
+  confidenceAdjustedAlignment,
+  skillComplementarity,
+} from '../services/matchingVectors';
+import {
+  awardCheckinBadges,
+  awardAgendaSpeakerBadge,
+} from '../services/eventBadges';
 
 const events = new Hono<{ Bindings: Env }>();
 
@@ -91,6 +100,51 @@ async function loadEvent(env: Env, id: number): Promise<any | null> {
 function intParam(v: string | undefined): number | null {
   const n = Number(v);
   return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+// Task #7 — light track→event-type affinity for /suggested. The assessment
+// `track` is a game slug (e.g. 'founder_origin_v1'); we key off its prefix so
+// new tracks degrade gracefully to the default set.
+function preferredEventTypes(track: string | null | undefined): Set<string> {
+  const t = String(track || '').toLowerCase();
+  if (t.startsWith('founder')) return new Set(['demo_day', 'workshop', 'office_hours']);
+  if (t.startsWith('investor')) return new Set(['demo_day', 'conference', 'webinar']);
+  if (t.startsWith('partner')) return new Set(['conference', 'meetup', 'social']);
+  if (t.startsWith('operator')) return new Set(['workshop', 'webinar', 'office_hours']);
+  return new Set(['demo_day', 'workshop', 'meetup']);
+}
+
+// Task #7 — the 8 canonical radar axes → display labels (seeded in migration
+// 090). Used to phrase invite-suggestion reasons WITHOUT leaking raw skill
+// levels (e.g. "Complementary GTM / Sales strength", never "you 1.0, them 4.0").
+const AXIS_LABELS: Record<string, string> = {
+  product: 'Product',
+  engineering: 'Engineering',
+  design: 'Design',
+  gtm_sales: 'GTM / Sales',
+  marketing_brand: 'Marketing / Brand',
+  finance_ops: 'Finance / Ops',
+  legal_compliance: 'Legal / Compliance',
+  capital_network: 'Capital / Network',
+};
+
+// The single axis where the candidate most fills a gap the host has (host weak,
+// candidate strong). Returns a human label, never a number.
+function topComplementAxisLabel(
+  hostSkills: Record<string, number>,
+  candSkills: Record<string, number>,
+): string | null {
+  let best: { axis: string; gap: number } | null = null;
+  for (const axis of Object.keys(candSkills)) {
+    const h = hostSkills[axis] || 0;
+    const c = candSkills[axis] || 0;
+    if (h < 2.5 && c > 3) {
+      const gap = c - h;
+      if (!best || gap > best.gap) best = { axis, gap };
+    }
+  }
+  if (!best) return null;
+  return AXIS_LABELS[best.axis] || best.axis.replace(/_/g, ' ');
 }
 
 events.use('*', async (c, next) => {
@@ -172,6 +226,142 @@ events.post('/', async (c) => {
 
   const created = await loadEvent(c.env, Number(ins?.meta?.last_row_id));
   return c.json({ event: shapeEvent(created, { includePrivate: true }) }, 201);
+});
+
+// ── GET /suggested — archetype/track-aware upcoming event suggestions ───────
+// Registered BEFORE GET /:id so the static segment isn't captured by the :id
+// param route. Upcoming public+admin-published events the caller hasn't
+// registered for (and isn't hosting), lightly boosted by a track→type affinity
+// map; the caller's published archetype rides along for framing. Defensive
+// against a cold assessment schema (→ no personalization, chronological order).
+events.get('/suggested', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+
+  let track: string | null = null;
+  let archetype: { slug: string; label: string | null } | null = null;
+  try {
+    const r: any = await c.env.DB.prepare(
+      `SELECT track, archetype_slug, archetype_label
+         FROM assessment_results WHERE user_id = ?
+        ORDER BY updated_at DESC LIMIT 1`,
+    ).bind(u.id).first();
+    if (r) {
+      track = r.track || null;
+      if (r.archetype_slug) archetype = { slug: r.archetype_slug, label: r.archetype_label || null };
+    }
+  } catch { /* cold assessment schema → no personalization */ }
+
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM events e
+      WHERE e.visibility = 'public' AND e.status = 'published' AND e.admin_published = 1
+        AND e.starts_at >= datetime('now')
+        AND e.host_user_id != ?
+        AND NOT EXISTS (
+          SELECT 1 FROM event_registrations r
+           WHERE r.event_id = e.id AND r.user_id = ?
+             AND r.status IN ('registered','confirmed','attended','waitlisted')
+        )
+      ORDER BY e.starts_at ASC
+      LIMIT 50`,
+  ).bind(u.id, u.id).all();
+
+  const prefer = preferredEventTypes(track);
+  const scored = (rows.results || []).map((e: any) => {
+    let score = 0;
+    if (prefer.has(e.type)) score += 10;
+    if (Number(e.featured) === 1) score += 3;
+    return { e, score };
+  });
+  scored.sort((a, b) => (b.score - a.score) || String(a.e.starts_at).localeCompare(String(b.e.starts_at)));
+
+  return c.json({
+    archetype,
+    track,
+    events: scored.slice(0, 8).map((s) => ({
+      ...shapeEvent(s.e),
+      suggestion_reason: prefer.has(s.e.type)
+        ? (archetype?.label ? `Recommended for ${archetype.label}` : 'Matches your track')
+        : null,
+    })),
+  });
+});
+
+// ── GET /:id/invite-suggestions — matching-ranked people to invite (host) ───
+// Host/admin only. CONSENT-SCOPED candidate pool: active non-admin members who
+// have PUBLISHED an assessment result (published = 1 — the same opt-in that
+// surfaces their archetype on rosters/network), minus the host and anyone
+// already on the roster or invited. This keeps the feature open to non-admin
+// hosts without letting them enumerate the names/roles of members who never
+// consented to being publicly visible (full user enumeration stays admin-only
+// via GET /users). Scored by confidence-adjusted value alignment + skill
+// complementarity vs the host. Reasons are coarse labels only — never raw
+// value/skill vectors or unpublished archetype detail.
+events.get('/:id/invite-suggestions', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+
+  let candidates: any[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT DISTINCT uv.user_id AS id, u.name AS name, u.role AS role
+         FROM user_values uv
+         JOIN users u ON u.id = uv.user_id
+        WHERE u.is_active = 1 AND u.role != 'admin'
+          AND u.id != ? AND u.id != ?
+          AND EXISTS (
+            SELECT 1 FROM assessment_results ar
+             WHERE ar.user_id = uv.user_id AND ar.published = 1
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM event_registrations r
+             WHERE r.event_id = ? AND r.user_id = uv.user_id
+               AND r.status IN ('registered','confirmed','attended','waitlisted')
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM event_invitations iv
+             WHERE iv.event_id = ? AND iv.invited_user_id = uv.user_id AND iv.status != 'revoked'
+          )
+        LIMIT 100`,
+    ).bind(event.host_user_id, u.id, id, id).all();
+    candidates = rows.results || [];
+  } catch { candidates = []; }
+  if (!candidates.length) return c.json({ suggestions: [] });
+
+  const host = await loadUserVectors(c.env, Number(event.host_user_id));
+
+  const vectors = await Promise.all(
+    candidates.map((cand) => loadUserVectors(c.env, Number(cand.id))),
+  );
+  const scored: Array<{ user_id: number; name: string | null; role: string | null; score: number; reason: string }> = [];
+  candidates.forEach((cand, i) => {
+    const cv = vectors[i];
+    // Confidence-adjusted cosine over value dimensions (−1..1) → floor at 0.
+    const alignment = Math.max(0, confidenceAdjustedAlignment(host.values, cv.values).score);
+    const complement = skillComplementarity(host.skills, cv.skills); // {score 0..100}
+    const score = Math.round(alignment * 60 + complement.score * 0.4);
+    if (score <= 0) return;
+    const compAxis = topComplementAxisLabel(host.skills, cv.skills);
+    const reason = compAxis
+      ? `Complementary ${compAxis} strength`
+      : alignment > 0.4
+        ? 'Strong values alignment'
+        : 'Suggested match';
+    scored.push({
+      user_id: Number(cand.id),
+      name: cand.name || null,
+      role: cand.role || null,
+      score,
+      reason,
+    });
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return c.json({ suggestions: scored.slice(0, 8) });
 });
 
 // ── GET /:id — event detail ────────────────────────────────────────────────
@@ -654,6 +844,9 @@ events.post('/:id/checkin/:code', async (c) => {
     ).bind(ch.registration_id).run();
   }
   const reg = await loadReg(c.env, id, Number(ch.registration_id));
+  // Task #7 — first check-in flips the reg to 'attended'; award the event
+  // participation badges (idempotent, best-effort, never throws).
+  if (!already && reg?.user_id) await awardCheckinBadges(c.env, Number(reg.user_id));
   return c.json({ ok: true, already_checked_in: already, registration: reg });
 });
 
@@ -740,6 +933,8 @@ events.post('/:id/agenda', async (c) => {
     body.display_order != null ? Number(body.display_order) : 0,
   ).run();
   const row = await c.env.DB.prepare(`SELECT * FROM event_agenda_items WHERE id = ?`).bind(Number(ins?.meta?.last_row_id)).first();
+  // Task #7 — a founder speaker on a Demo Day agenda earns Demo Day Presenter.
+  if (body.speaker_user_id) await awardAgendaSpeakerBadge(c.env, Number(body.speaker_user_id), event.type);
   return c.json({ item: shapeAgendaItem(row) }, 201);
 });
 
@@ -763,6 +958,10 @@ events.patch('/:id/agenda/:aid', async (c) => {
   binds.push(aid, id);
   await c.env.DB.prepare(`UPDATE event_agenda_items SET ${sets.join(', ')} WHERE id = ? AND event_id = ?`).bind(...binds).run();
   const row = await c.env.DB.prepare(`SELECT * FROM event_agenda_items WHERE id = ?`).bind(aid).first();
+  // Task #7 — setting/changing a founder speaker on a Demo Day item earns the badge.
+  if ('speaker_user_id' in body && body.speaker_user_id) {
+    await awardAgendaSpeakerBadge(c.env, Number(body.speaker_user_id), event.type);
+  }
   return c.json({ item: shapeAgendaItem(row) });
 });
 

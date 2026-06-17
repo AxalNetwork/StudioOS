@@ -3,6 +3,7 @@ import PageExplainer from '../components/PageExplainer';
 import { Network as NetworkIcon, Trophy, DollarSign, Users } from 'lucide-react';
 import { api } from '../lib/api';
 import UserTrustBadge from '../components/UserTrustBadge';
+import ArchetypeBadge from '../components/play/ArchetypeBadge';
 import { useAuth } from '../hooks/useAuthSync';
 
 const VIS_CSS = 'https://unpkg.com/vis-network/styles/vis-network.min.css';
@@ -148,6 +149,7 @@ export default function NetworkPage() {
                           admin/investor/partner viewers; UserTrustBadge
                           silently no-ops for other roles. */}
                       <UserTrustBadge userId={r.user_id} viewerRole={user?.role} />
+                      {r.user_id ? <ArchetypeBadge userId={r.user_id} /> : null}
                     </div>
                     <div className="text-[11px] text-gray-500 flex items-center gap-2">
                       <span className="flex items-center gap-0.5"><Users size={10} /> {r.referral_count}</span>

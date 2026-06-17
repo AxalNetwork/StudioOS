@@ -3,7 +3,7 @@
 // lists the caller's tickets, each rendering a QR of its check-in code.
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Calendar, MapPin, Users, Settings, Pencil, Ticket } from 'lucide-react';
+import { Plus, Calendar, MapPin, Users, Settings, Pencil, Ticket, Sparkles } from 'lucide-react';
 import { eventsApi } from '../../lib/eventsApi';
 import { useToast } from '../../components/useToast';
 import PageExplainer from '../../components/PageExplainer';
@@ -84,6 +84,8 @@ export default function MyEventsPage() {
 
       <PageExplainer pageKey="my_events" />
 
+      <SuggestedEvents />
+
       <div className="mt-4 flex gap-1 border-b border-gray-200 dark:border-gray-700">
         {[['hosting', 'Hosting', hosting.length], ['attending', 'Attending', attending.length]].map(([key, label, count]) => (
           <button
@@ -116,6 +118,59 @@ export default function MyEventsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// Task #7 — archetype/track-aware suggestions from GET /events/suggested.
+// Best-effort: renders nothing when there's nothing to suggest or the call fails.
+function SuggestedEvents() {
+  const [data, setData] = useState(null); // { archetype, track, events }
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await eventsApi.suggested();
+        if (alive) setData(res || null);
+      } catch { if (alive) setData(null); }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const events = Array.isArray(data?.events) ? data.events : [];
+  if (!events.length) return null;
+  const arch = data?.archetype?.label;
+
+  return (
+    <section className="mt-6 rounded-xl border border-violet-200 bg-violet-50/40 p-4 dark:border-violet-900/40 dark:bg-violet-900/10">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Sparkles size={16} className="text-violet-600 dark:text-violet-300" />
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Suggested for you</h2>
+        {arch ? (
+          <span className="text-xs text-gray-500 dark:text-gray-400">· tuned to {arch}</span>
+        ) : null}
+      </div>
+      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {events.map((ev) => (
+          <li key={ev.id}>
+            <Link
+              to={`/events/${ev.slug || ev.id}`}
+              className="block h-full rounded-lg border border-gray-200 bg-white p-3 transition-colors hover:border-violet-300 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-violet-700"
+            >
+              <h3 className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{ev.title}</h3>
+              <div className="mt-1 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                <Calendar size={12} /> {fmtDate(ev.starts_at, ev.timezone)}
+              </div>
+              {ev.suggestion_reason ? (
+                <span className="mt-2 inline-block rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+                  {ev.suggestion_reason}
+                </span>
+              ) : null}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

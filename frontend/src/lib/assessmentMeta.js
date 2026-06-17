@@ -6,6 +6,7 @@
 // render a level bar without a dedicated endpoint).
 import {
   Compass, Rocket, Ruler, Zap, Flag, Award, Medal, Sparkles, Trophy, Star,
+  Mic, Network, Ticket,
 } from 'lucide-react';
 
 // Value spectrums are bipolar (−2..+2). `low` = negative pole, `high` = positive
@@ -69,6 +70,8 @@ export const ARCHETYPES = {
 const ICONS = {
   compass: Compass, rocket: Rocket, ruler: Ruler, zap: Zap, flag: Flag,
   award: Award, medal: Medal, trophy: Trophy, star: Star, sparkles: Sparkles,
+  // Task #7 — event-participation badge icons.
+  mic: Mic, network: Network, ticket: Ticket,
 };
 export function iconFor(name) {
   return ICONS[String(name || '').toLowerCase()] || Sparkles;
