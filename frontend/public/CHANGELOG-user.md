@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Signing in and the rest of the site work again on axal.vc
+
+If you visited the site at **axal.vc** (rather than app.axal.vc), signing in was broken — email and authenticator sign-in showed a "Method Not Allowed" message, the "Continue with Google" button was missing, passkey sign-in didn't work, and pages like your Dashboard and Refer & Earn showed a red "Not Found". This happened because requests from the page weren't reaching our servers on that web address. That's now fixed: sign-in (email, Google, and passkey) works, and every page loads its data normally on axal.vc, just as it already did on app.axal.vc.
+
+---
+
 ## New welcome pages tailored to founders, investors, and partners
 
 There are now dedicated welcome pages for the different people who come to Axal — founders, people we're talking to during customer discovery, investors, partners, and anyone interested in our Spin-Out Demo Day. Each page explains what Axal offers that particular audience and points you straight to the right place to sign up or RSVP.

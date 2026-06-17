@@ -80,6 +80,118 @@ zone_name  = "axal.vc"
 pattern    = "axal.vc/share/deck/*"
 zone_name  = "axal.vc"
 
+# ---------------------------------------------------------------------------
+# Apex app routes — MIRRORED from [[env.production.routes]] below.
+# ---------------------------------------------------------------------------
+# Task #37 — the live production deploy binds THIS top-level [[routes]] block,
+# NOT [[env.production.routes]]. Verified against the live site: top-level
+# `/deck` is served by the Worker on the apex while env.production-only routes
+# (`/api/*`, `/insights`, …) fell through to GitHub Pages. Root cause: prod is
+# deployed with a plain `wrangler deploy` (top-level config) — the wrangler.toml
+# header documents production as `npx wrangler deploy` (no `--env`), which
+# conflicts with package.json's `deploy` script (`--env production`). Both
+# blocks set `name = "studioos"` with identical vars/bindings, so the ONLY
+# thing that differed was the route table.
+#
+# These apex carve-outs MUST live here or `axal.vc/api/*` falls through to
+# Jekyll/GitHub Pages — which answers POST with 405 and GET with 404, breaking
+# login, Dashboard, Refer & Earn, and every authenticated page (the SPA calls
+# `/api` relative). `/api/*` is the load-bearing route; the page routes give
+# Worker-served hard-loads/bookmarks instead of the GitHub Pages 404.html SPA
+# fallback. Keep this set in lockstep with [[env.production.routes]] (same
+# patterns, exact + wildcard) so EITHER deploy path yields the correct table.
+[[routes]]
+pattern    = "axal.vc/api/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/app"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/app/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/dashboard"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/dashboard/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/admin"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/admin/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/register"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/register/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/login"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/login/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/spinout-lab"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/spinout-lab/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/about"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/about/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/insights"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/insights/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/directory"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/directory/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/contact"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/contact/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/lp"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/lp/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/articles"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/articles/*"
+zone_name  = "axal.vc"
+# Task #37 — Refer & Earn. `/refer` (all roles, App.jsx) was missing from
+# BOTH route blocks entirely. `/admin/refer-earn` is already covered by
+# `axal.vc/admin/*` above, but is listed explicitly to match the exact+wildcard
+# convention and document intent.
+[[routes]]
+pattern    = "axal.vc/refer"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/refer/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/admin/refer-earn"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/admin/refer-earn/*"
+zone_name  = "axal.vc"
+
 # ---------- Static Assets (SPA) ----------
 # Task #36 — Worker Static Assets binding. The worker serves the
 # Vite-built SPA from `frontend/dist`. With `not_found_handling =
@@ -565,6 +677,22 @@ pattern    = "axal.vc/share/deck"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/share/deck/*"
+zone_name  = "axal.vc"
+# Task #37 — Refer & Earn. Mirrored into the top-level [[routes]] block too
+# (the block the live deploy actually binds). `/refer` was missing entirely;
+# `/admin/refer-earn` is also covered by axal.vc/admin/* above but listed for
+# parity. Keep both blocks in lockstep.
+[[env.production.routes]]
+pattern    = "axal.vc/refer"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/refer/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/admin/refer-earn"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/admin/refer-earn/*"
 zone_name  = "axal.vc"
 
 [env.production.vars]
