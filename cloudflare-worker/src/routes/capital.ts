@@ -44,13 +44,26 @@ capital.get('/investors', async (c) => {
   const __u = await requireAuth(c);
   if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
   const sql = getSQL(c.env);
-  const rows = await sql`
-    SELECT lp.*, f.name AS fund_name, u.name AS user_name, u.email AS user_email
-    FROM limited_partners lp
-    JOIN vc_funds f ON f.id = lp.fund_id
-    LEFT JOIN users u ON u.id = lp.user_id
-    ORDER BY lp.created_at DESC
-  `;
+  // Admins see every LP across all funds. A non-admin investor is scoped to
+  // their own LP record(s) (limited_partners.user_id) — without this any
+  // investor could read every LP's commitments / invested amounts across all
+  // funds (IDOR / cross-tenant leak). Mirrors the GET /calls scoping.
+  const rows = __u.role === 'admin'
+    ? await sql`
+        SELECT lp.*, f.name AS fund_name, u.name AS user_name, u.email AS user_email
+        FROM limited_partners lp
+        JOIN vc_funds f ON f.id = lp.fund_id
+        LEFT JOIN users u ON u.id = lp.user_id
+        ORDER BY lp.created_at DESC
+      `
+    : await sql`
+        SELECT lp.*, f.name AS fund_name, u.name AS user_name, u.email AS user_email
+        FROM limited_partners lp
+        JOIN vc_funds f ON f.id = lp.fund_id
+        LEFT JOIN users u ON u.id = lp.user_id
+        WHERE lp.user_id = ${__u.id}
+        ORDER BY lp.created_at DESC
+      `;
   await sql.end();
   return c.json(rows.map(lpDto));
 });
@@ -103,13 +116,26 @@ capital.get('/investors/:id', async (c) => {
   if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
-  const lps = await sql`
-    SELECT lp.*, f.name AS fund_name, u.name AS user_name, u.email AS user_email
-    FROM limited_partners lp
-    JOIN vc_funds f ON f.id = lp.fund_id
-    LEFT JOIN users u ON u.id = lp.user_id
-    WHERE lp.id = ${id}
-  `;
+  // IDOR guard: a non-admin investor may only read an LP record (and its
+  // capital calls) that belongs to them (limited_partners.user_id). Scope the
+  // LP lookup itself so a non-owner gets 404 and the capital_calls query below
+  // never runs — without this any investor could read every LP's record and
+  // capital calls by guessing ids.
+  const lps = __u.role === 'admin'
+    ? await sql`
+        SELECT lp.*, f.name AS fund_name, u.name AS user_name, u.email AS user_email
+        FROM limited_partners lp
+        JOIN vc_funds f ON f.id = lp.fund_id
+        LEFT JOIN users u ON u.id = lp.user_id
+        WHERE lp.id = ${id}
+      `
+    : await sql`
+        SELECT lp.*, f.name AS fund_name, u.name AS user_name, u.email AS user_email
+        FROM limited_partners lp
+        JOIN vc_funds f ON f.id = lp.fund_id
+        LEFT JOIN users u ON u.id = lp.user_id
+        WHERE lp.id = ${id} AND lp.user_id = ${__u.id}
+      `;
   if (lps.length === 0) { await sql.end(); return c.json({ error: 'Investor not found' }, 404); }
   const calls = await sql`SELECT * FROM capital_calls WHERE limited_partner_id = ${id}`;
   await sql.end();
