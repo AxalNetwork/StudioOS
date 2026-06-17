@@ -1161,6 +1161,68 @@ def ensure_market_intel_tables() -> None:
                 session.rollback()
 
 
+def ensure_matching_tables() -> None:
+    """Task #36 — dev parity for the AI Matching Engine (``/matches``).
+
+    The production Worker (``cloudflare-worker/src/routes/matches.ts``) stores
+    per-investor preferences in ``user_preferences`` and reads the referral
+    funnel from ``referrals`` + ``commissions``. Dev FastAPI has none of these,
+    so the Matching page 404s. We mirror the minimal schema the ported
+    endpoints query. Idempotent; Postgres DDL.
+
+    Note: the Worker also persists an LLM score cache (``match_scores``). The
+    dev backend has no Cloudflare Workers AI, so the ported endpoints score
+    rule-based and fresh on every request — no cache table is needed.
+    """
+    statements = (
+        """
+        CREATE TABLE IF NOT EXISTS user_preferences (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            investment_focus TEXT,
+            preferred_stages TEXT,
+            preferred_roles TEXT,
+            min_check_cents INTEGER,
+            max_check_cents INTEGER,
+            risk_tolerance VARCHAR,
+            bio TEXT,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        # `referrals` + `commissions` mirror the prod referral funnel the
+        # /matches/referral-scores endpoint reads. Dev has no referral feature
+        # that writes to them, so they stay empty (the tab shows its empty
+        # state) — but the endpoint runs a real query instead of a stub.
+        """
+        CREATE TABLE IF NOT EXISTS referrals (
+            id SERIAL PRIMARY KEY,
+            referrer_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            referred_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status VARCHAR NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            converted_at TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_referrals_referrer ON referrals(referrer_id)",
+        """
+        CREATE TABLE IF NOT EXISTS commissions (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            source_id VARCHAR,
+            amount_cents INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+    )
+    with Session(engine) as session:
+        for ddl in statements:
+            try:
+                session.exec(text(ddl))
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_matching_tables: statement failed: %s", exc)
+                session.rollback()
+
+
 def ensure_calendar_tables() -> None:
     """Task #56 — Unified calendar layer. Idempotent.
 

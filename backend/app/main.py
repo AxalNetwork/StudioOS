@@ -28,6 +28,7 @@ from backend.app.api.routes import (
     legal,
     liquidity,
     market_intel,
+    matches,
     monitoring,
     partners,
     partnernet,
@@ -96,6 +97,7 @@ async def lifespan(app: FastAPI):
             ensure_mentor_tables,
             ensure_calendar_tables,
             ensure_market_intel_tables,
+            ensure_matching_tables,
             ensure_task54_tables,
             ensure_task46_tables,
             ensure_cofounder_tables,
@@ -157,6 +159,9 @@ async def lifespan(app: FastAPI):
         # Task #35 — Market Intelligence dev parity (watchlist + per-user flags).
         ensure_market_intel_tables()
         logger.info("StudioOS migrations: market intel tables ensured")
+        # Task #36 — AI Matching Engine dev parity (preferences + referral funnel).
+        ensure_matching_tables()
+        logger.info("StudioOS migrations: matching tables ensured")
         # Task #54 — partner office hours + co-marketing pitches + attribution.
         ensure_task54_tables()
         logger.info("StudioOS migrations: task #54 tables ensured")
@@ -395,6 +400,7 @@ app.include_router(tickets.router, prefix="/api")
 app.include_router(deals.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(market_intel.router, prefix="/api")
+app.include_router(matches.router, prefix="/api")
 app.include_router(_investor_signals.router, prefix="/api")
 app.include_router(advisory.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
