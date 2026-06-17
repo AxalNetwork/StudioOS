@@ -14,7 +14,7 @@ import { useAuth } from '../../hooks/useAuthSync';
 import { useToast } from '../../components/useToast';
 import CardRadar from '../../components/play/CardRadar';
 import {
-  archetypeMeta, iconFor, topValues, topSkills, spectrumLean, levelProgress,
+  archetypeMeta, iconFor, humanize, topValues, topSkills, spectrumLean, levelProgress,
 } from '../../lib/assessmentMeta';
 
 const C = {
@@ -26,13 +26,14 @@ const C = {
   chip: '#1e1b4b',
 };
 
-function CardView({ cardRef, result, level, displayName }) {
+function CardView({ cardRef, result, level, displayName, badges = [] }) {
   const meta = archetypeMeta(result?.archetype_slug);
   const label = meta?.label || result?.archetype_label || 'Founder';
   const Icon = iconFor(meta?.icon);
   const accent = meta?.accent || '#7c3aed';
   const values = topValues(result?.value_vector || {}, 3);
   const skills = topSkills(result?.skill_vector || {}, 3);
+  const shownBadges = Array.isArray(badges) ? badges.slice(0, 6) : [];
 
   return (
     <div
@@ -94,6 +95,26 @@ function CardView({ cardRef, result, level, displayName }) {
         </div>
       )}
 
+      {shownBadges.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 10, letterSpacing: 1.5, color: C.sub, fontWeight: 700, marginBottom: 8 }}>BADGES</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {shownBadges.map((b) => {
+              const BIcon = iconFor(b.icon);
+              return (
+                <span
+                  key={b.slug}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: '#fde68a', background: '#78350f55', border: '1px solid #f59e0b66', borderRadius: 999, padding: '3px 9px' }}
+                >
+                  <BIcon color="#fbbf24" size={13} />
+                  {b.label || humanize(b.slug)}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 18, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
         <span style={{ fontSize: 12, color: C.sub }}>{displayName || 'Axal founder'}</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: accent, background: `${accent}22`, borderRadius: 999, padding: '3px 10px' }}>
@@ -115,6 +136,7 @@ export default function ProfileCardPage() {
 
   const [result, setResult] = useState(null);
   const [level, setLevel] = useState(1);
+  const [badges, setBadges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notShared, setNotShared] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -127,17 +149,21 @@ export default function ProfileCardPage() {
       if (isSelf) {
         const [r, b] = await Promise.all([
           assessment.myResults().catch(() => ({ results: [] })),
-          assessment.myBadges().catch(() => ({ level: 1 })),
+          assessment.myBadges().catch(() => ({ level: 1, badges: [] })),
         ]);
         const results = Array.isArray(r?.results) ? r.results : [];
         setResult(results[0] || null);
         setLevel(Number(b?.level) || levelProgress(b?.xp ?? 0).level);
+        setBadges(Array.isArray(b?.badges) ? b.badges : []);
       } else {
+        // Another user's card: results are consent-gated; badges aren't exposed
+        // per-user by the API, so the card omits the badge row for shared views.
         const r = await assessment.results(viewUserId).catch(() => ({ results: [] }));
         const results = Array.isArray(r?.results) ? r.results : [];
         if (results.length === 0) setNotShared(true);
         setResult(results[0] || null);
         setLevel(1);
+        setBadges([]);
       }
     } catch (e) {
       showToast({ kind: 'error', msg: e?.message || 'Could not load this card.' });
@@ -215,7 +241,7 @@ export default function ProfileCardPage() {
         </div>
       ) : (
         <div className="mt-6 flex flex-col items-center gap-6">
-          <CardView cardRef={cardRef} result={result} level={level} displayName={displayName} />
+          <CardView cardRef={cardRef} result={result} level={level} displayName={displayName} badges={badges} />
           <div className="flex flex-wrap justify-center gap-3">
             <button
               type="button"
