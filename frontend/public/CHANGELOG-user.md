@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Event reminders, paid tickets & an admin events console
+
+Events just got a lot more capable. When an event is published, anyone who qualifies for a free (comp) spot now gets an invitation by email — complete with a calendar file — and an in-app notification, all sent once so nobody is bothered twice. Everyone who's registered also gets automatic reminders 24 hours and 1 hour before the event starts.
+
+Paid events are now supported: when you register for a ticketed event, you can pay right on the page without being sent off to another site, and your spot is confirmed the moment payment goes through. Free and comp registrations skip payment entirely.
+
+Admins have a new **Event Admin** area in the sidebar to review events waiting for approval (approve or reject with a reason), feature, unpublish or cancel events, adjust an event's capacity (raising it automatically promotes people off the waitlist), and see at-a-glance analytics — registrations, attendance, how full each event is, and turnout — across every event.
+
+---
+
 ## Public events calendar
 
 A new public events page is now live at `/events` — no sign-in required. Browse upcoming meetups, workshops, webinars, demo days, and more. You can filter by event type and date, search by keyword, and download a calendar file to add events to your own calendar. Click through to any event for full details, agenda, and a registration form (waitlist automatically kicks in when an event is full). If you receive an invitation link, you can accept or decline directly from the invitation page.

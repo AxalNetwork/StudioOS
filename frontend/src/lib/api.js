@@ -2643,6 +2643,10 @@ export const adminEvents = {
   unpublish: (id) => request(`/admin/events/${id}/unpublish`, { method: 'POST', body: '{}' }),
   feature: (id, featured) => request(`/admin/events/${id}/feature`, { method: 'POST', body: JSON.stringify({ featured }) }),
   cancel: (id) => request(`/admin/events/${id}/cancel`, { method: 'POST', body: '{}' }),
+  // capacity: null clears the cap (unlimited). Promotes the waitlist server-side.
+  setCapacity: (id, capacity) =>
+    request(`/admin/events/${id}/capacity`, { method: 'POST', body: JSON.stringify({ capacity }) }),
+  analytics: () => request('/admin/events/analytics'),
 };
 
 // Task #44 — Gamified Assessment player surface (§7.1). Each method maps 1:1 to

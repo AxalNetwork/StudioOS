@@ -127,6 +127,17 @@ const STATEMENTS: string[] = [
      ON event_agenda_items (event_id, display_order)`,
   `CREATE INDEX IF NOT EXISTS idx_event_agenda_speaker
      ON event_agenda_items (speaker_user_id)`,
+  // Task #6 — reminder/notification ledger (mirror of 111_event_notifications.sql).
+  `CREATE TABLE IF NOT EXISTS event_notifications (
+     id            INTEGER PRIMARY KEY AUTOINCREMENT,
+     event_id      INTEGER NOT NULL REFERENCES events(id),
+     principal_key TEXT NOT NULL,
+     kind          TEXT NOT NULL,
+     created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+     UNIQUE (event_id, principal_key, kind)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_event_notifications_event
+     ON event_notifications (event_id, kind)`,
 ];
 
 export async function ensureEventsSchema(env: Env): Promise<boolean> {

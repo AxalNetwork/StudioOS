@@ -1490,6 +1490,11 @@ async function handleStripeEvent(
         await confirmBookingFromPaymentIntent(env, obj);
         return;
       }
+      if (meta.kind === 'event_ticket') {
+        const { fulfillEventTicket } = await import('../services/eventTickets');
+        await fulfillEventTicket(env, obj);
+        return;
+      }
       if (meta.kind === 'alacarte') {
         const featureKey = (meta.feature_key || '').trim();
         const userId = Number(meta.user_id);

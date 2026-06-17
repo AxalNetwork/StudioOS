@@ -6,8 +6,16 @@ import {
 } from 'lucide-react';
 import PublicNav from '../../components/PublicNav';
 import PublicFooter from '../../components/PublicFooter';
+import AxalCheckout from '../../components/AxalCheckout';
 import { eventsPublic } from '../../lib/api';
 import { reportError } from '../../lib/log';
+
+function formatMoney(cents, currency) {
+  const amt = (Number(cents) || 0) / 100;
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: (currency || 'usd').toUpperCase() }).format(amt);
+  } catch { return `$${amt.toFixed(2)}`; }
+}
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
@@ -66,6 +74,7 @@ export default function PublicEventDetailPage() {
 
   const [form, setForm] = useState({ name: '', email: '' });
   const [status, setStatus] = useState({ state: 'idle', error: '', result: null });
+  const [payment, setPayment] = useState(null); // { clientSecret, amountCents, currency } when a paid ticket needs payment
   const [turnstileToken, setTurnstileToken] = useState('');
   const turnstileRef = useRef(null);
   const turnstileWidgetId = useRef(null);
@@ -141,17 +150,40 @@ export default function PublicEventDetailPage() {
       return;
     }
     setStatus({ state: 'sending', error: '', result: null });
+    setPayment(null);
     try {
       const res = await eventsPublic.register(slug, {
         name: form.name,
         email: form.email,
         turnstile_token: turnstileToken,
       });
-      setStatus({ state: 'sent', error: '', result: res });
       setTurnstileToken('');
       if (turnstileWidgetId.current !== null) {
         try { window.turnstile.reset(turnstileWidgetId.current); } catch {}
       }
+      // Paid ticket: the seat is held but the server returned a PaymentIntent —
+      // collect payment inline (no redirect) before we treat the seat as final.
+      if (res?.client_secret) {
+        setPayment({
+          clientSecret: res.client_secret,
+          amountCents: res.registration?.amount_cents ?? event?.price_cents ?? null,
+          currency: event?.currency || 'usd',
+        });
+        setStatus({ state: 'paying', error: '', result: res });
+        return;
+      }
+      // Paid but no client_secret means we couldn't mint a customer (e.g. the
+      // email isn't a member yet) — surface a clear next step instead of a
+      // silent "registered" state.
+      if (res?.needs_payment) {
+        setStatus({
+          state: 'error',
+          error: 'This is a paid event. Please sign in with a member account to complete payment.',
+          result: null,
+        });
+        return;
+      }
+      setStatus({ state: 'sent', error: '', result: res });
     } catch (err) {
       const raw = err?.message || '';
       const msg = raw === 'turnstile_failed'
@@ -285,6 +317,32 @@ export default function PublicEventDetailPage() {
                           Register someone else
                         </button>
                       </div>
+                    </div>
+                  ) : status.state === 'paying' && payment ? (
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6">
+                      <div className="mb-3 text-base font-semibold text-slate-900 dark:text-slate-100">
+                        {payment.amountCents != null
+                          ? `Complete payment · ${formatMoney(payment.amountCents, payment.currency)}`
+                          : 'Complete payment'}
+                      </div>
+                      <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+                        Your spot is held. Pay below to confirm your ticket — you won't leave this page.
+                      </p>
+                      <AxalCheckout
+                        clientSecret={payment.clientSecret}
+                        submitLabel={payment.amountCents != null ? `Pay ${formatMoney(payment.amountCents, payment.currency)}` : 'Pay now'}
+                        onSuccess={() => {
+                          setPayment(null);
+                          setStatus((s) => ({ state: 'sent', error: '', result: s.result }));
+                        }}
+                        onError={(err) => setStatus((s) => ({ ...s, error: err?.message || 'Payment failed. Please try again.' }))}
+                      />
+                      {status.error && (
+                        <div className="mt-3 flex items-start gap-2 text-sm text-red-700 dark:text-red-300">
+                          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                          <span>{status.error}</span>
+                        </div>
+                      )}
                     </div>
                   ) : isFull && !event.waitlist_enabled ? (
                     <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-6">

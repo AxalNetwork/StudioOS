@@ -35,6 +35,8 @@ import {
   serializeAudienceRules,
   type AudienceRules,
 } from '../services/eventAudience';
+import { deliverEventInvite } from '../services/eventMessaging';
+import { createEventTicketPaymentIntent } from '../services/eventTickets';
 import {
   buildEventIcs,
   EVENT_TYPES,
@@ -296,7 +298,7 @@ events.post('/:id/invitations', async (c) => {
     ? body.emails.map((e: any) => (typeof e === 'string' ? { email: e } : e)).filter((e: any) => e && e.email)
     : [];
 
-  let created = 0;
+  const newInvites: Array<{ userId: number | null; email: string | null; name: string | null; token: string }> = [];
   const createInvite = async (
     invitedUserId: number | null, email: string | null, name: string | null,
   ) => {
@@ -318,14 +320,7 @@ events.post('/:id/invitations', async (c) => {
          (event_id, token, invited_user_id, invited_email, invited_name, source, comp, status, personal_message, invited_by)
        VALUES (?, ?, ?, ?, ?, 'manual', 0, 'pending', ?, ?)`,
     ).bind(id, token, invitedUserId, email, name, message, u.id).run();
-    created++;
-    if (invitedUserId) {
-      await notify(c.env, {
-        userId: invitedUserId, type: 'event_invitation', category: 'events',
-        title: `You're invited: ${event.title}`, body: message || undefined,
-        link: `/events/${event.slug}`, payload: { event_id: id, token },
-      }).catch(() => {});
-    }
+    newInvites.push({ userId: invitedUserId, email, name, token });
   };
 
   for (const uid of userIds) {
@@ -337,12 +332,27 @@ events.post('/:id/invitations', async (c) => {
     await createInvite(target ? Number(target.id) : null, e.email, e.name ?? target?.name ?? null);
   }
 
+  // Deliver each NEW manual invite: in-app inbox + email-with-.ics (design §6).
+  for (const inv of newInvites) {
+    await deliverEventInvite(c.env, event, {
+      userId: inv.userId, email: inv.email, name: inv.name, token: inv.token,
+      message, comp: false,
+    }).catch(() => {});
+  }
+
   // Auto-mint comp invites for partners/LPs per the event's audience rules
-  // (design §7.3 — minted on the host's "send invites" action).
+  // (design §7.3 — minted on the host's "send invites" action), then deliver
+  // only the newly minted ones the same way.
   const rules = parseAudienceRules(event.audience_rules_json);
   const comp = await mintCompInvitations(c.env, id, rules, event.host_user_id ?? null, u.id);
+  for (const inv of comp.created) {
+    await deliverEventInvite(c.env, event, {
+      userId: inv.invited_user_id, email: inv.invited_email,
+      name: inv.invited_name, token: inv.token, comp: true,
+    }).catch(() => {});
+  }
 
-  return c.json({ created, comp_minted: comp.minted });
+  return c.json({ created: newInvites.length, comp_minted: comp.minted });
 });
 
 // ── GET /:id/roster — registrations + invitations (host/admin) ─────────────
@@ -429,7 +439,9 @@ events.post('/:id/registrations/:rid/approve', async (c) => {
       `UPDATE event_registrations SET status = 'confirmed', waitlist_position = NULL, updated_at = datetime('now') WHERE id = ?`,
     ).bind(rid).run();
   }
-  await ensureCheckinCode(c.env, id, rid);
+  // Paid registrations stay code-less until payment settles (fulfillEventTicket
+  // mints the code) — approving an unpaid paid registration must not issue one.
+  if (reg.payment_status !== 'pending') await ensureCheckinCode(c.env, id, rid);
   if (reg.user_id) {
     await notify(c.env, {
       userId: reg.user_id, type: 'event_confirmed', category: 'events',
@@ -497,7 +509,9 @@ events.post('/:id/registrations/:rid/promote', async (c) => {
        WHERE id = ? AND status = 'waitlisted' AND ${SEAT_FREE_PREDICATE}`,
   ).bind(target, rid, cap, id, cap).run();
   if (!upd?.meta?.changes) return c.json({ error: 'full' }, 409);
-  await ensureCheckinCode(c.env, id, rid);
+  // Paid registrations stay code-less until payment settles (fulfillEventTicket
+  // mints the code) — manually promoting an unpaid paid row must not issue one.
+  if (reg.payment_status !== 'pending') await ensureCheckinCode(c.env, id, rid);
   if (reg.user_id) {
     await notify(c.env, {
       userId: reg.user_id, type: 'event_promoted', category: 'events',
@@ -618,6 +632,17 @@ events.post('/:id/checkin/:code', async (c) => {
     `SELECT * FROM event_checkins WHERE event_id = ? AND code = ?`,
   ).bind(id, code).first();
   if (!ch) return c.json({ error: 'invalid_code' }, 404);
+
+  // Defensive: a paid ticket whose PaymentIntent hasn't settled must not be
+  // admitted. Check-in codes for paid registrations are only minted by the
+  // webhook on `payment_status='paid'`, but we guard here too so a stale or
+  // out-of-band code can never wave an unpaid attendee in.
+  const regPay: any = await c.env.DB.prepare(
+    `SELECT payment_status FROM event_registrations WHERE id = ?`,
+  ).bind(ch.registration_id).first();
+  if (regPay && regPay.payment_status === 'pending') {
+    return c.json({ error: 'payment_pending', code: 'payment_pending' }, 402);
+  }
 
   const already = !!ch.checked_in_at;
   if (!already) {
@@ -785,8 +810,35 @@ export async function registerPrincipal(
     existing = await env.DB.prepare(`SELECT * FROM event_registrations WHERE event_id = ? AND lower(email) = lower(?)`).bind(eventId, p.email).first();
   }
   if (existing && ACTIVE_REG.includes(existing.status)) {
-    const code = ['registered', 'confirmed', 'attended'].includes(existing.status)
-      ? await ensureCheckinCode(env, eventId, Number(existing.id)) : null;
+    const seated = ['registered', 'confirmed', 'attended'].includes(existing.status);
+    // A paid registration still awaiting settlement must NEVER receive a
+    // check-in code while unpaid (regardless of caller). The authenticated
+    // self-register path (where userId IS the logged-in caller) can resume
+    // payment with a (idempotent) client_secret; public/invite callers just get
+    // needs_payment and must sign in to pay.
+    if (seated && existing.payment_status === 'pending') {
+      let clientSecret: string | null = null;
+      if (p.source === 'self' && p.userId) {
+        try {
+          const payer: any = await env.DB.prepare(
+            `SELECT id, uid, email, name, stripe_customer_id FROM users WHERE id = ?`,
+          ).bind(p.userId).first();
+          if (payer) {
+            const pi = await createEventTicketPaymentIntent(
+              env, event, { id: Number(existing.id), user_id: p.userId, email: p.email }, payer,
+            );
+            clientSecret = pi.client_secret;
+          }
+        } catch (e) {
+          console.warn('[events] resume event ticket PaymentIntent failed:', (e as Error).message);
+        }
+      }
+      return c.json({
+        already_registered: true, registration: existing, comp: existing.comp === 1,
+        needs_payment: true, client_secret: clientSecret,
+      });
+    }
+    const code = seated ? await ensureCheckinCode(env, eventId, Number(existing.id)) : null;
     return c.json({ already_registered: true, registration: existing, checkin_code: code, comp: existing.comp === 1 });
   }
 
@@ -849,8 +901,42 @@ export async function registerPrincipal(
     }
   }
 
+  // Paid (non-comp) registrations do NOT get a check-in code at registration
+  // time — the webhook mints it once `payment_status='paid'` (fulfillEventTicket)
+  // so an unpaid registrant can never be admitted. Free/comp seated rows get
+  // their code immediately.
   let code: string | null = null;
-  if (landed !== 'waitlisted') code = await ensureCheckinCode(env, eventId, regId);
+  if (landed !== 'waitlisted' && !p.paid) code = await ensureCheckinCode(env, eventId, regId);
+
+  // Paid, non-comp, seated registrations get a Stripe PaymentIntent so the
+  // registrant can pay via the embedded terminal. The seat is already held (we
+  // reserved it above regardless of payment), and the webhook flips the row to
+  // paid/confirmed. Best-effort: a PI failure leaves the row pending so the
+  // caller can retry; we never block the seat on Stripe. Only the authenticated
+  // self-register path (source='self', where userId IS the logged-in caller)
+  // may mint a PaymentIntent — public/invite callers resolve userId by submitted
+  // email, so minting a PI there would let anyone create charges against another
+  // member's customer. Those surface needs_payment WITHOUT a client_secret and
+  // the SPA gates them behind login.
+  let clientSecret: string | null = null;
+  if (p.paid && landed !== 'waitlisted' && p.userId && p.source === 'self') {
+    try {
+      const payer: any = await env.DB.prepare(
+        `SELECT id, uid, email, name, stripe_customer_id FROM users WHERE id = ?`,
+      ).bind(p.userId).first();
+      if (payer) {
+        const pi = await createEventTicketPaymentIntent(
+          env, event,
+          { id: regId, user_id: p.userId, email: p.email },
+          payer,
+        );
+        clientSecret = pi.client_secret;
+      }
+    } catch (e) {
+      console.warn('[events] event ticket PaymentIntent failed:', (e as Error).message);
+    }
+  }
+
   const reg = await env.DB.prepare(`SELECT * FROM event_registrations WHERE id = ?`).bind(regId).first();
   return c.json({
     registration: reg,
@@ -858,7 +944,8 @@ export async function registerPrincipal(
     waitlisted: landed === 'waitlisted',
     waitlist_position: landed === 'waitlisted' ? waitlistPosition : null,
     comp: p.comp,
-    needs_payment: p.paid,
+    needs_payment: p.paid && landed !== 'waitlisted',
+    client_secret: clientSecret,
     checkin_code: code,
   }, 201);
 }

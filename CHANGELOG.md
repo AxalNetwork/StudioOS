@@ -10,6 +10,15 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Event moderation, reminders, comp invites & paid tickets (Task #6)
+- **Messaging (`services/eventMessaging.ts`, `email/gmail.ts`, `email/send.ts`):** `deliverEventInvite` sends in-app notify (`category: 'events'`) + an email carrying a valid `.ics` (`text/calendar; method=REQUEST`) via the existing send path. `RawEmailOpts.attachments` adds multipart/mixed wrapping; alternative-only path preserved when no attachment.
+- **Comp-on-publish (`services/eventAudience.ts`, `routes/admin_events.ts`, `routes/events.ts`):** `mintCompInvitations` returns the inserted rows so only NEW invites are delivered (re-approve mints/sends nothing). `admin_events.approve` mints + delivers comp invites; manual invite flow reuses `deliverEventInvite`.
+- **Reminders (`sql/migrations/111_event_notifications.sql`, `services/eventsSchema.ts`, `services/eventReminders.ts`, `index.ts`):** notification ledger `(event_id, principal_key, kind)` UNIQUE. `sweepEventReminders` fires `reminder_24h` (0<hrs≤24) and `reminder_1h` (0<hrs≤1) to registered/confirmed principals, insert-ledger-first for idempotency. Hooked into `scheduled()`.
+- **Admin capacity + analytics (`routes/admin_events.ts`):** `POST /admin/events/:id/capacity` ({capacity int≥0|null}) updates + audits (`event_capacity_override`) + `promoteWaitlist` + notifies promoted. `GET /admin/events/analytics` (registered before `/:id`) returns summary + per-event rows (registrations, attended, waitlisted, capacity_util, conversion).
+- **Paid tickets (`services/eventTickets.ts`, `routes/events.ts`, `routes/billing.ts`):** `createEventTicketPaymentIntent` (platform PI; metadata `kind=event_ticket`/`event_id`/`registration_id`/`user_id`; idempotencyKey `pi:event_ticket:<regId>`) + idempotent `fulfillEventTicket` (payment_status=paid + status confirmed + checkin code + notify `event_ticket_paid`). `registerPrincipal` mints the PI for paid, seated, non-comp registrations with a userId and returns `needs_payment` + `client_secret`; `billing` webhook gains an `event_ticket` branch. Comp skips payment; free is default.
+- **Admin UI (`frontend/src/pages/admin/AdminEventsPage.jsx`, `App.jsx`, `sidebarConfig.js`):** `/admin/events` (admin-gated, lazy) — review queue (approve / reject + reason), lifecycle (feature, unpublish, cancel, capacity override) and recharts analytics (summary cards + registrations-by-event bar). Sidebar "Event Admin" entry. `api.js`: `adminEvents.setCapacity`, `adminEvents.analytics`.
+- **Paid registration wiring (`frontend/src/pages/events/PublicEventDetailPage.jsx`):** when register returns `client_secret`, renders the in-app `AxalCheckout` terminal (no redirect); when `needs_payment` without a secret, surfaces a clear "sign in to pay" state.
+
 ## Public Event Calendar + RSVP + Routing (Task #5)
 - Public event surface (no auth required): `PublicEventsPage.jsx`, `PublicEventDetailPage.jsx`, `InviteRsvpPage.jsx`.
 - `/events` list with type/date filters, search, `.ics` download, and register CTA.
