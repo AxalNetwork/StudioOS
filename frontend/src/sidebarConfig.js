@@ -63,6 +63,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'admin', label: 'Admin', items: [
       { to: '/admin', icon: Shield, label: 'Admin Console' },
       { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
+      { to: '/admin/assessment', icon: Gamepad2, label: 'Assessment Studio' },
       { to: '/portfolio/coverage', icon: Network, label: 'Portfolio Coverage' },
       { to: '/monitoring', icon: Activity, label: 'Monitoring' },
     ]},

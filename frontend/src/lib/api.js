@@ -2660,3 +2660,64 @@ export const assessment = {
     request('/assessment/results/publish', { method: 'POST', body: JSON.stringify({ track, published }) }),
   myBadges: () => request('/assessment/badges/me'),
 };
+
+// Task #3 — Assessment admin authoring + analytics (§3/§5/§7.2). Each method
+// maps 1:1 to a /api/admin/assessment route on the worker (api-drift guard
+// checks this prefix). All routes are requireAdmin on the worker. The dev
+// FastAPI backend does NOT implement these, so this surface is worker-only —
+// expect 404s in the dev preview.
+export const adminAssessment = {
+  // Games
+  listGames: () => request('/admin/assessment/games'),
+  createGame: (body) => request('/admin/assessment/games', { method: 'POST', body: JSON.stringify(body) }),
+  getGame: (slug) => request(`/admin/assessment/games/${encodeURIComponent(slug)}`),
+  updateGame: (slug, body) =>
+    request(`/admin/assessment/games/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(body) }),
+  publishGame: (slug) =>
+    request(`/admin/assessment/games/${encodeURIComponent(slug)}/publish`, { method: 'POST', body: '{}' }),
+  archiveGame: (slug) =>
+    request(`/admin/assessment/games/${encodeURIComponent(slug)}/archive`, { method: 'POST', body: '{}' }),
+  versionGame: (slug) =>
+    request(`/admin/assessment/games/${encodeURIComponent(slug)}/version`, { method: 'POST', body: '{}' }),
+
+  // Chapters (PUT/DELETE keyed by id; create is scoped to a game slug).
+  createChapter: (slug, body) =>
+    request(`/admin/assessment/games/${encodeURIComponent(slug)}/chapters`, { method: 'POST', body: JSON.stringify(body) }),
+  updateChapter: (id, body) =>
+    request(`/admin/assessment/chapters/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteChapter: (id) => request(`/admin/assessment/chapters/${id}`, { method: 'DELETE' }),
+
+  // Items (PUT/DELETE keyed by id; create is scoped to a game slug and needs
+  // chapterId or chapterSlug). DELETE soft-deactivates if the item has answers.
+  createItem: (slug, body) =>
+    request(`/admin/assessment/games/${encodeURIComponent(slug)}/items`, { method: 'POST', body: JSON.stringify(body) }),
+  updateItem: (id, body) =>
+    request(`/admin/assessment/items/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteItem: (id) => request(`/admin/assessment/items/${id}`, { method: 'DELETE' }),
+
+  // Archetypes (PUT/DELETE keyed by id; create scoped to a game slug).
+  createArchetype: (slug, body) =>
+    request(`/admin/assessment/games/${encodeURIComponent(slug)}/archetypes`, { method: 'POST', body: JSON.stringify(body) }),
+  updateArchetype: (id, body) =>
+    request(`/admin/assessment/archetypes/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteArchetype: (id) => request(`/admin/assessment/archetypes/${id}`, { method: 'DELETE' }),
+
+  // Badges (global; PUT/DELETE keyed by slug).
+  listBadges: () => request('/admin/assessment/badges'),
+  createBadge: (body) => request('/admin/assessment/badges', { method: 'POST', body: JSON.stringify(body) }),
+  updateBadge: (slug, body) =>
+    request(`/admin/assessment/badges/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteBadge: (slug) => request(`/admin/assessment/badges/${encodeURIComponent(slug)}`, { method: 'DELETE' }),
+
+  // Preview — scores a draft play-through in memory; persists NOTHING.
+  preview: (slug, responses) =>
+    request(`/admin/assessment/games/${encodeURIComponent(slug)}/preview`, {
+      method: 'POST',
+      body: JSON.stringify({ responses }),
+    }),
+  // Analytics — aggregate funnel/distribution/coverage for a game.
+  analytics: (slug) => request(`/admin/assessment/games/${encodeURIComponent(slug)}/analytics`),
+  // Admin re-score of a persisted session (optional surface).
+  rescore: (sessionId) =>
+    request(`/admin/assessment/sessions/${sessionId}/rescore`, { method: 'POST', body: '{}' }),
+};
