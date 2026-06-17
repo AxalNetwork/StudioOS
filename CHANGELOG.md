@@ -19,11 +19,11 @@
 - **Mentor match (`routes/mentors.ts`):** New `GET /api/mentors/match` endpoint. Domain-radar overlap (mentor expertise fills founder skill gaps) + values alignment + skill complementarity. Batch-loads mentor vectors via D1 `.prepare()`.
 - **Coach match (`routes/investor_signals.ts`):** New `GET /api/investor-signals/coach-match` endpoint. Coach pool = `role IN ('coach','admin')` OR `track = 'coachs_lens_v1'`. Scores: benevolence/universalism alignment + skill coverage of founder gaps + values overlap. Confidence-adjusted throughout.
 - **Migration 110 (`sql/migrations/110_assessment_tracks.sql`):** Seeds 5 complete tracks:
-  - `operators_path_v1` (8 items, 3 chapters, 3 archetypes: Executor, Builder, Fixer)
-  - `thesis_lab_v1` (7 items, 3 chapters, 3 archetypes: Conviction Investor, Thesis Builder, Risk-Aware Allocator)
-  - `partner_playbook_v1` (7 items, 3 chapters, 3 archetypes: Bridge Builder, Dealmaker, Networker)
-  - `mentor_compass_v1` (7 items, 3 chapters, 3 archetypes: Sage, Challenger, Domain Expert)
-  - `coachs_lens_v1` (7 items, 3 chapters, 3 archetypes: Growth Coach, Purpose Coach, Catalyst)
+  - `operators_path_v1` (12 items, 3 chapters, 3 archetypes: Executor, Builder, Fixer)
+  - `thesis_lab_v1` (12 items, 3 chapters, 3 archetypes: Conviction Investor, Thesis Builder, Risk-Aware Allocator)
+  - `partner_playbook_v1` (12 items, 3 chapters, 3 archetypes: Bridge Builder, Dealmaker, Networker)
+  - `mentor_compass_v1` (12 items, 3 chapters, 3 archetypes: Sage, Challenger, Domain Expert)
+  - `coachs_lens_v1` (12 items, 3 chapters, 3 archetypes: Growth Coach, Purpose Coach, Catalyst)
   Each track has archetype badges + completion milestone badges. All `INSERT OR IGNORE` on UNIQUE slugs → idempotent.
 - **Gates:** worker `tsc --noEmit` clean. API drift test unaffected (no new frontend API calls added yet).
 

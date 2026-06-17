@@ -757,12 +757,15 @@ investorSignals.get('/coach-match', async (c) => {
       const cVec = coachValuesMap.get(co.user_id) || {};
       const cSkills = coachSkillsMap.get(co.user_id) || {};
 
-      // 1. Coach alignment: benevolence + universalism weighted
-      const b = cVec['schwartz_benevolence'] || { score: 0, confidence: 0 };
-      const u = cVec['schwartz_universalism'] || { score: 0, confidence: 0 };
-      const coachBenevolence = ((b.score + 2) / 4) * b.confidence; // −2..2 → 0..1
-      const coachUniversalism = ((u.score + 2) / 4) * u.confidence;
-      const coachAlignment = Math.round((coachBenevolence + coachUniversalism) / 2 * 40);
+      // 1. Coach alignment: benevolence + universalism founder↔coach similarity
+      const tB = targetValues['schwartz_benevolence'] || { score: 0, confidence: 0 };
+      const tU = targetValues['schwartz_universalism'] || { score: 0, confidence: 0 };
+      const cB = cVec['schwartz_benevolence'] || { score: 0, confidence: 0 };
+      const cU = cVec['schwartz_universalism'] || { score: 0, confidence: 0 };
+      // Similarity per dimension: inverse of absolute difference, scaled −2..2 → 0..1
+      const bSim = (1 - Math.abs(tB.score - cB.score) / 4) * Math.min(tB.confidence, cB.confidence);
+      const uSim = (1 - Math.abs(tU.score - cU.score) / 4) * Math.min(tU.confidence, cU.confidence);
+      const coachAlignment = Math.round((bSim + uSim) / 2 * 40);
 
       // 2. Skill coverage: how many of the founder's weak axes does the coach cover well?
       const gaps = Object.keys(targetSkills).filter((k) => (targetSkills[k] || 0) < 2.5);
