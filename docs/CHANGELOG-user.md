@@ -5,6 +5,42 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Play to discover your founder archetype
+
+The interactive founder assessment is here. Look for **Discover** in the sidebar to play short, game-style rounds — quick choices, snap judgments, ranking and trade-off questions — that reveal your founder "archetype", a skills radar and where you lean across a few key tensions. You'll earn XP, level up and unlock badges as you go, and the results feed straight into the skills and values on your profile. When you're done, you get a shareable "founder card" you can download as an image or publish to share with a link — sharing is always optional and off by default.
+
+---
+
+## Groundwork for a new interactive founder assessment
+
+We've started building a playful, game-style assessment that will help map your strengths, working style and founder "archetype" — and turn your answers into the skills and values shown on your profile. This update lays the behind-the-scenes foundation: the scoring, badges and results all work, with the interactive experience to follow. There's nothing new to click just yet.
+
+---
+
+## Host your own events and manage who attends
+
+There's a new **Events** area in the sidebar. You can create events — demo days, workshops, office hours, meetups and more — set the date, place, capacity and who's allowed in, and offer free seats to whole groups like partners, investors or your own connections. Invite people from your network or by email, approve or decline requests, and move people up from the waitlist when space opens. When it's time, check guests in by scanning the QR code on their ticket with your phone camera. Events you're attending appear under an "Attending" tab, each with its own QR ticket ready to show at the door.
+
+---
+
+## Signing in and the rest of the site work again on axal.vc
+
+If you visited the site at **axal.vc** (rather than app.axal.vc), signing in was broken — email and authenticator sign-in showed a "Method Not Allowed" message, the "Continue with Google" button was missing, passkey sign-in didn't work, and pages like your Dashboard and Refer & Earn showed a red "Not Found". This happened because requests from the page weren't reaching our servers on that web address. That's now fixed: sign-in (email, Google, and passkey) works, and every page loads its data normally on axal.vc, just as it already did on app.axal.vc.
+
+---
+
+## New welcome pages tailored to founders, investors, and partners
+
+There are now dedicated welcome pages for the different people who come to Axal — founders, people we're talking to during customer discovery, investors, partners, and anyone interested in our Spin-Out Demo Day. Each page explains what Axal offers that particular audience and points you straight to the right place to sign up or RSVP.
+
+---
+
+## Billing is now in Settings for everyone — with receipts for one-off purchases
+
+The **Settings → Billing** tab is now available to everyone, not just founders and investors. Whatever your role, you'll find your saved cards, any subscription you have, your invoices, and a new **Payment history** list of one-off purchases — like company incorporation, feature unlocks, and expert sessions — each with a link to its receipt. If you've never bought anything, you'll simply see a friendly "no billing activity yet" note.
+
+---
+
 ## Signing out no longer flashes an error on the way to the login screen
 
 When you signed out, you might have briefly seen a red "this page hit an unexpected error" message before the sign-in screen appeared — usually right after we'd released a new version while your tab was open. Signing out now takes you straight to the sign-in screen cleanly. And if the app ever does need to refresh itself to pick up a new version, you'll see a calm "Updating to the latest version…" note for a moment instead of an error.

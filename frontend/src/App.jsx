@@ -49,6 +49,10 @@ const AdminX = lazy(() => import('./pages/admin/AdminX'));
 // Task #1 — Articles surfaces (public + author + admin queue).
 const ArticlesPage = lazy(() => import('./pages/ArticlesPage'));
 const ArticleReaderPage = lazy(() => import('./pages/ArticleReaderPage'));
+// Task #2 — Gamified assessment player surface.
+const AssessmentHubPage = lazy(() => import('./pages/play/AssessmentHubPage'));
+const AssessmentGamePage = lazy(() => import('./pages/play/AssessmentGamePage'));
+const ProfileCardPage = lazy(() => import('./pages/play/ProfileCardPage'));
 const ArticleAuthorPage = lazy(() => import('./pages/ArticleAuthorPage'));
 const AuthorProfilePage = lazy(() => import('./pages/AuthorProfilePage'));
 const ArticlesQueuePage = lazy(() => import('./pages/admin/ArticlesQueuePage'));
@@ -1214,6 +1218,10 @@ function AppInner() {
       <Route path="/events/new" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <EventEditorPage />)} />
       <Route path="/events/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <EventEditorPage />)} />
       <Route path="/events/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <EventManagePage />)} />
+      {/* Task #2 — Gamified assessment player (hub, shareable card, game runner). */}
+      <Route path="/play" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <AssessmentHubPage />)} />
+      <Route path="/play/card" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ProfileCardPage />)} />
+      <Route path="/play/:gameSlug" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <AssessmentGamePage />)} />
       <Route path="/cofounder" element={guard(['admin', 'founder'], <CofounderPage />)} />
       {/* Task #11 — User Skill Profile (self ratings + peer endorsements). */}
       <Route path="/skills" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SkillsProfilePage />)} />

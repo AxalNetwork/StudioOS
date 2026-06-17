@@ -7,6 +7,16 @@
 // `data-anchor`, so a typo here just sends the user to the docs index.
 
 export const EXPLAINERS = {
+  assessment_hub: {
+    title: 'Play to reveal your founder profile',
+    body: 'Short, game-like assessments that turn quick decisions into a Scout Report — your archetype, a skills radar and where you lean. Earn XP and badges as you go.',
+    docPath: 'getting-started/what-is-studioos',
+  },
+  assessment_card: {
+    title: 'Your shareable founder card',
+    body: 'A trading-card snapshot of your Scout Report. Download it as an image, or publish it to share a link. Publishing is optional — you can turn it off anytime.',
+    docPath: 'getting-started/what-is-studioos',
+  },
   dashboard: {
     title: 'Your studio at a glance',
     body: 'Quick stats across projects, capital, compliance and your network — pulled live so you can see what needs attention without opening every tab.',
