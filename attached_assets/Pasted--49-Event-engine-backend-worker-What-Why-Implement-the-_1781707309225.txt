@@ -1,0 +1,42 @@
+#49 - Event engine backend (worker)
+What & Why
+Implement the event engine in the Cloudflare Worker per design/EVENT_SYSTEM.md §1 (visibility/status), §2 (invitations), §3 (capacity), §8 (API), on top of migration 109. Prod-first (Worker on D1). Includes both auth'd host/attendee endpoints and a public (anonymous) surface. Frontend gets an events namespace in api.js (routes only, no UI).
+Done looks like
+* services/eventsSchema.ts with ensureEventsSchema(env) doing CREATE TABLE IF NOT EXISTS for all 109 tables (shape only), following the existing ensure*Schemapattern.
+* services/eventAudience.ts — evaluates events.audience_rules_json against official/KYB-verified partners, invested LPs (invested_amount>0), investors, project founders, and host connections; returns the comp-eligible principal set; helper to auto-mint comp event_invitations (source auto_partner/auto_lp).
+* services/eventCapacity.ts — seat math: seats_taken, waitlist promote on cancel, approval gating.
+* routes/events.ts (auth'd): §8 host/attendee endpoints incl. POST /:id/invitations (network picker or emails), roster management, /:id/register(comp auto-applied via eventAudience), /:id/eligibility, /:id/checkin/:code (QR → attended), /:id/event.ics, /:id/export.
+* routes/events_public.ts (NO auth, mounted OUTSIDE auth/tier middleware): GET /api/public/events (+/:slug), POST /:slug/register (Turnstile-gated, capacity/approval aware), GET /api/public/events.ics, GET /api/public/invite/:token, POST /api/public/invite/:token/respond.
+* routes/admin_events.ts (admin): review queue, create official Axal events, edit/override capacity, publish/unpublish/feature/approve/reject/cancel (each writes admin_audit_log with report_type='events'), analytics.
+* Publish gate enforced: a public listing requires visibility='public' AND status='published'AND admin_published=1. Founder "publish public" only sets status='pending_review'; admin approve sets published + admin_published=1; private/unlisted self-publish.
+* Mounts in index.ts: events_public OUTSIDE auth middleware; /api/events auth'd; /api/admin/events BEFORE the catch-all /api/admin. Lazy ensureEventsSchema().
+* events namespace in frontend/src/lib/api.js(routes only).
+* cloudflare-worker/test/events.test.ts: capacity cap → waitlist → auto-promote; comp eligibility for an official partner + invested LP; public calendar excludes pending_review/private events.
+* npm run test:drift + cd cloudflare-worker && npx tsc --noEmitgreen. Both changelogs updated.
+Out of scope
+* All event UI (E2/E3/E4).
+* Reminders/comp automation cron drain and paid tickets (E4) — beyond minimal register/eligibility hooks here.
+Steps
+1. Schema bootstrap — write eventsSchema.ts (ensureEventsSchema) for all 109 tables.
+2. Audience + capacity services — write eventAudience.ts (comp eligibility + auto-mint) and eventCapacity.ts (seat/waitlist/approval math).
+3. Auth'd routes — write routes/events.ts for host/attendee endpoints incl. invitations, roster, register, eligibility, QR check-in, ics, export.
+4. Public routes — write routes/events_public.ts; Turnstile-gate the register write, mirroring the contact form; enforce the public publish gate.
+5. Admin routes — write routes/admin_events.ts(review/queue/override/publish/feature/approve/reject/cancel + audit log + analytics).
+6. Mounts + lazy ensure — public router outside auth middleware, auth'd /api/events, admin before /api/admin catch-all; lazy ensureEventsSchema.
+7. api.js namespace + tests + green gates — add eventsmethods 1:1 with routes; add the events test; run drift + tsc; update both changelogs.
+Relevant files
+* cloudflare-worker/src/index.ts:264-321,535,560,690
+* cloudflare-worker/src/auth.ts:404-440
+* cloudflare-worker/src/db.ts:11
+* cloudflare-worker/src/services/turnstile.ts
+* cloudflare-worker/src/routes/contact.ts
+* cloudflare-worker/src/services/telegramSchema.ts
+* cloudflare-worker/src/routes/admin_telegram.ts
+* cloudflare-worker/sql/migrations/013_notifications_digest.sql
+* frontend/src/lib/api.js
+* scripts/check-api-drift.mjs
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md
+
+Dependencies
+#44 - Assessment + Events foundation
