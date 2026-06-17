@@ -177,6 +177,10 @@ import insightsRoutes from './routes/insights';
 import founderRiskRoutes from './routes/founder_risk';
 import servicesRoutes from './routes/services';
 import publicRoutes from './routes/public';
+// Task #39 — Event engine (Worker on D1): authed §8.1, public §8.2, admin §8.3.
+import eventsRoutes from './routes/events';
+import eventsPublicRoutes from './routes/events_public';
+import adminEventsRoutes from './routes/admin_events';
 // T3 — Reserve allocation + waterfall simulator (Task #46 port).
 import fundSimulatorRoutes from './routes/fund_simulator';
 import { processQueueBatch } from './services/queueWorker';
@@ -557,6 +561,9 @@ app.route('/api/admin/billing', adminBilling);
 app.route('/api/admin/catalog', adminCatalog);
 // Task #9 — promo-code admin CRUD; mount before the `/api/admin` catch-all.
 app.route('/api/admin/promos', adminPromos);
+// Task #39 — Event engine admin (§8.3). Mount BEFORE the catch-all /api/admin
+// so /api/admin/events/* resolves here, not in the generic admin router.
+app.route('/api/admin/events', adminEventsRoutes);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);
@@ -630,6 +637,8 @@ app.route('/api/networkfx', networkfx);
 app.route('/api/profiling', profiling);
 app.route('/api/studioops', studioops);
 app.route('/api/dashboard', dashboard);
+// Task #39 — Event engine authed routes (§8.1).
+app.route('/api/events', eventsRoutes);
 app.route('/api/matches', matches);
 app.route('/api/settings', settings);
 app.route('/api/integrations', integrations);
@@ -676,6 +685,10 @@ app.route('/api/journal', journalRoutes);
 app.route('/api/portfolio', portfolioRoutes);
 // Task #1 (AG) — public profile facade (no auth) sits between /api/portfolio
 // and /api/references alphabetically.
+// Task #39 — Event engine public routes (§8.2, no auth, Turnstile-gated).
+// Mounted BEFORE publicRoutes so /api/public/events* + /api/public/invite*
+// resolve here (no path collision with the profile facade).
+app.route('/api/public', eventsPublicRoutes);
 app.route('/api/public', publicRoutes);
 // Task #10 (LD) — Public team roster. Mounted under /api/public so it
 // sits OUTSIDE auth + the /api/admin/* CF Access perimeter; the Jekyll

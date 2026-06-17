@@ -2563,3 +2563,80 @@ export const spinoutLab = {
     }),
   exit: () => request('/spinout-lab/exit', { method: 'POST' }),
 };
+
+// Task #39 — Event engine. `events` covers the authenticated host/attendee
+// surface (§8.1); `eventsPublic` the no-auth, Turnstile-gated public surface
+// (§8.2); `adminEvents` the admin review queue (§8.3).
+export const events = {
+  // Caller's events (hosting + attending) + CRUD
+  mine: () => request('/events'),
+  get: (id) => request(`/events/${id}`),
+  create: (payload) => request('/events', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id, patch) => request(`/events/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  submitReview: (id) => request(`/events/${id}/submit-review`, { method: 'POST', body: '{}' }),
+  // Registration (self)
+  eligibility: (id) => request(`/events/${id}/eligibility`),
+  register: (id, answers) =>
+    request(`/events/${id}/register`, { method: 'POST', body: JSON.stringify({ answers }) }),
+  cancelRegistration: (id) => request(`/events/${id}/registration`, { method: 'DELETE' }),
+  // Host: invitations + roster + registration actions
+  invite: (id, { user_ids, emails, message } = {}) =>
+    request(`/events/${id}/invitations`, { method: 'POST', body: JSON.stringify({ user_ids, emails, message }) }),
+  roster: (id) => request(`/events/${id}/roster`),
+  approveRegistration: (id, rid) => request(`/events/${id}/registrations/${rid}/approve`, { method: 'POST', body: '{}' }),
+  declineRegistration: (id, rid) => request(`/events/${id}/registrations/${rid}/decline`, { method: 'POST', body: '{}' }),
+  promoteRegistration: (id, rid) => request(`/events/${id}/registrations/${rid}/promote`, { method: 'POST', body: '{}' }),
+  checkin: (id, code) => request(`/events/${id}/checkin/${encodeURIComponent(code)}`, { method: 'POST', body: '{}' }),
+  icsUrl: (id) => `/api/events/${id}/ics`,
+  exportUrl: (id) => `/api/events/${id}/export`,
+  // Agenda
+  agenda: (id) => request(`/events/${id}/agenda`),
+  addAgendaItem: (id, item) => request(`/events/${id}/agenda`, { method: 'POST', body: JSON.stringify(item) }),
+  updateAgendaItem: (id, aid, patch) => request(`/events/${id}/agenda/${aid}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteAgendaItem: (id, aid) => request(`/events/${id}/agenda/${aid}`, { method: 'DELETE' }),
+};
+
+// Public (no-auth) event surface — feed, detail, register, invite response.
+export const eventsPublic = {
+  list: ({ limit = 20, offset = 0, type, from, to, q, past } = {}) => {
+    const qs = new URLSearchParams();
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    if (type) qs.set('type', type);
+    if (from) qs.set('from', from);
+    if (to) qs.set('to', to);
+    if (q) qs.set('q', q);
+    if (past) qs.set('past', '1');
+    return request(`/public/events?${qs.toString()}`);
+  },
+  read: (slug) => request(`/public/events/${encodeURIComponent(slug)}`),
+  register: (slug, { name, email, turnstile_token, answers } = {}) =>
+    request(`/public/events/${encodeURIComponent(slug)}/register`, {
+      method: 'POST',
+      body: JSON.stringify({ name, email, turnstile_token, answers }),
+    }),
+  invite: (token) => request(`/public/invite/${encodeURIComponent(token)}`),
+  respondInvite: (token, { action, turnstile_token, name } = {}) =>
+    request(`/public/invite/${encodeURIComponent(token)}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({ action, turnstile_token, name }),
+    }),
+  icsUrl: () => '/api/public/events.ics',
+};
+
+// Admin event review queue (§8.3).
+export const adminEvents = {
+  list: ({ status, limit = 50, offset = 0 } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    return request(`/admin/events?${qs.toString()}`);
+  },
+  get: (id) => request(`/admin/events/${id}`),
+  approve: (id) => request(`/admin/events/${id}/approve`, { method: 'POST', body: '{}' }),
+  reject: (id, reason) => request(`/admin/events/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  unpublish: (id) => request(`/admin/events/${id}/unpublish`, { method: 'POST', body: '{}' }),
+  feature: (id, featured) => request(`/admin/events/${id}/feature`, { method: 'POST', body: JSON.stringify({ featured }) }),
+  cancel: (id) => request(`/admin/events/${id}/cancel`, { method: 'POST', body: '{}' }),
+};
