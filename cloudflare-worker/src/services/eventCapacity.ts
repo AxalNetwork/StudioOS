@@ -135,7 +135,7 @@ export async function promoteWaitlist(env: Env, event: EventSeatRow): Promise<Pr
     const taken = await seatsTaken(env, event.id);
     if (event.capacity != null && taken >= Number(event.capacity)) break; // no free seat
     const next: any = await env.DB.prepare(
-      `SELECT id, user_id, email, name, comp FROM event_registrations
+      `SELECT id, user_id, email, name, comp, payment_status FROM event_registrations
          WHERE event_id = ? AND status = 'waitlisted'
          ORDER BY waitlist_position ASC, id ASC LIMIT 1`,
     ).bind(event.id).first();
@@ -149,7 +149,11 @@ export async function promoteWaitlist(env: Env, event: EventSeatRow): Promise<Pr
         WHERE id = ? AND status = 'waitlisted' AND ${SEAT_FREE_PREDICATE}`,
     ).bind(target, next.id, cap, event.id, cap).run();
     if (!upd?.meta?.changes) break; // lost the seat to a concurrent claim/promotion
-    await ensureCheckinCode(env, event.id, Number(next.id));
+    // Paid registrations stay code-less until their PaymentIntent settles
+    // (fulfillEventTicket mints the code), so promoting a still-unpaid waitlist
+    // row must not hand out a check-in code. The registrant is notified by the
+    // promote caller and can resume payment from the event page.
+    if (next.payment_status !== 'pending') await ensureCheckinCode(env, event.id, Number(next.id));
     promoted.push({
       id: Number(next.id),
       user_id: next.user_id != null ? Number(next.user_id) : null,

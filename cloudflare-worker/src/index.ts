@@ -1351,6 +1351,22 @@ export default {
         } catch (e) {
           console.error('[cron] notification digest failed', e);
         }
+        // Task #6 — event reminder sweep every 5 minutes. Walks events
+        // starting within 24h and fires reminder_24h / reminder_1h to each
+        // registered/confirmed principal exactly once (insert-ledger-first
+        // idempotency). Cheap on idle ticks: exits O(1) when no event is
+        // inside the window.
+        if (now.getUTCMinutes() % 5 === 0) {
+          try {
+            const { sweepEventReminders } = await import('./services/eventReminders');
+            const r = await sweepEventReminders(env, now);
+            if (r.sent > 0) {
+              console.info(`[cron] event reminders events=${r.events} sent=${r.sent} skipped=${r.skipped}`);
+            }
+          } catch (e) {
+            console.error('[cron] event reminder sweep failed', e);
+          }
+        }
         // Task #13 — daily analytics snapshot at 02:05 UTC. Captures
         // yesterday's Overview + Financial rollup into `analytics_snapshots`
         // (USD baseline) so admin historical comparisons survive the

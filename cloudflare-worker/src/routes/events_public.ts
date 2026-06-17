@@ -150,6 +150,11 @@ eventsPublic.post('/events/:slug/register', async (c) => {
   ).bind(event.id, email).first();
   const comp = compRule.eligible || !!compInvite;
   const paid = Number(event.price_cents || 0) > 0 && !comp;
+  // Paid tickets require an authenticated member: minting a PaymentIntent needs
+  // the logged-in user's Stripe customer, and an anonymous caller must not be
+  // able to squat paid-event capacity with an unpayable pending seat. Defer to
+  // sign-in WITHOUT claiming a seat (the SPA surfaces a "sign in to pay" state).
+  if (paid) return c.json({ needs_payment: true, auth_required: true });
   const userId = await resolveUserIdByEmail(c.env, email);
 
   return registerPrincipal(c, event, {
@@ -223,6 +228,10 @@ eventsPublic.post('/invite/:token/respond', async (c) => {
   if (!userId && email) userId = await resolveUserIdByEmail(c.env, email);
   const comp = inv.comp === 1;
   const paid = Number(event.price_cents || 0) > 0 && !comp;
+  // A non-comp (paid) invite acceptance also needs sign-in to pay — record the
+  // acceptance (done above) but don't claim a seat we can't collect payment for
+  // from an unauthenticated caller.
+  if (paid) return c.json({ ok: true, status: 'accepted', needs_payment: true, auth_required: true });
 
   return registerPrincipal(c, event, {
     userId, email, name, comp, paid, source: 'invite', invitationId: Number(inv.id), answers: body.answers ?? null,

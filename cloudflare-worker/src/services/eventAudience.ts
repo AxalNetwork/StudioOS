@@ -184,11 +184,22 @@ export async function isPrincipalCompEligible(
   return { eligible: false, source: null };
 }
 
+/** A comp invitation row created by `mintCompInvitations` this call (so the
+ *  caller can deliver ONLY newly minted invites — never re-mailing existing
+ *  rows on a re-approve / retry). */
+export interface MintedInvite {
+  token: string;
+  invited_user_id: number | null;
+  invited_email: string | null;
+  invited_name: string | null;
+  source: CompSource;
+}
+
 /**
  * Pre-mint pending comp invitations for the stable-identity sources only
  * (auto_partner + auto_lp). Idempotent per (event, principal): an existing
  * invitation — matched on invited_user_id or invited_email — is left alone.
- * Returns the number of new invitations created.
+ * Returns the count plus the rows newly created this call.
  */
 export async function mintCompInvitations(
   env: Env,
@@ -196,10 +207,10 @@ export async function mintCompInvitations(
   rules: AudienceRules,
   hostUserId: number | null,
   invitedBy: number | null,
-): Promise<{ minted: number }> {
+): Promise<{ minted: number; created: MintedInvite[] }> {
   const all = await evaluateCompEligibility(env, rules, hostUserId);
   const principals = all.filter((p) => p.source === 'auto_partner' || p.source === 'auto_lp');
-  let minted = 0;
+  const created: MintedInvite[] = [];
   for (const p of principals) {
     if (p.user_id == null && !p.email) continue;
     let exists: any = null;
@@ -221,10 +232,16 @@ export async function mintCompInvitations(
            (event_id, token, invited_user_id, invited_email, invited_name, source, comp, status, invited_by)
          VALUES (?, ?, ?, ?, ?, ?, 1, 'pending', ?)`,
       ).bind(eventId, token, p.user_id ?? null, p.email ?? null, p.name ?? null, p.source, invitedBy ?? null).run();
-      minted++;
+      created.push({
+        token,
+        invited_user_id: p.user_id ?? null,
+        invited_email: p.email ?? null,
+        invited_name: p.name ?? null,
+        source: p.source,
+      });
     } catch {
       // UNIQUE(token) collision or a concurrent mint — skip.
     }
   }
-  return { minted };
+  return { minted: created.length, created };
 }

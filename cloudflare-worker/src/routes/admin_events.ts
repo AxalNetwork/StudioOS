@@ -17,6 +17,9 @@ import { requireAdmin } from '../auth';
 import { notify } from '../services/notify';
 import { ensureEventsSchema } from '../services/eventsSchema';
 import { shapeEvent } from '../services/eventsCommon';
+import { mintCompInvitations, parseAudienceRules } from '../services/eventAudience';
+import { deliverEventInvite } from '../services/eventMessaging';
+import { promoteWaitlist, type EventSeatRow } from '../services/eventCapacity';
 
 const adminEvents = new Hono<{ Bindings: Env }>();
 
@@ -105,6 +108,91 @@ adminEvents.get('/', async (c) => {
   return c.json({ events: (rows.results || []).map((r) => shapeEvent(r, { includePrivate: true })) });
 });
 
+// ── GET /analytics — portfolio-wide event metrics ──────────────────────────
+// MUST stay registered before GET /:id (a numeric :id guard would 404 the
+// word "analytics", but Hono matches in registration order regardless).
+adminEvents.get('/analytics', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+  let summary = {
+    total_events: 0, published: 0, pending_review: 0, draft: 0, cancelled: 0,
+    total_registrations: 0, total_attended: 0, total_waitlisted: 0,
+  };
+  try {
+    const ev: any = await c.env.DB.prepare(
+      `SELECT
+         COUNT(*) AS total_events,
+         COUNT(CASE WHEN status='published' THEN 1 END) AS published,
+         COUNT(CASE WHEN status='pending_review' THEN 1 END) AS pending_review,
+         COUNT(CASE WHEN status='draft' THEN 1 END) AS draft,
+         COUNT(CASE WHEN status='cancelled' THEN 1 END) AS cancelled
+       FROM events`,
+    ).first();
+    const reg: any = await c.env.DB.prepare(
+      `SELECT
+         COUNT(CASE WHEN status IN ('registered','confirmed','attended') THEN 1 END) AS registrations,
+         COUNT(CASE WHEN status='attended' THEN 1 END) AS attended,
+         COUNT(CASE WHEN status='waitlisted' THEN 1 END) AS waitlisted
+       FROM event_registrations`,
+    ).first();
+    summary = {
+      total_events: Number(ev?.total_events || 0),
+      published: Number(ev?.published || 0),
+      pending_review: Number(ev?.pending_review || 0),
+      draft: Number(ev?.draft || 0),
+      cancelled: Number(ev?.cancelled || 0),
+      total_registrations: Number(reg?.registrations || 0),
+      total_attended: Number(reg?.attended || 0),
+      total_waitlisted: Number(reg?.waitlisted || 0),
+    };
+  } catch (e) {
+    console.warn('[admin_events] analytics summary failed:', (e as Error).message);
+  }
+
+  let events: any[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT e.id, e.slug, e.title, e.status, e.starts_at, e.capacity, e.featured,
+              COUNT(CASE WHEN r.status IN ('registered','confirmed','attended') THEN 1 END) AS registrations,
+              COUNT(CASE WHEN r.status='attended' THEN 1 END) AS attended,
+              COUNT(CASE WHEN r.status='waitlisted' THEN 1 END) AS waitlisted,
+              COUNT(CASE WHEN r.status='cancelled' THEN 1 END) AS cancelled
+         FROM events e
+         LEFT JOIN event_registrations r ON r.event_id = e.id
+        GROUP BY e.id
+        ORDER BY e.starts_at DESC
+        LIMIT 200`,
+    ).all();
+    events = ((rows.results || []) as any[]).map((r) => {
+      const registrations = Number(r.registrations || 0);
+      const attended = Number(r.attended || 0);
+      const capacity = r.capacity != null ? Number(r.capacity) : null;
+      return {
+        id: Number(r.id),
+        slug: r.slug,
+        title: r.title,
+        status: r.status,
+        starts_at: r.starts_at,
+        featured: !!r.featured,
+        capacity,
+        registrations,
+        attended,
+        waitlisted: Number(r.waitlisted || 0),
+        cancelled: Number(r.cancelled || 0),
+        capacity_util: capacity && capacity > 0 ? round2(registrations / capacity) : null,
+        conversion: registrations > 0 ? round2(attended / registrations) : null,
+      };
+    });
+  } catch (e) {
+    console.warn('[admin_events] analytics rows failed:', (e as Error).message);
+  }
+
+  return c.json({ summary, events });
+});
+
 // ── GET /:id — admin event detail ──────────────────────────────────────────
 adminEvents.get('/:id', async (c) => {
   const a = await admin(c);
@@ -128,13 +216,32 @@ adminEvents.post('/:id/approve', async (c) => {
     `UPDATE events SET status = 'published', admin_published = 1, updated_at = datetime('now') WHERE id = ?`,
   ).bind(id).run();
   await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_approved', eventId: id });
+  const fresh = await loadEvent(c.env, id);
   if (event.host_user_id) {
     await notify(c.env, {
       userId: event.host_user_id, type: 'event_approved', category: 'events',
       title: `Your event is live: ${event.title}`, link: `/events/${event.slug}`, payload: { event_id: id },
     }).catch(() => {});
   }
-  return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
+  // Comp-on-publish (design §7.3): auto-mint comp invites for the event's
+  // configured partner/LP audiences, then deliver ONLY the newly minted ones
+  // (inbox + email-with-.ics). A re-approve mints nothing new, so nobody is
+  // re-mailed.
+  try {
+    const rules = parseAudienceRules(event.audience_rules_json);
+    if (Object.keys(rules).length > 0) {
+      const comp = await mintCompInvitations(c.env, id, rules, event.host_user_id ?? null, a.id);
+      for (const inv of comp.created) {
+        await deliverEventInvite(c.env, fresh, {
+          userId: inv.invited_user_id, email: inv.invited_email,
+          name: inv.invited_name, token: inv.token, comp: true,
+        }).catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.warn('[admin_events] comp mint/deliver failed:', (e as Error).message);
+  }
+  return c.json({ event: shapeEvent(fresh, { includePrivate: true }) });
 });
 
 // ── POST /:id/reject — bounce back from the review queue ────────────────────
@@ -217,6 +324,59 @@ adminEvents.post('/:id/cancel', async (c) => {
     }).catch(() => {});
   }
   return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
+});
+
+// ── POST /:id/capacity — admin capacity override ───────────────────────────
+// Body: { capacity: int>=0 | null }. null clears the cap (unlimited). Raising
+// or clearing the cap can free seats, so we promote the waitlist + notify the
+// promoted registrants.
+adminEvents.post('/:id/capacity', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+
+  const body = await c.req.json().catch(() => ({} as any));
+  let capacity: number | null;
+  if (body.capacity === null || body.capacity === undefined || body.capacity === '') {
+    capacity = null;
+  } else {
+    const n = Number(body.capacity);
+    if (!Number.isInteger(n) || n < 0) return c.json({ error: 'invalid_capacity' }, 400);
+    capacity = n;
+  }
+
+  await c.env.DB.prepare(
+    `UPDATE events SET capacity = ?, updated_at = datetime('now') WHERE id = ?`,
+  ).bind(capacity, id).run();
+  await writeAudit(c.env, {
+    adminId: a.id, adminEmail: a.email, action: 'event_capacity_override', eventId: id,
+    extra: { capacity },
+  });
+
+  let promoted: Array<{ user_id: number | null }> = [];
+  try {
+    const fresh = await loadEvent(c.env, id);
+    promoted = await promoteWaitlist(c.env, fresh as EventSeatRow);
+    for (const p of promoted) {
+      if (p.user_id != null) {
+        await notify(c.env, {
+          userId: Number(p.user_id), type: 'event_waitlist_promoted', category: 'events',
+          title: `You're off the waitlist: ${event.title}`,
+          link: `/events/${event.slug}`, payload: { event_id: id },
+        }).catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.warn('[admin_events] capacity waitlist promote failed:', (e as Error).message);
+  }
+
+  return c.json({
+    event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }),
+    promoted: promoted.length,
+  });
 });
 
 export default adminEvents;

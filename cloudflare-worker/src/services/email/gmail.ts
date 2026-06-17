@@ -43,6 +43,17 @@ function b64encode(str: string): string {
   return b64.match(/.{1,76}/g)!.join('\r\n');
 }
 
+/** A file part appended after the body via a multipart/mixed wrapper. The
+ *  `content` is the raw (un-encoded) string — it is base64-encoded here. */
+export interface EmailAttachment {
+  /** e.g. `event.ics`. Quotes / CR / LF are scrubbed before emission. */
+  filename: string;
+  /** Full Content-Type value, e.g. `text/calendar; method=REQUEST; charset="UTF-8"`. */
+  contentType: string;
+  /** Raw attachment body (NOT pre-encoded). */
+  content: string;
+}
+
 export interface RawEmailOpts {
   to: string;
   subject: string;
@@ -53,12 +64,41 @@ export interface RawEmailOpts {
   /** Extra headers — e.g. `List-Unsubscribe`. Values are header-injection
    *  scrubbed (CR/LF collapsed to space) before emission. */
   extraHeaders?: Record<string, string>;
+  /** Optional file parts. When present the body becomes a multipart/mixed
+   *  envelope wrapping the multipart/alternative text+html part plus each
+   *  attachment (used for the `.ics` on event invites). */
+  attachments?: EmailAttachment[];
+}
+
+/** Scrub a value destined for a quoted MIME parameter (filename="…"). */
+function safeFilename(s: string): string {
+  return stripHeaderInjection(s).replace(/["\\]/g, '').slice(0, 200) || 'attachment';
+}
+
+/** The text/plain + text/html multipart/alternative block (no leading/closing
+ *  envelope boundary — caller frames it). */
+function alternativeBlock(boundary: string, text: string, html: string): string {
+  return [
+    `--${boundary}`,
+    `Content-Type: text/plain; charset="UTF-8"`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    b64encode(text),
+    ``,
+    `--${boundary}`,
+    `Content-Type: text/html; charset="UTF-8"`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    b64encode(html),
+    ``,
+    `--${boundary}--`,
+  ].join('\r\n');
 }
 
 export async function sendRawEmail(env: Env, opts: RawEmailOpts): Promise<boolean> {
   try {
     const accessToken = await getGmailAccessToken(env);
-    const boundary = `boundary_${crypto.randomUUID().replace(/-/g, '')}`;
+    const altBoundary = `alt_${crypto.randomUUID().replace(/-/g, '')}`;
     const safeTo      = stripHeaderInjection(opts.to);
     const safeFrom    = stripHeaderInjection(opts.from);
     const safeReply   = stripHeaderInjection(opts.replyTo);
@@ -78,25 +118,40 @@ export async function sendRawEmail(env: Env, opts: RawEmailOpts): Promise<boolea
         headers.push(`${stripHeaderInjection(k)}: ${stripHeaderInjection(v)}`);
       }
     }
-    headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
 
-    const rawEmail = [
-      ...headers,
-      ``,
-      `--${boundary}`,
-      `Content-Type: text/plain; charset="UTF-8"`,
-      `Content-Transfer-Encoding: base64`,
-      ``,
-      b64encode(opts.text),
-      ``,
-      `--${boundary}`,
-      `Content-Type: text/html; charset="UTF-8"`,
-      `Content-Transfer-Encoding: base64`,
-      ``,
-      b64encode(opts.html),
-      ``,
-      `--${boundary}--`,
-    ].join('\r\n');
+    const attachments = (opts.attachments || []).filter((a) => a && a.content);
+    let rawEmail: string;
+    if (attachments.length === 0) {
+      // Simple multipart/alternative — unchanged legacy envelope.
+      headers.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`);
+      rawEmail = [...headers, ``, alternativeBlock(altBoundary, opts.text, opts.html)].join('\r\n');
+    } else {
+      // multipart/mixed wrapping the alternative part + each attachment.
+      const mixedBoundary = `mixed_${crypto.randomUUID().replace(/-/g, '')}`;
+      headers.push(`Content-Type: multipart/mixed; boundary="${mixedBoundary}"`);
+      const parts: string[] = [
+        ...headers,
+        ``,
+        `--${mixedBoundary}`,
+        `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
+        ``,
+        alternativeBlock(altBoundary, opts.text, opts.html),
+        ``,
+      ];
+      for (const att of attachments) {
+        parts.push(
+          `--${mixedBoundary}`,
+          `Content-Type: ${stripHeaderInjection(att.contentType)}; name="${safeFilename(att.filename)}"`,
+          `Content-Transfer-Encoding: base64`,
+          `Content-Disposition: attachment; filename="${safeFilename(att.filename)}"`,
+          ``,
+          b64encode(att.content),
+          ``,
+        );
+      }
+      parts.push(`--${mixedBoundary}--`);
+      rawEmail = parts.join('\r\n');
+    }
 
     const raw = btoa(unescape(encodeURIComponent(rawEmail)))
       .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
