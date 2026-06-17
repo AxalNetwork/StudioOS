@@ -10,6 +10,23 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Assessment vectors feed matching + five new track seeds (Task #4)
+
+- **What:** Feed canonical assessment vectors (`user_values`, `user_skills`) into cofounder, investor, mentor, and coach matching surfaces. Author the 5 remaining assessment track item banks in migration 110.
+- **Matching math (`services/matchingVectors.ts`):** `loadUserValueMap`, `loadUserSkillMap`, `loadUserVectors` (reusable vector loaders); `cosineSimilarity`, `confidenceAdjustedAlignment` (cosine × mean confidence of overlapping dimensions), `skillComplementarity` (+ when viewer weak & candidate strong, − when both weak), `computeWatchOuts` (low-confidence signals, bipolar opposition, double skill gaps).
+- **Cofounder (`routes/cofounder.ts`):** `scoreMatch()` now combines legacy profile signals (skills, sectors, commitment, location, equity) with canonical assessment vectors. Values alignment uses `confidenceAdjustedAlignment`. Skill complementarity and watch-outs detection added. `watch_outs` + `breakdown` surfaced in `/browse` response.
+- **Investor match (`routes/matches.ts`):** `/investor-match` upgraded to confidence-adjusted alignment (`cosineSimilarityVectors` replaced with `confidenceAdjustedAlignment`). Watch-outs and skills batch-loaded per investor. `watch_outs` + `breakdown` added to response.
+- **Mentor match (`routes/mentors.ts`):** New `GET /api/mentors/match` endpoint. Domain-radar overlap (mentor expertise fills founder skill gaps) + values alignment + skill complementarity. Batch-loads mentor vectors via D1 `.prepare()`.
+- **Coach match (`routes/investor_signals.ts`):** New `GET /api/investor-signals/coach-match` endpoint. Coach pool = `role IN ('coach','admin')` OR `track = 'coachs_lens_v1'`. Scores: benevolence/universalism alignment + skill coverage of founder gaps + values overlap. Confidence-adjusted throughout.
+- **Migration 110 (`sql/migrations/110_assessment_tracks.sql`):** Seeds 5 complete tracks:
+  - `operators_path_v1` (8 items, 3 chapters, 3 archetypes: Executor, Builder, Fixer)
+  - `thesis_lab_v1` (7 items, 3 chapters, 3 archetypes: Conviction Investor, Thesis Builder, Risk-Aware Allocator)
+  - `partner_playbook_v1` (7 items, 3 chapters, 3 archetypes: Bridge Builder, Dealmaker, Networker)
+  - `mentor_compass_v1` (7 items, 3 chapters, 3 archetypes: Sage, Challenger, Domain Expert)
+  - `coachs_lens_v1` (7 items, 3 chapters, 3 archetypes: Growth Coach, Purpose Coach, Catalyst)
+  Each track has archetype badges + completion milestone badges. All `INSERT OR IGNORE` on UNIQUE slugs → idempotent.
+- **Gates:** worker `tsc --noEmit` clean. API drift test unaffected (no new frontend API calls added yet).
+
 ## Assessment authoring + analytics studio — admin /admin/assessment (Task #3 — Assessment Admin Authoring + Analytics)
 
 - **What:** Admin-only frontend for authoring the gamified assessments and reading their analytics. Implements `design/GAMIFIED_ASSESSMENT_SYSTEM.md` §3/§5/§7.2. Consumes ONLY the worker's already-mounted `/api/admin/assessment` routes (`routes/admin_assessment.ts`, Task #1) — no new backend routes, so the API-drift guard is untouched. The dev FastAPI backend implements none of these routes, so the surface is validated by the build / drift / dark-mode gates and runs for real on the prod Worker (same constraint as Task #2).

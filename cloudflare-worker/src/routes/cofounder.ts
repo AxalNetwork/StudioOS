@@ -18,6 +18,13 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { filterOptedInUserIds } from '../services/matchingConsent';
 import { logMatchListGeneration } from '../services/matchAudit';
+import {
+  loadUserVectors,
+  confidenceAdjustedAlignment,
+  skillComplementarity,
+  computeWatchOuts,
+  type UserVectors,
+} from '../services/matchingVectors';
 
 const cofounder = new Hono<{ Bindings: Env }>();
 
@@ -285,49 +292,105 @@ cofounder.get('/vocab', async (c) => {
 // ---------------------------------------------------------------------------
 // Browse + scoring
 // ---------------------------------------------------------------------------
-function scoreMatch(viewer: ProfileRow, candidate: ProfileRow): { score: number; why: string[] } {
+/**
+ * Task #4 — Vector-augmented co-founder match scoring.
+ *
+ * Combines legacy profile signals (skills, sectors, commitment, location,
+ * equity) with canonical assessment vectors (values + skills) for richer
+ * complementarity and watch-out detection.
+ */
+interface ScoreMatchInput {
+  viewerProfile: ProfileRow;
+  candidateProfile: ProfileRow;
+  viewerVectors: UserVectors;
+  candidateVectors: UserVectors;
+}
+
+function scoreMatch(
+  { viewerProfile, candidateProfile, viewerVectors, candidateVectors }: ScoreMatchInput,
+): { score: number; why: string[]; watch_outs: string[]; breakdown: Record<string, number> } {
   let score = 0;
   const why: string[] = [];
-  const vSkills = new Set(loadList(viewer.skills_json));
-  const cSkills = new Set(loadList(candidate.skills_json));
+  const breakdown: Record<string, number> = {};
+
+  // 1. Legacy profile signals (keep existing bonuses)
+  const vSkills = new Set(loadList(viewerProfile.skills_json));
+  const cSkills = new Set(loadList(candidateProfile.skills_json));
   const complementary = [...cSkills].filter((s) => !vSkills.has(s));
   if (complementary.length) {
     const bonus = Math.min(25, 5 * complementary.length);
     score += bonus;
     why.push(`complementary skills: ${complementary.sort().join(', ').slice(0, 80)}`);
+    breakdown.profile_skills = bonus;
   }
-  const vSectors = new Set(loadList(viewer.sectors_json));
-  const cSectors = new Set(loadList(candidate.sectors_json));
+
+  const vSectors = new Set(loadList(viewerProfile.sectors_json));
+  const cSectors = new Set(loadList(candidateProfile.sectors_json));
   const shared = [...vSectors].filter((s) => cSectors.has(s));
   if (shared.length) {
     const bonus = Math.min(30, 15 * shared.length);
     score += bonus;
     why.push(`sector overlap: ${shared.sort().join(', ')}`);
+    breakdown.profile_sectors = bonus;
   }
-  if (viewer.commitment === candidate.commitment) {
+
+  if (viewerProfile.commitment === candidateProfile.commitment) {
     score += 20;
-    why.push(`same commitment (${viewer.commitment})`);
+    why.push(`same commitment (${viewerProfile.commitment})`);
+    breakdown.profile_commitment = 20;
   }
-  const vCity = (viewer.location_city || '').trim().toLowerCase();
-  const cCity = (candidate.location_city || '').trim().toLowerCase();
-  const vCountry = (viewer.location_country || '').trim().toLowerCase();
-  const cCountry = (candidate.location_country || '').trim().toLowerCase();
+
+  const vCity = (viewerProfile.location_city || '').trim().toLowerCase();
+  const cCity = (candidateProfile.location_city || '').trim().toLowerCase();
+  const vCountry = (viewerProfile.location_country || '').trim().toLowerCase();
+  const cCountry = (candidateProfile.location_country || '').trim().toLowerCase();
   if (vCity && cCity && vCity === cCity) {
-    score += 15; why.push(`same city (${viewer.location_city})`);
+    score += 15; why.push(`same city (${viewerProfile.location_city})`);
+    breakdown.profile_location = 15;
   } else if (vCountry && cCountry && vCountry === cCountry) {
-    score += 5; why.push(`same country (${viewer.location_country})`);
+    score += 5; why.push(`same country (${viewerProfile.location_country})`);
+    breakdown.profile_location = 5;
   }
-  if (viewer.remote_ok && candidate.remote_ok) {
+
+  if (viewerProfile.remote_ok && candidateProfile.remote_ok) {
     score += 5; why.push('both open to remote');
+    breakdown.profile_remote = 5;
   }
-  const vLo = viewer.equity_expectation_min, vHi = viewer.equity_expectation_max;
-  const cLo = candidate.equity_expectation_min, cHi = candidate.equity_expectation_max;
+
+  const vLo = viewerProfile.equity_expectation_min, vHi = viewerProfile.equity_expectation_max;
+  const cLo = candidateProfile.equity_expectation_min, cHi = candidateProfile.equity_expectation_max;
   if ([vLo, vHi, cLo, cHi].every((x) => x != null)) {
     if (Math.max(vLo as number, cLo as number) <= Math.min(vHi as number, cHi as number)) {
       score += 10; why.push('equity expectations overlap');
+      breakdown.profile_equity = 10;
     }
   }
-  return { score, why };
+
+  // 2. Assessment vector signals
+  const valAlign = confidenceAdjustedAlignment(viewerVectors.values, candidateVectors.values);
+  if (valAlign.overlapCount > 0) {
+    const valScore = Math.round(((valAlign.score + 1) / 2) * 30); // 0..30
+    score += valScore;
+    if (valScore > 0) {
+      why.push(`values alignment: ${valScore} (confidence ${(valAlign.meanConfidence * 100).toFixed(0)}%)`);
+    }
+    breakdown.values_alignment = valScore;
+  }
+
+  const comp = skillComplementarity(viewerVectors.skills, candidateVectors.skills);
+  if (comp.score > 0) {
+    score += comp.score;
+    why.push(...comp.reasons);
+    breakdown.skill_complementarity = comp.score;
+  }
+
+  // 3. Watch-outs
+  const watch_outs = computeWatchOuts(
+    viewerVectors.values, candidateVectors.values,
+    viewerVectors.skills, candidateVectors.skills,
+  );
+
+  return { score: Math.max(0, Math.min(100, score)), why, watch_outs, breakdown };
 }
 
 cofounder.get('/browse', async (c) => {
@@ -392,7 +455,45 @@ cofounder.get('/browse', async (c) => {
     } catch {}
   }
 
-  const scored: Array<{ score: number; why: string[]; profile: ProfileRow }> = [];
+  // Load viewer vectors once.
+  const viewerVectors = await loadUserVectors(c.env, user.id);
+
+  // Batch-load candidate vectors for scoring.
+  const candidateIds = rows.map((p) => p.user_id);
+  const candidateVectorsMap = new Map<number, UserVectors>();
+  if (candidateIds.length) {
+    const placeholders = candidateIds.map(() => '?').join(',');
+    // Values
+    const vRes = await c.env.DB.prepare(
+      `SELECT uv.user_id, vd.slug, uv.score, uv.confidence
+         FROM user_values uv
+         JOIN value_dimensions vd ON vd.id = uv.dimension_id
+        WHERE uv.user_id IN (${placeholders})`,
+    ).bind(...candidateIds).all<{ user_id: number; slug: string; score: number; confidence: number }>();
+    for (const r of vRes.results || []) {
+      const m = candidateVectorsMap.get(r.user_id) || { values: {}, skills: {} };
+      m.values[r.slug] = { score: Number(r.score) || 0, confidence: Number(r.confidence) || 0 };
+      candidateVectorsMap.set(r.user_id, m);
+    }
+    // Skills
+    const sRes = await c.env.DB.prepare(
+      `SELECT us.user_id, sc.slug, MAX(us.self_level) AS level
+         FROM user_skills us
+         JOIN skills s ON s.id = us.skill_id
+         JOIN skill_categories sc ON sc.slug = s.category_slug
+        WHERE us.user_id IN (${placeholders})
+        GROUP BY us.user_id, sc.slug`,
+    ).bind(...candidateIds).all<{ user_id: number; slug: string; level: number }>();
+    for (const r of sRes.results || []) {
+      const m = candidateVectorsMap.get(r.user_id) || { values: {}, skills: {} };
+      m.skills[r.slug] = Number(r.level) || 0;
+      candidateVectorsMap.set(r.user_id, m);
+    }
+  }
+
+  const scored: Array<{
+    score: number; why: string[]; watch_outs: string[]; breakdown: Record<string, number>; profile: ProfileRow;
+  }> = [];
   for (const p of rows) {
     if (closedIds.has(p.user_id)) continue;
     if (hiddenIds.has(p.user_id)) continue;
@@ -409,11 +510,17 @@ cofounder.get('/browse', async (c) => {
       ].join(' ').toLowerCase();
       if (!blob.includes(q)) continue;
     }
-    const { score, why } = scoreMatch(viewerProfile, p);
-    scored.push({ score, why, profile: p });
+    const candidateVectors = candidateVectorsMap.get(p.user_id) || { values: {}, skills: {} };
+    const { score, why, watch_outs, breakdown } = scoreMatch({
+      viewerProfile,
+      candidateProfile: p,
+      viewerVectors,
+      candidateVectors,
+    });
+    scored.push({ score, why, watch_outs, breakdown, profile: p });
   }
   scored.sort((a, b) => (b.score - a.score) || (a.profile.id - b.profile.id));
-  const cards = scored.slice(0, limit).map(({ score, why, profile: p }) => {
+  const cards = scored.slice(0, limit).map(({ score, why, watch_outs, breakdown, profile: p }) => {
     const card: any = serializeProfilePublic(p, uidById.get(p.user_id) || null);
     // Task #51 — surface integer user_id alongside the (already-public)
     // user_uid so admin/investor/partner viewers' UserTrustBadge can call
@@ -423,6 +530,8 @@ cofounder.get('/browse', async (c) => {
     card.user_id = p.user_id;
     card.match_score = score;
     card.match_reasons = why;
+    card.watch_outs = watch_outs;
+    card.breakdown = breakdown;
     card.interest_sent = sent.has(p.user_id);
     card.interest_received = received.has(p.user_id);
     card.mutual_interest = card.interest_sent && card.interest_received;
