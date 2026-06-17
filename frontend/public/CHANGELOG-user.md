@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Host your own events and manage who attends
+
+There's a new **Events** area in the sidebar. You can create events — demo days, workshops, office hours, meetups and more — set the date, place, capacity and who's allowed in, and offer free seats to whole groups like partners, investors or your own connections. Invite people from your network or by email, approve or decline requests, and move people up from the waitlist when space opens. When it's time, check guests in by scanning the QR code on their ticket with your phone camera. Events you're attending appear under an "Attending" tab, each with its own QR ticket ready to show at the door.
+
+---
+
 ## Signing in and the rest of the site work again on axal.vc
 
 If you visited the site at **axal.vc** (rather than app.axal.vc), signing in was broken — email and authenticator sign-in showed a "Method Not Allowed" message, the "Continue with Google" button was missing, passkey sign-in didn't work, and pages like your Dashboard and Refer & Earn showed a red "Not Found". This happened because requests from the page weren't reaching our servers on that web address. That's now fixed: sign-in (email, Google, and passkey) works, and every page loads its data normally on axal.vc, just as it already did on app.axal.vc.

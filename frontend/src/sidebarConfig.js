@@ -84,6 +84,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/relationships', icon: Handshake, label: 'Relationships' },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
+      { to: '/my/events', icon: Ticket, label: 'Events' },
     ]},
     { key: 'capital', label: 'Capital & Liquidity', items: [
       { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
@@ -180,6 +181,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/relationships', icon: Handshake, label: 'Relationships' },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
+      { to: '/my/events', icon: Ticket, label: 'Events' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles', icon: FileText, label: 'Articles' },
@@ -220,6 +222,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/relationships', icon: Handshake, label: 'Relationships' },
       { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
+      { to: '/my/events', icon: Ticket, label: 'Events' },
     ]},
     { key: 'capital', label: 'Capital & Liquidity', items: [
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
@@ -271,6 +274,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'network', label: 'Network', items: [
       { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
+      { to: '/my/events', icon: Ticket, label: 'Events' },
     ]},
     { key: 'legal', label: 'Legal & Compliance', items: [
       { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
@@ -295,6 +299,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'engagements', label: 'Engagements', items: [
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
+      { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/mentors', icon: UserCircle, label: 'Mentor Directory' },
       { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/tickets', icon: Ticket, label: 'Support' },

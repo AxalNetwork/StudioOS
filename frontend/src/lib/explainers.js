@@ -12,6 +12,21 @@ export const EXPLAINERS = {
     body: 'Quick stats across projects, capital, compliance and your network — pulled live so you can see what needs attention without opening every tab.',
     docPath: 'getting-started/what-is-studioos',
   },
+  my_events: {
+    title: 'Host and attend events',
+    body: 'Create demo days, workshops and meetups, invite your network, and manage who attends. Tickets you hold show a QR code for fast check-in.',
+    docPath: 'network/events',
+  },
+  event_editor: {
+    title: 'Set up your event',
+    body: 'Schedule, location, capacity and visibility in one place. Audience rules hand free seats to whole groups; public events go live after a quick admin review.',
+    docPath: 'network/events',
+  },
+  event_manage: {
+    title: 'Manage your roster',
+    body: 'Approve or decline registrations, promote people off the waitlist, send invites, and check attendees in by scanning their ticket QR with your camera.',
+    docPath: 'network/events',
+  },
   projects: {
     title: 'Pipeline & playbook tracking',
     body: 'Every venture you run, with stage, owners and the 4-week playbook progress. Add, archive or open one to see its team, financials and decision log.',

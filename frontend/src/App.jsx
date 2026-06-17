@@ -79,6 +79,10 @@ const OfficeHoursPage = lazy(() => import('./pages/OfficeHoursPage'));
 const PartnerOfficeHoursPage = lazy(() => import('./pages/PartnerOfficeHoursPage'));
 const CoMarketingPage = lazy(() => import('./pages/CoMarketingPage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
+// Task #40 (E2) — Event host/attendee surface.
+const MyEventsPage = lazy(() => import('./pages/events/MyEventsPage'));
+const EventEditorPage = lazy(() => import('./pages/events/EventEditorPage'));
+const EventManagePage = lazy(() => import('./pages/events/EventManagePage'));
 const CofounderPage = lazy(() => import('./pages/CofounderPage'));
 const SkillsProfilePage = lazy(() => import('./pages/SkillsProfilePage'));
 const ValuesAssessmentPage = lazy(() => import('./pages/ValuesAssessmentPage'));
@@ -1205,6 +1209,11 @@ function AppInner() {
       <Route path="/partner/office-hours" element={guard(['admin', 'partner'], <PartnerOfficeHoursPage />)} />
       <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], <CoMarketingPage user={user} />)} />
       <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <CalendarPage />)} />
+      {/* Task #40 (E2) — Event host/attendee surface. */}
+      <Route path="/my/events" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <MyEventsPage />)} />
+      <Route path="/events/new" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <EventEditorPage />)} />
+      <Route path="/events/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <EventEditorPage />)} />
+      <Route path="/events/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <EventManagePage />)} />
       <Route path="/cofounder" element={guard(['admin', 'founder'], <CofounderPage />)} />
       {/* Task #11 — User Skill Profile (self ratings + peer endorsements). */}
       <Route path="/skills" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SkillsProfilePage />)} />
