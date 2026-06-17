@@ -179,9 +179,27 @@ capital.get('/calls', async (c) => {
   if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
   const status = c.req.query('status');
   const sql = getSQL(c.env);
-  const rows = status
-    ? await sql`SELECT * FROM capital_calls WHERE status = ${status} ORDER BY created_at DESC`
-    : await sql`SELECT * FROM capital_calls ORDER BY created_at DESC`;
+  // Admins see every capital call. A non-admin investor is scoped to calls tied
+  // to their own LP record(s) (limited_partners.user_id) — without this any
+  // investor could read every LP's capital calls across all funds (IDOR).
+  let rows;
+  if (__u.role === 'admin') {
+    rows = status
+      ? await sql`SELECT * FROM capital_calls WHERE status = ${status} ORDER BY created_at DESC`
+      : await sql`SELECT * FROM capital_calls ORDER BY created_at DESC`;
+  } else {
+    rows = status
+      ? await sql`
+          SELECT cc.* FROM capital_calls cc
+          JOIN limited_partners lp ON lp.id = cc.limited_partner_id
+          WHERE lp.user_id = ${__u.id} AND cc.status = ${status}
+          ORDER BY cc.created_at DESC`
+      : await sql`
+          SELECT cc.* FROM capital_calls cc
+          JOIN limited_partners lp ON lp.id = cc.limited_partner_id
+          WHERE lp.user_id = ${__u.id}
+          ORDER BY cc.created_at DESC`;
+  }
   await sql.end();
   return c.json(rows.map(callDto));
 });
@@ -194,6 +212,17 @@ capital.post('/calls/:id/pay', async (c) => {
   const calls = await sql`SELECT * FROM capital_calls WHERE id = ${id}`;
   if (calls.length === 0) { await sql.end(); return c.json({ error: 'Capital call not found' }, 404); }
   const call = calls[0];
+  // IDOR guard: a non-admin investor may only act on a capital call that belongs
+  // to one of their own LP records. Respond 404 (not 403) so a non-owner cannot
+  // probe which call ids exist.
+  if (__u.role !== 'admin') {
+    const owned = await sql`
+      SELECT 1 FROM limited_partners
+      WHERE id = ${call.limited_partner_id} AND user_id = ${__u.id}
+      LIMIT 1
+    `;
+    if (owned.length === 0) { await sql.end(); return c.json({ error: 'Capital call not found' }, 404); }
+  }
   if (call.status === 'paid') { await sql.end(); return c.json({ status: 'paid', call: callDto(call) }); }
 
   await sql`UPDATE capital_calls SET status = 'paid', paid_date = date('now') WHERE id = ${id}`;
@@ -249,14 +278,18 @@ capital.post('/capitalCall', async (c) => {
   if (investors.length === 0) { await sql.end(); return c.json({ error: 'No active investors found' }, 404); }
 
   const perInvestor = Math.round((data.amount / investors.length) * 100) / 100;
-  const callsCreated = [];
-  for (const inv of investors) {
-    await sql`
-      INSERT INTO capital_calls (limited_partner_id, project_id, amount)
-      VALUES (${inv.id}, ${data.startup_id}, ${perInvestor})
-    `;
-    callsCreated.push({ investor_id: inv.id, investor_name: inv.name, amount: perInvestor });
-  }
+  // Batch all inserts into a single D1 round-trip instead of one INSERT per
+  // active investor (was N+1). Mirrors the env.DB.batch pattern used elsewhere
+  // (e.g. models/distributions.ts).
+  const stmts = investors.map((inv: any) =>
+    c.env.DB.prepare(
+      `INSERT INTO capital_calls (limited_partner_id, project_id, amount) VALUES (?, ?, ?)`,
+    ).bind(inv.id, data.startup_id, perInvestor),
+  );
+  await c.env.DB.batch(stmts);
+  const callsCreated = investors.map((inv: any) => ({
+    investor_id: inv.id, investor_name: inv.name, amount: perInvestor,
+  }));
 
   const allPartners = await sql`SELECT * FROM partners WHERE status = 'active'`;
   await sql.end();
