@@ -134,6 +134,15 @@ export async function signScore(
   return hmacSha256(hmacKey(env), canonicalMessage(projectId, score, version, timestamp));
 }
 
+// Generic HMAC over an already-canonicalized message, reusing the exact same
+// keying (SCORING_HMAC_SECRET || JWT_SECRET, ≥16 chars or it throws) and
+// SHA-256 algorithm as signScore. Used by the assessment engine
+// (services/assessmentScoring.ts) so result signing shares one source of truth
+// for the secret + algorithm rather than re-implementing crypto.subtle.
+export async function signHmac(env: Env, message: string): Promise<string> {
+  return hmacSha256(hmacKey(env), message);
+}
+
 // Minimal shape a score snapshot row exposes for verification + visibility.
 // Matches the columns added by `score_anti_cheat.sql`.
 export interface ScoreSnapshotRow {

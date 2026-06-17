@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Groundwork for a new interactive founder assessment
+
+We've started building a playful, game-style assessment that will help map your strengths, working style and founder "archetype" — and turn your answers into the skills and values shown on your profile. This update lays the behind-the-scenes foundation: the scoring, badges and results all work, with the interactive experience to follow. There's nothing new to click just yet.
+
+---
+
 ## Host your own events and manage who attends
 
 There's a new **Events** area in the sidebar. You can create events — demo days, workshops, office hours, meetups and more — set the date, place, capacity and who's allowed in, and offer free seats to whole groups like partners, investors or your own connections. Invite people from your network or by email, approve or decline requests, and move people up from the waitlist when space opens. When it's time, check guests in by scanning the QR code on their ticket with your phone camera. Events you're attending appear under an "Attending" tab, each with its own QR ticket ready to show at the door.

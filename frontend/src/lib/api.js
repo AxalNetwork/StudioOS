@@ -2640,3 +2640,23 @@ export const adminEvents = {
   feature: (id, featured) => request(`/admin/events/${id}/feature`, { method: 'POST', body: JSON.stringify({ featured }) }),
   cancel: (id) => request(`/admin/events/${id}/cancel`, { method: 'POST', body: '{}' }),
 };
+
+// Task #44 — Gamified Assessment player surface (§7.1). Each method maps 1:1 to
+// a /api/assessment route on the worker (api-drift guard checks this prefix).
+export const assessment = {
+  games: () => request('/assessment/games'),
+  start: (gameSlug) => request('/assessment/sessions', { method: 'POST', body: JSON.stringify({ gameSlug }) }),
+  session: (id) => request(`/assessment/sessions/${id}`),
+  next: (id) => request(`/assessment/sessions/${id}/next`),
+  respond: (id, { itemId, response, latencyMs, confidenceWager } = {}) =>
+    request(`/assessment/sessions/${id}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({ itemId, response, latencyMs, confidenceWager }),
+    }),
+  complete: (id) => request(`/assessment/sessions/${id}/complete`, { method: 'POST', body: '{}' }),
+  myResults: () => request('/assessment/results/me'),
+  results: (userId) => request(`/assessment/results/${userId}`),
+  publish: ({ track, published = true } = {}) =>
+    request('/assessment/results/publish', { method: 'POST', body: JSON.stringify({ track, published }) }),
+  myBadges: () => request('/assessment/badges/me'),
+};
