@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Track your 83(b) election deadline
+
+If you're incorporating, the Section 83(b) tracker now works on the live platform, not just in preview. Add your election details and StudioOS counts down the strict 30-day IRS filing window for you, shows a readiness checklist and step-by-step mailing instructions, and pre-fills your election document. Once you've mailed it, you can upload a photo or PDF of your certified-mail receipt and the tracker marks itself as filed — so your proof of the filing date is stored safely in one place.
+
+---
+
 ## Your capital calls are now private to you
 
 If you're an investor, the Capital page now shows only the capital calls that belong to you — not everyone's. You can review and pay your own calls exactly as before, and administrators still see the full picture across all funds.
