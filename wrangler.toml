@@ -191,6 +191,21 @@ zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/admin/refer-earn/*"
 zone_name  = "axal.vc"
+# Task #5 — Public event surface. Both /events and /invite must be apex-routed
+# so the SPA serves them (not Jekyll). Exact + wildcard to avoid hijacking similar
+# Jekyll paths (e.g., /events-*).
+[[routes]]
+pattern    = "axal.vc/events"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/events/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/invite"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/invite/*"
+zone_name  = "axal.vc"
 
 # ---------- Static Assets (SPA) ----------
 # Task #36 — Worker Static Assets binding. The worker serves the
@@ -693,6 +708,19 @@ pattern    = "axal.vc/admin/refer-earn"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/admin/refer-earn/*"
+zone_name  = "axal.vc"
+# Task #5 — Public event surface. Mirror of top-level routes block above.
+[[env.production.routes]]
+pattern    = "axal.vc/events"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/events/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/invite"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/invite/*"
 zone_name  = "axal.vc"
 
 [env.production.vars]
