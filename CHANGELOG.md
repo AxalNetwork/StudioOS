@@ -10,6 +10,11 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Fix broken nav & add 404 fallback (Task #11)
+- **Broken "View Billing" nav (`frontend/src/pages/IncorporatePage.jsx`):** the incorporation success card linked to a non-existent `/billing` route (dead-end blank page). Repointed to the real billing surface `/settings/billing` (the Billing tab in `SettingsPage`); every role that can reach `/incorporate` also passes the `/settings/:section` guard.
+- **Catch-all 404 (`frontend/src/App.jsx`, `frontend/src/pages/NotFoundPage.jsx`):** added a `path="*"` route as the LAST entry in the main route table rendering a new `NotFoundPage` (clear "Page not found" copy + "Back to home" link + "Go back"), so unmatched URLs no longer render a blank screen inside the layout. Placed last so it never shadows existing public/alias/guarded routes; React Router v6 ranking also keeps `*` lowest-priority.
+- **Docs (`replit.md`):** corrected the Run & Operate section — removed the documented standalone `npm run typecheck` (no such script); the TypeScript check (`tsc --noEmit` in `cloudflare-worker/`) runs inside `npm run test:drift`.
+
 ## Cross-system wiring: event badges, archetype surfacing & suggestions (Task #7)
 - **Event-participation badges (`sql/migrations/112_event_badges.sql`, `services/eventBadges.ts`):** new migration seeds three `kind='event'` badge defs (`event_demo_day_presenter`, `event_networker`, `event_founding_attendee`) via `INSERT OR IGNORE`, mirroring the existing badge-seed format. Isolated, best-effort award service: `awardEventBadge` runs `ensureAssessmentSchema`, does `INSERT OR IGNORE user_badges` with `source='event'`, and bumps `user_xp` by `xp_reward` (recomputing level via `levelForXp`) only on first award (`changes>0`); never throws. `awardCheckinBadges` counts attended registrations → Founding Attendee (≥1) + Networker (≥5); `awardAgendaSpeakerBadge` → Demo Day Presenter. Does NOT touch `assessment.ts` award logic.
 - **Badge hooks (`routes/events.ts`):** `POST /:id/checkin/:code` calls `awardCheckinBadges` after a registration first flips to `attended` (guarded by `!already` + `reg.user_id`); `POST /:id/agenda` + `PATCH /:id/agenda/:aid` call `awardAgendaSpeakerBadge` when `speaker_user_id` is present. All existing response shapes unchanged.

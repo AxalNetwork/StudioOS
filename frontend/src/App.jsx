@@ -26,6 +26,7 @@ const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
 const IncorporatePage = lazy(() => import('./pages/IncorporatePage'));
 const IncorporateSuccessPage = lazy(() => import('./pages/IncorporateSuccessPage'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const CofounderAgreementPage = lazy(() => import('./pages/CofounderAgreementPage'));
 const Section83bPage = lazy(() => import('./pages/Section83bPage'));
 const CompliancePage = lazy(() => import('./pages/CompliancePage'));
@@ -1311,6 +1312,9 @@ function AppInner() {
       <Route path="/lp/investor" element={<InvestorDealflowHomePage />} />
       <Route path="/lp/partner" element={<PartnerPartnershipHomePage />} />
       <Route path="/lp/spinout-demo-day" element={<SpinoutDemoDayPage />} />
+      {/* Task #11 — Catch-all 404. Must stay LAST so it only matches when no
+          other route (public, alias, or guarded) does. */}
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
 </RouteErrorBoundary>
 </Suspense>
