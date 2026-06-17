@@ -14,6 +14,12 @@ import { ensureTier } from '../middleware/requireTier';
 import {
   role, isAdmin, isFounder, mapError, nowIso, newUid, jload,
 } from './_t13t14t15_helpers';
+import {
+  loadUserVectors,
+  confidenceAdjustedAlignment,
+  skillComplementarity,
+  computeWatchOuts,
+} from '../services/matchingVectors';
 
 const mentors = new Hono<{ Bindings: Env }>();
 
@@ -165,6 +171,110 @@ mentors.post('/me', async (c) => {
     } catch { /* mentor_id column not yet migrated */ }
     const fresh = await loadMentorById(c.env, newId);
     return c.json(mentorDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// Task #4 — Mentor matching (domain-radar overlap + values alignment)
+// MUST be registered BEFORE /:uid so Hono does not shadow it.
+// ---------------------------------------------------------------------------
+mentors.get('/match', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!isFounder(user) && !isAdmin(user)) {
+      return c.json({ detail: 'Founder role required' }, 403);
+    }
+
+    // Load all active mentors
+    const rows = await c.env.DB.prepare(
+      'SELECT * FROM mentors WHERE is_active = 1 ORDER BY display_name ASC'
+    ).all<MentorRow>();
+    const allMentors = (rows.results || []) as MentorRow[];
+
+    // Load caller vectors
+    const callerVectors = await loadUserVectors(c.env, user.id);
+
+    // Batch-load mentor vectors
+    const mentorIds = allMentors.map((m) => m.user_id).filter(Boolean) as number[];
+    const mentorVectorsMap = new Map<number, Awaited<ReturnType<typeof loadUserVectors>>>();
+    if (mentorIds.length) {
+      const placeholders = mentorIds.map(() => '?').join(',');
+      // Values
+      const vRes = await c.env.DB.prepare(
+        `SELECT uv.user_id, vd.slug, uv.score, uv.confidence
+           FROM user_values uv
+           JOIN value_dimensions vd ON vd.id = uv.dimension_id
+          WHERE uv.user_id IN (${placeholders})`,
+      ).bind(...mentorIds).all<{ user_id: number; slug: string; score: number; confidence: number }>();
+      for (const r of vRes.results || []) {
+        const m = mentorVectorsMap.get(r.user_id) || { values: {}, skills: {} };
+        m.values[r.slug] = { score: Number(r.score) || 0, confidence: Number(r.confidence) || 0 };
+        mentorVectorsMap.set(r.user_id, m);
+      }
+      // Skills
+      const sRes = await c.env.DB.prepare(
+        `SELECT us.user_id, sc.slug, MAX(us.self_level) AS level
+           FROM user_skills us
+           JOIN skills s ON s.id = us.skill_id
+           JOIN skill_categories sc ON sc.slug = s.category_slug
+          WHERE us.user_id IN (${placeholders})
+          GROUP BY us.user_id, sc.slug`,
+      ).bind(...mentorIds).all<{ user_id: number; slug: string; level: number }>();
+      for (const r of sRes.results || []) {
+        const m = mentorVectorsMap.get(r.user_id) || { values: {}, skills: {} };
+        m.skills[r.slug] = Number(r.level) || 0;
+        mentorVectorsMap.set(r.user_id, m);
+      }
+    }
+
+    const scored = allMentors.map((m) => {
+      const mVec = mentorVectorsMap.get(m.user_id || 0) || { values: {}, skills: {} };
+      // 1. Domain overlap: does the mentor's expertise match the founder's skill gaps?
+      const mentorExpertise = jload(m.expertise_json, [] as string[]);
+      const founderAxes = Object.keys(callerVectors.skills);
+      const gaps = founderAxes.filter((ax) => (callerVectors.skills[ax] || 0) < 2.5);
+      // Normalise mentor free-text expertise to axis slugs
+      const EXPERTISE_MAP: Record<string, string> = {
+        product: 'product', engineering: 'engineering', design: 'design',
+        sales: 'gtm_sales', marketing: 'marketing_brand', 'go-to-market': 'gtm_sales',
+        gtm: 'gtm_sales', finance: 'finance_ops', ops: 'finance_ops', operations: 'finance_ops',
+        legal: 'legal_compliance', compliance: 'legal_compliance', capital: 'capital_network',
+        fundraising: 'capital_network', networking: 'capital_network', 'data science': 'engineering',
+        ai_ml: 'engineering', 'ai / ml': 'engineering', growth: 'gtm_sales',
+      };
+      const mappedExpertise = mentorExpertise.map((ex) => EXPERTISE_MAP[ex.toLowerCase()] || ex.toLowerCase());
+      const domainOverlap = mappedExpertise.filter((ex) => gaps.includes(ex));
+      const domainScore = Math.min(40, domainOverlap.length * 10);
+
+      // 2. Values alignment
+      const val = confidenceAdjustedAlignment(callerVectors.values, mVec.values);
+      const valScore = val.overlapCount > 0 ? Math.round(((val.score + 1) / 2) * 30) : 0;
+
+      // 3. Skill complementarity
+      const comp = skillComplementarity(callerVectors.skills, mVec.skills);
+      const compScore = Math.min(30, comp.score);
+
+      const total = Math.min(100, domainScore + valScore + compScore);
+      const watchOuts = computeWatchOuts(
+        callerVectors.values, mVec.values,
+        callerVectors.skills, mVec.skills,
+      );
+
+      return {
+        mentor: mentorDto(m),
+        match_score: total,
+        breakdown: { domain_overlap: domainScore, values_alignment: valScore, skill_complementarity: compScore },
+        reasons: [
+          ...(domainScore > 0 ? [`Fills ${domainOverlap.length} skill gap(s)`] : []),
+          ...(valScore > 0 ? [`Values alignment: ${valScore}`] : []),
+          ...(compScore > 0 ? [`Skill complementarity: ${compScore}`] : []),
+        ].slice(0, 4),
+        watch_outs: watchOuts.slice(0, 4),
+      };
+    });
+
+    scored.sort((a, b) => b.match_score - a.match_score);
+    return c.json({ items: scored.slice(0, 20) });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -492,5 +602,4 @@ mentors.post('/:uid/book', async (c) => {
   url.pathname = `/api/mentors/slots/${slotId}/book`;
   return mentors.fetch(new Request(url, { method: 'POST', headers: c.req.raw.headers, body }), c.env, c.executionCtx);
 });
-
 export default mentors;

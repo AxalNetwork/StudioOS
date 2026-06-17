@@ -4,6 +4,11 @@ import { getSQL } from '../db';
 import { requireAuth, requireAdmin } from '../auth';
 import { filterOptedInUserIds } from '../services/matchingConsent';
 import { logMatchListGeneration } from '../services/matchAudit';
+import {
+  confidenceAdjustedAlignment,
+  computeWatchOuts,
+  type ValueEntry,
+} from '../services/matchingVectors';
 
 const matches = new Hono<{ Bindings: Env }>();
 
@@ -464,30 +469,72 @@ matches.post('/investor-match', async (c) => {
   const optedInInvestors = await filterOptedInUserIds(c.env, (investorRows as any[]).map((r) => Number(r.user_id)));
   const visibleInvestorRows = (investorRows as any[]).filter((r) => optedInInvestors.has(Number(r.user_id)));
 
-  // Fetch founder's values vector
+  // Fetch founder's values vector (slug-keyed so watch-outs + alignment work)
   const founderValuesRows = await sql`
-    SELECT v.dimension_id, v.score, v.confidence
+    SELECT vd.slug, v.score, v.confidence
     FROM user_values v
+    JOIN value_dimensions vd ON vd.id = v.dimension_id
     WHERE v.user_id = ${user.id}
   `;
-  const founderValues: Record<number, number> = {};
+  const founderValues: Record<string, ValueEntry> = {};
   for (const r of founderValuesRows as any[]) {
-    founderValues[Number(r.dimension_id)] = Number(r.score) * Number(r.confidence);
+    founderValues[String(r.slug)] = {
+      score: Number(r.score),
+      confidence: Number(r.confidence),
+    };
   }
 
-  // Fetch investor values vectors (all investors in one query)
+  // Fetch investor values vectors (slug-keyed, all investors in one query)
   const investorUserIds = visibleInvestorRows.map((r) => Number(r.user_id)).filter(Boolean);
-  const investorValuesMap = new Map<number, Record<number, number>>();
+  const investorValuesMap = new Map<number, Record<string, ValueEntry>>();
   if (investorUserIds.length > 0) {
     const ph = investorUserIds.map(() => '?').join(',');
     const valuesRows = await sql.unsafe(
-      `SELECT user_id, dimension_id, score, confidence FROM user_values WHERE user_id IN (${ph})`,
+      `SELECT uv.user_id, vd.slug, uv.score, uv.confidence
+         FROM user_values uv
+         JOIN value_dimensions vd ON vd.id = uv.dimension_id
+        WHERE uv.user_id IN (${ph})`,
       investorUserIds,
     );
     for (const r of valuesRows as any[]) {
       const uid = Number(r.user_id);
       if (!investorValuesMap.has(uid)) investorValuesMap.set(uid, {});
-      investorValuesMap.get(uid)![Number(r.dimension_id)] = Number(r.score) * Number(r.confidence);
+      investorValuesMap.get(uid)![String(r.slug)] = {
+        score: Number(r.score),
+        confidence: Number(r.confidence),
+      };
+    }
+  }
+
+  // Fetch founder skills for watch-out detection
+  const founderSkillsRows = await sql`
+    SELECT sc.slug, MAX(us.self_level) AS level
+    FROM user_skills us
+    JOIN skills s ON s.id = us.skill_id
+    JOIN skill_categories sc ON sc.slug = s.category_slug
+    WHERE us.user_id = ${user.id}
+    GROUP BY sc.slug
+  `;
+  const founderSkills: Record<string, number> = {};
+  for (const r of founderSkillsRows as any[]) founderSkills[String(r.slug)] = Number(r.level) || 0;
+
+  // Fetch investor skills for watch-outs
+  const investorSkillsMap = new Map<number, Record<string, number>>();
+  if (investorUserIds.length > 0) {
+    const ph = investorUserIds.map(() => '?').join(',');
+    const skillRows = await sql.unsafe(
+      `SELECT us.user_id, sc.slug, MAX(us.self_level) AS level
+         FROM user_skills us
+         JOIN skills s ON s.id = us.skill_id
+         JOIN skill_categories sc ON sc.slug = s.category_slug
+        WHERE us.user_id IN (${ph})
+        GROUP BY us.user_id, sc.slug`,
+      investorUserIds,
+    );
+    for (const r of skillRows as any[]) {
+      const uid = Number(r.user_id);
+      if (!investorSkillsMap.has(uid)) investorSkillsMap.set(uid, {});
+      investorSkillsMap.get(uid)![String(r.slug)] = Number(r.level) || 0;
     }
   }
 
@@ -612,12 +659,20 @@ matches.post('/investor-match', async (c) => {
     if (totalFunding > 0) { tractionScore += 10; reasons.push('Prior funding'); }
     tractionScore = Math.max(0, Math.min(100, tractionScore));
 
-    // ---- 5. Values alignment (0-100) ----
+    // ---- 5. Values alignment (0-100) with confidence down-weighting ----
     let valuesScore = 0;
+    let watchOuts: string[] = [];
     if (investorValuesMap.has(invUid) && Object.keys(founderValues).length > 0) {
       const invVec = investorValuesMap.get(invUid)!;
-      valuesScore = Math.round(cosineSimilarityVectors(founderValues, invVec) * 100);
-      if (valuesScore > 0) reasons.push(`Values alignment: ${valuesScore}`);
+      const aligned = confidenceAdjustedAlignment(founderValues, invVec);
+      // Scale −1..1 adjusted cosine to 0..100
+      valuesScore = Math.round(((aligned.score + 1) / 2) * 100);
+      if (valuesScore > 0) {
+        reasons.push(`Values alignment: ${valuesScore} (confidence ${(aligned.meanConfidence * 100).toFixed(0)}%)`);
+      }
+      // Watch-outs: low-confidence founder signals, strong value opposition
+      const invSkills = investorSkillsMap.get(invUid) || {};
+      watchOuts = computeWatchOuts(founderValues, invVec, founderSkills, invSkills);
     }
 
     // ---- 6. Network warmth (0-100) ----
@@ -649,6 +704,7 @@ matches.post('/investor-match', async (c) => {
         network_warmth: networkScore,
       },
       reasons: reasons.slice(0, 6),
+      watch_outs: watchOuts.slice(0, 4),
       thesis: {
         sectors,
         stages,

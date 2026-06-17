@@ -18,6 +18,12 @@ import { requireAuth } from '../auth';
 import { getSQL } from '../db';
 import { hashEmail } from '../util/hashEmail';
 import { callerHasFullLens } from '../util/marketIntelTier';
+import {
+  confidenceAdjustedAlignment,
+  type ValueEntry,
+} from '../services/matchingVectors';
+import { isAdmin, isFounder, mapError } from './_t13t14t15_helpers';
+import { filterOptedInUserIds } from '../services/matchingConsent';
 
 export const investorProfile = new Hono<{ Bindings: Env }>();
 export const investorSignals = new Hono<{ Bindings: Env }>();
@@ -663,4 +669,133 @@ export async function aggregateInvestorSignals(env: Env): Promise<{ n_total: num
 // Backward-compat: legacy callers that used /api/investor-signals/profile/me*
 // or /api/investor-profile/profile/me* (pre-2026-05-10 paths) still work.
 investorSignals.route('/profile', investorProfile);
+// ---------------------------------------------------------------------------
+// Task #4 — Coach matching (benevolence/universalism alignment + skill gaps)
+// ---------------------------------------------------------------------------
+investorSignals.get('/coach-match', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!isFounder(user) && !isAdmin(user)) {
+      return c.json({ detail: 'Founder or admin role required' }, 403);
+    }
+    const { userId } = c.req.query();
+    const targetId = userId ? Number(userId) : user.id;
+    // Prevent IDOR: only self or admin can target another user's vectors
+    if (targetId !== user.id && !isAdmin(user)) {
+      return c.json({ detail: 'Not authorized' }, 403);
+    }
+
+    // Load target vectors
+    const vRes = await c.env.DB.prepare(
+      `SELECT vd.slug, uv.score, uv.confidence
+         FROM user_values uv
+         JOIN value_dimensions vd ON vd.id = uv.dimension_id
+        WHERE uv.user_id = ?`,
+    ).bind(targetId).all<{ slug: string; score: number; confidence: number }>();
+    const sRes = await c.env.DB.prepare(
+      `SELECT sc.slug, MAX(us.self_level) AS level
+         FROM user_skills us
+         JOIN skills s ON s.id = us.skill_id
+         JOIN skill_categories sc ON sc.slug = s.category_slug
+        WHERE us.user_id = ?
+        GROUP BY sc.slug`,
+    ).bind(targetId).all<{ slug: string; level: number }>();
+
+    const targetValues: Record<string, { score: number; confidence: number }> = {};
+    for (const r of vRes.results || []) targetValues[r.slug] = { score: Number(r.score) || 0, confidence: Number(r.confidence) || 0 };
+    const targetSkills: Record<string, number> = {};
+    for (const r of sRes.results || []) targetSkills[r.slug] = Number(r.level) || 0;
+
+    // Coach pool: distinct users who have role=coach OR completed coachs_lens_v1
+    // Exclude admins who are not coaches; respect directory visibility
+    const coachRows = await c.env.DB.prepare(
+      `SELECT DISTINCT u.id AS user_id, u.name, u.email, u.role, u.avatar_url
+         FROM users u
+         LEFT JOIN assessment_results ar ON ar.user_id = u.id
+        WHERE (u.role = 'coach' OR ar.track = 'coachs_lens_v1')
+          AND (u.show_in_directory IS NULL OR u.show_in_directory = 1)
+        ORDER BY u.name ASC`,
+    ).all<{ user_id: number; name: string; email: string; role: string; avatar_url: string | null }>();
+    const coaches = (coachRows.results || []) as { user_id: number; name: string; email: string; role: string; avatar_url: string | null }[];
+
+    // Privacy-first consent filter: only surface coaches who have opted in
+    const optedIn = await filterOptedInUserIds(c.env, coaches.map((co) => co.user_id));
+    const visibleCoaches = coaches.filter((co) => optedIn.has(co.user_id));
+
+    const coachIds = visibleCoaches.map((co) => co.user_id).filter(Boolean);
+    const coachValuesMap = new Map<number, Record<string, { score: number; confidence: number }>>();
+    const coachSkillsMap = new Map<number, Record<string, number>>();
+    if (coachIds.length) {
+      const ph = coachIds.map(() => '?').join(',');
+      const cv = await c.env.DB.prepare(
+        `SELECT uv.user_id, vd.slug, uv.score, uv.confidence
+           FROM user_values uv
+           JOIN value_dimensions vd ON vd.id = uv.dimension_id
+          WHERE uv.user_id IN (${ph})`,
+      ).bind(...coachIds).all<{ user_id: number; slug: string; score: number; confidence: number }>();
+      for (const r of cv.results || []) {
+        const m = coachValuesMap.get(r.user_id) || {};
+        m[r.slug] = { score: Number(r.score) || 0, confidence: Number(r.confidence) || 0 };
+        coachValuesMap.set(r.user_id, m);
+      }
+      const cs = await c.env.DB.prepare(
+        `SELECT us.user_id, sc.slug, MAX(us.self_level) AS level
+           FROM user_skills us
+           JOIN skills s ON s.id = us.skill_id
+           JOIN skill_categories sc ON sc.slug = s.category_slug
+          WHERE us.user_id IN (${ph})
+          GROUP BY us.user_id, sc.slug`,
+      ).bind(...coachIds).all<{ user_id: number; slug: string; level: number }>();
+      for (const r of cs.results || []) {
+        const m = coachSkillsMap.get(r.user_id) || {};
+        m[r.slug] = Number(r.level) || 0;
+        coachSkillsMap.set(r.user_id, m);
+      }
+    }
+
+    const scored = visibleCoaches.map((co) => {
+      const cVec = coachValuesMap.get(co.user_id) || {};
+      const cSkills = coachSkillsMap.get(co.user_id) || {};
+
+      // 1. Coach alignment: benevolence + universalism weighted
+      const b = cVec['schwartz_benevolence'] || { score: 0, confidence: 0 };
+      const u = cVec['schwartz_universalism'] || { score: 0, confidence: 0 };
+      const coachBenevolence = ((b.score + 2) / 4) * b.confidence; // −2..2 → 0..1
+      const coachUniversalism = ((u.score + 2) / 4) * u.confidence;
+      const coachAlignment = Math.round((coachBenevolence + coachUniversalism) / 2 * 40);
+
+      // 2. Skill coverage: how many of the founder's weak axes does the coach cover well?
+      const gaps = Object.keys(targetSkills).filter((k) => (targetSkills[k] || 0) < 2.5);
+      const covered = gaps.filter((g) => (cSkills[g] || 0) > 3);
+      const coverageScore = Math.min(30, covered.length * 7);
+
+      // 3. Values overlap (confidence-adjusted)
+      const valScore = confidenceAdjustedAlignment(targetValues, cVec);
+      const overlapScore = valScore.overlapCount > 0 ? Math.round(((valScore.score + 1) / 2) * 30) : 0;
+
+      const total = Math.min(100, coachAlignment + coverageScore + overlapScore);
+
+      return {
+        coach: {
+          user_id: co.user_id,
+          name: co.name,
+          email: isAdmin(user) ? co.email : null,
+          role: co.role,
+          avatar_url: co.avatar_url,
+        },
+        match_score: total,
+        breakdown: { coach_alignment: coachAlignment, skill_coverage: coverageScore, values_overlap: overlapScore },
+        reasons: [
+          ...(coachAlignment > 0 ? [`Coach alignment: ${coachAlignment}`] : []),
+          ...(coverageScore > 0 ? [`Covers ${covered.length} skill gap(s)`] : []),
+          ...(overlapScore > 0 ? [`Values overlap: ${overlapScore}`] : []),
+        ].slice(0, 4),
+      };
+    });
+
+    scored.sort((a, b) => b.match_score - a.match_score);
+    return c.json({ items: scored.slice(0, 20) });
+  } catch (e) { return mapError(c, e); }
+});
+
 export default investorSignals;
