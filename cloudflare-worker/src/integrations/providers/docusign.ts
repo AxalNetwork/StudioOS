@@ -327,6 +327,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
 interface SendEnvelopeOpts {
   documentTitle: string;
   documentBody: string;
+  documentType?: string;
   recipientEmail: string;
   recipientName: string;
   emailSubject?: string;
@@ -369,12 +370,17 @@ export async function sendDocusignEnvelope(
     envelopeUuid: 'docusign-pending',
     documentTitle: opts.documentTitle,
     documentBody: bodyWithAnchor,
+    documentType: opts.documentType,
     signerName: opts.recipientName || opts.recipientEmail,
     signerEmail: opts.recipientEmail,
     signerIp: 'docusign',
     signedAt: new Date().toISOString(),
     signatureDataUrl: TRANSPARENT_PNG,
     bodySha256: bodySha,
+    // DocuSign draws its own signature tabs at the in-body anchor, so keep the
+    // anchor text and don't append our execution block.
+    preserveBody: true,
+    suppressExecutionBlock: true,
   });
   const pdfBase64 = bytesToBase64(pdf);
   // eventNotification — per-envelope Connect subscription. DocuSign POSTs

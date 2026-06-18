@@ -1,13 +1,3 @@
-# Accredited Investor Self-Certification
-
-> **Subject to legal review.** This template is a working draft. Final
-> binding terms must be reviewed and approved by qualified counsel
-> before public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Investor:** {{investor_name}} ({{investor_email}})
-
 The undersigned ("Investor") certifies, under penalties of perjury,
 that they qualify as an "Accredited Investor" as that term is defined
 in Rule 501(a) of Regulation D under the U.S. Securities Act of 1933,
@@ -36,8 +26,3 @@ ceases to be true. Each such entity is entitled to rely on this
 certification and is under no obligation to independently verify
 Investor's status, except as required by Rule 506(c) (in which case
 additional documentation may be requested).
-
----
-
-Signed electronically by {{investor_name}} on the date appearing
-below.

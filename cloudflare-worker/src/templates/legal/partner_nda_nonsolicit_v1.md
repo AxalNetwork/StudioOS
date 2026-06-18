@@ -1,14 +1,3 @@
-# Partner NDA + Non-Solicit — Axal StudioOS
-
-> **v1 draft — subject to legal review.** This template is a working
-> draft and must be reviewed and approved by qualified counsel before
-> execution or public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Counterparty:** Axal VC Management LLC, a Delaware limited liability company ("Axal")
-**Partner:** {{partner.legal_name}}, a {{partner.entity_type}} ("Partner"), acting through {{partner.contact_name}} ({{partner.email}})
-
 ## 1. Purpose
 
 To protect non-public information exchanged between Axal and Partner in connection with Partner's engagement in the capacity of {{partner.role}}, and to record the parties' non-solicitation commitments.
@@ -44,7 +33,3 @@ Partner shall not use Confidential Information to circumvent Axal in any transac
 ## 8. Governing Law
 
 This Agreement is governed by {{governing_law}}.
-
----
-
-Signed electronically by {{partner.contact_name}}, for and on behalf of {{partner.legal_name}}, and by Axal VC Management LLC on the date(s) appearing below.

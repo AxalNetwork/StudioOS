@@ -1,14 +1,3 @@
-# Mentor Engagement Disclaimer — Axal StudioOS
-
-> **v1 draft — subject to legal review.** This template is a working
-> draft and must be reviewed and approved by qualified counsel before
-> execution or public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Platform operator:** Axal VC Management LLC, a Delaware limited liability company ("Axal")
-**Mentor:** {{partner.legal_name}}, acting through {{partner.contact_name}} ({{partner.email}}), engaged in the capacity of {{partner.role}}
-
 ## 1. Nature of the Engagement
 
 Mentor provides guidance, feedback, and introductions to founders and portfolio companies through the Axal StudioOS platform on a voluntary, non-fiduciary basis. This document records the disclaimers governing that engagement.

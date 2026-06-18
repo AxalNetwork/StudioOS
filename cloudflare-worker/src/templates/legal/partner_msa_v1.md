@@ -1,15 +1,3 @@
-# Partner Master Services Agreement — Axal StudioOS
-
-> **Subject to legal review.** This template is a working draft. Final
-> binding terms must be reviewed and approved by qualified counsel
-> before public release. **Note:** Deal-specific terms (fees, scope,
-> SLAs) are seeded by the Partner Deal flow (X-1) and override the
-> defaults below where they conflict.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Partner:** {{partner_name}} ({{partner_email}})
-**Counterparty:** Axal VC Management LLC, a Delaware limited liability
 company ("Axal")
 
 ## 1. Scope
@@ -56,8 +44,3 @@ including export controls and anti-bribery rules.
 This MSA continues until terminated by either party on 30 days'
 written notice. Active SOWs survive termination of the MSA according
 to their own terms.
-
----
-
-Signed electronically by {{partner_name}} and Axal VC Management LLC
-on the date(s) appearing below.

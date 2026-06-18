@@ -1,13 +1,3 @@
-# Mentor Disclaimer & Acknowledgement
-
-> **Subject to legal review.** This template is a working draft. Final
-> binding terms must be reviewed and approved by qualified counsel
-> before public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Mentor:** {{mentor_name}} ({{mentor_email}})
-
 ## 1. No professional advice
 
 Guidance provided by Mentor through the Axal StudioOS platform is

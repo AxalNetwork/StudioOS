@@ -1,14 +1,3 @@
-# Partner Capital Deal — Axal StudioOS
-
-> **v1 draft — subject to legal review.** This template is a working
-> draft and must be reviewed and approved by qualified counsel before
-> execution or public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Company:** Axal VC Management LLC, a Delaware limited liability company ("Axal")
-**Partner:** {{partner.legal_name}}, a {{partner.entity_type}} ("Partner"), acting through {{partner.contact_name}} ({{partner.email}})
-
 ## Recitals
 
 WHEREAS, Partner wishes to participate in Axal's venture activities by committing capital alongside Axal in the capacity of {{partner.role}}; and
@@ -54,7 +43,3 @@ This Agreement continues until the final investment funded by the Commitment is 
 ## 8. Governing Law
 
 This Agreement is governed by {{governing_law}}.
-
----
-
-Signed electronically by {{partner.contact_name}}, for and on behalf of {{partner.legal_name}}, and by Axal VC Management LLC on the date(s) appearing below.

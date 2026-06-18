@@ -180,6 +180,7 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('gp');
   const [body, setBody] = useState('');
+  const [version, setVersion] = useState(1);
 
   const [versions, setVersions] = useState([]);
   const [showVersions, setShowVersions] = useState(false);
@@ -202,6 +203,7 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
         setTitle(t.title);
         setCategory(CATEGORY_META[t.category] ? t.category : 'gp');
         setBody(t.body_md || '');
+        setVersion(t.version || 1);
         try {
           const v = await api.adminTemplateStoreVersions(slug);
           if (alive) setVersions(v.versions || []);
@@ -398,6 +400,9 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
                 title={viewVersion ? viewVersion.title : title}
                 body={previewBody}
                 resolveTokens={resolveTokens}
+                version={viewVersion ? viewVersion.version : version}
+                docType={slugInput || slug}
+                category={category}
               />
             </div>
           </div>

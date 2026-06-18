@@ -1,14 +1,3 @@
-# Partner Service Agreement — Axal StudioOS
-
-> **v1 draft — subject to legal review.** This template is a working
-> draft and must be reviewed and approved by qualified counsel before
-> execution or public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Company:** Axal VC Management LLC, a Delaware limited liability company ("Axal")
-**Service Provider:** {{counterparty.legal_name}}, a {{counterparty.entity_type}} ("Service Provider"), acting through {{counterparty.signatory_name}}, {{counterparty.signatory_title}} ({{counterparty.email}})
-
 ## Recitals
 
 WHEREAS, Axal wishes to retain Service Provider to provide certain professional services; and
@@ -54,7 +43,3 @@ This Agreement continues until the Services are completed, unless terminated ear
 ## 8. Governing Law
 
 This Agreement is governed by {{governing_law}}.
-
----
-
-Signed electronically by {{counterparty.signatory_name}}, for and on behalf of {{counterparty.legal_name}}, and by Axal VC Management LLC on the date(s) appearing below.

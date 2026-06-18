@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Cleaner legal documents — no more formatting symbols in previews and exports
+
+Legal document previews and exported PDFs now look like finished legal documents instead of raw template drafts. Previously, Markdown formatting symbols (`#`, `**`, `>`, `---`, checkbox markers) could appear in previews and in exported PDFs — they're now stripped at render time so the text looks clean. Every document now has a standardized layout: a **CONFIDENTIAL** marker, a centered bold title, an opening preamble paragraph (with the registered Delaware address), and a properly formatted signature block at the end — with the signing parties, names, titles, and date fields exactly where they should be.
+
+The signature block is also document-aware: legal agreements show both the Axal party and the counterparty; corporate documents show the company; government filings show only the filer; policies (Terms of Service, Privacy Policy) have no signature block.
+
+Fifteen legal templates that were previously blank now have complete first-draft bodies: Subscription Booklet & LPA, SPV Joinder, Co-Investment Side Letter, Strategic Side Letter, Investor Subscription (Pro & Institutional tiers), Founder Collaboration Agreement, Spin-Out Subsidiary SPA, Strategic Scale Partnership, Technology Integration / JV, Referral / Agency Agreement, M&A Advisory Mandate, Secondary Purchase Agreement, IP Background Schedule, and Data Access Acknowledgment. All bodies are v1 drafts pending legal review.
+
+The admin template editor's live preview now matches the final exported PDF exactly.
+
+---
+
 ## Choose your cookie preferences
 
 A small banner now appears at the bottom of the screen on your first visit, letting you decide how we can use cookies. You can **Accept all**, **Reject all**, or pick **More choices** to turn individual categories on or off — Functional, Analytics, and Advertising (Essential cookies keep the site working and are always on). Your choice is saved in your browser, so the banner won't keep coming back. Changed your mind? Use the new **"Cookie preferences"** link in the footer to update your choice any time, and see our Privacy Policy for what each category means.

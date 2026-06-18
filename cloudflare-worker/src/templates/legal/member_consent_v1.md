@@ -1,14 +1,3 @@
-# Initial Member Written Consent — Axal StudioOS
-
-> **v1 draft — subject to legal review.** This template is a working
-> draft and must be reviewed and approved by qualified counsel before
-> execution or public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Company:** {{company.legal_name}}, a {{company.entity_type}} (the "Company")
-**Registered office:** {{company.registered_address}}
-
 ## Action by Written Consent of the Initial Member(s) in Lieu of an Organizational Meeting
 
 The undersigned, being the initial member(s) of the Company, hereby adopt the following resolutions by written consent, effective as of {{effective_date}}, in lieu of an organizational meeting.
@@ -36,7 +25,3 @@ RESOLVED, that the officers be authorized to obtain a federal Employer Identific
 ## 6. General Authority
 
 RESOLVED, that the officers be authorized to take all further actions and execute all further documents reasonably necessary to carry out the purpose and intent of these resolutions.
-
----
-
-Signed electronically by {{founder.legal_name}}, initial member, for and on behalf of {{company.legal_name}}, on the date appearing below.

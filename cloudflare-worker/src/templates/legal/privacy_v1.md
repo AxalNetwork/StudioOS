@@ -1,12 +1,3 @@
-# Privacy Notice — Axal StudioOS
-
-> **Subject to legal review.** This template is a working draft. Final
-> binding terms must be reviewed and approved by qualified counsel
-> before public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Data Controller:** Axal VC Management LLC, a Delaware limited
 liability company ("Axal VC Management" or "we")
 **Counterparty:** {{counterparty_name}} ({{counterparty_email}})
 
@@ -47,9 +38,3 @@ Subject to applicable law (including GDPR/CCPA where relevant), you
 may request access, correction, portability, or deletion of your data
 by contacting privacy@axal.vc (Axal VC Management LLC, attn: Privacy
 Officer).
-
----
-
-By signing electronically below, {{counterparty_name}} acknowledges
-having read this Privacy Notice and consents to the processing
-described herein by Axal VC Management LLC.
