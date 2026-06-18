@@ -1,14 +1,3 @@
-# Engagement Letter — Spin-Out Legal Package
-
-> **v1 draft — subject to legal review.** This template is a working
-> draft and must be reviewed and approved by qualified counsel before
-> execution or public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Client:** Axal VC Management LLC, a Delaware limited liability company ("Axal")
-**Counsel:** {{counterparty.legal_name}}, a {{counterparty.entity_type}} ("Counsel"), acting through {{counterparty.signatory_name}}, {{counterparty.signatory_title}} ({{counterparty.email}})
-
 ## Recitals
 
 WHEREAS, Axal operates a venture studio and from time to time forms spin-out companies; and
@@ -54,7 +43,3 @@ Either party may terminate this engagement on written notice. Axal shall pay for
 ## 6. Governing Law
 
 This Engagement Letter is governed by {{governing_law}}.
-
----
-
-Signed electronically by {{counterparty.signatory_name}}, for and on behalf of {{counterparty.legal_name}}, and by Axal VC Management LLC on the date(s) appearing below.

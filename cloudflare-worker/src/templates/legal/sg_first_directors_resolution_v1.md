@@ -1,14 +1,3 @@
-# First Directors' Resolution (Singapore Pte. Ltd.)
-
-> **v1 draft — subject to legal review.** This template is a working
-> draft and must be reviewed and approved by qualified counsel before
-> execution or public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Company:** {{company.legal_name}}, a private company limited by shares incorporated in the {{company.jurisdiction}} (UEN {{company.registration_number}}) (the "Company")
-**Registered office:** {{company.registered_address}}
-
 ## Written Resolution of the First Director(s) in Lieu of the First Meeting
 
 The undersigned, being the first director(s) of the Company, hereby pass the following resolutions by written means pursuant to the Constitution of the Company and the Companies Act 1967 of Singapore.
@@ -40,7 +29,3 @@ RESOLVED, that the first financial year of the Company be determined by the dire
 ## 7. General Authority
 
 RESOLVED, that the directors be and are hereby authorised to do all such acts and things as may be necessary or expedient to give effect to the foregoing resolutions.
-
----
-
-Signed electronically by {{founder.legal_name}}, first director, for and on behalf of {{company.legal_name}}, on the date appearing below.

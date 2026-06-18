@@ -1,13 +1,3 @@
-# Investment Committee Charter — Axal StudioOS
-
-> **v1 draft — subject to legal review.** This template is a working
-> draft and must be reviewed and approved by qualified counsel before
-> execution or public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Adopted by:** Axal VC GP LLC, the general partner of Axal VC Fund I, LP ("Axal GP")
-
 ## 1. Purpose
 
 This Charter governs the Investment Committee (the "Committee") of Axal GP. The Committee is responsible for approving, declining, and overseeing investments made by Axal VC Fund I, LP (the "Fund") consistent with the Fund's limited partnership agreement and investment mandate.

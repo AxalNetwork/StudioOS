@@ -1,16 +1,3 @@
-# Partner Services Agreement (MSA) — Axal StudioOS
-
-> **v1 draft — subject to legal review.** This template is a working
-> draft and must be reviewed and approved by qualified counsel before
-> execution or public release. Deal-specific terms (fees, scope, SLAs)
-> seeded by the Partner Deal flow override the defaults below where they
-> conflict.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Company:** Axal VC Management LLC, a Delaware limited liability company ("Axal")
-**Partner:** {{partner.legal_name}}, a {{partner.entity_type}} ("Partner"), acting through {{partner.contact_name}} ({{partner.email}}), engaged in the capacity of {{partner.role}}
-
 ## 1. Scope
 
 1.1 This Master Services Agreement governs the supply of services by Partner to Axal and/or the portfolio companies of Axal VC Fund I, LP. Specific engagements are documented in Statements of Work ("SOWs") that reference this Agreement.
@@ -48,7 +35,3 @@ This Agreement continues until terminated by either party on thirty (30) days' w
 ## 8. Governing Law
 
 This Agreement is governed by {{governing_law}}.
-
----
-
-Signed electronically by {{partner.contact_name}}, for and on behalf of {{partner.legal_name}}, and by Axal VC Management LLC on the date(s) appearing below.

@@ -1,14 +1,3 @@
-# Three-Way Mutual NDA — Founder · Investor · Axal
-
-> **Subject to legal review.** This template is a working draft. Final
-> binding terms must be reviewed and approved by qualified counsel
-> before public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-
-**Parties:**
-
 - **Founder:** {{founder_name}} ({{founder_email}})
 - **Investor:** {{investor_name}} ({{investor_email}})
 - **Intermediary / Counter-signer:** Axal VC Management LLC, a
@@ -80,10 +69,3 @@ This NDA is governed by the laws of the State of Delaware, USA,
 without regard to conflict-of-laws principles. The parties consent
 to the exclusive jurisdiction of the state and federal courts located
 in Wilmington, Delaware.
-
----
-
-By signing electronically below, each party acknowledges having read,
-understood, and agreed to be bound by the terms of this Three-Way
-Mutual NDA. The NDA becomes binding only when **all three** parties
-have signed.

@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { Check, AlertCircle, FileText, Shield, Clock, Eraser, X } from 'lucide-react';
 import DocumentBody from '../components/DocumentBody';
+import { normalizeLegalBody } from '../lib/legalDocFormat';
 
 /**
  * Public eSignature page reached via deal@axal.vc magic link.
@@ -149,7 +150,7 @@ export default function ESignPage() {
             </div>
           </div>
           <div className="px-6 py-5 max-h-[440px] overflow-y-auto bg-gray-50/50">
-            <DocumentBody text={envelope.document_body} className="font-sans text-[13.5px] leading-relaxed text-gray-800 dark:text-gray-200" />
+            <DocumentBody text={normalizeLegalBody(envelope.document_body)} className="font-sans text-[13.5px] leading-relaxed text-gray-800 dark:text-gray-200" />
           </div>
           <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-500 dark:border-gray-800">
             <div className="flex items-center gap-1.5"><Clock className="w-3 h-3" /> Expires {new Date(envelope.expires_at).toLocaleDateString()}</div>

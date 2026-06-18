@@ -67,6 +67,9 @@ Operating / active business layer. Belongs here:
 
 | Concern                                     | File                                                                  |
 | ------------------------------------------- | --------------------------------------------------------------------- |
+| Document architecture (preamble, exec block, entity routing, Markdown normalize) — worker | `cloudflare-worker/src/services/legalDocFormat.ts` |
+| Document architecture — frontend mirror (live preview) | `frontend/src/lib/legalDocFormat.js` |
+| Legal PDF renderer (header/CONFIDENTIAL, title, footer, signature) | `cloudflare-worker/src/services/pdf.ts` |
 | Entity constants (frontend)                 | `frontend/src/brand/gvpn.ts` (`LEGAL_ENTITIES`)                       |
 | Terms of Service (user-facing)              | `frontend/src/pages/TermsPage.jsx`                                    |
 | Terms of Service (signable template)        | `cloudflare-worker/src/templates/legal/tos_v1.md`                     |

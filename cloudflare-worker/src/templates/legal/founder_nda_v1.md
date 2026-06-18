@@ -1,13 +1,3 @@
-# Founder Mutual NDA — Axal StudioOS
-
-> **Subject to legal review.** This template is a working draft. Final
-> binding terms must be reviewed and approved by qualified counsel
-> before public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Founder:** {{founder_name}} ({{founder_email}})
-**Counterparty:** Axal VC Management LLC, a Delaware limited liability
 company ("Axal")
 
 ## 1. Purpose
@@ -48,8 +38,3 @@ information remains a trade secret under applicable law.
 Nothing in this NDA grants either party rights in the other's
 intellectual property or obliges either party to enter into any
 further transaction.
-
----
-
-Signed electronically by {{founder_name}} and Axal VC Management LLC
-on the date(s) appearing below.
