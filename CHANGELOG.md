@@ -10,6 +10,12 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Stripe live-mode cutover — ops runbook + credential prerequisites (Task #17)
+
+### Docs / ops
+- `GOTCHAS.md` — added "Stripe live-mode cutover runbook" section: complete operator sequence for switching the platform from Stripe test mode to live mode, covering credential secrets (`STRIPE_SECRET_KEY`, `STRIPE_CONNECT_CLIENT_ID`, `STRIPE_PUBLISHABLE_KEY` via Admin Console KV), full product catalog provisioning with exact metadata per kind, incorporation price ID secrets (`STRIPE_PRICE_INCORP_*` for all five jurisdictions), live webhook registration with all 8 required events and auto-push of `STRIPE_WEBHOOK_SECRET`, `STRIPE_TAX_ENABLED` guard and activation prerequisites, build + deploy command, end-to-end verification checklist (subscriptions, incorporation, à la carte, bookings + Connect payout, promo codes, tax line), and rollback procedure. Added ops item (m) to the "Ops items still owned by user" section cross-referencing the runbook.
+- No code changes in this task — all Stripe infrastructure was built in Task #16. Current state: no Stripe secrets configured; production runs with payment dev-fallback active. The cutover is a pure ops sequence requiring Stripe dashboard access and live API credentials from the account owner.
+
 ## In-app Stripe catalog & webhook admin — Payments tab in Admin Console (Task #16)
 
 ### Worker
