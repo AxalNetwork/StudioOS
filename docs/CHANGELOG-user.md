@@ -5,6 +5,42 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Choose your cookie preferences
+
+A small banner now appears at the bottom of the screen on your first visit, letting you decide how we can use cookies. You can **Accept all**, **Reject all**, or pick **More choices** to turn individual categories on or off — Functional, Analytics, and Advertising (Essential cookies keep the site working and are always on). Your choice is saved in your browser, so the banner won't keep coming back. Changed your mind? Use the new **"Cookie preferences"** link in the footer to update your choice any time, and see our Privacy Policy for what each category means.
+
+---
+
+## Clearer messages when incorporating your company
+
+The "Incorporate your company" wizard now tells you exactly what's happening if it can't take you to payment. If online filing isn't set up yet for the jurisdiction you picked, you'll see a clear note — and a way to reach the studio team to file manually — right on the company-details step, instead of a vague "Submission failed" after you click. If something just hiccups temporarily, you'll get a "please try again in a moment" message so you know retrying is worth it.
+
+---
+
+## A cleaner Articles page, with writing in its own space
+
+The Articles page is now a clean public reading feed — browse and open published articles without any editing controls in the way. To write or manage your own articles, use the "Articles" link in the sidebar: it now takes you straight to your writing space, where you'll find your drafts and submitted pieces and can start a new article. Existing links to your articles list still work.
+
+---
+
+## Only administrators can add investors and issue capital calls
+
+Adding a new investor and creating or issuing capital calls are now administrator-only actions, since these are fund-level operations. If you're an investor, nothing changes about reviewing your own investor record and capital calls or paying your own calls — you just won't see the "Capital Call" create button, which was never meant for investors.
+
+---
+
+## The "Page not found" screen now shows for signed-out visitors
+
+If you're not signed in and you open a link to a page that doesn't exist, you'll now see the friendly "404 — Page not found" screen (with a way back home) instead of being sent to the sign-in form. Signing in still works as before, and pages that need an account still ask you to sign in.
+
+---
+
+## Cleaner role selector in the Admin Console
+
+The role pill in the Users table (Admin Console → Users) now uses a modern custom dropdown instead of the browser's native select widget. You'll see a single chevron icon that spins open a clean options list — no more double-arrow glitch. Changing a user's role works exactly as before.
+
+---
+
 ## Signing in with Google works again
 
 Clicking "Continue with Google" on the sign-in or sign-up page now takes you straight to your dashboard instead of dropping you back on the sign-in screen. You'll briefly see a "Signing you in…" message while we finish setting up your session.
