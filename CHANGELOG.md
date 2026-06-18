@@ -10,6 +10,29 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## In-app Stripe catalog & webhook admin — Payments tab in Admin Console (Task #16)
+
+### Worker
+- `cloudflare-worker/src/services/catalog.ts` — added `stripeMode()`, `getPublishableKey()`, `setPublishableKey()` (KV key `config:stripe:pk`), `validateProductMetadata()`, `createProduct()`, `updateProduct()`, `archiveProduct()`, `createPrice()`, `archivePrice()`.
+- `cloudflare-worker/src/routes/catalog.ts` — expanded admin CRUD: `GET /api/admin/catalog/products`, `POST /api/admin/catalog/products`, `PATCH /api/admin/catalog/products/:id`, `POST /api/admin/catalog/products/:id/archive`, `POST /api/admin/catalog/products/:id/prices`, `POST /api/admin/catalog/prices/:priceId/archive`, `GET /api/admin/catalog/mode`. All `requireAdmin`-gated.
+- `cloudflare-worker/src/routes/admin_stripe.ts` — **new file**: `GET/POST /api/admin/stripe/webhook` (list + register/update endpoint), `GET/PUT /api/admin/stripe/config` (publishable key read/write). Webhook registration auto-pushes `STRIPE_WEBHOOK_SECRET` via `cloudflareSecrets.setSecret`. All routes audit-logged (`report_type='billing'`).
+- `cloudflare-worker/src/index.ts` — mounted `adminStripe` at `/api/admin/stripe` (before the catch-all), added public `GET /api/payments/config` (returns publishable key + mode; no auth required).
+- `cloudflare-worker/src/middleware/rateLimit.ts` — added `admin_catalog_writes` bucket (20/min/user) covering write methods on `/api/admin/catalog/*` and `/api/admin/stripe/*`.
+- `cloudflare-worker/src/types.ts` — added `STRIPE_PUBLISHABLE_KEY?: string` env var (KV value takes precedence).
+
+### Frontend
+- `frontend/src/lib/stripe.js` — added runtime key fetch from `GET /api/payments/config` with in-memory caching; `getStripe()` uses KV key first, then build-time `VITE_STRIPE_PUBLISHABLE_KEY`.
+- `frontend/src/components/AxalCheckout.jsx` — replaced `!STRIPE_PUBLISHABLE_KEY` hard-gate with async `stripeConfigured` state (null=loading, false=not configured, true=ready) resolved from `getStripe()` Promise; shows loading placeholder while resolving — no longer silently breaks when runtime KV key is set but build-time env var is absent.
+- `frontend/src/components/BillingDashboard.jsx` — same `stripeConfigured` async pattern in `CardSetupForm`; `useEffect` for SetupIntent creation now depends on `stripeConfigured` (not `stripePromise`) to avoid firing before key is resolved.
+- `frontend/src/lib/api.js` — added `adminCatalogMode`, `adminCatalogList`, `adminCatalogSync`, `adminCatalogCreateProduct`, `adminCatalogUpdateProduct`, `adminCatalogArchiveProduct`, `adminCatalogAddPrice`, `adminCatalogArchivePrice`, `adminStripeListWebhooks`, `adminStripeRegisterWebhook`, `adminStripeUpdateWebhookEvents`, `adminStripeGetConfig`, `adminStripeSetConfig`.
+- `frontend/src/pages/AdminPage.jsx` — added **Payments tab** with `PaymentsPanel` + `MetadataFields` helper: mode banner, publishable-key form (KV-backed), product catalog CRUD (expand/collapse rows, create/edit/archive products with kind-aware metadata fields, add/archive prices), webhook status & register/update-events UI. Product inline edit form wired to `adminCatalogUpdateProduct`.
+
+### Worker (reliability fix)
+- `routes/admin_stripe.ts` — webhook registration response now includes `webhook_secret` field when `STRIPE_WEBHOOK_SECRET` auto-push fails, so admin can copy and set it manually via `wrangler secret put`; Stripe only returns the secret at creation time.
+
+### Tests
+- `cloudflare-worker/test/catalog.test.ts` — **new**: 27 unit tests covering `validateProductMetadata` (all 4 kinds, valid/invalid taxonomy values, edge cases) and `stripeMode` (unconfigured/test/live/rk_live prefix).
+
 ## Legal-document architecture refactor — clean renderer + 45 template bodies (Task #14)
 - **What:** integrated the legal-architecture branch (`claude/cool-volta-0mc9i5`, PR #90) into `main`. The branch delivers a shared formatting layer, a Markdown-leakage fix, 30 cleaned existing template bodies, and 15 new template bodies.
 - **Shared formatting layer:** `cloudflare-worker/src/services/legalDocFormat.ts` + `frontend/src/lib/legalDocFormat.js` (JS mirror). Both are now the single source of truth for: `normalizeLegalBody` (strips `#`, `##`, `**`, `>`, `---`, `- [ ]` from authored .md bodies without touching `{{merge_tokens}}`, `____` blanks, or `[BRACKET LABELS]`); `buildPreamble` (standardized opening paragraph with registered Delaware address `16192 Coastal Highway, Lewes, Delaware 19958`); `buildExecutionBlock` (dual Axal/Counterparty block with Joseph Gabriel Guillaume Lauzier / Managing Partner; document-kind-aware: agreements=dual, corporate=Company-only, unilateral/filings=counterparty-only, policies=none); `axalEntityKeyForDoc` (management/holdings/gp/fund routing per `LEGAL_ENTITIES.md`); `classifyDocument` (agreement/corporate/policy/unilateral/resolution).

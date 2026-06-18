@@ -937,6 +937,73 @@ export const api = {
     request(`/admin/billing/disputes/${encodeURIComponent(id)}/evidence`, { method: 'POST', body: JSON.stringify(body || {}) }),
   adminBillingLTV: (userId) =>
     request(`/admin/billing/ltv?user_id=${encodeURIComponent(userId)}`),
+
+  // Task #16 — Admin Stripe catalog CRUD + webhook/config management.
+  //
+  // Catalog:
+  //   adminCatalogMode()                       → { mode: 'test'|'live'|'unconfigured' }
+  //   adminCatalogList()                       → { products, mode }
+  //   adminCatalogSync()                       → { ok, synced }
+  //   adminCatalogCreateProduct(body)          → { ok, product }
+  //   adminCatalogUpdateProduct(id, body)      → { ok }
+  //   adminCatalogArchiveProduct(id)           → { ok }
+  //   adminCatalogAddPrice(productId, body)    → { ok, price }
+  //   adminCatalogArchivePrice(priceId)        → { ok }
+  // Webhook:
+  //   adminStripeListWebhooks()                → { endpoints, required_events, our_url }
+  //   adminStripeRegisterWebhook()             → { ok, endpoint_id, url, secret_stored }
+  //   adminStripeUpdateWebhookEvents(epId)     → { ok, endpoint_id, url }
+  // Config (publishable key):
+  //   adminStripeGetConfig()                   → { publishable_key, mode, configured }
+  //   adminStripeSetConfig(pk)                 → { ok, mode }
+  adminCatalogMode: () => request('/admin/catalog/mode'),
+  adminCatalogList: () => request('/admin/catalog/products'),
+  adminCatalogSync: () => request('/admin/catalog/sync', { method: 'POST', body: '{}' }),
+  adminCatalogCreateProduct: (body) =>
+    request('/admin/catalog/products', { method: 'POST', body: JSON.stringify(body || {}) }),
+  adminCatalogUpdateProduct: (id, body) =>
+    request(`/admin/catalog/products/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body || {}),
+    }),
+  adminCatalogArchiveProduct: (id) =>
+    request(`/admin/catalog/products/${encodeURIComponent(id)}/archive`, {
+      method: 'POST',
+      body: '{}',
+    }),
+  adminCatalogAddPrice: (productId, body) =>
+    request(`/admin/catalog/products/${encodeURIComponent(productId)}/prices`, {
+      method: 'POST',
+      body: JSON.stringify(body || {}),
+    }),
+  adminCatalogUpdatePrice: (priceId, body) =>
+    request(`/admin/catalog/prices/${encodeURIComponent(priceId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body || {}),
+    }),
+  adminCatalogArchivePrice: (priceId) =>
+    request(`/admin/catalog/prices/${encodeURIComponent(priceId)}/archive`, {
+      method: 'POST',
+      body: '{}',
+    }),
+  adminStripeListWebhooks: () => request('/admin/stripe/webhook'),
+  adminStripeRegisterWebhook: () =>
+    request('/admin/stripe/webhook', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'register' }),
+    }),
+  adminStripeUpdateWebhookEvents: (endpointId) =>
+    request('/admin/stripe/webhook', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'update', endpoint_id: endpointId }),
+    }),
+  adminStripeGetConfig: () => request('/admin/stripe/config'),
+  adminStripeSetConfig: (publishableKey) =>
+    request('/admin/stripe/config', {
+      method: 'PUT',
+      body: JSON.stringify({ publishable_key: publishableKey }),
+    }),
+
   adminVoidContract: (uid) => request(`/admin/contracts/${uid}/void`, { method: 'POST' }),
   adminDownloadContractUrl: (uid) => `/api/admin/contracts/${uid}/download`,
   adminIssueContractShareLink: (uid, ttl_seconds = 300) =>

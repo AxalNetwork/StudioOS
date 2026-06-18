@@ -5,6 +5,29 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Payments tab in Admin Console — manage Stripe products and webhooks without leaving Axal
+
+Admins can now manage the full Stripe payment setup from inside the Admin Console → **Payments** tab, with no need to switch to the Stripe dashboard for day-to-day catalog work.
+
+What's in the new tab:
+- **Stripe mode badge** — at a glance, know whether the account is in Test or Live mode (or unconfigured).
+- **Publishable key** — paste in a `pk_test_…` or `pk_live_…` key and it's stored immediately; the frontend picks it up without a rebuild.
+- **Product catalog** — view all products synced from Stripe, create new ones (subscriptions, incorporation, session, or à la carte), add or archive prices, and archive products. Kind-aware metadata fields (tier, plan, feature key, etc.) are shown automatically based on the product type.
+- **Sync from Stripe** — pull the latest product/price data from Stripe into the Axal catalog mirror in one click.
+- **Billing webhook** — see which webhook endpoints are registered in Stripe, spot missing required events, and register a new endpoint (signing secret is stored automatically) or fix an existing one's event list.
+
+## Cleaner legal documents — no more formatting symbols in previews and exports
+
+Legal document previews and exported PDFs now look like finished legal documents instead of raw template drafts. Previously, Markdown formatting symbols (`#`, `**`, `>`, `---`, checkbox markers) could appear in previews and in exported PDFs — they're now stripped at render time so the text looks clean. Every document now has a standardized layout: a **CONFIDENTIAL** marker, a centered bold title, an opening preamble paragraph (with the registered Delaware address), and a properly formatted signature block at the end — with the signing parties, names, titles, and date fields exactly where they should be.
+
+The signature block is also document-aware: legal agreements show both the Axal party and the counterparty; corporate documents show the company; government filings show only the filer; policies (Terms of Service, Privacy Policy) have no signature block.
+
+Fifteen legal templates that were previously blank now have complete first-draft bodies: Subscription Booklet & LPA, SPV Joinder, Co-Investment Side Letter, Strategic Side Letter, Investor Subscription (Pro & Institutional tiers), Founder Collaboration Agreement, Spin-Out Subsidiary SPA, Strategic Scale Partnership, Technology Integration / JV, Referral / Agency Agreement, M&A Advisory Mandate, Secondary Purchase Agreement, IP Background Schedule, and Data Access Acknowledgment. All bodies are v1 drafts pending legal review.
+
+The admin template editor's live preview now matches the final exported PDF exactly.
+
+---
+
 ## Choose your cookie preferences
 
 A small banner now appears at the bottom of the screen on your first visit, letting you decide how we can use cookies. You can **Accept all**, **Reject all**, or pick **More choices** to turn individual categories on or off — Functional, Analytics, and Advertising (Essential cookies keep the site working and are always on). Your choice is saved in your browser, so the banner won't keep coming back. Changed your mind? Use the new **"Cookie preferences"** link in the footer to update your choice any time, and see our Privacy Policy for what each category means.

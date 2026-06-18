@@ -42,6 +42,19 @@ const BUCKETS: Bucket[] = [
     test: (p, m) => m === 'POST' && p === '/api/payments/promo/validate',
     scope: 'user',
   },
+  // Task #16 — admin catalog + stripe-config writes. Mutations here are
+  // money-adjacent (creating products, registering webhooks, pushing secrets)
+  // so a tighter limit than the default 60/min/user is warranted. 20/min is
+  // ample for any legitimate admin workflow and prevents any tool misuse.
+  {
+    name: 'admin_catalog_writes',
+    limit: 20,
+    windowSec: 60,
+    test: (p, m) =>
+      (m === 'POST' || m === 'PATCH' || m === 'PUT') &&
+      (p.startsWith('/api/admin/catalog/') || p.startsWith('/api/admin/stripe/')),
+    scope: 'user',
+  },
   // 60 requests/min per user — default
   {
     name: 'user',

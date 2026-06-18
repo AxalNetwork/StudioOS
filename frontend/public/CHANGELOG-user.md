@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Payments tab in Admin Console — manage Stripe products and webhooks without leaving Axal
+
+Admins can now manage the full Stripe payment setup from inside the Admin Console → **Payments** tab, with no need to switch to the Stripe dashboard for day-to-day catalog work.
+
+What's in the new tab:
+- **Stripe mode badge** — at a glance, know whether the account is in Test or Live mode (or unconfigured).
+- **Publishable key** — paste in a `pk_test_…` or `pk_live_…` key and it's stored immediately; the frontend picks it up without a rebuild.
+- **Product catalog** — view all products synced from Stripe, create new ones (subscriptions, incorporation, session, or à la carte), add or archive prices, and archive products. Kind-aware metadata fields (tier, plan, feature key, etc.) are shown automatically based on the product type.
+- **Sync from Stripe** — pull the latest product/price data from Stripe into the Axal catalog mirror in one click.
+- **Billing webhook** — see which webhook endpoints are registered in Stripe, spot missing required events, and register a new endpoint (signing secret is stored automatically) or fix an existing one's event list.
+
 ## Cleaner legal documents — no more formatting symbols in previews and exports
 
 Legal document previews and exported PDFs now look like finished legal documents instead of raw template drafts. Previously, Markdown formatting symbols (`#`, `**`, `>`, `---`, checkbox markers) could appear in previews and in exported PDFs — they're now stripped at render time so the text looks clean. Every document now has a standardized layout: a **CONFIDENTIAL** marker, a centered bold title, an opening preamble paragraph (with the registered Delaware address), and a properly formatted signature block at the end — with the signing parties, names, titles, and date fields exactly where they should be.

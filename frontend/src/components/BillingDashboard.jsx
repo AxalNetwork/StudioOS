@@ -451,12 +451,18 @@ function CardSetupForm({ scope, onSuccess, onCancel }) {
   const { effectiveTheme } = useSettings();
   const isDark = effectiveTheme === 'dark';
   const stripePromise = useMemo(() => getStripe(), []);
+  // Task #16 — runtime key: resolve async to distinguish loading/configured/not.
+  const [stripeConfigured, setStripeConfigured] = useState(null); // null=loading
+  useEffect(() => {
+    stripePromise.then((s) => setStripeConfigured(s !== null));
+  }, [stripePromise]);
+
   const [clientSecret, setClientSecret] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const startedRef = useRef(false);
 
   useEffect(() => {
-    if (!stripePromise) return;
+    if (!stripeConfigured) return;
     if (startedRef.current) return; // create exactly one SetupIntent per mount
     startedRef.current = true;
     let cancelled = false;
@@ -468,9 +474,17 @@ function CardSetupForm({ scope, onSuccess, onCancel }) {
       })
       .catch((e) => { if (!cancelled) setLoadError(e?.message || 'Could not start card setup. Please try again.'); });
     return () => { cancelled = true; };
-  }, [stripePromise, scope]);
+  }, [stripeConfigured, scope]);
 
-  if (!STRIPE_PUBLISHABLE_KEY || !stripePromise) {
+  if (stripeConfigured === null) {
+    return (
+      <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-4 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2 animate-pulse">
+        <span>Loading payment form…</span>
+      </div>
+    );
+  }
+
+  if (!stripeConfigured) {
     return (
       <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2">
         <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />

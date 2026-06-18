@@ -194,6 +194,8 @@ import { requireTier } from './middleware/requireTier';
 import billing from './routes/billing';
 // Task — Stripe-backed product catalog (read + admin sync over the D1 mirror).
 import catalog, { adminCatalog } from './routes/catalog';
+// Task #16 — Admin Stripe management (webhook endpoints + publishable key).
+import adminStripe from './routes/admin_stripe';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 import payments from './routes/payments';
 import { Jobs } from './models/jobs';
@@ -414,6 +416,16 @@ app.route('/api/billing', billing);
 // sibling of /api/billing so SKUs come from one source, not STRIPE_PRICE_*.
 app.route('/api/catalog', catalog);
 
+// Task #16 — Public runtime Stripe config. Returns publishable key + mode
+// (Test/Live) so the frontend can load Stripe.js without a rebuild when the
+// key changes. No auth required — publishable keys are public. The secret key
+// and webhook secret are NEVER returned here.
+app.get('/api/payments/config', async (c) => {
+  const { getPublishableKey, stripeMode } = await import('./services/catalog');
+  const pk = await getPublishableKey(c.env);
+  return c.json({ publishable_key: pk || null, mode: stripeMode(c.env) });
+});
+
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 // Server-side only — hands back Stripe `client_secret`s so the SPA can confirm
 // cards via Stripe Elements without ever seeing the Stripe secret key. Sibling
@@ -562,6 +574,9 @@ app.route('/api/admin/billing', adminBilling);
 // Task — Stripe product catalog admin sync. Mounted BEFORE the catch-all
 // /api/admin so /api/admin/catalog/* resolves here. requireAdmin per-route.
 app.route('/api/admin/catalog', adminCatalog);
+// Task #16 — Admin Stripe management (webhook + publishable key). Mounted
+// BEFORE the catch-all /api/admin so /api/admin/stripe/* resolves here.
+app.route('/api/admin/stripe', adminStripe);
 // Task #9 — promo-code admin CRUD; mount before the `/api/admin` catch-all.
 app.route('/api/admin/promos', adminPromos);
 // Task #39 — Event engine admin (§8.3). Mount BEFORE the catch-all /api/admin
