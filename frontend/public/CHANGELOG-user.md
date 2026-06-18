@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Clearer messages when incorporating your company
+
+The "Incorporate your company" wizard now tells you exactly what's happening if it can't take you to payment. If online filing isn't set up yet for the jurisdiction you picked, you'll see a clear note — and a way to reach the studio team to file manually — right on the company-details step, instead of a vague "Submission failed" after you click. If something just hiccups temporarily, you'll get a "please try again in a moment" message so you know retrying is worth it.
+
+---
+
 ## A cleaner Articles page, with writing in its own space
 
 The Articles page is now a clean public reading feed — browse and open published articles without any editing controls in the way. To write or manage your own articles, use the "Articles" link in the sidebar: it now takes you straight to your writing space, where you'll find your drafts and submitted pieces and can start a new article. Existing links to your articles list still work.

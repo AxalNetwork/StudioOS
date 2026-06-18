@@ -301,7 +301,7 @@ function NameAvailability({ jurisdiction, nameChecking, nameCheck, skipNameCheck
   );
 }
 
-function ConfirmStep({ jurisdiction, projects, form, setForm, nameCheck, nameChecking, skipNameCheck, setSkipNameCheck }) {
+function ConfirmStep({ jurisdiction, projects, form, setForm, nameCheck, nameChecking, skipNameCheck, setSkipNameCheck, onlineFilingUnavailable }) {
   if (!jurisdiction) {
     // Defensive — Next button on step 1 is gated on selectedId + a populated
     // jurisdictions list, so this branch should be unreachable. If we still
@@ -330,6 +330,32 @@ function ConfirmStep({ jurisdiction, projects, form, setForm, nameCheck, nameChe
             : `After you submit, we'll generate the ${jurisdiction.label} document set into Legal. Filing on the official portal is a manual next step.`}
         </div>
       </div>
+
+      {/* Task #12 — graceful gate. When the mirrored Stripe catalog has no
+          purchasable online-filing price for this jurisdiction, explain it and
+          disable "Continue to payment" instead of dead-ending after the click. */}
+      {onlineFilingUnavailable && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 flex items-start gap-3 dark:border-amber-900/50 dark:bg-amber-950/30">
+          <AlertTriangle className="text-amber-600 flex-shrink-0 mt-0.5" size={18} />
+          <div className="text-xs text-amber-900 dark:text-amber-200 space-y-1">
+            <div className="text-sm font-semibold">
+              Online filing isn't available for {jurisdiction.label} yet
+            </div>
+            <p>
+              We haven't enabled online payment &amp; filing for {jurisdiction.label} yet.{' '}
+              <a
+                href={`mailto:support@axal.vc?subject=${encodeURIComponent(`Incorporation — ${jurisdiction.label}`)}`}
+                className="font-semibold underline hover:no-underline"
+              >
+                Contact the studio team
+              </a>
+              {jurisdiction.atlas_supported
+                ? ' and we\u2019ll file your Delaware C-Corp via Stripe Atlas, or pick another jurisdiction above.'
+                : ' to file your company manually, or pick another jurisdiction above.'}
+            </p>
+          </div>
+        </div>
+      )}
 
       <div>
         <label className="block text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Company name (legal)</label>
@@ -643,6 +669,11 @@ export default function IncorporatePage() {
   // compliance à la carte catalog surfaced on the Done step.
   const [order, setOrder] = useState(null);
   const [complianceProducts, setComplianceProducts] = useState([]);
+  // Task #12 — per-jurisdiction online-filing availability derived from the
+  // mirrored Stripe catalog. `null` = unknown (never blocks the wizard); a Set
+  // holds the jurisdiction ids that have a purchasable one-time incorporation
+  // price, so we can disable "Continue to payment" up-front for the rest.
+  const [incorpAvailability, setIncorpAvailability] = useState(null);
   // Task #10 — live company-name availability state.
   const [nameCheck, setNameCheck] = useState(null);
   const [nameChecking, setNameChecking] = useState(false);
@@ -673,9 +704,20 @@ export default function IncorporatePage() {
       return e?.status === 404 || msg.includes('not found');
     };
     (async () => {
-      const [jRes, pRes] = await Promise.allSettled([
+      const [jRes, pRes, cRes] = await Promise.allSettled([
         api.legalJurisdictions(),
         api.listProjects(),
+        // Task #12 — best-effort read of the FULL catalog so we can disable
+        // "Continue to payment" up-front for jurisdictions with no purchasable
+        // online-filing price, instead of only failing after the click. We must
+        // NOT pass kind='incorporation' here: the Worker's resolveIncorporationPrice
+        // matches ANY active product by metadata.jurisdiction_id, and a product
+        // tagged only with jurisdiction_id derives kind 'alacarte' — so a kind
+        // filter would wrongly hide (and block) a jurisdiction the server would
+        // actually accept. ANY failure (the dev FastAPI has no catalog route,
+        // network, etc.) leaves availability `null` → never blocks; submit()'s
+        // catch handler remains the required safety net.
+        api.catalogProducts(),
       ]);
       if (cancelled) return;
 
@@ -696,6 +738,26 @@ export default function IncorporatePage() {
           setErr(pRes.reason?.message || 'Failed to load projects.');
         }
       } // 404 → leave projects empty; submit step shows a clear reason.
+
+      if (cRes.status === 'fulfilled') {
+        const products = cRes.value?.products || cRes.value || [];
+        const purchasable = new Set();
+        for (const p of products) {
+          if (!p?.active) continue;
+          const jid = p?.metadata?.jurisdiction_id;
+          if (!jid) continue;
+          // Mirror the Worker (priceForPlanMetadata with interval=null, then
+          // unit_amount > 0): a one-time price carries no recurring interval.
+          const hasOneTimePrice = (p.prices || []).some(
+            (pr) => pr?.active && pr?.type !== 'recurring' && Number(pr?.unit_amount) > 0,
+          );
+          if (hasOneTimePrice) purchasable.add(jid);
+        }
+        // A reachable-but-empty catalog (the reported case: nothing configured)
+        // yields an empty Set → we DO block, since we positively know no price
+        // exists. Only a failed fetch leaves availability unknown (`null`).
+        setIncorpAvailability(purchasable);
+      } // failure → leave incorpAvailability null (unknown); submit() handles it.
 
       setLoading(false);
     })();
@@ -740,6 +802,12 @@ export default function IncorporatePage() {
 
   const selected = jurisdictions.find((j) => j.id === selectedId) || null;
   const goalsAnswered = answers.raisingVc && answers.region && answers.minimalCost && answers.entityPref;
+  // Task #12 — true only when we KNOW (catalog reachable) that the selected
+  // jurisdiction has no purchasable online-filing price. `null` availability
+  // (catalog unreachable / dev) keeps this false so we never block on a guess.
+  const onlineFilingUnavailable = Boolean(
+    incorpAvailability && selectedId && !incorpAvailability.has(selectedId),
+  );
 
   const submit = async () => {
     if (!form.company_name.trim()) { setErr('Enter a company name to continue.'); return; }
@@ -769,11 +837,25 @@ export default function IncorporatePage() {
       setStep(res?.dev || res?.status === 'paid' ? 4 : 3);
     } catch (e) {
       const status = e?.status;
-      const msg = (e?.message || '').toLowerCase();
-      if (status === 404 || msg.includes('not found')) {
+      // The Worker returns a structured `error` code we branch on instead of
+      // collapsing everything into one opaque message:
+      //   stripe_not_configured (503) / catalog_price_missing (502) → online
+      //     filing isn't set up for this jurisdiction yet — a setup gap, not a
+      //     transient error, so retrying won't help.
+      //   order_failed (502) / other 5xx / network → genuinely transient.
+      // api.js surfaces the parsed body on `e.data` and the code on `e.message`.
+      const code = (
+        (typeof e?.data?.error === 'string' && e.data.error) || e?.message || ''
+      ).toLowerCase();
+      const jLabel = selected?.label || 'this jurisdiction';
+      if (status === 404 || code.includes('not found')) {
         setErr("The selected project or jurisdiction is no longer available. Please refresh and try again.");
       } else if (status === 401 || status === 403) {
         setErr('Your session expired or you do not have access to this project. Please sign in again.');
+      } else if (code.includes('stripe_not_configured') || code.includes('catalog_price_missing')) {
+        setErr(`Online incorporation filing isn't set up for ${jLabel} yet — contact the studio team at support@axal.vc to file your company manually.`);
+      } else if (code.includes('order_failed') || (typeof status === 'number' && status >= 500)) {
+        setErr("We couldn't start the payment for this filing. Please try again in a moment, or contact support if it keeps happening.");
       } else {
         setErr('Submission failed. Please retry in a moment, or contact support if it persists.');
       }
@@ -846,6 +928,7 @@ export default function IncorporatePage() {
                 nameChecking={nameChecking}
                 skipNameCheck={skipNameCheck}
                 setSkipNameCheck={setSkipNameCheck}
+                onlineFilingUnavailable={onlineFilingUnavailable}
               />
             )}
             {step === 3 && (
@@ -887,7 +970,7 @@ export default function IncorporatePage() {
             ) : (
               <button
                 onClick={submit}
-                disabled={busy || nameChecking || (nameCheck?.status === 'taken' && !skipNameCheck)}
+                disabled={busy || nameChecking || onlineFilingUnavailable || (nameCheck?.status === 'taken' && !skipNameCheck)}
                 className="inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2 rounded-md disabled:opacity-50"
               >
                 {busy ? <Loader2 className="animate-spin" size={14} /> : <DollarSign size={14} />}
