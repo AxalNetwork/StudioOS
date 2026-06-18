@@ -44,6 +44,68 @@ const ROLE_BADGES = {
   mentor: 'bg-sky-100 text-sky-700',
 };
 
+function RoleDropdown({ user, onRoleChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const OPTIONS = [
+    { value: 'founder', label: 'Founder' },
+    { value: 'partner', label: 'Partner' },
+    { value: 'investor', label: 'Investor' },
+  ];
+  const currentLabel = OPTIONS.find(o => o.value === user.role)?.label ?? user.role;
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        type="button"
+        aria-label={`Change role for ${user.name || user.email}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title="Click to change this user's role"
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border border-transparent hover:border-current hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:ring-offset-1 transition-all cursor-pointer ${ROLE_BADGES[user.role] || 'bg-gray-100 text-gray-700'}`}
+      >
+        {currentLabel}
+        <ChevronDown size={11} className={`shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Select role"
+          className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-50 min-w-[120px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg py-1 overflow-hidden"
+        >
+          {OPTIONS.map(opt => (
+            <li
+              key={opt.value}
+              role="option"
+              aria-selected={user.role === opt.value}
+              onClick={(e) => { e.stopPropagation(); setOpen(false); onRoleChange(user, opt.value); }}
+              className={`flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer select-none transition-colors ${
+                user.role === opt.value
+                  ? `${ROLE_BADGES[opt.value] || 'bg-gray-100 text-gray-700'} font-semibold`
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium'
+              }`}
+            >
+              <span className="w-[11px] shrink-0">
+                {user.role === opt.value && <Check size={11} />}
+              </span>
+              {opt.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 const STATUS_BADGES = {
   pending: 'bg-amber-100 text-amber-700',
   verified: 'bg-emerald-100 text-emerald-700',
@@ -365,17 +427,8 @@ export default function AdminPage({ onImpersonate }) {
                               Admin
                             </span>
                           ) : (
-                            <div className="relative inline-block group" title="Click to change this user's role">
-                              <select value={u.role} onChange={(e) => handleRoleChange(u, e.target.value)}
-                                aria-label={`Change role for ${u.name || u.email}`}
-                                className={`appearance-none text-xs font-semibold px-3 py-1 pr-7 rounded-full cursor-pointer border border-transparent hover:border-current hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:ring-offset-1 transition-all ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>
-                                {/* Admin promotion intentionally not offered — see span branch above. */}
-                                <option value="founder">Founder</option>
-                                <option value="partner">Partner</option>
-                                <option value="investor">Investor</option>
-                              </select>
-                              <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-70 group-hover:opacity-100" />
-                            </div>
+                            // Admin promotion intentionally not offered — see span branch above.
+                            <RoleDropdown user={u} onRoleChange={handleRoleChange} />
                           )}
                         </td>
                         <td className="px-4 py-3 text-center">

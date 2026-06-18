@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Cleaner role selector in the Admin Console
+
+The role pill in the Users table (Admin Console → Users) now uses a modern custom dropdown instead of the browser's native select widget. You'll see a single chevron icon that spins open a clean options list — no more double-arrow glitch. Changing a user's role works exactly as before.
+
+---
+
 ## Signing in with Google works again
 
 Clicking "Continue with Google" on the sign-in or sign-up page now takes you straight to your dashboard instead of dropping you back on the sign-in screen. You'll briefly see a "Signing you in…" message while we finish setting up your session.
