@@ -27,6 +27,7 @@ const AuthCtx = createContext({
   user: null,
   role: null,
   loading: false,
+  oauthBootstrapping: false,
   refresh: async () => {},
   setUser: () => {},
 });
@@ -52,6 +53,17 @@ export function AuthProvider({ children }) {
       return params.has('google') || params.has('google_signup');
     } catch { return false; }
   });
+
+  // True while we force-probe /me for a session the OAuth callback set
+  // entirely server-side (httpOnly cookie only — localStorage is still
+  // empty). RequireAuth shows a spinner instead of bouncing to /login while
+  // this is set: that bounce lands the user on AuthScreen, which treats any
+  // authenticated user on /login as an "account switch" and tears the
+  // freshly-minted Google session down (clearSession → /api/auth/logout),
+  // dumping the user straight back onto the sign-in form. Flips false the
+  // moment the probe settles (success OR failure) so a genuinely failed
+  // bootstrap still falls through to /login.
+  const [oauthBootstrapping, setOauthBootstrapping] = useState(postOAuthMarker);
 
   // Wrap setUser so localStorage stays consistent. Callers like
   // handleImpersonate / login still write to localStorage themselves
@@ -162,7 +174,10 @@ export function AuthProvider({ children }) {
         localStorage.removeItem('realUser');
         localStorage.removeItem('realToken');
       } catch { /* ignore */ }
-      refresh({ force: true });
+      // Settle `oauthBootstrapping` once the forced /me resolves (success
+      // populates `user`; failure leaves it null) so RequireAuth either
+      // renders the protected page or, only then, falls through to /login.
+      Promise.resolve(refresh({ force: true })).finally(() => setOauthBootstrapping(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postOAuthMarker]);
@@ -186,6 +201,7 @@ export function AuthProvider({ children }) {
     user,
     role: user?.role || null,
     loading,
+    oauthBootstrapping,
     refresh,
     setUser,
   };

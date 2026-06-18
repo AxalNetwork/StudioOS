@@ -742,6 +742,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
 function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate }) {
   const location = useLocation();
+  const { oauthBootstrapping } = useAuth();
   const [kycStatus, setKycStatus] = useState(user?.kyc_status || null);
   const [accessLevel, setAccessLevel] = useState(user?.access_level || null);
   // Task #24 — authoritative role from /api/me. The login token / stored
@@ -803,6 +804,23 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     })();
     return () => { cancelled = true; };
   }, [user?.id]);
+
+  // Post-OAuth bootstrap in flight. The Google callback set the session
+  // cookie entirely server-side and 302'd us to a protected route;
+  // useAuthSync is force-probing /me to reconcile the cookie-backed identity.
+  // Show a spinner until it settles — checked BEFORE the `!user` branch so we
+  // (a) never bounce to /login (which lands on AuthScreen and would tear the
+  // freshly-minted session down as an "account switch"), and (b) never flash
+  // protected UI under a STALE cached user (e.g. a prior browser user still
+  // in localStorage) before the fresh /me lands. Cleared on settle, so a
+  // genuinely failed bootstrap falls through to the normal checks below.
+  if (oauthBootstrapping) {
+    return (
+      <div className="flex items-center justify-center min-h-screen text-sm text-gray-500 dark:text-gray-400">
+        Signing you in…
+      </div>
+    );
+  }
 
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;

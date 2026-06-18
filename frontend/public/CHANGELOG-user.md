@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Signing in with Google works again
+
+Clicking "Continue with Google" on the sign-in or sign-up page now takes you straight to your dashboard instead of dropping you back on the sign-in screen. You'll briefly see a "Signing you in…" message while we finish setting up your session.
+
+---
+
 ## Your investor records stay private to you
 
 If you're an investor, the Capital area now shows only your own investor record and capital calls — never other investors' commitments or details. You'll review and manage your own information exactly as before, and administrators still see the full picture across all funds.
