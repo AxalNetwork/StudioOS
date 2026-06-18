@@ -128,7 +128,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/articles', icon: FileText, label: 'Content Queue' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles', icon: FileText, label: 'Articles' },
+      { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/skills', icon: Target, label: 'Skills Profile' },
       { to: '/values', icon: Heart, label: 'Values Assessment' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
@@ -188,7 +188,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/my/events', icon: Ticket, label: 'Events' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles', icon: FileText, label: 'Articles' },
+      { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/skills', icon: Target, label: 'Skills Profile' },
       { to: '/values', icon: Heart, label: 'Values Assessment' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
@@ -242,7 +242,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles', icon: FileText, label: 'Articles' },
+      { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/skills', icon: Target, label: 'Skills Profile' },
       { to: '/values', icon: Heart, label: 'Values Assessment' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
@@ -289,7 +289,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles', icon: FileText, label: 'Articles' },
+      { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/skills', icon: Target, label: 'Skills Profile' },
       { to: '/values', icon: Heart, label: 'Values Assessment' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
@@ -312,7 +312,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/tickets', icon: Ticket, label: 'Support' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles', icon: FileText, label: 'Articles' },
+      { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/skills', icon: Target, label: 'Skills Profile' },
       { to: '/values', icon: Heart, label: 'Values Assessment' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },

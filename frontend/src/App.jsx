@@ -1209,8 +1209,8 @@ function AppInner() {
       <Route path="/articles" element={<ArticlesPage />} />
       <Route path="/articles/draft" element={authOnly(<ArticleAuthorPage />)} />
       <Route path="/articles/edit/:id" element={authOnly(<ArticleAuthorPage />)} />
-      {/* Task #5 — Articles hub: /articles (Browse) + /articles/mine (My Articles tab). */}
-      <Route path="/articles/mine" element={authOnly(<ArticlesPage />)} />
+      {/* Articles hub is public-only; the writing workspace lives at /articles/draft. Legacy /articles/mine redirects there. */}
+      <Route path="/articles/mine" element={<Navigate to="/articles/draft" replace />} />
       <Route path="/authors/:userId" element={<AuthorProfilePage />} />
       <Route path="/admin/articles" element={guard(['admin'], <ArticlesQueuePage />)} />
       <Route path="/articles/:slug" element={<ArticleReaderPage />} />

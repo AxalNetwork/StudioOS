@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A cleaner Articles page, with writing in its own space
+
+The Articles page is now a clean public reading feed — browse and open published articles without any editing controls in the way. To write or manage your own articles, use the "Articles" link in the sidebar: it now takes you straight to your writing space, where you'll find your drafts and submitted pieces and can start a new article. Existing links to your articles list still work.
+
+---
+
 ## Only administrators can add investors and issue capital calls
 
 Adding a new investor and creating or issuing capital calls are now administrator-only actions, since these are fund-level operations. If you're an investor, nothing changes about reviewing your own investor record and capital calls or paying your own calls — you just won't see the "Capital Call" create button, which was never meant for investors.
