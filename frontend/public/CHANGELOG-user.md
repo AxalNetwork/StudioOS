@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Only administrators can add investors and issue capital calls
+
+Adding a new investor and creating or issuing capital calls are now administrator-only actions, since these are fund-level operations. If you're an investor, nothing changes about reviewing your own investor record and capital calls or paying your own calls — you just won't see the "Capital Call" create button, which was never meant for investors.
+
+---
+
 ## The "Page not found" screen now shows for signed-out visitors
 
 If you're not signed in and you open a link to a page that doesn't exist, you'll now see the friendly "404 — Page not found" screen (with a way back home) instead of being sent to the sign-in form. Signing in still works as before, and pages that need an account still ask you to sign in.
