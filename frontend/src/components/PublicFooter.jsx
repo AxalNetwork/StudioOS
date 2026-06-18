@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Send } from 'lucide-react';
+import { openCookiePreferences } from '../lib/cookieConsent';
 
 const socials = [
   {
@@ -124,6 +125,15 @@ export default function PublicFooter() {
               <li><Link to="/contact" className="text-sm text-gray-600 hover:text-gray-900">Contact</Link></li>
               <li><Link to="/terms" className="text-sm text-gray-600 hover:text-gray-900">Terms</Link></li>
               <li><Link to="/privacy" className="text-sm text-gray-600 hover:text-gray-900">Privacy</Link></li>
+              <li>
+                <button
+                  type="button"
+                  onClick={openCookiePreferences}
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Cookie preferences
+                </button>
+              </li>
               <li><Link to="/risk-disclosures" className="text-sm text-gray-600 hover:text-gray-900">Risk Disclosures</Link></li>
             </ul>
           </div>

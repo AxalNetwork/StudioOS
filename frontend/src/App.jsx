@@ -6,6 +6,7 @@ import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import PersonalAssistant from './components/PersonalAssistant';
 import SpinoutLabListener from './components/SpinoutLabListener';
 import SafeMount from './components/SafeMount';
+import CookieConsent from './components/CookieConsent';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
@@ -1401,6 +1402,7 @@ export default function App() {
         <SafeMount name="SpinoutLabListener"><SpinoutLabListener /></SafeMount>
         <SafeMount name="GlobalAssistantMount"><GlobalAssistantMount /></SafeMount>
         <SafeMount name="GlobalPaywallMount"><GlobalPaywallMount /></SafeMount>
+        <SafeMount name="CookieConsent"><CookieConsent /></SafeMount>
       </SettingsProvider>
     </AuthProvider>
   );

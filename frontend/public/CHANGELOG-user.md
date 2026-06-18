@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Choose your cookie preferences
+
+A small banner now appears at the bottom of the screen on your first visit, letting you decide how we can use cookies. You can **Accept all**, **Reject all**, or pick **More choices** to turn individual categories on or off — Functional, Analytics, and Advertising (Essential cookies keep the site working and are always on). Your choice is saved in your browser, so the banner won't keep coming back. Changed your mind? Use the new **"Cookie preferences"** link in the footer to update your choice any time, and see our Privacy Policy for what each category means.
+
+---
+
 ## Clearer messages when incorporating your company
 
 The "Incorporate your company" wizard now tells you exactly what's happening if it can't take you to payment. If online filing isn't set up yet for the jurisdiction you picked, you'll see a clear note — and a way to reach the studio team to file manually — right on the company-details step, instead of a vague "Submission failed" after you click. If something just hiccups temporarily, you'll get a "please try again in a moment" message so you know retrying is worth it.
