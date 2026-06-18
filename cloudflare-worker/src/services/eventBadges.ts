@@ -49,9 +49,17 @@ async function grantBadge(env: Env, userId: number, slug: string): Promise<boole
     const after: any = await env.DB.prepare(`SELECT xp FROM user_xp WHERE user_id = ?`)
       .bind(userId).first();
     const total = Number(after?.xp) || reward;
+    // Recompute level from the total we just read, but GUARD the write to that
+    // exact xp: `AND xp = ?` makes the update a no-op if a concurrent award has
+    // since bumped xp past `total`. So a stale (lower) level derived from an
+    // older read can never clobber a fresher one — the award that reads the
+    // final total lands the correct level, while xp itself is always right via
+    // the atomic increment above. levelForXp stays the single source of truth
+    // for the curve (no fragile SQL sqrt()).
     await env.DB.prepare(
-      `UPDATE user_xp SET level = ?, updated_at = datetime('now') WHERE user_id = ?`,
-    ).bind(levelForXp(total), userId).run();
+      `UPDATE user_xp SET level = ?, updated_at = datetime('now')
+        WHERE user_id = ? AND xp = ?`,
+    ).bind(levelForXp(total), userId, total).run();
   }
   return true;
 }
