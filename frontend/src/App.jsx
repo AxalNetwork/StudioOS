@@ -19,6 +19,11 @@ import PaywallModal, { openPaywall } from './components/PaywallModal';
 import { Lock as LockIcon } from 'lucide-react';
 import { api } from './lib/api';
 import SpinoutLabSidebar from './components/SpinoutLabSidebar';
+// Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
+// renders synchronously on first paint. It marks itself a no-auth-redirect
+// surface on mount; a lazy chunk could load AFTER the background settings 401
+// returns, racing the flag and still bouncing logged-out visitors to /login.
+import NotFoundPage from './pages/NotFoundPage';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
@@ -26,7 +31,6 @@ const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
 const IncorporatePage = lazy(() => import('./pages/IncorporatePage'));
 const IncorporateSuccessPage = lazy(() => import('./pages/IncorporateSuccessPage'));
-const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const CofounderAgreementPage = lazy(() => import('./pages/CofounderAgreementPage'));
 const Section83bPage = lazy(() => import('./pages/Section83bPage'));
 const CompliancePage = lazy(() => import('./pages/CompliancePage'));

@@ -54,6 +54,18 @@ function requestStepUp(ttlMinutes) {
   return _stepUpInFlight;
 }
 
+// Task #8 — the catch-all 404 page marks itself as a no-auth-redirect surface
+// while it is mounted (setSuppressAuthRedirect(true) on mount, false on
+// unmount). A background 401 — e.g. SettingsProvider probing
+// /api/settings/appearance on first paint — must NOT bounce a logged-OUT
+// visitor who hit an UNKNOWN url to /login; they should see the 404 page.
+// Deliberately scoped to the 404 surface only: the flag is false on every
+// real page, so genuinely-expired sessions on protected pages still bounce.
+let _suppressAuthRedirect = false;
+export function setSuppressAuthRedirect(v) {
+  _suppressAuthRedirect = !!v;
+}
+
 export async function request(path, options = {}) {
   try {
     // FormData uploads must NOT carry an explicit Content-Type — the browser
@@ -126,7 +138,10 @@ export async function request(path, options = {}) {
           || currentPath === '/events'
           || currentPath.startsWith('/events/')
           || currentPath.startsWith('/invite/');
-        if (!isPublicPath) {
+        // `_suppressAuthRedirect` is set only while the catch-all 404 page is
+        // mounted (an unknown URL), so a logged-out visitor there sees the 404
+        // instead of being bounced to /login by this background 401.
+        if (!isPublicPath && !_suppressAuthRedirect) {
           window.location.href = '/login';
         }
         throw new Error('Session expired');

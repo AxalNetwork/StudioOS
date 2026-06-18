@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## The "Page not found" screen now shows for signed-out visitors
+
+If you're not signed in and you open a link to a page that doesn't exist, you'll now see the friendly "404 — Page not found" screen (with a way back home) instead of being sent to the sign-in form. Signing in still works as before, and pages that need an account still ask you to sign in.
+
+---
+
 ## Cleaner role selector in the Admin Console
 
 The role pill in the Users table (Admin Console → Users) now uses a modern custom dropdown instead of the browser's native select widget. You'll see a single chevron icon that spins open a clean options list — no more double-arrow glitch. Changing a user's role works exactly as before.
