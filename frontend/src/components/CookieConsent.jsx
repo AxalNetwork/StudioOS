@@ -68,14 +68,23 @@ export default function CookieConsent() {
     setView('basic');
   }, []);
 
-  // Esc dismisses (a recorded choice persists; an undecided visitor is simply
-  // re-prompted on the next load — never a trap).
+  // Dismissing via ✕ or Esc records an explicit "essential only" decision when
+  // the visitor hasn't chosen yet, so the banner stops re-prompting on every
+  // refresh/navigation. No consent is inferred for non-essential categories.
+  // If a choice already exists (banner reopened from the footer link), dismissing
+  // leaves the saved choice untouched.
+  const dismiss = useCallback(() => {
+    if (!isDecided()) rejectAll();
+    close();
+  }, [close]);
+
+  // Esc dismisses — same persist-on-dismiss behavior as the ✕ button.
   useEffect(() => {
     if (!open) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    const onKey = (e) => { if (e.key === 'Escape') dismiss(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, close]);
+  }, [open, dismiss]);
 
   if (!open) return null;
 
@@ -110,7 +119,7 @@ export default function CookieConsent() {
     >
       <button
         type="button"
-        onClick={close}
+        onClick={dismiss}
         aria-label="Dismiss"
         className="absolute right-3 top-3 rounded-md p-1 text-gray-400 hover:text-gray-700
                    dark:hover:text-gray-200"

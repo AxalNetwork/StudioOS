@@ -10,6 +10,15 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Cookie banner persists on dismiss — no more re-prompt on every refresh (Task #23)
+
+### Frontend
+- `frontend/src/components/CookieConsent.jsx` — the ✕ button and Esc key now call a new `dismiss()` handler instead of the no-op `close()`. When the visitor has not yet decided, `dismiss()` records an explicit "essential only" choice via `rejectAll()` (decided=true, all non-essential off) before hiding the card, so the banner no longer reappears on every refresh/navigation. No consent is inferred for functional/analytics/advertising. When the banner is reopened from the footer "Cookie preferences" link (a choice already exists), dismissing leaves the saved choice untouched. Explicit *Accept all* / *Reject all* / *Confirm* behavior is unchanged.
+
+### Notes
+- Consent ↔ cookie wiring confirmed unchanged: no third-party analytics/advertising scripts are loaded. `frontend/index.html` loads only Cloudflare Turnstile (essential/security) and Google Fonts (functional) — no analytics or advertising trackers. `hasConsent()` in `frontend/src/lib/cookieConsent.js` remains the mandatory gate any future tracker must check; the Analytics/Advertising toggles record intent only. Only essential/functional first-party cookies (auth, `axal_ref` referral, Turnstile) are set pre-consent.
+- Choice persists per browser via `localStorage` (`axal_cookie_consent_v1`) on the apex origin; `app.axal.vc` traffic converges to `axal.vc` via the existing edge 301, so the stored choice carries for normal navigation.
+
 ## Stripe live-mode cutover — ops runbook + credential prerequisites (Task #17)
 
 ### Docs / ops
