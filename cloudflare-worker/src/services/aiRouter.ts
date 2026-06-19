@@ -32,6 +32,7 @@ export type TaskClass =
   | 'safety'
   | 'role_detect'
   | 'advisor_turn'
+  | 'onboarding_chat'
   | 'tool_call'
   | 'rerank'
   | 'explain'
@@ -141,6 +142,14 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   safety:       { provider: 'workers-ai', model: '@cf/meta/llama-guard-3-8b' },
   role_detect:  { provider: 'workers-ai', model: SMALL_LLAMA },
   advisor_turn: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  // Onboarding profiling chatbot (routes/profiling.ts). Deliberately NOT
+  // gateway-routed (see gatewayOptionFor) and on the light 8B model first:
+  // it is a short 5–8 turn intake, not the Personal Advisor, so it must not
+  // share the `advisor-ongoing` AI Gateway (whose failure used to cost an 8s
+  // timeout PER TURN before the bypass kicked in) nor the advisor daily
+  // budget. 8B primary keeps it fast/cheap; 70B is the fallback. Matches the
+  // documented intent in OnboardingChatPage.jsx.
+  onboarding_chat: { provider: 'workers-ai', model: SMALL_LLAMA, fallbackChain: [MID_LLAMA] },
   tool_call:    { provider: 'workers-ai', model: '@cf/qwen/qwen2.5-coder-32b-instruct', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
   // Personal Advisor next-question re-ranker (advisor/rerank.ts).
   // Structured JSON pick over a bounded candidate list — qwen-coder
@@ -446,8 +455,15 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       return { ok: true, stream: raw as ReadableStream, prompt_tokens: promptTok, completion_tokens: 0 };
     }
     // Workers AI chat models return { response: string } or
-    // { choices: [{ message: { content } }] } depending on model.
-    const r = raw as {
+    // { choices: [{ message: { content } }] } depending on model. Some
+    // models / gateway responses nest the payload under { result: {...} },
+    // so unwrap that too before reading — otherwise a valid reply is
+    // silently dropped to the empty-string fallback (reads as "the chatbot
+    // is broken" even though the model answered).
+    const rawObj = raw as { result?: unknown } | undefined;
+    const r = ((rawObj && typeof rawObj === 'object' && 'result' in rawObj && rawObj.result)
+      ? rawObj.result
+      : raw) as {
       response?: string;
       choices?: Array<{ message?: { content?: string } }>;
       usage?: { prompt_tokens?: number; completion_tokens?: number };

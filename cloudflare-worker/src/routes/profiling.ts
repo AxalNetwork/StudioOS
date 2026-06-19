@@ -136,15 +136,19 @@ profiling.post('/chat', async (c) => {
     content: String(m.content || '').slice(0, 2000),
   }));
 
-  // Route the turn through the shared resilient AI router (task
-  // 'advisor_turn' → MID_LLAMA primary, SMALL_LLAMA fallback) so a single
-  // transient model blip no longer hard-fails onboarding. On a router
-  // refusal / total-chain failure we degrade gracefully: the user gets a
-  // clear message and can still click "Save & continue".
+  // Route the turn through the shared resilient AI router on the dedicated
+  // 'onboarding_chat' task class (8B primary, 70B fallback, NOT gateway-
+  // routed). Previously this used 'advisor_turn', which forced every
+  // onboarding turn through the `advisor-ongoing` AI Gateway — when that
+  // gateway is misconfigured/unavailable each turn paid an 8s timeout
+  // before the un-gatewayed bypass retry, making the chatbot feel broken,
+  // and it also burned the shared advisor daily budget. On a router refusal
+  // / total-chain failure we still degrade gracefully: the user gets a
+  // clear message and can keep going via "Save & continue".
   let assistantReply = '';
   let degraded = false;
   const result = await aiRouterRun(c.env, {
-    task: 'advisor_turn',
+    task: 'onboarding_chat',
     userId: authedUser.id,
     systemPrompt: SYSTEM_PROMPT,
     messages: chatMessages,
