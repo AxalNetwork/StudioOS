@@ -206,14 +206,29 @@ const TOOL_TIER_REQUIRED: Record<string, string | undefined> = {
   draftCofounderAgreement: 'subscriber',
 };
 
-// SQL / shell / HTML-shaped argument detectors. The advisor's tools take
-// structured payloads (question_id, page_target, topic) — none of these
-// patterns are ever legitimate, so any match is a hard reject.
+// SQL / shell / HTML-shaped argument detectors. These run ONLY over the
+// tool's structural / control fields (question_id, page_target, topic,
+// page_url) — never the human free-text body (see gateToolCall) — so they
+// can be matched against real injection grammar rather than bare keywords.
+// The SQL detector requires a keyword together with its canonical companion
+// clause (SELECT…FROM, INSERT INTO, UPDATE…SET, DROP TABLE, UNION SELECT, …)
+// so an ordinary English structural value never trips it. The bounded
+// `{0,200}?` windows keep the match cheap and ReDoS-safe.
 const SUSPICIOUS_ARG_PATTERNS: Array<{ re: RegExp; label: string }> = [
-  { re: /\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|TRUNCATE|ALTER|GRANT|REVOKE)\s/i, label: 'sql' },
+  { re: /\b(?:SELECT\b[\s\S]{0,200}?\bFROM\b|INSERT\s+INTO\b|UPDATE\b[\s\S]{0,200}?\bSET\b|DELETE\s+FROM\b|DROP\s+(?:TABLE|DATABASE|INDEX|VIEW|SCHEMA)\b|TRUNCATE\s+TABLE\b|ALTER\s+TABLE\b|UNION\s+(?:ALL\s+)?SELECT\b|GRANT\b[\s\S]{0,200}?\bTO\b|REVOKE\b[\s\S]{0,200}?\bFROM\b)/i, label: 'sql' },
   { re: /(^|\W)(rm\s+-rf|cat\s+\/etc|curl\s+http|wget\s+http|chmod\s+\+x|\$\(|`[^`]+`|\|\s*sh\b|\|\s*bash\b)/i, label: 'shell' },
   { re: /<script[\s>]|javascript:|on\w+\s*=\s*"|<iframe[\s>]/i, label: 'html' },
 ];
+
+// Tool argument keys that carry user-authored natural language rather than
+// structural control values. These are EXCLUDED from the SUSPICIOUS_ARG_PATTERNS
+// scan: free-text answers are persisted via parameterized D1 .bind() (no SQLi
+// surface), HTML-sanitised on render, and already screened by the L0 safety
+// classifier + the /answer destructive-intent gate. Running code-injection
+// regexes over prose only manufactures false positives — e.g. a founder
+// typing "we grant equity to advisors" or "I select deals by traction" would
+// otherwise be rejected with `arg pattern: sql` and lose their answer.
+const FREE_TEXT_ARG_KEYS = new Set(['value', 'evidence']);
 
 export async function gateToolCall(
   env: Env,
@@ -235,8 +250,22 @@ export async function gateToolCall(
   if (reqTier && !ctx.tiers.has(reqTier)) {
     return { ok: false, reason: 'tier_required', detail: reqTier };
   }
-  // Arg shape — flatten to string, reject any suspicious pattern.
-  const argStr = typeof args === 'string' ? args : JSON.stringify(args ?? '');
+  // Arg shape — scan only the tool's STRUCTURAL / control fields for
+  // injection-shaped payloads. The human free-text fields (FREE_TEXT_ARG_KEYS:
+  // the answer body + its evidence) are intentionally skipped — see the
+  // constant's docstring for why scanning prose there is both unsafe-to-rely-on
+  // and a false-positive factory. A bare string payload (no field names to
+  // discriminate) is still scanned wholesale as a conservative fallback.
+  const scanParts: string[] = [];
+  if (typeof args === 'string') {
+    scanParts.push(args);
+  } else if (args && typeof args === 'object') {
+    for (const [k, v] of Object.entries(args as Record<string, unknown>)) {
+      if (FREE_TEXT_ARG_KEYS.has(k) || v == null) continue;
+      scanParts.push(typeof v === 'string' ? v : JSON.stringify(v));
+    }
+  }
+  const argStr = scanParts.join(' ');
   for (const p of SUSPICIOUS_ARG_PATTERNS) {
     if (p.re.test(argStr)) {
       return { ok: false, reason: 'invalid_args', detail: `arg pattern: ${p.label}` };

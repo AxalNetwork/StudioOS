@@ -1287,6 +1287,67 @@ advisor.get('/sources', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /answered  —  Task #13 captured-answer list for the right-rail
+// "Completed" bucket. Returns every reply the user actually committed in
+// their LATEST conversation where `saved_status IN ('saved','noop')` — the
+// exact same scope + predicate that drives `answered_count` (refreshCounts)
+// and the /progress captured set, so the Completed list can never disagree
+// with the "N / total answered" figure shown in the header.
+//
+// This differs from /sources (which reads field_sources, populated only on
+// structured `saved` writes): /answered also includes `noop` captures —
+// reflections, partner answers made before the partner profile is bound,
+// and dynamic reflection ids — which never produce a field_sources row and
+// were therefore invisible in the old Completed bucket. Rows are decorated
+// with the question-bank label / section / page_target so the widget needs
+// no second round-trip.
+// ---------------------------------------------------------------------------
+advisor.get('/answered', async (c) => {
+  const user = await requireAuth(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
+  await ensureSchema(c.env);
+  try {
+    const conv = await getLatestConversation(c.env, user);
+    if (!conv) return c.json({ conversation_uid: null, answered: [] });
+    const rows = await c.env.DB.prepare(
+      `SELECT question_id, saved_to_table, saved_to_column, saved_to_id,
+              saved_status, created_at
+         FROM advisor_answers
+        WHERE conversation_id = ? AND saved_status IN ('saved', 'noop')
+        ORDER BY created_at DESC, id DESC
+        -- advisor_answers has UNIQUE(conversation_id, question_id), so a single
+        -- conversation can hold at most one row per bank question (~210 total);
+        -- the 500 cap is a safety bound that can never truncate the list, so the
+        -- "count == list" invariant with answered_count/refreshCounts holds.
+        LIMIT 500`,
+    ).bind(conv.id).all<{
+      question_id: string;
+      saved_to_table: string | null; saved_to_column: string | null;
+      saved_to_id: string | null; saved_status: string; created_at: string;
+    }>();
+    const answered = (rows.results || []).map((r) => {
+      const q = questionById(r.question_id);
+      return {
+        question_id: r.question_id,
+        label: q?.prompt || r.question_id,
+        section: q?.section || null,
+        page_target: q?.page_target || null,
+        saved_status: r.saved_status,
+        saved_to_table: r.saved_to_table,
+        saved_to_column: r.saved_to_column,
+        saved_to_id: r.saved_to_id,
+        completed_at: r.created_at,
+      };
+    });
+    return c.json({ conversation_uid: conv.uid, answered });
+  } catch (e) {
+    console.error('[advisor] /answered:', (e as Error).message);
+    return c.json({ conversation_uid: null, answered: [] });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // GET /next-question?focus=SECTION  —  return the next visible
 // question pinned to a section (BUILD/CAPITAL/LEGAL/NETWORK or any
 // persona-defined section). Used by the per-page progress rail's

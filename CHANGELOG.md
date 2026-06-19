@@ -10,6 +10,21 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Fix Personal Advisor: prose answers rejected + empty "Completed" list (Task #13)
+
+Two independent Personal Advisor bugs.
+
+### Bug A — `arg pattern: sql` blocked ordinary answers (Worker)
+- `cloudflare-worker/src/services/advisor/guardrails.ts` — the L2 tool-gate arg scan (`gateToolCall`) was running every tool-call field through `SUSPICIOUS_ARG_PATTERNS`. The SQL heuristic matched bare English keywords (`select`, `update`, `grant … to`), so a normal answer like *"we select the best deals and grant equity to advisors"* hard-failed with `invalid_args` / `arg pattern: sql`. Two changes: (1) `SUSPICIOUS_ARG_PATTERNS.sql` is now **grammar-based** — `SELECT…FROM`, `INSERT INTO`, `UPDATE…SET`, `DELETE FROM`, `DROP/CREATE/ALTER TABLE`, `UNION [ALL] SELECT`, `GRANT…TO`, `; … --`, etc. with bounded `{0,200}?` gaps — so isolated keywords no longer trip it; (2) added `FREE_TEXT_ARG_KEYS = {value, evidence}` and the scan now only inspects **structural** object fields (ids, queries, page targets), skipping user prose. Bare-string args (no object) are still scanned wholesale; shell/HTML/path-traversal heuristics unchanged.
+
+### Bug B — "Completed" bucket always empty despite "N answered" (Worker + frontend)
+- `cloudflare-worker/src/routes/advisor.ts` — added `GET /answered`. It resolves the latest conversation (`getLatestConversation`) and returns `advisor_answers` rows with `saved_status IN ('saved','noop')`, newest-first, decorated via `questionById` → `{question_id, label, section, page_target, saved_status, saved_to_*, completed_at}`. The predicate + conversation scope match `refreshCounts` and `GET /progress`, so the list length now equals the header's answered count. The widget previously derived "Completed" from `GET /sources` (page-attribution `field_sources` rows), which is a different, often-empty table — hence the mismatch.
+- `frontend/src/lib/api.js` — `advisor.answered()` → `GET /advisor/answered`.
+- `frontend/src/components/advisor/AdvisorProgressWidget.jsx` — the Completed bucket (`completedSet` + `completedItems`) now reads `api.advisor.answered()` instead of `sources`; removed the prior 10-item cap so the bucket count matches the answered total.
+
+### Tests
+- `cloudflare-worker/test/advisor.scenarios.test.ts` — 4 new `gateToolCall` regression cases: free-text `value` with SQL-ish prose saves; `value`+`evidence` both exempt; a bare keyword in a scanned structural field passes; real injection (`UNION SELECT … FROM`, `DROP TABLE`) in a structural field is still blocked. `npm run test:drift` green (incl. `tsc --noEmit`).
+
 ## Venture Risk — 10-layer rating system (Tasks #9–#11)
 
 Internal deal-team-only feature: a 10-layer Venture Risk rating per portfolio company (Founder, Market, Competition, Timing, Financing, Marketing, Distribution, Technology, Product, Hiring), hybrid auto + analyst scoring. Scores are a 0–100 "de-risk confidence" (higher = more proof = lower risk); risk bands invert: ≥67 low (emerald), ≥34 medium (amber), else high (red). Audience is admin/partner/investor (read); analyst writes are admin/partner.

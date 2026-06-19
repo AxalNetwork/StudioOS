@@ -5,6 +5,14 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Personal Advisor: your answers save, and "Completed" finally fills up
+
+Two fixes to the Personal Advisor. First, ordinary answers no longer get rejected: if your reply happened to contain everyday words like "select", "update", or "grant", the advisor would sometimes refuse to save it with a technical error. It now saves your wording as written.
+
+Second, the "Completed" list in the progress panel now actually shows every question you've answered, matching the "answered" count in the header. Previously it could stay empty even though the count said you'd answered several — now the two always agree.
+
+---
+
 ## A new Venture Risk rating for every portfolio company
 
 The deal team now has a Venture Risk view that rates each company across ten layers of risk — Founder, Market, Competition, Timing, Financing, Marketing, Distribution, Technology, Product, and Hiring. Each layer gets a 0–100 "de-risk confidence" score (higher means lower risk), worked out automatically from the signals already in the platform, with a colour band — green for low risk, amber for medium, red for high.

@@ -598,6 +598,11 @@ export const api = {
     // <AdvisorFilledBanner> + the per-field sparkle icons.
     sources: (page) =>
       request(`/advisor/sources${page ? `?page=${encodeURIComponent(page)}` : ''}`),
+    // Task #13 — captured-answer list (saved + noop) for the right-rail
+    // "Completed" bucket. Same scope/predicate as the header answered count,
+    // so it includes free-form/reflection replies that never reach
+    // field_sources (and thus were missing from /sources).
+    answered: () => request('/advisor/answered'),
     // Voice-to-text for the composer mic. Posts a base64-encoded audio clip
     // + its mime type to the Workers AI Whisper endpoint; returns { text }.
     // The UI mic button that calls this is a separate task.
