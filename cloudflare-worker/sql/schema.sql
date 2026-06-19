@@ -357,6 +357,72 @@ CREATE TABLE IF NOT EXISTS venture_risk_overrides (
 CREATE INDEX IF NOT EXISTS idx_venture_risk_overrides_project
     ON venture_risk_overrides(project_id);
 
+-- Axal Fit (migration 115) — conversational profiling scorecard + 5 values +
+-- admin best-fit report + consultation bookings. See migration for column docs.
+CREATE TABLE IF NOT EXISTS axal_values (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    value_key TEXT NOT NULL,
+    score REAL NOT NULL DEFAULT 0,
+    confidence REAL NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, value_key)
+);
+CREATE TABLE IF NOT EXISTS axal_fit_responses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    persona TEXT NOT NULL,
+    question_id TEXT NOT NULL,
+    category TEXT,
+    score REAL NOT NULL DEFAULT 0,
+    red_flag TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (user_id, question_id)
+);
+CREATE INDEX IF NOT EXISTS idx_axal_fit_responses_user
+    ON axal_fit_responses(user_id, persona);
+CREATE TABLE IF NOT EXISTS axal_fit_scores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    persona TEXT NOT NULL,
+    total_score REAL NOT NULL DEFAULT 0,
+    band TEXT NOT NULL DEFAULT 'hold',
+    rubric_json TEXT NOT NULL DEFAULT '[]',
+    red_flags_json TEXT NOT NULL DEFAULT '[]',
+    signal_quality REAL NOT NULL DEFAULT 0,
+    narrative_fit TEXT,
+    computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_axal_fit_scores_user
+    ON axal_fit_scores(user_id, persona, computed_at DESC);
+CREATE TABLE IF NOT EXISTS axal_fit_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    persona TEXT,
+    report_json TEXT NOT NULL DEFAULT '{}',
+    computed_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_axal_fit_reports_user
+    ON axal_fit_reports(user_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS admin_consultation_bookings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    admin_id INTEGER REFERENCES users(id),
+    requested_at TEXT NOT NULL DEFAULT (datetime('now')),
+    slot_at TEXT,
+    status TEXT NOT NULL DEFAULT 'requested',
+    topic TEXT,
+    notes TEXT,
+    report_id INTEGER REFERENCES axal_fit_reports(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_admin_consultation_bookings_status
+    ON admin_consultation_bookings(status, requested_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_consultation_bookings_user
+    ON admin_consultation_bookings(user_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
