@@ -10,6 +10,32 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Use of Funds allocator → THE ASK (Task #2)
+
+Replaces the free-text "Use of Funds" box on founder intake (FounderPortal step 1) with a structured 5-section % allocator and feeds THE ASK slide (in-app preview + PPTX, dev + prod) from the same data. Canonical sections, in order: `Product & engineering`, `GTM: sales and marketing`, `Infrastructure & data`, `Operations, legal & compliance`, `Hiring / runway reserve`.
+
+### Storage contract
+- `use_of_funds` is now persisted as **JSON** (`[{ "label": string, "pct": number }, …]`) — JSON (not a delimited string) because canonical labels contain colons. Validation rule: each `pct` is `0–100`, sections sum to **exactly 100** to submit, OR all sections are `0` (no allocation → stored as `NULL`, submit allowed). Legacy free-text rows still render everywhere via a fallback path; no backfill.
+
+### Helper twins (parse JSON-first, fall back to legacy free-text)
+- `cloudflare-worker/src/util/useOfFunds.ts` — **new**: `parseUseOfFundsValue()` (→ `{label,pct}[]`, drops 0% sections, caps at 5), `normalizeUseOfFunds()` (→ `{ value, error? }`: validates + canonicalizes JSON, all-zero/empty → `null`, passes legacy text through), `formatUseOfFundsText()` (→ `"label pct%; …"`, free-text passthrough).
+- `backend/app/services/use_of_funds.py` — **new**: Python twin — `parse_use_of_funds_value()`, `normalize_use_of_funds()` (→ `(value, error)`), `format_use_of_funds_text()`. Same JSON-first/legacy-fallback semantics.
+
+### Frontend
+- `frontend/src/pages/FounderPortal.jsx` — `FUND_SECTIONS` const + `FundAllocator` component (slider + numeric 0–100 per section, live total, dark-mode paired). Step-1 Next + submit gated on `fundsValid` (total === 100 or all 0). `handleSubmit` serializes non-zero sections to the JSON contract; reset clears to `[0,0,0,0,0]`.
+
+### Worker
+- `cloudflare-worker/src/routes/projects.ts` — `POST /api/projects/submit` runs `normalizeUseOfFunds()` before the INSERT (rejects invalid splits with `400 invalid_use_of_funds`); writes the canonical value; qual-text snapshot uses the normalized value.
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts` — removed the local `parseUseOfFunds()`; THE ASK funds now derive from `parseUseOfFundsValue(p.use_of_funds)` (financials override still wins first).
+- `cloudflare-worker/src/routes/decks.ts`, `cloudflare-worker/src/services/decks/autofill.ts` (`ask_line` + `use_of_funds` column), `cloudflare-worker/src/routes/scoring.ts` (deal-memo economics) — render via `formatUseOfFundsText()` so the structured JSON never leaks raw into prose/decks.
+
+### Backend (dev FastAPI)
+- `backend/app/api/routes/projects.py` — `/submit` normalizes (same `400 invalid_use_of_funds` contract) and stores the canonical value; `_spinout_deck_payload` overrides `data["ask"]["funds"]` from `parse_use_of_funds_value()` when present (else keeps the deterministic sample split).
+- `backend/app/api/routes/decks.py`, `backend/app/api/routes/scoring.py` (deal-memo economics) — render via `format_use_of_funds_text()`. AI-context fields and the raw qual scoring input are left untouched.
+
+### Tests
+- `cloudflare-worker/test/useOfFunds.test.ts` — **new** (added to `test:drift`): 11 cases over parse (JSON-first, colon labels, drop-zero, cap-5, legacy fallback), normalize (valid-100, all-zero/empty → null, sum≠100, out-of-range, malformed JSON, free-text passthrough), and format.
+
 ## Billing overview no longer 502s — resilient per-section reads + stale-customer self-heal (Task #25)
 
 ### Worker

@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Show investors exactly how you'll spend the round
+
+The "Use of Funds" step on the founder intake is no longer a free-text box. You now split your raise across five clear areas — Product & engineering, GTM (sales and marketing), Infrastructure & data, Operations/legal/compliance, and Hiring/runway reserve — using a slider or by typing a percentage for each. A running total keeps you honest: you can submit once the split adds up to exactly 100% (or leave everything at 0% if you'd rather not allocate yet). Whatever you set flows straight through to the "The Ask" slide in your pitch deck — both the on-screen preview and the downloaded PowerPoint — so your deck always matches what you entered. Decks created before this change keep showing your original text.
+
+---
+
 ## Your Billing page loads again
 
 The **Settings → Billing** page could show an error and fail to load instead of your cards, subscriptions, and receipts. It now loads reliably: if part of the billing information can't be fetched at that moment, the page shows whatever it can rather than failing entirely, and if billing is briefly unavailable you'll see a calm "temporarily unavailable" note with a Retry button instead of a raw error. Accounts that were affected are repaired automatically the next time you open the page.

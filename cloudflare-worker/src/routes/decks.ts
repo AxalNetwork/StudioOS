@@ -13,6 +13,7 @@ import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
 } from '../services/decks/methods';
 import { autofillDeck, toEditorSlides } from '../services/decks/autofill';
+import { formatUseOfFundsText } from '../util/useOfFunds';
 // Task #15 — Axal 30-day Spin-Out Lab demo day deck. Custom autofill
 // path that bypasses the generic field-source vocabulary in autofill.ts
 // because the deck binds to Lab tables (interviews, milestones, OKRs)
@@ -231,7 +232,7 @@ function heuristicSlides(p: any, snap: any | null): any[] {
   const users = Number(p.users_count || 0);
   const revenue = fmtMoney(p.revenue);
   const funding = fmtMoney(p.funding_needed);
-  const useOf = orDash(p.use_of_funds);
+  const useOf = formatUseOfFundsText(p.use_of_funds) || DASH;
   const cac = fmtMoney(p.cac);
   const grossMarginPct = p.gross_margin_pct != null && p.gross_margin_pct !== ''
     ? `${Math.round(Number(p.gross_margin_pct) * 100) / 100}%` : null;

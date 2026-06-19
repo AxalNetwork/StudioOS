@@ -7,6 +7,7 @@ from backend.app.schemas.scoring import ScoreRequest, GenerateMemoRequest, Score
 from backend.app.services.scoring import run_full_score, run_brain_score, tier_label
 from backend.app.services.ai_memo import generate_memo_with_ai
 from backend.app.services.scoring_ai import explain_score
+from backend.app.services.use_of_funds import format_use_of_funds_text
 from backend.app.services.score_integrity import (
     assert_no_reserved_fields,
     assert_official_inputs_complete,
@@ -357,7 +358,7 @@ def generate_deal_memo(project_id: int, session: Session = Depends(get_session),
         "economics": {
             "cost_to_mvp": memo.cost_to_mvp,
             "funding_needed": memo.funding_needed,
-            "use_of_funds": memo.use_of_funds,
+            "use_of_funds": format_use_of_funds_text(memo.use_of_funds) or memo.use_of_funds,
         },
         "axal_fit": {
             "strategic_alignment": memo.strategic_alignment,

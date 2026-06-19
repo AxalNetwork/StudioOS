@@ -13,6 +13,7 @@
  */
 import type { Env } from '../../types';
 import type { DeckMethodSpec, DeckSlideField } from './methods';
+import { formatUseOfFundsText } from '../../util/useOfFunds';
 
 export type FilledFieldValue =
   | { kind: 'title' | 'subtitle' | 'paragraph' | 'quote'; value: string; source: 'data' | 'ai' | 'placeholder' }
@@ -72,7 +73,7 @@ function resolveProjectSource(expr: string, project: any): string | null {
     if (k === 'ask_line') {
       const f = fmtMoney(project.funding_needed);
       if (!f) return null;
-      const use = (project.use_of_funds || '').toString().trim();
+      const use = formatUseOfFundsText(project.use_of_funds);
       return use ? `Raising ${f} — ${use.slice(0, 80)}` : `Raising ${f}.`;
     }
     if (k === 'runway_target') {
@@ -83,6 +84,9 @@ function resolveProjectSource(expr: string, project: any): string | null {
   }
   const v = project?.[col];
   if (v === undefined || v === null || v === '') return null;
+  // Task #2 — render the structured Use-of-Funds allocation as readable text
+  // (e.g. "Product & engineering 45%; …") rather than leaking raw JSON.
+  if (col === 'use_of_funds') return formatUseOfFundsText(v) || null;
   if (col.endsWith('_pct')) return `${Math.round(Number(v) * 100) / 100}%`;
   if (typeof v === 'number') {
     if (col === 'tam' || col === 'sam' || col === 'som' || col === 'revenue' || col === 'funding_needed' || col === 'cost_to_mvp') {

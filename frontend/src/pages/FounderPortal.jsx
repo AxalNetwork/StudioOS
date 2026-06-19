@@ -22,11 +22,22 @@ function ModernSelect({ value, onChange, children, ...props }) {
 
 const SECTORS = ['AI/Infrastructure', 'Blockchain/DeFi', 'Data/Analytics', 'FinTech', 'HealthTech', 'CleanTech', 'EdTech', 'SaaS', 'Other'];
 
+// Task #2 — THE ASK Use-of-Funds allocator. Fixed, canonical sections in a
+// fixed order; founders only set the percentages. Labels are persisted as
+// structured data (label + pct) because they contain colons.
+const FUND_SECTIONS = [
+  'Product & engineering',
+  'GTM: sales and marketing',
+  'Infrastructure & data',
+  'Operations, legal & compliance',
+  'Hiring / runway reserve',
+];
+
 export default function FounderPortal() {
   const [form, setForm] = useState({
     name: '', description: '', sector: '', founder_name: '', founder_email: '',
     problem_statement: '', solution: '', why_now: '', tam: '', sam: '',
-    cost_to_mvp: '', funding_needed: '', use_of_funds: '',
+    cost_to_mvp: '', funding_needed: '', use_of_funds_alloc: [0, 0, 0, 0, 0],
     market_urgency: 5, market_trend: 3, team_expertise: 5, team_execution: 5,
     team_network: 2, mvp_time_days: 60, product_complexity: 3, product_dependencies: 2,
     time_to_revenue_months: 12, burn_risk: 2, fit_alignment: 5, fit_synergy: 3,
@@ -37,13 +48,26 @@ export default function FounderPortal() {
   const [step, setStep] = useState(1);
 
   const handleChange = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
+  const handleFund = (i, value) => setForm(prev => {
+    const next = [...prev.use_of_funds_alloc];
+    next[i] = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+    return { ...prev, use_of_funds_alloc: next };
+  });
+
+  const fundsTotal = form.use_of_funds_alloc.reduce((a, b) => a + (Number(b) || 0), 0);
+  const fundsValid = fundsTotal === 0 || fundsTotal === 100;
 
   const handleSubmit = async () => {
-    if (!form.name || !form.founder_name || !form.founder_email) return;
+    if (!form.name || !form.founder_name || !form.founder_email || !fundsValid) return;
     setLoading(true);
     try {
+      const { use_of_funds_alloc, ...rest } = form;
+      const alloc = FUND_SECTIONS
+        .map((label, i) => ({ label, pct: Number(use_of_funds_alloc[i]) || 0 }))
+        .filter(x => x.pct > 0);
       const payload = {
-        ...form,
+        ...rest,
+        use_of_funds: alloc.length ? JSON.stringify(alloc) : '',
         tam: form.tam ? parseFloat(form.tam) : null,
         sam: form.sam ? parseFloat(form.sam) : null,
         cost_to_mvp: form.cost_to_mvp ? parseFloat(form.cost_to_mvp) : null,
@@ -146,11 +170,8 @@ export default function FounderPortal() {
               <input type="number" className="w-full bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-gray-900 text-sm dark:text-gray-100" value={form.funding_needed} onChange={e => handleChange('funding_needed', e.target.value)} />
             </div>
           </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Use of Funds</label>
-            <textarea className="w-full bg-gray-50 border border-gray-700 rounded-lg px-3 py-2 text-gray-900 text-sm h-16 dark:text-gray-100" value={form.use_of_funds} onChange={e => handleChange('use_of_funds', e.target.value)} />
-          </div>
-          <button onClick={() => setStep(2)} disabled={!form.name || !form.founder_name || !form.founder_email} className="px-6 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors">
+          <FundAllocator values={form.use_of_funds_alloc} total={fundsTotal} valid={fundsValid} onChange={handleFund} />
+          <button onClick={() => setStep(2)} disabled={!form.name || !form.founder_name || !form.founder_email || !fundsValid} className="px-6 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors">
             Next: Scoring Inputs
           </button>
         </div>
@@ -264,7 +285,7 @@ export default function FounderPortal() {
             )}
           </div>
 
-          <button onClick={() => { setResult(null); setStep(1); setForm(prev => ({ ...prev, name: '', description: '', problem_statement: '', solution: '' })); }} className="px-6 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg text-sm font-medium dark:text-gray-100">
+          <button onClick={() => { setResult(null); setStep(1); setForm(prev => ({ ...prev, name: '', description: '', problem_statement: '', solution: '', use_of_funds_alloc: [0, 0, 0, 0, 0] })); }} className="px-6 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg text-sm font-medium dark:text-gray-100">
             Submit Another Startup
           </button>
         </div>
@@ -278,6 +299,33 @@ function SliderInput({ label, value, max, onChange }) {
     <div>
       <label className="block text-sm text-gray-600 mb-1">{label}: {value}/{max}</label>
       <input type="range" min={0} max={max} step={0.5} value={value} onChange={e => onChange(parseFloat(e.target.value))} className="w-full accent-violet-500" />
+    </div>
+  );
+}
+
+// Task #2 — THE ASK: structured Use-of-Funds allocator. Five fixed sections,
+// each a slider + numeric input (0–100). Submit is allowed only when the total
+// is exactly 100% or all sections are 0 (no allocation).
+function FundAllocator({ values, total, valid, onChange }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="block text-sm text-gray-600 font-medium">Use of Funds (%)</label>
+        <span className={`text-sm font-semibold ${valid ? 'text-gray-700 dark:text-gray-300' : 'text-red-500'}`}>Total: {total}%</span>
+      </div>
+      <div className="space-y-3">
+        {FUND_SECTIONS.map((label, i) => (
+          <div key={label} className="flex items-center gap-3">
+            <span className="flex-1 min-w-0 text-sm text-gray-700 dark:text-gray-300">{label}</span>
+            <input type="range" min={0} max={100} step={1} value={values[i]} onChange={e => onChange(i, e.target.value)} className="w-28 sm:w-40 accent-violet-500" />
+            <input type="number" min={0} max={100} value={values[i]} onChange={e => onChange(i, e.target.value)} className="w-16 bg-gray-50 border border-gray-700 rounded-lg px-2 py-1 text-gray-900 text-sm dark:text-gray-100" aria-label={`${label} percentage`} />
+          </div>
+        ))}
+      </div>
+      {!valid && (
+        <p className="text-xs text-red-500 mt-2">Allocation must total exactly 100% (currently {total}%). Leave all at 0 to skip.</p>
+      )}
+      <p className="text-xs text-gray-500 mt-1">Set the percentage of the raise going to each area. Sections left at 0% are omitted.</p>
     </div>
   );
 }

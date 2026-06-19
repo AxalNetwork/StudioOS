@@ -47,6 +47,7 @@ import {
 import { computeRadar, type RadarResult } from '../radar';
 import { RADAR_AXES, ensureSkillsTaxonomySchema } from '../skillsTaxonomySchema';
 import { ensureSkillProfileSchema } from '../skillProfileSchema';
+import { parseUseOfFundsValue } from '../../util/useOfFunds';
 
 /**
  * Task #1 — Load admin-managed mentor/partner network profiles.
@@ -492,23 +493,6 @@ const interviewTakeaway = (row: InterviewRow): string => {
   return '';
 };
 
-/** Parse "Eng 55%, GTM 30%" / "engineering:50, gtm:30" into FundUse[]. */
-const parseUseOfFunds = (raw: string): Array<{ label: string; pct: number }> => {
-  if (!raw) return [];
-  const parts = raw.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
-  const out: Array<{ label: string; pct: number }> = [];
-  for (const part of parts) {
-    const m = part.match(/^(.+?)[:\s]+(\d{1,3})\s*%?$/);
-    if (m) {
-      const pct = Math.max(0, Math.min(100, parseInt(m[2], 10)));
-      out.push({ label: m[1].trim(), pct });
-    }
-  }
-  const sum = out.reduce((a, b) => a + b.pct, 0);
-  if (out.length >= 2 && sum >= 80 && sum <= 120) return out.slice(0, 5);
-  return [];
-};
-
 const signalsFromText = (raw: string, max = 3): string[] => {
   const text = (raw || '').trim();
   if (!text) return [];
@@ -742,9 +726,11 @@ export async function fillAxalSpinoutDemoDay(
     } catch {}
   }
   // Project-string parse is the third source; never invent a 50/30/20 split.
+  // Task #2 — parseUseOfFundsValue reads the structured allocator JSON first,
+  // then falls back to legacy free-text.
   const useOfFundsParsed = financialUseOfFunds.length > 0
     ? financialUseOfFunds
-    : parseUseOfFunds(p.use_of_funds || '');
+    : parseUseOfFundsValue(p.use_of_funds);
 
   // ------ team + mentor colour from advisor_answers -------------------
   const advisorMap = new Map<string, string>();

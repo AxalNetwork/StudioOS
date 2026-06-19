@@ -8,6 +8,7 @@ import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '.
 import { assembleSpinoutDeckData } from '../services/decks/spinoutDeckData';
 import { ensureMethodAllowed } from '../services/decks/branding';
 import { PREMIUM_METHOD_IDS } from '../services/decks/methods';
+import { normalizeUseOfFunds, formatUseOfFundsText } from '../util/useOfFunds';
 
 const projects = new Hono<{ Bindings: Env }>();
 
@@ -291,6 +292,12 @@ projects.post('/submit', async (c) => {
     return c.json({ error: message, code: 'reserved_field' }, 400);
   }
 
+  // Task #2 — validate + canonicalize the structured Use-of-Funds allocation
+  // before any DB writes (defense in depth; the intake UI also enforces this).
+  const uof = normalizeUseOfFunds(data.use_of_funds);
+  if (uof.error) return c.json({ error: uof.error, code: 'invalid_use_of_funds' }, 400);
+  const useOfFunds = uof.value;
+
   const sql = getSQL(c.env);
 
   const existingFounders = await sql`SELECT id FROM founders WHERE email = ${data.founder_email}`;
@@ -302,7 +309,7 @@ projects.post('/submit', async (c) => {
     founderId = f.id;
   }
 
-  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, 'idea', ${founderId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${data.use_of_funds || null}) RETURNING *`;
+  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, 'idea', ${founderId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${useOfFunds}) RETURNING *`;
 
   const result = runFullScore(data);
   const b = result.breakdown;
@@ -316,7 +323,7 @@ projects.post('/submit', async (c) => {
   for (const k of ['tam','sam','market_urgency','market_trend','team_expertise','team_execution','team_network','mvp_time_days','product_complexity','product_dependencies','cost_to_mvp','time_to_revenue_months','burn_risk','fit_alignment','fit_synergy','distribution_channels','distribution_virality']) {
     if (data[k] !== undefined) inputsSnapshot[k] = data[k];
   }
-  const qualText = [data.problem_statement, data.solution, data.why_now, data.use_of_funds, data.growth_signals]
+  const qualText = [data.problem_statement, data.solution, data.why_now, formatUseOfFundsText(useOfFunds), data.growth_signals]
     .filter(v => typeof v === 'string' && v.trim()).map(v => (v as string).trim().toLowerCase()).join('\n---\n') || null;
   const lockedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
 

@@ -33,6 +33,7 @@ from backend.app.api.routes.auth import get_current_user
 from backend.app.database import get_session
 from backend.app.models.entities import Project, ScoreSnapshot, User
 from backend.app.services.file_storage import mint_signed_token, verify_signed_token
+from backend.app.services.use_of_funds import format_use_of_funds_text
 
 router = APIRouter(prefix="/decks", tags=["Pitch Decks"])
 
@@ -139,7 +140,7 @@ def _heuristic_slides(p: Project, snap: Optional[ScoreSnapshot]) -> List[Dict[st
     users = p.users_count or 0
     revenue = p.revenue or 0
     funding = p.funding_needed or 0
-    use_of = (p.use_of_funds or "Product, GTM, key hires.").strip()
+    use_of = format_use_of_funds_text(p.use_of_funds) or "Product, GTM, key hires."
 
     # Lean on scoring data when available — gives investors a credible
     # quantitative anchor on the Traction and Market slides.
