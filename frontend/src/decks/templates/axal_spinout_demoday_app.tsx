@@ -223,6 +223,33 @@ const Oval: React.FC<{
   }}>{children}</div>
 );
 
+// Circular avatar: shows a profile photo cropped to a circle when a URL is
+// present and loads, otherwise falls back to the initials monogram (also used
+// when the image errors out, so a dead URL never shows a broken-image icon).
+const Avatar: React.FC<{
+  l: number; t: number; d: number; photo?: string; initials: string;
+  fill: string; fontSize: number; textColor: string; z?: number;
+}> = ({ l, t, d, photo, initials, fill, fontSize, textColor, z }) => {
+  const [errored, setErrored] = React.useState(false);
+  const showPhoto = !!photo && !errored;
+  return (
+    <div style={{
+      position: 'absolute', left: inch(l), top: inch(t), width: inch(d), height: inch(d),
+      borderRadius: '50%', background: fill, overflow: 'hidden', zIndex: z,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      {showPhoto ? (
+        <img
+          src={photo} alt={initials} onError={() => setErrored(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      ) : (
+        <span style={{ fontFamily: FF, fontWeight: 700, fontSize: pt(fontSize), color: textColor }}>{initials}</span>
+      )}
+    </div>
+  );
+};
+
 // Progress / funnel bar: a track with a filled portion.
 const Bar: React.FC<{ l: number; t: number; w: number; h: number; pct: number; fill: string; track?: string }> = ({
   l, t, w, h, pct, fill, track = K.panel2,
@@ -630,34 +657,92 @@ const SlideTeamNetwork: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   const t = d.team;
   const f = t.founder || {};
   const lx = ML, lw = 4.7;
-  const advisors: Array<[string, string, string]> = Array.isArray(t.advisors) ? t.advisors : [];
+  const rawFounders: Array<any> = Array.isArray(t.founders) && t.founders.length ? t.founders : [f];
+  const founders = rawFounders.filter((x) => x && (x.name || x.initials || x.photo));
+  const multi = founders.length > 1;
+  const advisors: Array<[string, string, string, (string | null)?]> = Array.isArray(t.advisors) ? t.advisors : [];
   const nodes: Array<[number, number, string, string]> = Array.isArray(t.nodes) ? t.nodes : [];
   const cX = 9.35, cY = 4.15, nw = 2.2, nh = 0.92;
+
+  // ── left-column vertical fit ────────────────────────────────────────────
+  // The founder block + roster must stay between the title and the footer no
+  // matter how many people are listed. With co-founders the founder block
+  // becomes compact rows to reclaim space; the roster then scales its row
+  // height (and only caps its visible count as a last resort) so the final
+  // row never crosses the bottom margin.
+  const TOP = 2.0, BOTTOM = 6.92;
+  const leftEls: React.ReactNode[] = [];
+  let founderBottom: number;
+
+  if (!multi) {
+    const fo = founders[0] || f;
+    leftEls.push(<Rect key="fcard" l={lx} t={TOP} w={lw} h={2.0} r={0.1} />);
+    leftEls.push(
+      <Avatar key="favatar" l={lx + 0.3} t={TOP + 0.3} d={1.05}
+        photo={fo.photo} initials={fo.initials} fill={K.accent} fontSize={24} textColor={K.white} />,
+    );
+    leftEls.push(<Ed key="fname" l={lx + 1.55} t={TOP + 0.32} w={lw - 1.8} h={0.4} size={19} bold color={K.ink} value={fo.name} path="team.founder.name" editable={editable} onEdit={onEdit} />);
+    leftEls.push(<Ed key="frole" l={lx + 1.55} t={TOP + 0.72} w={lw - 1.8} h={0.3} size={12} bold color={K.accent} value={fo.role} path="team.founder.role" editable={editable} onEdit={onEdit} />);
+    leftEls.push(<Ed key="fbio" l={lx + 0.3} t={TOP + 1.45} w={lw - 0.6} h={0.5} size={11.5} lh={1.1} valign="top" color={K.body} value={fo.bio} path="team.founder.bio" editable={editable} onEdit={onEdit} />);
+    founderBottom = TOP + 2.0;
+  } else {
+    // Compact stacked founder cards: smaller avatar, name + role, no bio.
+    const rowH = founders.length >= 3 ? 0.82 : 0.96;
+    const cardH = rowH - 0.12;
+    const avD = Math.max(0.4, cardH - 0.26);
+    founders.forEach((fo, i) => {
+      const y = TOP + i * rowH;
+      const tx = lx + 0.16 + avD + 0.18;
+      const tw = lw - (0.16 + avD + 0.18) - 0.2;
+      leftEls.push(<Rect key={`fc${i}`} l={lx} t={y} w={lw} h={cardH} r={0.1} />);
+      leftEls.push(
+        <Avatar key={`fa${i}`} l={lx + 0.16} t={y + (cardH - avD) / 2} d={avD}
+          photo={fo.photo} initials={fo.initials} fill={K.accent} fontSize={15} textColor={K.white} />,
+      );
+      leftEls.push(<Txt key={`fn${i}`} l={tx} t={y + 0.16} w={tw} h={0.34} size={15} bold color={K.ink}>{fo.name}</Txt>);
+      leftEls.push(<Txt key={`fr${i}`} l={tx} t={y + 0.5} w={tw} h={0.3} size={11} bold color={K.accent}>{fo.role}</Txt>);
+    });
+    founderBottom = TOP + founders.length * rowH;
+  }
+
+  // ── roster (advisors / mentors / partners) ──────────────────────────────
+  const labelY = founderBottom + 0.16;
+  const rosterTop = labelY + 0.36;
+  const avail = Math.max(0, BOTTOM - rosterTop);
+  const MAX_ROW = 0.62, MIN_ROW = 0.46;
+  let rowH = MAX_ROW;
+  let visible = advisors;
+  if (advisors.length > 0) {
+    rowH = Math.min(MAX_ROW, avail / advisors.length);
+    if (rowH < MIN_ROW) {
+      const maxRows = Math.max(1, Math.floor(avail / MIN_ROW));
+      visible = advisors.slice(0, maxRows);
+      rowH = Math.min(MAX_ROW, avail / visible.length);
+    }
+  }
+  const avD = Math.max(0.34, Math.min(0.5, rowH - 0.12));
+  const nameSize = Math.max(10.5, Math.min(12.5, rowH * 20));
+  const roleSize = Math.max(9.5, nameSize - 1.5);
+
   return (
     <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
       <div style={{ position: 'absolute', inset: 0 }}>
         <Eyebrow label={t.eyebrow} idx={t.idx} />
         <Title text={t.title} path="team.title" editable={editable} onEdit={onEdit} />
 
-        <Rect l={lx} t={2.0} w={lw} h={2.0} r={0.1} />
-        <Oval l={lx + 0.3} t={2.3} d={1.05} fill={K.accent}>
-          <span style={{ fontFamily: FF, fontWeight: 700, fontSize: pt(24), color: K.white }}>{f.initials}</span>
-        </Oval>
-        <Ed l={lx + 1.55} t={2.32} w={lw - 1.8} h={0.4} size={19} bold color={K.ink} value={f.name} path="team.founder.name" editable={editable} onEdit={onEdit} />
-        <Ed l={lx + 1.55} t={2.72} w={lw - 1.8} h={0.3} size={12} bold color={K.accent} value={f.role} path="team.founder.role" editable={editable} onEdit={onEdit} />
-        <Ed l={lx + 0.3} t={3.45} w={lw - 0.6} h={0.5} size={11.5} lh={1.1} valign="top" color={K.body} value={f.bio} path="team.founder.bio" editable={editable} onEdit={onEdit} />
+        {leftEls}
 
-        <Txt l={lx} t={4.25} w={lw} h={0.3} size={10} bold spacing={1} color={K.muted}>{t.advisorsLabel}</Txt>
-        {advisors.map((a, i) => {
-          const ay = 4.62 + i * 0.62;
+        <Txt l={lx} t={labelY} w={lw} h={0.3} size={10} bold spacing={1} color={K.muted}>{t.advisorsLabel}</Txt>
+        {visible.map((a, i) => {
+          const ay = rosterTop + i * rowH;
+          const photo = a[3] || undefined;
           return (
             <React.Fragment key={i}>
-              <Oval l={lx} t={ay} d={0.5} fill={K.panel2}>
-                <span style={{ fontFamily: FF, fontWeight: 700, fontSize: pt(11), color: K.body }}>{a[0]}</span>
-              </Oval>
-              <Txt l={lx + 0.65} t={ay} w={lw - 0.65} h={0.5} size={12.5} valign="middle" color={K.ink}>
+              <Avatar l={lx} t={ay + (rowH - avD) / 2} d={avD}
+                photo={photo || undefined} initials={a[0]} fill={K.panel2} fontSize={11} textColor={K.body} />
+              <Txt l={lx + avD + 0.15} t={ay} w={lw - avD - 0.15} h={rowH} size={nameSize} valign="middle" color={K.ink}>
                 <span style={{ fontWeight: 700 }}>{a[1] + '   '}</span>
-                <span style={{ color: K.muted, fontWeight: 400, fontSize: pt(11) }}>{a[2]}</span>
+                <span style={{ color: K.muted, fontWeight: 400, fontSize: pt(roleSize) }}>{a[2]}</span>
               </Txt>
             </React.Fragment>
           );

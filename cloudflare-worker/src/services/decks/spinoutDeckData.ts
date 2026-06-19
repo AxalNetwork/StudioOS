@@ -67,8 +67,14 @@ export interface SpinoutDeckData {
   };
   team: {
     eyebrow: string; idx: string; title: string;
-    founder: { initials: string; name: string; role: string; bio: string };
-    advisorsLabel: string; advisors: Array<[string, string, string]>;
+    // `photo` is an optional headshot URL; the renderer falls back to
+    // `initials` when it is absent or fails to load.
+    founder: { initials: string; name: string; role: string; bio: string; photo?: string };
+    // Full founder roster (primary first). The single `founder` above stays
+    // populated for back-compat (pptx export + the single-founder layout).
+    founders: Array<{ initials: string; name: string; role: string; bio: string; photo?: string }>;
+    // advisor tuple: [initials, name, role, photo?]
+    advisorsLabel: string; advisors: Array<[string, string, string, string?]>;
     centerName: string; nodes: Array<[number, number, string, string]>;
   };
   captable: {
@@ -435,28 +441,53 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   };
 
   /* ---- team & network ---- */
-  const founders = src.team?.founders || [];
-  const f0 = founders[0];
-  let founder: SpinoutDeckData['team']['founder'];
-  if (f0 && has(f0.name)) {
-    founder = {
-      initials: initialsOf(f0.name),
-      name: f0.name,
-      role: has(f0.role) ? f0.role : 'Founder',
-      bio: has(f0.bio) ? String(f0.bio) : (has(f0.company) ? `Founder, ${f0.company}.` : ''),
+  const srcFounders = (src.team?.founders || []).filter((f) => f && has(f.name));
+  const profiles = src.mentor_network?.profiles || [];
+
+  // Cap-table founders carry no photo of their own. Best-effort: reuse the
+  // headshot of a published network profile whose name matches the founder
+  // (case-insensitive). Falls back to the initials monogram otherwise.
+  const photoByName = new Map<string, string>();
+  for (const p of profiles) {
+    const ph = p.photo_url || '';
+    if (has(p.name) && has(ph)) photoByName.set(p.name.trim().toLowerCase(), String(ph));
+  }
+  const toFounderCard = (
+    fr: { name: string; role?: string; bio?: string; company?: string },
+  ): SpinoutDeckData['team']['founders'][number] => {
+    const photo = photoByName.get(fr.name.trim().toLowerCase());
+    return {
+      initials: initialsOf(fr.name),
+      name: fr.name,
+      role: has(fr.role) ? String(fr.role) : 'Founder',
+      bio: has(fr.bio) ? String(fr.bio) : (has(fr.company) ? `Founder, ${fr.company}.` : ''),
+      ...(photo ? { photo } : {}),
     };
+  };
+
+  let founder: SpinoutDeckData['team']['founder'];
+  let founders: SpinoutDeckData['team']['founders'];
+  if (srcFounders.length) {
+    founders = srcFounders.map(toFounderCard);
+    founder = founders[0];
   } else {
     founder = { initials: DASH, name: 'Founder', role: 'Founder & CEO', bio: '[draft — add your founder profile in the Team module]' };
+    founders = [founder];
     gap('Team: add your founder profile in the Cofounder/Team module.');
   }
 
-  const profiles = src.mentor_network?.profiles || [];
   const mentorNames = (src.mentor_network?.mentors || []).filter(has);
-  let advisors: Array<[string, string, string]>;
+  // Roster (advisors / mentors / partners). The renderer's vertical-fit logic
+  // decides how many actually render, so we pass through a generous slice
+  // rather than hard-capping at the old 4.
+  let advisors: SpinoutDeckData['team']['advisors'];
   if (profiles.length) {
-    advisors = profiles.slice(0, 4).map((p) => [initialsOf(p.name), p.name, has(p.role) ? p.role : 'Advisor'] as [string, string, string]);
+    advisors = profiles.slice(0, 8).map((p) => {
+      const photo = has(p.photo_url || '') ? String(p.photo_url) : undefined;
+      return [initialsOf(p.name), p.name, has(p.role) ? p.role : 'Advisor', photo] as [string, string, string, string?];
+    });
   } else if (mentorNames.length) {
-    advisors = mentorNames.slice(0, 4).map((n) => [initialsOf(n), n, 'Mentor'] as [string, string, string]);
+    advisors = mentorNames.slice(0, 8).map((n) => [initialsOf(n), n, 'Mentor'] as [string, string, string, string?]);
   } else {
     advisors = [];
     gap('Team: connect mentors/advisors in the Mentors & Network module.');
@@ -466,6 +497,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     eyebrow: 'Team & Network', idx: '07',
     title: has(src.team?.headline) ? src.team.headline : 'A founder backed by an operating network.',
     founder,
+    founders,
     advisorsLabel: 'ADVISORS & MENTORS',
     advisors,
     centerName: projectName,

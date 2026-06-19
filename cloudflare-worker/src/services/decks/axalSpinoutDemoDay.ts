@@ -356,7 +356,7 @@ export type SpinoutDemoDayData = {
     network_signals: string[];
     // Task #14 — typed profile cards for the new Mentors slide layout.
     // Task #1 — `company` carries the admin-managed affiliation.
-    profiles: Array<{ name: string; role: string; bio: string; skills: string[]; company?: string }>;
+    profiles: Array<{ name: string; role: string; bio: string; skills: string[]; company?: string; photo_url?: string | null }>;
     // Task #14 — aggregated skill coverage for SkillsSpider (label → 0..1).
     skill_coverage: Array<{ label: string; value: number }>;
     // Task #14 — counted breakdown of network categories (legal / design /

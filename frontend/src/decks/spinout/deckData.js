@@ -70,6 +70,17 @@ export const fmt = {
  *  Real spin-out data (same shape) is threaded in by the wiring layer.
  *  status values: "done" | "active" | "pending"
  * -------------------------------------------------------------------------- */
+/* Self-contained SVG headshot (data URI) so the sample deck exercises the
+ * photo-rendering path offline / CSP-safe. Live decks use real /api photo
+ * endpoints; entries left without a `photo` demonstrate the initials fallback. */
+const _avatar = (bg, fg) =>
+  'data:image/svg+xml;utf8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160">` +
+    `<rect width="160" height="160" fill="${bg}"/>` +
+    `<circle cx="80" cy="60" r="30" fill="${fg}"/>` +
+    `<path d="M28 156a52 52 0 0 1 104 0z" fill="${fg}"/></svg>`,
+  );
+
 export const SAMPLE_DATA = {
   brand: {
     lab: 'AXAL VC · SPIN-OUT LAB',
@@ -194,12 +205,32 @@ export const SAMPLE_DATA = {
     founder: {
       initials: 'MO', name: 'Maya Osei', role: 'Founder & CEO',
       bio: 'Ex-credit-risk lead; built underwriting models across a $2B private-credit book.',
+      photo: _avatar('#2C4BE0', '#FFFFFF'),
     },
-    advisorsLabel: 'ADVISORS',
+    // Founder roster (primary first). With a co-founder present the renderer
+    // switches the founder block to compact cards to keep the roster on-slide.
+    founders: [
+      {
+        initials: 'MO', name: 'Maya Osei', role: 'Founder & CEO',
+        bio: 'Ex-credit-risk lead; built underwriting models across a $2B private-credit book.',
+        photo: _avatar('#2C4BE0', '#FFFFFF'),
+      },
+      {
+        initials: 'SR', name: 'Sofia Reyes', role: 'Co-founder & CTO',
+        bio: 'Ex-staff ML engineer; shipped real-time risk infra at scale.',
+        photo: _avatar('#1F9D6B', '#FFFFFF'),
+      },
+    ],
+    advisorsLabel: 'ADVISORS & MENTORS',
+    // [initials, name, role, photo?] — some carry headshots, others fall back
+    // to the initials monogram.
     advisors: [
-      ['DK', 'Daniel Kerr', 'Former CRO, regional bank'],
+      ['DK', 'Daniel Kerr', 'Former CRO, regional bank', _avatar('#8A93A0', '#FFFFFF')],
       ['RP', 'Rina Patel', 'Fintech GTM, 2 exits'],
-      ['AlV', 'Alex Voss', 'ML lead, risk modeling'],
+      ['AV', 'Alex Voss', 'ML lead, risk modeling', _avatar('#D98A2B', '#FFFFFF')],
+      ['JL', 'Jordan Lee', 'Mentor · credit markets'],
+      ['NC', 'Nadia Cho', 'Partner · design partner intros', _avatar('#6E86FF', '#FFFFFF')],
+      ['TM', 'Tomas Mraz', 'Advisor · compliance & legal'],
     ],
     centerName: 'Basepoint',
     // [xIn, yIn, name, sub] — positions on the 13.33x7.5 canvas

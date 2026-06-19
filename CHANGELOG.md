@@ -41,6 +41,16 @@ Replaces the free-text "Use of Funds" box on founder intake (FounderPortal step 
 ### Tests
 - `cloudflare-worker/test/useOfFunds.test.ts` — **new** (added to `test:drift`): 11 cases over parse (JSON-first, colon labels, drop-zero, cap-5, legacy fallback), normalize (valid-100, all-zero/empty → null, sum≠100, out-of-range, malformed JSON, free-text passthrough), and format.
 
+## Spin-Out deck Slide 07 "Team & Network" — vertical-fit left column, real photos, roles, multi-founder support (Task #1)
+
+### Frontend
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx` — new `Avatar` component renders a circle-cropped `<img>` from a profile `photo` with an `onError` fallback to initials, so missing/broken photos degrade gracefully. `SlideTeamNetwork` rewritten with vertical-fit logic bounded by `TOP`/`BOTTOM`: single founder keeps today's large editable card (`team.founder.*`); multiple founders/co-founders render compact stacked cards; the advisor/mentor roster scales `rowH` between `MIN_ROW`/`MAX_ROW` and only caps the visible count as a last resort, so the column never overflows regardless of roster size. Right-side network graph unchanged.
+- `frontend/src/decks/spinout/deckData.js` — sample `team` extended: `_avatar()` data-URI SVG helper, `photo` on the founder, a `founders` array (Maya + co-founder Sofia Reyes) to exercise the multi-founder path, and an expanded 6-entry `ADVISORS & MENTORS` roster (mix of photos and initials fallback).
+
+### Worker
+- `cloudflare-worker/src/services/decks/spinoutDeckData.ts` — `SpinoutDeckData['team']` type extended: optional `photo` on `founder`, a `founders[]` array (`{initials,name,role,bio,photo?}`), and `advisors` widened to a 4-tuple (`[initials,name,role,photo?]`). Mapper now builds a `photoByName` map from network profiles, maps ALL `src.team.founders` via `toFounderCard` (best-effort name→photo match) instead of only the first, and bumps the advisors slice 4→8 with each entry's `photo_url`.
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts` — added `photo_url` to the upstream `mentor_network.profiles` type so profile photos already set at runtime survive the mapping.
+
 ## Billing overview no longer 502s — resilient per-section reads + stale-customer self-heal (Task #25)
 
 ### Worker
