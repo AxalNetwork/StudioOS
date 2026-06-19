@@ -960,6 +960,7 @@ function PrintStage({ Template, data, isFullscreen, currentIdx, onSlideCount, re
   const outerRef = useRef(null);
   const innerRef = useRef(null);
   const [scale, setScale] = useState(0.5);
+  const [slideCount, setSlideCount] = useState(0);
 
   useEffect(() => {
     const el = outerRef.current;
@@ -990,7 +991,10 @@ function PrintStage({ Template, data, isFullscreen, currentIdx, onSlideCount, re
     if (!el) return undefined;
     const count = () => {
       const n = el.querySelectorAll('[data-slide-frame]').length;
-      if (n > 0) onSlideCount?.(n);
+      if (n > 0) {
+        setSlideCount(n);
+        onSlideCount?.(n);
+      }
     };
     count();
     const mo = new MutationObserver(count);
@@ -1054,10 +1058,14 @@ function PrintStage({ Template, data, isFullscreen, currentIdx, onSlideCount, re
 
   return (
     <div ref={outerRef} className="deck-print-stage" style={{ width: '100%', padding: 16 }}>
+      {/* Layout-sized wrapper so the scroll track matches the scaled content
+          height. Transform doesn't affect layout, so without this the scroll
+          surface would be 1080*N px tall — producing a blank "11th slide" region. */}
       <div
         className="deck-print-scaler"
         style={{
           width: INNER_W * scale,
+          height: slideCount > 0 ? (INNER_H * slideCount + 24 * (slideCount - 1)) * scale : 0,
           margin: '0 auto',
           position: 'relative',
         }}

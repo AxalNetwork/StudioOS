@@ -10,6 +10,11 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Fix blank 11th slide in deck viewer (Task #4)
+
+### Frontend
+- `frontend/src/pages/PitchDeckPrintPage.jsx` — `PrintStage` normal (non-fullscreen) mode now sets the `.deck-print-scaler` wrapper height to the scaled content height (`(INNER_H * slideCount + gap * (slideCount-1)) * scale`), matching the height-correction pattern already used in `Thumbnail.tsx`. The `slideCount` is tracked locally via `useState` and updated by the existing MutationObserver. Fixes the blank scroll region after the last real slide (10 slides → no extra "11th" blank region). Fullscreen path unchanged.
+
 ## Founder intake sector dropdown expanded to 18 sectors (no task ID)
 
 ### Frontend

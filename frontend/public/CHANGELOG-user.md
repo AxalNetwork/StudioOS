@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Decks no longer show a blank slide after the last one
+
+When viewing any pitch deck in the scroll-through view, the page now ends right after the last slide instead of showing a large blank area below it. Previously, the deck appeared to have an extra blank "11th slide" after the real 10 slides. The fix is purely a layout change — nothing about the deck content or export output changed.
+
+---
+
 ## More sectors to choose from when you apply
 
 The "About Your Startup" dropdown on the founder intake now includes 18 sectors instead of 9. You can pick from AI / ML, Developer tools, SaaS / enterprise software, FinTech / InsurTech, HealthTech / BioTech, ClimateTech / CleanTech / Energy, EdTech, Cybersecurity, Data / Analytics, Marketplaces, Consumer / Social / Creator economy, E-commerce / RetailTech, PropTech, HRTech / Future of work, Logistics / Supply chain, Blockchain / Web3, DeepTech / Robotics / Space, and Other. The sector you pick still appears on your pitch deck and portfolio profile.
