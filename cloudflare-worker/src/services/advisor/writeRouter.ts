@@ -19,6 +19,8 @@
 import type { Env } from '../../types';
 import type { User } from '../../types';
 import { questionById, mapRoleAnswer, DYNAMIC_ID_RE } from './questionBank.ts';
+import type { Question } from './questionBank.ts';
+import { computeFit, type FitPersona } from '../axalFit.ts';
 
 export type WriteStatus = 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop' | 'needs_evidence' | 'invalid';
 
@@ -430,6 +432,56 @@ async function tierForInvestorThesis(env: Env, user: User): Promise<{ ok: boolea
  * nothing was persisted — surfaces gaps loudly instead of silently
  * dropping data.
  */
+// Axal Fit — resolve the scorecard persona for a fit question.
+function resolveFitPersona(q: Question, user: User): FitPersona {
+  const p = q.persona;
+  if (p === 'founder' || p === 'investor' || p === 'partner' || p === 'mentor') return p;
+  const r = String(user.role || '');
+  if (r === 'founder' || r === 'investor' || r === 'partner' || r === 'mentor') return r as FitPersona;
+  return 'founder';
+}
+
+// Axal Fit — persist a 0..5 `scale` answer. One question can measure several
+// things, so we fan it out into axal_fit_responses (rubric / skill / value /
+// axal_value) and recompute the scorecard snapshot. Value-lean measures map the
+// 0..5 scale onto the −2..+2 dimension. Best-effort + non-blocking.
+async function persistFitAnswer(env: Env, user: User, q: Question, rawValue: string): Promise<WriteResult> {
+  const m = q.measures;
+  if (!m) return { status: 'noop' };
+  const score = Math.max(0, Math.min(5, Math.round(Number(String(rawValue).replace(/[^0-9.]/g, '')) || 0)));
+  const persona = resolveFitPersona(q, user);
+  const redFlagKey = m.red_flag && score <= m.red_flag.at_or_below ? m.red_flag.key : null;
+
+  const rows: Array<{ kind: string; key: string; score: number; flag: string | null }> = [];
+  if (m.rubric_category) rows.push({ kind: 'rubric', key: m.rubric_category, score, flag: redFlagKey });
+  if (m.skill_axis) rows.push({ kind: 'skill', key: m.skill_axis, score, flag: null });
+  if (m.axal_value) rows.push({ kind: 'axal_value', key: m.axal_value, score, flag: m.rubric_category ? null : redFlagKey });
+  if (m.value_dim) {
+    let lean = (score / 5) * 4 - 2; // 0..5 → −2..+2
+    if (m.invert) lean = -lean;
+    rows.push({ kind: 'value', key: m.value_dim, score: Math.round(lean * 100) / 100, flag: null });
+  }
+  if (rows.length === 0) return { status: 'noop' };
+
+  for (const r of rows) {
+    try {
+      await env.DB.prepare(
+        `INSERT INTO axal_fit_responses (user_id, persona, question_id, measure_kind, measure_key, score, red_flag, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+         ON CONFLICT(user_id, question_id, measure_kind, measure_key) DO UPDATE SET
+           score = excluded.score, red_flag = excluded.red_flag, created_at = datetime('now')`,
+      ).bind(user.id, persona, q.id, r.kind, r.key, r.score, r.flag).run();
+    } catch { /* axal_fit_responses may not be migrated on some dev DBs */ }
+  }
+  try { await computeFit(env, user.id, persona); } catch { /* recompute best-effort */ }
+
+  return {
+    status: 'saved',
+    saved_to: { table: 'axal_fit_responses', column: 'score', id: user.id, page_url: '/dashboard' },
+    hint: 'Profile updated — see your radar on the dashboard.',
+  };
+}
+
 export async function routeAnswer(
   env: Env,
   user: User,
@@ -454,6 +506,10 @@ export async function routeAnswer(
   if (!q) return { status: 'failed', error: 'unknown question_id' };
   const value = String(rawValue ?? '').trim();
   if (!value) return { status: 'skipped' };
+
+  // Axal Fit — conversational scorecard questions carry a `measures` map and a
+  // 0..5 `scale` answer. Persist + recompute here, before the id-based dispatch.
+  if (q.measures) return await persistFitAnswer(env, user, q, value);
 
   // Task #3 (AS) — evidence gate. Bank questions flagged
   // `requires_evidence` (high-risk financial fields) refuse to

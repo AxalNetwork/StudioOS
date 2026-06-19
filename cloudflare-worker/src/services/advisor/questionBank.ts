@@ -27,8 +27,23 @@
 export type Persona = 'founder' | 'investor' | 'mentor' | 'partner' | 'admin' | 'unknown';
 export type Importance = 'critical' | 'high' | 'normal' | 'low';
 export type ValidateKind =
-  | 'short' | 'long' | 'number' | 'select' | 'multi'
+  | 'short' | 'long' | 'number' | 'select' | 'multi' | 'scale'
   | 'csv' | 'url' | 'email' | 'hex_color';
+
+// Axal Fit — what a conversational scorecard question measures. A single
+// question may feed several at once (e.g. a rubric category + a skill axis).
+// `scale` answers (0..5) are fanned out by the write-router into
+// axal_fit_responses and recomputed by services/axalFit.ts.
+export interface FitMeasures {
+  rubric_category?: string; // axalFit RUBRICS category key
+  skill_axis?: string;      // one of the 8 skill_category slugs (0..5)
+  value_dim?: string;       // one of the 15 value dimensions (−2..+2)
+  axal_value?: string;      // one of the 5 Axal values (0..5)
+  // When the answer is at/under this 0..5 threshold, attribute this red flag.
+  red_flag?: { key: string; at_or_below: number };
+  // For value_dim measures the 0..5 scale maps onto −2..+2; set true to invert.
+  invert?: boolean;
+}
 
 export interface UnlockRequirement {
   week?: number;          // minimum spinout_lab_week
@@ -66,8 +81,10 @@ export interface Question {
   section?: string;
   prompt: string;
   hint?: string;
-  input_kind: 'short' | 'long' | 'number' | 'select' | 'multi';
+  input_kind: 'short' | 'long' | 'number' | 'select' | 'multi' | 'scale';
   options?: string[];
+  // Axal Fit — present on conversational scorecard questions (input_kind 'scale').
+  measures?: FitMeasures;
   skip_allowed?: boolean;
   sensitive?: boolean;
   importance?: Importance;
@@ -162,10 +179,13 @@ import { INVESTOR_BANK } from './banks/investor.ts';
 import { OPERATING_PARTNER_BANK } from './banks/operatingPartner.ts';
 import { MENTOR_BANK } from './banks/mentor.ts';
 import { ADMIN_BANK } from './banks/admin.ts';
+// Axal Fit — conversational scorecard banks (input_kind 'scale').
+import { FIT_FOUNDER_BANK, FIT_INVESTOR_BANK, FIT_PARTNER_BANK, FIT_MENTOR_BANK } from './banks/fit.ts';
 
 export type BankName =
   | 'newFounderSpinout' | 'existingFounder'
-  | 'investor' | 'operatingPartner' | 'mentor' | 'admin';
+  | 'investor' | 'operatingPartner' | 'mentor' | 'admin'
+  | 'fitFounder' | 'fitInvestor' | 'fitPartner' | 'fitMentor';
 
 export const BANKS: Record<BankName, Question[]> = {
   newFounderSpinout: NEW_FOUNDER_SPINOUT_BANK,
@@ -174,6 +194,10 @@ export const BANKS: Record<BankName, Question[]> = {
   operatingPartner:  OPERATING_PARTNER_BANK,
   mentor:            MENTOR_BANK,
   admin:             ADMIN_BANK,
+  fitFounder:        FIT_FOUNDER_BANK,
+  fitInvestor:       FIT_INVESTOR_BANK,
+  fitPartner:        FIT_PARTNER_BANK,
+  fitMentor:         FIT_MENTOR_BANK,
 };
 
 export function bankByName(name: BankName): Question[] {
@@ -186,11 +210,13 @@ export function bankByName(name: BankName): Question[] {
  * existing-founder bank.
  */
 export function bankFor(persona: Persona, ctx?: { spinoutLabActive?: boolean }): Question[] {
+  // The Axal Fit scorecard questions are appended to every non-admin persona so
+  // the skills/values/fit profile builds up inside the ongoing conversation.
   switch (persona) {
-    case 'founder':  return ctx?.spinoutLabActive ? BANKS.newFounderSpinout : BANKS.existingFounder;
-    case 'investor': return BANKS.investor;
-    case 'partner':  return BANKS.operatingPartner;
-    case 'mentor':   return BANKS.mentor;
+    case 'founder':  return [...(ctx?.spinoutLabActive ? BANKS.newFounderSpinout : BANKS.existingFounder), ...BANKS.fitFounder];
+    case 'investor': return [...BANKS.investor, ...BANKS.fitInvestor];
+    case 'partner':  return [...BANKS.operatingPartner, ...BANKS.fitPartner];
+    case 'mentor':   return [...BANKS.mentor, ...BANKS.fitMentor];
     case 'admin':    return BANKS.admin;
     default:         return [];
   }

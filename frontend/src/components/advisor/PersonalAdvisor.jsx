@@ -1233,6 +1233,8 @@ function Composer({ input, setInput, onSend, onSkip, busy, disabled, skipAllowed
   const mic = useMicRecorder(appendTranscript);
   // Render the option chips for select/multiselect kinds.
   const showOptions = Array.isArray(options) && options.length > 0 && (inputKind === 'select' || inputKind === 'choice');
+  // Axal Fit — 0..5 scale questions get a one-tap rating row.
+  const showScale = inputKind === 'scale';
   return (
     <div className="border-t border-gray-100 dark:border-gray-800 px-3 py-2 bg-white dark:bg-gray-900">
       {showOptions && (
@@ -1247,6 +1249,22 @@ function Composer({ input, setInput, onSend, onSkip, busy, disabled, skipAllowed
               {opt}
             </button>
           ))}
+        </div>
+      )}
+      {showScale && (
+        <div className="flex items-center justify-center gap-1.5 mb-2">
+          <span className="text-[10px] text-gray-400 mr-1">Not at all</span>
+          {[0, 1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              onClick={() => onPickOption(String(n))}
+              disabled={busy || disabled}
+              className="w-9 h-9 rounded-lg border border-violet-200 dark:border-violet-800 text-sm font-semibold text-violet-700 dark:text-violet-300 hover:bg-violet-600 hover:text-white hover:border-violet-600 transition-colors disabled:opacity-50"
+            >
+              {n}
+            </button>
+          ))}
+          <span className="text-[10px] text-gray-400 ml-1">Completely</span>
         </div>
       )}
       <div className="flex items-end gap-2">

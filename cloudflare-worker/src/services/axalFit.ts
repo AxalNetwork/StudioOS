@@ -169,6 +169,53 @@ async function safeAll<T = Record<string, unknown>>(env: Env, sql: string, binds
   }
 }
 
+// The 5 Axal values, aggregated from the conversation (measure_kind='axal_value').
+// score = mean 0..5; confidence = min(1, n/2) so two probes per value reach full.
+export async function loadAxalValues(env: Env, userId: number): Promise<Array<{ key: string; label: string; score: number; confidence: number }>> {
+  const rows = await safeAll<{ measure_key: string; avg: number; n: number }>(
+    env,
+    `SELECT measure_key, AVG(score) AS avg, COUNT(*) AS n
+       FROM axal_fit_responses WHERE user_id = ? AND measure_kind = 'axal_value' GROUP BY measure_key`,
+    [userId],
+  );
+  const m = new Map(rows.map((r) => [r.measure_key, r]));
+  return AXAL_VALUES.map((v) => {
+    const row = m.get(v.key);
+    return {
+      key: v.key,
+      label: v.label,
+      score: row ? Math.round(Number(row.avg) * 100) / 100 : 0,
+      confidence: row ? Math.min(1, Number(row.n) / 2) : 0,
+    };
+  });
+}
+
+// 8-axis skill vector (0..5) from the conversation (measure_kind='skill').
+export async function loadSkillVector(env: Env, userId: number): Promise<Record<string, number>> {
+  const rows = await safeAll<{ measure_key: string; avg: number }>(
+    env,
+    `SELECT measure_key, AVG(score) AS avg
+       FROM axal_fit_responses WHERE user_id = ? AND measure_kind = 'skill' GROUP BY measure_key`,
+    [userId],
+  );
+  const out: Record<string, number> = {};
+  for (const r of rows) out[r.measure_key] = Math.round(Number(r.avg) * 100) / 100;
+  return out;
+}
+
+// 15-dim value lean (−2..+2) from the conversation (measure_kind='value').
+export async function loadValueLean(env: Env, userId: number): Promise<Record<string, number>> {
+  const rows = await safeAll<{ measure_key: string; avg: number }>(
+    env,
+    `SELECT measure_key, AVG(score) AS avg
+       FROM axal_fit_responses WHERE user_id = ? AND measure_kind = 'value' GROUP BY measure_key`,
+    [userId],
+  );
+  const out: Record<string, number> = {};
+  for (const r of rows) out[r.measure_key] = Math.round(Number(r.avg) * 100) / 100;
+  return out;
+}
+
 function buildNarrative(persona: FitPersona, r: RubricResult, redFlags: string[]): string {
   if (r.coverage === 0) return 'Not enough conversation yet to assess fit.';
   const ranked = r.breakdown.filter((b) => b.score != null).sort((a, b) => (b.score! - a.score!));
@@ -183,7 +230,10 @@ function buildNarrative(persona: FitPersona, r: RubricResult, redFlags: string[]
 export async function computeFit(env: Env, userId: number, persona: FitPersona): Promise<FitResult> {
   const rows = await safeAll<{ category: string | null; avg: number; n: number }>(
     env,
-    'SELECT category, AVG(score) AS avg, COUNT(*) AS n FROM axal_fit_responses WHERE user_id = ? AND persona = ? GROUP BY category',
+    `SELECT measure_key AS category, AVG(score) AS avg, COUNT(*) AS n
+       FROM axal_fit_responses
+      WHERE user_id = ? AND persona = ? AND measure_kind = 'rubric'
+      GROUP BY measure_key`,
     [userId, persona],
   );
   const categoryScores: Record<string, number> = {};
@@ -191,18 +241,7 @@ export async function computeFit(env: Env, userId: number, persona: FitPersona):
 
   const rubric = scoreRubric(persona, categoryScores);
 
-  const valueRows = await safeAll<{ value_key: string; score: number; confidence: number }>(
-    env,
-    'SELECT value_key, score, confidence FROM axal_values WHERE user_id = ?',
-    [userId],
-  );
-  const valueMap = new Map(valueRows.map((v) => [v.value_key, v]));
-  const axal_values = AXAL_VALUES.map((v) => ({
-    key: v.key,
-    label: v.label,
-    score: Number(valueMap.get(v.key)?.score ?? 0),
-    confidence: Number(valueMap.get(v.key)?.confidence ?? 0),
-  }));
+  const axal_values = await loadAxalValues(env, userId);
 
   const flagRows = await safeAll<{ red_flag: string }>(
     env,

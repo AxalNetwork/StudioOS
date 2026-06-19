@@ -359,27 +359,22 @@ CREATE INDEX IF NOT EXISTS idx_venture_risk_overrides_project
 
 -- Axal Fit (migration 115) — conversational profiling scorecard + 5 values +
 -- admin best-fit report + consultation bookings. See migration for column docs.
-CREATE TABLE IF NOT EXISTS axal_values (
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    value_key TEXT NOT NULL,
-    score REAL NOT NULL DEFAULT 0,
-    confidence REAL NOT NULL DEFAULT 0,
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (user_id, value_key)
-);
 CREATE TABLE IF NOT EXISTS axal_fit_responses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     persona TEXT NOT NULL,
     question_id TEXT NOT NULL,
-    category TEXT,
+    measure_kind TEXT NOT NULL,
+    measure_key TEXT NOT NULL,
     score REAL NOT NULL DEFAULT 0,
     red_flag TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE (user_id, question_id)
+    UNIQUE (user_id, question_id, measure_kind, measure_key)
 );
 CREATE INDEX IF NOT EXISTS idx_axal_fit_responses_user
     ON axal_fit_responses(user_id, persona);
+CREATE INDEX IF NOT EXISTS idx_axal_fit_responses_measure
+    ON axal_fit_responses(user_id, measure_kind);
 CREATE TABLE IF NOT EXISTS axal_fit_scores (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

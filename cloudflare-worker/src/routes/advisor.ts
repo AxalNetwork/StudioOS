@@ -48,6 +48,10 @@ import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import {
+  loadSkillVector, loadValueLean, loadAxalValues, loadLatestFit,
+  BAND_LABEL, type FitPersona,
+} from '../services/axalFit';
+import {
   ROLE_DETECTOR,
   bankFor,
   questionById,
@@ -1331,6 +1335,49 @@ advisor.get('/next-question', async (c) => {
 // flat fields remain on the top level so existing clients keep
 // working through one rollout cycle.
 // ---------------------------------------------------------------------------
+// Axal Fit — the assembled conversational profile for the dashboard: the 8-axis
+// skills radar, the 15-dim values lean, the 5 Axal behavioral values, and the
+// latest fit scorecard band. Always returns a summary for the calling user
+// (gating of the full report detail lives on the report/admin surfaces).
+advisor.get('/fit', async (c) => {
+  const user = await requireAuth(c);
+  const role = String(user.role || '');
+  const persona: FitPersona =
+    role === 'investor' || role === 'partner' || role === 'mentor' ? (role as FitPersona) : 'founder';
+
+  const [skill_vector, value_lean, axal_values, latest] = await Promise.all([
+    loadSkillVector(c.env, user.id),
+    loadValueLean(c.env, user.id),
+    loadAxalValues(c.env, user.id),
+    loadLatestFit(c.env, user.id, persona),
+  ]);
+
+  let fit: Record<string, unknown> | null = null;
+  if (latest) {
+    let rubric: unknown = [];
+    let redFlags: unknown = [];
+    try { rubric = JSON.parse(String(latest.rubric_json ?? '[]')); } catch { rubric = []; }
+    try { redFlags = JSON.parse(String(latest.red_flags_json ?? '[]')); } catch { redFlags = []; }
+    fit = {
+      total_score: Number(latest.total_score ?? 0),
+      band: String(latest.band ?? 'hold'),
+      band_label: BAND_LABEL[String(latest.band ?? 'hold') as keyof typeof BAND_LABEL] ?? 'Hold',
+      rubric,
+      red_flags: redFlags,
+      signal_quality: Number(latest.signal_quality ?? 0),
+      narrative_fit: latest.narrative_fit ?? null,
+      computed_at: latest.computed_at ?? null,
+    };
+  }
+
+  // Completion proxy: share of the 8 skill axes + 5 values populated so far.
+  const skillsAnswered = Object.keys(skill_vector).length;
+  const valuesAnswered = axal_values.filter((v) => v.confidence > 0).length;
+  const completion = Math.round(((skillsAnswered / 8) * 0.6 + (valuesAnswered / 5) * 0.4) * 100);
+
+  return c.json({ persona, skill_vector, value_lean, axal_values, fit, completion });
+});
+
 advisor.get('/progress', async (c) => {
   const user = await requireAuth(c);
   const blocked = await applyAdvisorGate(c, user);

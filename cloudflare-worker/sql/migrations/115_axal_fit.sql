@@ -9,33 +9,31 @@
 --
 -- Idempotent (CREATE ... IF NOT EXISTS). Mirrored into schema.sql.
 
--- The 5 Axal behavioral values, 0..5 with confidence, mirrors user_values.
-CREATE TABLE IF NOT EXISTS axal_values (
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    value_key TEXT NOT NULL,            -- integrity|stewardship|curiosity|resilience|collaboration
-    score REAL NOT NULL DEFAULT 0,      -- 0..5
-    confidence REAL NOT NULL DEFAULT 0, -- 0..1
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (user_id, value_key)
-);
-
--- One row per scored "fit" question answered in the advisor conversation.
--- `category` is the rubric category this question feeds; the write-router also
--- fans the same answer out to user_skills / user_values / axal_values for the
--- dashboard graphs. Latest answer per (user, question) wins (upsert).
+-- One row per (scored fit question × measure) answered in the advisor
+-- conversation. A single question can measure several things at once — a rubric
+-- category, an 8-axis skill, a 15-dim value lean, one of the 5 Axal values —
+-- so it fans out into multiple rows here. The dashboard graphs and the admin
+-- scorecard are all computed by aggregating this one table, keeping a single
+-- source of truth. Latest answer per (user, question, measure) wins (upsert).
+--   measure_kind: rubric | skill | value | axal_value
+--   measure_key:  rubric category key / skill axis / value dim / axal value key
+--   score:        0..5 (rubric/skill/axal_value) or −2..+2 (value lean)
 CREATE TABLE IF NOT EXISTS axal_fit_responses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     persona TEXT NOT NULL,              -- founder|investor|partner|mentor|coach
     question_id TEXT NOT NULL,
-    category TEXT,                      -- rubric category key (e.g. execution_ability)
-    score REAL NOT NULL DEFAULT 0,      -- 0..5
+    measure_kind TEXT NOT NULL,
+    measure_key TEXT NOT NULL,
+    score REAL NOT NULL DEFAULT 0,
     red_flag TEXT,                      -- optional red-flag key if this probe tripped
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE (user_id, question_id)
+    UNIQUE (user_id, question_id, measure_kind, measure_key)
 );
 CREATE INDEX IF NOT EXISTS idx_axal_fit_responses_user
     ON axal_fit_responses(user_id, persona);
+CREATE INDEX IF NOT EXISTS idx_axal_fit_responses_measure
+    ON axal_fit_responses(user_id, measure_kind);
 
 -- Computed weighted-rubric result; latest row per (user, persona) is current.
 CREATE TABLE IF NOT EXISTS axal_fit_scores (

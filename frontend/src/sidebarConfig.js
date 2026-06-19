@@ -130,8 +130,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/skills', icon: Target, label: 'Skills Profile' },
-      { to: '/values', icon: Heart, label: 'Values Assessment' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -190,8 +188,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/skills', icon: Target, label: 'Skills Profile' },
-      { to: '/values', icon: Heart, label: 'Values Assessment' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -245,8 +241,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/skills', icon: Target, label: 'Skills Profile' },
-      { to: '/values', icon: Heart, label: 'Values Assessment' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -293,8 +287,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/skills', icon: Target, label: 'Skills Profile' },
-      { to: '/values', icon: Heart, label: 'Values Assessment' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -316,8 +308,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/skills', icon: Target, label: 'Skills Profile' },
-      { to: '/values', icon: Heart, label: 'Values Assessment' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
       { to: '/settings', icon: SettingsIcon, label: 'Settings' },

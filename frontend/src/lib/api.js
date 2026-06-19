@@ -573,6 +573,8 @@ export const api = {
     skip: (conversation_id, question_id) =>
       request('/advisor/skip', { method: 'POST', body: JSON.stringify({ conversation_id, question_id }) }),
     progress: () => request('/advisor/progress'),
+    // Axal Fit — assembled profile (skills radar + values lean + 5 Axal values + scorecard).
+    fit: () => request('/advisor/fit'),
     // Task #2 (AR) — pinned next-question fetch + canonical manifest.
     nextQuestion: (focus) =>
       request(`/advisor/next-question${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`),

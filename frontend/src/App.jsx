@@ -1257,10 +1257,11 @@ function AppInner() {
       <Route path="/play/card" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ProfileCardPage />)} />
       <Route path="/play/:gameSlug" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <AssessmentGamePage />)} />
       <Route path="/cofounder" element={guard(['admin', 'founder'], <CofounderPage />)} />
-      {/* Task #11 — User Skill Profile (self ratings + peer endorsements). */}
-      <Route path="/skills" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SkillsProfilePage />)} />
-      {/* Task #12 — Personal-Values Assessment. */}
-      <Route path="/values" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ValuesAssessmentPage />)} />
+      {/* Skills + Values are now consolidated into the Personal Advisor
+          conversation; results live on the dashboard "Your Profile & Fit"
+          card. The old standalone pages redirect home. */}
+      <Route path="/skills" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/values" element={<Navigate to="/dashboard" replace />} />
       <Route path="/portfolio/health" element={guard(['admin', 'founder', 'partner', 'investor'], <PortfolioHealthPage />)} />
       {/* Task #18 — Partner Coverage Analytics (admin/partner-only internal dashboard). */}
       <Route path="/portfolio/coverage" element={guard(['admin', 'partner'], <PortfolioCoveragePage />)} />
