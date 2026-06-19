@@ -18,7 +18,7 @@
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Zap, Handshake, Rocket, UserCircle,
-  Globe, Brain, Activity, Shield, Code, ShieldCheck, Share2, Wallet,
+  Globe, Brain, Activity, Shield, ShieldAlert, Code, ShieldCheck, Share2, Wallet,
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2,
@@ -66,6 +66,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/assessment', icon: Gamepad2, label: 'Assessment Studio' },
       { to: '/admin/events', icon: Ticket, label: 'Event Admin' },
       { to: '/portfolio/coverage', icon: Network, label: 'Portfolio Coverage' },
+      { to: '/portfolio/risk', icon: ShieldAlert, label: 'Risk Matrix' },
       { to: '/monitoring', icon: Activity, label: 'Monitoring' },
     ]},
     { key: 'core', label: 'Core', items: [
@@ -217,6 +218,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
       { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
+      { to: '/portfolio/risk', icon: ShieldAlert, label: 'Risk Matrix' },
     ]},
     { key: 'network', label: 'Network', items: [
       { to: '/services', icon: Package, label: 'My Service Catalogue' },
@@ -268,6 +270,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'intelligence', label: 'Intelligence', items: [
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
+      { to: '/portfolio/risk', icon: ShieldAlert, label: 'Risk Matrix' },
     ]},
     { key: 'portfolio', label: 'Portfolio', items: [
       { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },

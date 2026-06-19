@@ -1861,6 +1861,16 @@ export const api = {
   recomputeFounderRisk: (founderId) =>
     request(`/founder-risk/${founderId}/recompute`, { method: 'POST' }),
 
+  // ---------- Venture risk rating (10 layers; admin/partner/investor) ----------
+  // Read: admin/partner/investor. Compute + layer override: admin/partner.
+  getVentureRisk: (projectId) => request(`/venture-risk/${projectId}`),
+  getVentureRiskHistory: (projectId) => request(`/venture-risk/${projectId}/history`),
+  computeVentureRisk: (projectId) =>
+    request(`/venture-risk/${projectId}/compute`, { method: 'POST' }),
+  setVentureRiskLayer: (projectId, layerKey, data) =>
+    request(`/venture-risk/${projectId}/layer/${layerKey}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getVentureRiskPortfolio: () => request('/venture-risk/portfolio'),
+
   // ---------- Reference checks (Task #43, admin/investor only) ----------
   listReferences: (dealId) =>
     request(`/references${dealId != null ? `?deal_id=${dealId}` : ''}`),

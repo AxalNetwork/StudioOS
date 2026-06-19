@@ -8,6 +8,7 @@ import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { getPitchCopyLengthStatus } from '../lib/pitchCopyLength';
 import { StatusBadge } from './Dashboard';
+import VentureRiskPanel from '../components/VentureRiskPanel';
 
 const weekLabels = {
   week_1: { name: 'Week 1 — Validation Sprint', tasks: ['Define problem + ICP', 'Run user interviews', 'Validate willingness to pay', 'Draft 1-page concept'] },
@@ -301,6 +302,9 @@ export default function ProjectDetail() {
           )}
         </div>
       </div>
+
+      {/* Venture Risk — 10-layer risk surface for the internal deal team. */}
+      {isElevated && <VentureRiskPanel projectId={id} />}
 
       <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
         <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 dark:text-gray-100">
