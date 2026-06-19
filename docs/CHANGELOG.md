@@ -10,6 +10,12 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Stripe live-mode cutover — ops runbook + credential prerequisites (Task #17)
+
+### Docs / ops
+- `GOTCHAS.md` — added "Stripe live-mode cutover runbook" section: complete operator sequence for switching the platform from Stripe test mode to live mode, covering credential secrets (`STRIPE_SECRET_KEY`, `STRIPE_CONNECT_CLIENT_ID`, `STRIPE_PUBLISHABLE_KEY` via Admin Console KV), full product catalog provisioning with exact metadata per kind, incorporation price ID secrets (`STRIPE_PRICE_INCORP_*` for all five jurisdictions), live webhook registration with all 8 required events and auto-push of `STRIPE_WEBHOOK_SECRET`, `STRIPE_TAX_ENABLED` guard and activation prerequisites, build + deploy command, end-to-end verification checklist (subscriptions, incorporation, à la carte, bookings + Connect payout, promo codes, tax line), and rollback procedure. Added ops item (m) to the "Ops items still owned by user" section cross-referencing the runbook.
+- No code changes in this task — all Stripe infrastructure was built in Task #16. Current state: no Stripe secrets configured; production runs with payment dev-fallback active. The cutover is a pure ops sequence requiring Stripe dashboard access and live API credentials from the account owner.
+
 ## In-app Stripe catalog & webhook admin — Payments tab in Admin Console (Task #16)
 
 ### Worker
@@ -22,8 +28,16 @@
 
 ### Frontend
 - `frontend/src/lib/stripe.js` — added runtime key fetch from `GET /api/payments/config` with in-memory caching; `getStripe()` uses KV key first, then build-time `VITE_STRIPE_PUBLISHABLE_KEY`.
+- `frontend/src/components/AxalCheckout.jsx` — replaced `!STRIPE_PUBLISHABLE_KEY` hard-gate with async `stripeConfigured` state (null=loading, false=not configured, true=ready) resolved from `getStripe()` Promise; shows loading placeholder while resolving — no longer silently breaks when runtime KV key is set but build-time env var is absent.
+- `frontend/src/components/BillingDashboard.jsx` — same `stripeConfigured` async pattern in `CardSetupForm`; `useEffect` for SetupIntent creation now depends on `stripeConfigured` (not `stripePromise`) to avoid firing before key is resolved.
 - `frontend/src/lib/api.js` — added `adminCatalogMode`, `adminCatalogList`, `adminCatalogSync`, `adminCatalogCreateProduct`, `adminCatalogUpdateProduct`, `adminCatalogArchiveProduct`, `adminCatalogAddPrice`, `adminCatalogArchivePrice`, `adminStripeListWebhooks`, `adminStripeRegisterWebhook`, `adminStripeUpdateWebhookEvents`, `adminStripeGetConfig`, `adminStripeSetConfig`.
-- `frontend/src/pages/AdminPage.jsx` — added **Payments tab** with `PaymentsPanel` + `MetadataFields` helper: mode banner, publishable-key form (KV-backed), product catalog CRUD (expand/collapse rows, create with kind-aware metadata fields, add/archive prices, archive products), webhook status & register/update-events UI.
+- `frontend/src/pages/AdminPage.jsx` — added **Payments tab** with `PaymentsPanel` + `MetadataFields` helper: mode banner, publishable-key form (KV-backed), product catalog CRUD (expand/collapse rows, create/edit/archive products with kind-aware metadata fields, add/archive prices), webhook status & register/update-events UI. Product inline edit form wired to `adminCatalogUpdateProduct`.
+
+### Worker (reliability fix)
+- `routes/admin_stripe.ts` — webhook registration response now includes `webhook_secret` field when `STRIPE_WEBHOOK_SECRET` auto-push fails, so admin can copy and set it manually via `wrangler secret put`; Stripe only returns the secret at creation time.
+
+### Tests
+- `cloudflare-worker/test/catalog.test.ts` — **new**: 27 unit tests covering `validateProductMetadata` (all 4 kinds, valid/invalid taxonomy values, edge cases) and `stripeMode` (unconfigured/test/live/rk_live prefix).
 
 ## Legal-document architecture refactor — clean renderer + 45 template bodies (Task #14)
 - **What:** integrated the legal-architecture branch (`claude/cool-volta-0mc9i5`, PR #90) into `main`. The branch delivers a shared formatting layer, a Markdown-leakage fix, 30 cleaned existing template bodies, and 15 new template bodies.

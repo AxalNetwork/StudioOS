@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Live payments coming soon — Stripe live-mode cutover in progress
+
+The platform's payment infrastructure is ready to accept real charges. The final steps are operational (activating the Stripe account for live charges, setting live API credentials, and provisioning the live product catalog via Admin Console → Payments). Once those steps are complete, all payment surfaces — subscriptions, incorporation fees, expert bookings, and à la carte unlocks — will process real transactions. No changes to the user experience; the switch is transparent. A follow-up note will appear here when live mode is confirmed.
+
+---
+
 ## Payments tab in Admin Console — manage Stripe products and webhooks without leaving Axal
 
 Admins can now manage the full Stripe payment setup from inside the Admin Console → **Payments** tab, with no need to switch to the Stripe dashboard for day-to-day catalog work.
