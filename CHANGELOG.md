@@ -10,6 +10,11 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Fix Google sign-in redirect loop (Task #6)
+
+### Worker
+- `cloudflare-worker/src/auth.ts` — `authCookieDomainAttr` now derives the cookie `Domain` attribute from the **request host** instead of checking `env.ENVIRONMENT === 'production'`. For a request on `app.axal.vc`, the cookie is now scoped to `Domain=.axal.vc`, so the session cookie survives the edge 301 redirect from `app.axal.vc` to `axal.vc`. For localhost and `*.workers.dev`, the Domain attribute is omitted (host-only cookies) so dev/preview still works. `setAuthCookies` and `clearAuthCookies` updated to pass the Hono `Context` instead of `env`. The previous env-only check was inconsistent with the rest of `auth.ts` (which uses `env.STUDIOOS_ENV || env.ENVIRONMENT`) and could silently fall back to host-only cookies if the exact string didn't match, causing the Google sign-in loop.
+
 ## Fix cover slide caption overlap (Task #5)
 
 ### Frontend

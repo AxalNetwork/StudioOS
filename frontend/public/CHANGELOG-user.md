@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Signing in with Google works again
+
+Clicking "Continue with Google" on the sign-in or sign-up page now takes you straight to your dashboard instead of dropping you back on the sign-in screen. You'll briefly see a "Signing you in…" message while we finish setting up your session.
+
+---
+
 ## Cover chart caption no longer overlaps axis labels
 
 On the cover slide of the Spin-Out Demo Day deck, the italic chart caption — "Cumulative discovery interviews" — now sits clearly below the chart's day labels (D0, D5, D10, etc.) instead of landing on top of them. The signal value stays in the top-right corner and the meta row below the chart is unchanged.

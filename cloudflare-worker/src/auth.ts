@@ -604,26 +604,36 @@ export function generateCsrfToken(): string {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-// In production, scope auth cookies to `.axal.vc` so a session set by
-// `app.axal.vc/api/auth/*` is also valid when the SPA loads on the apex
-// (`axal.vc/dashboard`, `axal.vc/register`, etc). Leaf-host scoping
-// (the old default) would log users out the moment they navigated
-// between the two hosts. Dev/preview deliberately omits Domain so
-// localhost / *.workers.dev cookies still work.
-function authCookieDomainAttr(env: { ENVIRONMENT?: string }): string {
-  return String(env.ENVIRONMENT || '') === 'production' ? '; Domain=.axal.vc' : '';
+// Derive the cookie Domain attribute from the request host so a session
+// set by `app.axal.vc/api/auth/*` is also valid when the SPA loads on the
+// apex (`axal.vc/dashboard`, etc). Leaf-host scoping (the old default)
+// would log users out the moment they navigated between the two hosts.
+// Dev/preview (localhost / *.workers.dev) deliberately omits Domain so
+// host-only cookies still work.
+function authCookieDomainAttr(c: Context<{ Bindings: Env }>): string {
+  const host = (c.req.header('host') || '').toLowerCase();
+  // Localhost / preview workers — host-only cookies (no cross-host issue)
+  if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.workers.dev')) {
+    return '';
+  }
+  // Derive registrable parent domain: app.axal.vc → .axal.vc
+  const parts = host.split('.');
+  if (parts.length >= 2) {
+    return `; Domain=.${parts.slice(-2).join('.')}`;
+  }
+  return '';
 }
 
 export function setAuthCookies(c: Context<{ Bindings: Env }>, jwt: string, csrf: string): void {
-  const dom = authCookieDomainAttr(c.env);
+  const dom = authCookieDomainAttr(c);
   const common = `Secure; SameSite=Lax; Path=/${dom}; Max-Age=${AUTH_COOKIE_TTL}`;
   c.header('Set-Cookie', `studioos_auth=${jwt}; HttpOnly; ${common}`, { append: true });
   c.header('Set-Cookie', `studioos_csrf=${csrf}; ${common}`, { append: true });
 }
 
 export function clearAuthCookies(c: Context<{ Bindings: Env }>): void {
-  const dom = authCookieDomainAttr(c.env);
-  // Clear with the production Domain attribute (matches what we now set)
+  const dom = authCookieDomainAttr(c);
+  // Clear with the derived Domain attribute (matches what we now set)
   // AND without it, so any legacy host-only cookie issued before this
   // change still gets cleaned up on logout. Two Set-Cookie headers per
   // cookie is the standard pattern for cookie-domain migrations.
