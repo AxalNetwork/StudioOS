@@ -8,7 +8,7 @@ import { RISK_BAND_HEX, bandFromScore, shortLayerLabel } from '../lib/riskBands'
 // vertex dot is tinted by that layer's own band so weak axes read at a glance.
 //
 // `layers` is the assessment's merged layer array ({ key, label, score }).
-export default function RiskRadar({ layers = [], size = 300, band = 'medium' }) {
+export default function RiskRadar({ layers = [], size = 300, band = 'medium', muted = false }) {
   const n = layers.length;
   if (!n) return null;
 
@@ -32,7 +32,10 @@ export default function RiskRadar({ layers = [], size = 300, band = 'medium' }) 
       .map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`)
       .join(' ') + ' Z';
 
-  const accent = RISK_BAND_HEX[band] || RISK_BAND_HEX.medium;
+  // No-data state: tint the (collapsed) polygon and vertices slate so an
+  // unscored company never reads as a red "high risk" cluster at the center.
+  const MUTED_HEX = '#cbd5e1';
+  const accent = muted ? MUTED_HEX : (RISK_BAND_HEX[band] || RISK_BAND_HEX.medium);
 
   return (
     <svg
@@ -89,7 +92,7 @@ export default function RiskRadar({ layers = [], size = 300, band = 'medium' }) 
           cx={x}
           cy={y}
           r="3.5"
-          fill={RISK_BAND_HEX[layers[i].band] || RISK_BAND_HEX[bandFromScore(layers[i].score)]}
+          fill={muted ? MUTED_HEX : (RISK_BAND_HEX[layers[i].band] || RISK_BAND_HEX[bandFromScore(layers[i].score)])}
           stroke="#fff"
           strokeWidth="1"
         />

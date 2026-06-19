@@ -164,6 +164,10 @@ export default function RiskMatrixPage() {
         </div>
       )}
 
+      {loading && !data && !unavailable && (
+        <div className="py-16 text-center text-slate-400 text-sm">Loading risk matrix…</div>
+      )}
+
       {data && !unavailable && (
         <div className="bg-white dark:bg-gray-900 border border-slate-200 dark:border-slate-700 rounded-lg overflow-x-auto">
           <table className="min-w-full text-sm">
@@ -199,7 +203,9 @@ export default function RiskMatrixPage() {
               {!loading && sortedCompanies.length === 0 && (
                 <tr><td colSpan={colCount} className="px-4 py-8 text-center text-slate-400 text-sm">No companies in scope.</td></tr>
               )}
-              {!loading && sortedCompanies.map((co) => (
+              {!loading && sortedCompanies.map((co) => {
+                const rowHasData = Object.values(co.layers || {}).some((l) => l && l.has_data);
+                return (
                 <tr key={co.project_id}>
                   <td className="px-3 py-2 sticky left-0 bg-white dark:bg-gray-900 z-10">
                     <Link to={`/projects/${co.project_id}`} className="block group">
@@ -217,15 +223,25 @@ export default function RiskMatrixPage() {
                     </td>
                   ))}
                   <td className="px-1 py-1 text-center">
-                    <span
-                      className={`inline-flex items-center justify-center w-10 h-8 rounded font-mono text-xs font-semibold ${RISK_BAND_CELL[co.overall_band] || RISK_BAND_CELL.medium}`}
-                      title={`Overall ${RISK_BAND_LABEL[co.overall_band] || ''}: ${co.overall_score}`}
-                    >
-                      {co.overall_score}
-                    </span>
+                    {rowHasData ? (
+                      <span
+                        className={`inline-flex items-center justify-center w-10 h-8 rounded font-mono text-xs font-semibold ${RISK_BAND_CELL[co.overall_band] || RISK_BAND_CELL.medium}`}
+                        title={`Overall ${RISK_BAND_LABEL[co.overall_band] || ''}: ${co.overall_score}`}
+                      >
+                        {co.overall_score}
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center justify-center w-10 h-8 rounded font-mono text-xs bg-slate-50 text-slate-300 dark:bg-slate-800/50 dark:text-slate-600"
+                        title="No platform data yet"
+                      >
+                        —
+                      </span>
+                    )}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

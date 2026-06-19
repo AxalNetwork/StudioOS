@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A new Venture Risk rating for every portfolio company
+
+The deal team now has a Venture Risk view that rates each company across ten layers of risk — Founder, Market, Competition, Timing, Financing, Marketing, Distribution, Technology, Product, and Hiring. Each layer gets a 0–100 "de-risk confidence" score (higher means lower risk), worked out automatically from the signals already in the platform, with a colour band — green for low risk, amber for medium, red for high.
+
+Open any portfolio company to see its risk panel: a ten-point radar, an overall score, and a card per layer that spells out what investors need to believe, the proof that retires the risk, and the live signals behind the score. Analysts can fine-tune any layer with their own score, band, status, and a note explaining the call — overrides are clearly marked. There's also a portfolio-wide Risk Matrix that lays every company out against the ten layers as a colour heatmap you can sort by any column.
+
+Where the platform doesn't have enough information yet, the view honestly shows a muted "—" instead of a misleading red zero, so an unknown never looks like a high risk. This area is internal to the deal team.
+
+---
+
 ## Signing in with Google works again
 
 Clicking "Continue with Google" on the sign-in or sign-up page now takes you straight to your dashboard instead of dropping you back on the sign-in screen. You'll briefly see a "Signing you in…" message while we finish setting up your session.

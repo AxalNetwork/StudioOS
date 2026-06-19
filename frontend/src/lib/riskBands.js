@@ -49,3 +49,13 @@ export const RISK_BAND_HEX = {
 export function shortLayerLabel(label) {
   return String(label || '').replace(/\s*risk$/i, '').trim();
 }
+
+// True when a layer carries real risk *data* — auto data, OR an explicit
+// analyst score/band. A note- or status-only override does NOT count: it must
+// not unmute a misleading 0/High display. Prefers the worker's `has_data`
+// flag (services/ventureRisk.ts) and falls back to deriving the same predicate.
+export function layerHasRiskData(layer) {
+  if (!layer) return false;
+  if (typeof layer.has_data === 'boolean') return layer.has_data;
+  return !!(layer.auto_has_data || layer.analyst_score != null || layer.analyst_band != null);
+}

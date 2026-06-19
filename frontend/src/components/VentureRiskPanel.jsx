@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 import { reportError } from '../lib/log';
 import RiskRadar from './RiskRadar';
 import RiskLayerCard from './RiskLayerCard';
-import { RISK_BAND_CHIP, RISK_BAND_LABEL, RISK_BAND_HEX } from '../lib/riskBands';
+import { RISK_BAND_CHIP, RISK_BAND_LABEL, RISK_BAND_HEX, layerHasRiskData } from '../lib/riskBands';
 
 // Task #10 — per-company Venture Risk panel (internal deal team only).
 //
@@ -12,12 +12,12 @@ import { RISK_BAND_CHIP, RISK_BAND_LABEL, RISK_BAND_HEX } from '../lib/riskBands
 // with the analyst override controls. Reads gate to admin/partner/investor;
 // `canWrite` (admin/partner) unlocks the recompute + override controls.
 
-function RiskGauge({ score, band, size = 96 }) {
+function RiskGauge({ score, band, size = 96, muted = false }) {
   const stroke = 8;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const dash = (Math.max(0, Math.min(100, score)) / 100) * c;
-  const accent = RISK_BAND_HEX[band] || RISK_BAND_HEX.medium;
+  const accent = muted ? '#cbd5e1' : (RISK_BAND_HEX[band] || RISK_BAND_HEX.medium);
   return (
     <span className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
@@ -36,12 +36,12 @@ function RiskGauge({ score, band, size = 96 }) {
           fill="none"
           stroke={accent}
           strokeWidth={stroke}
-          strokeDasharray={`${dash} ${c}`}
+          strokeDasharray={muted ? `0 ${c}` : `${dash} ${c}`}
           strokeLinecap="round"
         />
       </svg>
       <span className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-xl font-bold text-slate-900 dark:text-slate-100">{score}</span>
+        <span className="text-xl font-bold text-slate-900 dark:text-slate-100">{muted ? '—' : score}</span>
         <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500">/ 100</span>
       </span>
     </span>
@@ -115,6 +115,8 @@ export default function VentureRiskPanel({ projectId, canWrite = false }) {
     }
   };
 
+  const hasAnyData = data ? data.layers.some(layerHasRiskData) : false;
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-slate-700">
       <div className="flex items-start justify-between gap-3 mb-1">
@@ -166,13 +168,19 @@ export default function VentureRiskPanel({ projectId, canWrite = false }) {
         <>
           <div className="grid lg:grid-cols-[auto_1fr] gap-6 items-center mb-6">
             <div className="flex items-center gap-4 justify-center lg:justify-start">
-              <RiskGauge score={data.overall_score} band={data.overall_band} />
+              <RiskGauge score={data.overall_score} band={data.overall_band} muted={!hasAnyData} />
               <div>
                 <div className="text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Overall derisking</div>
-                <span className={`inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-medium border ${RISK_BAND_CHIP[data.overall_band] || RISK_BAND_CHIP.medium}`}>
-                  {RISK_BAND_LABEL[data.overall_band] || 'Unknown'}
-                </span>
-                {data.computed_at && (
+                {hasAnyData ? (
+                  <span className={`inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-medium border ${RISK_BAND_CHIP[data.overall_band] || RISK_BAND_CHIP.medium}`}>
+                    {RISK_BAND_LABEL[data.overall_band] || 'Unknown'}
+                  </span>
+                ) : (
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-[16rem]">
+                    Not enough platform data yet to score this company. Add an analyst override or capture signals to begin.
+                  </div>
+                )}
+                {hasAnyData && data.computed_at && (
                   <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
                     Computed {new Date(data.computed_at).toLocaleString()}
                   </div>
@@ -180,7 +188,7 @@ export default function VentureRiskPanel({ projectId, canWrite = false }) {
               </div>
             </div>
             <div className="flex justify-center">
-              <RiskRadar layers={data.layers} band={data.overall_band} size={300} />
+              <RiskRadar layers={data.layers} band={data.overall_band} size={300} muted={!hasAnyData} />
             </div>
           </div>
 

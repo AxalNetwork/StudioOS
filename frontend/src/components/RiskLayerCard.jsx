@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Check, Minus, Pencil, X, Trash2, AlertCircle } from 'lucide-react';
-import { RISK_BAND_CHIP, RISK_BAND_LABEL } from '../lib/riskBands';
+import { RISK_BAND_CHIP, RISK_BAND_LABEL, layerHasRiskData } from '../lib/riskBands';
 
 // Task #10 — one Venture Risk layer.
 //
@@ -84,6 +84,7 @@ export default function RiskLayerCard({ layer, canWrite = false, onSave, onClear
   };
 
   const signals = Array.isArray(layer.signals) ? layer.signals : [];
+  const layerHasData = layerHasRiskData(layer);
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 dark:bg-gray-900 dark:border-slate-700 flex flex-col">
@@ -102,8 +103,19 @@ export default function RiskLayerCard({ layer, canWrite = false, onSave, onClear
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">{layer.score}</span>
-          <Band band={layer.band} />
+          {layerHasData ? (
+            <>
+              <span className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">{layer.score}</span>
+              <Band band={layer.band} />
+            </>
+          ) : (
+            <>
+              <span className="text-lg font-bold tabular-nums text-slate-300 dark:text-slate-600">—</span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                No data
+              </span>
+            </>
+          )}
         </div>
       </div>
 

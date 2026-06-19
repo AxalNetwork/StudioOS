@@ -10,6 +10,27 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Venture Risk — 10-layer rating system (Tasks #9–#11)
+
+Internal deal-team-only feature: a 10-layer Venture Risk rating per portfolio company (Founder, Market, Competition, Timing, Financing, Marketing, Distribution, Technology, Product, Hiring), hybrid auto + analyst scoring. Scores are a 0–100 "de-risk confidence" (higher = more proof = lower risk); risk bands invert: ≥67 low (emerald), ≥34 medium (amber), else high (red). Audience is admin/partner/investor (read); analyst writes are admin/partner.
+
+### Worker (Task #9)
+- `cloudflare-worker/src/services/ventureRisk.ts` — **new**: `LAYERS` metadata (per-layer thesis + proof_signal); pure scoring helpers (`computeAutoLayers`, `mergeLayers`, `overallFromLayers`, `scoreToBand`, `bandColor`, `clampScore`, `bandScore`). Auto scores derive live from the latest non-sandbox `score_snapshots` sub-scores (market/25, team/20, product/15, capital/15, fit/15, distribution/10, market_trend/5, market_urgency/10) + project row fields (revenue, users_count, growth_signals, why_now, employee_count) — real platform data, not placeholders. Layers with no feeding signal report `has_data:false` + score 0 (explicit "unknown", never a silent guess). DB twins: `loadProject`, `loadSnapshot`, `loadOverrides`, `upsertOverride`, `deleteOverride`, `buildAssessment`, `buildMatrix`.
+- `cloudflare-worker/src/routes/venture_risk.ts` — **new**, mounted at `/api/venture-risk`. READ (`GET /matrix`, `GET /by-project/:projectId`) gated to admin/partner/investor; analyst WRITE (`POST /:projectId/recompute`, `PUT`/`DELETE /:projectId/layers/:layerKey`) gated to admin/partner. Override validation: analyst_score 0..100, analyst_band low|medium|high, note ≤2000 chars.
+- `cloudflare-worker/sql/migrations/114_venture_risk.sql` — `venture_risk_overrides` (one row per project_id+layer_key: analyst_score, analyst_band, analyst_note, status, updated_by, created_at, updated_at).
+
+### Frontend (Task #10)
+- `frontend/src/lib/riskBands.js` — **new**: shared band thresholds/colors (`RISK_BAND_CHIP`/`CELL`/`HEX`/`LABEL`, `bandFromScore`, `shortLayerLabel`) kept in lockstep with the worker so the UI never re-bands a score differently from the API.
+- `frontend/src/components/RiskRadar.jsx`, `RiskLayerCard.jsx`, `VentureRiskPanel.jsx` — **new**: 10-axis radar (polygon tinted by overall band, each vertex tinted by that layer's effective band), per-layer card (thesis, proof signal, auto score, contributing signals, analyst override editor with score/band/status/note), per-company panel (overall gauge + radar + cards + recompute).
+- `frontend/src/pages/RiskMatrixPage.jsx` — **new**: portfolio company × 10-layer heatmap, sortable columns, override dot, legend.
+- Wiring: `frontend/src/lib/api.js` (`ventureRiskMatrix`, `ventureRiskByProject`, `ventureRiskRecompute`, `ventureRiskSetLayer`, `ventureRiskClearLayer`); `App.jsx` route `/portfolio/risk-matrix` (guard admin/partner/investor); `sidebarConfig.js` nav; `ProjectDetail.jsx` panel mount. The panel/matrix treat a `404` on the prefix as "unavailable in this environment" (the dev FastAPI has no venture-risk surface; it is worker-only on D1).
+
+### Closeout polish (Task #11)
+- Unified no-data states so a company/layer with no platform signal never renders a misleading red "0 / High risk": `VentureRiskPanel` overall gauge mutes (grey ring, "—") + shows a "not enough data yet" note; `RiskLayerCard` header shows "— / No data" instead of 0/high; `RiskMatrixPage` overall cell mutes to match the existing per-cell no-data style.
+- `RiskMatrixPage` gained a top-level first-load placeholder ("Loading risk matrix…"); previously the loading row was nested under `data && !unavailable`, so the first paint was blank.
+- All new states use the slate palette with paired `dark:` variants (passes `scripts/check-dark-mode.mjs`).
+- `npm run test:drift` green (incl. `tsc --noEmit` + `ventureRisk` unit tests); frontend build green. GitHub PR #91 / branch `claude/beautiful-dirac-xh904d` closed — the work landed via the Replit task flow, not the PR.
+
 ## Fix Google sign-in redirect loop (Task #6)
 
 ### Worker

@@ -389,6 +389,12 @@ export type MergedLayer = LayerMeta & {
   auto_score: number;
   auto_band: RiskBand;
   auto_has_data: boolean;
+  /**
+   * Carries real risk *data* (not just an annotation): auto data, OR an
+   * explicit analyst score/band. A note-/status-only override is false here so
+   * a no-data layer never renders as a scored 0/High. Mirrored to the frontend.
+   */
+  has_data: boolean;
   analyst_score: number | null;
   analyst_band: RiskBand | null;
   analyst_note: string | null;
@@ -426,11 +432,16 @@ export function mergeLayers(
         o.analyst_band != null ||
         (o.analyst_note != null && o.analyst_note !== '') ||
         (o.status != null && o.status !== '' && o.status !== 'open'));
+    // Real risk *data* (not just an annotation): auto data, or an explicit
+    // analyst score or band. A note-/status-only override carries no risk
+    // signal and must NOT make a no-data layer render as a scored 0/High.
+    const hasScoreData = a.has_data || analystScore != null || o?.analyst_band != null;
     return {
       ...meta,
       auto_score: a.score,
       auto_band: autoBand,
       auto_has_data: a.has_data,
+      has_data: hasScoreData,
       analyst_score: analystScore,
       analyst_band: o?.analyst_band ?? null,
       analyst_note: o?.analyst_note ?? null,
@@ -649,7 +660,7 @@ export async function buildMatrix(env: Env, limit = 200): Promise<MatrixRow[]> {
         band: l.band,
         color: l.color,
         is_overridden: l.is_overridden,
-        has_data: l.auto_has_data || l.is_overridden,
+        has_data: l.has_data,
       };
     }
     rows.push({

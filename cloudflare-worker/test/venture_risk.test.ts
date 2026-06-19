@@ -174,6 +174,38 @@ test('mergeLayers: a bare status=open row is NOT treated as an override', () => 
   assert.equal(market.is_overridden, false);
 });
 
+test('mergeLayers: a note-/status-only override is overridden but carries NO risk data', () => {
+  // Regression: a note or non-open status (with score AND band both null) must
+  // NOT make a no-auto-data layer report risk data — otherwise the UI renders a
+  // misleading "0 / High risk" instead of muted "— / No data".
+  const auto = computeAutoLayers({ snapshot: null, project: null }); // all 0/high, no data
+  const overrides = new Map<LayerKey, OverrideInput>([
+    ['founder', { layer_key: 'founder', analyst_note: 'Following up with the team', status: 'in_review' }],
+  ]);
+  const founder = mergeLayers(auto, overrides).find((l) => l.key === 'founder')!;
+  assert.equal(founder.is_overridden, true); // annotation exists
+  assert.equal(founder.has_data, false); // but it is not risk score data
+  assert.equal(founder.auto_has_data, false);
+  assert.equal(founder.analyst_score, null);
+  assert.equal(founder.analyst_band, null);
+});
+
+test('mergeLayers: has_data is true for auto data, an explicit score, or an explicit band', () => {
+  const auto = computeAutoLayers({
+    snapshot: { team_total: 20 }, // founder auto = 100 -> has data
+    project: null,
+  });
+  const overrides = new Map<LayerKey, OverrideInput>([
+    ['market', { layer_key: 'market', analyst_score: 80 }], // explicit score
+    ['product', { layer_key: 'product', analyst_band: 'low' }], // explicit band only
+  ]);
+  const merged = mergeLayers(auto, overrides);
+  assert.equal(merged.find((l) => l.key === 'founder')!.has_data, true); // auto data
+  assert.equal(merged.find((l) => l.key === 'market')!.has_data, true); // explicit score
+  assert.equal(merged.find((l) => l.key === 'product')!.has_data, true); // explicit band
+  // (the no-data path is asserted in the note-/status-only regression test above)
+});
+
 test('overallFromLayers: overall is the mean of the effective per-layer scores', () => {
   const auto = computeAutoLayers({ snapshot: null, project: null }); // all 0
   const overrides = new Map<LayerKey, OverrideInput>([
