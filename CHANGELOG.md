@@ -10,6 +10,14 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Fix cover slide caption overlap (Task #5)
+
+### Frontend
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx` — SlideCover: moved `signalCaption` down from `t=5.05` to `t=5.5` (≈ 0.45" below the chart's x-axis labels). The chart's `AreaChart` renders axis labels at `ph + inch(0.06)` below its own container, so the caption was colliding with them at `t=5.05`. The new `t=5.5` leaves the labels at ~5.11 and the caption at ~5.5, with clear spacing between them. Signal value stays at `t=2.62` (top-right of chart). Meta row stays at `t=6.05` — no collision.
+
+### PPTX export
+- `frontend/src/decks/spinout/buildDeck.js` — cover slide: same caption shift, `y: 5.05` → `y: 5.5`. Matches the React renderer fix.
+
 ## Fix blank 11th slide in deck viewer (Task #4)
 
 ### Frontend

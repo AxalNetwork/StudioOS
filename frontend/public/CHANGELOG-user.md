@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Cover chart caption no longer overlaps axis labels
+
+On the cover slide of the Spin-Out Demo Day deck, the italic chart caption — "Cumulative discovery interviews" — now sits clearly below the chart's day labels (D0, D5, D10, etc.) instead of landing on top of them. The signal value stays in the top-right corner and the meta row below the chart is unchanged.
+
+---
+
 ## Decks no longer show a blank slide after the last one
 
 When viewing any pitch deck in the scroll-through view, the page now ends right after the last slide instead of showing a large blank area below it. Previously, the deck appeared to have an extra blank "11th slide" after the real 10 slides. The fix is purely a layout change — nothing about the deck content or export output changed.

@@ -395,7 +395,7 @@ const SlideCover: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
         <Txt l={8.7} t={2.2} w={4.0} h={0.3} size={9.5} bold spacing={1} color={K.dmuted}>{c.signalLabel}</Txt>
         <AreaChart l={8.55} t={2.55} w={4.25} h={2.5} values={sigY} labels={c.signalX} color={K.accentLt} />
         <Txt l={11.85} t={2.62} w={0.95} h={0.35} size={16} bold align="right" color={K.accentLt}>{String(last)}</Txt>
-        <Txt l={8.55} t={5.05} w={4.25} h={0.3} size={9} italic color={K.dfaint} face={SERIF}>{c.signalCaption}</Txt>
+        <Txt l={8.55} t={5.5} w={4.25} h={0.3} size={9} italic color={K.dfaint} face={SERIF}>{c.signalCaption}</Txt>
 
         {(Array.isArray(c.meta) ? c.meta : []).map((m: [string, string], i: number) => {
           const x = ML + i * 2.95;

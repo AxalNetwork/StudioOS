@@ -102,7 +102,7 @@ function cover(pres, data, notes) {
   });
   s.addText(String(d.signalY[d.signalY.length - 1]), { x: 11.85, y: 2.62, w: 0.95, h: 0.35, margin: 0,
     align: 'right', fontFace: F.head, fontSize: 16, bold: true, color: C.accentLt });
-  s.addText(d.signalCaption, { x: 8.55, y: 5.05, w: 4.25, h: 0.3, margin: 0, fontFace: F.body,
+  s.addText(d.signalCaption, { x: 8.55, y: 5.5, w: 4.25, h: 0.3, margin: 0, fontFace: F.body,
     fontSize: 9, italic: true, color: C.dfaint });
 
   d.meta.forEach((m, i) => {
