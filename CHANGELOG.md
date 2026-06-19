@@ -10,6 +10,21 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Billing overview no longer 502s — resilient per-section reads + stale-customer self-heal (Task #25)
+
+### Worker
+- `cloudflare-worker/src/util/stripeError.ts` — **new file**: `StripeApiError` (carries HTTP `status` + parsed Stripe `error.code`/`error.type`, keeps the legacy `stripe_error:STATUS:body` message shape for back-compat), `classifyStripeError()` (→ `resource_missing` | `auth` | `other`, with a fallback parser for the legacy message string), and `resolveCoreOutcome()` (maps per-section failure kinds → `ok` | `customer_missing` | `unavailable`).
+- `cloudflare-worker/src/routes/billing.ts` — `stripeCall` now throws `StripeApiError` instead of a plain `Error` (additive: `.message` unchanged). `GET /api/billing/overview` rewritten: each of the 4 core Stripe calls (subscriptions, payment methods, customer, invoices) is fetched via a `section()` wrapper that captures failures by kind instead of throwing, so one failing call no longer 502s the whole tab. Outcomes: `resource_missing` on any core section → self-heal (NULL the scope's `stripe_customer_id`/`investor_stripe_customer_id` via allowlisted column name) + return the clean empty payload (`has_customer:false`); `auth` error or total core outage → explicit `{error:'billing_unavailable'}` 502 (no misleading empty page); otherwise degrade each individually-failed section to empty, add a `degraded: string[]` field naming the affected core sections, and render the rest. Charges remain additive enrichment and never affect the outcome. Replaces the old single `try/catch` that returned `overview_failed`.
+
+### Root cause
+- Post Task #17 live-key cutover, users still hold TEST-mode customer ids; the live key returns `resource_missing` "No such customer", which the old all-or-nothing overview surfaced as a 502 `overview_failed`. Self-heal nulls the stale id so the next purchase re-creates a live customer.
+
+### Frontend
+- `frontend/src/components/BillingDashboard.jsx` — added a `loadError` state; an overview load failure now renders a calm inline amber panel with a Retry button instead of flashing the raw error message. `billing_unavailable`/502 maps to a friendly "temporarily unavailable" message.
+
+### Tests
+- `cloudflare-worker/test/billing_overview.test.ts` — **new** (added to `test:drift`): 17 cases over `StripeApiError` parsing, `classifyStripeError` (incl. legacy-string fallback), and `resolveCoreOutcome` branch coverage.
+
 ## Cookie banner persists on dismiss — no more re-prompt on every refresh (Task #23)
 
 ### Frontend

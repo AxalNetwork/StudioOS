@@ -41,14 +41,30 @@ export default function BillingDashboard({ scope = 'founder', variant = 'subscri
   const [plans, setPlans] = useState([]);
   const [busy, setBusy] = useState(null);          // action key in flight
   const [preview, setPreview] = useState(null);    // { sub_id, price_id, label, data }
+  const [loadError, setLoadError] = useState(null); // overview load failed (inline panel)
 
   const load = useCallback(() => {
     setLoading(true);
+    setLoadError(null);
     api.billingOverview(scope)
-      .then((res) => setOverview(res))
-      .catch((e) => flash?.(e.message || 'Could not load billing details', 'error'))
+      .then((res) => {
+        setOverview(res);
+        setLoadError(null);
+      })
+      .catch((e) => {
+        // The whole tab failed to load. A transient toast disappears; show a
+        // calm inline panel instead. `billing_unavailable` is the server's
+        // explicit "Stripe is reachable but a call failed" signal — never leak
+        // the raw error code to the user.
+        const unavailable = e?.status === 502 || e?.data?.error === 'billing_unavailable';
+        setLoadError(
+          unavailable
+            ? 'Billing details are temporarily unavailable. Please try again in a moment.'
+            : (e?.message || 'Could not load billing details.'),
+        );
+      })
       .finally(() => setLoading(false));
-  }, [scope, flash]);
+  }, [scope]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -175,6 +191,24 @@ export default function BillingDashboard({ scope = 'founder', variant = 'subscri
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2">
+        <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+        <div className="flex-1">
+          <p>{loadError}</p>
+          <button
+            type="button"
+            onClick={load}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-amber-300 dark:border-amber-700 px-2.5 py-1 text-xs font-medium text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (overview && overview.has_customer === false) {
     return (
       <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-sm text-gray-500 dark:text-gray-400">
@@ -196,6 +230,23 @@ export default function BillingDashboard({ scope = 'founder', variant = 'subscri
 
   return (
     <div className="space-y-5">
+      {/* Some billing sections couldn't be loaded just now — say so explicitly
+          rather than silently showing them as empty. The rest still renders. */}
+      {overview?.degraded?.length > 0 && (
+        <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <span>Some billing details couldn't be loaded just now and may be incomplete.</span>
+            <button
+              type="button"
+              onClick={load}
+              className="ml-2 inline-flex items-center gap-1 font-medium underline hover:no-underline"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> Retry
+            </button>
+          </div>
+        </div>
+      )}
       {/* Active subscriptions — hidden for the general (non-subscription) variant
           when there are none, so those roles get a clean cards/receipts view. */}
       {(variant !== 'general' || subs.length > 0) && (

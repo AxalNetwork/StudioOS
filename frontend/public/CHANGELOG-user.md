@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your Billing page loads again
+
+The **Settings → Billing** page could show an error and fail to load instead of your cards, subscriptions, and receipts. It now loads reliably: if part of the billing information can't be fetched at that moment, the page shows whatever it can rather than failing entirely, and if billing is briefly unavailable you'll see a calm "temporarily unavailable" note with a Retry button instead of a raw error. Accounts that were affected are repaired automatically the next time you open the page.
+
+---
+
 ## The cookie banner now remembers when you close it
 
 The "We use cookies" banner no longer keeps coming back every time you refresh or open another page. Now, whatever you do with it — Accept all, Reject all, pick your own categories, or simply close it with the ✕ — your choice is remembered in your browser and the banner stays away. Closing it with the ✕ is treated as "essential cookies only," so nothing extra is switched on unless you choose it. You can always change your mind later with the "Cookie preferences" link in the footer. (To be clear: the site still loads no analytics or advertising trackers today — your choice is recorded and ready for if that ever changes.)
