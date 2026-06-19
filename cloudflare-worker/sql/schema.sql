@@ -677,6 +677,27 @@ CREATE TABLE IF NOT EXISTS founder_risk_pulls (
 CREATE INDEX IF NOT EXISTS idx_founder_risk_pulls_founder
     ON founder_risk_pulls(founder_id, created_at DESC);
 
+-- Task #9 — Venture Risk analyst overrides (mirrors migration
+-- 114_venture_risk.sql). Auto scores are computed live by
+-- services/ventureRisk.ts from score_snapshots + projects and are NOT stored;
+-- this table persists only the analyst override layer, one row per
+-- (project_id, layer_key). Idempotent.
+CREATE TABLE IF NOT EXISTS venture_risk_overrides (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    layer_key TEXT NOT NULL,
+    analyst_score REAL,
+    analyst_band TEXT,
+    analyst_note TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    updated_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (project_id, layer_key)
+);
+CREATE INDEX IF NOT EXISTS idx_venture_risk_overrides_project
+    ON venture_risk_overrides(project_id);
+
 CREATE TABLE IF NOT EXISTS service_offerings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),

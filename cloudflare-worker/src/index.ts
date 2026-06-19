@@ -175,6 +175,8 @@ import companyRoutes from './routes/company';
 import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 import insightsRoutes from './routes/insights';
 import founderRiskRoutes from './routes/founder_risk';
+// Task #9 — Venture Risk (10-layer hybrid auto+analyst rating, internal only).
+import ventureRiskRoutes from './routes/venture_risk';
 import servicesRoutes from './routes/services';
 import publicRoutes from './routes/public';
 // Task #39 — Event engine (Worker on D1): authed §8.1, public §8.2, admin §8.3.
@@ -672,6 +674,8 @@ app.route('/api/calendar', calendarRoutes);
 app.route('/api/financials', financialsRoutes);
 // Task #1 (AG) — kept alphabetically adjacent to /api/financials.
 app.route('/api/founder-risk', founderRiskRoutes);
+// Task #9 — Venture Risk (internal deal-team 10-layer rating).
+app.route('/api/venture-risk', ventureRiskRoutes);
 app.route('/api/progress', progressRoutes);
 // Task #3 (DF) — `/api/metrics/*` alias of /api/progress/metrics/* + /series.
 app.route('/api/metrics', metricsRoutes);
