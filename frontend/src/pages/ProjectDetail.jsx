@@ -8,6 +8,7 @@ import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { getPitchCopyLengthStatus } from '../lib/pitchCopyLength';
 import { StatusBadge } from './Dashboard';
+import VentureRiskPanel from '../components/VentureRiskPanel';
 
 const weekLabels = {
   week_1: { name: 'Week 1 — Validation Sprint', tasks: ['Define problem + ICP', 'Run user interviews', 'Validate willingness to pay', 'Draft 1-page concept'] },
@@ -95,6 +96,10 @@ export default function ProjectDetail() {
   const tier = (user?.tier || user?.subscription_plan || 'free').toLowerCase();
   const isElevated = ['admin','partner','investor','mentor'].includes((user?.role || '').toLowerCase());
   const cbTierLocked = !isElevated && tier !== 'growth' && tier !== 'studio';
+  // Task #10 — Venture Risk panel: read gates to admin/partner/investor;
+  // analyst writes (override/recompute) gate to admin/partner.
+  const canSeeVentureRisk = ['admin','partner','investor'].includes((user?.role || '').toLowerCase());
+  const canWriteVentureRisk = ['admin','partner'].includes((user?.role || '').toLowerCase());
   const handleCbClick = () => {
     if (cbTierLocked) {
       try {
@@ -244,6 +249,10 @@ export default function ProjectDetail() {
         }}
         onError={(msg) => showToast({ kind: 'error', msg })}
       />
+
+      {canSeeVentureRisk && project.id != null && (
+        <VentureRiskPanel projectId={project.id} canWrite={canWriteVentureRisk} />
+      )}
 
       {project.founder && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">

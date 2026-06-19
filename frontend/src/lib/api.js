@@ -1928,6 +1928,19 @@ export const api = {
   recomputeFounderRisk: (founderId) =>
     request(`/founder-risk/${founderId}/recompute`, { method: 'POST' }),
 
+  // ---------- Venture risk (Task #10 — 10-layer rating system) ----------
+  // Worker-only (D1); the dev FastAPI backend 404s on the whole prefix.
+  // Reads gate to admin/partner/investor; analyst writes (override/recompute)
+  // gate to admin/partner.
+  ventureRiskMatrix: () => request('/venture-risk/matrix'),
+  ventureRiskByProject: (projectId) => request(`/venture-risk/by-project/${projectId}`),
+  ventureRiskRecompute: (projectId) =>
+    request(`/venture-risk/${projectId}/recompute`, { method: 'POST' }),
+  ventureRiskSetLayer: (projectId, layerKey, body) =>
+    request(`/venture-risk/${projectId}/layers/${layerKey}`, { method: 'PUT', body: JSON.stringify(body || {}) }),
+  ventureRiskClearLayer: (projectId, layerKey) =>
+    request(`/venture-risk/${projectId}/layers/${layerKey}`, { method: 'DELETE' }),
+
   // ---------- Reference checks (Task #43, admin/investor only) ----------
   listReferences: (dealId) =>
     request(`/references${dealId != null ? `?deal_id=${dealId}` : ''}`),

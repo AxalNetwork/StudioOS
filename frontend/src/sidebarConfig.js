@@ -21,7 +21,7 @@ import {
   Globe, Brain, Activity, Shield, Code, ShieldCheck, Share2, Wallet,
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
-  BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2,
+  BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2, ShieldAlert,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -76,6 +76,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'intelligence', label: 'Intelligence', items: [
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
+      { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
       { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
@@ -215,6 +216,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'insights', label: 'Insights', items: [
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
+      { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
       { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
     ]},
@@ -268,6 +270,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'intelligence', label: 'Intelligence', items: [
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
+      { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
     ]},
     { key: 'portfolio', label: 'Portfolio', items: [
       { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },

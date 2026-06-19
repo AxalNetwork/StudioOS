@@ -10,6 +10,89 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Fix Google sign-in redirect loop (Task #6)
+
+### Worker
+- `cloudflare-worker/src/auth.ts` — `authCookieDomainAttr` now derives the cookie `Domain` attribute from the **request host** instead of checking `env.ENVIRONMENT === 'production'`. For a request on `app.axal.vc`, the cookie is now scoped to `Domain=.axal.vc`, so the session cookie survives the edge 301 redirect from `app.axal.vc` to `axal.vc`. For localhost and `*.workers.dev`, the Domain attribute is omitted (host-only cookies) so dev/preview still works. `setAuthCookies` and `clearAuthCookies` updated to pass the Hono `Context` instead of `env`. The previous env-only check was inconsistent with the rest of `auth.ts` (which uses `env.STUDIOOS_ENV || env.ENVIRONMENT`) and could silently fall back to host-only cookies if the exact string didn't match, causing the Google sign-in loop.
+
+## Fix cover slide caption overlap (Task #5)
+
+### Frontend
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx` — SlideCover: moved `signalCaption` down from `t=5.05` to `t=5.5` (≈ 0.45" below the chart's x-axis labels). The chart's `AreaChart` renders axis labels at `ph + inch(0.06)` below its own container, so the caption was colliding with them at `t=5.05`. The new `t=5.5` leaves the labels at ~5.11 and the caption at ~5.5, with clear spacing between them. Signal value stays at `t=2.62` (top-right of chart). Meta row stays at `t=6.05` — no collision.
+
+### PPTX export
+- `frontend/src/decks/spinout/buildDeck.js` — cover slide: same caption shift, `y: 5.05` → `y: 5.5`. Matches the React renderer fix.
+
+## Fix blank 11th slide in deck viewer (Task #4)
+
+### Frontend
+- `frontend/src/pages/PitchDeckPrintPage.jsx` — `PrintStage` normal (non-fullscreen) mode now sets the `.deck-print-scaler` wrapper height to the scaled content height (`(INNER_H * slideCount + gap * (slideCount-1)) * scale`), matching the height-correction pattern already used in `Thumbnail.tsx`. The `slideCount` is tracked locally via `useState` and updated by the existing MutationObserver. Fixes the blank scroll region after the last real slide (10 slides → no extra "11th" blank region). Fullscreen path unchanged.
+
+## Founder intake sector dropdown expanded to 18 sectors (no task ID)
+
+### Frontend
+- `frontend/src/pages/FounderPortal.jsx` — `SECTORS` expanded from 9 to 18: `AI / ML`, `Developer tools / infrastructure`, `SaaS / enterprise software`, `FinTech / InsurTech`, `HealthTech / BioTech`, `ClimateTech / CleanTech / Energy`, `EdTech`, `Cybersecurity`, `Data / Analytics`, `Marketplaces`, `Consumer / Social / Creator economy`, `E-commerce / RetailTech`, `PropTech`, `HRTech / Future of work`, `Logistics / Supply chain`, `Blockchain / Web3`, `DeepTech / Robotics / Space`, `Other`. Order is alphabetical-ish (with "Other" at the end) and the existing dropdown (`ModernSelect`) consumes the array unchanged.
+
+## Use of Funds allocator → THE ASK (Task #2)
+
+Replaces the free-text "Use of Funds" box on founder intake (FounderPortal step 1) with a structured 5-section % allocator and feeds THE ASK slide (in-app preview + PPTX, dev + prod) from the same data. Canonical sections, in order: `Product & engineering`, `GTM: sales and marketing`, `Infrastructure & data`, `Operations, legal & compliance`, `Hiring / runway reserve`.
+
+### Storage contract
+- `use_of_funds` is now persisted as **JSON** (`[{ "label": string, "pct": number }, …]`) — JSON (not a delimited string) because canonical labels contain colons. Validation rule: each `pct` is `0–100`, sections sum to **exactly 100** to submit, OR all sections are `0` (no allocation → stored as `NULL`, submit allowed). Legacy free-text rows still render everywhere via a fallback path; no backfill.
+
+### Helper twins (parse JSON-first, fall back to legacy free-text)
+- `cloudflare-worker/src/util/useOfFunds.ts` — **new**: `parseUseOfFundsValue()` (→ `{label,pct}[]`, drops 0% sections, caps at 5), `normalizeUseOfFunds()` (→ `{ value, error? }`: validates + canonicalizes JSON, all-zero/empty → `null`, passes legacy text through), `formatUseOfFundsText()` (→ `"label pct%; …"`, free-text passthrough).
+- `backend/app/services/use_of_funds.py` — **new**: Python twin — `parse_use_of_funds_value()`, `normalize_use_of_funds()` (→ `(value, error)`), `format_use_of_funds_text()`. Same JSON-first/legacy-fallback semantics.
+
+### Frontend
+- `frontend/src/pages/FounderPortal.jsx` — `FUND_SECTIONS` const + `FundAllocator` component (slider + numeric 0–100 per section, live total, dark-mode paired). Step-1 Next + submit gated on `fundsValid` (total === 100 or all 0). `handleSubmit` serializes non-zero sections to the JSON contract; reset clears to `[0,0,0,0,0]`.
+
+### Worker
+- `cloudflare-worker/src/routes/projects.ts` — `POST /api/projects/submit` runs `normalizeUseOfFunds()` before the INSERT (rejects invalid splits with `400 invalid_use_of_funds`); writes the canonical value; qual-text snapshot uses the normalized value.
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts` — removed the local `parseUseOfFunds()`; THE ASK funds now derive from `parseUseOfFundsValue(p.use_of_funds)` (financials override still wins first).
+- `cloudflare-worker/src/routes/decks.ts`, `cloudflare-worker/src/services/decks/autofill.ts` (`ask_line` + `use_of_funds` column), `cloudflare-worker/src/routes/scoring.ts` (deal-memo economics) — render via `formatUseOfFundsText()` so the structured JSON never leaks raw into prose/decks.
+
+### Backend (dev FastAPI)
+- `backend/app/api/routes/projects.py` — `/submit` normalizes (same `400 invalid_use_of_funds` contract) and stores the canonical value; `_spinout_deck_payload` overrides `data["ask"]["funds"]` from `parse_use_of_funds_value()` when present (else keeps the deterministic sample split).
+- `backend/app/api/routes/decks.py`, `backend/app/api/routes/scoring.py` (deal-memo economics) — render via `format_use_of_funds_text()`. AI-context fields and the raw qual scoring input are left untouched.
+
+### Tests
+- `cloudflare-worker/test/useOfFunds.test.ts` — **new** (added to `test:drift`): 11 cases over parse (JSON-first, colon labels, drop-zero, cap-5, legacy fallback), normalize (valid-100, all-zero/empty → null, sum≠100, out-of-range, malformed JSON, free-text passthrough), and format.
+
+## Spin-Out deck Slide 07 "Team & Network" — vertical-fit left column, real photos, roles, multi-founder support (Task #1)
+
+### Frontend
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx` — new `Avatar` component renders a circle-cropped `<img>` from a profile `photo` with an `onError` fallback to initials, so missing/broken photos degrade gracefully. `SlideTeamNetwork` rewritten with vertical-fit logic bounded by `TOP`/`BOTTOM`: single founder keeps today's large editable card (`team.founder.*`); multiple founders/co-founders render compact stacked cards; the advisor/mentor roster scales `rowH` between `MIN_ROW`/`MAX_ROW` and only caps the visible count as a last resort, so the column never overflows regardless of roster size. Right-side network graph unchanged.
+- `frontend/src/decks/spinout/deckData.js` — sample `team` extended: `_avatar()` data-URI SVG helper, `photo` on the founder, a `founders` array (Maya + co-founder Sofia Reyes) to exercise the multi-founder path, and an expanded 6-entry `ADVISORS & MENTORS` roster (mix of photos and initials fallback).
+
+### Worker
+- `cloudflare-worker/src/services/decks/spinoutDeckData.ts` — `SpinoutDeckData['team']` type extended: optional `photo` on `founder`, a `founders[]` array (`{initials,name,role,bio,photo?}`), and `advisors` widened to a 4-tuple (`[initials,name,role,photo?]`). Mapper now builds a `photoByName` map from network profiles, maps ALL `src.team.founders` via `toFounderCard` (best-effort name→photo match) instead of only the first, and bumps the advisors slice 4→8 with each entry's `photo_url`.
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts` — added `photo_url` to the upstream `mentor_network.profiles` type so profile photos already set at runtime survive the mapping.
+
+## Billing overview no longer 502s — resilient per-section reads + stale-customer self-heal (Task #25)
+
+### Worker
+- `cloudflare-worker/src/util/stripeError.ts` — **new file**: `StripeApiError` (carries HTTP `status` + parsed Stripe `error.code`/`error.type`, keeps the legacy `stripe_error:STATUS:body` message shape for back-compat), `classifyStripeError()` (→ `resource_missing` | `auth` | `other`, with a fallback parser for the legacy message string), and `resolveCoreOutcome()` (maps per-section failure kinds → `ok` | `customer_missing` | `unavailable`).
+- `cloudflare-worker/src/routes/billing.ts` — `stripeCall` now throws `StripeApiError` instead of a plain `Error` (additive: `.message` unchanged). `GET /api/billing/overview` rewritten: each of the 4 core Stripe calls (subscriptions, payment methods, customer, invoices) is fetched via a `section()` wrapper that captures failures by kind instead of throwing, so one failing call no longer 502s the whole tab. Outcomes: `resource_missing` on any core section → self-heal (NULL the scope's `stripe_customer_id`/`investor_stripe_customer_id` via allowlisted column name) + return the clean empty payload (`has_customer:false`); `auth` error or total core outage → explicit `{error:'billing_unavailable'}` 502 (no misleading empty page); otherwise degrade each individually-failed section to empty, add a `degraded: string[]` field naming the affected core sections, and render the rest. Charges remain additive enrichment and never affect the outcome. Replaces the old single `try/catch` that returned `overview_failed`.
+
+### Root cause
+- Post Task #17 live-key cutover, users still hold TEST-mode customer ids; the live key returns `resource_missing` "No such customer", which the old all-or-nothing overview surfaced as a 502 `overview_failed`. Self-heal nulls the stale id so the next purchase re-creates a live customer.
+
+### Frontend
+- `frontend/src/components/BillingDashboard.jsx` — added a `loadError` state; an overview load failure now renders a calm inline amber panel with a Retry button instead of flashing the raw error message. `billing_unavailable`/502 maps to a friendly "temporarily unavailable" message.
+
+### Tests
+- `cloudflare-worker/test/billing_overview.test.ts` — **new** (added to `test:drift`): 17 cases over `StripeApiError` parsing, `classifyStripeError` (incl. legacy-string fallback), and `resolveCoreOutcome` branch coverage.
+
+## Cookie banner persists on dismiss — no more re-prompt on every refresh (Task #23)
+
+### Frontend
+- `frontend/src/components/CookieConsent.jsx` — the ✕ button and Esc key now call a new `dismiss()` handler instead of the no-op `close()`. When the visitor has not yet decided, `dismiss()` records an explicit "essential only" choice via `rejectAll()` (decided=true, all non-essential off) before hiding the card, so the banner no longer reappears on every refresh/navigation. No consent is inferred for functional/analytics/advertising. When the banner is reopened from the footer "Cookie preferences" link (a choice already exists), dismissing leaves the saved choice untouched. Explicit *Accept all* / *Reject all* / *Confirm* behavior is unchanged.
+
+### Notes
+- Consent ↔ cookie wiring confirmed unchanged: no third-party analytics/advertising scripts are loaded. `frontend/index.html` loads only Cloudflare Turnstile (essential/security) and Google Fonts (functional) — no analytics or advertising trackers. `hasConsent()` in `frontend/src/lib/cookieConsent.js` remains the mandatory gate any future tracker must check; the Analytics/Advertising toggles record intent only. Only essential/functional first-party cookies (auth, `axal_ref` referral, Turnstile) are set pre-consent.
+- Choice persists per browser via `localStorage` (`axal_cookie_consent_v1`) on the apex origin; `app.axal.vc` traffic converges to `axal.vc` via the existing edge 301, so the stored choice carries for normal navigation.
+
 ## Stripe live-mode cutover — ops runbook + credential prerequisites (Task #17)
 
 ### Docs / ops
