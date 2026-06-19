@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## More sectors to choose from when you apply
+
+The "About Your Startup" dropdown on the founder intake now includes 18 sectors instead of 9. You can pick from AI / ML, Developer tools, SaaS / enterprise software, FinTech / InsurTech, HealthTech / BioTech, ClimateTech / CleanTech / Energy, EdTech, Cybersecurity, Data / Analytics, Marketplaces, Consumer / Social / Creator economy, E-commerce / RetailTech, PropTech, HRTech / Future of work, Logistics / Supply chain, Blockchain / Web3, DeepTech / Robotics / Space, and Other. The sector you pick still appears on your pitch deck and portfolio profile.
+
+---
+
 ## Show investors exactly how you'll spend the round
 
 The "Use of Funds" step on the founder intake is no longer a free-text box. You now split your raise across five clear areas — Product & engineering, GTM (sales and marketing), Infrastructure & data, Operations/legal/compliance, and Hiring/runway reserve — using a slider or by typing a percentage for each. A running total keeps you honest: you can submit once the split adds up to exactly 100% (or leave everything at 0% if you'd rather not allocate yet). Whatever you set flows straight through to the "The Ask" slide in your pitch deck — both the on-screen preview and the downloaded PowerPoint — so your deck always matches what you entered. Decks created before this change keep showing your original text.

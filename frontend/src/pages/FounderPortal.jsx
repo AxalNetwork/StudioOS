@@ -20,7 +20,26 @@ function ModernSelect({ value, onChange, children, ...props }) {
   );
 }
 
-const SECTORS = ['AI/Infrastructure', 'Blockchain/DeFi', 'Data/Analytics', 'FinTech', 'HealthTech', 'CleanTech', 'EdTech', 'SaaS', 'Other'];
+const SECTORS = [
+  'AI / ML',
+  'Developer tools / infrastructure',
+  'SaaS / enterprise software',
+  'FinTech / InsurTech',
+  'HealthTech / BioTech',
+  'ClimateTech / CleanTech / Energy',
+  'EdTech',
+  'Cybersecurity',
+  'Data / Analytics',
+  'Marketplaces',
+  'Consumer / Social / Creator economy',
+  'E-commerce / RetailTech',
+  'PropTech',
+  'HRTech / Future of work',
+  'Logistics / Supply chain',
+  'Blockchain / Web3',
+  'DeepTech / Robotics / Space',
+  'Other',
+];
 
 // Task #2 — THE ASK Use-of-Funds allocator. Fixed, canonical sections in a
 // fixed order; founders only set the percentages. Labels are persisted as

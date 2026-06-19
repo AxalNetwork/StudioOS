@@ -10,6 +10,11 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Founder intake sector dropdown expanded to 18 sectors (no task ID)
+
+### Frontend
+- `frontend/src/pages/FounderPortal.jsx` — `SECTORS` expanded from 9 to 18: `AI / ML`, `Developer tools / infrastructure`, `SaaS / enterprise software`, `FinTech / InsurTech`, `HealthTech / BioTech`, `ClimateTech / CleanTech / Energy`, `EdTech`, `Cybersecurity`, `Data / Analytics`, `Marketplaces`, `Consumer / Social / Creator economy`, `E-commerce / RetailTech`, `PropTech`, `HRTech / Future of work`, `Logistics / Supply chain`, `Blockchain / Web3`, `DeepTech / Robotics / Space`, `Other`. Order is alphabetical-ish (with "Other" at the end) and the existing dropdown (`ModernSelect`) consumes the array unchanged.
+
 ## Use of Funds allocator → THE ASK (Task #2)
 
 Replaces the free-text "Use of Funds" box on founder intake (FounderPortal step 1) with a structured 5-section % allocator and feeds THE ASK slide (in-app preview + PPTX, dev + prod) from the same data. Canonical sections, in order: `Product & engineering`, `GTM: sales and marketing`, `Infrastructure & data`, `Operations, legal & compliance`, `Hiring / runway reserve`.
