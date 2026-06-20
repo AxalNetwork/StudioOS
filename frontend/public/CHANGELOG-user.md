@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Removed the separate "Discover" game
+
+The standalone "Play & Discover" area has been retired. Your skills and values are now captured naturally through your conversation with the Personal Advisor, so the separate game, the shareable card, and the "Discover" sidebar link are gone. Finishing onboarding now takes you straight to your dashboard.
+
+---
+
 ## Fixed: dashboard and profile pages crashing for everyone
 
 A bug caused the dashboard and profile pages to show a full-page error for all users. It's fixed — both pages now load normally and the profile fit section shows your data again.

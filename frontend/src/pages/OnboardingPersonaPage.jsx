@@ -249,10 +249,6 @@ export default function OnboardingPersonaPage() {
               className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2 rounded-lg">
               <ArrowRight size={14} /> Go to dashboard
             </button>
-            <button onClick={() => navigate('/play')}
-              className="inline-flex items-center gap-2 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-200 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-sm px-4 py-2 rounded-lg">
-              <Sparkles size={14} /> Discover your archetype
-            </button>
           </div>
         </div>
       )}

@@ -10,6 +10,32 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Remove the "Play & Discover" surface everywhere (Task #8)
+
+The skills & values assessment is now collected conversationally inside the Personal
+Advisor ("Fit Banks"), so the standalone gamified "Play & Discover" surface is
+redundant and has been removed from every user-facing entry point.
+
+- **Sidebar**: dropped the `{ to: '/play', label: 'Discover' }` nav item from all five
+  role menus in `frontend/src/sidebarConfig.js`. The `Gamepad2` icon import stays —
+  it's still used by the admin "Assessment Studio" item.
+- **Entry points**: removed the onboarding "Discover your archetype" button in
+  `frontend/src/pages/OnboardingPersonaPage.jsx` (the "Go to dashboard" action
+  remains) and the "Discover your archetype" CTA card in
+  `frontend/src/pages/LandingPage.jsx`; the landing grid wrapper collapses from a
+  two-column grid to a single centered column so the remaining "Upcoming events"
+  card still renders correctly.
+- **Routes**: removed the `/play`, `/play/card`, and `/play/:gameSlug` routes and
+  their lazy imports from `frontend/src/App.jsx`, and deleted the three retired page
+  files under `frontend/src/pages/play/` (`AssessmentHubPage.jsx`,
+  `AssessmentGamePage.jsx`, `ProfileCardPage.jsx`). Removed the now-orphaned
+  `Task #2` header comments.
+- **Kept intact**: shared visuals under `frontend/src/components/play/*` (SkillRadar,
+  ArchetypeBadge, CardRadar, mechanics, SpectrumBar) reused by the Profile & Fit
+  section and admin consoles; the `assessment` API namespace in `lib/api.js`; and the
+  admin Assessment Studio (`/admin/assessment`) and Best-Fit console.
+- No API, worker, or schema change.
+
 ## Fix dashboard & profile crash — api.assessment undefined (Task #7)
 
 `ProfileFitSection` imported only `{ api }` but called `api.assessment.myResults()`;

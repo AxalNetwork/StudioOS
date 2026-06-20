@@ -58,7 +58,6 @@ export const SIDEBAR_GROUPS = {
   admin: [
     { key: 'home', label: 'Home', items: [
       { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-      { to: '/play', icon: Gamepad2, label: 'Discover' },
     ]},
     { key: 'admin', label: 'Admin', items: [
       { to: '/admin', icon: Shield, label: 'Admin Console' },
@@ -143,7 +142,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       { to: '/founder', icon: Rocket, label: 'Founder Portal', highlight: true },
-      { to: '/play', icon: Gamepad2, label: 'Discover' },
     ]},
     { key: 'build', label: 'Build', items: [
       { to: '/projects', icon: Zap, label: 'Projects' },
@@ -202,7 +200,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       { to: '/partner-portal', icon: UserCircle, label: 'Partner Portal', highlight: true },
-      { to: '/play', icon: Gamepad2, label: 'Discover' },
     ]},
     { key: 'sourcing', label: 'Sourcing', items: [
       { to: '/projects', icon: Zap, label: 'Projects' },
@@ -256,7 +253,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       { to: '/partner-portal', icon: UserCircle, label: 'Investor Portal', highlight: true },
-      { to: '/play', icon: Gamepad2, label: 'Discover' },
     ]},
     { key: 'pipeline', label: 'Pipeline', items: [
       { to: '/projects', icon: Zap, label: 'Projects' },
@@ -302,7 +298,6 @@ export const SIDEBAR_GROUPS = {
   mentor: [
     { key: 'home', label: 'Home', items: [
       { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
-      { to: '/play', icon: Gamepad2, label: 'Discover' },
     ]},
     { key: 'engagements', label: 'Engagements', items: [
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
