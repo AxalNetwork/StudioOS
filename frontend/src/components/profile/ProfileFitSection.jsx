@@ -3,7 +3,7 @@
 // self endpoints that exist today:
 //   - api.radar.me()          → 8-axis skill radar
 //   - api.values.getMe()      → 15-dimension values lean
-//   - api.assessment.myResults() → latest archetype
+//   - assessment.myResults() → latest archetype
 //   - api.advisor.progress()  → conversational-profiling completion %
 //   - api.matches.summary()   → cross-counterparty match range (see MatchSummaryCard)
 //   - api.bestFit.me()        → the caller's own Axal Fit scorecard + 5 Axal values
@@ -18,7 +18,7 @@ import {
   UserCircle, Target, Heart, Sparkles, Lock, Loader2, AlertCircle,
   CheckCircle2, CalendarPlus, ArrowRight, Users,
 } from 'lucide-react';
-import { api } from '../../lib/api';
+import { api, assessment } from '../../lib/api';
 import SkillRadar from '../play/SkillRadar';
 import { openPaywall } from '../PaywallModal';
 import { archetypeMeta, iconFor, humanize } from '../../lib/assessmentMeta';
@@ -473,7 +473,7 @@ export default function ProfileFitSection({ className = '' }) {
       .catch((e) => { if (alive) set({ data: null, error: e?.message || 'Failed to load' }); });
     wire(api.radar.me(), setRadar);
     wire(api.values.getMe(), setValues);
-    wire(api.assessment.myResults(), setResults);
+    wire(assessment.myResults(), setResults);
     wire(api.advisor.progress(), setProgress);
     wire(api.bestFit.me(), setFit);
     return () => { alive = false; };
