@@ -10,6 +10,15 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Persist landing-page audience, goal & template kit (Task #1)
+
+Backend persistence for the audience-first Brand & Landing flow. A landing page now stores its primary `audience`, `goal`, and `template_kit` (catalog id) alongside the existing visual `template` key, on BOTH prod (Worker/D1) and dev (FastAPI). Re-fetching returns them so the wizard can restore the founder's selections. Public/preview rendering is unchanged. User-facing line added to `frontend/public/CHANGELOG-user.md`.
+
+- `cloudflare-worker/sql/migrations/116_landing_audience_goal_kit.sql`: additive — `audience`, `goal`, `template_kit` TEXT columns on `landing_pages`. NO CHECK on `audience` so it carries the full 6-value taxonomy (customer/investor/partner/advisor/mentor/cofounder), distinct from the narrow 3-value `waitlist_signups.audience` CHECK in migration 081. Validation lives at the API layer.
+- `cloudflare-worker/src/services/landingPageSchema.ts`: lazy-bootstrap ALTERs for the 3 new columns (prod self-heals if the migration lands un-applied).
+- `cloudflare-worker/src/routes/brand.ts`: PUT upsert validates + persists `audience` (6-value `PAGE_AUDIENCE_SET`, separate from the waitlist `AUDIENCE_SET`), `goal` (`GOAL_SET`), and `template_kit` (kebab-id sanitiser, NOT validated against the catalog — that's frontend-side in `lib/brand/templates.js`); `rowToLanding` returns all three. Visual `template` still defaults to `minimal`.
+- `backend/app/api/routes/brand.py`: mirror — `_ensure_schema` ALTERs, `LandingUpsert` fields, upsert read/write, `_row_to_landing` output, plus `_valid_page_audience`/`_valid_goal`/`_clean_template_kit` validators.
+
 ## Brand template catalog & matching (Task #30)
 
 Data layer for the audience-first Brand & Landing wizard. Maps every supplied prebuilt template to an audience + goal and adds pure matching/seed helpers. No UI, DB, or API changes (those are Tasks #32 and #31). Not user-facing yet — no `CHANGELOG-user.md` line.

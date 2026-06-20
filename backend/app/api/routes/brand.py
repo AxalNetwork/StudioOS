@@ -112,6 +112,12 @@ def _ensure_schema(session: Session) -> None:
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS template TEXT",
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS hero_media_url TEXT",
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS product_screenshot_url TEXT",
+        # Audience-first flow — primary page audience (full 6-value taxonomy),
+        # goal, and catalog template id. The narrow waitlist audience above is
+        # left untouched.
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS goal TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS template_kit TEXT",
         "CREATE INDEX IF NOT EXISTS idx_landing_preview_token ON landing_pages(preview_token)",
         "CREATE INDEX IF NOT EXISTS idx_waitlist_audience ON waitlist_signups(project_id, audience)",
     ]:
@@ -161,6 +167,35 @@ def _sanitize_logo_url(url: Optional[str]) -> Optional[str]:
 def _slugify(name: str) -> str:
     base = _SLUG_RE.sub("-", (name or "").lower()).strip("-")[:48] or "page"
     return f"{base}-{secrets.token_hex(3)}"
+
+
+# Audience-first flow validators (mirror of routes/brand.ts). The page's
+# PRIMARY audience carries the full 6-value taxonomy — distinct from the
+# narrow 3-value waitlist audience (`_valid_audience`, defined below).
+_PAGE_AUDIENCE_SET = {"customer", "investor", "partner", "advisor", "mentor", "cofounder"}
+_GOAL_SET = {"join_waitlist", "request_intro", "start_pilot", "book_call", "apply", "offer_guidance"}
+_TEMPLATE_KIT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+
+
+def _valid_page_audience(v: Optional[str]) -> Optional[str]:
+    if isinstance(v, str) and v.strip() in _PAGE_AUDIENCE_SET:
+        return v.strip()
+    return None
+
+
+def _valid_goal(v: Optional[str]) -> Optional[str]:
+    if isinstance(v, str) and v.strip() in _GOAL_SET:
+        return v.strip()
+    return None
+
+
+def _clean_template_kit(v: Optional[str]) -> Optional[str]:
+    # Catalog id (kebab-case); not validated against the catalog (frontend-side).
+    if isinstance(v, str):
+        s = v.strip().lower()
+        if _TEMPLATE_KIT_RE.match(s):
+            return s
+    return None
 
 
 def _project_owned(session: Session, project_id: int, user: User) -> Project:
@@ -356,6 +391,9 @@ def _row_to_landing(row) -> Dict[str, Any]:
         "template": row.get("template") or "minimal",
         "hero_media_url": row.get("hero_media_url") or None,
         "product_screenshot_url": row.get("product_screenshot_url") or None,
+        "audience": row.get("audience") or None,
+        "goal": row.get("goal") or None,
+        "template_kit": row.get("template_kit") or None,
         "logo_url": row.get("logo_url") or None,
     }
 
@@ -401,6 +439,9 @@ class LandingUpsert(BaseModel):
     template: Optional[str] = None
     hero_media_url: Optional[str] = None
     product_screenshot_url: Optional[str] = None
+    audience: Optional[str] = None
+    goal: Optional[str] = None
+    template_kit: Optional[str] = None
 
 
 class PalettePayload(BaseModel):
@@ -720,6 +761,9 @@ def upsert_landing(
         "ai_h": payload.audience_investor_headline or None,
         "ai_b": payload.audience_investor_body or None,
         "ai_c": payload.audience_investor_cta or None,
+        "audience": _valid_page_audience(payload.audience),
+        "goal": _valid_goal(payload.goal),
+        "template_kit": _clean_template_kit(payload.template_kit),
     }
     if existing:
         preview_token = existing.get("preview_token") or secrets.token_hex(16)
@@ -737,6 +781,7 @@ def upsert_landing(
             "audience_partner_headline=:ap_h, audience_partner_body=:ap_b, audience_partner_cta=:ap_c, "
             "audience_investor_headline=:ai_h, audience_investor_body=:ai_b, audience_investor_cta=:ai_c, "
             "template=:template, hero_media_url=:hero_media_url, product_screenshot_url=:product_screenshot_url, "
+            "audience=:audience, goal=:goal, template_kit=:template_kit, "
             "preview_token=:preview_token, updated_at=CURRENT_TIMESTAMP WHERE project_id=:pid"
         ), params=params)
         slug = existing["slug"]
@@ -755,12 +800,12 @@ def upsert_landing(
             "audience_customer_headline, audience_customer_body, audience_customer_cta, "
             "audience_partner_headline, audience_partner_body, audience_partner_cta, "
             "audience_investor_headline, audience_investor_body, audience_investor_cta, "
-            "template, hero_media_url, product_screenshot_url) "
+            "template, hero_media_url, product_screenshot_url, audience, goal, template_kit) "
             "VALUES (:pid, :slug, :preview_token, :name, :tagline, :headline, :subheadline, :cta, :logo_url, "
             ":logo_svg, :logo_asset_id, :color, :palette_bg, :palette_ink, "
             ":palette_secondary, :palette_accent, :font_pairing, "
             ":ac_h, :ac_b, :ac_c, :ap_h, :ap_b, :ap_c, :ai_h, :ai_b, :ai_c, "
-            ":template, :hero_media_url, :product_screenshot_url)"
+            ":template, :hero_media_url, :product_screenshot_url, :audience, :goal, :template_kit)"
         ), params=params)
     session.commit()
     row = session.exec(text(

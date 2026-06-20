@@ -37,6 +37,12 @@ export async function ensureLandingPageBrandKitColumns(env: Env): Promise<void> 
     `ALTER TABLE landing_pages ADD COLUMN template TEXT`,
     `ALTER TABLE landing_pages ADD COLUMN hero_media_url TEXT`,
     `ALTER TABLE landing_pages ADD COLUMN product_screenshot_url TEXT`,
+    // Audience-first flow — primary page audience (full 6-value taxonomy),
+    // goal, and catalog template id. Separate from the per-audience copy
+    // columns above and from the narrow waitlist audience.
+    `ALTER TABLE landing_pages ADD COLUMN audience TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN goal TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN template_kit TEXT`,
   ];
   for (const s of alters) {
     try { await env.DB.prepare(s).run(); } catch { /* column exists / table absent */ }

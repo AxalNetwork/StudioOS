@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your Brand & Landing page remembers who it's for
+
+When you build a landing page, it now remembers who it's for (your audience), what you'd like visitors to do, and the template you started from. Come back later and those choices are still set, so you can pick up right where you left off. Your live and preview pages look exactly the same as before.
+
+---
+
 ## One live preview that follows the slide you're editing
 
 In the Spin-Out deck builder, the slide editor used to show two fixed live previews stacked above it — one for the cover and one for the "pain frequency" slide. Now there's a single live preview that automatically shows whichever slide you've selected in the SLIDES list. Click any slide — or step through with the arrows — and the preview updates to match, with a heading and caption tailored to that slide. The cover still shows your live validation-signal curve, and the problem slide still shows your grouped discovery pains (with a reminder to log and group pains when there's no data yet).
