@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Build your landing page around who it's for
+
+The Brand & Landing Page builder now walks you through it in four clear steps. First you pick your project and choose who the page is for — a customer, investor, partner, advisor, mentor, or co-founder — and we suggest what you'd like visitors to do. Next you pick from templates recommended for that audience, which fills in a starting headline, subheadline, and button text you can edit. Then you fine-tune your logo, colors, fonts, and wording — the AI name ideas, palette suggestions, and tagline helper all live here now. Finally you publish and grab your shareable link. Your audience, goal, and chosen template are saved, so reopening the builder picks up right where you left off.
+
+---
+
 ## Your Brand & Landing page remembers who it's for
 
 When you build a landing page, it now remembers who it's for (your audience), what you'd like visitors to do, and the template you started from. Come back later and those choices are still set, so you can pick up right where you left off. Your live and preview pages look exactly the same as before.

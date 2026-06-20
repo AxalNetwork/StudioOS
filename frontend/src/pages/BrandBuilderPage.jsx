@@ -1,15 +1,33 @@
 import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { Link } from 'react-router-dom';
-import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe, Upload, Palette, PenLine, Eye } from 'lucide-react';
+import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe, Upload, Palette, PenLine, Eye, Users, LayoutTemplate, Share2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { FONT_PAIRING_OPTIONS } from '../decks/templates/axal_spinout_demoday_app';
+import { AUDIENCES, GOALS, AUDIENCE_LABELS as PAGE_AUDIENCE_LABELS } from '../lib/brand/templates.js';
+import { suggestAudienceAndGoal, getRecommendedTemplatesForAudience, generateInitialBrandKit } from '../lib/brand/flow.js';
 
 // Task #24 — Brand & landing page generator.
-// Single-page wizard: pick project → AI suggestions → choose name/logo →
-// edit landing copy → publish → share + view waitlist signups.
+// Task #2 — Reworked into the audience-first flow:
+//   1. Pick project & audience  2. Pick a recommended template
+//   3. Tune brand kit & copy     4. Share
+// Template recommendations + seed copy come from the catalog in
+// frontend/src/lib/brand/. Audience/goal/template_kit persist via the
+// brand-landing API (Task #1). Published output keeps the existing visual
+// templates — we don't recreate designs here.
+
+// Human labels for the persisted primary goal (the 6-value taxonomy).
+const GOAL_LABELS = {
+  join_waitlist: 'Join the waitlist',
+  request_intro: 'Request an intro',
+  start_pilot: 'Start a pilot',
+  book_call: 'Book a call',
+  apply: 'Apply to join',
+  offer_guidance: 'Offer guidance',
+};
+
 export default function BrandBuilderPage() {
   const { user } = useAuth();
   const [projects, setProjects] = useState([]);
@@ -32,6 +50,8 @@ export default function BrandBuilderPage() {
     audience_partner_headline: '', audience_partner_body: '', audience_partner_cta: '',
     audience_investor_headline: '', audience_investor_body: '', audience_investor_cta: '',
     template: 'minimal', hero_media_url: '', product_screenshot_url: '',
+    // Task #2 — audience-first selections (persisted via Task #1 API)
+    audience: '', goal: '', template_kit: '',
   });
   const [signups, setSignups] = useState([]);
   const [waitlistAudienceFilter, setWaitlistAudienceFilter] = useState('');
@@ -45,13 +65,12 @@ export default function BrandBuilderPage() {
   const [taglineCandidates, setTaglineCandidates] = useState([]);
   const [taglineInputs, setTaglineInputs] = useState({ audience: '', tone: 'bold', marketAngle: 'innovation' });
   const [uploadBusy, setUploadBusy] = useState(false);
-  // Task #4 — Audience copy
+  // Task #4 — per-audience copy (customer/partner/investor variants on the page)
   const [activeAudienceTab, setActiveAudienceTab] = useState('customer');
   const AUDIENCE_LABELS = { customer: 'Customer discovery', partner: 'Partner', investor: 'Investor' };
   const AUDIENCE_COLORS = { customer: 'bg-violet-100 text-violet-700', partner: 'bg-indigo-100 text-indigo-700', investor: 'bg-emerald-100 text-emerald-700' };
-  // Task #5 — Template picker
+  // Task #5 — visual template registry (maps a catalog template's visualTemplate → label / media needs)
   const [templates, setTemplates] = useState([]);
-  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
 
   useEffect(() => {
     api.listProjects().then((r) => {
@@ -102,6 +121,10 @@ export default function BrandBuilderPage() {
             template: lp.template || 'minimal',
             hero_media_url: lp.hero_media_url || '',
             product_screenshot_url: lp.product_screenshot_url || '',
+            // Task #2 — restore audience-first selections
+            audience: lp.audience || '',
+            goal: lp.goal || '',
+            template_kit: lp.template_kit || '',
           });
         } else {
           setLanding(null);
@@ -116,7 +139,7 @@ export default function BrandBuilderPage() {
         setPreviewUrl(pu?.url || null);
       } catch { setPreviewUrl(null); }
     })();
-    // Task #5 — load template registry
+    // Task #5 — load visual template registry (for media-field needs + style labels)
     (async () => {
       try {
         const r = await api.brandListTemplates();
@@ -125,8 +148,38 @@ export default function BrandBuilderPage() {
     })();
   }, [projectId, projects, waitlistAudienceFilter]);
 
+  // Step 1 — pick an audience; prefill the goal default for that audience.
+  const selectAudience = (audience) => {
+    const { goal } = suggestAudienceAndGoal(project || {}, audience);
+    setDraft((d) => ({ ...d, audience, goal }));
+  };
+
+  // Step 2 — choose a recommended template. Maps the catalog entry to the
+  // existing visual style and seeds editable copy/CTA. Re-clicking the active
+  // template is a no-op so saved edits aren't clobbered.
+  const chooseTemplate = (t) => {
+    setDraft((d) => {
+      if (t.id === d.template_kit) return d;
+      const kit = generateInitialBrandKit(
+        { ...(project || {}), name: project?.name, description: description || project?.description, oneLiner: description || project?.description },
+        t,
+        t.primaryGoal,
+      );
+      return {
+        ...d,
+        template_kit: t.id,
+        template: t.visualTemplate || d.template,
+        goal: t.primaryGoal || d.goal,
+        cta_text: kit.ctaLabel || d.cta_text,
+        name: d.name || kit.brandName,
+        headline: kit.headline,
+        subheadline: kit.subheadline,
+      };
+    });
+  };
+
   const generate = async () => {
-    if (description.trim().length < 4) { setError('Add a short description first.'); return; }
+    if (description.trim().length < 4) { setError('Add a short description in step 1 first.'); return; }
     setBusy(true); setError('');
     try {
       const r = await api.brandSuggest({ description: description.trim(), sector: sector || null });
@@ -254,6 +307,11 @@ export default function BrandBuilderPage() {
 
   const landingUrl = landing ? `${window.location.origin}/landing/${landing.slug}` : '';
 
+  // Step 2 — templates recommended for the chosen audience (recommended-first).
+  const recommendedTemplates = draft.audience ? getRecommendedTemplatesForAudience(draft.audience) : [];
+  const visualMeta = templates.find((t) => t.key === draft.template);
+  const visualLabel = (key) => templates.find((t) => t.key === key)?.label || key;
+
   return (
     <div className="max-w-5xl mx-auto py-8 px-4">
       <div className="mb-6">
@@ -261,21 +319,23 @@ export default function BrandBuilderPage() {
           <Sparkles className="text-violet-600" size={22} /> Brand & Landing Page
         </h1>
         <PageExplainer pageKey="brand_builder" />
-        <p className="text-sm text-gray-600 mt-1">
-          Go from idea to a public landing page + waitlist in one sitting.
+        <p className="text-sm text-gray-600 mt-1 dark:text-gray-400">
+          Start with who the page is for, pick a matching template, then tune and share.
         </p>
       </div>
 
-      {/* Step 1 — pick project + describe */}
+      {/* Step 1 — pick project & audience */}
       <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
-        <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">1. Tell us about your venture</h2>
+        <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 dark:text-gray-100">
+          <Users size={15} className="text-violet-600" /> 1. Project & audience
+        </h2>
         <div className="grid sm:grid-cols-2 gap-3 mb-3">
           <label className="block">
             <span className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Project</span>
             <select
               value={projectId || ''}
               onChange={(e) => setProjectId(parseInt(e.target.value) || null)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100"
             >
               <option value="">Pick a project…</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -286,124 +346,185 @@ export default function BrandBuilderPage() {
             <input
               value={sector} onChange={(e) => setSector(e.target.value)}
               placeholder="AI / Climate / Fintech…"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
             />
           </label>
         </div>
-        <label className="block">
+        <label className="block mb-4">
           <span className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">One-paragraph description</span>
           <textarea
             value={description} onChange={(e) => setDescription(e.target.value)}
             rows={3}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
             placeholder="What are you building, for whom, and why now?"
           />
         </label>
-        <button
-          onClick={generate}
-          disabled={busy || !projectId}
-          className="mt-3 inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50"
-        >
-          {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-          Generate 5 brand options
-        </button>
-        {!aiUsed && suggestions.length > 0 && (
-          <div className="text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded-md px-2 py-1 mt-2 inline-block dark:text-gray-300 dark:bg-gray-800 dark:border-gray-700">
-            Showing starter options — try regenerating for AI-crafted ideas.
-          </div>
-        )}
-      </section>
 
-      {/* Step 2 — suggestions */}
-      {suggestions.length > 0 && (
-        <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">2. Pick a direction</h2>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {suggestions.map((s, i) => {
-              const active = draft.name === s.name;
+        <div className="mb-3">
+          <span className="block text-xs font-medium text-gray-700 mb-2 dark:text-gray-300">Who is this page for?</span>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {AUDIENCES.map((a) => {
+              const active = draft.audience === a;
               return (
                 <button
-                  key={i}
+                  key={a}
                   type="button"
-                  onClick={() => pickSuggestion(s)}
-                  className={`text-left border rounded-lg p-3 hover:border-violet-300 transition ${
-                    active ? 'border-violet-400 ring-2 ring-violet-100 bg-violet-50/30' : 'border-gray-200'
+                  onClick={() => selectAudience(a)}
+                  className={`text-left border rounded-lg px-3 py-2 text-sm transition ${
+                    active
+                      ? 'border-violet-400 ring-2 ring-violet-100 bg-violet-50/40 text-violet-800 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-200 dark:ring-violet-900'
+                      : 'border-gray-200 text-gray-700 hover:border-violet-300 dark:border-gray-800 dark:text-gray-300'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="font-semibold text-gray-900 dark:text-gray-100">{s.name}</div>
+                  <span className="flex items-center justify-between">
+                    {PAGE_AUDIENCE_LABELS[a]}
                     {active && <Check size={14} className="text-violet-600" />}
-                  </div>
-                  <div className="text-sm text-gray-600 mt-1">{s.tagline}</div>
-                  <div className="text-[11px] text-gray-400 mt-2 italic">Logo: {s.logo_prompt}</div>
+                  </span>
                 </button>
               );
             })}
           </div>
-        </section>
-      )}
+        </div>
 
-      {/* Step 2b — pick a template */}
-      {draft.name && (
+        {draft.audience && (
+          <label className="block max-w-xs">
+            <span className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Primary goal for visitors</span>
+            <select
+              value={draft.goal || ''}
+              onChange={(e) => setDraft({ ...draft, goal: e.target.value })}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100"
+            >
+              {GOALS.map((g) => <option key={g} value={g}>{GOAL_LABELS[g] || g}</option>)}
+            </select>
+          </label>
+        )}
+      </section>
+
+      {/* Step 2 — pick a recommended template */}
+      {projectId && draft.audience && (
         <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">3. Pick a template</h2>
+          <h2 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-2 dark:text-gray-100">
+            <LayoutTemplate size={15} className="text-violet-600" /> 2. Pick a template
+          </h2>
+          <p className="text-xs text-gray-500 mb-3 dark:text-gray-400">
+            Recommended for {PAGE_AUDIENCE_LABELS[draft.audience]} — choose one to seed your copy & CTA.
+          </p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {templates.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setDraft({ ...draft, template: t.key })}
-                className={`text-left border rounded-lg p-4 transition ${
-                  draft.template === t.key
-                    ? 'border-violet-400 ring-2 ring-violet-100 bg-violet-50/30'
-                    : 'border-gray-200 hover:border-violet-300'
-                }`}
-              >
-                <div className="h-24 bg-gray-100 border border-gray-200 rounded-md mb-3 flex items-center justify-center text-gray-400 text-xs dark:bg-gray-800 dark:border-gray-700">
-                  {t.thumbnailPlaceholder}
-                </div>
-                <div className="font-semibold text-gray-900 text-sm dark:text-gray-100">{t.label}</div>
-                <div className="text-xs text-gray-500 mt-0.5">{t.description}</div>
-                {draft.template === t.key && (
-                  <div className="mt-2 text-xs font-medium text-violet-600 flex items-center gap-1">
-                    <Check size={12} /> Selected
+            {recommendedTemplates.map((t) => {
+              const active = draft.template_kit === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => chooseTemplate(t)}
+                  className={`text-left border rounded-lg p-4 transition ${
+                    active
+                      ? 'border-violet-400 ring-2 ring-violet-100 bg-violet-50/30 dark:border-violet-700 dark:bg-violet-950/30 dark:ring-violet-900'
+                      : 'border-gray-200 hover:border-violet-300 dark:border-gray-800'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-semibold text-gray-900 text-sm dark:text-gray-100">{t.label}</div>
+                    {t.recommended && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
+                        Recommended
+                      </span>
+                    )}
                   </div>
-                )}
-              </button>
-            ))}
+                  {t.notes && <div className="text-xs text-gray-500 mt-1 dark:text-gray-400">{t.notes}</div>}
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
+                    <span>Goal: <span className="text-gray-700 dark:text-gray-300">{GOAL_LABELS[t.primaryGoal] || t.primaryGoal}</span></span>
+                    <span>CTA: <span className="text-gray-700 dark:text-gray-300">{t.defaultCtaLabel}</span></span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">Style: {visualLabel(t.visualTemplate)}</div>
+                  {active && (
+                    <div className="mt-2 text-xs font-medium text-violet-600 flex items-center gap-1">
+                      <Check size={12} /> Selected
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
-          {(templates.find((t) => t.key === draft.template)?.usesHero || draft.hero_media_url) && (
+          {(visualMeta?.usesHero || draft.hero_media_url) && (
             <label className="mt-3 block">
               <span className="text-[11px] text-gray-600 dark:text-gray-400">Hero media URL</span>
               <input
                 value={draft.hero_media_url || ''}
                 onChange={(e) => setDraft({ ...draft, hero_media_url: e.target.value })}
                 placeholder="https://..."
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
+                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
               />
             </label>
           )}
-          {(templates.find((t) => t.key === draft.template)?.usesProduct || draft.product_screenshot_url) && (
+          {(visualMeta?.usesProduct || draft.product_screenshot_url) && (
             <label className="mt-2 block">
               <span className="text-[11px] text-gray-600 dark:text-gray-400">Product screenshot URL</span>
               <input
                 value={draft.product_screenshot_url || ''}
                 onChange={(e) => setDraft({ ...draft, product_screenshot_url: e.target.value })}
                 placeholder="https://..."
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
+                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
               />
             </label>
           )}
         </section>
       )}
 
-      {/* Step 4 — edit + publish */}
-      {draft.name && (
+      {/* Step 3 — tune brand kit & copy */}
+      {(draft.template_kit || landing) && (
         <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">5. Tune your landing page</h2>
+          <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 dark:text-gray-100">
+            <PenLine size={15} className="text-violet-600" /> 3. Tune your brand & copy
+          </h2>
+
+          {/* Brand-direction generation (relocated from step 1) */}
+          <div className="border border-gray-200 rounded-lg p-3 mb-4 dark:border-gray-800">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Need name ideas? Generate AI brand directions.</span>
+              <button
+                onClick={generate}
+                disabled={busy || !projectId}
+                className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-50"
+              >
+                {busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                Generate 5 options
+              </button>
+            </div>
+            {!aiUsed && suggestions.length > 0 && (
+              <div className="text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded-md px-2 py-1 mt-2 inline-block dark:text-gray-300 dark:bg-gray-800 dark:border-gray-700">
+                Showing starter options — try regenerating for AI-crafted ideas.
+              </div>
+            )}
+            {suggestions.length > 0 && (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-3">
+                {suggestions.map((s, i) => {
+                  const active = draft.name === s.name;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => pickSuggestion(s)}
+                      className={`text-left border rounded-lg p-3 hover:border-violet-300 transition ${
+                        active ? 'border-violet-400 ring-2 ring-violet-100 bg-violet-50/30 dark:border-violet-700 dark:bg-violet-950/30 dark:ring-violet-900' : 'border-gray-200 dark:border-gray-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold text-gray-900 dark:text-gray-100">{s.name}</div>
+                        {active && <Check size={14} className="text-violet-600" />}
+                      </div>
+                      <div className="text-sm text-gray-600 mt-1 dark:text-gray-400">{s.tagline}</div>
+                      <div className="text-[11px] text-gray-400 mt-2 italic dark:text-gray-500">Logo: {s.logo_prompt}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <div className="grid sm:grid-cols-3 gap-4">
             <div className="sm:col-span-1">
-              <div className="aspect-square bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center overflow-hidden dark:border-gray-800">
+              <div className="aspect-square bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center overflow-hidden dark:border-gray-800 dark:bg-gray-800">
                 {logoBusy ? (
                   <Loader2 className="animate-spin text-violet-500" />
                 ) : draft.logo_url ? (
@@ -519,17 +640,17 @@ export default function BrandBuilderPage() {
               <input
                 value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                 placeholder="Brand name"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold dark:border-gray-800"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
               />
               <input
                 value={draft.headline} onChange={(e) => setDraft({ ...draft, headline: e.target.value })}
                 placeholder="Headline"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
               />
               <textarea
                 value={draft.subheadline} onChange={(e) => setDraft({ ...draft, subheadline: e.target.value })}
                 rows={2} placeholder="Subheadline"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
               />
               {/* Tagline iterator */}
               <div className="border border-gray-200 rounded-lg p-3 dark:border-gray-800">
@@ -551,12 +672,12 @@ export default function BrandBuilderPage() {
                         value={taglineInputs.audience}
                         onChange={(e) => setTaglineInputs({ ...taglineInputs, audience: e.target.value })}
                         placeholder="Audience (e.g. founders)"
-                        className="border border-gray-200 rounded px-2 py-1 text-sm dark:border-gray-800"
+                        className="border border-gray-200 rounded px-2 py-1 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
                       />
                       <select
                         value={taglineInputs.tone}
                         onChange={(e) => setTaglineInputs({ ...taglineInputs, tone: e.target.value })}
-                        className="border border-gray-200 rounded px-2 py-1 text-sm dark:border-gray-800"
+                        className="border border-gray-200 rounded px-2 py-1 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
                       >
                         <option value="bold">Bold</option>
                         <option value="warm">Warm</option>
@@ -568,7 +689,7 @@ export default function BrandBuilderPage() {
                         value={taglineInputs.marketAngle}
                         onChange={(e) => setTaglineInputs({ ...taglineInputs, marketAngle: e.target.value })}
                         placeholder="Angle (e.g. AI)"
-                        className="border border-gray-200 rounded px-2 py-1 text-sm dark:border-gray-800"
+                        className="border border-gray-200 rounded px-2 py-1 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
                       />
                     </div>
                     <div className="grid gap-2">
@@ -577,7 +698,7 @@ export default function BrandBuilderPage() {
                           key={i} type="button"
                           onClick={() => setDraft({ ...draft, tagline: t, headline: t })}
                           className={`text-left text-sm px-3 py-2 rounded border transition ${
-                            draft.tagline === t ? 'border-violet-400 bg-violet-50/30' : 'border-gray-200 hover:border-violet-300'
+                            draft.tagline === t ? 'border-violet-400 bg-violet-50/30 dark:border-violet-700 dark:bg-violet-950/30' : 'border-gray-200 hover:border-violet-300 dark:border-gray-800'
                           }`}
                         >
                           {t}
@@ -597,8 +718,57 @@ export default function BrandBuilderPage() {
               <input
                 value={draft.cta_text} onChange={(e) => setDraft({ ...draft, cta_text: e.target.value })}
                 placeholder="CTA button text"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
               />
+
+              {/* Per-audience copy variants (customer / partner / investor) */}
+              <div className="border border-gray-200 rounded-lg p-3 dark:border-gray-800">
+                <span className="block text-[11px] font-medium text-gray-600 mb-2 dark:text-gray-400">Audience-specific copy (optional)</span>
+                <div className="flex gap-2 mb-3">
+                  {['customer', 'partner', 'investor'].map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => setActiveAudienceTab(a)}
+                      className={`px-3 py-1.5 text-xs rounded-lg border transition ${
+                        activeAudienceTab === a
+                          ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-300 dark:border-gray-800 dark:text-gray-400'
+                      }`}
+                    >
+                      {AUDIENCE_LABELS[a]}
+                    </button>
+                  ))}
+                </div>
+                {['customer', 'partner', 'investor'].map((a) => (
+                  <div key={a} className={activeAudienceTab === a ? 'block' : 'hidden'}>
+                    <div className="space-y-2">
+                      <input
+                        value={draft[`audience_${a}_headline`] || ''}
+                        onChange={(e) => setDraft({ ...draft, [`audience_${a}_headline`]: e.target.value })}
+                        placeholder={`${AUDIENCE_LABELS[a]} headline`}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
+                      />
+                      <textarea
+                        value={draft[`audience_${a}_body`] || ''}
+                        onChange={(e) => setDraft({ ...draft, [`audience_${a}_body`]: e.target.value })}
+                        rows={2}
+                        placeholder={`${AUDIENCE_LABELS[a]} body`}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
+                      />
+                      <input
+                        value={draft[`audience_${a}_cta`] || ''}
+                        onChange={(e) => setDraft({ ...draft, [`audience_${a}_cta`]: e.target.value })}
+                        placeholder={`${AUDIENCE_LABELS[a]} CTA`}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
+                      />
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                        Defaults to your main headline / subheadline / CTA if left blank.
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <button
@@ -608,82 +778,33 @@ export default function BrandBuilderPage() {
                   {busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                   Save
                 </button>
-                {landing && (
-                  <button
-                    onClick={togglePublish} disabled={busy}
-                    className={`inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg border ${
-                      landing.published
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
-                    }`}
-                  >
-                    <Globe size={14} /> {landing.published ? 'Published' : 'Publish'}
-                  </button>
-                )}
               </div>
             </div>
           </div>
         </section>
       )}
 
-      {/* Step 4 — Audience copy */}
-      {draft.name && (
-        <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">4. Audience copy</h2>
-          <div className="flex gap-2 mb-3">
-            {['customer', 'partner', 'investor'].map((a) => (
-              <button
-                key={a}
-                type="button"
-                onClick={() => setActiveAudienceTab(a)}
-                className={`px-3 py-1.5 text-xs rounded-lg border transition ${
-                  activeAudienceTab === a
-                    ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300'
-                    : 'border-gray-200 text-gray-600 hover:border-gray-300 dark:border-gray-800 dark:text-gray-400'
-                }`}
-              >
-                {AUDIENCE_LABELS[a]}
-              </button>
-            ))}
-          </div>
-          {['customer', 'partner', 'investor'].map((a) => (
-            <div key={a} className={activeAudienceTab === a ? 'block' : 'hidden'}>
-              <div className="space-y-2">
-                <input
-                  value={draft[`audience_${a}_headline`] || ''}
-                  onChange={(e) => setDraft({ ...draft, [`audience_${a}_headline`]: e.target.value })}
-                  placeholder={`${AUDIENCE_LABELS[a]} headline`}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
-                />
-                <textarea
-                  value={draft[`audience_${a}_body`] || ''}
-                  onChange={(e) => setDraft({ ...draft, [`audience_${a}_body`]: e.target.value })}
-                  rows={2}
-                  placeholder={`${AUDIENCE_LABELS[a]} body`}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
-                />
-                <input
-                  value={draft[`audience_${a}_cta`] || ''}
-                  onChange={(e) => setDraft({ ...draft, [`audience_${a}_cta`]: e.target.value })}
-                  placeholder={`${AUDIENCE_LABELS[a]} CTA`}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
-                />
-                <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                  Defaults to your main headline / subheadline / CTA if left blank.
-                </p>
-              </div>
-            </div>
-          ))}
-        </section>
-      )}
-
-      {/* Step 5 — share */}
+      {/* Step 4 — share */}
       {landing && (
         <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">6. Share your page</h2>
+          <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 dark:text-gray-100">
+            <Share2 size={15} className="text-violet-600" /> 4. Share your page
+          </h2>
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <button
+              onClick={togglePublish} disabled={busy}
+              className={`inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg border ${
+                landing.published
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300'
+                  : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300'
+              }`}
+            >
+              <Globe size={14} /> {landing.published ? 'Published' : 'Publish'}
+            </button>
+          </div>
           {landing.published && (
             <div className="flex flex-wrap items-center gap-2 mb-3">
-              <code className="bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 text-sm break-all dark:border-gray-800">{landingUrl}</code>
+              <code className="bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 text-sm break-all dark:border-gray-800 dark:bg-gray-800 dark:text-gray-100">{landingUrl}</code>
               <button
                 onClick={() => navigator.clipboard.writeText(landingUrl)}
                 className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-violet-700 dark:text-gray-300"
@@ -700,7 +821,7 @@ export default function BrandBuilderPage() {
           )}
           {previewUrl && (
             <div className="flex flex-wrap items-center gap-2">
-              <code className="bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5 text-sm break-all dark:border-amber-800 dark:bg-amber-900/20">{window.location.origin}{previewUrl}</code>
+              <code className="bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5 text-sm break-all dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-100">{window.location.origin}{previewUrl}</code>
               <button
                 onClick={() => navigator.clipboard.writeText(window.location.origin + previewUrl)}
                 className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-violet-700 dark:text-gray-300"
@@ -716,7 +837,7 @@ export default function BrandBuilderPage() {
               <span className="text-[11px] text-amber-600 dark:text-amber-400">Private — share for feedback only</span>
             </div>
           )}
-          <div className="text-xs text-gray-500 mt-2">
+          <div className="text-xs text-gray-500 mt-2 dark:text-gray-400">
             {landing.views_count || 0} pageviews · {signups.length} signup{signups.length === 1 ? '' : 's'}
           </div>
         </section>
@@ -730,7 +851,7 @@ export default function BrandBuilderPage() {
             <select
               value={waitlistAudienceFilter}
               onChange={(e) => setWaitlistAudienceFilter(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2 py-1 dark:border-gray-800 dark:text-gray-100"
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
             >
               <option value="">All</option>
               <option value="customer">Customer</option>
@@ -760,7 +881,7 @@ export default function BrandBuilderPage() {
         <div className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2 dark:bg-red-900/20 dark:border-red-900 dark:text-red-300">{error}</div>
       )}
 
-      <div className="mt-6 text-xs text-gray-500">
+      <div className="mt-6 text-xs text-gray-500 dark:text-gray-400">
         <Link to="/founder" className="text-violet-700 hover:underline">← Back to Founder Portal</Link>
       </div>
     </div>

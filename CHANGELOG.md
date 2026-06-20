@@ -10,6 +10,18 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Audience-first Brand & Landing wizard (Task #2)
+
+Reworked `frontend/src/pages/BrandBuilderPage.jsx` into the approved audience-first flow: (1) project & audience, (2) recommended template, (3) tune brand kit & copy, (4) share. Consumes the catalog + helpers in `frontend/src/lib/brand/` and the `audience`/`goal`/`template_kit` persistence API (Task #1). No backend/API or catalog changes.
+
+- Step 1 leads with project + sector + description and a 6-audience picker (`AUDIENCES`/`AUDIENCE_LABELS` from `lib/brand/templates.js`); selecting an audience prefills the primary `goal` via `suggestAudienceAndGoal`, editable through a goal `<select>` (`GOALS`).
+- Step 2 replaces the fixed visual-template picker with catalog-driven recommended cards for the audience (`getRecommendedTemplatesForAudience`, recommended-first). Each card shows label, recommended badge, goal, default CTA and mapped visual style. Picking a template sets `template_kit` (catalog id) + maps its `visualTemplate` → the persisted visual `template`, sets `goal`/`cta_text`, and seeds editable name/headline/subheadline via `generateInitialBrandKit`. Re-selecting the active template is a no-op so saved edits aren't clobbered. Hero/product-media inputs key off the mapped visual template's `usesHero`/`usesProduct` from the worker registry.
+- Step 3 folds all existing tuning: relocated brand-direction generation (`/brand/suggest` + pick), logo regenerate/upload, palette pickers + AI palette suggest, typography, name/headline/subheadline/CTA, tagline iterator, and the per-audience copy tabs. Save lives here.
+- Step 4 holds publish + public/preview URLs + counts (publish moved out of the tuning section). Waitlist list unchanged.
+- `draft` gains `audience`/`goal`/`template_kit`, restored from the landing row on load and sent on save (PUT already posts the whole draft). Dark-mode variants added to new/changed UI.
+
+User-facing line added to `frontend/public/CHANGELOG-user.md`.
+
 ## Persist landing-page audience, goal & template kit (Task #1)
 
 Backend persistence for the audience-first Brand & Landing flow. A landing page now stores its primary `audience`, `goal`, and `template_kit` (catalog id) alongside the existing visual `template` key, on BOTH prod (Worker/D1) and dev (FastAPI). Re-fetching returns them so the wizard can restore the founder's selections. Public/preview rendering is unchanged. User-facing line added to `frontend/public/CHANGELOG-user.md`.
