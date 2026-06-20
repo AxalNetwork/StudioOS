@@ -5,6 +5,42 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Removed the separate "Discover" game
+
+The standalone "Play & Discover" area has been retired. Your skills and values are now captured naturally through your conversation with the Personal Advisor, so the separate game, the shareable card, and the "Discover" sidebar link are gone. Finishing onboarding now takes you straight to your dashboard.
+
+---
+
+## Fixed: dashboard and profile pages crashing for everyone
+
+A bug caused the dashboard and profile pages to show a full-page error for all users. It's fixed — both pages now load normally and the profile fit section shows your data again.
+
+---
+
+## Tailor your landing copy for every audience
+
+You can now write a custom headline, description, and button for all six audiences — customer, investor, partner, advisor, mentor, and co-founder. Previously only customer, partner, and investor had their own wording. Open the audience tabs in the brand builder to give each visitor a message written just for them, and your published page shows a tab for each one. Any audience you leave blank simply falls back to your main page copy.
+
+---
+
+## Build your landing page around who it's for
+
+The Brand & Landing Page builder now walks you through it in four clear steps. First you pick your project and choose who the page is for — a customer, investor, partner, advisor, mentor, or co-founder — and we suggest what you'd like visitors to do. Next you pick from templates recommended for that audience, which fills in a starting headline, subheadline, and button text you can edit. Then you fine-tune your logo, colors, fonts, and wording — the AI name ideas, palette suggestions, and tagline helper all live here now. Finally you publish and grab your shareable link. Your audience, goal, and chosen template are saved, so reopening the builder picks up right where you left off.
+
+---
+
+## Your Brand & Landing page remembers who it's for
+
+When you build a landing page, it now remembers who it's for (your audience), what you'd like visitors to do, and the template you started from. Come back later and those choices are still set, so you can pick up right where you left off. Your live and preview pages look exactly the same as before.
+
+---
+
+## One live preview that follows the slide you're editing
+
+In the Spin-Out deck builder, the slide editor used to show two fixed live previews stacked above it — one for the cover and one for the "pain frequency" slide. Now there's a single live preview that automatically shows whichever slide you've selected in the SLIDES list. Click any slide — or step through with the arrows — and the preview updates to match, with a heading and caption tailored to that slide. The cover still shows your live validation-signal curve, and the problem slide still shows your grouped discovery pains (with a reminder to log and group pains when there's no data yet).
+
+---
+
 ## See your Best-Fit profile, matches, and book a 1:1
 
 Your dashboard now has a "Your Profile & Fit" section, also available on its own "My Profile" page. It brings together everything your advisor learns about you: an 8-point skills radar, your top values, your founder archetype, your Axal Fit score and band, your 5 behavioral values, and how far along your profiling is — all in one place. Each card gently points you back to the advisor whenever there's more to fill in.

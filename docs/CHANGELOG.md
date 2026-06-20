@@ -10,6 +10,94 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Remove the "Play & Discover" surface everywhere (Task #8)
+
+The skills & values assessment is now collected conversationally inside the Personal
+Advisor ("Fit Banks"), so the standalone gamified "Play & Discover" surface is
+redundant and has been removed from every user-facing entry point.
+
+- **Sidebar**: dropped the `{ to: '/play', label: 'Discover' }` nav item from all five
+  role menus in `frontend/src/sidebarConfig.js`. The `Gamepad2` icon import stays —
+  it's still used by the admin "Assessment Studio" item.
+- **Entry points**: removed the onboarding "Discover your archetype" button in
+  `frontend/src/pages/OnboardingPersonaPage.jsx` (the "Go to dashboard" action
+  remains) and the "Discover your archetype" CTA card in
+  `frontend/src/pages/LandingPage.jsx`; the landing grid wrapper collapses from a
+  two-column grid to a single centered column so the remaining "Upcoming events"
+  card still renders correctly.
+- **Routes**: removed the `/play`, `/play/card`, and `/play/:gameSlug` routes and
+  their lazy imports from `frontend/src/App.jsx`, and deleted the three retired page
+  files under `frontend/src/pages/play/` (`AssessmentHubPage.jsx`,
+  `AssessmentGamePage.jsx`, `ProfileCardPage.jsx`). Removed the now-orphaned
+  `Task #2` header comments.
+- **Kept intact**: shared visuals under `frontend/src/components/play/*` (SkillRadar,
+  ArchetypeBadge, CardRadar, mechanics, SpectrumBar) reused by the Profile & Fit
+  section and admin consoles; the `assessment` API namespace in `lib/api.js`; and the
+  admin Assessment Studio (`/admin/assessment`) and Best-Fit console.
+- No API, worker, or schema change.
+
+## Fix dashboard & profile crash — api.assessment undefined (Task #7)
+
+`ProfileFitSection` imported only `{ api }` but called `api.assessment.myResults()`;
+`assessment` is a separate named export in `lib/api.js`, not a property of `api`, so
+the access threw synchronously before the `.catch()` could run and tripped the error
+boundary on every Dashboard and Profile page load for all roles.
+
+- **Fix**: `frontend/src/components/profile/ProfileFitSection.jsx` — add `assessment`
+  to the import and call `assessment.myResults()` directly (matches the pattern used
+  by other call sites).
+- Stale comment on line 6 updated to match.
+- No API, worker, or schema change.
+
+## Per-audience landing copy for all six audiences (Task #3)
+
+Extended per-audience headline/body/CTA copy from 3 audiences (customer/partner/investor) to all 6 (added advisor/mentor/cofounder) end-to-end.
+
+- **Prod (Worker/D1)**: migration `cloudflare-worker/sql/migrations/117_landing_audience_advisor_mentor_cofounder.sql` adds 9 additive TEXT columns (`audience_{advisor,mentor,cofounder}_{headline,body,cta}`). `services/landingPageSchema.ts` gains matching lazy-bootstrap ALTERs. `routes/brand.ts` extends `rowToLanding` serialization, PUT var parsing, and the UPDATE/INSERT column/placeholder/bind lists. `services/landingTemplates.ts` `buildAudienceData`, tab markup (tabs + panels) and the waitlist `forEach` list now cover all 6.
+- **Dev (FastAPI/SQLite)**: `backend/app/models/migrations.py` (`ensure_brand_landing_columns`) and `backend/app/api/routes/brand.py` `_ensure_schema` add the 9 columns; `_row_to_landing`, the Pydantic payload model, and the PUT params/UPDATE/INSERT extended; public HTML render `aud` dict, tab/panel markup and the JS `forEach` now render all 6.
+- **Frontend**: `frontend/src/pages/BrandBuilderPage.jsx` draft state + load mapping gain the 9 new fields; local `AUDIENCE_LABELS`/`AUDIENCE_COLORS` extended to 6; Step 3's audience tabs/panels now iterate `AUDIENCES` (all 6) instead of the hardcoded 3.
+- **Out of scope (deliberate)**: the `waitlist_signups.audience` CHECK + `VALID_AUDIENCE`/`AUDIENCE_SET` (3 values) are unchanged — new-audience tab signups post `audience=advisor|mentor|cofounder`, which resolves to NULL (CHECK allows NULL, no crash). Widening the CHECK would require a risky D1 table rebuild.
+
+User-facing line added to `frontend/public/CHANGELOG-user.md`.
+
+## Audience-first Brand & Landing wizard (Task #2)
+
+Reworked `frontend/src/pages/BrandBuilderPage.jsx` into the approved audience-first flow: (1) project & audience, (2) recommended template, (3) tune brand kit & copy, (4) share. Consumes the catalog + helpers in `frontend/src/lib/brand/` and the `audience`/`goal`/`template_kit` persistence API (Task #1). No backend/API or catalog changes.
+
+- Step 1 leads with project + sector + description and a 6-audience picker (`AUDIENCES`/`AUDIENCE_LABELS` from `lib/brand/templates.js`); selecting an audience prefills the primary `goal` via `suggestAudienceAndGoal`, editable through a goal `<select>` (`GOALS`).
+- Step 2 replaces the fixed visual-template picker with catalog-driven recommended cards for the audience (`getRecommendedTemplatesForAudience`, recommended-first). Each card shows label, recommended badge, goal, default CTA and mapped visual style. Picking a template sets `template_kit` (catalog id) + maps its `visualTemplate` → the persisted visual `template`, sets `goal`/`cta_text`, and seeds editable name/headline/subheadline via `generateInitialBrandKit`. Re-selecting the active template is a no-op so saved edits aren't clobbered. Hero/product-media inputs key off the mapped visual template's `usesHero`/`usesProduct` from the worker registry.
+- Step 3 folds all existing tuning: relocated brand-direction generation (`/brand/suggest` + pick), logo regenerate/upload, palette pickers + AI palette suggest, typography, name/headline/subheadline/CTA, tagline iterator, and the per-audience copy tabs. Save lives here.
+- Step 4 holds publish + public/preview URLs + counts (publish moved out of the tuning section). Waitlist list unchanged.
+- `draft` gains `audience`/`goal`/`template_kit`, restored from the landing row on load and sent on save (PUT already posts the whole draft). Dark-mode variants added to new/changed UI.
+
+User-facing line added to `frontend/public/CHANGELOG-user.md`.
+
+## Persist landing-page audience, goal & template kit (Task #1)
+
+Backend persistence for the audience-first Brand & Landing flow. A landing page now stores its primary `audience`, `goal`, and `template_kit` (catalog id) alongside the existing visual `template` key, on BOTH prod (Worker/D1) and dev (FastAPI). Re-fetching returns them so the wizard can restore the founder's selections. Public/preview rendering is unchanged. User-facing line added to `frontend/public/CHANGELOG-user.md`.
+
+- `cloudflare-worker/sql/migrations/116_landing_audience_goal_kit.sql`: additive — `audience`, `goal`, `template_kit` TEXT columns on `landing_pages`. NO CHECK on `audience` so it carries the full 6-value taxonomy (customer/investor/partner/advisor/mentor/cofounder), distinct from the narrow 3-value `waitlist_signups.audience` CHECK in migration 081. Validation lives at the API layer.
+- `cloudflare-worker/src/services/landingPageSchema.ts`: lazy-bootstrap ALTERs for the 3 new columns (prod self-heals if the migration lands un-applied).
+- `cloudflare-worker/src/routes/brand.ts`: PUT upsert validates + persists `audience` (6-value `PAGE_AUDIENCE_SET`, separate from the waitlist `AUDIENCE_SET`), `goal` (`GOAL_SET`), and `template_kit` (kebab-id sanitiser, NOT validated against the catalog — that's frontend-side in `lib/brand/templates.js`); `rowToLanding` returns all three. Visual `template` still defaults to `minimal`.
+- `backend/app/api/routes/brand.py`: mirror — `_ensure_schema` ALTERs, `LandingUpsert` fields, upsert read/write, `_row_to_landing` output, plus `_valid_page_audience`/`_valid_goal`/`_clean_template_kit` validators.
+
+## Brand template catalog & matching (Task #30)
+
+Data layer for the audience-first Brand & Landing wizard. Maps every supplied prebuilt template to an audience + goal and adds pure matching/seed helpers. No UI, DB, or API changes (those are Tasks #32 and #31). Not user-facing yet — no `CHANGELOG-user.md` line.
+
+- `frontend/src/lib/brand/templates.js`: typed (JSDoc) catalog. `TEMPLATES` covers all 16 supplied templates; each entry has `id` (kebab), `label`, `audience` (one of 6: customer/investor/partner/advisor/mentor/cofounder), `assetType`, `primaryGoal`, `defaultCtaLabel`, `defaultSlug`, `visualTemplate` (one of the existing `minimal|bold-hero|video-first|editorial|product-mock` keys — published pages keep built-in visual styles, designs are NOT recreated), optional `recommended`, `notes`. Exports the `AUDIENCES`/`ASSET_TYPES`/`GOALS`/`VISUAL_TEMPLATE_KEYS` enums + `AUDIENCE_LABELS`, and helpers `getTemplateById`, `getTemplatesByAudience` (recommended-first), `inferDefaultsFromTemplate`. `VISUAL_TEMPLATE_KEYS` mirrors `cloudflare-worker/src/services/landingTemplates.ts` TEMPLATE_KEYS — keep in lockstep.
+- `frontend/src/lib/brand/flow.js`: pure flow helpers — `suggestAudienceAndGoal(project, preferredAudience?)` (defaults to customer/join_waitlist; per-audience default goal), `getRecommendedTemplatesForAudience(audience)`, `generateInitialBrandKit(project, template, goal)` (deterministic placeholder brandName/headline/subheadline/ctaLabel the wizard can edit — no network, no AI).
+- `frontend/test/brand_templates.test.mjs`: 15 unit tests — catalog integrity (enum/kebab/uniqueness), per-audience coverage + recommended-first ordering, and helper behavior incl. copy seeding for every goal + graceful degradation. Wired into `test:decks` (runs under `npm run test:drift`).
+
+## Live deck preview follows the selected slide (Task #26)
+
+Spin-Out deck builder (`axal_spinout_demoday`) now shows ONE live-preview card above the slide editor instead of two fixed cards (cover + slide-2 pain-frequency).
+
+- `frontend/src/pages/PitchDeckPage.jsx`: removed the standalone "Slide 2 preview — pain frequency" card and merged the two preview components (`SpinoutCoverPreview` + `SpinoutProblemPreview`) into a single `SpinoutSlidePreview({ fields, slideIndex })` that renders the `axal_spinout_demoday` template clipped to `slideIndex` via the shared lazy `<Thumbnail>`.
+- The card is driven by `slideIndex={activeIdx}`, so it follows whichever slide is selected in the SLIDES list and stays in sync with the editor's prev/next arrows.
+- New `spinoutPreviewMeta` `useMemo` derives the per-slide header label + caption: cover (idx 0) keeps the validation-signal copy; problem (idx 1) keeps the pain-frequency copy + empty-data nudge via the retained `spinoutHasRealPains` helper; every other slide gets a neutral "live preview of this slide" caption + `Slide N preview — {title}` label.
+- No changes to PPTX/PDF export, template/deck data, or non-Spin-Out decks. `<Thumbnail slideIndex>` already supported any index (`top: -(slideIndex*INNER_H*scale)`); the template renders all 10 slides stacked.
+
 ## Best-Fit dashboard & admin UI (Task #20)
 
 Frontend half of Conversational Profiling + Best-Fit Matching, built against the merged Task #19 backend shapes. One small read-only backend addition (below): `GET /api/best-fit/me`, the self equivalent of the admin-only Best-Fit report, scoped to the caller's own fit scorecard + Axal values (no matches/spin-out).
