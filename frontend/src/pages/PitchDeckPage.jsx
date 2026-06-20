@@ -13,6 +13,7 @@ import { deckReadinessState } from '../lib/deckReadiness';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 import { useAuth } from '../hooks/useAuthSync';
 import { useSpinoutDeckFields } from '../hooks/useSpinoutDeckFields';
+import UseOfFundsEditor from '../components/UseOfFundsEditor';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
 
@@ -74,6 +75,9 @@ export default function PitchDeckPage() {
   // Stays null until the registry resolves so we don't ship a stale number.
   const [templateCount, setTemplateCount] = useState(null);
   const [error, setError] = useState('');
+  // Task #8 — bumped after the deck-side Use-of-Funds editor saves so the live
+  // spinout field map + readiness re-fetch and THE ASK preview reflects the edit.
+  const [deckDataReload, setDeckDataReload] = useState(0);
 
   // Kick off the templates dynamic import eagerly so the header label can
   // show the true registry size and so the picker opens instantly when
@@ -205,6 +209,7 @@ export default function PitchDeckPage() {
   const { fields: spinoutFields } = useSpinoutDeckFields({
     projectId,
     enabled: isSpinoutDeck && !!projectId,
+    reloadKey: deckDataReload,
   });
 
   // Task #42 — pre-flight readiness. As soon as a Spin-Out deck loads, pull
@@ -227,7 +232,7 @@ export default function PitchDeckPage() {
       .catch((e) => { if (alive) { setDeckPreview(null); if (e?.status !== 402) reportError(e); } })
       .finally(() => { if (alive) setPreviewLoading(false); });
     return () => { alive = false; };
-  }, [isSpinoutDeck, projectId]);
+  }, [isSpinoutDeck, projectId, deckDataReload]);
 
   // Drives the readiness panel. Honors the backend `draft` flag (not just
   // gaps.length) so a no-gaps-but-mid-program deck never reads as "ready".
@@ -859,6 +864,20 @@ export default function PitchDeckPage() {
                     <Loader2 className="w-4 h-4 animate-spin" /> Checking deck readiness…
                   </div>
                 </div>
+              )}
+
+              {/* Task #8 — deck-side Use-of-Funds editor. Lets founders revise
+                  THE ASK allocation after intake; saving re-fetches the live
+                  spinout fields + readiness so the preview and PPTX export
+                  reflect the change. */}
+              {isSpinoutDeck && projectId && (
+                <UseOfFundsEditor
+                  projectId={projectId}
+                  onSaved={() => {
+                    setDeckDataReload((k) => k + 1);
+                    addToast('Use of Funds updated', 'success');
+                  }}
+                />
               )}
 
               {/* Task #53 — Engagement panel: shows aggregate views,

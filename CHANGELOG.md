@@ -10,6 +10,24 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Edit Use of Funds allocation after intake (Task #8)
+
+Founders could only set THE ASK "Use of Funds" % once, on the FounderPortal intake (step 1). They can now revise it after intake from a deck-side editor, and the change flows through to THE ASK slide (live preview + PPTX) in both dev (FastAPI) and prod (Worker).
+
+### Backend — normalize on update (both stacks)
+- `cloudflare-worker/src/routes/projects.ts` — PUT `/:id` previously wrote `use_of_funds` raw (it was in `baseFields`). It now runs `normalizeUseOfFunds` (from `util/useOfFunds.ts`) when the field is present: `400 {error, code:'invalid_use_of_funds'}` on a non-100 total / malformed JSON, otherwise the canonical JSON (or `null` to clear). Mirrors the `/submit` intake path.
+- `backend/app/api/routes/projects.py` — PUT `/{id}` now runs `normalize_use_of_funds` (from `services/use_of_funds.py`) on `update_data['use_of_funds']` when present, raising the same 400 shape; `None` clears. Both stacks reuse the existing validators — no duplicate logic, contract unchanged (JSON `[{label,pct}]`, non-zero only, total exactly 100 or cleared).
+
+### Frontend — shared allocator + deck-side editor
+- `frontend/src/components/FundAllocator.jsx` — **new** shared module: extracted `FUND_SECTIONS` + the `FundAllocator` component (previously inline in `FounderPortal.jsx`), plus helpers `allocToValues(raw)→[5]` (maps stored `{label,pct}` onto the 5 canonical slots by exact label; legacy free-text / unknown labels → all-zeros), `valuesToUseOfFunds([5])→string`, `fundsTotal`, `fundsValid`.
+- `frontend/src/pages/FounderPortal.jsx` — imports the shared allocator + `valuesToUseOfFunds`; removed the inline `FUND_SECTIONS`/`FundAllocator`. Intake behavior unchanged.
+- `frontend/src/components/UseOfFundsEditor.jsx` — **new**: loads the project's current allocation (`api.getProject`), prefills the shared allocator, saves via `api.updateProject(id, {use_of_funds})`, and fires `onSaved()`.
+- `frontend/src/pages/PitchDeckPage.jsx` — mounts `UseOfFundsEditor` in the right rail (gated `isSpinoutDeck && projectId`, near the readiness panel). A `deckDataReload` counter is bumped on save and threaded into the spinout field hook + the readiness effect so the in-builder previews re-fetch live data. THE ASK slide stays in lockstep automatically: the print/share preview and PPTX export both derive funds from the project at fetch time.
+- `frontend/src/hooks/useSpinoutDeckFields.js` — added an optional `reloadKey` param (folded into the effect deps) to force a re-fetch after an edit.
+
+### Tests
+- `npm run test:drift` green (incl. `tsc --noEmit` and `cloudflare-worker/test/useOfFunds.test.ts`).
+
 ## Fix Personal Advisor: prose answers rejected + empty "Completed" list (Task #13)
 
 Two independent Personal Advisor bugs.

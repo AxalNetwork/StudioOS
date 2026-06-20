@@ -5,6 +5,14 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Change your Use of Funds split after you've applied
+
+You're no longer locked into the "Use of Funds" breakdown you set when you first applied. Open the Pitch Deck builder for your Spin-Out deck and you'll find a "Use of Funds" editor in the side panel: adjust the percentages across the five areas, and save. As before, the split has to add up to exactly 100% (or you can leave everything at zero to clear it).
+
+Once you save, your deck's "The Ask" slide updates to match — both the on-screen preview and the PowerPoint you export — so your raise breakdown is always current.
+
+---
+
 ## Personal Advisor: your answers save, and "Completed" finally fills up
 
 Two fixes to the Personal Advisor. First, ordinary answers no longer get rejected: if your reply happened to contain everyday words like "select", "update", or "grant", the advisor would sometimes refuse to save it with a technical error. It now saves your wording as written.

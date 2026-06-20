@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { reportError } from '../lib/log';
 import { api } from '../lib/api';
 import { Rocket, CheckCircle, XCircle, AlertTriangle, ChevronDown, ArrowRight } from 'lucide-react';
+import { FundAllocator, valuesToUseOfFunds } from '../components/FundAllocator';
 
 // Task #2 — The legacy stage-gated "Identity verification recommended"
 // banner for founders has been removed. KYC is now investor-only; founders
@@ -41,17 +42,6 @@ const SECTORS = [
   'Other',
 ];
 
-// Task #2 — THE ASK Use-of-Funds allocator. Fixed, canonical sections in a
-// fixed order; founders only set the percentages. Labels are persisted as
-// structured data (label + pct) because they contain colons.
-const FUND_SECTIONS = [
-  'Product & engineering',
-  'GTM: sales and marketing',
-  'Infrastructure & data',
-  'Operations, legal & compliance',
-  'Hiring / runway reserve',
-];
-
 export default function FounderPortal() {
   const [form, setForm] = useState({
     name: '', description: '', sector: '', founder_name: '', founder_email: '',
@@ -81,12 +71,9 @@ export default function FounderPortal() {
     setLoading(true);
     try {
       const { use_of_funds_alloc, ...rest } = form;
-      const alloc = FUND_SECTIONS
-        .map((label, i) => ({ label, pct: Number(use_of_funds_alloc[i]) || 0 }))
-        .filter(x => x.pct > 0);
       const payload = {
         ...rest,
-        use_of_funds: alloc.length ? JSON.stringify(alloc) : '',
+        use_of_funds: valuesToUseOfFunds(use_of_funds_alloc),
         tam: form.tam ? parseFloat(form.tam) : null,
         sam: form.sam ? parseFloat(form.sam) : null,
         cost_to_mvp: form.cost_to_mvp ? parseFloat(form.cost_to_mvp) : null,
@@ -322,29 +309,3 @@ function SliderInput({ label, value, max, onChange }) {
   );
 }
 
-// Task #2 — THE ASK: structured Use-of-Funds allocator. Five fixed sections,
-// each a slider + numeric input (0–100). Submit is allowed only when the total
-// is exactly 100% or all sections are 0 (no allocation).
-function FundAllocator({ values, total, valid, onChange }) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <label className="block text-sm text-gray-600 font-medium">Use of Funds (%)</label>
-        <span className={`text-sm font-semibold ${valid ? 'text-gray-700 dark:text-gray-300' : 'text-red-500'}`}>Total: {total}%</span>
-      </div>
-      <div className="space-y-3">
-        {FUND_SECTIONS.map((label, i) => (
-          <div key={label} className="flex items-center gap-3">
-            <span className="flex-1 min-w-0 text-sm text-gray-700 dark:text-gray-300">{label}</span>
-            <input type="range" min={0} max={100} step={1} value={values[i]} onChange={e => onChange(i, e.target.value)} className="w-28 sm:w-40 accent-violet-500" />
-            <input type="number" min={0} max={100} value={values[i]} onChange={e => onChange(i, e.target.value)} className="w-16 bg-gray-50 border border-gray-700 rounded-lg px-2 py-1 text-gray-900 text-sm dark:text-gray-100" aria-label={`${label} percentage`} />
-          </div>
-        ))}
-      </div>
-      {!valid && (
-        <p className="text-xs text-red-500 mt-2">Allocation must total exactly 100% (currently {total}%). Leave all at 0 to skip.</p>
-      )}
-      <p className="text-xs text-gray-500 mt-1">Set the percentage of the raise going to each area. Sections left at 0% are omitted.</p>
-    </div>
-  );
-}

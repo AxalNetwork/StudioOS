@@ -460,6 +460,15 @@ projects.put('/:id', async (c) => {
     const allowed = new Set(['paid', 'pilot_paid', 'pilot_signed', 'pre_revenue']);
     data.paid_pilot_status = allowed.has(s) ? s : null;
   }
+  // Task #8 — validate + canonicalize the structured Use-of-Funds allocation
+  // on update, mirroring the /submit intake path. Founders revise THE ASK
+  // allocation from the deck-side editor; an invalid total is rejected and an
+  // all-zero / empty allocation clears the field (stored NULL).
+  if (data.use_of_funds !== undefined) {
+    const uof = normalizeUseOfFunds(data.use_of_funds);
+    if (uof.error) { await sql.end(); return c.json({ error: uof.error, code: 'invalid_use_of_funds' }, 400); }
+    data.use_of_funds = uof.value;
+  }
   const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status'];
   // Normalise: coerce boolean → 0/1 for the NDA flag, trim URL, allow
   // explicit null to clear either field.

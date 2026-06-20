@@ -612,6 +612,14 @@ def update_project(project_id: int, data: ProjectUpdate, session: Session = Depe
     if not is_privileged(user):
         for protected in ("status", "stage", "playbook_week"):
             update_data.pop(protected, None)
+    # Task #8 — validate + canonicalize the structured Use-of-Funds allocation
+    # on update, mirroring the /submit intake path. An invalid total is
+    # rejected; an all-zero / empty allocation clears the field (stored NULL).
+    if "use_of_funds" in update_data:
+        uof_value, uof_error = normalize_use_of_funds(update_data["use_of_funds"])
+        if uof_error:
+            raise HTTPException(status_code=400, detail={"error": uof_error, "code": "invalid_use_of_funds"})
+        update_data["use_of_funds"] = uof_value
     for key, val in update_data.items():
         setattr(project, key, val)
     project.updated_at = datetime.utcnow()
