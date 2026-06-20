@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import PageExplainer from '../components/PageExplainer';
+import InfoStrip from '../components/InfoStrip';
 import { Link } from 'react-router-dom';
 import {
   BarChart3, Zap, Users, DollarSign, Target, TrendingUp, Sparkles, Bell,
@@ -96,15 +97,12 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {googleNotice && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/40 dark:border-blue-900 text-sm text-blue-900 dark:text-blue-200 px-4 py-3 flex items-start justify-between gap-3">
-          <div>
-            <strong>You're signed in with Google.</strong> Signing out of Axal VC will not
-            sign you out of Google globally — if you're on a shared device, also sign
-            out of your Google account in this browser. You can manage this anytime
-            under <Link to="/settings/security" className="underline">Settings → Security → Connected accounts</Link>.
-          </div>
-          <button onClick={() => setGoogleNotice(false)} className="text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 text-xs shrink-0">Dismiss</button>
-        </div>
+        <InfoStrip variant="info" inline={false} onDismiss={() => setGoogleNotice(false)}>
+          <strong>You're signed in with Google.</strong> Signing out of Axal VC will not
+          sign you out of Google globally — if you're on a shared device, also sign
+          out of your Google account in this browser. You can manage this anytime
+          under <Link to="/settings/security" className="underline">Settings → Security → Connected accounts</Link>.
+        </InfoStrip>
       )}
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">

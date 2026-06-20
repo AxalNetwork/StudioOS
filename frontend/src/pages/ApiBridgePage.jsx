@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Code, Copy, Check, Globe, Shield, Key, Server } from 'lucide-react';
+import InfoStrip from '../components/InfoStrip';
 
 const API_BASE = window.location.origin + '/api';
 
@@ -249,15 +250,14 @@ studioos:
       </div>
       <p className="text-gray-600 mb-6">Connect your external Jekyll portal to StudioOS private data</p>
 
-      <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 mb-6">
-        <div className="flex items-center gap-2 mb-2">
-          <Shield size={16} className="text-violet-600" />
-          <span className="text-sm font-semibold text-violet-800">Clean Room Architecture</span>
-        </div>
-        <p className="text-sm text-violet-700">
-          Private data (PII, financials, auth) stays in the Replit PostgreSQL database.
-          Your Jekyll site fetches only what the user's JWT permits. No secrets touch GitHub.
-        </p>
+      <div className="mb-6">
+        <InfoStrip
+          title="Clean Room Architecture"
+          body="Private data (PII, financials, auth) stays in the database. Your Jekyll site fetches only what the user's JWT permits — no secrets touch GitHub."
+          icon={Shield}
+          dismissible={false}
+          inline={false}
+        />
       </div>
 
       <div className="flex gap-2 mb-6 flex-wrap">
