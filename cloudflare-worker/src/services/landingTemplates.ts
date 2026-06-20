@@ -149,6 +149,21 @@ function buildAudienceData(row: any): Record<string, { h: string; b: string; c: 
       b: escapeHtml(row.audience_investor_body || row.subheadline || row.tagline || ''),
       c: escapeHtml(row.audience_investor_cta || row.cta_text || 'Join the waitlist'),
     },
+    advisor: {
+      h: escapeHtml(row.audience_advisor_headline || row.headline || row.tagline || row.name),
+      b: escapeHtml(row.audience_advisor_body || row.subheadline || row.tagline || ''),
+      c: escapeHtml(row.audience_advisor_cta || row.cta_text || 'Join the waitlist'),
+    },
+    mentor: {
+      h: escapeHtml(row.audience_mentor_headline || row.headline || row.tagline || row.name),
+      b: escapeHtml(row.audience_mentor_body || row.subheadline || row.tagline || ''),
+      c: escapeHtml(row.audience_mentor_cta || row.cta_text || 'Join the waitlist'),
+    },
+    cofounder: {
+      h: escapeHtml(row.audience_cofounder_headline || row.headline || row.tagline || row.name),
+      b: escapeHtml(row.audience_cofounder_body || row.subheadline || row.tagline || ''),
+      c: escapeHtml(row.audience_cofounder_cta || row.cta_text || 'Join the waitlist'),
+    },
   };
 }
 
@@ -169,6 +184,9 @@ function tabMarkup(aud: Record<string, { h: string; b: string; c: string }>, col
       <button class="tab active" role="tab" aria-selected="true" aria-controls="p-customer" data-a="customer" onclick="switchTab('customer')">Customer<span class="badge badge-customer">Discovery</span></button>
       <button class="tab" role="tab" aria-selected="false" aria-controls="p-partner" data-a="partner" onclick="switchTab('partner')">Partner</button>
       <button class="tab" role="tab" aria-selected="false" aria-controls="p-investor" data-a="investor" onclick="switchTab('investor')">Investor</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="p-advisor" data-a="advisor" onclick="switchTab('advisor')">Advisor</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="p-mentor" data-a="mentor" onclick="switchTab('mentor')">Mentor</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="p-cofounder" data-a="cofounder" onclick="switchTab('cofounder')">Co-founder</button>
     </div>
     <div class="panel active" id="p-customer" role="tabpanel" data-a="customer">
       <h1>${aud.customer.h}</h1>
@@ -200,6 +218,36 @@ function tabMarkup(aud: Record<string, { h: string; b: string; c: string }>, col
       </form>
       <div id="msg-investor" aria-live="polite"></div>
     </div>
+    <div class="panel" id="p-advisor" role="tabpanel" data-a="advisor">
+      <h1>${aud.advisor.h}</h1>
+      ${aud.advisor.b ? `<p class="sub">${aud.advisor.b}</p>` : ''}
+      <form id="wl-advisor">
+        <label for="email-advisor" class="sr">Email</label>
+        <input id="email-advisor" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit">${aud.advisor.c}</button>
+      </form>
+      <div id="msg-advisor" aria-live="polite"></div>
+    </div>
+    <div class="panel" id="p-mentor" role="tabpanel" data-a="mentor">
+      <h1>${aud.mentor.h}</h1>
+      ${aud.mentor.b ? `<p class="sub">${aud.mentor.b}</p>` : ''}
+      <form id="wl-mentor">
+        <label for="email-mentor" class="sr">Email</label>
+        <input id="email-mentor" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit">${aud.mentor.c}</button>
+      </form>
+      <div id="msg-mentor" aria-live="polite"></div>
+    </div>
+    <div class="panel" id="p-cofounder" role="tabpanel" data-a="cofounder">
+      <h1>${aud.cofounder.h}</h1>
+      ${aud.cofounder.b ? `<p class="sub">${aud.cofounder.b}</p>` : ''}
+      <form id="wl-cofounder">
+        <label for="email-cofounder" class="sr">Email</label>
+        <input id="email-cofounder" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit">${aud.cofounder.c}</button>
+      </form>
+      <div id="msg-cofounder" aria-live="polite"></div>
+    </div>
     <style>
       .badge { display:inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-left: 8px; }
       .badge-customer { background: ${color}18; color: ${color}; }
@@ -221,7 +269,7 @@ function switchTab(aud){
 (function(){
   var api=${JSON.stringify(apiWaitlist)};
   if(!api) return;
-  ['customer','partner','investor'].forEach(function(aud){
+  ['customer','partner','investor','advisor','mentor','cofounder'].forEach(function(aud){
     var f=document.getElementById('wl-'+aud), m=document.getElementById('msg-'+aud);
     f.addEventListener('submit',function(e){
       e.preventDefault();

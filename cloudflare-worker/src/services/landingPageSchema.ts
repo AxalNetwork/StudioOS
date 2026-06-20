@@ -32,6 +32,16 @@ export async function ensureLandingPageBrandKitColumns(env: Env): Promise<void> 
     `ALTER TABLE landing_pages ADD COLUMN audience_investor_headline TEXT`,
     `ALTER TABLE landing_pages ADD COLUMN audience_investor_body TEXT`,
     `ALTER TABLE landing_pages ADD COLUMN audience_investor_cta TEXT`,
+    // Task #3 (audience-first) — remaining 3 audiences' per-audience copy.
+    `ALTER TABLE landing_pages ADD COLUMN audience_advisor_headline TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN audience_advisor_body TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN audience_advisor_cta TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN audience_mentor_headline TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN audience_mentor_body TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN audience_mentor_cta TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN audience_cofounder_headline TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN audience_cofounder_body TEXT`,
+    `ALTER TABLE landing_pages ADD COLUMN audience_cofounder_cta TEXT`,
     `ALTER TABLE waitlist_signups ADD COLUMN audience TEXT`,
     // Task #5 — landing page template library
     `ALTER TABLE landing_pages ADD COLUMN template TEXT`,

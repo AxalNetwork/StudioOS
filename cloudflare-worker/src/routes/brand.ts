@@ -306,6 +306,15 @@ function rowToLanding(row: any) {
     audience_investor_headline: row.audience_investor_headline || null,
     audience_investor_body: row.audience_investor_body || null,
     audience_investor_cta: row.audience_investor_cta || null,
+    audience_advisor_headline: row.audience_advisor_headline || null,
+    audience_advisor_body: row.audience_advisor_body || null,
+    audience_advisor_cta: row.audience_advisor_cta || null,
+    audience_mentor_headline: row.audience_mentor_headline || null,
+    audience_mentor_body: row.audience_mentor_body || null,
+    audience_mentor_cta: row.audience_mentor_cta || null,
+    audience_cofounder_headline: row.audience_cofounder_headline || null,
+    audience_cofounder_body: row.audience_cofounder_body || null,
+    audience_cofounder_cta: row.audience_cofounder_cta || null,
     template: row.template || 'minimal',
     hero_media_url: row.hero_media_url || null,
     product_screenshot_url: row.product_screenshot_url || null,
@@ -672,6 +681,15 @@ brand.put('/landing/by-project/:pid', async (c) => {
   const audInvestorHeadline = String(body?.audience_investor_headline || '').trim() || null;
   const audInvestorBody = String(body?.audience_investor_body || '').trim() || null;
   const audInvestorCta = String(body?.audience_investor_cta || '').trim() || null;
+  const audAdvisorHeadline = String(body?.audience_advisor_headline || '').trim() || null;
+  const audAdvisorBody = String(body?.audience_advisor_body || '').trim() || null;
+  const audAdvisorCta = String(body?.audience_advisor_cta || '').trim() || null;
+  const audMentorHeadline = String(body?.audience_mentor_headline || '').trim() || null;
+  const audMentorBody = String(body?.audience_mentor_body || '').trim() || null;
+  const audMentorCta = String(body?.audience_mentor_cta || '').trim() || null;
+  const audCofounderHeadline = String(body?.audience_cofounder_headline || '').trim() || null;
+  const audCofounderBody = String(body?.audience_cofounder_body || '').trim() || null;
+  const audCofounderCta = String(body?.audience_cofounder_cta || '').trim() || null;
   const template = String(body?.template || '').trim() || 'minimal';
   const heroMediaUrl = sanitizeUrl(String(body?.hero_media_url || '').trim());
   const productScreenshotUrl = sanitizeUrl(String(body?.product_screenshot_url || '').trim());
@@ -688,6 +706,9 @@ brand.put('/landing/by-project/:pid', async (c) => {
        audience_customer_headline=?, audience_customer_body=?, audience_customer_cta=?,
        audience_partner_headline=?, audience_partner_body=?, audience_partner_cta=?,
        audience_investor_headline=?, audience_investor_body=?, audience_investor_cta=?,
+       audience_advisor_headline=?, audience_advisor_body=?, audience_advisor_cta=?,
+       audience_mentor_headline=?, audience_mentor_body=?, audience_mentor_cta=?,
+       audience_cofounder_headline=?, audience_cofounder_body=?, audience_cofounder_cta=?,
        template=?, hero_media_url=?, product_screenshot_url=?,
        audience=?, goal=?, template_kit=?,
        preview_token=?, updated_at=datetime('now') WHERE project_id=?`
@@ -698,6 +719,9 @@ brand.put('/landing/by-project/:pid', async (c) => {
       audCustomerHeadline, audCustomerBody, audCustomerCta,
       audPartnerHeadline, audPartnerBody, audPartnerCta,
       audInvestorHeadline, audInvestorBody, audInvestorCta,
+      audAdvisorHeadline, audAdvisorBody, audAdvisorCta,
+      audMentorHeadline, audMentorBody, audMentorCta,
+      audCofounderHeadline, audCofounderBody, audCofounderCta,
       template, heroMediaUrl, productScreenshotUrl,
       audience, goal, templateKit,
       previewToken, pid,
@@ -711,10 +735,15 @@ brand.put('/landing/by-project/:pid', async (c) => {
        audience_customer_headline, audience_customer_body, audience_customer_cta,
        audience_partner_headline, audience_partner_body, audience_partner_cta,
        audience_investor_headline, audience_investor_body, audience_investor_cta,
+       audience_advisor_headline, audience_advisor_body, audience_advisor_cta,
+       audience_mentor_headline, audience_mentor_body, audience_mentor_cta,
+       audience_cofounder_headline, audience_cofounder_body, audience_cofounder_cta,
        template, hero_media_url, product_screenshot_url,
        audience, goal, template_kit)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-               ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               ?, ?, ?,
                ?, ?, ?)`
     ).bind(
       pid, slug, previewToken, name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
@@ -723,6 +752,9 @@ brand.put('/landing/by-project/:pid', async (c) => {
       audCustomerHeadline, audCustomerBody, audCustomerCta,
       audPartnerHeadline, audPartnerBody, audPartnerCta,
       audInvestorHeadline, audInvestorBody, audInvestorCta,
+      audAdvisorHeadline, audAdvisorBody, audAdvisorCta,
+      audMentorHeadline, audMentorBody, audMentorCta,
+      audCofounderHeadline, audCofounderBody, audCofounderCta,
       template, heroMediaUrl, productScreenshotUrl,
       audience, goal, templateKit,
     ).run();

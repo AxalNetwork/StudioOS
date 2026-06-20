@@ -109,6 +109,15 @@ def _ensure_schema(session: Session) -> None:
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_investor_headline TEXT",
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_investor_body TEXT",
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_investor_cta TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_advisor_headline TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_advisor_body TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_advisor_cta TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_mentor_headline TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_mentor_body TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_mentor_cta TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_cofounder_headline TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_cofounder_body TEXT",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience_cofounder_cta TEXT",
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS template TEXT",
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS hero_media_url TEXT",
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS product_screenshot_url TEXT",
@@ -388,6 +397,15 @@ def _row_to_landing(row) -> Dict[str, Any]:
         "audience_investor_headline": row.get("audience_investor_headline") or None,
         "audience_investor_body": row.get("audience_investor_body") or None,
         "audience_investor_cta": row.get("audience_investor_cta") or None,
+        "audience_advisor_headline": row.get("audience_advisor_headline") or None,
+        "audience_advisor_body": row.get("audience_advisor_body") or None,
+        "audience_advisor_cta": row.get("audience_advisor_cta") or None,
+        "audience_mentor_headline": row.get("audience_mentor_headline") or None,
+        "audience_mentor_body": row.get("audience_mentor_body") or None,
+        "audience_mentor_cta": row.get("audience_mentor_cta") or None,
+        "audience_cofounder_headline": row.get("audience_cofounder_headline") or None,
+        "audience_cofounder_body": row.get("audience_cofounder_body") or None,
+        "audience_cofounder_cta": row.get("audience_cofounder_cta") or None,
         "template": row.get("template") or "minimal",
         "hero_media_url": row.get("hero_media_url") or None,
         "product_screenshot_url": row.get("product_screenshot_url") or None,
@@ -436,6 +454,15 @@ class LandingUpsert(BaseModel):
     audience_investor_headline: Optional[str] = None
     audience_investor_body: Optional[str] = None
     audience_investor_cta: Optional[str] = None
+    audience_advisor_headline: Optional[str] = None
+    audience_advisor_body: Optional[str] = None
+    audience_advisor_cta: Optional[str] = None
+    audience_mentor_headline: Optional[str] = None
+    audience_mentor_body: Optional[str] = None
+    audience_mentor_cta: Optional[str] = None
+    audience_cofounder_headline: Optional[str] = None
+    audience_cofounder_body: Optional[str] = None
+    audience_cofounder_cta: Optional[str] = None
     template: Optional[str] = None
     hero_media_url: Optional[str] = None
     product_screenshot_url: Optional[str] = None
@@ -574,6 +601,21 @@ def _render_landing_html(row, noindex: bool = False, csp_nonce: Optional[str] = 
             "b": esc(row["audience_investor_body"] or row["subheadline"] or row["tagline"] or ""),
             "c": esc(row["audience_investor_cta"] or row["cta_text"] or "Join the waitlist"),
         },
+        "advisor": {
+            "h": esc(row["audience_advisor_headline"] or row["headline"] or row["tagline"] or row["name"]),
+            "b": esc(row["audience_advisor_body"] or row["subheadline"] or row["tagline"] or ""),
+            "c": esc(row["audience_advisor_cta"] or row["cta_text"] or "Join the waitlist"),
+        },
+        "mentor": {
+            "h": esc(row["audience_mentor_headline"] or row["headline"] or row["tagline"] or row["name"]),
+            "b": esc(row["audience_mentor_body"] or row["subheadline"] or row["tagline"] or ""),
+            "c": esc(row["audience_mentor_cta"] or row["cta_text"] or "Join the waitlist"),
+        },
+        "cofounder": {
+            "h": esc(row["audience_cofounder_headline"] or row["headline"] or row["tagline"] or row["name"]),
+            "b": esc(row["audience_cofounder_body"] or row["subheadline"] or row["tagline"] or ""),
+            "c": esc(row["audience_cofounder_cta"] or row["cta_text"] or "Join the waitlist"),
+        },
     }
 
     slug = esc(row["slug"])
@@ -627,6 +669,9 @@ def _render_landing_html(row, noindex: bool = False, csp_nonce: Optional[str] = 
       <button class="tab active" role="tab" aria-selected="true" aria-controls="p-customer" data-a="customer" onclick="switchTab('customer')">Customer{tab_badge}</button>
       <button class="tab" role="tab" aria-selected="false" aria-controls="p-partner" data-a="partner" onclick="switchTab('partner')">Partner</button>
       <button class="tab" role="tab" aria-selected="false" aria-controls="p-investor" data-a="investor" onclick="switchTab('investor')">Investor</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="p-advisor" data-a="advisor" onclick="switchTab('advisor')">Advisor</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="p-mentor" data-a="mentor" onclick="switchTab('mentor')">Mentor</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="p-cofounder" data-a="cofounder" onclick="switchTab('cofounder')">Co-founder</button>
     </div>
     <div class="panel active" id="p-customer" role="tabpanel" data-a="customer">
       <h1>{aud['customer']['h']}</h1>
@@ -658,6 +703,36 @@ def _render_landing_html(row, noindex: bool = False, csp_nonce: Optional[str] = 
       </form>
       <div id="msg-investor" aria-live="polite"></div>
     </div>
+    <div class="panel" id="p-advisor" role="tabpanel" data-a="advisor">
+      <h1>{aud['advisor']['h']}</h1>
+      {f'<p class="sub">{aud["advisor"]["b"]}</p>' if aud['advisor']['b'] else ''}
+      <form id="wl-advisor">
+        <label for="email-advisor" class="sr">Email</label>
+        <input id="email-advisor" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit">{aud['advisor']['c']}</button>
+      </form>
+      <div id="msg-advisor" aria-live="polite"></div>
+    </div>
+    <div class="panel" id="p-mentor" role="tabpanel" data-a="mentor">
+      <h1>{aud['mentor']['h']}</h1>
+      {f'<p class="sub">{aud["mentor"]["b"]}</p>' if aud['mentor']['b'] else ''}
+      <form id="wl-mentor">
+        <label for="email-mentor" class="sr">Email</label>
+        <input id="email-mentor" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit">{aud['mentor']['c']}</button>
+      </form>
+      <div id="msg-mentor" aria-live="polite"></div>
+    </div>
+    <div class="panel" id="p-cofounder" role="tabpanel" data-a="cofounder">
+      <h1>{aud['cofounder']['h']}</h1>
+      {f'<p class="sub">{aud["cofounder"]["b"]}</p>' if aud['cofounder']['b'] else ''}
+      <form id="wl-cofounder">
+        <label for="email-cofounder" class="sr">Email</label>
+        <input id="email-cofounder" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit">{aud['cofounder']['c']}</button>
+      </form>
+      <div id="msg-cofounder" aria-live="polite"></div>
+    </div>
     <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
   </div>
 <script{csp_nonce and f' nonce="{html.escape(csp_nonce)}"' or ''}>
@@ -672,7 +747,7 @@ function switchTab(aud){{
 (function(){{
   var api="{api_waitlist}";
   if(!api) return;
-  ['customer','partner','investor'].forEach(function(aud){{
+  ['customer','partner','investor','advisor','mentor','cofounder'].forEach(function(aud){{
     var f=document.getElementById('wl-'+aud), m=document.getElementById('msg-'+aud);
     f.addEventListener('submit',function(e){{
       e.preventDefault();
@@ -761,6 +836,15 @@ def upsert_landing(
         "ai_h": payload.audience_investor_headline or None,
         "ai_b": payload.audience_investor_body or None,
         "ai_c": payload.audience_investor_cta or None,
+        "adv_h": payload.audience_advisor_headline or None,
+        "adv_b": payload.audience_advisor_body or None,
+        "adv_c": payload.audience_advisor_cta or None,
+        "men_h": payload.audience_mentor_headline or None,
+        "men_b": payload.audience_mentor_body or None,
+        "men_c": payload.audience_mentor_cta or None,
+        "cof_h": payload.audience_cofounder_headline or None,
+        "cof_b": payload.audience_cofounder_body or None,
+        "cof_c": payload.audience_cofounder_cta or None,
         "audience": _valid_page_audience(payload.audience),
         "goal": _valid_goal(payload.goal),
         "template_kit": _clean_template_kit(payload.template_kit),
@@ -780,6 +864,9 @@ def upsert_landing(
             "audience_customer_headline=:ac_h, audience_customer_body=:ac_b, audience_customer_cta=:ac_c, "
             "audience_partner_headline=:ap_h, audience_partner_body=:ap_b, audience_partner_cta=:ap_c, "
             "audience_investor_headline=:ai_h, audience_investor_body=:ai_b, audience_investor_cta=:ai_c, "
+            "audience_advisor_headline=:adv_h, audience_advisor_body=:adv_b, audience_advisor_cta=:adv_c, "
+            "audience_mentor_headline=:men_h, audience_mentor_body=:men_b, audience_mentor_cta=:men_c, "
+            "audience_cofounder_headline=:cof_h, audience_cofounder_body=:cof_b, audience_cofounder_cta=:cof_c, "
             "template=:template, hero_media_url=:hero_media_url, product_screenshot_url=:product_screenshot_url, "
             "audience=:audience, goal=:goal, template_kit=:template_kit, "
             "preview_token=:preview_token, updated_at=CURRENT_TIMESTAMP WHERE project_id=:pid"
@@ -800,11 +887,15 @@ def upsert_landing(
             "audience_customer_headline, audience_customer_body, audience_customer_cta, "
             "audience_partner_headline, audience_partner_body, audience_partner_cta, "
             "audience_investor_headline, audience_investor_body, audience_investor_cta, "
+            "audience_advisor_headline, audience_advisor_body, audience_advisor_cta, "
+            "audience_mentor_headline, audience_mentor_body, audience_mentor_cta, "
+            "audience_cofounder_headline, audience_cofounder_body, audience_cofounder_cta, "
             "template, hero_media_url, product_screenshot_url, audience, goal, template_kit) "
             "VALUES (:pid, :slug, :preview_token, :name, :tagline, :headline, :subheadline, :cta, :logo_url, "
             ":logo_svg, :logo_asset_id, :color, :palette_bg, :palette_ink, "
             ":palette_secondary, :palette_accent, :font_pairing, "
             ":ac_h, :ac_b, :ac_c, :ap_h, :ap_b, :ap_c, :ai_h, :ai_b, :ai_c, "
+            ":adv_h, :adv_b, :adv_c, :men_h, :men_b, :men_c, :cof_h, :cof_b, :cof_c, "
             ":template, :hero_media_url, :product_screenshot_url, :audience, :goal, :template_kit)"
         ), params=params)
     session.commit()

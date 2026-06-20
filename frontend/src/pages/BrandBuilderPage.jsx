@@ -49,6 +49,9 @@ export default function BrandBuilderPage() {
     audience_customer_headline: '', audience_customer_body: '', audience_customer_cta: '',
     audience_partner_headline: '', audience_partner_body: '', audience_partner_cta: '',
     audience_investor_headline: '', audience_investor_body: '', audience_investor_cta: '',
+    audience_advisor_headline: '', audience_advisor_body: '', audience_advisor_cta: '',
+    audience_mentor_headline: '', audience_mentor_body: '', audience_mentor_cta: '',
+    audience_cofounder_headline: '', audience_cofounder_body: '', audience_cofounder_cta: '',
     template: 'minimal', hero_media_url: '', product_screenshot_url: '',
     // Task #2 — audience-first selections (persisted via Task #1 API)
     audience: '', goal: '', template_kit: '',
@@ -67,8 +70,8 @@ export default function BrandBuilderPage() {
   const [uploadBusy, setUploadBusy] = useState(false);
   // Task #4 — per-audience copy (customer/partner/investor variants on the page)
   const [activeAudienceTab, setActiveAudienceTab] = useState('customer');
-  const AUDIENCE_LABELS = { customer: 'Customer discovery', partner: 'Partner', investor: 'Investor' };
-  const AUDIENCE_COLORS = { customer: 'bg-violet-100 text-violet-700', partner: 'bg-indigo-100 text-indigo-700', investor: 'bg-emerald-100 text-emerald-700' };
+  const AUDIENCE_LABELS = { customer: 'Customer discovery', partner: 'Partner', investor: 'Investor', advisor: 'Advisor', mentor: 'Mentor', cofounder: 'Co-founder' };
+  const AUDIENCE_COLORS = { customer: 'bg-violet-100 text-violet-700', partner: 'bg-indigo-100 text-indigo-700', investor: 'bg-emerald-100 text-emerald-700', advisor: 'bg-amber-100 text-amber-700', mentor: 'bg-sky-100 text-sky-700', cofounder: 'bg-rose-100 text-rose-700' };
   // Task #5 — visual template registry (maps a catalog template's visualTemplate → label / media needs)
   const [templates, setTemplates] = useState([]);
 
@@ -118,6 +121,15 @@ export default function BrandBuilderPage() {
             audience_investor_headline: lp.audience_investor_headline || '',
             audience_investor_body: lp.audience_investor_body || '',
             audience_investor_cta: lp.audience_investor_cta || '',
+            audience_advisor_headline: lp.audience_advisor_headline || '',
+            audience_advisor_body: lp.audience_advisor_body || '',
+            audience_advisor_cta: lp.audience_advisor_cta || '',
+            audience_mentor_headline: lp.audience_mentor_headline || '',
+            audience_mentor_body: lp.audience_mentor_body || '',
+            audience_mentor_cta: lp.audience_mentor_cta || '',
+            audience_cofounder_headline: lp.audience_cofounder_headline || '',
+            audience_cofounder_body: lp.audience_cofounder_body || '',
+            audience_cofounder_cta: lp.audience_cofounder_cta || '',
             template: lp.template || 'minimal',
             hero_media_url: lp.hero_media_url || '',
             product_screenshot_url: lp.product_screenshot_url || '',
@@ -721,11 +733,11 @@ export default function BrandBuilderPage() {
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
               />
 
-              {/* Per-audience copy variants (customer / partner / investor) */}
+              {/* Per-audience copy variants (all six audiences) */}
               <div className="border border-gray-200 rounded-lg p-3 dark:border-gray-800">
                 <span className="block text-[11px] font-medium text-gray-600 mb-2 dark:text-gray-400">Audience-specific copy (optional)</span>
-                <div className="flex gap-2 mb-3">
-                  {['customer', 'partner', 'investor'].map((a) => (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {AUDIENCES.map((a) => (
                     <button
                       key={a}
                       type="button"
@@ -740,7 +752,7 @@ export default function BrandBuilderPage() {
                     </button>
                   ))}
                 </div>
-                {['customer', 'partner', 'investor'].map((a) => (
+                {AUDIENCES.map((a) => (
                   <div key={a} className={activeAudienceTab === a ? 'block' : 'hidden'}>
                     <div className="space-y-2">
                       <input

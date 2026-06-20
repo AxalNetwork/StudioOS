@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Tailor your landing copy for every audience
+
+You can now write a custom headline, description, and button for all six audiences — customer, investor, partner, advisor, mentor, and co-founder. Previously only customer, partner, and investor had their own wording. Open the audience tabs in the brand builder to give each visitor a message written just for them, and your published page shows a tab for each one. Any audience you leave blank simply falls back to your main page copy.
+
+---
+
 ## Build your landing page around who it's for
 
 The Brand & Landing Page builder now walks you through it in four clear steps. First you pick your project and choose who the page is for — a customer, investor, partner, advisor, mentor, or co-founder — and we suggest what you'd like visitors to do. Next you pick from templates recommended for that audience, which fills in a starting headline, subheadline, and button text you can edit. Then you fine-tune your logo, colors, fonts, and wording — the AI name ideas, palette suggestions, and tagline helper all live here now. Finally you publish and grab your shareable link. Your audience, goal, and chosen template are saved, so reopening the builder picks up right where you left off.

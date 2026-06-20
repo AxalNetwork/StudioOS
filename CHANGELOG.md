@@ -10,6 +10,17 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Per-audience landing copy for all six audiences (Task #3)
+
+Extended per-audience headline/body/CTA copy from 3 audiences (customer/partner/investor) to all 6 (added advisor/mentor/cofounder) end-to-end.
+
+- **Prod (Worker/D1)**: migration `cloudflare-worker/sql/migrations/117_landing_audience_advisor_mentor_cofounder.sql` adds 9 additive TEXT columns (`audience_{advisor,mentor,cofounder}_{headline,body,cta}`). `services/landingPageSchema.ts` gains matching lazy-bootstrap ALTERs. `routes/brand.ts` extends `rowToLanding` serialization, PUT var parsing, and the UPDATE/INSERT column/placeholder/bind lists. `services/landingTemplates.ts` `buildAudienceData`, tab markup (tabs + panels) and the waitlist `forEach` list now cover all 6.
+- **Dev (FastAPI/SQLite)**: `backend/app/models/migrations.py` (`ensure_brand_landing_columns`) and `backend/app/api/routes/brand.py` `_ensure_schema` add the 9 columns; `_row_to_landing`, the Pydantic payload model, and the PUT params/UPDATE/INSERT extended; public HTML render `aud` dict, tab/panel markup and the JS `forEach` now render all 6.
+- **Frontend**: `frontend/src/pages/BrandBuilderPage.jsx` draft state + load mapping gain the 9 new fields; local `AUDIENCE_LABELS`/`AUDIENCE_COLORS` extended to 6; Step 3's audience tabs/panels now iterate `AUDIENCES` (all 6) instead of the hardcoded 3.
+- **Out of scope (deliberate)**: the `waitlist_signups.audience` CHECK + `VALID_AUDIENCE`/`AUDIENCE_SET` (3 values) are unchanged — new-audience tab signups post `audience=advisor|mentor|cofounder`, which resolves to NULL (CHECK allows NULL, no crash). Widening the CHECK would require a risky D1 table rebuild.
+
+User-facing line added to `frontend/public/CHANGELOG-user.md`.
+
 ## Audience-first Brand & Landing wizard (Task #2)
 
 Reworked `frontend/src/pages/BrandBuilderPage.jsx` into the approved audience-first flow: (1) project & audience, (2) recommended template, (3) tune brand kit & copy, (4) share. Consumes the catalog + helpers in `frontend/src/lib/brand/` and the `audience`/`goal`/`template_kit` persistence API (Task #1). No backend/API or catalog changes.
