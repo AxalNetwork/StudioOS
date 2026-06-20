@@ -52,6 +52,7 @@ import {
   bankFor,
   questionById,
   DYNAMIC_ID_RE,
+  FIT_ID_RE,
   filterByContext,
   groupByPage,
   groupBySection,
@@ -60,6 +61,9 @@ import {
   type Persona,
   type Question,
 } from '../services/advisor/questionBank';
+// Task #19 — Best-Fit. Recompute the user's persona fit scores after a fit
+// answer lands (the raw score is persisted to field_sources below).
+import { recomputeUserFit } from '../services/axalFit';
 import { routeAnswer, recordFieldSource, type WriteResult } from '../services/advisor/writeRouter';
 import { hashEmail } from '../util/hashEmail';
 // Task #4 (AW) — 7-layer advisor guardrails.
@@ -853,6 +857,12 @@ advisor.post('/answer', async (c) => {
     ? await routeAnswer(c.env, user, q.id, valueStr, evidenceStr)
     : { status: 'skipped' };
 
+  // Task #19 — Best-Fit. axalFit.loadAnsweredScores() reconstructs rubric +
+  // red-flag scores from field_sources.evidence_text, so for fit.* questions we
+  // persist the RAW 0..5 score there (not the free-text citation). Non-fit
+  // questions keep the verbatim evidence-gate citation.
+  const fieldEvidence = FIT_ID_RE.test(q.id) ? valueStr : evidenceStr;
+
   // Surface evidence-gate / schema-invalid as 4xx so the frontend
   // can run optimistic-rollback + inline retry instead of treating
   // it as a successful turn. We still record the user message above
@@ -921,7 +931,7 @@ advisor.post('/answer', async (c) => {
         result.saved_to?.table || null,
         result.saved_to?.column || null,
         result.saved_to?.id != null ? String(result.saved_to.id) : null,
-        evidenceStr,
+        fieldEvidence,
       ));
       const actorHash = await hashEmail(user.email || '');
       stmts.push(c.env.DB.prepare(
@@ -949,8 +959,20 @@ advisor.post('/answer', async (c) => {
     if (result.status === 'saved') {
       await recordFieldSource(
         c.env, user.id, q.id, q.page_target || null,
-        result.saved_to || null, 'advisor', evidenceStr,
+        result.saved_to || null, 'advisor', fieldEvidence,
       );
+    }
+  }
+
+  // Task #19 — Best-Fit. Recompute the user's persona fit scores after a fit
+  // answer lands. The raw score is now in field_sources (above), so
+  // recomputeUserFit → loadAnsweredScores picks it up. Best-effort: a recompute
+  // failure must not break the user's chat turn.
+  if (result.status === 'saved' && FIT_ID_RE.test(q.id)) {
+    try {
+      await recomputeUserFit(c.env, user.id);
+    } catch (e) {
+      console.warn('[advisor] recomputeUserFit failed', (e as Error).message);
     }
   }
 

@@ -232,6 +232,15 @@ async function _analyticsRead(path) {
 }
 
 export const api = {
+  // Task #19 — Best-Fit consultations + admin report.
+  bookConsultation: (data) =>
+    request('/consultations/book', { method: 'POST', body: JSON.stringify(data || {}) }),
+  getMyConsultations: () => request('/consultations/me'),
+  adminListConsultations: (status) =>
+    request(`/admin/consultations${status ? `?status=${status}` : ''}`),
+  adminUpdateConsultationStatus: (id, data) =>
+    request(`/admin/consultations/${id}/status`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  adminGetBestFitReport: (userId) => request(`/admin/best-fit/${userId}`),
   register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
   login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
   // T6 — server-side logout: clears the httpOnly auth + CSRF cookies and

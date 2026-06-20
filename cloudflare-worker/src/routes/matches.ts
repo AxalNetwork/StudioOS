@@ -7,8 +7,11 @@ import { logMatchListGeneration } from '../services/matchAudit';
 import {
   confidenceAdjustedAlignment,
   computeWatchOuts,
+  loadUserVectors,
   type ValueEntry,
 } from '../services/matchingVectors';
+import { ensureTier, userMeetsTier } from '../middleware/requireTier';
+import { computeCounterpartyMatches } from '../services/bestFit';
 
 const matches = new Hono<{ Bindings: Env }>();
 
@@ -753,6 +756,45 @@ matches.get('/admin/all', async (c) => {
     result_count: (rows as any[]).length,
   });
   return c.json(rows);
+});
+
+// --------- Best-Fit cross-counterparty summary (Task #19) ---------
+//
+// Top matches for the current user across all five counterparty types.
+//   free      → counts + ONE anonymized teaser per type
+//   studio    → full ranked matches with identity (names/contact)
+//   bypass    → admin/partner/investor/mentor see full (via userMeetsTier)
+//   ?detail=full → free callers get a 402 PaywallModal trigger; unlocked get full.
+// The default (no `detail`) ALWAYS returns 200 so the summary card never 402s.
+matches.get('/summary', async (c) => {
+  const user = await requireAuth(c);
+  const wantsDetail = (c.req.query('detail') || '').toLowerCase() === 'full';
+  const unlocked = userMeetsTier(user, 'studio');
+  // Explicit full-detail request from a non-unlocked caller → 402 PaywallModal.
+  if (wantsDetail && !unlocked) ensureTier(user, 'studio'); // throws 402 Response
+
+  const viewerVectors = await loadUserVectors(c.env, user.id);
+  const results = await computeCounterpartyMatches(c.env, user.id, viewerVectors, { limit: 5 });
+
+  const types = results.map((r) => {
+    if (unlocked) {
+      return { type: r.type, label: r.label, count: r.count, matches: r.matches };
+    }
+    // Free: counts + a single identity-stripped teaser.
+    const top = r.matches[0];
+    const teaser = top
+      ? {
+          match_score: top.match_score,
+          band: top.band,
+          values_alignment: top.values_alignment,
+          skill_complementarity: top.skill_complementarity,
+          top_reason: top.reasons[0] ?? null,
+        }
+      : null;
+    return { type: r.type, label: r.label, count: r.count, teaser };
+  });
+
+  return c.json({ unlocked, types });
 });
 
 function safeJson(s: any, def: any) { try { return s ? JSON.parse(s) : def; } catch { return def; } }

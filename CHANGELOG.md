@@ -10,6 +10,34 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Best-Fit backend — conversational profiling, fit scoring & matching APIs (Task #19)
+
+Backend-only half of Conversational Profiling + Best-Fit Matching (PR #92). All frontend/UI is Task #20; methodology doc is #21. Reuses `ventureRisk.ts`, `assessmentScoring.ts`, `matchingVectors.ts`.
+
+### Onboarding chat reliability — `services/aiRouter.ts`, `routes/profiling.ts`
+- Dedicated non-gateway task class for onboarding chat; the bypass-on-failure fallback always fires; nested AI response shapes (`r.result?.response`) are parsed; the stale `[PROFILING]` failure-log label is corrected.
+- Test: `test/aiRouter.bugfix.test.ts` (bypass-retry + shape parse).
+
+### Data model + scoring — `sql/migrations/115_axal_fit.sql`, `sql/schema.sql`, `services/axalFit.ts`
+- Migration 115 (mirrored idempotently in `schema.sql`): `axal_values`, `axal_fit_scores` (per-persona), `admin_consultation_bookings`, `axal_fit_reports`.
+- `axalFit.ts`: per-persona weighted rubrics, 5 Axal behavioral values, `computeFit` (0–100; bands strong_yes/yes_caution/hold/no; red flags; signal quality; narrative), reusing `assessmentScoring.ts`.
+
+### Conversational delivery — `services/advisor/questionBank.ts`, `banks/fit_*.ts`, `services/advisor/writeRouter.ts`
+- `scale` (0–5) input_kind + validator; `fit_<persona>` banks (founder/investor/partner/mentor/coach) registered in `BANKS` + `BANK_SIZE_TARGETS`.
+- writeRouter routes fit answers BEFORE the persona branches: `axal_value`→`axal_values`, `skill_axis`→`user_skills`, `value_dim`→`user_values` (confidence-blended); fit + vectors recompute after each batch; paywall/`paywalled` preserved.
+- Test: `test/writeRouter.fit.test.ts`.
+
+### Match summary — `routes/matches.ts`, `services/bestFit.ts`
+- `GET /api/matches/summary`: 5 counterparty types (cofounder/investor/partner/mentor/coach); counts + teasers free, detail tier-gated, bypass roles unrestricted. Reuses `matchingVectors.ts` (`loadUserVectorsBatch` added).
+- Matcher (`computeCounterpartyMatches`, bands) in `services/bestFit.ts`. Test: `test/bestFit.matches.test.ts`.
+
+### Consultation + admin report APIs — `services/bestFit.ts`, `routes/consultations.ts`, `routes/admin_bestfit.ts`
+- `buildBestFitReport`/`persistBestFitReport`: assembles skills / 15-dim values / 5 Axal values / archetype / per-persona fit / counterparty matches (reasons, gaps, watch-outs) / spin-out assessment (via `ventureRisk.ts`). Reads stored scores (no recompute on read); explicit nulls when data is absent.
+- `POST /api/consultations/book` precomputes + persists a report snapshot; `GET /api/consultations/me`. Admin: `GET /api/admin/consultations`, `POST /api/admin/consultations/:id/status`, `GET /api/admin/best-fit/:userId` (admin-only, NOT tier-gated). `frontend/src/lib/api.js` client methods added with matching worker mounts (drift).
+
+### Wiring & tests
+- Routes mounted in `src/index.ts` (admin best-fit surfaces mounted BEFORE the catch-all `/api/admin`). New `.ts` tests added to the `npm run test:drift` strip-types list; `tsc --noEmit` clean; `npm run test:drift` green.
+
 ## All founders & profile photos in the Spin-Out deck PPTX export (Task #7)
 
 The PowerPoint export (`buildDeck`) now mirrors the in-app Slide 07 "Team & Network": it renders every founder/co-founder and embeds founder + advisor profile photos (circular, with an initials fallback). Previously the PPTX rendered only the single primary founder and ignored photos entirely. Single-founder decks export with their existing geometry unchanged.

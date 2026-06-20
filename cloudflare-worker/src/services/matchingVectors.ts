@@ -78,6 +78,51 @@ export async function loadUserVectors(
   return { values, skills };
 }
 
+/**
+ * Batch variant of loadUserVectors — two queries total regardless of how many
+ * users are requested. Avoids N+1 when scoring a candidate pool (matches
+ * summary, admin best-fit report). Missing users get an empty vector entry.
+ */
+export async function loadUserVectorsBatch(
+  env: Env,
+  userIds: Array<number | null | undefined>,
+): Promise<Map<number, UserVectors>> {
+  const out = new Map<number, UserVectors>();
+  const ids = [...new Set(
+    userIds.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0),
+  )];
+  if (ids.length === 0) return out;
+  for (const id of ids) out.set(id, { values: {}, skills: {} });
+  const ph = ids.map(() => '?').join(',');
+  try {
+    const vRes = await env.DB.prepare(
+      `SELECT uv.user_id, vd.slug, uv.score, uv.confidence
+         FROM user_values uv
+         JOIN value_dimensions vd ON vd.id = uv.dimension_id
+        WHERE uv.user_id IN (${ph})`,
+    ).bind(...ids).all<{ user_id: number; slug: string; score: number; confidence: number }>();
+    for (const r of vRes.results || []) {
+      const v = out.get(Number(r.user_id));
+      if (v) v.values[r.slug] = { score: Number(r.score) || 0, confidence: Number(r.confidence) || 0 };
+    }
+  } catch { /* schema may be cold → empty values */ }
+  try {
+    const sRes = await env.DB.prepare(
+      `SELECT us.user_id, sc.slug, MAX(us.self_level) AS level
+         FROM user_skills us
+         JOIN skills s ON s.id = us.skill_id
+         JOIN skill_categories sc ON sc.slug = s.category_slug
+        WHERE us.user_id IN (${ph})
+        GROUP BY us.user_id, sc.slug`,
+    ).bind(...ids).all<{ user_id: number; slug: string; level: number }>();
+    for (const r of sRes.results || []) {
+      const v = out.get(Number(r.user_id));
+      if (v) v.skills[r.slug] = Number(r.level) || 0;
+    }
+  } catch { /* schema may be cold → empty skills */ }
+  return out;
+}
+
 // ── Matching math (pure) ───────────────────────────────────────────────
 
 function clamp(n: number, lo: number, hi: number): number {

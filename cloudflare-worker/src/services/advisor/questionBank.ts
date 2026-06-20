@@ -28,7 +28,7 @@ export type Persona = 'founder' | 'investor' | 'mentor' | 'partner' | 'admin' | 
 export type Importance = 'critical' | 'high' | 'normal' | 'low';
 export type ValidateKind =
   | 'short' | 'long' | 'number' | 'select' | 'multi'
-  | 'csv' | 'url' | 'email' | 'hex_color';
+  | 'csv' | 'url' | 'email' | 'hex_color' | 'scale';
 
 export interface UnlockRequirement {
   week?: number;          // minimum spinout_lab_week
@@ -59,6 +59,25 @@ export type PartnerSubtype =
   | 'strategic'           // corporate / channel / distribution partner
   | 'corporate_venture';  // CVC investment + commercial bundle
 
+// Task #19 — Best-Fit. Fit-question personas. Distinct from the advisor
+// `Persona` enum: it adds 'coach' (no advisor role) and drops admin/unknown.
+// Fit questions carry id `fit.<FitPersona>.<key>`; fitMeasuresIndex() derives
+// the persona from that id prefix (NOT from Question.persona) so a coach fit
+// bank can ride inside the mentor conversation without touching `Persona`.
+export type FitPersona = 'founder' | 'investor' | 'partner' | 'mentor' | 'coach';
+
+// Task #19 — what a fit question measures. Tagged on each `fit.*` question and
+// consumed by services/axalFit.ts (rubric_category → RUBRICS) + the write-router
+// (skill_axis → user_skills, value_dim → user_values, axal_value → axal_values).
+// `red_flag` fires when the answer's 0..5 score is at or below `at_or_below`.
+export interface FitMeasures {
+  rubric_category?: string;   // a key in axalFit RUBRICS[persona]
+  skill_axis?: string;        // RADAR_AXES slug → user_skills
+  value_dim?: string;         // value_dimensions slug → user_values
+  axal_value?: string;        // one of axalFit AXAL_VALUES → axal_values
+  red_flag?: { key: string; at_or_below: number };
+}
+
 export interface Question {
   id: string;
   persona: Persona;
@@ -66,7 +85,7 @@ export interface Question {
   section?: string;
   prompt: string;
   hint?: string;
-  input_kind: 'short' | 'long' | 'number' | 'select' | 'multi';
+  input_kind: 'short' | 'long' | 'number' | 'select' | 'multi' | 'scale';
   options?: string[];
   skip_allowed?: boolean;
   sensitive?: boolean;
@@ -93,6 +112,9 @@ export interface Question {
   // re-classifying every question by id pattern.
   sentiment_eligible?: boolean;
   talc_eligible?: boolean;
+  // Task #19 — Best-Fit. Present only on `fit.*` questions; tags what the 0..5
+  // answer measures so axalFit + the write-router can route + score it.
+  measures?: FitMeasures;
 }
 
 // Task #5 (CH) — per-persona size targets enforced by the drift CI
@@ -104,6 +126,14 @@ export const BANK_SIZE_TARGETS = {
   mentor: 30,
   admin: 10,
   operatingPartnerPerSubtype: 50, // ×4 sub-types = 200 total
+  // Task #19 — Best-Fit conversational banks. Documentation-only minimums
+  // (not enforced by scripts/check-advisor-bank-drift.mjs, which scans only the
+  // 6 manifest banks). Each must cover its full axalFit RUBRIC + the 5 Axal values.
+  fitFounder: 25,
+  fitInvestor: 18,
+  fitPartner: 17,
+  fitMentor: 17,
+  fitCoach: 17,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -162,10 +192,19 @@ import { INVESTOR_BANK } from './banks/investor.ts';
 import { OPERATING_PARTNER_BANK } from './banks/operatingPartner.ts';
 import { MENTOR_BANK } from './banks/mentor.ts';
 import { ADMIN_BANK } from './banks/admin.ts';
+// Task #19 — Best-Fit fit banks. Registered here so bankFor/questionById/
+// fitMeasuresIndex see them, but kept OUT of banks.manifest.json (fit answers
+// are routed by a generic fit.* branch in writeRouter, not per-id).
+import { FIT_FOUNDER_BANK } from './banks/fit_founder.ts';
+import { FIT_INVESTOR_BANK } from './banks/fit_investor.ts';
+import { FIT_PARTNER_BANK } from './banks/fit_partner.ts';
+import { FIT_MENTOR_BANK } from './banks/fit_mentor.ts';
+import { FIT_COACH_BANK } from './banks/fit_coach.ts';
 
 export type BankName =
   | 'newFounderSpinout' | 'existingFounder'
-  | 'investor' | 'operatingPartner' | 'mentor' | 'admin';
+  | 'investor' | 'operatingPartner' | 'mentor' | 'admin'
+  | 'fitFounder' | 'fitInvestor' | 'fitPartner' | 'fitMentor' | 'fitCoach';
 
 export const BANKS: Record<BankName, Question[]> = {
   newFounderSpinout: NEW_FOUNDER_SPINOUT_BANK,
@@ -174,6 +213,11 @@ export const BANKS: Record<BankName, Question[]> = {
   operatingPartner:  OPERATING_PARTNER_BANK,
   mentor:            MENTOR_BANK,
   admin:             ADMIN_BANK,
+  fitFounder:        FIT_FOUNDER_BANK,
+  fitInvestor:       FIT_INVESTOR_BANK,
+  fitPartner:        FIT_PARTNER_BANK,
+  fitMentor:         FIT_MENTOR_BANK,
+  fitCoach:          FIT_COACH_BANK,
 };
 
 export function bankByName(name: BankName): Question[] {
@@ -187,13 +231,44 @@ export function bankByName(name: BankName): Question[] {
  */
 export function bankFor(persona: Persona, ctx?: { spinoutLabActive?: boolean }): Question[] {
   switch (persona) {
-    case 'founder':  return ctx?.spinoutLabActive ? BANKS.newFounderSpinout : BANKS.existingFounder;
-    case 'investor': return BANKS.investor;
-    case 'partner':  return BANKS.operatingPartner;
-    case 'mentor':   return BANKS.mentor;
+    // Task #19 — append the persona's Best-Fit bank so the conversational
+    // profiling questions are delivered inline (importance:'low' → trailing).
+    // Mentor carries both mentor + coach fit banks (coach has no advisor role).
+    case 'founder':  return [...(ctx?.spinoutLabActive ? BANKS.newFounderSpinout : BANKS.existingFounder), ...BANKS.fitFounder];
+    case 'investor': return [...BANKS.investor, ...BANKS.fitInvestor];
+    case 'partner':  return [...BANKS.operatingPartner, ...BANKS.fitPartner];
+    case 'mentor':   return [...BANKS.mentor, ...BANKS.fitMentor, ...BANKS.fitCoach];
     case 'admin':    return BANKS.admin;
     default:         return [];
   }
+}
+
+// ---------------------------------------------------------------------------
+// Task #19 — Best-Fit. Flat index of every fit question's measures across all
+// banks, keyed by the FitPersona parsed from its `fit.<persona>.<key>` id.
+// services/axalFit.ts consumes this to aggregate rubric categories + red-flag
+// probes; the write-router consumes per-question measures to route answers.
+// Returns [] until the fit_* banks are registered in BANKS (WS2).
+// ---------------------------------------------------------------------------
+export const FIT_ID_RE = /^fit\.(founder|investor|partner|mentor|coach)\./;
+
+export interface FitMeasureEntry {
+  question_id: string;
+  persona: FitPersona;
+  measures: FitMeasures;
+}
+
+export function fitMeasuresIndex(): FitMeasureEntry[] {
+  const out: FitMeasureEntry[] = [];
+  for (const bank of Object.values(BANKS)) {
+    for (const q of bank) {
+      if (!q.measures) continue;
+      const m = FIT_ID_RE.exec(q.id);
+      if (!m) continue;
+      out.push({ question_id: q.id, persona: m[1] as FitPersona, measures: q.measures });
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

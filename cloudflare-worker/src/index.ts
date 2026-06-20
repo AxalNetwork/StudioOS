@@ -186,6 +186,8 @@ import adminEventsRoutes from './routes/admin_events';
 // Task #44 — Gamified Assessment engine (player + admin authoring).
 import assessmentRoutes from './routes/assessment';
 import adminAssessmentRoutes from './routes/admin_assessment';
+import consultations, { adminConsultations } from './routes/consultations';
+import adminBestFit from './routes/admin_bestfit';
 // T3 — Reserve allocation + waterfall simulator (Task #46 port).
 import fundSimulatorRoutes from './routes/fund_simulator';
 import { processQueueBatch } from './services/queueWorker';
@@ -585,6 +587,10 @@ app.route('/api/admin/promos', adminPromos);
 // so /api/admin/events/* resolves here, not in the generic admin router.
 app.route('/api/admin/events', adminEventsRoutes);
 app.route('/api/admin/assessment', adminAssessmentRoutes);
+// Task #19 — Best-Fit admin surfaces. Mount BEFORE the catch-all /api/admin so
+// the specific prefixes resolve here, not in the generic admin router.
+app.route('/api/admin/consultations', adminConsultations);
+app.route('/api/admin/best-fit', adminBestFit);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);
@@ -663,6 +669,7 @@ app.route('/api/events', eventsRoutes);
 // Task #44 — Gamified Assessment player routes (§7.1).
 app.route('/api/assessment', assessmentRoutes);
 app.route('/api/matches', matches);
+app.route('/api/consultations', consultations);
 app.route('/api/settings', settings);
 app.route('/api/integrations', integrations);
 app.route('/api/crunchbase', crunchbaseRoutes);

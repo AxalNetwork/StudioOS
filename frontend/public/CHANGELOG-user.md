@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A more dependable onboarding chat
+
+The onboarding assistant is steadier now. If the service that picks how to answer you is briefly unavailable, the chat automatically keeps going instead of stalling, and it correctly reads replies that come back in a slightly different format. You should see fewer hiccups while getting set up.
+
+---
+
 ## Your whole founding team — with photos — in the exported deck
 
 When you export your Spin-Out deck to PowerPoint, the "Team & Network" slide now shows your full founding team, not just the lead founder. If you have co-founders, they each get their own card. Profile photos now come through too: founders and advisors appear as circular headshots, falling back to their initials when there's no photo (or if a photo can't be loaded). Decks with a single founder look exactly as they did before.
