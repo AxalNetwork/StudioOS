@@ -170,8 +170,6 @@ const EmailChangeRevokePage = lazy(() => import('./pages/EmailChangeRevokePage')
 import InactivityWarningModal from './components/InactivityWarningModal';
 import NotificationBell from './components/NotificationBell';
 import CommandPalette from './components/CommandPalette';
-// Task #7 (IG) — Contextual help (+ paid-tier customer chat) on every signed-in page.
-import HelpWidget from './components/HelpWidget';
 import StepUpModal from './components/StepUpModal';
 import InstallPrompt from './components/InstallPrompt';
 import KeyboardShortcutsOverlay from './components/KeyboardShortcutsOverlay';
@@ -737,7 +735,6 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         onLogout={logoutNow}
       />
       <CommandPalette />
-      <HelpWidget />
       <KeyboardShortcutsOverlay />
       <InstallPrompt />
       <StepUpModal />

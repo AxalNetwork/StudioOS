@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Help options now live in the Support Hub
+
+The floating Help button that used to sit in the bottom-right corner of every page is gone. All of its options now live in one place — the Support Hub (your "Support" page). Open it to search the docs, ask the Personal Advisor, open a support ticket, and — on the Studio, Institutional, and Partner plans — chat with the Axal VC team, all from a single "How can we help?" panel next to your tickets.
+
+---
+
 ## Cleaner page tips — less purple, less vertical space
 
 The informational help strip that sits under each page's title is now compact and low-key — a slim inline line instead of a wide purple banner. All pages get the lighter treatment automatically, so your KPI cards and content no longer get pushed far down by a big header block. The Metrics page no longer shows the same description twice. You can still dismiss the tip and it stays gone across devices, exactly as before.

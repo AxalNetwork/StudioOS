@@ -69,9 +69,7 @@ const QUICK_ACTIONS = [
     label: 'Open Help',
     hint: 'Docs, ticket, contact options',
     roles: ['admin', 'founder', 'partner', 'investor', 'mentor'],
-    run: () => {
-      try { window.dispatchEvent(new CustomEvent('open-help-widget')); } catch { /* ignore */ }
-    },
+    run: (nav) => nav('/tickets'),
   },
 ];
 

@@ -10,6 +10,25 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Move Help into Support Hub (Task #13)
+
+Removed the global floating Help widget (the bottom-right purple `LifeBuoy` button and its
+"How can we help?" slide-over) and relocated its four options into the Support Hub (`/tickets`).
+
+- **Deleted `frontend/src/components/HelpWidget.jsx`** — the floating launcher, the `?` open
+  hotkey, the `open-help-widget` window-event listener, and the slide-over panel are all gone.
+- **`frontend/src/App.jsx`** — dropped the `HelpWidget` import and its global mount in the
+  signed-in shell (and the stale Task #7 comment).
+- **`frontend/src/pages/TicketsPage.jsx`** — added a `SupportHelpPanel` ("How can we help?")
+  as a right-hand column (`lg:grid-cols-3`, `lg:sticky lg:top-20`; stacks on mobile). Reuses the
+  old widget's debounced `/api/docs/search` call, the `isChatEligible` tier gate, and mounts
+  `CustomerChatWidget` for eligible users. Options: Search the docs, Ask Personal Advisor
+  (`/dashboard?advisor=1`), Chat with the Axal VC team (gated), Open a ticket (reveals the
+  existing New Ticket form + scrolls to top). Form/table now share a `lg:col-span-2` column.
+- **`frontend/src/components/CommandPalette.jsx`** — the Cmd+K "Open Help" command now
+  navigates to `/tickets` instead of dispatching the removed `open-help-widget` event.
+- **`frontend/src/components/CustomerChatWidget.jsx`** — updated the parent-component doc comment.
+
 ## Compact, consistent info help strips (Task #9)
 
 Replaced the heavy full-width purple `PageExplainer` banner (used on ~43 pages) with
