@@ -10,6 +10,21 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## All founders & profile photos in the Spin-Out deck PPTX export (Task #7)
+
+The PowerPoint export (`buildDeck`) now mirrors the in-app Slide 07 "Team & Network": it renders every founder/co-founder and embeds founder + advisor profile photos (circular, with an initials fallback). Previously the PPTX rendered only the single primary founder and ignored photos entirely. Single-founder decks export with their existing geometry unchanged.
+
+### Frontend — `frontend/src/decks/spinout/buildDeck.js`
+- **New photo helpers**: `resolvePhotoData(photo)` (async) normalizes a photo source to an embeddable raster data URL or `null`: raster base64 `data:` URLs (png/jpe?g/gif/webp) pass through; other `data:` URLs (e.g. SVG) → `null`; `http(s)`/root-relative URLs are fetched, MIME-sniffed by **magic bytes** (not the `Content-Type` header), and inlined as base64. A 5s `AbortController` timeout guards each fetch and any failure resolves to `null` — a slow/CORS-blocked/non-image URL degrades to initials instead of throwing at `pres.write()`. `abToBase64`/`sniffImageMime` are the supporting primitives. Photos are passed via `addImage({data})` (not `path`) so no deferred network work happens during write.
+- **New `avatar(pres, s, x, y, d, {dataUrl, initials, fill, fontSize, textColor})`**: draws a cover-cropped circular image (`rounding:true` + `sizing:{type:'cover'}`) when a photo resolved, else the existing OVAL + initials monogram.
+- **`team()` is now async** (and `await`ed in `buildDeck` before `captable()`, preserving slide order). It reads `d.founders[]` (falling back to the legacy singular `d.founder`), filters empty rows, and pre-resolves all founder + advisor photos via `Promise.all` before drawing.
+  - **Single founder** (`!multi`): geometry, panel, name/role/bio and the fixed advisor roster (label `y=4.25`, roster `ay=4.62`, `rowH 0.62`, avatar `0.5`) are unchanged — only the avatar gains photo support.
+  - **Multiple founders** (`multi`): compact stacked founder cards (avatar + name + role, no bio) plus a vertical-fit advisor roster (`MAX_ROW 0.62`/`MIN_ROW 0.46`, derived `avD`/`nameSize`/`roleSize`) so the last row never crosses the bottom margin — mirroring `templates/axal_spinout_demoday_app.tsx` (`SlideTeamNetwork`).
+
+### Tests — `frontend/test/spinout_pptx_build.test.mjs`
+- multi-founder SAMPLE renders every co-founder (asserts the co-founder name is present); single-founder clone renders only the primary founder (co-founder name absent); embedding founder + advisor raster photos increases the `media/image-*` file count vs a photo-stripped clone; unsupported/unreachable photos (ftp / SVG / blob) fall back to initials without throwing.
+- `npm run test:decks` green (51 tests). `npm run test:drift` otherwise green; the lone failure (`incorporationPacket` "tamper-evident hash is deterministic") is a pre-existing order-dependent flake — passes in isolation and is untouched by this change.
+
 ## Edit Use of Funds allocation after intake (Task #8)
 
 Founders could only set THE ASK "Use of Funds" % once, on the FounderPortal intake (step 1). They can now revise it after intake from a deck-side editor, and the change flows through to THE ASK slide (live preview + PPTX) in both dev (FastAPI) and prod (Worker).

@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your whole founding team — with photos — in the exported deck
+
+When you export your Spin-Out deck to PowerPoint, the "Team & Network" slide now shows your full founding team, not just the lead founder. If you have co-founders, they each get their own card. Profile photos now come through too: founders and advisors appear as circular headshots, falling back to their initials when there's no photo (or if a photo can't be loaded). Decks with a single founder look exactly as they did before.
+
+---
+
 ## Change your Use of Funds split after you've applied
 
 You're no longer locked into the "Use of Funds" breakdown you set when you first applied. Open the Pitch Deck builder for your Spin-Out deck and you'll find a "Use of Funds" editor in the side panel: adjust the percentages across the five areas, and save. As before, the split has to add up to exactly 100% (or you can leave everything at zero to clear it).
