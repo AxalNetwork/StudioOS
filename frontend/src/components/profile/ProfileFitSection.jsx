@@ -6,10 +6,13 @@
 //   - api.assessment.myResults() → latest archetype
 //   - api.advisor.progress()  → conversational-profiling completion %
 //   - api.matches.summary()   → cross-counterparty match range (see MatchSummaryCard)
+//   - api.bestFit.me()        → the caller's own Axal Fit scorecard + 5 Axal values
 //
-// The self Axal-Fit score+band and the 5 Axal behavioral values do NOT have a
-// self endpoint yet (admin-only in the Best-Fit report), so they render a clean
-// "complete profiling to unlock" card instead of fabricating data.
+// api.bestFit.me() is read-only and leaner than the admin report: it carries the
+// per-persona fit scorecard + behavioral values only. Cross-counterparty matches
+// stay gated via api.matches.summary(); the full report stays admin-only. Until
+// the advisor conversation has enough signal, the fit card shows a clean empty
+// state instead of fabricating data.
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   UserCircle, Target, Heart, Sparkles, Lock, Loader2, AlertCircle,
@@ -18,7 +21,7 @@ import {
 import { api } from '../../lib/api';
 import SkillRadar from '../play/SkillRadar';
 import { openPaywall } from '../PaywallModal';
-import { archetypeMeta, iconFor } from '../../lib/assessmentMeta';
+import { archetypeMeta, iconFor, humanize } from '../../lib/assessmentMeta';
 
 const CARD = 'rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5';
 const H = 'text-sm font-semibold text-gray-900 dark:text-gray-100';
@@ -197,19 +200,86 @@ function CompletionCard({ state, className }) {
   return <CardShell title="Profiling completion" icon={UserCircle} className={className}>{body}</CardShell>;
 }
 
-// ── Fit + Axal-5 (locked: no self endpoint yet) ──────────────────────────────
-function FitUnlockCard({ className }) {
-  return (
-    <CardShell title="Your Axal Fit & values" icon={Lock} className={className}>
-      <Nudge>
-        <p className="font-medium text-gray-700 dark:text-gray-200">Complete your profiling to unlock</p>
-        <p className="mt-1">
-          Your personal <strong>Axal Fit score &amp; band</strong> and your <strong>5 Axal behavioral values</strong>
-          {' '}are computed once your advisor conversation has enough signal. Finish the questions above to reveal them.
-        </p>
-      </Nudge>
-    </CardShell>
-  );
+// ── Fit + Axal-5 (self: api.bestFit.me) ──────────────────────────────────────
+const FIT_BAND = {
+  strong_yes: { label: 'Strong yes', cls: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700' },
+  yes_caution: { label: 'Yes, with caution', cls: 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-700' },
+  hold: { label: 'Hold — more diligence', cls: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700' },
+  no: { label: 'No', cls: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600' },
+};
+
+function FitCard({ state, className }) {
+  const { data, error } = state;
+  let body;
+  if (error) {
+    body = <ErrorNote>Couldn’t load your Axal Fit. {error}</ErrorNote>;
+  } else if (!data) {
+    body = <div className="py-4 flex justify-center text-gray-400"><Loader2 className="animate-spin" size={18} /></div>;
+  } else {
+    // GET /api/best-fit/me → { primary_persona, fit[], axal_values[], computed_at }.
+    const fit = Array.isArray(data.fit) ? data.fit : [];
+    const axal = Array.isArray(data.axal_values) ? data.axal_values : [];
+    const axalWithSignal = axal.filter((v) => Number(v.confidence) > 0);
+    if (fit.length === 0 && axalWithSignal.length === 0) {
+      body = (
+        <Nudge>
+          <p className="font-medium text-gray-700 dark:text-gray-200">Complete your profiling to unlock</p>
+          <p className="mt-1">
+            Your personal <strong>Axal Fit score &amp; band</strong> and your <strong>5 Axal behavioral values</strong>
+            {' '}are computed once your advisor conversation has enough signal. Finish the questions above to reveal them.
+          </p>
+        </Nudge>
+      );
+    } else {
+      body = (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <p className={`${SUB} mb-2`}>Axal Fit scorecard</p>
+            {fit.length === 0 ? (
+              <p className={SUB}>No fit computed yet (insufficient signal).</p>
+            ) : (
+              <div className="space-y-2">
+                {fit.map((f) => {
+                  const b = FIT_BAND[f.band] || FIT_BAND.no;
+                  return (
+                    <div key={f.persona} className={`rounded-lg border p-2.5 ${data.primary_persona === f.persona ? 'ring-1 ring-violet-500/50' : ''} ${b.cls}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold capitalize">{humanize(f.persona)}</span>
+                        <span className="text-base font-bold">{Math.round(Number(f.total_score) || 0)}<span className="text-xs font-normal">/100</span></span>
+                      </div>
+                      <p className="text-xs font-medium mt-0.5">{f.band_label || b.label}</p>
+                      {f.narrative_fit && <p className="text-xs mt-1 opacity-90 line-clamp-3">{f.narrative_fit}</p>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div>
+            <p className={`${SUB} mb-2`}>5 Axal behavioral values</p>
+            {axalWithSignal.length === 0 ? (
+              <p className={SUB}>No behavioral values recorded yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {axal.map((v) => (
+                  <li key={v.value_key}>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="capitalize text-gray-700 dark:text-gray-300">{humanize(v.value_key)}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{(Number(v.score) || 0).toFixed(1)}/5</span>
+                    </div>
+                    <div className="mt-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                      <div className="h-full bg-violet-500 dark:bg-violet-400" style={{ width: `${Math.max(0, Math.min(100, (Number(v.score) || 0) / 5 * 100))}%` }} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      );
+    }
+  }
+  return <CardShell title="Your Axal Fit & values" icon={Sparkles} className={className}>{body}</CardShell>;
 }
 
 // ── Match range (counts + teaser free; full list gated) ───────────────────────
@@ -394,6 +464,7 @@ export default function ProfileFitSection({ className = '' }) {
   const [values, setValues] = useState({ data: null, error: '' });
   const [results, setResults] = useState({ data: null, error: '' });
   const [progress, setProgress] = useState({ data: null, error: '' });
+  const [fit, setFit] = useState({ data: null, error: '' });
 
   useEffect(() => {
     let alive = true;
@@ -404,6 +475,7 @@ export default function ProfileFitSection({ className = '' }) {
     wire(api.values.getMe(), setValues);
     wire(api.assessment.myResults(), setResults);
     wire(api.advisor.progress(), setProgress);
+    wire(api.bestFit.me(), setFit);
     return () => { alive = false; };
   }, []);
 
@@ -418,7 +490,7 @@ export default function ProfileFitSection({ className = '' }) {
         <ValuesLeanCard state={values} className="lg:col-span-2" />
         <ArchetypeCard state={results} className="lg:col-span-2" />
         <CompletionCard state={progress} className="md:col-span-1 lg:col-span-2" />
-        <FitUnlockCard className="md:col-span-1 lg:col-span-4" />
+        <FitCard state={fit} className="md:col-span-1 lg:col-span-4" />
         <MatchSummaryCard className="md:col-span-2 lg:col-span-4" />
         <BookConsultationCard className="md:col-span-2 lg:col-span-2" />
       </div>

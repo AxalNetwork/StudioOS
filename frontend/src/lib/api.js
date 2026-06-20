@@ -2329,6 +2329,13 @@ export const api = {
     summary: ({ detail } = {}) =>
       request(`/matches/summary${detail ? `?detail=${encodeURIComponent(detail)}` : ''}`),
   },
+
+  // Task #20 — self Best-Fit (Worker-only). The caller's own per-persona Axal Fit
+  // scorecard + 5 Axal behavioral values. Read-only; no matches/spin-out (those
+  // stay gated via matches.summary / admin-only report).
+  bestFit: {
+    me: () => request('/best-fit/me'),
+  },
 };
 
 // Task #3 — Due Diligence module. Admin/partner/investor/mentor only;

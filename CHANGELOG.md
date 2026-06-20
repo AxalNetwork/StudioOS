@@ -12,11 +12,12 @@
 
 ## Best-Fit dashboard & admin UI (Task #20)
 
-Frontend half of Conversational Profiling + Best-Fit Matching, built against the merged Task #19 backend shapes. No backend/API changes.
+Frontend half of Conversational Profiling + Best-Fit Matching, built against the merged Task #19 backend shapes. One small read-only backend addition (below): `GET /api/best-fit/me`, the self equivalent of the admin-only Best-Fit report, scoped to the caller's own fit scorecard + Axal values (no matches/spin-out).
 
 ### "Your Profile & Fit" — `frontend/src/components/profile/ProfileFitSection.jsx`
 - Self-only section rendered after `<PersonalAdvisor/>` on the dashboard (`pages/Dashboard.jsx`) and on the new `/profile` page. Reads existing self endpoints: `api.radar.me` (8-axis skills, score/20→0–5 domain), `api.values.getMe` (15-dim lean), `api.assessment.myResults` (latest archetype), `api.advisor.progress` (completion %), `api.matches.summary` (cross-counterparty match range).
-- Self Axal-Fit score+band and the 5 Axal behavioral values have no self endpoint yet → explicit "complete profiling to unlock" card (`FitUnlockCard`) instead of fabricated data. Every empty/error state nudges back to the advisor.
+- Self Axal-Fit scorecard + the 5 Axal behavioral values render from `api.bestFit.me()` (`FitCard`): per-persona weighted-rubric score/band/narrative + behavioral-value bars; primary persona ringed. Before the advisor has enough signal (`fit` empty AND no Axal value has confidence > 0) it shows a "complete profiling to unlock" empty state instead of fabricated data. Every empty/error state nudges back to the advisor.
+- Backend (read-only): `cloudflare-worker/src/routes/best_fit.ts` → `GET /api/best-fit/me` returns `{ primary_persona, fit[], axal_values[], computed_at }` via `loadAllLatestFit` + `loadAxalValues` (auth-only). Mounted at `/api/best-fit` in `index.ts`; cross-counterparty matches deliberately excluded so they stay tier-gated via `matches.summary`. `api.js`: `api.bestFit.me()`.
 - Match card: counts + one free teaser per counterparty type; "Unlock full match list" calls `openPaywall('studio', …)` directly (api.js auto-402 path is once-per-session, wrong for an explicit click). Studio/bypass roles get the full list inline via `summary.unlocked`.
 - "Book with Guillaume" card uses `api.bookConsultation` + `api.getMyConsultations`.
 

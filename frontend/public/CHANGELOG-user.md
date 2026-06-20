@@ -7,7 +7,7 @@ everyone using the platform. Newest changes are at the top.
 
 ## See your Best-Fit profile, matches, and book a 1:1
 
-Your dashboard now has a "Your Profile & Fit" section, also available on its own "My Profile" page. It brings together everything your advisor learns about you: an 8-point skills radar, your top values, your founder archetype, and how far along your profiling is — all in one place. Each card gently points you back to the advisor whenever there's more to fill in.
+Your dashboard now has a "Your Profile & Fit" section, also available on its own "My Profile" page. It brings together everything your advisor learns about you: an 8-point skills radar, your top values, your founder archetype, your Axal Fit score and band, your 5 behavioral values, and how far along your profiling is — all in one place. Each card gently points you back to the advisor whenever there's more to fill in.
 
 You'll also see your best-fit matches across the network — co-founders, investors, partners, mentors, and coaches — with a free preview of your top match in each group. Upgrade to Studio to open the full list with names, scores, and the reasons behind every match. And when you're ready to talk it through, there's a "Book with Guillaume" card to request a 1:1 about your results.
 
