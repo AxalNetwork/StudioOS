@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Fixed: dashboard and profile pages crashing for everyone
+
+A bug caused the dashboard and profile pages to show a full-page error for all users. It's fixed — both pages now load normally and the profile fit section shows your data again.
+
+---
+
 ## Tailor your landing copy for every audience
 
 You can now write a custom headline, description, and button for all six audiences — customer, investor, partner, advisor, mentor, and co-founder. Previously only customer, partner, and investor had their own wording. Open the audience tabs in the brand builder to give each visitor a message written just for them, and your published page shows a tab for each one. Any audience you leave blank simply falls back to your main page copy.

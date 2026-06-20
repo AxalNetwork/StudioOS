@@ -10,6 +10,19 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Fix dashboard & profile crash — api.assessment undefined (Task #7)
+
+`ProfileFitSection` imported only `{ api }` but called `api.assessment.myResults()`;
+`assessment` is a separate named export in `lib/api.js`, not a property of `api`, so
+the access threw synchronously before the `.catch()` could run and tripped the error
+boundary on every Dashboard and Profile page load for all roles.
+
+- **Fix**: `frontend/src/components/profile/ProfileFitSection.jsx` — add `assessment`
+  to the import and call `assessment.myResults()` directly (matches the pattern used
+  by other call sites).
+- Stale comment on line 6 updated to match.
+- No API, worker, or schema change.
+
 ## Per-audience landing copy for all six audiences (Task #3)
 
 Extended per-audience headline/body/CTA copy from 3 audiences (customer/partner/investor) to all 6 (added advisor/mentor/cofounder) end-to-end.
