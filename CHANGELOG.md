@@ -10,6 +10,14 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Brand template catalog & matching (Task #30)
+
+Data layer for the audience-first Brand & Landing wizard. Maps every supplied prebuilt template to an audience + goal and adds pure matching/seed helpers. No UI, DB, or API changes (those are Tasks #32 and #31). Not user-facing yet — no `CHANGELOG-user.md` line.
+
+- `frontend/src/lib/brand/templates.js`: typed (JSDoc) catalog. `TEMPLATES` covers all 16 supplied templates; each entry has `id` (kebab), `label`, `audience` (one of 6: customer/investor/partner/advisor/mentor/cofounder), `assetType`, `primaryGoal`, `defaultCtaLabel`, `defaultSlug`, `visualTemplate` (one of the existing `minimal|bold-hero|video-first|editorial|product-mock` keys — published pages keep built-in visual styles, designs are NOT recreated), optional `recommended`, `notes`. Exports the `AUDIENCES`/`ASSET_TYPES`/`GOALS`/`VISUAL_TEMPLATE_KEYS` enums + `AUDIENCE_LABELS`, and helpers `getTemplateById`, `getTemplatesByAudience` (recommended-first), `inferDefaultsFromTemplate`. `VISUAL_TEMPLATE_KEYS` mirrors `cloudflare-worker/src/services/landingTemplates.ts` TEMPLATE_KEYS — keep in lockstep.
+- `frontend/src/lib/brand/flow.js`: pure flow helpers — `suggestAudienceAndGoal(project, preferredAudience?)` (defaults to customer/join_waitlist; per-audience default goal), `getRecommendedTemplatesForAudience(audience)`, `generateInitialBrandKit(project, template, goal)` (deterministic placeholder brandName/headline/subheadline/ctaLabel the wizard can edit — no network, no AI).
+- `frontend/test/brand_templates.test.mjs`: 15 unit tests — catalog integrity (enum/kebab/uniqueness), per-audience coverage + recommended-first ordering, and helper behavior incl. copy seeding for every goal + graceful degradation. Wired into `test:decks` (runs under `npm run test:drift`).
+
 ## Live deck preview follows the selected slide (Task #26)
 
 Spin-Out deck builder (`axal_spinout_demoday`) now shows ONE live-preview card above the slide editor instead of two fixed cards (cover + slide-2 pain-frequency).
