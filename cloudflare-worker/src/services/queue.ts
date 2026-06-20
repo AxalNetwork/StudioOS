@@ -22,7 +22,7 @@
  * D1-table side. Callers can decide to retry the producer call.
  */
 import type { Env, JobMessage } from '../types';
-import { Jobs, JobType, QueueJob } from '../models/jobs';
+import { Jobs, type JobType, type QueueJob } from '../models/jobs';
 
 export interface EnqueueOptions {
   /** Honored on D1 transport only. CF retry count is set in wrangler.toml. */
