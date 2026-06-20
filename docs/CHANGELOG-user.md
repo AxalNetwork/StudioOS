@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Cleaner page tips — less purple, less vertical space
+
+The informational help strip that sits under each page's title is now compact and low-key — a slim inline line instead of a wide purple banner. All pages get the lighter treatment automatically, so your KPI cards and content no longer get pushed far down by a big header block. The Metrics page no longer shows the same description twice. You can still dismiss the tip and it stays gone across devices, exactly as before.
+
+---
+
 ## Removed the separate "Discover" game
 
 The standalone "Play & Discover" area has been retired. Your skills and values are now captured naturally through your conversation with the Personal Advisor, so the separate game, the shareable card, and the "Discover" sidebar link are gone. Finishing onboarding now takes you straight to your dashboard.

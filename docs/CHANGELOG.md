@@ -10,6 +10,34 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Compact, consistent info help strips (Task #9)
+
+Replaced the heavy full-width purple `PageExplainer` banner (used on ~43 pages) with
+a compact, low-emphasis inline strip that sits directly under the page `<h1>` without
+pushing KPI cards far down. All pages that already used `PageExplainer` get the lighter
+treatment automatically.
+
+- **New `InfoStrip` component** (`frontend/src/components/InfoStrip.jsx`) — pure
+  presentational atom with `variant` (`info`|`tip`|`warning`), `title?`, `body`, `icon?`,
+  `dismissible` (default `true`), `storageKey?`, `onDismiss?`, `inline?` props. Uses
+  design-system surface tokens (`bg-blue-50/50`, `bg-green-50/50`, `bg-amber-50/60`) and
+  Tailwind 4 `dark:` variants; no new colors outside the existing system. Accessible:
+  `role="note"`, `aria-label`, keyboard-focusable dismiss button with `focus:ring-2`.
+- **`InfoStrip.examples.md`** added alongside `EmptyState.examples.md` convention.
+- **`PageExplainer` refactored** to render through `InfoStrip`. All existing behavior
+  preserved: EXPLAINERS registry lookup, "Learn more →" docs deep-link, mobile
+  collapsed tap-to-expand, localStorage cache + server sync dismissal persistence.
+  Removed heavy `bg-violet-50/60` / `border-violet-200` visual treatment.
+- **Metrics page** (`MetricsPage.jsx`): removed redundant subtitle paragraph
+  ("Snapshot MRR, ARR, CAC, LTV, churn…") — the `PageExplainer` strip is the single
+  source of truth; no empty gap on dismiss.
+- **API Bridge page** (`ApiBridgePage.jsx`): converted `bg-violet-50` "Clean Room
+  Architecture" info block to `<InfoStrip dismissible={false} inline={false} icon={Shield}>`.
+- **Dashboard** (`Dashboard.jsx`): converted "You're signed in with Google" notice
+  to `<InfoStrip variant="info" inline={false}>` (contextual system notice, keeps
+  `Link` inside via `children` prop).
+- Both drift guards pass: `check-dark-mode.mjs` ✅ · `check-api-drift.mjs` ✅.
+
 ## Remove the "Play & Discover" surface everywhere (Task #8)
 
 The skills & values assessment is now collected conversationally inside the Personal
