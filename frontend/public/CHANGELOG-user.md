@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Admin Console: pick a section from one clean dropdown
+
+The Admin Console used to show all of its sections as a long row of tabs that crowded together and wrapped onto two lines on smaller screens. That row is now a single dropdown menu: click it to see every section in one tidy list, each with its icon, and pick the one you want. The currently open section shows at the top, the "pending" counts on Partner Profiles and KYC Queue still appear, and links that open a specific section directly still work. (Admins only — nothing changes for other members.)
+
+---
+
 ## Help options now live in the Support Hub
 
 The floating Help button that used to sit in the bottom-right corner of every page is gone. All of its options now live in one place — the Support Hub (your "Support" page). Open it to search the docs, ask the Personal Advisor, open a support ticket, and — on the Studio, Institutional, and Partner plans — chat with the Axal VC team, all from a single "How can we help?" panel next to your tickets.

@@ -161,8 +161,113 @@ const TRACK_BADGES = {
   'Strategic Scale (Existing)': 'bg-indigo-100 text-indigo-700',
 };
 
+// Task #15 — single ordered source for the Admin Console section nav. The
+// dropdown trigger and menu both render from this list instead of a hardcoded
+// row of 12 tab buttons. Pending counts are computed per-render in the page
+// and passed in via `badges` keyed by section value.
+const ADMIN_SECTIONS = [
+  { value: 'users', label: 'Users', Icon: Users },
+  { value: 'profiles', label: 'Partner Profiles', Icon: Briefcase },
+  { value: 'kyc', label: 'KYC Queue', Icon: ShieldCheck },
+  { value: 'legal', label: 'Legal', Icon: FileText },
+  { value: 'personas', label: 'Personas', Icon: Sparkles },
+  { value: 'directory', label: 'Directory', Icon: Sparkles },
+  { value: 'integration-keys', label: 'Integration Keys', Icon: KeyRound },
+  { value: 'promos', label: 'Promo Codes', Icon: Ticket },
+  { value: 'payments', label: 'Payments', Icon: Package },
+  { value: 'billing', label: 'Billing', Icon: CreditCard },
+  { value: 'wellbeing', label: 'Wellbeing', Icon: Heart },
+  { value: 'network-profiles', label: 'Mentors & Partners', Icon: Users },
+];
+const ADMIN_SECTION_VALUES = new Set(ADMIN_SECTIONS.map(s => s.value));
+
+// Dropdown replacing the old horizontal tab row. Closes on selection, outside
+// click, and Escape; full light/dark support. Preserves the `admin-page` and
+// `admin-tab-*` data-testid hooks so existing selectors keep working.
+function AdminSectionNav({ value, onChange, badges }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const active = ADMIN_SECTIONS.find(s => s.value === value) || ADMIN_SECTIONS[0];
+  const ActiveIcon = active.Icon;
+  const activeBadge = badges?.[active.value] || 0;
+
+  return (
+    <div ref={ref} className="relative inline-block mb-6" data-testid="admin-page">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Select admin section"
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-2 min-w-[240px] px-4 py-2.5 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 hover:border-violet-400 dark:hover:border-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-500/40 transition-colors"
+      >
+        <ActiveIcon size={16} className="text-violet-600 dark:text-violet-300 shrink-0" />
+        <span className="flex-1 text-left truncate">{active.label}</span>
+        {activeBadge > 0 && (
+          <span className="bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0">{activeBadge} pending</span>
+        )}
+        <ChevronDown size={14} className={`shrink-0 text-gray-400 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Admin sections"
+          className="absolute left-0 top-full mt-1.5 z-50 w-[260px] max-h-[70vh] overflow-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg py-1"
+        >
+          {ADMIN_SECTIONS.map(s => {
+            const Icon = s.Icon;
+            const isActive = s.value === value;
+            const badge = badges?.[s.value] || 0;
+            return (
+              <li key={s.value} role="option" aria-selected={isActive}>
+                <button
+                  type="button"
+                  data-testid={`admin-tab-${s.value}`}
+                  onClick={() => { onChange(s.value); setOpen(false); }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-colors ${
+                    isActive
+                      ? 'bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-200 font-semibold'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium'
+                  }`}
+                >
+                  <Icon size={14} className={`shrink-0 ${isActive ? 'text-violet-600 dark:text-violet-300' : 'text-gray-400 dark:text-gray-500'}`} />
+                  <span className="flex-1 truncate">{s.label}</span>
+                  {badge > 0 && (
+                    <span className="bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0">{badge} pending</span>
+                  )}
+                  {isActive && <Check size={14} className="shrink-0 text-violet-600 dark:text-violet-300" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage({ onImpersonate }) {
-  const [tab, setTab] = useState('users');
+  // Initial section honors a `?tab=` deep-link (e.g. /admin?tab=network-profiles)
+  // when it names a known section; otherwise defaults to Users.
+  const [tab, setTab] = useState(() => {
+    if (typeof window === 'undefined') return 'users';
+    const t = new URLSearchParams(window.location.search).get('tab');
+    return t && ADMIN_SECTION_VALUES.has(t) ? t : 'users';
+  });
   const [users, setUsers] = useState([]);
   // Task #40 — batched trust-score map keyed by user_id, populated by a
   // single POST /api/trust/score/batch after each users-list refresh.
@@ -310,62 +415,14 @@ export default function AdminPage({ onImpersonate }) {
       </div>
       <p className="text-gray-600 mb-6">Manage users, roles, and partner profiles</p>
 
-      <div className="flex gap-2 mb-6 border-b border-gray-200 dark:border-gray-800" data-testid="admin-page">
-        <button data-testid="admin-tab-users" onClick={() => setTab('users')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'users' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <Users size={14} className="inline mr-1.5" /> Users
-        </button>
-        <button data-testid="admin-tab-profiles" onClick={() => setTab('profiles')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'profiles' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <Briefcase size={14} className="inline mr-1.5" /> Partner Profiles
-          {pendingProfiles > 0 && (
-            <span className="ml-2 bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">{pendingProfiles} pending</span>
-          )}
-        </button>
-        <button data-testid="admin-tab-kyc" onClick={() => setTab('kyc')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'kyc' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <ShieldCheck size={14} className="inline mr-1.5" /> KYC Queue
-          {kycFilter === 'pending' && kycQueue.length > 0 && (
-            <span className="ml-2 bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">{kycQueue.length} pending</span>
-          )}
-        </button>
-        <button data-testid="admin-tab-legal" onClick={() => setTab('legal')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'legal' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <FileText size={14} className="inline mr-1.5" /> Legal
-        </button>
-        <button data-testid="admin-tab-personas" onClick={() => setTab('personas')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'personas' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <Sparkles size={14} className="inline mr-1.5" /> Personas
-        </button>
-        <button data-testid="admin-tab-directory" onClick={() => setTab('directory')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'directory' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <Sparkles size={14} className="inline mr-1.5" /> Directory
-        </button>
-        <button data-testid="admin-tab-integration-keys" onClick={() => setTab('integration-keys')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'integration-keys' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <KeyRound size={14} className="inline mr-1.5" /> Integration Keys
-        </button>
-        <button data-testid="admin-tab-promos" onClick={() => setTab('promos')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'promos' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <Ticket size={14} className="inline mr-1.5" /> Promo Codes
-        </button>
-        <button data-testid="admin-tab-payments" onClick={() => setTab('payments')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'payments' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <Package size={14} className="inline mr-1.5" /> Payments
-        </button>
-        <button data-testid="admin-tab-billing" onClick={() => setTab('billing')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'billing' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <CreditCard size={14} className="inline mr-1.5" /> Billing
-        </button>
-        <button data-testid="admin-tab-wellbeing" onClick={() => setTab('wellbeing')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'wellbeing' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <Heart size={14} className="inline mr-1.5" /> Wellbeing
-        </button>
-        <button data-testid="admin-tab-network-profiles" onClick={() => setTab('network-profiles')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'network-profiles' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <Users size={14} className="inline mr-1.5" /> Mentors & Partners
-        </button>
-      </div>
+      <AdminSectionNav
+        value={tab}
+        onChange={setTab}
+        badges={{
+          profiles: pendingProfiles,
+          kyc: kycFilter === 'pending' ? kycQueue.length : 0,
+        }}
+      />
 
       {tab === 'network-profiles' && (
         <div data-testid="admin-network-profiles-panel"><AdminNetworkProfiles /></div>

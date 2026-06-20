@@ -10,6 +10,26 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Admin Console section nav: dropdown instead of tab row (Task #15)
+
+Replaced the Admin Console's horizontal row of 12 section tabs (which crowded and
+wrapped on narrower widths) with a single dropdown menu in `frontend/src/pages/AdminPage.jsx`.
+
+- Added a module-level `ADMIN_SECTIONS` ordered list (value/label/Icon) as the single
+  source for both the trigger and the menu, plus `ADMIN_SECTION_VALUES` for validation.
+- New `AdminSectionNav` component: a trigger button showing the active section's icon,
+  label, and its "N pending" badge (when applicable), and a `role="listbox"` menu listing
+  all 12 options in the original tab order with icons, badges, violet active-highlight, and
+  a trailing check on the active item. Closes on selection, outside click, and Escape; full
+  light/dark support. Preserves the `admin-page` and `admin-tab-*` `data-testid` hooks
+  (testid = `admin-tab-${value}`) so existing selectors keep working.
+- Pending counts are passed in via a `badges` map (`profiles` → pendingProfiles,
+  `kyc` → pending KYC queue length when the KYC filter is "pending"), matching the prior
+  per-tab badge logic; the trigger reflects the badge when that section is selected.
+- The `tab` state initializer now reads the `?tab=` query param (validated against
+  `ADMIN_SECTION_VALUES`) so `/admin?tab=network-profiles` deep-links select the right
+  section on load — previously the documented deep-link had no reader and always opened Users.
+
 ## Move Help into Support Hub (Task #13)
 
 Removed the global floating Help widget (the bottom-right purple `LifeBuoy` button and its
