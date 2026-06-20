@@ -11,6 +11,7 @@ import SemanticSearch from '../components/SemanticSearch';
 import InvestorTrialBanner from '../components/InvestorTrialBanner';
 import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
 import ProfileFitCard from '../components/profile/ProfileFitCard';
+import MatchesCard from '../components/profile/MatchesCard';
 // Task #6 (IF) — first-login product tour (the onboarding checklist panel
 // was removed 2026-05-22: signup flow already runs the persona chatbot and
 // the dashboard already surfaces the Personal Advisor, so the checklist
@@ -142,6 +143,9 @@ export default function Dashboard() {
 
       {/* Your Profile & Fit — skills radar, Axal values, value lean, fit band. */}
       <ProfileFitCard />
+
+      {/* Range of matches — co-founders, investors, partners, mentors/coaches. */}
+      <MatchesCard />
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

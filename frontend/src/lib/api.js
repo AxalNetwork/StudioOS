@@ -1873,6 +1873,14 @@ export const api = {
     request(`/venture-risk/${projectId}/layer/${layerKey}`, { method: 'PUT', body: JSON.stringify(data) }),
   getVentureRiskPortfolio: () => request('/venture-risk/portfolio'),
 
+  // ---------- Best-Fit matching + admin consultations ----------
+  bestfitMatches: () => request('/bestfit/matches'),
+  bestfitConsult: (data) => request('/bestfit/consult', { method: 'POST', body: JSON.stringify(data || {}) }),
+  adminConsultations: () => request('/bestfit/consultations'),
+  adminConsultationStatus: (id, status) =>
+    request(`/bestfit/consultations/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
+  adminBestFitReport: (userId) => request(`/bestfit/report/${userId}`),
+
   // ---------- Reference checks (Task #43, admin/investor only) ----------
   listReferences: (dealId) =>
     request(`/references${dealId != null ? `?deal_id=${dealId}` : ''}`),
