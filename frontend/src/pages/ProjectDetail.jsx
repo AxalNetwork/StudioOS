@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { safeExternalUrl } from '../lib/url';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, FileText, Target, Building, Rocket, Pencil, Trash2, X, Database, Search, ExternalLink, AlertCircle } from 'lucide-react';
+import SectorSelect from '../components/SectorSelect';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { useToast } from '../components/useToast';
@@ -765,7 +766,7 @@ function PitchCopyMeter({ status }) {
 const EDITABLE_FIELDS = [
   { key: 'name', label: 'Project Name', required: true },
   { key: 'description', label: 'Description' },
-  { key: 'sector', label: 'Sector' },
+  { key: 'sector', label: 'Sector', sectorSelect: true },
   { key: 'problem_statement', label: 'Problem Statement', textarea: true },
   { key: 'solution', label: 'Solution', textarea: true },
 ];
@@ -868,26 +869,36 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
         <div className="p-5 space-y-4">
           {EDITABLE_FIELDS.map((f) => (
             <div key={f.key}>
-              <label className="block text-xs text-gray-600 mb-1">
-                {f.label}{f.required && <span className="text-red-500"> *</span>}
-              </label>
-              {f.textarea ? (
-                <textarea
+              {f.sectorSelect ? (
+                <SectorSelect
+                  label={f.label}
                   value={form[f.key]}
-                  onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
-                  rows={3}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+                  onChange={(v) => setForm((s) => ({ ...s, [f.key]: v }))}
                 />
               ) : (
-                <input
-                  type="text"
-                  value={form[f.key]}
-                  onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
-                />
-              )}
-              {PITCH_FIELD_TYPE[f.key] && (
-                <PitchCopyMeter status={getPitchCopyLengthStatus(form[f.key], PITCH_FIELD_TYPE[f.key])} />
+                <>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    {f.label}{f.required && <span className="text-red-500"> *</span>}
+                  </label>
+                  {f.textarea ? (
+                    <textarea
+                      value={form[f.key]}
+                      onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
+                      rows={3}
+                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      value={form[f.key]}
+                      onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
+                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+                    />
+                  )}
+                  {PITCH_FIELD_TYPE[f.key] && (
+                    <PitchCopyMeter status={getPitchCopyLengthStatus(form[f.key], PITCH_FIELD_TYPE[f.key])} />
+                  )}
+                </>
               )}
             </div>
           ))}

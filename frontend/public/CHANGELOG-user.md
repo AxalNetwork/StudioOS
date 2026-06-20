@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Consistent sector picker everywhere you set a sector
+
+The "Sector" field now works the same way across the whole platform — whether you're creating a new project, editing an existing one, submitting through the Founder Portal, or setting up your Brand & Landing page. In each place you now get the same searchable dropdown with the same list of ~80 industry sectors: type to filter, click to select, and clear with the ✕ button. Previously the field behaved differently in each screen (free-text input in Edit Project and Brand Builder, a short 18-item list in the Founder Portal), which could cause the sector to show up as a dash in your Spinout deck or Brand Builder if it was set in the wrong place.
+
+---
+
 ## Admin Console: pick a section from one clean dropdown
 
 The Admin Console used to show all of its sections as a long row of tabs that crowded together and wrapped onto two lines on smaller screens. That row is now a single dropdown menu: click it to see every section in one tidy list, each with its icon, and pick the one you want. The currently open section shows at the top, the "pending" counts on Partner Profiles and KYC Queue still appear, and links that open a specific section directly still work. (Admins only — nothing changes for other members.)

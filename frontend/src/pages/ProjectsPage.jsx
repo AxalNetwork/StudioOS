@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { Link } from 'react-router-dom';
-import { Plus, Search, ChevronDown, X, Trash2, Database } from 'lucide-react';
+import { Plus, Search, Trash2, Database } from 'lucide-react';
+import SectorSelect from '../components/SectorSelect';
 import { api } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
@@ -288,25 +289,6 @@ export default function ProjectsPage() {
   );
 }
 
-const SECTORS = [
-  '3D Printing / Additive Manufacturing', 'AdTech', 'Advanced Manufacturing', 'Advanced Materials', 'Aerospace',
-  'AgTech / AgriTech', 'AI / Machine Learning', 'AI Agents / Agentic Systems', 'AI Infrastructure', 'Alternative Energy',
-  'AR / VR / XR / Spatial Computing', 'Audiotech', 'Autonomous Robotics', 'Autonomous Vehicles', 'Battery Tech',
-  'B2B SaaS', 'Beauty Tech', 'Big Data / Analytics', 'Bio-Automation', 'Bioinformatics',
-  'Biotech / Life Sciences', 'Blockchain / Crypto / Web3', 'Carbon Capture', 'Clean Energy', 'Climate Intelligence / Climate Tech',
-  'Cloud Computing', 'Construction Tech (ConTech)', 'Consumer Electronics', 'Consumer Internet / Apps', 'Consumer Tech',
-  'Cybersecurity', 'Data Infrastructure', 'Defense Tech / GovTech', 'DeFi', 'Digital Health',
-  'Digital Twins', 'Drone Tech', 'E-commerce / Marketplace', 'EdTech', 'Edge Computing',
-  'Electric Vehicles', 'Embedded Finance', 'Energy Storage / Renewables', 'Energy Tech', 'Enterprise AI Software',
-  'Enterprise Software', 'FinTech', 'Food Tech', 'Gaming / eSports / Entertainment', 'GovTech',
-  'Hardware', 'HealthTech / MedTech', 'HR Tech', 'Industrial IoT', 'InsurTech',
-  'IoT', 'Legal Tech', 'Logistics / Supply Chain Tech', 'Marine Tech', 'Mobility / Transportation Tech',
-  'Music Tech', 'Nanotechnology', 'Neurotech', 'Photonics', 'Precision Medicine',
-  'PropTech / Real Estate Tech', 'Quantum Computing / Infrastructure', 'Regenerative Medicine', 'Robotics & Automation', 'Satellite / Space Tech',
-  'Semiconductors', 'Social Tech / Social Media', 'Sports Tech', 'Supply Chain Tech', 'Sustainability / Cleantech',
-  'Synthetic Biology', 'Vertical SaaS', 'Wearables', 'Web3 / Metaverse'
-];
-
 function Input({ label, value, onChange }) {
   return (
     <div>
@@ -350,75 +332,3 @@ function PitchInput({ label, fieldType, value, onChange }) {
   );
 }
 
-function SectorSelect({ label = 'Sector', value, onChange }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const dropdownRef = useRef(null);
-
-  const filtered = SECTORS.filter(s => s.toLowerCase().includes(search.toLowerCase()));
-
-  const handleSelect = (sector) => {
-    onChange(sector);
-    setIsOpen(false);
-    setSearch('');
-  };
-
-  const handleClear = (e) => {
-    e.stopPropagation();
-    onChange('');
-    setSearch('');
-  };
-
-  return (
-    <div className="relative" ref={dropdownRef}>
-      <label className="block text-xs text-gray-600 mb-1">{label}</label>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 hover:border-violet-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 transition-colors dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
-      >
-        <span className={value ? 'text-gray-900' : 'text-gray-500'}>{value || 'Select a sector...'}</span>
-        <div className="flex items-center gap-1">
-          {value && (
-            <X size={14} className="text-gray-400 hover:text-gray-600" onClick={handleClear} />
-          )}
-          <ChevronDown size={14} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-        </div>
-      </button>
-
-      {isOpen && (
-        <div className="absolute z-50 w-full mt-2 bg-white border border-gray-300 rounded-lg shadow-lg dark:bg-gray-900 dark:border-gray-700">
-          <div className="p-2 border-b border-gray-200 dark:border-gray-800">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search sectors..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:border-gray-800 dark:text-gray-100"
-                autoFocus
-              />
-            </div>
-          </div>
-          <div className="max-h-60 overflow-y-auto">
-            {filtered.length > 0 ? (
-              filtered.map(sector => (
-                <button
-                  key={sector}
-                  onClick={() => handleSelect(sector)}
-                  className={`w-full text-left px-3 py-2 text-sm transition-colors hover:bg-violet-50 ${
-                    value === sector ? 'bg-violet-100 text-violet-700 font-medium' : 'text-gray-900'
-                  }`}
-                >
-                  {sector}
-                </button>
-              ))
-            ) : (
-              <div className="px-3 py-4 text-center text-sm text-gray-500">No sectors found</div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}

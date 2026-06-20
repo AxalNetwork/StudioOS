@@ -3,6 +3,7 @@ import { reportError } from '../lib/log';
 import { api } from '../lib/api';
 import { Rocket, CheckCircle, XCircle, AlertTriangle, ChevronDown, ArrowRight } from 'lucide-react';
 import { FundAllocator, valuesToUseOfFunds } from '../components/FundAllocator';
+import { SECTORS } from '../lib/sectors';
 
 // Task #2 — The legacy stage-gated "Identity verification recommended"
 // banner for founders has been removed. KYC is now investor-only; founders
@@ -21,26 +22,6 @@ function ModernSelect({ value, onChange, children, ...props }) {
   );
 }
 
-const SECTORS = [
-  'AI / ML',
-  'Developer tools / infrastructure',
-  'SaaS / enterprise software',
-  'FinTech / InsurTech',
-  'HealthTech / BioTech',
-  'ClimateTech / CleanTech / Energy',
-  'EdTech',
-  'Cybersecurity',
-  'Data / Analytics',
-  'Marketplaces',
-  'Consumer / Social / Creator economy',
-  'E-commerce / RetailTech',
-  'PropTech',
-  'HRTech / Future of work',
-  'Logistics / Supply chain',
-  'Blockchain / Web3',
-  'DeepTech / Robotics / Space',
-  'Other',
-];
 
 export default function FounderPortal() {
   const [form, setForm] = useState({

@@ -10,6 +10,27 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Unified sector dropdown across Edit Project, Brand Builder & Founder Portal (Task #16)
+
+Extracted a canonical ~80-item sector list to `frontend/src/lib/sectors.js` (base = the
+existing ~70-item list in ProjectsPage + `'Other'`). Created `frontend/src/components/SectorSelect.jsx`
+— a shared searchable dropdown (with outside-click handler that was missing in the original).
+
+Changes per entry point:
+- **New Project** (`ProjectsPage.jsx`) — was already using SectorSelect. Now imports the
+  shared component; inline `SECTORS` constant and `SectorSelect` definition removed.
+- **Edit Project** (`ProjectDetail.jsx`) — the `sector` field in `EditProjectModal` was a
+  plain `<input type="text">`. Now uses `SectorSelect` via a `sectorSelect: true` flag on
+  the `EDITABLE_FIELDS` entry.
+- **About Your Startup / Founder Portal** (`FounderPortal.jsx`) — was using a coarser
+  18-item hardcoded list. Now imports `SECTORS` from `lib/sectors.js`; existing
+  `ModernSelect` + `<option>` structure unchanged.
+- **Brand Builder** (`BrandBuilderPage.jsx`) — was a free-text `<input>`. Now uses
+  `SectorSelect`; project auto-fill (`setSector(p.sector)`) unchanged.
+
+Spinout deck and Brand Builder already read `project.sector` automatically; no additional
+wiring needed. Existing free-text DB values are not migrated (out of scope).
+
 ## Admin Console section nav: dropdown instead of tab row (Task #15)
 
 Replaced the Admin Console's horizontal row of 12 section tabs (which crowded and

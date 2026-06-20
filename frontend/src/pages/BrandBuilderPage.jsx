@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
+import SectorSelect from '../components/SectorSelect';
 import { Link } from 'react-router-dom';
 import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe, Upload, Palette, PenLine, Eye, Users, LayoutTemplate, Share2 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -353,14 +354,11 @@ export default function BrandBuilderPage() {
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </label>
-          <label className="block">
-            <span className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Sector</span>
-            <input
-              value={sector} onChange={(e) => setSector(e.target.value)}
-              placeholder="AI / Climate / Fintech…"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
-            />
-          </label>
+          <SectorSelect
+            label="Sector"
+            value={sector}
+            onChange={setSector}
+          />
         </div>
         <label className="block mb-4">
           <span className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">One-paragraph description</span>
