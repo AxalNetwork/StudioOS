@@ -255,17 +255,22 @@ async function loadUserArchetype(
 }
 
 async function loadSubject(env: Env, userId: number): Promise<BestFitReportSubject | null> {
-  const row = await env.DB.prepare(
-    `SELECT id, uid, name, email, role FROM users WHERE id = ?`,
-  ).bind(userId).first<{ id: number; uid: string | null; name: string | null; email: string | null; role: string | null }>();
-  if (!row) return null;
-  return {
-    user_id: Number(row.id),
-    uid: row.uid ?? null,
-    name: row.name ?? null,
-    email: row.email ?? null,
-    role: row.role ?? null,
-  };
+  try {
+    const row = await env.DB.prepare(
+      `SELECT id, uid, name, email, role FROM users WHERE id = ?`,
+    ).bind(userId).first<{ id: number; uid: string | null; name: string | null; email: string | null; role: string | null }>();
+    if (!row) return null;
+    return {
+      user_id: Number(row.id),
+      uid: row.uid ?? null,
+      name: row.name ?? null,
+      email: row.email ?? null,
+      role: row.role ?? null,
+    };
+  } catch (e) {
+    console.error('[bestFit] loadSubject:', (e as Error).message);
+    return null;
+  }
 }
 
 /** The subject's most recent non-deleted project (for the spin-out assessment). */
@@ -323,14 +328,29 @@ export async function buildBestFitReport(
     findUserProjectId(env, userId),
   ]);
 
-  const matches = await computeCounterpartyMatches(env, userId, vectors, {
-    limit: opts.matchLimit ?? 5,
-  });
+  // Defensive: a cold/un-migrated D1 or a transient DB error in the match or
+  // spin-out loaders should degrade to a partial report, not surface the
+  // global 500 ("Internal server error"). Other loaders already self-catch.
+  let matches: CounterpartyResult[] = [];
+  try {
+    matches = await computeCounterpartyMatches(env, userId, vectors, {
+      limit: opts.matchLimit ?? 5,
+    });
+  } catch (e) {
+    console.error('[bestFit] computeCounterpartyMatches:', (e as Error).message);
+  }
 
   const values: Record<string, number> = {};
   for (const [slug, entry] of Object.entries(vectors.values)) values[slug] = entry.score;
 
-  const venture = projectId != null ? await buildAssessment(env, projectId) : null;
+  let venture: Assessment | null = null;
+  if (projectId != null) {
+    try {
+      venture = await buildAssessment(env, projectId);
+    } catch (e) {
+      console.error('[bestFit] buildAssessment:', (e as Error).message);
+    }
+  }
 
   return {
     subject,

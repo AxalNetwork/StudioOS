@@ -17,6 +17,12 @@ The Admin Console used to show all of its sections as a long row of tabs that cr
 
 ---
 
+## Best-Fit Console loads reliably again
+
+The admin Best-Fit Console no longer shows an "Internal server error" when opened. The consultation queue now loads every time — showing an empty state when there are no requests yet — and opening a person's Best-Fit report works even when they haven't completed their profile yet, showing whatever signal is available instead of failing.
+
+---
+
 ## Help options now live in the Support Hub
 
 The floating Help button that used to sit in the bottom-right corner of every page is gone. All of its options now live in one place — the Support Hub (your "Support" page). Open it to search the docs, ask the Personal Advisor, open a support ticket, and — on the Studio, Institutional, and Partner plans — chat with the Axal VC team, all from a single "How can we help?" panel next to your tickets.

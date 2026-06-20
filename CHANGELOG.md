@@ -51,6 +51,29 @@ wrapped on narrower widths) with a single dropdown menu in `frontend/src/pages/A
   `ADMIN_SECTION_VALUES`) so `/admin?tab=network-profiles` deep-links select the right
   section on load — previously the documented deep-link had no reader and always opened Users.
 
+## Fix Best-Fit Console 500 (Task #14)
+
+The admin Best-Fit Console returned `Internal server error` in prod because its first call
+(`GET /api/admin/consultations`) hit `admin_consultation_bookings` with no schema bootstrap and
+no try/catch — on a prod D1 where migration `115_axal_fit.sql` was never applied, the table was
+missing and the raw `no such table` bubbled to the Worker's global `app.onError` → 500.
+
+- **New `cloudflare-worker/src/services/axalFitSchema.ts`** — `ensureAxalFitSchema(env)`, an
+  idempotent lazy bootstrap (`CREATE TABLE/INDEX IF NOT EXISTS`) for `axal_values`,
+  `axal_fit_scores`, `axal_fit_reports`, `admin_consultation_bookings`, mirrored from migration
+  115 / `schema.sql`. Follows the `ensureTelegramSchema` / `ensureXSchema` self-heal pattern.
+- **Wired `ensureAxalFitSchema()`** into `routes/consultations.ts` (book / me / admin list),
+  `routes/admin_bestfit.ts`, and `routes/best_fit.ts` before any query touching those tables.
+- **Hardened the report builder** (`services/bestFit.ts`): `loadSubject` now try/catches (missing
+  subject still returns null → clean 404); `computeCounterpartyMatches` and the `buildAssessment`
+  spin-out call degrade to `[]` / `null` instead of throwing — so a cold D1 yields a partial
+  report, never a 500.
+- **Hardened the admin consultations list** (`routes/consultations.ts`) to return `[]` on a
+  cold/missing table instead of surfacing the 500.
+- **Ops:** migration `115_axal_fit.sql` must be applied to prod D1 (manual migrations) and the
+  Worker redeployed. With the lazy bootstrap the endpoints self-heal on first hit regardless.
+
+
 ## Move Help into Support Hub (Task #13)
 
 Removed the global floating Help widget (the bottom-right purple `LifeBuoy` button and its

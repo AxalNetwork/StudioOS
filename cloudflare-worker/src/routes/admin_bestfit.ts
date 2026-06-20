@@ -10,6 +10,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin } from '../auth';
 import { buildBestFitReport } from '../services/bestFit';
+import { ensureAxalFitSchema } from '../services/axalFitSchema';
 
 const adminBestFit = new Hono<{ Bindings: Env }>();
 adminBestFit.use('*', async (c, next) => {
@@ -22,6 +23,7 @@ adminBestFit.get('/:userId', async (c) => {
   const userId = Number(c.req.param('userId'));
   if (!Number.isFinite(userId) || userId <= 0) return c.json({ error: 'bad user id' }, 400);
 
+  await ensureAxalFitSchema(c.env);
   const report = await buildBestFitReport(c.env, userId);
   if (!report) return c.json({ error: 'user not found' }, 404);
   return c.json(report);

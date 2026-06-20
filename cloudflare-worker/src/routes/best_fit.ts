@@ -14,12 +14,14 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { loadAllLatestFit, loadAxalValues } from '../services/axalFit';
+import { ensureAxalFitSchema } from '../services/axalFitSchema';
 
 const bestFitSelf = new Hono<{ Bindings: Env }>();
 
 // GET /api/best-fit/me — the caller's own fit scorecard + 5 Axal values.
 bestFitSelf.get('/me', async (c) => {
   const user = await requireAuth(c);
+  await ensureAxalFitSchema(c.env);
   const [fit, axalValues] = await Promise.all([
     loadAllLatestFit(c.env, user.id),
     loadAxalValues(c.env, user.id),

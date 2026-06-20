@@ -13,6 +13,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin } from '../auth';
 import { buildBestFitReport, persistBestFitReport } from '../services/bestFit';
+import { ensureAxalFitSchema } from '../services/axalFitSchema';
 
 const CONSULTATION_STATUSES = ['requested', 'confirmed', 'completed', 'cancelled'] as const;
 
@@ -22,6 +23,7 @@ const consultations = new Hono<{ Bindings: Env }>();
 // best-fit report; the booking still succeeds even if precompute fails.
 consultations.post('/book', async (c) => {
   const user = await requireAuth(c);
+  await ensureAxalFitSchema(c.env);
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
   const topic = typeof body.topic === 'string' ? body.topic.slice(0, 500) : null;
   const notes = typeof body.notes === 'string' ? body.notes.slice(0, 2000) : null;
@@ -53,6 +55,7 @@ consultations.post('/book', async (c) => {
 // GET /api/consultations/me — the caller's own consultation requests.
 consultations.get('/me', async (c) => {
   const user = await requireAuth(c);
+  await ensureAxalFitSchema(c.env);
   const res = await c.env.DB.prepare(
     `SELECT id, uid, status, requested_at, slot_at, topic, notes, created_at
        FROM admin_consultation_bookings
@@ -74,22 +77,30 @@ adminConsultations.use('*', async (c, next) => {
 
 // GET /api/admin/consultations — list requests (optional ?status= filter).
 adminConsultations.get('/', async (c) => {
+  await ensureAxalFitSchema(c.env);
   const status = c.req.query('status');
   const filterStatus = status && (CONSULTATION_STATUSES as readonly string[]).includes(status)
     ? status
     : null;
   const where = filterStatus ? 'WHERE b.status = ?' : '';
-  const stmt = c.env.DB.prepare(
-    `SELECT b.id, b.uid, b.user_id, b.admin_id, b.requested_at, b.slot_at, b.status,
-            b.topic, b.notes, b.report_id, b.created_at,
-            u.name AS user_name, u.email AS user_email
-       FROM admin_consultation_bookings b
-       JOIN users u ON u.id = b.user_id
-       ${where}
-      ORDER BY b.created_at DESC`,
-  );
-  const res = await (filterStatus ? stmt.bind(filterStatus) : stmt).all<Record<string, unknown>>();
-  return c.json(res.results || []);
+  try {
+    const stmt = c.env.DB.prepare(
+      `SELECT b.id, b.uid, b.user_id, b.admin_id, b.requested_at, b.slot_at, b.status,
+              b.topic, b.notes, b.report_id, b.created_at,
+              u.name AS user_name, u.email AS user_email
+         FROM admin_consultation_bookings b
+         JOIN users u ON u.id = b.user_id
+         ${where}
+        ORDER BY b.created_at DESC`,
+    );
+    const res = await (filterStatus ? stmt.bind(filterStatus) : stmt).all<Record<string, unknown>>();
+    return c.json(res.results || []);
+  } catch (e) {
+    // Cold/un-migrated D1 or a missing-table race: degrade to an empty queue
+    // rather than surfacing the global 500 ("Internal server error").
+    console.error('[consultations] admin list failed:', (e as Error).message);
+    return c.json([]);
+  }
 });
 
 // POST /api/admin/consultations/:id/status — update status; assign the acting
