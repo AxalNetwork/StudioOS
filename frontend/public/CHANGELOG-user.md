@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## One live preview that follows the slide you're editing
+
+In the Spin-Out deck builder, the slide editor used to show two fixed live previews stacked above it — one for the cover and one for the "pain frequency" slide. Now there's a single live preview that automatically shows whichever slide you've selected in the SLIDES list. Click any slide — or step through with the arrows — and the preview updates to match, with a heading and caption tailored to that slide. The cover still shows your live validation-signal curve, and the problem slide still shows your grouped discovery pains (with a reminder to log and group pains when there's no data yet).
+
+---
+
 ## See your Best-Fit profile, matches, and book a 1:1
 
 Your dashboard now has a "Your Profile & Fit" section, also available on its own "My Profile" page. It brings together everything your advisor learns about you: an 8-point skills radar, your top values, your founder archetype, your Axal Fit score and band, your 5 behavioral values, and how far along your profiling is — all in one place. Each card gently points you back to the advisor whenever there's more to fill in.

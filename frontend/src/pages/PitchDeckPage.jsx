@@ -212,6 +212,33 @@ export default function PitchDeckPage() {
     reloadKey: deckDataReload,
   });
 
+  // Task #26 — the single live preview tracks whichever slide is selected in
+  // the SLIDES list (slideIndex = activeIdx). Label + caption adapt per slide:
+  // the cover keeps its validation-signal copy, slide 2 keeps the pain-
+  // frequency copy + empty-data nudge, and every other slide gets a neutral
+  // live-preview caption.
+  const spinoutPreviewMeta = useMemo(() => {
+    if (activeIdx === 0) {
+      return {
+        label: 'Cover preview — live validation signal',
+        caption: 'Cumulative discovery interviews logged across your 30-day sprint — updates as you log more. Empty until your first interview.',
+      };
+    }
+    if (activeIdx === 1) {
+      const hasReal = spinoutHasRealPains(spinoutFields);
+      return {
+        label: 'Slide 2 preview — pain frequency',
+        caption: hasReal
+          ? 'Your top grouped discovery pains, ranked by how many interviews mention each — updates as you log and group pains.'
+          : 'Placeholder pains shown. Log discovery interviews and group their pains in Customer Discovery to populate this slide with real data.',
+      };
+    }
+    return {
+      label: `Slide ${activeIdx + 1} preview — ${activeSlide?.title || 'Untitled'}`,
+      caption: 'Live preview of this slide — updates as you edit your project data.',
+    };
+  }, [activeIdx, activeSlide, spinoutFields]);
+
   // Task #42 — pre-flight readiness. As soon as a Spin-Out deck loads, pull
   // the live gaps[] + draft/program_day (no .pptx built) so the founder sees
   // what's still empty BEFORE exporting. Re-runs when the project/deck changes;
@@ -715,31 +742,21 @@ export default function PitchDeckPage() {
 
             {/* CENTER — slide editor */}
             <div className="col-span-1 lg:col-span-6 space-y-3">
-              {/* Task #28 — live cover preview for the Spin-Out deck. Shows the
-                  founder's REAL "Validation Signal" curve (cumulative logged
-                  discovery interviews) so the builder is no longer blind to it;
-                  honest zero-baseline until the first interview is logged. */}
+              {/* Task #26 — a single live preview that follows the slide
+                  selected in the SLIDES list (slideIndex = activeIdx). The
+                  label + caption adapt per slide: the cover shows the founder's
+                  REAL "Validation Signal" curve, slide 2 shows their grouped
+                  discovery pains (with a nudge until there's real data), and
+                  every other slide gets a neutral live-preview caption. */}
               {isSpinoutDeck && (
                 <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
                   <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2 flex items-center gap-1">
-                    <Eye className="w-3 h-3" /> Cover preview — live validation signal
+                    <Eye className="w-3 h-3" /> {spinoutPreviewMeta.label}
                   </div>
-                  <SpinoutCoverPreview fields={spinoutFields} />
+                  <SpinoutSlidePreview fields={spinoutFields} slideIndex={activeIdx} />
                   <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-2">
-                    Cumulative discovery interviews logged across your 30-day sprint — updates as you log more. Empty until your first interview.
+                    {spinoutPreviewMeta.caption}
                   </p>
-                </div>
-              )}
-              {/* Task #29 — live Slide 2 preview ("PAIN FREQUENCY ACROSS
-                  INTERVIEWS"). Renders the founder's REAL grouped discovery
-                  pains; falls back to neutral placeholders (with a nudge to
-                  log + group pains) until there's real data. */}
-              {isSpinoutDeck && (
-                <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-3" data-card>
-                  <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2 flex items-center gap-1">
-                    <Eye className="w-3 h-3" /> Slide 2 preview — pain frequency
-                  </div>
-                  <SpinoutProblemPreview fields={spinoutFields} />
                 </div>
               )}
               <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-6 min-h-[60vh]" data-card>
@@ -1265,58 +1282,12 @@ function loadThumbnailModule() {
   return _thumbnailModulePromise;
 }
 
-// =====================================================================
-// Task #28 — in-builder live cover preview for the Spin-Out deck. A 16:9
-// <Thumbnail> renders the template scaled-to-fit, which clips to exactly
-// the first slide (the cover), so the founder sees their REAL "Validation
-// Signal" area chart — cumulative logged discovery interviews — while
-// editing, instead of being blind to it (the center column is a form). A
-// founder with zero interviews sees the honest zero-baseline curve. Lazy-
-// loads the same Thumbnail module + templates registry the picker uses.
-// =====================================================================
-function SpinoutCoverPreview({ fields }) {
-  const [Thumb, setThumb] = useState(null);
-  const [tplMeta, setTplMeta] = useState(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    loadThumbnailModule().then((m) => {
-      if (!alive) return;
-      if (m?.Thumbnail) setThumb(() => m.Thumbnail);
-      else setFailed(true);
-    });
-    loadTemplates().then((t) => {
-      if (!alive) return;
-      const meta = t?.record?.axal_spinout_demoday
-        || (t?.list || []).find((x) => x?.key === 'axal_spinout_demoday')
-        || null;
-      if (meta) setTplMeta(meta);
-      else setFailed(true);
-    });
-    return () => { alive = false; };
-  }, []);
-
-  if (failed) return null;
-  if (!Thumb || !tplMeta) {
-    return (
-      <div
-        className="w-full rounded bg-gray-100 dark:bg-slate-800 flex items-center justify-center"
-        style={{ aspectRatio: '16 / 9' }}
-      >
-        <Loader2 className="w-5 h-5 animate-spin text-violet-500" />
-      </div>
-    );
-  }
-  return <Thumb template={tplMeta} data={fields} />;
-}
-
-// Task #29 — `problem.pains_json` is a JSON array of [label, pct, count] rows.
-// The mapper falls back to neutral placeholders (count === '—', the em-dash
-// DASH sentinel shared by the Worker + dev FastAPI mappers) whenever the
-// founder has no grouped discovery pains yet. Detect that all-placeholder
-// state so the builder can nudge the founder instead of implying the slide
-// is "done". Returns true only when there's real grouped data to show.
+// Task #29/#26 — `problem.pains_json` is a JSON array of [label, pct, count]
+// rows. The mapper falls back to neutral placeholders (count === '—', the
+// em-dash DASH sentinel shared by the Worker + dev FastAPI mappers) whenever
+// the founder has no grouped discovery pains yet. Detect that all-placeholder
+// state so the slide-2 caption can nudge the founder instead of implying the
+// slide is "done". Returns true only when there's real grouped data to show.
 function spinoutHasRealPains(fields) {
   const raw = fields?.['problem.pains_json'];
   if (!raw) return false;
@@ -1328,14 +1299,14 @@ function spinoutHasRealPains(fields) {
 }
 
 // =====================================================================
-// Task #29 — in-builder live preview of Slide 2 ("PAIN FREQUENCY ACROSS
-// INTERVIEWS"). Same lazy-loaded <Thumbnail> as the cover preview, but
-// clipped to slideIndex={1} so the founder sees their REAL grouped
-// discovery pains (theme · % · n/total) while editing. When there's no
-// real grouped data yet the slide shows neutral placeholders, so we add a
-// one-line nudge pointing at the Customer Discovery curation panel.
+// Task #26 — single in-builder live preview for the Spin-Out deck. Renders
+// the `axal_spinout_demoday` template clipped to `slideIndex` via the same
+// lazy-loaded <Thumbnail> the picker uses, so the preview follows whichever
+// slide is selected in the SLIDES list. The per-slide label + caption (incl
+// the slide-2 pain-frequency nudge) live in the parent so this component
+// stays a thin slide renderer.
 // =====================================================================
-function SpinoutProblemPreview({ fields }) {
+function SpinoutSlidePreview({ fields, slideIndex = 0 }) {
   const [Thumb, setThumb] = useState(null);
   const [tplMeta, setTplMeta] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -1369,17 +1340,7 @@ function SpinoutProblemPreview({ fields }) {
       </div>
     );
   }
-  const hasReal = spinoutHasRealPains(fields);
-  return (
-    <>
-      <Thumb template={tplMeta} data={fields} slideIndex={1} />
-      <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-2">
-        {hasReal
-          ? 'Your top grouped discovery pains, ranked by how many interviews mention each — updates as you log and group pains.'
-          : 'Placeholder pains shown. Log discovery interviews and group their pains in Customer Discovery to populate this slide with real data.'}
-      </p>
-    </>
-  );
+  return <Thumb template={tplMeta} data={fields} slideIndex={slideIndex} />;
 }
 
 // =====================================================================

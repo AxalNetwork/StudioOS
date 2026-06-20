@@ -10,6 +10,15 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Live deck preview follows the selected slide (Task #26)
+
+Spin-Out deck builder (`axal_spinout_demoday`) now shows ONE live-preview card above the slide editor instead of two fixed cards (cover + slide-2 pain-frequency).
+
+- `frontend/src/pages/PitchDeckPage.jsx`: removed the standalone "Slide 2 preview — pain frequency" card and merged the two preview components (`SpinoutCoverPreview` + `SpinoutProblemPreview`) into a single `SpinoutSlidePreview({ fields, slideIndex })` that renders the `axal_spinout_demoday` template clipped to `slideIndex` via the shared lazy `<Thumbnail>`.
+- The card is driven by `slideIndex={activeIdx}`, so it follows whichever slide is selected in the SLIDES list and stays in sync with the editor's prev/next arrows.
+- New `spinoutPreviewMeta` `useMemo` derives the per-slide header label + caption: cover (idx 0) keeps the validation-signal copy; problem (idx 1) keeps the pain-frequency copy + empty-data nudge via the retained `spinoutHasRealPains` helper; every other slide gets a neutral "live preview of this slide" caption + `Slide N preview — {title}` label.
+- No changes to PPTX/PDF export, template/deck data, or non-Spin-Out decks. `<Thumbnail slideIndex>` already supported any index (`top: -(slideIndex*INNER_H*scale)`); the template renders all 10 slides stacked.
+
 ## Best-Fit dashboard & admin UI (Task #20)
 
 Frontend half of Conversational Profiling + Best-Fit Matching, built against the merged Task #19 backend shapes. One small read-only backend addition (below): `GET /api/best-fit/me`, the self equivalent of the admin-only Best-Fit report, scoped to the caller's own fit scorecard + Axal values (no matches/spin-out).
