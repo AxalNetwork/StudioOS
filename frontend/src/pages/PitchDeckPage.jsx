@@ -16,6 +16,7 @@ import { useSpinoutDeckFields } from '../hooks/useSpinoutDeckFields';
 import UseOfFundsEditor from '../components/UseOfFundsEditor';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
+import { spinoutHasRealPains, spinoutPreviewMeta as computeSpinoutPreviewMeta } from './spinoutPreview';
 
 /**
  * Task #16 (DE) — Pitch Deck Builder rewrite.
@@ -217,27 +218,10 @@ export default function PitchDeckPage() {
   // the cover keeps its validation-signal copy, slide 2 keeps the pain-
   // frequency copy + empty-data nudge, and every other slide gets a neutral
   // live-preview caption.
-  const spinoutPreviewMeta = useMemo(() => {
-    if (activeIdx === 0) {
-      return {
-        label: 'Cover preview — live validation signal',
-        caption: 'Cumulative discovery interviews logged across your 30-day sprint — updates as you log more. Empty until your first interview.',
-      };
-    }
-    if (activeIdx === 1) {
-      const hasReal = spinoutHasRealPains(spinoutFields);
-      return {
-        label: 'Slide 2 preview — pain frequency',
-        caption: hasReal
-          ? 'Your top grouped discovery pains, ranked by how many interviews mention each — updates as you log and group pains.'
-          : 'Placeholder pains shown. Log discovery interviews and group their pains in Customer Discovery to populate this slide with real data.',
-      };
-    }
-    return {
-      label: `Slide ${activeIdx + 1} preview — ${activeSlide?.title || 'Untitled'}`,
-      caption: 'Live preview of this slide — updates as you edit your project data.',
-    };
-  }, [activeIdx, activeSlide, spinoutFields]);
+  const spinoutPreviewMeta = useMemo(
+    () => computeSpinoutPreviewMeta({ activeIdx, activeSlide, fields: spinoutFields }),
+    [activeIdx, activeSlide, spinoutFields],
+  );
 
   // Task #42 — pre-flight readiness. As soon as a Spin-Out deck loads, pull
   // the live gaps[] + draft/program_day (no .pptx built) so the founder sees
@@ -1280,22 +1264,6 @@ function loadThumbnailModule() {
     });
   }
   return _thumbnailModulePromise;
-}
-
-// Task #29/#26 — `problem.pains_json` is a JSON array of [label, pct, count]
-// rows. The mapper falls back to neutral placeholders (count === '—', the
-// em-dash DASH sentinel shared by the Worker + dev FastAPI mappers) whenever
-// the founder has no grouped discovery pains yet. Detect that all-placeholder
-// state so the slide-2 caption can nudge the founder instead of implying the
-// slide is "done". Returns true only when there's real grouped data to show.
-function spinoutHasRealPains(fields) {
-  const raw = fields?.['problem.pains_json'];
-  if (!raw) return false;
-  let rows;
-  try { rows = JSON.parse(raw); } catch { return false; }
-  if (!Array.isArray(rows) || rows.length === 0) return false;
-  // Real rows carry a numeric "n" or "n / total" count; placeholders use '—'.
-  return rows.some((r) => Array.isArray(r) && r[2] != null && String(r[2]).trim() !== '—');
 }
 
 // =====================================================================
