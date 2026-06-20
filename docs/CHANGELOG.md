@@ -10,6 +10,104 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Best-Fit dashboard & admin UI (Task #20)
+
+Frontend half of Conversational Profiling + Best-Fit Matching, built against the merged Task #19 backend shapes. No backend/API changes.
+
+### "Your Profile & Fit" — `frontend/src/components/profile/ProfileFitSection.jsx`
+- Self-only section rendered after `<PersonalAdvisor/>` on the dashboard (`pages/Dashboard.jsx`) and on the new `/profile` page. Reads existing self endpoints: `api.radar.me` (8-axis skills, score/20→0–5 domain), `api.values.getMe` (15-dim lean), `api.assessment.myResults` (latest archetype), `api.advisor.progress` (completion %), `api.matches.summary` (cross-counterparty match range).
+- Self Axal-Fit score+band and the 5 Axal behavioral values have no self endpoint yet → explicit "complete profiling to unlock" card (`FitUnlockCard`) instead of fabricated data. Every empty/error state nudges back to the advisor.
+- Match card: counts + one free teaser per counterparty type; "Unlock full match list" calls `openPaywall('studio', …)` directly (api.js auto-402 path is once-per-session, wrong for an explicit click). Studio/bypass roles get the full list inline via `summary.unlocked`.
+- "Book with Guillaume" card uses `api.bookConsultation` + `api.getMyConsultations`.
+
+### Admin Best-Fit console — `frontend/src/pages/admin/AdminBestFitPage.jsx`
+- Consultation queue (`api.adminListConsultations` + per-row `api.adminUpdateConsultationStatus`) with status filter tabs; selecting a request loads the full report via `api.adminGetBestFitReport`.
+- Report viewer renders REAL shapes: skills radar + `gaps_to_fill`, 5 Axal values + 15-dim lean, per-persona fit scorecard (band, narrative, signal/coverage/confidence, red flags, rubric), counterparty matches (reasons/gaps/watch-outs), and the spin-out `venture` assessment using actual `ventureRisk.ts` fields (`overall_score`/`overall_band`/`overall_color`, `layers[].{score,band,color,signals,is_overridden,analyst_note,has_data}`).
+- Lazy-imported + admin-guarded `/admin/best-fit` route in `App.jsx`; sidebar entry added to the admin group.
+
+### Consolidation — `frontend/src/App.jsx`, `frontend/src/sidebarConfig.js`
+- New `/profile` route (auth-only) = PersonalAdvisor + ProfileFitSection. Legacy `/skills` and `/values` routes now `<Navigate to="/profile" replace/>`; the `SkillsProfilePage`/`ValuesAssessmentPage` files (data stores) are kept intact on disk.
+- Sidebar: the separate "Skills Profile" + "Values Assessment" entries collapse into a single "My Profile" entry across all 5 roles; CommandPalette auto-rebuilds from `SIDEBAR_GROUPS`.
+
+### Wiring & checks
+- New client wrapper `api.matches.summary({detail})` in `frontend/src/lib/api.js`. `npm run build` clean; `npm run test:drift` green; dark-mode `dark:` variants on all new styles.
+
+## Best-Fit backend — conversational profiling, fit scoring & matching APIs (Task #19)
+
+Backend-only half of Conversational Profiling + Best-Fit Matching (PR #92). All frontend/UI is Task #20; methodology doc is #21. Reuses `ventureRisk.ts`, `assessmentScoring.ts`, `matchingVectors.ts`.
+
+### Onboarding chat reliability — `services/aiRouter.ts`, `routes/profiling.ts`
+- Dedicated non-gateway task class for onboarding chat; the bypass-on-failure fallback always fires; nested AI response shapes (`r.result?.response`) are parsed; the stale `[PROFILING]` failure-log label is corrected.
+- Test: `test/aiRouter.bugfix.test.ts` (bypass-retry + shape parse).
+
+### Data model + scoring — `sql/migrations/115_axal_fit.sql`, `sql/schema.sql`, `services/axalFit.ts`
+- Migration 115 (mirrored idempotently in `schema.sql`): `axal_values`, `axal_fit_scores` (per-persona), `admin_consultation_bookings`, `axal_fit_reports`.
+- `axalFit.ts`: per-persona weighted rubrics, 5 Axal behavioral values, `computeFit` (0–100; bands strong_yes/yes_caution/hold/no; red flags; signal quality; narrative), reusing `assessmentScoring.ts`.
+
+### Conversational delivery — `services/advisor/questionBank.ts`, `banks/fit_*.ts`, `services/advisor/writeRouter.ts`
+- `scale` (0–5) input_kind + validator; `fit_<persona>` banks (founder/investor/partner/mentor/coach) registered in `BANKS` + `BANK_SIZE_TARGETS`.
+- writeRouter routes fit answers BEFORE the persona branches: `axal_value`→`axal_values`, `skill_axis`→`user_skills`, `value_dim`→`user_values` (confidence-blended); fit + vectors recompute after each batch; paywall/`paywalled` preserved.
+- Test: `test/writeRouter.fit.test.ts`.
+
+### Match summary — `routes/matches.ts`, `services/bestFit.ts`
+- `GET /api/matches/summary`: 5 counterparty types (cofounder/investor/partner/mentor/coach); counts + teasers free, detail tier-gated, bypass roles unrestricted. Reuses `matchingVectors.ts` (`loadUserVectorsBatch` added).
+- Matcher (`computeCounterpartyMatches`, bands) in `services/bestFit.ts`. Test: `test/bestFit.matches.test.ts`.
+
+### Consultation + admin report APIs — `services/bestFit.ts`, `routes/consultations.ts`, `routes/admin_bestfit.ts`
+- `buildBestFitReport`/`persistBestFitReport`: assembles skills / 15-dim values / 5 Axal values / archetype / per-persona fit / counterparty matches (reasons, gaps, watch-outs) / spin-out assessment (via `ventureRisk.ts`). Reads stored scores (no recompute on read); explicit nulls when data is absent.
+- `POST /api/consultations/book` precomputes + persists a report snapshot; `GET /api/consultations/me`. Admin: `GET /api/admin/consultations`, `POST /api/admin/consultations/:id/status`, `GET /api/admin/best-fit/:userId` (admin-only, NOT tier-gated). `frontend/src/lib/api.js` client methods added with matching worker mounts (drift).
+
+### Wiring & tests
+- Routes mounted in `src/index.ts` (admin best-fit surfaces mounted BEFORE the catch-all `/api/admin`). New `.ts` tests added to the `npm run test:drift` strip-types list; `tsc --noEmit` clean; `npm run test:drift` green.
+
+## All founders & profile photos in the Spin-Out deck PPTX export (Task #7)
+
+The PowerPoint export (`buildDeck`) now mirrors the in-app Slide 07 "Team & Network": it renders every founder/co-founder and embeds founder + advisor profile photos (circular, with an initials fallback). Previously the PPTX rendered only the single primary founder and ignored photos entirely. Single-founder decks export with their existing geometry unchanged.
+
+### Frontend — `frontend/src/decks/spinout/buildDeck.js`
+- **New photo helpers**: `resolvePhotoData(photo)` (async) normalizes a photo source to an embeddable raster data URL or `null`: raster base64 `data:` URLs (png/jpe?g/gif/webp) pass through; other `data:` URLs (e.g. SVG) → `null`; `http(s)`/root-relative URLs are fetched, MIME-sniffed by **magic bytes** (not the `Content-Type` header), and inlined as base64. A 5s `AbortController` timeout guards each fetch and any failure resolves to `null` — a slow/CORS-blocked/non-image URL degrades to initials instead of throwing at `pres.write()`. `abToBase64`/`sniffImageMime` are the supporting primitives. Photos are passed via `addImage({data})` (not `path`) so no deferred network work happens during write.
+- **New `avatar(pres, s, x, y, d, {dataUrl, initials, fill, fontSize, textColor})`**: draws a cover-cropped circular image (`rounding:true` + `sizing:{type:'cover'}`) when a photo resolved, else the existing OVAL + initials monogram.
+- **`team()` is now async** (and `await`ed in `buildDeck` before `captable()`, preserving slide order). It reads `d.founders[]` (falling back to the legacy singular `d.founder`), filters empty rows, and pre-resolves all founder + advisor photos via `Promise.all` before drawing.
+  - **Single founder** (`!multi`): geometry, panel, name/role/bio and the fixed advisor roster (label `y=4.25`, roster `ay=4.62`, `rowH 0.62`, avatar `0.5`) are unchanged — only the avatar gains photo support.
+  - **Multiple founders** (`multi`): compact stacked founder cards (avatar + name + role, no bio) plus a vertical-fit advisor roster (`MAX_ROW 0.62`/`MIN_ROW 0.46`, derived `avD`/`nameSize`/`roleSize`) so the last row never crosses the bottom margin — mirroring `templates/axal_spinout_demoday_app.tsx` (`SlideTeamNetwork`).
+
+### Tests — `frontend/test/spinout_pptx_build.test.mjs`
+- multi-founder SAMPLE renders every co-founder (asserts the co-founder name is present); single-founder clone renders only the primary founder (co-founder name absent); embedding founder + advisor raster photos increases the `media/image-*` file count vs a photo-stripped clone; unsupported/unreachable photos (ftp / SVG / blob) fall back to initials without throwing.
+- `npm run test:decks` green (51 tests). `npm run test:drift` otherwise green; the lone failure (`incorporationPacket` "tamper-evident hash is deterministic") is a pre-existing order-dependent flake — passes in isolation and is untouched by this change.
+
+## Edit Use of Funds allocation after intake (Task #8)
+
+Founders could only set THE ASK "Use of Funds" % once, on the FounderPortal intake (step 1). They can now revise it after intake from a deck-side editor, and the change flows through to THE ASK slide (live preview + PPTX) in both dev (FastAPI) and prod (Worker).
+
+### Backend — normalize on update (both stacks)
+- `cloudflare-worker/src/routes/projects.ts` — PUT `/:id` previously wrote `use_of_funds` raw (it was in `baseFields`). It now runs `normalizeUseOfFunds` (from `util/useOfFunds.ts`) when the field is present: `400 {error, code:'invalid_use_of_funds'}` on a non-100 total / malformed JSON, otherwise the canonical JSON (or `null` to clear). Mirrors the `/submit` intake path.
+- `backend/app/api/routes/projects.py` — PUT `/{id}` now runs `normalize_use_of_funds` (from `services/use_of_funds.py`) on `update_data['use_of_funds']` when present, raising the same 400 shape; `None` clears. Both stacks reuse the existing validators — no duplicate logic, contract unchanged (JSON `[{label,pct}]`, non-zero only, total exactly 100 or cleared).
+
+### Frontend — shared allocator + deck-side editor
+- `frontend/src/components/FundAllocator.jsx` — **new** shared module: extracted `FUND_SECTIONS` + the `FundAllocator` component (previously inline in `FounderPortal.jsx`), plus helpers `allocToValues(raw)→[5]` (maps stored `{label,pct}` onto the 5 canonical slots by exact label; legacy free-text / unknown labels → all-zeros), `valuesToUseOfFunds([5])→string`, `fundsTotal`, `fundsValid`.
+- `frontend/src/pages/FounderPortal.jsx` — imports the shared allocator + `valuesToUseOfFunds`; removed the inline `FUND_SECTIONS`/`FundAllocator`. Intake behavior unchanged.
+- `frontend/src/components/UseOfFundsEditor.jsx` — **new**: loads the project's current allocation (`api.getProject`), prefills the shared allocator, saves via `api.updateProject(id, {use_of_funds})`, and fires `onSaved()`.
+- `frontend/src/pages/PitchDeckPage.jsx` — mounts `UseOfFundsEditor` in the right rail (gated `isSpinoutDeck && projectId`, near the readiness panel). A `deckDataReload` counter is bumped on save and threaded into the spinout field hook + the readiness effect so the in-builder previews re-fetch live data. THE ASK slide stays in lockstep automatically: the print/share preview and PPTX export both derive funds from the project at fetch time.
+- `frontend/src/hooks/useSpinoutDeckFields.js` — added an optional `reloadKey` param (folded into the effect deps) to force a re-fetch after an edit.
+
+### Tests
+- `npm run test:drift` green (incl. `tsc --noEmit` and `cloudflare-worker/test/useOfFunds.test.ts`).
+
+## Fix Personal Advisor: prose answers rejected + empty "Completed" list (Task #13)
+
+Two independent Personal Advisor bugs.
+
+### Bug A — `arg pattern: sql` blocked ordinary answers (Worker)
+- `cloudflare-worker/src/services/advisor/guardrails.ts` — the L2 tool-gate arg scan (`gateToolCall`) was running every tool-call field through `SUSPICIOUS_ARG_PATTERNS`. The SQL heuristic matched bare English keywords (`select`, `update`, `grant … to`), so a normal answer like *"we select the best deals and grant equity to advisors"* hard-failed with `invalid_args` / `arg pattern: sql`. Two changes: (1) `SUSPICIOUS_ARG_PATTERNS.sql` is now **grammar-based** — `SELECT…FROM`, `INSERT INTO`, `UPDATE…SET`, `DELETE FROM`, `DROP/CREATE/ALTER TABLE`, `UNION [ALL] SELECT`, `GRANT…TO`, `; … --`, etc. with bounded `{0,200}?` gaps — so isolated keywords no longer trip it; (2) added `FREE_TEXT_ARG_KEYS = {value, evidence}` and the scan now only inspects **structural** object fields (ids, queries, page targets), skipping user prose. Bare-string args (no object) are still scanned wholesale; shell/HTML/path-traversal heuristics unchanged.
+
+### Bug B — "Completed" bucket always empty despite "N answered" (Worker + frontend)
+- `cloudflare-worker/src/routes/advisor.ts` — added `GET /answered`. It resolves the latest conversation (`getLatestConversation`) and returns `advisor_answers` rows with `saved_status IN ('saved','noop')`, newest-first, decorated via `questionById` → `{question_id, label, section, page_target, saved_status, saved_to_*, completed_at}`. The predicate + conversation scope match `refreshCounts` and `GET /progress`, so the list length now equals the header's answered count. The widget previously derived "Completed" from `GET /sources` (page-attribution `field_sources` rows), which is a different, often-empty table — hence the mismatch.
+- `frontend/src/lib/api.js` — `advisor.answered()` → `GET /advisor/answered`.
+- `frontend/src/components/advisor/AdvisorProgressWidget.jsx` — the Completed bucket (`completedSet` + `completedItems`) now reads `api.advisor.answered()` instead of `sources`; removed the prior 10-item cap so the bucket count matches the answered total.
+
+### Tests
+- `cloudflare-worker/test/advisor.scenarios.test.ts` — 4 new `gateToolCall` regression cases: free-text `value` with SQL-ish prose saves; `value`+`evidence` both exempt; a bare keyword in a scanned structural field passes; real injection (`UNION SELECT … FROM`, `DROP TABLE`) in a structural field is still blocked. `npm run test:drift` green (incl. `tsc --noEmit`).
+
 ## Venture Risk — 10-layer rating system (Tasks #9–#11)
 
 Internal deal-team-only feature: a 10-layer Venture Risk rating per portfolio company (Founder, Market, Competition, Timing, Financing, Marketing, Distribution, Technology, Product, Hiring), hybrid auto + analyst scoring. Scores are a 0–100 "de-risk confidence" (higher = more proof = lower risk); risk bands invert: ≥67 low (emerald), ≥34 medium (amber), else high (red). Audience is admin/partner/investor (read); analyst writes are admin/partner.

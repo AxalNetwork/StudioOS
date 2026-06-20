@@ -10,6 +10,28 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Best-Fit dashboard & admin UI (Task #20)
+
+Frontend half of Conversational Profiling + Best-Fit Matching, built against the merged Task #19 backend shapes. No backend/API changes.
+
+### "Your Profile & Fit" — `frontend/src/components/profile/ProfileFitSection.jsx`
+- Self-only section rendered after `<PersonalAdvisor/>` on the dashboard (`pages/Dashboard.jsx`) and on the new `/profile` page. Reads existing self endpoints: `api.radar.me` (8-axis skills, score/20→0–5 domain), `api.values.getMe` (15-dim lean), `api.assessment.myResults` (latest archetype), `api.advisor.progress` (completion %), `api.matches.summary` (cross-counterparty match range).
+- Self Axal-Fit score+band and the 5 Axal behavioral values have no self endpoint yet → explicit "complete profiling to unlock" card (`FitUnlockCard`) instead of fabricated data. Every empty/error state nudges back to the advisor.
+- Match card: counts + one free teaser per counterparty type; "Unlock full match list" calls `openPaywall('studio', …)` directly (api.js auto-402 path is once-per-session, wrong for an explicit click). Studio/bypass roles get the full list inline via `summary.unlocked`.
+- "Book with Guillaume" card uses `api.bookConsultation` + `api.getMyConsultations`.
+
+### Admin Best-Fit console — `frontend/src/pages/admin/AdminBestFitPage.jsx`
+- Consultation queue (`api.adminListConsultations` + per-row `api.adminUpdateConsultationStatus`) with status filter tabs; selecting a request loads the full report via `api.adminGetBestFitReport`.
+- Report viewer renders REAL shapes: skills radar + `gaps_to_fill`, 5 Axal values + 15-dim lean, per-persona fit scorecard (band, narrative, signal/coverage/confidence, red flags, rubric), counterparty matches (reasons/gaps/watch-outs), and the spin-out `venture` assessment using actual `ventureRisk.ts` fields (`overall_score`/`overall_band`/`overall_color`, `layers[].{score,band,color,signals,is_overridden,analyst_note,has_data}`).
+- Lazy-imported + admin-guarded `/admin/best-fit` route in `App.jsx`; sidebar entry added to the admin group.
+
+### Consolidation — `frontend/src/App.jsx`, `frontend/src/sidebarConfig.js`
+- New `/profile` route (auth-only) = PersonalAdvisor + ProfileFitSection. Legacy `/skills` and `/values` routes now `<Navigate to="/profile" replace/>`; the `SkillsProfilePage`/`ValuesAssessmentPage` files (data stores) are kept intact on disk.
+- Sidebar: the separate "Skills Profile" + "Values Assessment" entries collapse into a single "My Profile" entry across all 5 roles; CommandPalette auto-rebuilds from `SIDEBAR_GROUPS`.
+
+### Wiring & checks
+- New client wrapper `api.matches.summary({detail})` in `frontend/src/lib/api.js`. `npm run build` clean; `npm run test:drift` green; dark-mode `dark:` variants on all new styles.
+
 ## Best-Fit backend — conversational profiling, fit scoring & matching APIs (Task #19)
 
 Backend-only half of Conversational Profiling + Best-Fit Matching (PR #92). All frontend/UI is Task #20; methodology doc is #21. Reuses `ventureRisk.ts`, `assessmentScoring.ts`, `matchingVectors.ts`.

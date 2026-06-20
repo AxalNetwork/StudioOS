@@ -97,8 +97,11 @@ const MyEventsPage = lazy(() => import('./pages/events/MyEventsPage'));
 const EventEditorPage = lazy(() => import('./pages/events/EventEditorPage'));
 const EventManagePage = lazy(() => import('./pages/events/EventManagePage'));
 const CofounderPage = lazy(() => import('./pages/CofounderPage'));
-const SkillsProfilePage = lazy(() => import('./pages/SkillsProfilePage'));
-const ValuesAssessmentPage = lazy(() => import('./pages/ValuesAssessmentPage'));
+// Task #20 — /skills and /values are consolidated into the profile/advisor flow.
+// The underlying SkillsProfilePage/ValuesAssessmentPage files are kept intact on
+// disk (data stores), but their routes now redirect to /profile.
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
 const PortfolioHealthPage = lazy(() => import('./pages/PortfolioHealthPage'));
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
 const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
@@ -1204,6 +1207,8 @@ function AppInner() {
       <Route path="/admin/telegram" element={guard(['admin'], <AdminTelegram />)} />
       <Route path="/admin/x" element={guard(['admin'], <AdminX />)} />
       <Route path="/admin/assessment" element={guard(['admin'], <AdminAssessment />)} />
+      {/* Task #20 — Admin Best-Fit console (consultation queue + full report). */}
+      <Route path="/admin/best-fit" element={guard(['admin'], <AdminBestFitPage />)} />
       {/* Task #3 — News & Articles admin queues merged into one Content Queue. Legacy routes redirect. */}
       <Route path="/admin/news" element={<Navigate to="/admin/articles" replace />} />
       <Route path="/news" element={<Navigate to="/articles/draft" replace />} />
@@ -1257,10 +1262,12 @@ function AppInner() {
       <Route path="/play/card" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ProfileCardPage />)} />
       <Route path="/play/:gameSlug" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <AssessmentGamePage />)} />
       <Route path="/cofounder" element={guard(['admin', 'founder'], <CofounderPage />)} />
-      {/* Task #11 — User Skill Profile (self ratings + peer endorsements). */}
-      <Route path="/skills" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SkillsProfilePage />)} />
-      {/* Task #12 — Personal-Values Assessment. */}
-      <Route path="/values" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ValuesAssessmentPage />)} />
+      {/* Task #20 — Consolidated profile/advisor flow. The advisor conversation
+          now builds the skill + values profile; the legacy /skills and /values
+          routes redirect here (underlying data stores kept intact). */}
+      <Route path="/profile" element={authOnly(<ProfilePage />)} />
+      <Route path="/skills" element={<Navigate to="/profile" replace />} />
+      <Route path="/values" element={<Navigate to="/profile" replace />} />
       <Route path="/portfolio/health" element={guard(['admin', 'founder', 'partner', 'investor'], <PortfolioHealthPage />)} />
       {/* Task #18 — Partner Coverage Analytics (admin/partner-only internal dashboard). */}
       <Route path="/portfolio/coverage" element={guard(['admin', 'partner'], <PortfolioCoveragePage />)} />

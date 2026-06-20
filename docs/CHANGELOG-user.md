@@ -5,6 +5,46 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## See your Best-Fit profile, matches, and book a 1:1
+
+Your dashboard now has a "Your Profile & Fit" section, also available on its own "My Profile" page. It brings together everything your advisor learns about you: an 8-point skills radar, your top values, your founder archetype, and how far along your profiling is — all in one place. Each card gently points you back to the advisor whenever there's more to fill in.
+
+You'll also see your best-fit matches across the network — co-founders, investors, partners, mentors, and coaches — with a free preview of your top match in each group. Upgrade to Studio to open the full list with names, scores, and the reasons behind every match. And when you're ready to talk it through, there's a "Book with Guillaume" card to request a 1:1 about your results.
+
+We've tidied navigation too: the old separate "Skills Profile" and "Values Assessment" links are now a single "My Profile" entry, since the advisor builds both for you.
+
+For admins, a new Best-Fit Console brings the consultation request queue and each member's full report — skills, values, fit scores, matches, and spin-out risk — into one screen.
+
+---
+
+## A more dependable onboarding chat
+
+The onboarding assistant is steadier now. If the service that picks how to answer you is briefly unavailable, the chat automatically keeps going instead of stalling, and it correctly reads replies that come back in a slightly different format. You should see fewer hiccups while getting set up.
+
+---
+
+## Your whole founding team — with photos — in the exported deck
+
+When you export your Spin-Out deck to PowerPoint, the "Team & Network" slide now shows your full founding team, not just the lead founder. If you have co-founders, they each get their own card. Profile photos now come through too: founders and advisors appear as circular headshots, falling back to their initials when there's no photo (or if a photo can't be loaded). Decks with a single founder look exactly as they did before.
+
+---
+
+## Change your Use of Funds split after you've applied
+
+You're no longer locked into the "Use of Funds" breakdown you set when you first applied. Open the Pitch Deck builder for your Spin-Out deck and you'll find a "Use of Funds" editor in the side panel: adjust the percentages across the five areas, and save. As before, the split has to add up to exactly 100% (or you can leave everything at zero to clear it).
+
+Once you save, your deck's "The Ask" slide updates to match — both the on-screen preview and the PowerPoint you export — so your raise breakdown is always current.
+
+---
+
+## Personal Advisor: your answers save, and "Completed" finally fills up
+
+Two fixes to the Personal Advisor. First, ordinary answers no longer get rejected: if your reply happened to contain everyday words like "select", "update", or "grant", the advisor would sometimes refuse to save it with a technical error. It now saves your wording as written.
+
+Second, the "Completed" list in the progress panel now actually shows every question you've answered, matching the "answered" count in the header. Previously it could stay empty even though the count said you'd answered several — now the two always agree.
+
+---
+
 ## A new Venture Risk rating for every portfolio company
 
 The deal team now has a Venture Risk view that rates each company across ten layers of risk — Founder, Market, Competition, Timing, Financing, Marketing, Distribution, Technology, Product, and Hiring. Each layer gets a 0–100 "de-risk confidence" score (higher means lower risk), worked out automatically from the signals already in the platform, with a colour band — green for low risk, amber for medium, red for high.

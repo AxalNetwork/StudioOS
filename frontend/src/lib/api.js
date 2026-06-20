@@ -2318,6 +2318,17 @@ export const api = {
     team: (userIds) =>
       request('/radar/team', { method: 'POST', body: JSON.stringify({ user_ids: userIds }) }),
   },
+
+  // Task #20 — Best-Fit cross-counterparty match summary (Worker-only).
+  // Default (no detail) ALWAYS returns 200: counts + one anonymized teaser per
+  // type for free callers, full ranked matches for studio/bypass roles.
+  // detail:'full' from a non-unlocked caller 402s → PaywallModal (auto-handled
+  // by `request` above). The UI gates the explicit "unlock" action via
+  // openPaywall() instead of forcing that 402, so prefer the default call.
+  matches: {
+    summary: ({ detail } = {}) =>
+      request(`/matches/summary${detail ? `?detail=${encodeURIComponent(detail)}` : ''}`),
+  },
 };
 
 // Task #3 — Due Diligence module. Admin/partner/investor/mentor only;

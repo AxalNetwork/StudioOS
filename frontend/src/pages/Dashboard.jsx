@@ -10,6 +10,7 @@ import { api } from '../lib/api';
 import SemanticSearch from '../components/SemanticSearch';
 import InvestorTrialBanner from '../components/InvestorTrialBanner';
 import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
+import ProfileFitSection from '../components/profile/ProfileFitSection';
 // Task #6 (IF) — first-login product tour (the onboarding checklist panel
 // was removed 2026-05-22: signup flow already runs the persona chatbot and
 // the dashboard already surfaces the Personal Advisor, so the checklist
@@ -138,6 +139,9 @@ export default function Dashboard() {
 
       {/* Task #12 (AC-3) — Personal Advisor replaces the legacy persona tile. */}
       <PersonalAdvisor />
+
+      {/* Task #20 — Best-Fit: skills/values/archetype/completion + matches range. */}
+      <ProfileFitSection />
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

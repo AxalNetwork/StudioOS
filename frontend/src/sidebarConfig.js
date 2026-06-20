@@ -64,6 +64,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin', icon: Shield, label: 'Admin Console' },
       { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/admin/assessment', icon: Gamepad2, label: 'Assessment Studio' },
+      { to: '/admin/best-fit', icon: Sparkles, label: 'Best-Fit Console' },
       { to: '/admin/events', icon: Ticket, label: 'Event Admin' },
       { to: '/portfolio/coverage', icon: Network, label: 'Portfolio Coverage' },
       { to: '/monitoring', icon: Activity, label: 'Monitoring' },
@@ -130,8 +131,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/skills', icon: Target, label: 'Skills Profile' },
-      { to: '/values', icon: Heart, label: 'Values Assessment' },
+      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -190,8 +190,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/skills', icon: Target, label: 'Skills Profile' },
-      { to: '/values', icon: Heart, label: 'Values Assessment' },
+      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -245,8 +244,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/skills', icon: Target, label: 'Skills Profile' },
-      { to: '/values', icon: Heart, label: 'Values Assessment' },
+      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -293,8 +291,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/skills', icon: Target, label: 'Skills Profile' },
-      { to: '/values', icon: Heart, label: 'Values Assessment' },
+      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -316,8 +313,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/skills', icon: Target, label: 'Skills Profile' },
-      { to: '/values', icon: Heart, label: 'Values Assessment' },
+      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
       { to: '/settings', icon: SettingsIcon, label: 'Settings' },
