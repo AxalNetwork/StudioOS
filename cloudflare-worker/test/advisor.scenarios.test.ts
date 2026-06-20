@@ -376,18 +376,22 @@ async function runScenario(
       'roadmap_okrs', 'cap_table_entries', 'compliance_items',
       'spinout_lab_milestones', 'project_extras', 'founder_extras',
       'advisor_extras_json',
+      // Conversational Axal Fit scorecard — questions carrying a `measures`
+      // map fan into axal_fit_responses for every persona (writeRouter.ts
+      // persistFitAnswer), so it is an allowed target across the board.
+      'axal_fit_responses',
     ]),
     investor: new Set([
       'investor_profiles', 'users', 'investor_extras',
-      'advisor_extras_json',
+      'advisor_extras_json', 'axal_fit_responses',
     ]),
     partner: new Set([
       'partner_profiles', 'users', 'partner_extras',
-      'advisor_extras_json',
+      'advisor_extras_json', 'axal_fit_responses',
     ]),
     mentor: new Set([
       'mentors', 'mentor_profiles', 'users', 'mentor_extras',
-      'advisor_extras_json',
+      'advisor_extras_json', 'axal_fit_responses',
     ]),
     unknown: new Set(['advisor_extras_json']),
   };

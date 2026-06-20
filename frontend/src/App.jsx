@@ -74,6 +74,7 @@ const AdvisoryPage = lazy(() => import('./pages/AdvisoryPage'));
 const ActivityPage = lazy(() => import('./pages/ActivityPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const AdminTrashPage = lazy(() => import('./pages/AdminTrashPage'));
+const AdminBestFitPage = lazy(() => import('./pages/AdminBestFitPage'));
 const AdminReferEarnPayouts = lazy(() => import('./pages/admin/ReferEarnPayouts'));
 const AdminDueDiligencePage = lazy(() => import('./pages/AdminDueDiligencePage'));
 const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCasePage'));
@@ -1196,6 +1197,7 @@ function AppInner() {
           short-lived. */}
       <Route path="/deck/print-export/:token" element={<PitchDeckPrintPage exportMode />} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/best-fit" element={guard(['admin'], <AdminBestFitPage />)} />
       <Route path="/admin/trash" element={guard(['admin'], <AdminTrashPage />)} />
       <Route path="/admin/refer-earn" element={guard(['admin'], <AdminReferEarnPayouts />)} />
       <Route path="/admin/partners" element={guard(['admin'], <AdminPartnerInvitations />)} />

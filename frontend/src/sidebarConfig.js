@@ -120,6 +120,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'portals', label: 'Portals', items: [
       { to: '/founder', icon: Rocket, label: 'Founder Portal' },
       { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
+      { to: '/admin/best-fit', icon: Users, label: 'Best-Fit & Consultations' },
     ]},
     { key: 'broadcasting', label: 'Broadcasting', items: [
       { to: '/admin/telegram', icon: Send, label: 'Telegram Channels' },

@@ -160,7 +160,7 @@ profiling.post('/chat', async (c) => {
   } else {
     degraded = true;
     console.error('[PROFILING] chat AI router failed', {
-      task: 'advisor_turn',
+      task: 'onboarding_chat',
       model: result.usage?.model,
       refusal: result.refusal,
       error: result.error,
