@@ -19,7 +19,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { ensureLandingPageBrandKitColumns } from '../services/landingPageSchema';
-import { renderLandingTemplate, TEMPLATE_REGISTRY } from '../services/landingTemplates';
+import { renderLandingTemplate, TEMPLATE_REGISTRY, TEMPLATE_KEYS } from '../services/landingTemplates';
 import { requireAuth } from '../auth';
 import { run as aiRouterRun } from '../services/aiRouter';
 
@@ -904,6 +904,36 @@ export async function renderLandingPreview(env: Env, token: string, nonce?: stri
     return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain' } });
   }
   return buildLandingPageHtml(row, { token, noindex: true, nonce });
+}
+
+// Task #20 — public (no-auth) visual preview of a landing template. Renders one
+// of the five visual styles with generic placeholder copy + Axal brand colours
+// so the template picker can show a true-to-life preview before selection. No
+// DB read, no slug/token — pure render. Always noindex.
+export function renderTemplatePreview(env: Env, style: string, nonce?: string): Response {
+  const key = (TEMPLATE_KEYS as readonly string[]).includes(style) ? style : 'minimal';
+  const row = {
+    name: 'Northwind Labs',
+    tagline: 'The operating system for ambitious founders.',
+    headline: 'Build, launch, and grow — all in one place.',
+    subheadline: 'Northwind Labs gives early-stage teams everything they need to go from idea to traction without the busywork.',
+    cta_text: 'Join the waitlist',
+    theme_color: '#7c3aed',
+    palette_bg: '#faf7ff',
+    palette_ink: '#1b1430',
+    palette_secondary: '#c4b5fd',
+    palette_accent: '#f59e0b',
+    font_pairing: 'editorial',
+    template: key,
+  };
+  const html = renderLandingTemplate(row, { noindex: true, nonce });
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=300',
+      'X-Robots-Tag': 'noindex, nofollow',
+    },
+  });
 }
 
 export default brand;

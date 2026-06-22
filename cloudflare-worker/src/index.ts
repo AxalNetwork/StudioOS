@@ -136,7 +136,7 @@ import customerChat from './routes/customer_chat';
 // Task #8 (IH) — Data import + migration tools (Carta/AngelList CSV/Deck
 // PDF+PPTX/Investor portfolio/HubSpot pipeline/Universal CSV).
 import importsRoutes from './routes/imports';
-import brand, { renderLandingHtml, renderLandingPreview } from './routes/brand';
+import brand, { renderLandingHtml, renderLandingPreview, renderTemplatePreview } from './routes/brand';
 import decks from './routes/decks';
 // Task #6 — share-link viewer onboarding (signup/NDA/feedback/deal-pack)
 // + conversion tracking. MUST be mounted BEFORE the `/api/decks`
@@ -632,6 +632,9 @@ app.route('/api/decks', decks);
 // Public landing page HTML (no /api prefix). Founders publish via the
 // authenticated /api/brand/landing/by-project/:pid/publish endpoint;
 // this route renders the page for un-authenticated visitors.
+// Task #20 — public visual preview of a landing template (no auth, noindex).
+// Registered before /landing/:slug so the two-segment path matches first.
+app.get('/landing/template-preview/:style', (c) => renderTemplatePreview(c.env, c.req.param('style'), c.get('cspNonce' as never) as string | undefined));
 app.get('/landing/:slug', async (c) => renderLandingHtml(c.env, c.req.param('slug'), c.get('cspNonce' as never) as string | undefined));
 // Task #4 — private preview URL for unpublished drafts (noindex).
 app.get('/landing/preview/:token', async (c) => renderLandingPreview(c.env, c.req.param('token'), c.get('cspNonce' as never) as string | undefined));

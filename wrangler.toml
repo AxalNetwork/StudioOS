@@ -206,6 +206,17 @@ zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/invite/*"
 zone_name  = "axal.vc"
+# Task #20 — Brand & Landing pages. The Worker (Hono) already serves
+# /landing/:slug (published), /landing/preview/:token (draft), and
+# /landing/template-preview/:style (picker preview), but without these apex
+# routes every /landing/* request fell through to Jekyll/GitHub Pages and
+# 404'd. Exact + wildcard, mirrored in [[env.production.routes]] below.
+[[routes]]
+pattern    = "axal.vc/landing"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/landing/*"
+zone_name  = "axal.vc"
 
 # ---------- Static Assets (SPA) ----------
 # Task #36 — Worker Static Assets binding. The worker serves the
@@ -239,7 +250,7 @@ zone_name  = "axal.vc"
 directory = "./docs"
 binding   = "ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/landing/*"]
+run_worker_first = ["/api/*", "/landing/*", "/landing/template-preview/*"]
 
 # ---------- Module Rules ----------
 # Task #9 (AO) — register `.md` files (and the Vite-style `?raw` suffix)
@@ -722,6 +733,15 @@ zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/invite/*"
 zone_name  = "axal.vc"
+# Task #20 — Brand & Landing pages. Mirror of the top-level [[routes]] block.
+# /landing/:slug + /landing/preview/:token + /landing/template-preview/:style
+# are Worker-served; without these apex routes they 404 on Jekyll.
+[[env.production.routes]]
+pattern    = "axal.vc/landing"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/landing/*"
+zone_name  = "axal.vc"
 
 [env.production.vars]
 # Task #5 — canonical-host flip. APP_URL/PUBLIC_BASE_URL now point at
@@ -823,7 +843,7 @@ binding = "BROWSER"
 directory = "./docs"
 binding   = "ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/landing/*"]
+run_worker_first = ["/api/*", "/landing/*", "/landing/template-preview/*"]
 
 # Task #9 (AO) — wire the studioos-tail consumer worker
 # (cloudflare-worker-tail/) so all production worker tail events get

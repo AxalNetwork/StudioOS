@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import SectorSelect from '../components/SectorSelect';
 import { Link } from 'react-router-dom';
-import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe, Upload, Palette, PenLine, Eye, Users, LayoutTemplate, Share2 } from 'lucide-react';
+import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe, Upload, Palette, PenLine, Eye, Users, LayoutTemplate, Share2, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
@@ -75,6 +75,8 @@ export default function BrandBuilderPage() {
   const AUDIENCE_COLORS = { customer: 'bg-violet-100 text-violet-700', partner: 'bg-indigo-100 text-indigo-700', investor: 'bg-emerald-100 text-emerald-700', advisor: 'bg-amber-100 text-amber-700', mentor: 'bg-sky-100 text-sky-700', cofounder: 'bg-rose-100 text-rose-700' };
   // Task #5 — visual template registry (maps a catalog template's visualTemplate → label / media needs)
   const [templates, setTemplates] = useState([]);
+  // Task #20 — visual-style key currently shown in the full-screen preview modal (null = closed)
+  const [previewTemplate, setPreviewTemplate] = useState(null);
 
   useEffect(() => {
     api.listProjects().then((r) => {
@@ -160,6 +162,14 @@ export default function BrandBuilderPage() {
       } catch {}
     })();
   }, [projectId, projects, waitlistAudienceFilter]);
+
+  // Task #20 — close the template-preview modal on Escape.
+  useEffect(() => {
+    if (!previewTemplate) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setPreviewTemplate(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [previewTemplate]);
 
   // Step 1 — pick an audience; prefill the goal default for that audience.
   const selectAudience = (audience) => {
@@ -423,36 +433,47 @@ export default function BrandBuilderPage() {
             {recommendedTemplates.map((t) => {
               const active = draft.template_kit === t.id;
               return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => chooseTemplate(t)}
-                  className={`text-left border rounded-lg p-4 transition ${
-                    active
-                      ? 'border-violet-400 ring-2 ring-violet-100 bg-violet-50/30 dark:border-violet-700 dark:bg-violet-950/30 dark:ring-violet-900'
-                      : 'border-gray-200 hover:border-violet-300 dark:border-gray-800'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-semibold text-gray-900 text-sm dark:text-gray-100">{t.label}</div>
-                    {t.recommended && (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
-                        Recommended
-                      </span>
-                    )}
-                  </div>
-                  {t.notes && <div className="text-xs text-gray-500 mt-1 dark:text-gray-400">{t.notes}</div>}
-                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
-                    <span>Goal: <span className="text-gray-700 dark:text-gray-300">{GOAL_LABELS[t.primaryGoal] || t.primaryGoal}</span></span>
-                    <span>CTA: <span className="text-gray-700 dark:text-gray-300">{t.defaultCtaLabel}</span></span>
-                  </div>
-                  <div className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">Style: {visualLabel(t.visualTemplate)}</div>
-                  {active && (
-                    <div className="mt-2 text-xs font-medium text-violet-600 flex items-center gap-1">
-                      <Check size={12} /> Selected
+                <div key={t.id} className="relative group">
+                  <button
+                    type="button"
+                    onClick={() => chooseTemplate(t)}
+                    className={`w-full text-left border rounded-lg p-4 transition ${
+                      active
+                        ? 'border-violet-400 ring-2 ring-violet-100 bg-violet-50/30 dark:border-violet-700 dark:bg-violet-950/30 dark:ring-violet-900'
+                        : 'border-gray-200 hover:border-violet-300 dark:border-gray-800'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 pr-8">
+                      <div className="font-semibold text-gray-900 text-sm dark:text-gray-100">{t.label}</div>
+                      {t.recommended && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
+                          Recommended
+                        </span>
+                      )}
                     </div>
-                  )}
-                </button>
+                    {t.notes && <div className="text-xs text-gray-500 mt-1 dark:text-gray-400">{t.notes}</div>}
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
+                      <span>Goal: <span className="text-gray-700 dark:text-gray-300">{GOAL_LABELS[t.primaryGoal] || t.primaryGoal}</span></span>
+                      <span>CTA: <span className="text-gray-700 dark:text-gray-300">{t.defaultCtaLabel}</span></span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">Style: {visualLabel(t.visualTemplate)}</div>
+                    {active && (
+                      <div className="mt-2 text-xs font-medium text-violet-600 flex items-center gap-1">
+                        <Check size={12} /> Selected
+                      </div>
+                    )}
+                  </button>
+                  {/* Task #20 — preview the visual style without selecting the template. */}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setPreviewTemplate(t.visualTemplate); }}
+                    title={`Preview ${visualLabel(t.visualTemplate)} style`}
+                    aria-label={`Preview ${t.label} template`}
+                    className="absolute top-2 right-2 p-1.5 rounded-md border border-gray-200 bg-white/90 text-gray-500 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-violet-600 hover:border-violet-300 transition dark:bg-gray-900/90 dark:border-gray-700 dark:text-gray-400"
+                  >
+                    <Eye size={14} />
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -479,6 +500,42 @@ export default function BrandBuilderPage() {
             </label>
           )}
         </section>
+      )}
+
+      {/* Task #20 — full-screen template preview modal */}
+      {previewTemplate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Template preview"
+          onClick={() => setPreviewTemplate(null)}
+        >
+          <div
+            className="relative flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-gray-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-2 dark:border-gray-800">
+              <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                <Eye size={14} /> Preview — {visualLabel(previewTemplate)} style
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewTemplate(null)}
+                aria-label="Close preview"
+                className="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <iframe
+              key={previewTemplate}
+              src={`/landing/template-preview/${encodeURIComponent(previewTemplate)}`}
+              title="Template preview"
+              className="w-full flex-1 border-0 bg-white"
+            />
+          </div>
+        </div>
       )}
 
       {/* Step 3 — tune brand kit & copy */}
