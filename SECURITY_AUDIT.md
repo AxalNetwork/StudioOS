@@ -21,6 +21,18 @@ now return **503** `{ code: 'rate_limit_unavailable', retry_after: 30 }` with
 other buckets still fail open, but now do so explicitly with a log line instead
 of a silent swallow.
 
+The auth/OTP flows use their **own** KV limiter helpers (separate from the
+middleware above): `checkRateLimit` in `routes/auth.ts` (login, registration
+resend, email-verify, magic-link, step-up) and the `rate` helpers in
+`routes/auth_sms.ts` (SMS OTP enroll/challenge/verify) and
+`routes/auth_recover.ts` (account recovery). All three previously failed
+**open** on a KV error — the highest-value endpoints (credential stuffing /
+OTP brute-force / recovery brute-force) silently lost throttling during an
+outage. They now fail **closed**: a KV error denies the request (callers map the
+`false` return to `429`) and logs `... (failing closed) bucket=<prefix>`. The
+log records only the bucket prefix, never the key tail (which carries the email
+/ phone — see L5).
+
 ---
 
 ## M2 — Blanket founder-resource bypass (cross-founder IDOR) — *highest risk*

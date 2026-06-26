@@ -18,7 +18,11 @@ Full write-up in [`SECURITY_AUDIT.md`](./SECURITY_AUDIT.md). Summary:
   `failClosed` flag. Sensitive buckets (`ai`, `promo_validate`, `admin_catalog_writes`,
   `register`) now return `503 { code: 'rate_limit_unavailable', retry_after: 30 }` with
   `Retry-After` / `X-RateLimit-Bucket` headers + `logBlock` on KV failure, instead of
-  silently failing open. Other buckets fail open explicitly (logged).
+  silently failing open. Other buckets fail open explicitly (logged). The separate
+  auth/OTP KV limiters — `routes/auth.ts::checkRateLimit` (login/register/magic-link/
+  step-up) and the `rate` helpers in `routes/auth_sms.ts` (SMS OTP) and
+  `routes/auth_recover.ts` (account recovery) — now also fail **closed** on KV error
+  (deny → `429`), logging only the bucket prefix (key tail carries email/phone → L5).
 - **M2 — founder-resource IDOR (highest risk).** `auth.ts::canAccessFounderResource`
   no longer blanket-bypasses investors — only admin/partner (studio staff) and the
   owning founder pass. Investors keep founder-data access only via the NDA-gated,

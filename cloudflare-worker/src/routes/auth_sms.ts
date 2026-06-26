@@ -54,8 +54,12 @@ async function rate(env: Env, key: string, max: number, windowSec: number): Prom
     if (cur >= max) return false;
     await env.RATE_LIMITS.put(k, String(cur + 1), { expirationTtl: windowSec + 5 });
     return true;
-  } catch {
-    return true; // fail-open on KV outage; checkRateLimit follows the same convention
+  } catch (e) {
+    // Fail-CLOSED on KV outage (audit M1): SMS OTP enroll/challenge/verify are
+    // sensitive, so deny rather than disable the throttle. Log only the bucket
+    // prefix — the key tail carries email/phone (PII, L5).
+    console.error('auth_sms rate KV error (failing closed) bucket=%s', key.split(':')[0], e);
+    return false;
   }
 }
 
