@@ -8,7 +8,8 @@ import {
 import { articles as api } from '../lib/api';
 import { useToast } from '../components/useToast';
 import { reportError } from '../lib/log';
-import { renderMarkdown, wordsAndMinutes, slugify } from '../lib/articleMarkdown';
+import ReactMarkdown from 'react-markdown';
+import { wordsAndMinutes, slugify } from '../lib/articleMarkdown';
 
 // Task #1 — Article author dashboard, scoped to the /articles surface
 // (role-aware list, dynamic sector taxonomy from `/api/articles/sectors`,
@@ -232,13 +233,6 @@ function coverErrorMessage(e) {
     return 'You can only change the cover on your own draft.';
   }
   return e?.message || 'Cover upload failed. Please try again.';
-}
-
-function renderPreview(md) {
-  // Task #4: use the verbatim server renderer so the preview matches the
-  // public reader output exactly. The container uses `prose dark:prose-invert`
-  // which provides the visual styles on top of the bare tags.
-  return renderMarkdown(md || '');
 }
 
 function ArticleRow({ a, selected, onSelect, onCopyUrl }) {
@@ -929,7 +923,7 @@ export default function ArticleAuthorPage() {
                 <div className="bg-white dark:bg-slate-900 p-8 rounded border border-slate-200 dark:border-slate-800">
                   <h1 className="text-3xl font-bold">{editing.title}</h1>
                   {editing.subtitle && <p className="text-lg text-slate-600 dark:text-slate-400 mt-2">{editing.subtitle}</p>}
-                  <div className="mt-6 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: renderPreview(editing.body_markdown) }} />
+                  <div className="mt-6 prose dark:prose-invert max-w-none"><ReactMarkdown>{editing.body_markdown || ''}</ReactMarkdown></div>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1150,7 +1144,7 @@ export default function ArticleAuthorPage() {
                     {/* Preview pane */}
                     <div className="flex-1 min-h-[360px] border-t lg:border-t-0 lg:border-l border-slate-300 dark:border-slate-700 overflow-y-auto">
                       <div className="px-3 py-1.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs text-slate-500">Preview</div>
-                      <div className="p-4 prose dark:prose-invert max-w-none text-sm" dangerouslySetInnerHTML={{ __html: renderPreview(editing.body_markdown) }} />
+                      <div className="p-4 prose dark:prose-invert max-w-none text-sm"><ReactMarkdown>{editing.body_markdown || ''}</ReactMarkdown></div>
                     </div>
                   </div>
                 </div>

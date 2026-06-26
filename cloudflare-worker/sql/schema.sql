@@ -107,6 +107,13 @@ CREATE TABLE IF NOT EXISTS users (
     postal_code TEXT,
     country TEXT,
     profile_completion_pct INTEGER DEFAULT 0,
+    -- LinkedIn OAuth identity (audit L4 — moved off the request-path lazy
+    -- ALTER that used to live in routes/linkedin.ts::ensureColumns).
+    -- Existing DBs: apply sql/linkedin_alter.sql manually via wrangler d1 execute.
+    linkedin_sub TEXT,
+    linkedin_email TEXT,
+    linkedin_name TEXT,
+    linkedin_connected_at TEXT,
     -- Task #1 (DB) — public FOUNDER_ID / PARTNER_ID surfaced in legal
     -- contracts (via {{counterparty.founder_id}} merge field). Allocated
     -- on first role grant (services/publicIds.ts) from id_sequences.

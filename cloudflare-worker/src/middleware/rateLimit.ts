@@ -9,6 +9,10 @@ type Bucket = {
   windowSec: number;
   test: (path: string, method: string, role?: string) => boolean;
   scope: 'user' | 'global' | 'ip';
+  // When true, a KV outage REJECTS the request with 503 instead of failing
+  // open. Reserved for abuse-prone / money-adjacent buckets so the limiter
+  // can't be bypassed by knocking out KV.
+  failClosed?: boolean;
 };
 
 const BUCKETS: Bucket[] = [
@@ -31,6 +35,7 @@ const BUCKETS: Bucket[] = [
       p.startsWith('/api/advisory/') ||
       p.startsWith('/api/monitoring/anomalies'),
     scope: 'user',
+    failClosed: true,
   },
   // Task #9 — promo-code validation. Stricter than the default user bucket so
   // the redeemable-code space can't be enumerated at checkout. 20/min/user is
@@ -41,6 +46,7 @@ const BUCKETS: Bucket[] = [
     windowSec: 60,
     test: (p, m) => m === 'POST' && p === '/api/payments/promo/validate',
     scope: 'user',
+    failClosed: true,
   },
   // Task #16 — admin catalog + stripe-config writes. Mutations here are
   // money-adjacent (creating products, registering webhooks, pushing secrets)
@@ -54,6 +60,7 @@ const BUCKETS: Bucket[] = [
       (m === 'POST' || m === 'PATCH' || m === 'PUT') &&
       (p.startsWith('/api/admin/catalog/') || p.startsWith('/api/admin/stripe/')),
     scope: 'user',
+    failClosed: true,
   },
   // 60 requests/min per user — default
   {
@@ -87,6 +94,7 @@ const BUCKETS: Bucket[] = [
     windowSec: 60,
     test: (p, m) => m === 'POST' && p === '/api/auth/register',
     scope: 'ip',
+    failClosed: true,
   },
   // 1000 req/min global burst protection
   {
@@ -121,9 +129,11 @@ const RATE_LIMIT_EXEMPT = [
 // double-digit RPS), the worst case is a small over-allowance at window
 // boundaries — acceptable. If/when traffic grows, swap this for a Durable
 // Object token-bucket or D1 transactional counter.
-// Fail-open is intentional: a KV outage should not lock out admins/partners
-// from running spinouts. Sensitive operations have their own RBAC checks
-// downstream.
+// Fail-open is the DEFAULT: a KV outage should not lock out admins/partners
+// from running spinouts, and most buckets have their own RBAC checks
+// downstream. Buckets marked `failClosed` (abuse-prone / money-adjacent:
+// ai, register, promo_validate, admin_catalog_writes) instead REJECT with a
+// 503 on a KV outage so a KV failure can't be used to bypass the limiter.
 async function bumpCounter(kv: KVNamespace, key: string, windowSec: number): Promise<number> {
   const raw = await kv.get(key);
   const next = (raw ? parseInt(raw, 10) : 0) + 1;
@@ -206,8 +216,23 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
       try {
         count = await bumpCounter(env.RATE_LIMITS, key, b.windowSec);
       } catch (e) {
-        // KV failure: fail-open
-        console.error('KV bumpCounter failed', e);
+        // KV outage. Default = fail-open (continue); buckets marked
+        // `failClosed` instead reject with 503 so a KV failure can't be used
+        // to bypass an abuse-prone limiter. Either way it is observable.
+        console.error(`[ratelimit] KV bumpCounter failed bucket=${b.name} failClosed=${!!b.failClosed}`, e);
+        if (b.failClosed) {
+          await logBlock(env, ctx, {
+            user_id: userId, endpoint: path, bucket: b.name, count: -1, blocked: true,
+          });
+          c.header('Retry-After', '30');
+          c.header('X-RateLimit-Bucket', b.name);
+          return c.json({
+            detail: 'Rate limiting is temporarily unavailable; this request was rejected for safety. Try again shortly.',
+            bucket: b.name,
+            code: 'rate_limit_unavailable',
+            retry_after: 30,
+          }, 503);
+        }
         continue;
       }
 

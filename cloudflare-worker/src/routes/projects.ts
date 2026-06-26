@@ -120,8 +120,13 @@ projects.get('/:id', async (c) => {
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = rows[0];
-  // IDOR guard: a founder can only read their own project; admins/partners read all.
-  if (!canAccessFounderResource(user, project.founder_id)) {
+  // IDOR guard: a founder can only read their own project; admins/partners read
+  // all. Investors are intentionally allowed PAST this gate so they reach the
+  // maskFounderForInvestor branch below — that mask is fail-closed and NDA-gated,
+  // so an un-NDA'd investor still only ever sees the public-key subset. This is
+  // the ONE route with a masked investor fallback; canAccessFounderResource
+  // denies investors on every other founder-resource route (audit M2).
+  if (user.role !== 'investor' && !canAccessFounderResource(user, project.founder_id)) {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
   }
@@ -405,9 +410,13 @@ projects.put('/:id', async (c) => {
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
 
-  // RBAC: admins/partners/investors can edit any project; founders can only edit their own.
+  // RBAC: admins/partners can edit any project; founders can only edit their own.
+  // Investors are NOT editors (audit M2) — their project access is the read-only,
+  // NDA-masked view in GET '/:id'. Letting an investor through here is a
+  // write-IDOR (they could mutate any founder's project, incl. the
+  // admin/partner-only stage/status/playbook_week fields below).
   const project = rows[0];
-  const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
+  const isPrivileged = user.role === 'admin' || user.role === 'partner';
   const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
   if (!isPrivileged && !isOwner) {
     await sql.end();

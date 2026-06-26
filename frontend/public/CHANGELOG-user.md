@@ -5,6 +5,20 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Security & privacy hardening
+
+We tightened who can see sensitive founder information. Investor accounts now
+only ever see the limited, NDA-gated view of a founder's data — access to
+detailed financials, scoring, progress, deals and legal documents is restricted
+to the studio team and the founder who owns them.
+
+We also made the platform behave more safely when it's under heavy load: a few
+sensitive actions (like AI requests and sign-up) now return a clear "please try
+again in a moment" message instead of quietly letting requests through when our
+rate-limiting service is briefly unavailable.
+
+---
+
 ## Consistent sector picker everywhere you set a sector
 
 The "Sector" field now works the same way across the whole platform — whether you're creating a new project, editing an existing one, submitting through the Founder Portal, or setting up your Brand & Landing page. In each place you now get the same searchable dropdown with the same list of ~80 industry sectors: type to filter, click to select, and clear with the ✕ button. Previously the field behaved differently in each screen (free-text input in Edit Project and Brand Builder, a short 18-item list in the Founder Portal), which could cause the sector to show up as a dash in your Spinout deck or Brand Builder if it was set in the wrong place.

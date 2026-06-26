@@ -532,7 +532,7 @@ export default function BrandBuilderPage() {
               key={previewTemplate}
               src={`/landing/template-preview/${encodeURIComponent(previewTemplate)}`}
               title="Template preview"
-              className="w-full flex-1 border-0 bg-white"
+              className="w-full flex-1 border-0 bg-white dark:bg-gray-900"
             />
           </div>
         </div>

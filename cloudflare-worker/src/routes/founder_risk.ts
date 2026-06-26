@@ -27,7 +27,12 @@ type Pull = {
 };
 
 function isPrivileged(role: User['role']): boolean {
-  return role === 'admin' || role === 'partner' || role === 'investor';
+  // Investor removed from the read-allowlist per the IDOR contract (matches
+  // progress.ts / financials.ts — audit M2). Founder-risk pulls are raw,
+  // un-masked signals about a founder; an investor reading them across
+  // founders would be a cross-founder IDOR. NDA-gated investor access would be
+  // a future masked feature, not a blanket read.
+  return role === 'admin' || role === 'partner';
 }
 
 async function loadFounderId(env: Env, founderId: number): Promise<{ id: number } | null> {

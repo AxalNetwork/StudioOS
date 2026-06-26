@@ -10,6 +10,43 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Security audit remediation — 2026-06-25 (Task #1)
+
+Full write-up in [`SECURITY_AUDIT.md`](./SECURITY_AUDIT.md). Summary:
+
+- **M1 — rate limiter fail-closed.** `middleware/rateLimit.ts` gained a per-bucket
+  `failClosed` flag. Sensitive buckets (`ai`, `promo_validate`, `admin_catalog_writes`,
+  `register`) now return `503 { code: 'rate_limit_unavailable', retry_after: 30 }` with
+  `Retry-After` / `X-RateLimit-Bucket` headers + `logBlock` on KV failure, instead of
+  silently failing open. Other buckets fail open explicitly (logged).
+- **M2 — founder-resource IDOR (highest risk).** `auth.ts::canAccessFounderResource`
+  no longer blanket-bypasses investors — only admin/partner (studio staff) and the
+  owning founder pass. Investors keep founder-data access only via the NDA-gated,
+  fail-closed `maskFounderForInvestor` view; `routes/projects.ts` GET `/:id` keeps an
+  explicit `role !== 'investor'` branch so the mask still runs. Also removed `investor`
+  from `routes/founder_risk.ts::isPrivileged` (second copy of the same leak) and from
+  `routes/projects.ts` PUT `/:id` `isPrivileged` (third copy — a **write-IDOR** letting
+  an investor edit any founder's project incl. admin/partner-only stage/status/playbook_week;
+  investors now hit the existing 403). All remaining shared-predicate call sites fixed for
+  free. `projects.delete` was already admin/partner/owner-only. New test
+  `test/founderAccess.authz.test.ts` (wired into `test:drift`). Investor visibility on
+  `deals.get('/')` (deal-flow pipeline) and `legal.get('/documents')` (metadata via
+  `safeDoc`) left as documented, intentional product behavior — see `SECURITY_AUDIT.md`.
+- **M3 — `sql.unsafe` drift guard.** New `scripts/check-sql-unsafe.mjs` (allowlisted
+  `${…}` interpolations + non-literal `unsafe()` args), wired into `test:drift`.
+- **M4 — scoring HMAC domain separation.** `services/scoreIntegrity.ts::deriveScoringKey`
+  HKDF-SHA256-derives a subkey from `JWT_SECRET` (salt `axal:score-integrity`, info
+  `scoring-hmac:v1`) when `SCORING_HMAC_SECRET` is unset, instead of reusing `JWT_SECRET`
+  verbatim. `INTEGRITY_VERSION` not bumped.
+- **L2 — safe article preview.** `pages/ArticleAuthorPage.jsx` preview now renders via
+  `<ReactMarkdown>` instead of `dangerouslySetInnerHTML`.
+- **L4 — LinkedIn schema off the request path.** LinkedIn identity columns added to
+  `sql/schema.sql`; removed the lazy `ensureColumns()` ALTER (swallowed DDL errors) from
+  `routes/linkedin.ts`. Existing D1 migrated manually via `sql/linkedin_alter.sql`.
+- **L5 — logging hygiene.** Reviewed OAuth/Stripe/Telegram/auth error paths; no PII/token
+  leakage found, no change required.
+- Also wired the existing `test/aiRouter.bugfix.test.ts` into `test:drift`.
+
 ## Unified sector dropdown across Edit Project, Brand Builder & Founder Portal (Task #16)
 
 Extracted a canonical ~80-item sector list to `frontend/src/lib/sectors.js` (base = the

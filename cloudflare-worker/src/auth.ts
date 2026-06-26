@@ -31,14 +31,14 @@ export function assertJwtSecretStrength(env: Env): void {
 /**
  * T9 — SCORING_HMAC_SECRET enforcement.
  *
- * The Epic-5 score-integrity HMAC silently falls back to JWT_SECRET when
- * SCORING_HMAC_SECRET is unset (see services/scoreIntegrity.ts:hmacKey).
- * That fallback is fine for local dev convenience but in production it
- * collides the score-signing key with the auth-signing key — a JWT_SECRET
- * leak would also forge signed scores. Refuse to boot in production unless
- * an explicit SCORING_HMAC_SECRET (≥32 bytes) is provisioned. Dev/preview
- * still tolerate the fallback but log a one-shot warning so the operator
- * sees it during smoke tests.
+ * The Epic-5 score-integrity HMAC derives an HKDF domain-separated subkey
+ * from JWT_SECRET when SCORING_HMAC_SECRET is unset (see
+ * services/scoreIntegrity.ts:deriveScoringKey). That derivation keeps the
+ * score-signing key cryptographically independent from the auth-signing key
+ * even in dev, but production still requires a DEDICATED secret so the two
+ * keys never share a root. Refuse to boot in production unless an explicit
+ * SCORING_HMAC_SECRET (≥32 bytes) is provisioned. Dev/preview tolerate the
+ * derived fallback but log a one-shot warning so the operator sees it.
  *
  * Provision via:
  *   openssl rand -hex 32 | npx wrangler secret put SCORING_HMAC_SECRET --env=production
@@ -67,9 +67,9 @@ export function assertScoringHmacSecret(env: Env): void {
   if (!explicit && !_scoringSecretWarned) {
     _scoringSecretWarned = true;
     console.warn(
-      '[boot] SCORING_HMAC_SECRET is unset — falling back to JWT_SECRET for ' +
-      'Epic-5 score signing. This is allowed in dev/preview only; production ' +
-      'boot will refuse to start without it.',
+      '[boot] SCORING_HMAC_SECRET is unset — deriving an HKDF domain-separated ' +
+      'subkey from JWT_SECRET for Epic-5 score signing. This is allowed in ' +
+      'dev/preview only; production boot will refuse to start without it.',
     );
   }
 }
@@ -434,11 +434,27 @@ export async function requireRole(
  * pass when the row's founder_id matches their own.
  */
 export function canAccessFounderResource(user: User, ownerFounderId: number | null | undefined): boolean {
-  // Phase 0.1 split — admin / partner / investor all bypass founder ownership.
-  // Tighten in Phase 4 once role-specific predicates ship.
-  if (user.role === 'admin' || user.role === 'partner' || user.role === 'investor') return true;
+  // Relationship predicate (was a Phase-0.1 blanket admin/partner/investor
+  // bypass — see the 2026-06-25 audit, M2).
+  //
+  // Admin + partner are studio-wide staff: there is no per-deal assignment
+  // model, so they retain broad access by design.
+  //
+  // INVESTORS get NO access through this predicate. An investor's only path to
+  // founder data is the NDA-gated, fail-closed `maskFounderForInvestor` view
+  // (projects list/detail, dashboard, private-data). The routes that call THIS
+  // predicate (financials, scoring, progress, pipeline, deals, legal docs,
+  // studioops) carry NO mask, so letting an investor through leaks unmasked
+  // founder data regardless of any NDA — a cross-founder IDOR. The one place an
+  // investor still needs a masked fallback, `projects.get('/:id')`, keeps its
+  // own `user.role !== 'investor'` branch so the mask below still runs.
+  if (user.role === 'admin' || user.role === 'partner') return true;
   if (ownerFounderId == null) return false;
-  return !!user.founder_id && user.founder_id === ownerFounderId;
+  // Founder role only — and only their own row. Gating on the role (not merely
+  // a matching founder_id) means a non-founder principal that happens to carry
+  // a residual founder_id (e.g. a founder later converted to an investor) can
+  // never bypass into the un-masked data this predicate guards.
+  return user.role === 'founder' && !!user.founder_id && user.founder_id === ownerFounderId;
 }
 
 /** Phase 0.1 — true iff viewer may see capital / LP / fund cashflow data.

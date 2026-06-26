@@ -1,9 +1,9 @@
--- LinkedIn identity columns on users.
--- Idempotent on D1 (SQLite) only when run as separate statements; if a column
--- already exists, the corresponding ALTER will error and should be skipped
--- manually. The worker also runs these defensively at first-request time
--- via routes/linkedin.ts::ensureColumns(), so this file is mostly here for
--- documentation + manual `wrangler d1 execute` use.
+-- LinkedIn identity columns on users (audit L4).
+-- These columns now ship in sql/schema.sql for fresh databases. For EXISTING
+-- D1 databases, apply this file MANUALLY (`wrangler d1 execute`) — the worker
+-- no longer performs a lazy request-path ALTER (that swallowed DDL errors and
+-- masked schema drift). Run each statement separately; if a column already
+-- exists the corresponding ALTER errors and should be skipped.
 ALTER TABLE users ADD COLUMN linkedin_sub TEXT;
 ALTER TABLE users ADD COLUMN linkedin_email TEXT;
 ALTER TABLE users ADD COLUMN linkedin_name TEXT;
