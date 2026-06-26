@@ -10,6 +10,26 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Dependency updates (Task #2)
+
+Adopted the pending Dependabot upgrades directly on `main` (supersedes the open
+Dependabot PRs — they auto-close once `main` carries equal-or-higher versions and
+refreshed lockfiles). Dependency manifests, lockfiles, and workflow action pins only.
+
+- **esbuild advisory cleared (L1, GHSA-g7r4-m6w7-qqqr).** Root `npm audit --omit=dev`
+  and the frontend tree both report 0 vulnerabilities.
+- **npm.** Refreshed lockfiles across root, `frontend/`, and `cloudflare-worker/` via
+  `npm update` + in-range `npm audit fix`. Widened the root `wrangler` devDependency
+  (`~4.98.0` → `^4.98.0`) to pull 4.105.x, clearing the dev-only undici / ws / miniflare
+  high-severity advisories. Frontend `dompurify` and worker `hono` advisories cleared.
+- **Python.** `uv lock --upgrade` bumped 37 packages within the existing `pyproject.toml`
+  `>=` floors (fastapi 0.135→0.138, cryptography 46→49, pydantic 2.12→2.13, sqlalchemy
+  2.0.48→2.0.51, uvicorn 0.42→0.49, starlette 1.0→1.3, …); `requirements.txt` re-exported
+  via `uv export --no-hashes --no-dev --no-emit-project`. Dev FastAPI backend boots and
+  serves `/api` (200).
+- **GitHub Actions.** `actions/checkout` v6 → v7 across all `.github/workflows/*.yml`.
+- Gate: `npm run test:drift` passes; both dev workflows (frontend Vite, FastAPI) green.
+
 ## Security audit remediation — 2026-06-25 (Task #1)
 
 Full write-up in [`SECURITY_AUDIT.md`](./SECURITY_AUDIT.md). Summary:
