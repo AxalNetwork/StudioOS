@@ -9,7 +9,8 @@ everyone using the platform. Newest changes are at the top.
 
 Your home page is now called **Studio**, and its web address moved from
 `/dashboard` to `/studio`. Old links and bookmarks to `/dashboard` still work —
-they take you straight to Studio.
+they take you straight to Studio. Buttons and on-screen messages across the app
+that used to say "dashboard" now say "Studio" to match.
 
 We also streamlined the Studio page to focus on your Personal Advisor and your
 best-fit matches. The earnings, deal-flow, performance-analytics, AI-opportunities

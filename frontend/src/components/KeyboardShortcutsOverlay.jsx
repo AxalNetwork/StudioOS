@@ -13,7 +13,7 @@ const SHORTCUTS = [
   { keys: ['⌘', 'K'], altKeys: ['Ctrl', 'K'], label: 'Open command palette' },
   { keys: ['⌘', '/'], altKeys: ['Ctrl', '/'], label: 'Show keyboard shortcuts' },
   { keys: ['?'], label: 'Show keyboard shortcuts (alternate)' },
-  { keys: ['G', 'H'], label: 'Go to Home / Dashboard' },
+  { keys: ['G', 'H'], label: 'Go to Home' },
   { keys: ['G', 'P'], label: 'Go to Projects' },
   { keys: ['G', 'S'], label: 'Go to Settings' },
   { keys: ['G', 'D'], label: 'Go to Docs' },

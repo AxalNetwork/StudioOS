@@ -134,7 +134,7 @@ export default function KYCPage() {
           Identity Verification (KYC / AML) is only required for investor accounts. Your {role} account does not need to complete this step.
           <div className="mt-4">
             <button onClick={() => navigate('/studio')} className="px-3 py-1.5 text-sm bg-violet-600 text-white rounded-md font-medium hover:bg-violet-700">
-              Back to dashboard
+              Back to Studio
             </button>
           </div>
         </div>

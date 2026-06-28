@@ -10,6 +10,36 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Studio rename — leftover copy cleanup (Task #8)
+
+Finished the Dashboard → Studio rename in user-facing strings that still read
+"dashboard" while pointing at `/studio`:
+
+- "Back to dashboard" → "Back to Studio": `frontend/src/pages/AcademyLessonPage.jsx`,
+  `frontend/src/pages/InvestorPricingPage.jsx`, `frontend/src/pages/KYCPage.jsx`,
+  `frontend/src/components/RouteErrorBoundary.jsx` (button label, render-error body
+  copy, and the header comment).
+- `frontend/src/pages/OnboardingPersonaPage.jsx`: "Go to dashboard" → "Go to Studio";
+  "Your sidebar and dashboard now reflect…" → "Your sidebar and Studio now reflect…".
+- `frontend/src/components/OnboardingWizard.jsx`: completion copy "redirecting you to
+  your dashboard" → "redirecting you to Studio".
+- `frontend/src/pages/CustomerDiscoveryPage.jsx`: empty-state "Create one from your
+  dashboard" → "Create one from Studio".
+- `frontend/src/pages/SpinoutLabPage.jsx`: Spin-Out Lab exit-success "Continue to
+  dashboard" → "Continue". (The button navigates to `/`, which routes to the role's
+  default — `/founder` for founders, not `/studio` — so a neutral label is accurate.)
+- `frontend/src/components/OnboardingSettingsTab.jsx`: "re-fire on next dashboard load"
+  and "Tour will re-run on your next dashboard load." → "…next Studio load" (the rerun
+  navigates to `/studio`).
+- `frontend/src/components/KeyboardShortcutsOverlay.jsx`: the `G H` shortcut label
+  "Go to Home / Dashboard" → "Go to Home" (Home routes per-role via `ROLE_DEFAULT_PATH`,
+  so the stale "Dashboard" qualifier is dropped rather than renamed to Studio).
+- Left as-is (out of scope): the PageExplainer `dashboard` help entry (already titled
+  "Your studio at a glance"); other/generic dashboards (Partnerships, Metrics, referral,
+  Market Intel, deck KPI); API paths `/api/dashboard*`; and the "Back to dashboard" pill
+  in `frontend/src/components/advisor/PersonalAdvisor.jsx`, deferred to avoid colliding
+  with Task #9 which owns that file.
+
 ## Studio rename + My Profile removal (Task #7)
 
 Renamed the authenticated **Dashboard** to **Studio** (sidebar label + route

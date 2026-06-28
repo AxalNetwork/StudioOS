@@ -17,7 +17,7 @@ import { reportError } from '../lib/log';
  *   - Logs once via `reportError` for triage.
  *   - Renders an explicit, visible error state (NOT silent) with the
  *     error message, a "Try again" button (resets boundary state so
- *     the route re-renders fresh), and a "Back to dashboard" link.
+ *     the route re-renders fresh), and a "Back to Studio" link.
  *   - Resets automatically when the URL pathname changes, so navigating
  *     away from the broken page recovers without a hard reload.
  *
@@ -159,7 +159,7 @@ class RouteErrorBoundary extends React.Component {
           <p className="text-sm text-gray-700 dark:text-gray-300 mb-4 leading-relaxed">
             {isChunk
               ? 'A new version of the app was just deployed. Reload to pick it up.'
-              : 'The page failed to render. The team has been notified. You can try again, or head back to the dashboard.'}
+              : 'The page failed to render. The team has been notified. You can try again, or head back to Studio.'}
           </p>
           <pre className="text-xs font-mono text-red-700 dark:text-red-300 bg-white/60 dark:bg-black/30 border border-red-200 dark:border-red-900/40 rounded-md p-3 mb-5 whitespace-pre-wrap break-words max-h-40 overflow-auto">
             {msg}
@@ -178,7 +178,7 @@ class RouteErrorBoundary extends React.Component {
               className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               <Home size={15} aria-hidden="true" />
-              Back to dashboard
+              Back to Studio
             </a>
           </div>
         </div>
