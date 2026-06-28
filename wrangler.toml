@@ -256,7 +256,7 @@ zone_name  = "axal.vc"
 directory = "./docs"
 binding   = "ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/landing/*", "/landing/template-preview/*"]
+run_worker_first = ["/api/*", "/landing/*"]
 
 # ---------- Module Rules ----------
 # Task #9 (AO) — register `.md` files (and the Vite-style `?raw` suffix)
@@ -856,7 +856,7 @@ binding = "BROWSER"
 directory = "./docs"
 binding   = "ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/landing/*", "/landing/template-preview/*"]
+run_worker_first = ["/api/*", "/landing/*"]
 
 # Task #9 (AO) — wire the studioos-tail consumer worker
 # (cloudflare-worker-tail/) so all production worker tail events get
