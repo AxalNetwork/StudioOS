@@ -419,18 +419,6 @@ export default function BrandBuilderPage() {
           </div>
         </div>
 
-        {draft.audience && (
-          <label className="block max-w-xs">
-            <span className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Primary goal for visitors</span>
-            <select
-              value={draft.goal || ''}
-              onChange={(e) => setDraft({ ...draft, goal: e.target.value })}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100"
-            >
-              {GOALS.map((g) => <option key={g} value={g}>{GOAL_LABELS[g] || g}</option>)}
-            </select>
-          </label>
-        )}
       </section>
 
       {/* Step 2 — pick a recommended template */}
