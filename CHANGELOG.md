@@ -10,6 +10,47 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Three new selectable landing-page designs in the Brand & Landing builder (Task #24)
+
+Recreated the first batch (3 of 16) of the uploaded landing designs as new,
+distinct, server-rendered visual templates selectable in the Brand & Landing page
+builder, keeping the existing fill-in-the-blanks editor. Each ships its own
+signature palette and renders as a faithful, single-audience page.
+
+- `cloudflare-worker/src/services/landingTemplates.ts`:
+  - Added `advisor-connect`, `proof-builder`, `capital-ready-kit` to
+    `TEMPLATE_KEYS` and `TEMPLATE_REGISTRY` (all `usesHero/usesProduct: false`, so
+    the `/templates` API auto-drives the builder's labels/meta).
+  - New shared helpers: `contrastText(hex)` (relative-luminance pick of a legible
+    button-text colour, so accent-coloured buttons stay readable — e.g. the lime
+    Capital Ready Kit accent) and `singleWaitlistScript(api, audience, nonce)`
+    (CSP-safe, nonce'd, single-form capture wiring `#wl-form`/`#wl-msg` and
+    posting a fixed audience — these designs are single-narrative, unlike the
+    shared six-tab `waitlistScript`).
+  - Exported `TEMPLATE_SIGNATURE_PALETTES` (per-design palette) and three full
+    renderers: `renderAdvisorConnect` (warm cream/ochre, serif, advisory invite),
+    `renderProofBuilder` (light, green accent, evidence-first proof card),
+    `renderCapitalReadyKit` (dark mono+serif, lime signal, investor brief). All
+    three registered in `RENDERERS`. System fonts only; inline `<style>` +
+    nonce'd script (CSP-safe). Honest qualitative default copy (Live/Weekly/
+    Growing) where no real metric exists.
+- `cloudflare-worker/src/routes/brand.ts`: `renderTemplatePreview` now merges
+  `TEMPLATE_SIGNATURE_PALETTES[key]` into the placeholder row so the public,
+  no-auth template-picker previews render on-brand instead of the generic violet.
+- `frontend/src/lib/brand/templates.js`: added the three keys to
+  `VISUAL_TEMPLATE_KEYS` + the `VisualTemplate` typedef; added a new
+  `VISUAL_TEMPLATE_PALETTES` export (mirror of the Worker constant — keep in
+  lockstep); repointed the `advisor-connect`, `proof-builder` and
+  `capital-ready-kit` catalog entries from generic visual styles to their own
+  recreated designs.
+- `frontend/src/pages/BrandBuilderPage.jsx`: `chooseTemplate` seeds the signature
+  palette into the editable colour fields when one of the recreated designs is
+  picked, and restores the default violet palette when switching from a recreated
+  design back to a generic one (generic→generic switches leave the palette
+  untouched). The palette still flows through and can be re-tuned.
+- No D1 migration required: render-only change; the `template` column already
+  stores an arbitrary key.
+
 ## Ticket filing from the Personal Advisor + legacy help-surface removal (Task #9)
 
 Users can now file tracked support tickets directly from the Personal Advisor

@@ -3,9 +3,10 @@
 // Maps every prebuilt communication-surface template the studio ships to an
 // audience + goal so the Brand & Landing wizard can recommend the right one
 // and pre-fill copy. Per the agreed approach (catalog + smart matching), a
-// published page keeps using one of the existing built-in *visual* templates
-// — so each catalog entry also names the `visualTemplate` it renders with. We
-// are NOT recreating the source designs here.
+// published page keeps using one of the built-in *visual* templates — so each
+// catalog entry also names the `visualTemplate` it renders with. Some entries
+// now map to recreated source designs (Task #24, batch 1): advisor-connect,
+// proof-builder and capital-ready-kit each render with their own ported style.
 //
 // Pure data + pure helpers. No I/O, no network, no React.
 
@@ -28,7 +29,7 @@
  * One of the existing built-in landing visual styles the page renders with.
  * MUST mirror TEMPLATE_KEYS in
  * `cloudflare-worker/src/services/landingTemplates.ts`.
- * @typedef {'minimal'|'bold-hero'|'video-first'|'editorial'|'product-mock'} VisualTemplate
+ * @typedef {'minimal'|'bold-hero'|'video-first'|'editorial'|'product-mock'|'advisor-connect'|'proof-builder'|'capital-ready-kit'} VisualTemplate
  */
 
 /**
@@ -59,7 +60,21 @@ export const GOALS = ['join_waitlist', 'request_intro', 'start_pilot', 'book_cal
  * here so the catalog + its tests stay self-contained on the frontend.
  * @type {VisualTemplate[]}
  */
-export const VISUAL_TEMPLATE_KEYS = ['minimal', 'bold-hero', 'video-first', 'editorial', 'product-mock'];
+export const VISUAL_TEMPLATE_KEYS = ['minimal', 'bold-hero', 'video-first', 'editorial', 'product-mock', 'advisor-connect', 'proof-builder', 'capital-ready-kit'];
+
+/**
+ * Signature palettes for the recreated designs (Task #24). Selecting one of
+ * these templates seeds these into the editable palette fields so the design is
+ * on-brand by default while still letting the palette flow through. MIRROR of
+ * TEMPLATE_SIGNATURE_PALETTES in
+ * `cloudflare-worker/src/services/landingTemplates.ts` — keep in lockstep.
+ * @type {Record<string, {theme_color:string,palette_bg:string,palette_ink:string,palette_secondary:string,palette_accent:string}>}
+ */
+export const VISUAL_TEMPLATE_PALETTES = {
+  'advisor-connect': { theme_color: '#b06a32', palette_bg: '#f6f1e7', palette_ink: '#33302a', palette_secondary: '#ddd3c0', palette_accent: '#b06a32' },
+  'proof-builder': { theme_color: '#1f7a52', palette_bg: '#fbfbf9', palette_ink: '#1f2630', palette_secondary: '#e2e5e1', palette_accent: '#1f7a52' },
+  'capital-ready-kit': { theme_color: '#c7e83f', palette_bg: '#1b1a16', palette_ink: '#f4f1e6', palette_secondary: '#3a382f', palette_accent: '#c7e83f' },
+};
 
 /**
  * Human-friendly label per audience, for wizard headings ("Templates for…").
@@ -88,7 +103,7 @@ export const TEMPLATES = [
     primaryGoal: 'request_intro',
     defaultCtaLabel: 'Request intro',
     defaultSlug: 'capital-ready',
-    visualTemplate: 'editorial',
+    visualTemplate: 'capital-ready-kit',
     recommended: true,
     notes: 'Fundraise one-pager / data room — raise, traction and round details for investors.',
   },
@@ -219,7 +234,7 @@ export const TEMPLATES = [
     primaryGoal: 'offer_guidance',
     defaultCtaLabel: 'Become an advisor',
     defaultSlug: 'advisor-connect',
-    visualTemplate: 'minimal',
+    visualTemplate: 'advisor-connect',
     recommended: true,
     notes: 'Invite domain experts to advise — focus areas and time commitment.',
   },
@@ -258,7 +273,7 @@ export const TEMPLATES = [
     primaryGoal: 'join_waitlist',
     defaultCtaLabel: 'Join the waitlist',
     defaultSlug: 'proof-builder',
-    visualTemplate: 'product-mock',
+    visualTemplate: 'proof-builder',
     recommended: true,
     notes: 'Customer-discovery landing to validate demand and collect a waitlist.',
   },
