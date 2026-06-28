@@ -20,6 +20,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field as PField
+from sqlalchemy import func, text
 from sqlmodel import Session, desc, select
 
 from backend.app.api.routes.auth import get_current_user
@@ -28,6 +29,33 @@ from backend.app.models.entities import CapTableScenario, Project, User
 from backend.app.services.captable import simulate, to_csv, validate_inputs
 
 router = APIRouter(prefix="/captable", tags=["Cap Table"])
+
+
+# Task #29 — cap_table_scenarios.is_variant may be missing on an existing dev
+# SQLite DB (create_all only adds it to fresh DBs). Lazy-bootstrap it once per
+# process so the canonical-only filters below don't blow up. Mirrors the
+# worker's ensureCapTableVariantColumn self-heal (SQLite has no ADD COLUMN IF
+# NOT EXISTS, so the ALTER is wrapped in try/except).
+_schema_ready = False
+
+
+def _ensure_schema(session: Session) -> None:
+    global _schema_ready
+    if _schema_ready:
+        return
+    try:
+        session.exec(text(
+            "ALTER TABLE cap_table_scenarios ADD COLUMN is_variant INTEGER NOT NULL DEFAULT 0"
+        ))
+        session.commit()
+    except Exception:
+        session.rollback()
+    _schema_ready = True
+
+
+def _session_with_schema(session: Session = Depends(get_session)) -> Session:
+    _ensure_schema(session)
+    return session
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +122,7 @@ def _serialize(s: CapTableScenario, with_result: bool = True) -> dict:
         "name": s.name,
         "owner_user_id": s.owner_user_id,
         "project_id": s.project_id,
+        "is_variant": int(s.is_variant or 0),
         "inputs": json.loads(s.inputs_json) if s.inputs_json else {},
         "computed_at": s.computed_at.isoformat() if s.computed_at else None,
         "created_at": s.created_at.isoformat(),
@@ -154,7 +183,7 @@ def simulate_endpoint(
 
 @router.get("/scenarios")
 def list_scenarios(
-    session: Session = Depends(get_session),
+    session: Session = Depends(_session_with_schema),
     user: User = Depends(get_current_user),
 ):
     stmt = select(CapTableScenario).order_by(desc(CapTableScenario.updated_at))
@@ -167,7 +196,7 @@ def list_scenarios(
 @router.post("/scenarios")
 def create_scenario(
     body: ScenarioIn,
-    session: Session = Depends(get_session),
+    session: Session = Depends(_session_with_schema),
     user: User = Depends(get_current_user),
 ):
     errs = validate_inputs(body.inputs)
@@ -185,6 +214,7 @@ def create_scenario(
         existing = session.exec(
             select(CapTableScenario)
             .where(CapTableScenario.project_id == body.project_id)
+            .where(func.coalesce(CapTableScenario.is_variant, 0) == 0)
             .order_by(desc(CapTableScenario.updated_at))
         ).first()
         if existing is not None:
@@ -214,7 +244,7 @@ def create_scenario(
 @router.get("/scenarios/by-project/{project_id}")
 def read_scenario_by_project(
     project_id: int,
-    session: Session = Depends(get_session),
+    session: Session = Depends(_session_with_schema),
     user: User = Depends(get_current_user),
 ):
     proj = session.get(Project, project_id)
@@ -225,15 +255,75 @@ def read_scenario_by_project(
     s = session.exec(
         select(CapTableScenario)
         .where(CapTableScenario.project_id == project_id)
+        .where(func.coalesce(CapTableScenario.is_variant, 0) == 0)
         .order_by(desc(CapTableScenario.updated_at))
     ).first()
     return {"scenario": _serialize(s) if s else None}
 
 
+# Task #29 — create a named DRAFT variant for a project (is_variant=1). Always
+# inserts a fresh row (never upserts), so it stays distinct from the canonical
+# cap table and is excluded from the deck + one-per-project lookups. Declared
+# before /scenarios/{uid} so "by-project" isn't captured as a uid.
+@router.post("/scenarios/by-project/{project_id}/variants")
+def create_variant(
+    project_id: int,
+    body: ScenarioIn,
+    session: Session = Depends(_session_with_schema),
+    user: User = Depends(get_current_user),
+):
+    _ensure_project_write_access(session, project_id, user)
+    errs = validate_inputs(body.inputs)
+    if errs:
+        raise HTTPException(status_code=400, detail={"code": "invalid_inputs", "errors": errs})
+    result = simulate(body.inputs)
+    now = datetime.utcnow()
+    s = CapTableScenario(
+        owner_user_id=user.id,
+        project_id=project_id,
+        name=body.name,
+        inputs_json=json.dumps(body.inputs),
+        result_json=json.dumps(result),
+        computed_at=now,
+        is_variant=1,
+    )
+    session.add(s); session.commit(); session.refresh(s)
+    return _serialize(s)
+
+
+# Task #29 — read-only compare: the canonical cap table + all draft variants,
+# each with its computed result, for side-by-side ownership / dilution.
+@router.get("/scenarios/by-project/{project_id}/compare")
+def compare_scenarios(
+    project_id: int,
+    session: Session = Depends(_session_with_schema),
+    user: User = Depends(get_current_user),
+):
+    proj = session.get(Project, project_id)
+    if not proj:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not _can_read_project(user, proj):
+        raise HTTPException(status_code=403, detail="You don't have access to that project")
+    rows = session.exec(
+        select(CapTableScenario)
+        .where(CapTableScenario.project_id == project_id)
+        .order_by(
+            func.coalesce(CapTableScenario.is_variant, 0).asc(),
+            desc(CapTableScenario.updated_at),
+        )
+    ).all()
+    canonical = next((r for r in rows if not r.is_variant), None)
+    variants = [r for r in rows if r.is_variant]
+    return {
+        "canonical": _serialize(canonical) if canonical else None,
+        "variants": [_serialize(r) for r in variants],
+    }
+
+
 @router.get("/scenarios/{uid}")
 def read_scenario(
     uid: str,
-    session: Session = Depends(get_session),
+    session: Session = Depends(_session_with_schema),
     user: User = Depends(get_current_user),
 ):
     s = _read_or_404(session, uid, user)
@@ -244,7 +334,7 @@ def read_scenario(
 def update_scenario(
     uid: str,
     body: ScenarioIn,
-    session: Session = Depends(get_session),
+    session: Session = Depends(_session_with_schema),
     user: User = Depends(get_current_user),
 ):
     s = _write_or_404(session, uid, user)
@@ -255,19 +345,24 @@ def update_scenario(
         _ensure_project_write_access(session, body.project_id, user)
         # Task #28 — one cap table per project: refuse to bind this scenario to a
         # project that a DIFFERENT scenario already owns (prevents PUT duplicates).
-        clash = session.exec(
-            select(CapTableScenario)
-            .where(CapTableScenario.project_id == body.project_id)
-            .where(CapTableScenario.uid != uid)
-        ).first()
-        if clash is not None:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "project_has_cap_table",
-                    "message": "This project already has a cap table. Edit that one instead.",
-                },
-            )
+        # Task #29 — only CANONICAL scenarios are unique per project; draft
+        # variants (is_variant=1) coexist freely, so a variant edit never clashes
+        # and only an existing canonical row counts as the clash.
+        if not s.is_variant:
+            clash = session.exec(
+                select(CapTableScenario)
+                .where(CapTableScenario.project_id == body.project_id)
+                .where(CapTableScenario.uid != uid)
+                .where(func.coalesce(CapTableScenario.is_variant, 0) == 0)
+            ).first()
+            if clash is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "project_has_cap_table",
+                        "message": "This project already has a cap table. Edit that one instead.",
+                    },
+                )
     result = simulate(body.inputs)
     now = datetime.utcnow()
     s.name = body.name
@@ -284,7 +379,7 @@ def update_scenario(
 @router.delete("/scenarios/{uid}")
 def delete_scenario(
     uid: str,
-    session: Session = Depends(get_session),
+    session: Session = Depends(_session_with_schema),
     user: User = Depends(get_current_user),
 ):
     s = _write_or_404(session, uid, user)
@@ -295,7 +390,7 @@ def delete_scenario(
 @router.get("/scenarios/{uid}/export.csv", response_class=PlainTextResponse)
 def export_csv(
     uid: str,
-    session: Session = Depends(get_session),
+    session: Session = Depends(_session_with_schema),
     user: User = Depends(get_current_user),
 ):
     s = _read_or_404(session, uid, user)

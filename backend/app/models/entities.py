@@ -451,6 +451,9 @@ class CapTableScenario(SQLModel, table=True):
     computed_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    # Task #29 — 0 = canonical (the project's one cap table, the only row the
+    # deck + one-per-project upsert read), 1 = named draft variant for compare.
+    is_variant: int = Field(default=0)
 
 
 class FounderRiskProfile(SQLModel, table=True):
