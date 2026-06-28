@@ -10,6 +10,26 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Publish-time render guard for every landing visual template
+
+Added a committed test that renders all 21 landing visual templates and catches
+broken designs before a founder publishes — no behavior change, test-only.
+
+- `cloudflare-worker/test/landing_templates_render.test.ts`: iterates every key
+  in `TEMPLATE_KEYS` (5 original six-tab layouts + 16 ported single-audience
+  designs) and asserts each rendered page: starts/ends well-formed with no
+  unresolved `${...}` tokens; carries the provided nonce on every inline
+  `<script>`; HTML-escapes hostile founder copy (`<x-pwn>`-style payload) so it
+  is never injected raw; contains no `@import` and no external font/stylesheet
+  URLs (CSP). Waitlist capture is checked per architecture — ported designs must
+  expose exactly one `#wl-form`/`#wl-msg` posting a single fixed audience that
+  matches its `frontend/src/lib/brand/templates.js` catalog entry; original
+  designs expose the six-tab `#wl-<audience>`/`#msg-<audience>` capture.
+- Complements `landing_templates.test.ts` (palette lockstep / signature colours)
+  by adding the XSS-escaping + CSP-font invariants and covering the original 5.
+- `package.json`: appended the new file to the `test:drift` strip-types list
+  (the gate only runs files named there).
+
 ## Cap-Table Simulator is now project-aware and feeds Demo Day Slide 08
 
 The Cap-Table Simulator now binds a cap table to a project (one per project)
