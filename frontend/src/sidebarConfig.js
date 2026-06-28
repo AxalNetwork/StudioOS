@@ -54,6 +54,11 @@ export function hasInvestorTier(user, required) {
   return have >= (INVESTOR_RANK[required] ?? 0);
 }
 
+// Phase D · sidebar slim-down — fewer, broader groups per role plus a
+// collapsed "More" bucket for advanced/occasional destinations. No routes
+// were removed: every item that used to live here still does, so the
+// learning curve drops without losing reachability. Mentor is already lean
+// and is left unchanged.
 export const SIDEBAR_GROUPS = {
   admin: [
     { key: 'home', label: 'Home', items: [
@@ -65,16 +70,18 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/assessment', icon: Gamepad2, label: 'Assessment Studio' },
       { to: '/admin/best-fit', icon: Sparkles, label: 'Best-Fit Console' },
       { to: '/admin/events', icon: Ticket, label: 'Event Admin' },
-      { to: '/portfolio/coverage', icon: Network, label: 'Portfolio Coverage' },
       { to: '/monitoring', icon: Activity, label: 'Monitoring' },
+      { to: '/admin/telegram', icon: Send, label: 'Telegram Channels' },
+      // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
+      // Re-enable once X_CLIENT_ID/SECRET are bound on the prod worker.
+      // { to: '/admin/x', icon: Megaphone, label: 'X (Twitter)' },
+      { to: '/admin/articles', icon: FileText, label: 'Content Queue' },
     ]},
-    { key: 'core', label: 'Core', items: [
+    { key: 'studio', label: 'Studio', items: [
       { to: '/projects', icon: Zap, label: 'Projects' },
       { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
       { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
       { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
-    ]},
-    { key: 'intelligence', label: 'Intelligence', items: [
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
       { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
@@ -82,33 +89,27 @@ export const SIDEBAR_GROUPS = {
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
       { to: '/deals', icon: Handshake, label: 'Deal Flow' },
     ]},
-    { key: 'network', label: 'Network', items: [
+    { key: 'capital', label: 'Capital & Legal', items: [
+      { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
+      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
+      { to: '/payouts', icon: Wallet, label: 'Payouts' },
+      { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
+      { to: '/portfolio/coverage', icon: Network, label: 'Portfolio Coverage' },
+      { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
+      { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
+      { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
+      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+      { to: '/incorporate', icon: Scale, label: 'Incorporate' },
+      { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
+      { to: '/trust', icon: Lock, label: 'Trust Center' },
+    ]},
+    { key: 'network', label: 'Network & Growth', items: [
       { to: '/partners', icon: Users, label: 'Partners' },
       { to: '/refer', icon: Share2, label: 'Refer & Earn' },
       { to: '/relationships', icon: Handshake, label: 'Relationships' },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
-    ]},
-    { key: 'capital', label: 'Capital & Liquidity', items: [
-      { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
-      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
-      { to: '/payouts', icon: Wallet, label: 'Payouts' },
-      { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
-      { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
-      { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
-      { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
-    ]},
-    { key: 'legal', label: 'Legal & Compliance', items: [
-      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
-      { to: '/incorporate', icon: Scale, label: 'Incorporate' },
-      { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
-      { to: '/incorporate/83b', icon: Calendar, label: '83(b) Tracker' },
-      { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
-      { to: '/trust', icon: Lock, label: 'Trust Center' },
-      { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
-    ]},
-    { key: 'advanced', label: 'Advanced', items: [
       { to: '/integrations', icon: Plug, label: 'Integrations' },
       { to: '/marketplace', icon: Briefcase, label: 'Marketplace' },
       { to: '/services', icon: Package, label: 'Service Catalogue' },
@@ -117,16 +118,12 @@ export const SIDEBAR_GROUPS = {
       { to: '/partner/office-hours', icon: Calendar, label: 'Partner Office Hours' },
       { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing Review' },
     ]},
-    { key: 'portals', label: 'Portals', items: [
+    { key: 'more', label: 'More', items: [
+      { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
+      { to: '/incorporate/83b', icon: Calendar, label: '83(b) Tracker' },
+      { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
       { to: '/founder', icon: Rocket, label: 'Founder Portal' },
       { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
-    ]},
-    { key: 'broadcasting', label: 'Broadcasting', items: [
-      { to: '/admin/telegram', icon: Send, label: 'Telegram Channels' },
-      // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
-      // Re-enable once X_CLIENT_ID/SECRET are bound on the prod worker.
-      // { to: '/admin/x', icon: Megaphone, label: 'X (Twitter)' },
-      { to: '/admin/articles', icon: FileText, label: 'Content Queue' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
@@ -156,35 +153,31 @@ export const SIDEBAR_GROUPS = {
       { to: '/build/metrics', icon: TrendingUp, label: 'Metrics' },
       { to: '/build/captable', icon: PieIcon, label: 'Cap Table' },
     ]},
-    { key: 'validate', label: 'Validate', items: [
+    { key: 'grow', label: 'Grow', items: [
       { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
       { to: '/mentors', icon: UserCircle, label: 'Find a Mentor', requiredTier: 'growth' },
       { to: '/cofounder', icon: Users, label: 'Find a Co-founder', requiredTier: 'studio' },
+      { to: '/services', icon: Package, label: 'Service Catalogue' },
+      { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
+      { to: '/calendar', icon: Calendar, label: 'Calendar' },
+      { to: '/my/events', icon: Ticket, label: 'Events' },
     ]},
-    { key: 'capital', label: 'Capital & Liquidity', items: [
+    { key: 'capital', label: 'Capital & Legal', items: [
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits', requiredTier: 'studio' },
       { to: '/payouts', icon: Wallet, label: 'Payouts' },
       { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health', requiredTier: 'studio' },
-    ]},
-    { key: 'legal', label: 'Legal & Compliance', items: [
       { to: '/legal-capital', icon: Scale, label: 'Legal & Capital', requiredTier: 'studio' },
       { to: '/incorporate', icon: Scale, label: 'Incorporate' },
+      { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
+    ]},
+    { key: 'more', label: 'More', items: [
       { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement', requiredTier: 'studio' },
       { to: '/incorporate/83b', icon: Calendar, label: '83(b) Tracker', requiredTier: 'studio' },
-      { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
       { to: '/trust', icon: Lock, label: 'Trust Center' },
-    ]},
-    { key: 'wellbeing', label: 'Wellbeing', items: [
       { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
-    ]},
-    { key: 'network', label: 'Network & Growth', items: [
-      { to: '/services', icon: Package, label: 'Service Catalogue' },
-      { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
       { to: '/refer', icon: Share2, label: 'Refer & Earn' },
       { to: '/relationships', icon: Handshake, label: 'Relationships' },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
-      { to: '/calendar', icon: Calendar, label: 'Calendar' },
-      { to: '/my/events', icon: Ticket, label: 'Events' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
@@ -208,13 +201,22 @@ export const SIDEBAR_GROUPS = {
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
       { to: '/marketplace', icon: Briefcase, label: 'Marketplace' },
       { to: '/partner/office-hours', icon: Calendar, label: 'My Office Hours' },
-      { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
     ]},
     { key: 'insights', label: 'Insights', items: [
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
       { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
       { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
+    ]},
+    { key: 'capital', label: 'Capital & Legal', items: [
+      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
+      { to: '/payouts', icon: Wallet, label: 'Payouts' },
+      { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
+      { to: '/portfolio/coverage', icon: Network, label: 'Portfolio Coverage' },
+      { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
+      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
+      { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
     { key: 'network', label: 'Network', items: [
       { to: '/services', icon: Package, label: 'My Service Catalogue' },
@@ -224,20 +226,9 @@ export const SIDEBAR_GROUPS = {
       { to: '/refer', icon: Share2, label: 'Refer & Earn' },
       { to: '/relationships', icon: Handshake, label: 'Relationships' },
       { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
+      { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
-    ]},
-    { key: 'capital', label: 'Capital & Liquidity', items: [
-      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
-      { to: '/payouts', icon: Wallet, label: 'Payouts' },
-      { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
-      { to: '/portfolio/coverage', icon: Network, label: 'Portfolio Coverage' },
-      { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
-    ]},
-    { key: 'legal', label: 'Legal & Compliance', items: [
-      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
-      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
-      { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
@@ -254,14 +245,12 @@ export const SIDEBAR_GROUPS = {
       { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       { to: '/partner-portal', icon: UserCircle, label: 'Investor Portal', highlight: true },
     ]},
-    { key: 'pipeline', label: 'Pipeline', items: [
+    { key: 'pipeline', label: 'Deal Flow', items: [
       { to: '/projects', icon: Zap, label: 'Projects' },
       { to: '/pipeline', icon: Layers, label: 'Pipeline Board', requiredInvestorTier: 'professional' },
       { to: '/deals', icon: Handshake, label: 'Deal Flow', requiredInvestorTier: 'professional' },
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
       { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
-    ]},
-    { key: 'intelligence', label: 'Intelligence', items: [
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
       { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
@@ -274,16 +263,16 @@ export const SIDEBAR_GROUPS = {
       { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
       { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
     ]},
-    { key: 'network', label: 'Network', items: [
-      { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
-      { to: '/calendar', icon: Calendar, label: 'Calendar' },
-      { to: '/my/events', icon: Ticket, label: 'Events' },
-    ]},
     { key: 'legal', label: 'Legal & Compliance', items: [
       { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
       { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
       { to: '/trust', icon: Lock, label: 'Trust Center' },
+    ]},
+    { key: 'more', label: 'More', items: [
+      { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
+      { to: '/calendar', icon: Calendar, label: 'Calendar' },
+      { to: '/my/events', icon: Ticket, label: 'Events' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
