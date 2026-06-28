@@ -57,7 +57,7 @@ export function hasInvestorTier(user, required) {
 export const SIDEBAR_GROUPS = {
   admin: [
     { key: 'home', label: 'Home', items: [
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
     ]},
     { key: 'admin', label: 'Admin', items: [
       { to: '/admin', icon: Shield, label: 'Admin Console' },
@@ -130,7 +130,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -140,7 +139,7 @@ export const SIDEBAR_GROUPS = {
 
   founder: [
     { key: 'home', label: 'Home', items: [
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/founder', icon: Rocket, label: 'Founder Portal', highlight: true },
     ]},
     { key: 'build', label: 'Build', items: [
@@ -188,7 +187,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -198,7 +196,7 @@ export const SIDEBAR_GROUPS = {
 
   partner: [
     { key: 'home', label: 'Home', items: [
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/partner-portal', icon: UserCircle, label: 'Partner Portal', highlight: true },
     ]},
     { key: 'sourcing', label: 'Sourcing', items: [
@@ -241,7 +239,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -251,7 +248,7 @@ export const SIDEBAR_GROUPS = {
 
   investor: [
     { key: 'home', label: 'Home', items: [
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/partner-portal', icon: UserCircle, label: 'Investor Portal', highlight: true },
     ]},
     { key: 'pipeline', label: 'Pipeline', items: [
@@ -287,7 +284,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -308,7 +304,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
       { to: '/settings', icon: SettingsIcon, label: 'Settings' },

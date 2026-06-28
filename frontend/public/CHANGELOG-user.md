@@ -5,6 +5,20 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## "Dashboard" is now "Studio"
+
+Your home page is now called **Studio**, and its web address moved from
+`/dashboard` to `/studio`. Old links and bookmarks to `/dashboard` still work —
+they take you straight to Studio.
+
+We also streamlined the Studio page to focus on your Personal Advisor and your
+best-fit matches. The earnings, deal-flow, performance-analytics, AI-opportunities
+and syndication panels — along with the Quick Links box — have been removed.
+
+The separate **My Profile** page has been retired; it's no longer in the sidebar.
+
+---
+
 ## Security & privacy hardening
 
 We tightened who can see sensitive founder information. Investor accounts now

@@ -116,6 +116,12 @@ zone_name  = "axal.vc"
 pattern    = "axal.vc/dashboard/*"
 zone_name  = "axal.vc"
 [[routes]]
+pattern    = "axal.vc/studio"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/studio/*"
+zone_name  = "axal.vc"
+[[routes]]
 pattern    = "axal.vc/admin"
 zone_name  = "axal.vc"
 [[routes]]
@@ -583,7 +589,8 @@ custom_domain  = true
 # Jekyll (404). Patterns are conservative — only paths we own:
 #   /api/*                     — Worker API (cross-origin from axal.vc OK)
 #   /app, /app/*               — generic app shell catch-all
-#   /dashboard, /dashboard/*   — founder/investor dashboards
+#   /dashboard, /dashboard/*   — legacy dashboard path (301s to /studio)
+#   /studio, /studio/*         — Studio home (renamed from /dashboard)
 #   /admin, /admin/*           — admin console (incl. /admin/due-diligence)
 #   /register, /register/*     — sign-up (referral landing: /register?ref=)
 #   /login, /login/*           — sign-in
@@ -604,6 +611,12 @@ pattern    = "axal.vc/dashboard"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/dashboard/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/studio"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/studio/*"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/admin"

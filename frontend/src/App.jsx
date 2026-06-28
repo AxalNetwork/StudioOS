@@ -93,10 +93,9 @@ const MyEventsPage = lazy(() => import('./pages/events/MyEventsPage'));
 const EventEditorPage = lazy(() => import('./pages/events/EventEditorPage'));
 const EventManagePage = lazy(() => import('./pages/events/EventManagePage'));
 const CofounderPage = lazy(() => import('./pages/CofounderPage'));
-// Task #20 — /skills and /values are consolidated into the profile/advisor flow.
+// Task #20 — /skills and /values are consolidated into the advisor flow.
 // The underlying SkillsProfilePage/ValuesAssessmentPage files are kept intact on
-// disk (data stores), but their routes now redirect to /profile.
-const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+// disk (data stores), but their routes now redirect to /studio.
 const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
 const PortfolioHealthPage = lazy(() => import('./pages/PortfolioHealthPage'));
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
@@ -194,10 +193,10 @@ const ROLE_COLORS = {
 };
 
 const ROLE_DEFAULT_PATH = {
-  admin: '/dashboard',
+  admin: '/studio',
   founder: '/founder',
   partner: '/partner-portal',
-  investor: '/dashboard',
+  investor: '/studio',
   mentor: '/office-hours',
   // Task #51 follow-up — fresh Google signups land with role='pending' until
   // the onboarding chatbot classifies them. The pending-gate in RequireAuth
@@ -205,6 +204,14 @@ const ROLE_DEFAULT_PATH = {
   // role-lookup (e.g. landing-page fallback) from 404-ing them out.
   pending: '/onboarding/chat',
 };
+
+// Legacy /dashboard → /studio. Preserve the query string and hash so old links
+// and server-driven OAuth callbacks (?google=ok, ?advisor=1, ?profile_pending=1)
+// keep working after the rename.
+function DashboardRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/studio', search: loc.search, hash: loc.hash }} replace />;
+}
 
 const ViewModeContext = createContext(null);
 export const useViewMode = () => useContext(ViewModeContext);
@@ -954,7 +961,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
 function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImpersonating }) {
   const effectiveRole = isImpersonating ? user?.role : ((realUser || user)?.role === 'admin' ? viewMode : user?.role);
   if (!allowedRoles.includes(effectiveRole)) {
-    const defaultPath = ROLE_DEFAULT_PATH[effectiveRole] || '/dashboard';
+    const defaultPath = ROLE_DEFAULT_PATH[effectiveRole] || '/studio';
     return <Navigate to={defaultPath} replace />;
   }
   return children;
@@ -1006,7 +1013,7 @@ function AppInner() {
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
     localStorage.setItem('viewMode', mode);
-    const defaultPath = ROLE_DEFAULT_PATH[mode] || '/dashboard';
+    const defaultPath = ROLE_DEFAULT_PATH[mode] || '/studio';
     navigate(defaultPath);
   };
 
@@ -1021,7 +1028,7 @@ function AppInner() {
     setUser(impersonatedUser);
     setViewMode(impersonatedUser.role);
     localStorage.setItem('viewMode', impersonatedUser.role);
-    navigate(ROLE_DEFAULT_PATH[impersonatedUser.role] || '/dashboard');
+    navigate(ROLE_DEFAULT_PATH[impersonatedUser.role] || '/studio');
     // T20 — bypass the 5-min /me throttle so the impersonated session is
     // immediately reconciled against the server (KYC, access_level, etc.).
     refresh({ force: true });
@@ -1138,7 +1145,7 @@ function AppInner() {
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
 <RouteErrorBoundary>
 <Routes>
-      <Route path="/" element={user ? <Navigate to={ROLE_DEFAULT_PATH[user.role] || '/dashboard'} replace /> : <LandingPage />} />
+      <Route path="/" element={user ? <Navigate to={ROLE_DEFAULT_PATH[user.role] || '/studio'} replace /> : <LandingPage />} />
       <Route path="/spinout-lab" element={<SpinoutLabPage />} />
       <Route path="/pricing/investor" element={<InvestorPricingPage />} />
       <Route path="/register" element={<AuthScreen user={user} clearSession={clearSession}><RegisterPage /></AuthScreen>} />
@@ -1162,7 +1169,8 @@ function AppInner() {
           passes. Investor-only nav is curated above (NAV_BY_ROLE.investor)
           so we get a tighter capital-allocator surface; per-route guards
           stay permissive so deep links keep working during the split. */}
-      <Route path="/dashboard" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <Dashboard />)} />
+      <Route path="/studio" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <Dashboard />)} />
+      <Route path="/dashboard" element={<DashboardRedirect />} />
       <Route path="/onboarding/chat" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor', 'pending'], <OnboardingChatPage />)} />
       <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor'], <OnboardingPersonaPage />)} />
       <Route path="/onboarding/founder" element={guard(['admin', 'founder'], <OnboardingFounderPage />)} />
@@ -1254,9 +1262,8 @@ function AppInner() {
       {/* Task #20 — Consolidated profile/advisor flow. The advisor conversation
           now builds the skill + values profile; the legacy /skills and /values
           routes redirect here (underlying data stores kept intact). */}
-      <Route path="/profile" element={authOnly(<ProfilePage />)} />
-      <Route path="/skills" element={<Navigate to="/profile" replace />} />
-      <Route path="/values" element={<Navigate to="/profile" replace />} />
+      <Route path="/skills" element={<Navigate to="/studio" replace />} />
+      <Route path="/values" element={<Navigate to="/studio" replace />} />
       <Route path="/portfolio/health" element={guard(['admin', 'founder', 'partner', 'investor'], <PortfolioHealthPage />)} />
       {/* Task #18 — Partner Coverage Analytics (admin/partner-only internal dashboard). */}
       <Route path="/portfolio/coverage" element={guard(['admin', 'partner'], <PortfolioCoveragePage />)} />

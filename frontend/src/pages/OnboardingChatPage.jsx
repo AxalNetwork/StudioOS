@@ -71,7 +71,7 @@ export default function OnboardingChatPage() {
       // /onboarding/chat — re-mounting this component with an empty chat.
       // A hard reload remounts App.jsx so the effect re-runs and sees the
       // freshly-flipped `completed_at`.
-      window.location.assign('/dashboard?profile_pending=1');
+      window.location.assign('/studio?profile_pending=1');
     } catch (e) {
       setError(e.message);
       setSaving(false);

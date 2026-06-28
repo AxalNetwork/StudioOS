@@ -10,6 +10,182 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Studio rename + My Profile removal (Task #7)
+
+Renamed the authenticated **Dashboard** to **Studio** (sidebar label + route
+`/dashboard` → `/studio`) and retired the authenticated **My Profile** page.
+
+- Sidebar (`frontend/src/sidebarConfig.js`): "Dashboard" → "Studio" (`/studio`) for
+  every role that has it; removed the "My Profile" item from all five role groups.
+- Routing (`frontend/src/App.jsx`): `Dashboard` now mounts at `/studio`. `/dashboard`
+  renders `DashboardRedirect`, a query/hash-preserving `<Navigate>` to `/studio`, so
+  legacy links/bookmarks and server-driven OAuth callbacks (`?google=ok`, `?advisor=1`,
+  `?profile_pending=1`, `?google_signup=1`) keep working. Deleted the `/profile` route +
+  `ProfilePage` lazy import; repointed the legacy `/skills` and `/values` redirects to
+  `/studio`. Updated `ROLE_DEFAULT_PATH` (admin, investor) and all `|| '/dashboard'`
+  fallbacks to `/studio`.
+- Deleted `frontend/src/pages/ProfilePage.jsx` (the underlying
+  SkillsProfilePage/ValuesAssessmentPage data stores are left intact on disk).
+- In-app `/dashboard` nav links repointed to `/studio`: CommandPalette, TicketsPage,
+  OnboardingChatPage, LoginPage (passkey/login/Google `redirect`), KYCPage,
+  InvestorPricingPage, PartnerDealPortal, OnboardingPersonaPage, OnboardingInvestorPage,
+  AcademyLessonPage, RouteErrorBoundary, OnboardingSettingsTab.
+- Studio page (`frontend/src/pages/Dashboard.jsx`) trimmed: removed the four quick-stat
+  tiles (This Month / Compounding / Syndicates / AI Score Avg), Proprietary Deal Flow,
+  Performance Analytics, AI-Scored Opportunities, Syndication Tools, and Quick Links.
+  Kept the header/search/notifications/refresh, Personal Advisor, Profile-fit section,
+  "My Studio Ops Tasks", and "Independent Subsidiaries". Preserved the exported
+  `StatusBadge`/`WeekBadge` helpers other pages import; dropped now-unused local helpers.
+- Apex routing (`wrangler.toml`): added `axal.vc/studio` + `axal.vc/studio/*` to BOTH the
+  top-level `[[routes]]` and `[[env.production.routes]]` blocks (kept in lockstep), and
+  left the `/dashboard` (+ `/dashboard/*`) patterns in place so the redirect resolves on a
+  hard-load. Routes only take effect on `npm run deploy`.
+- No backend/API changes — the dashboard payload is unchanged, just no longer fully rendered.
+
+## Dependency updates (Task #2)
+
+Adopted the pending Dependabot upgrades directly on `main` (supersedes the open
+Dependabot PRs — they auto-close once `main` carries equal-or-higher versions and
+refreshed lockfiles). Dependency manifests, lockfiles, and workflow action pins only.
+
+- **esbuild advisory cleared (L1, GHSA-g7r4-m6w7-qqqr).** Root `npm audit --omit=dev`
+  and the frontend tree both report 0 vulnerabilities.
+- **npm.** Refreshed lockfiles across root, `frontend/`, and `cloudflare-worker/` via
+  `npm update` + in-range `npm audit fix`. Widened the root `wrangler` devDependency
+  (`~4.98.0` → `^4.98.0`) to pull 4.105.x, clearing the dev-only undici / ws / miniflare
+  high-severity advisories. Frontend `dompurify` and worker `hono` advisories cleared.
+- **Python.** `uv lock --upgrade` bumped 37 packages within the existing `pyproject.toml`
+  `>=` floors (fastapi 0.135→0.138, cryptography 46→49, pydantic 2.12→2.13, sqlalchemy
+  2.0.48→2.0.51, uvicorn 0.42→0.49, starlette 1.0→1.3, …); `requirements.txt` re-exported
+  via `uv export --no-hashes --no-dev --no-emit-project`. Dev FastAPI backend boots and
+  serves `/api` (200).
+- **GitHub Actions.** `actions/checkout` v6 → v7 across all `.github/workflows/*.yml`.
+- Gate: `npm run test:drift` passes; both dev workflows (frontend Vite, FastAPI) green.
+
+## Security audit remediation — 2026-06-25 (Task #1)
+
+Full write-up in [`SECURITY_AUDIT.md`](./SECURITY_AUDIT.md). Summary:
+
+- **M1 — rate limiter fail-closed.** `middleware/rateLimit.ts` gained a per-bucket
+  `failClosed` flag. Sensitive buckets (`ai`, `promo_validate`, `admin_catalog_writes`,
+  `register`) now return `503 { code: 'rate_limit_unavailable', retry_after: 30 }` with
+  `Retry-After` / `X-RateLimit-Bucket` headers + `logBlock` on KV failure, instead of
+  silently failing open. Other buckets fail open explicitly (logged). The separate
+  auth/OTP KV limiters — `routes/auth.ts::checkRateLimit` (login/register/magic-link/
+  step-up) and the `rate` helpers in `routes/auth_sms.ts` (SMS OTP) and
+  `routes/auth_recover.ts` (account recovery) — now also fail **closed** on KV error
+  (deny → `429`), logging only the bucket prefix (key tail carries email/phone → L5).
+- **M2 — founder-resource IDOR (highest risk).** `auth.ts::canAccessFounderResource`
+  no longer blanket-bypasses investors — only admin/partner (studio staff) and the
+  owning founder pass. Investors keep founder-data access only via the NDA-gated,
+  fail-closed `maskFounderForInvestor` view; `routes/projects.ts` GET `/:id` keeps an
+  explicit `role !== 'investor'` branch so the mask still runs. Also removed `investor`
+  from `routes/founder_risk.ts::isPrivileged` (second copy of the same leak) and from
+  `routes/projects.ts` PUT `/:id` `isPrivileged` (third copy — a **write-IDOR** letting
+  an investor edit any founder's project incl. admin/partner-only stage/status/playbook_week;
+  investors now hit the existing 403). All remaining shared-predicate call sites fixed for
+  free. `projects.delete` was already admin/partner/owner-only. New test
+  `test/founderAccess.authz.test.ts` (wired into `test:drift`). Investor visibility on
+  `deals.get('/')` (deal-flow pipeline) and `legal.get('/documents')` (metadata via
+  `safeDoc`) left as documented, intentional product behavior — see `SECURITY_AUDIT.md`.
+- **M3 — `sql.unsafe` drift guard.** New `scripts/check-sql-unsafe.mjs` (allowlisted
+  `${…}` interpolations + non-literal `unsafe()` args), wired into `test:drift`.
+- **M4 — scoring HMAC domain separation.** `services/scoreIntegrity.ts::deriveScoringKey`
+  HKDF-SHA256-derives a subkey from `JWT_SECRET` (salt `axal:score-integrity`, info
+  `scoring-hmac:v1`) when `SCORING_HMAC_SECRET` is unset, instead of reusing `JWT_SECRET`
+  verbatim. `INTEGRITY_VERSION` not bumped.
+- **L2 — safe article preview.** `pages/ArticleAuthorPage.jsx` preview now renders via
+  `<ReactMarkdown>` instead of `dangerouslySetInnerHTML`.
+- **L4 — LinkedIn schema off the request path.** LinkedIn identity columns added to
+  `sql/schema.sql`; removed the lazy `ensureColumns()` ALTER (swallowed DDL errors) from
+  `routes/linkedin.ts`. Existing D1 migrated manually via `sql/linkedin_alter.sql`.
+- **L5 — logging hygiene.** Reviewed OAuth/Stripe/Telegram/auth error paths; no PII/token
+  leakage found, no change required.
+- Also wired the existing `test/aiRouter.bugfix.test.ts` into `test:drift`.
+
+## Unified sector dropdown across Edit Project, Brand Builder & Founder Portal (Task #16)
+
+Extracted a canonical ~80-item sector list to `frontend/src/lib/sectors.js` (base = the
+existing ~70-item list in ProjectsPage + `'Other'`). Created `frontend/src/components/SectorSelect.jsx`
+— a shared searchable dropdown (with outside-click handler that was missing in the original).
+
+Changes per entry point:
+- **New Project** (`ProjectsPage.jsx`) — was already using SectorSelect. Now imports the
+  shared component; inline `SECTORS` constant and `SectorSelect` definition removed.
+- **Edit Project** (`ProjectDetail.jsx`) — the `sector` field in `EditProjectModal` was a
+  plain `<input type="text">`. Now uses `SectorSelect` via a `sectorSelect: true` flag on
+  the `EDITABLE_FIELDS` entry.
+- **About Your Startup / Founder Portal** (`FounderPortal.jsx`) — was using a coarser
+  18-item hardcoded list. Now imports `SECTORS` from `lib/sectors.js`; existing
+  `ModernSelect` + `<option>` structure unchanged.
+- **Brand Builder** (`BrandBuilderPage.jsx`) — was a free-text `<input>`. Now uses
+  `SectorSelect`; project auto-fill (`setSector(p.sector)`) unchanged.
+
+Spinout deck and Brand Builder already read `project.sector` automatically; no additional
+wiring needed. Existing free-text DB values are not migrated (out of scope).
+
+## Admin Console section nav: dropdown instead of tab row (Task #15)
+
+Replaced the Admin Console's horizontal row of 12 section tabs (which crowded and
+wrapped on narrower widths) with a single dropdown menu in `frontend/src/pages/AdminPage.jsx`.
+
+- Added a module-level `ADMIN_SECTIONS` ordered list (value/label/Icon) as the single
+  source for both the trigger and the menu, plus `ADMIN_SECTION_VALUES` for validation.
+- New `AdminSectionNav` component: a trigger button showing the active section's icon,
+  label, and its "N pending" badge (when applicable), and a `role="listbox"` menu listing
+  all 12 options in the original tab order with icons, badges, violet active-highlight, and
+  a trailing check on the active item. Closes on selection, outside click, and Escape; full
+  light/dark support. Preserves the `admin-page` and `admin-tab-*` `data-testid` hooks
+  (testid = `admin-tab-${value}`) so existing selectors keep working.
+- Pending counts are passed in via a `badges` map (`profiles` → pendingProfiles,
+  `kyc` → pending KYC queue length when the KYC filter is "pending"), matching the prior
+  per-tab badge logic; the trigger reflects the badge when that section is selected.
+- The `tab` state initializer now reads the `?tab=` query param (validated against
+  `ADMIN_SECTION_VALUES`) so `/admin?tab=network-profiles` deep-links select the right
+  section on load — previously the documented deep-link had no reader and always opened Users.
+
+## Fix Best-Fit Console 500 (Task #14)
+
+The admin Best-Fit Console returned `Internal server error` in prod because its first call
+(`GET /api/admin/consultations`) hit `admin_consultation_bookings` with no schema bootstrap and
+no try/catch — on a prod D1 where migration `115_axal_fit.sql` was never applied, the table was
+missing and the raw `no such table` bubbled to the Worker's global `app.onError` → 500.
+
+- **New `cloudflare-worker/src/services/axalFitSchema.ts`** — `ensureAxalFitSchema(env)`, an
+  idempotent lazy bootstrap (`CREATE TABLE/INDEX IF NOT EXISTS`) for `axal_values`,
+  `axal_fit_scores`, `axal_fit_reports`, `admin_consultation_bookings`, mirrored from migration
+  115 / `schema.sql`. Follows the `ensureTelegramSchema` / `ensureXSchema` self-heal pattern.
+- **Wired `ensureAxalFitSchema()`** into `routes/consultations.ts` (book / me / admin list),
+  `routes/admin_bestfit.ts`, and `routes/best_fit.ts` before any query touching those tables.
+- **Hardened the report builder** (`services/bestFit.ts`): `loadSubject` now try/catches (missing
+  subject still returns null → clean 404); `computeCounterpartyMatches` and the `buildAssessment`
+  spin-out call degrade to `[]` / `null` instead of throwing — so a cold D1 yields a partial
+  report, never a 500.
+- **Hardened the admin consultations list** (`routes/consultations.ts`) to return `[]` on a
+  cold/missing table instead of surfacing the 500.
+- **Ops:** migration `115_axal_fit.sql` must be applied to prod D1 (manual migrations) and the
+  Worker redeployed. With the lazy bootstrap the endpoints self-heal on first hit regardless.
+
+
+## Move Help into Support Hub (Task #13)
+
+Removed the global floating Help widget (the bottom-right purple `LifeBuoy` button and its
+"How can we help?" slide-over) and relocated its four options into the Support Hub (`/tickets`).
+
+- **Deleted `frontend/src/components/HelpWidget.jsx`** — the floating launcher, the `?` open
+  hotkey, the `open-help-widget` window-event listener, and the slide-over panel are all gone.
+- **`frontend/src/App.jsx`** — dropped the `HelpWidget` import and its global mount in the
+  signed-in shell (and the stale Task #7 comment).
+- **`frontend/src/pages/TicketsPage.jsx`** — added a `SupportHelpPanel` ("How can we help?")
+  as a right-hand column (`lg:grid-cols-3`, `lg:sticky lg:top-20`; stacks on mobile). Reuses the
+  old widget's debounced `/api/docs/search` call, the `isChatEligible` tier gate, and mounts
+  `CustomerChatWidget` for eligible users. Options: Search the docs, Ask Personal Advisor
+  (`/dashboard?advisor=1`), Chat with the Axal VC team (gated), Open a ticket (reveals the
+  existing New Ticket form + scrolls to top). Form/table now share a `lg:col-span-2` column.
+- **`frontend/src/components/CommandPalette.jsx`** — the Cmd+K "Open Help" command now
+  navigates to `/tickets` instead of dispatching the removed `open-help-widget` event.
+- **`frontend/src/components/CustomerChatWidget.jsx`** — updated the parent-component doc comment.
+
 ## Compact, consistent info help strips (Task #9)
 
 Replaced the heavy full-width purple `PageExplainer` banner (used on ~43 pages) with

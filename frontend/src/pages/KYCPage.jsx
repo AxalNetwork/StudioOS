@@ -133,7 +133,7 @@ export default function KYCPage() {
         <div className="bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-700 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-300">
           Identity Verification (KYC / AML) is only required for investor accounts. Your {role} account does not need to complete this step.
           <div className="mt-4">
-            <button onClick={() => navigate('/dashboard')} className="px-3 py-1.5 text-sm bg-violet-600 text-white rounded-md font-medium hover:bg-violet-700">
+            <button onClick={() => navigate('/studio')} className="px-3 py-1.5 text-sm bg-violet-600 text-white rounded-md font-medium hover:bg-violet-700">
               Back to dashboard
             </button>
           </div>
@@ -169,7 +169,7 @@ export default function KYCPage() {
           {status?.rejection_reason && <div className="text-xs mt-1"><strong>Reason:</strong> {status.rejection_reason}</div>}
         </div>
         {s === 'approved' && (
-          <button onClick={() => navigate('/dashboard')} className="px-3 py-1.5 text-xs bg-white/70 rounded-md font-medium hover:bg-white">Continue →</button>
+          <button onClick={() => navigate('/studio')} className="px-3 py-1.5 text-xs bg-white/70 rounded-md font-medium hover:bg-white">Continue →</button>
         )}
       </div>
 

@@ -82,7 +82,7 @@ export default function InvestorPricingPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">
       <div className="mb-6">
-        <Link to="/dashboard" className="inline-flex items-center gap-1 text-sm text-violet-700 dark:text-violet-300 hover:underline">
+        <Link to="/studio" className="inline-flex items-center gap-1 text-sm text-violet-700 dark:text-violet-300 hover:underline">
           <ChevronLeft size={14} /> Back to dashboard
         </Link>
       </div>

@@ -174,7 +174,7 @@ class RouteErrorBoundary extends React.Component {
               {isChunk ? 'Reload' : 'Try again'}
             </button>
             <a
-              href="/dashboard"
+              href="/studio"
               className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               <Home size={15} aria-hidden="true" />

@@ -119,7 +119,7 @@ export default function LoginPage() {
       if (!res?.token || !res?.user) throw new Error('Invalid response from server.');
       localStorage.setItem('token', res.token);
       localStorage.setItem('user', JSON.stringify(res.user));
-      window.location.href = safeNextPath() || '/dashboard';
+      window.location.href = safeNextPath() || '/studio';
     } catch (e) {
       if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
         setError('Passkey sign-in was cancelled.');
@@ -136,7 +136,7 @@ export default function LoginPage() {
       // Google round-trip. The worker's /auth/google/start re-sanitizes the
       // `redirect` param (absolute same-origin path only) before signing it
       // into the OAuth state, so safeNextPath() here is defence-in-depth.
-      const { url } = await api.googleStartUrl({ action: 'signin', redirect: safeNextPath() || '/dashboard' });
+      const { url } = await api.googleStartUrl({ action: 'signin', redirect: safeNextPath() || '/studio' });
       if (!url) throw new Error('No redirect URL returned.');
       window.location.href = url;
     } catch (e) {
@@ -242,9 +242,9 @@ export default function LoginPage() {
       localStorage.setItem('token', res.token);
       localStorage.setItem('user', JSON.stringify(res.user));
       // Relative path — stays on whichever canonical host the user signed in
-      // on (axal.vc post-flip). The Worker serves the SPA on /dashboard for
+      // on (axal.vc post-flip). The Worker serves the SPA on /studio for
       // both axal.vc and app.axal.vc per the apex routing table in wrangler.toml.
-      window.location.href = safeNextPath() || '/dashboard';
+      window.location.href = safeNextPath() || '/studio';
     } catch (e) {
       setError(e?.message || 'Sign in failed.');
       resetTurnstile();

@@ -134,7 +134,7 @@ function SupportHelpPanel({ onOpenTicket }) {
 
           {/* Primary actions */}
           <section className="space-y-2">
-            <HelpRow icon={<Brain size={16} />} title="Ask Personal Advisor" hint="The AI advisor knows your projects." onClick={() => navigate('/dashboard?advisor=1')} />
+            <HelpRow icon={<Brain size={16} />} title="Ask Personal Advisor" hint="The AI advisor knows your projects." onClick={() => navigate('/studio?advisor=1')} />
             {showChat && (
               <HelpRow
                 icon={<MessageSquare size={16} />}

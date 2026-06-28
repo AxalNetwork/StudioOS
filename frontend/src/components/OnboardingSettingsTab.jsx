@@ -55,7 +55,7 @@ export default function OnboardingSettingsTab() {
       await api.patchOnboardingMeta({ rerun_tour: true });
       setMsg('Tour will re-run on your next dashboard load.');
       // Take the user there so the tour fires immediately.
-      setTimeout(() => navigate('/dashboard'), 600);
+      setTimeout(() => navigate('/studio'), 600);
     } finally { setBusy(false); }
   };
 

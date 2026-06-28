@@ -245,7 +245,7 @@ export default function OnboardingPersonaPage() {
             Your sidebar and dashboard now reflect what's most useful to you.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button onClick={() => navigate('/dashboard')}
+            <button onClick={() => navigate('/studio')}
               className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2 rounded-lg">
               <ArrowRight size={14} /> Go to dashboard
             </button>

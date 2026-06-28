@@ -10,6 +10,38 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Studio rename + My Profile removal (Task #7)
+
+Renamed the authenticated **Dashboard** to **Studio** (sidebar label + route
+`/dashboard` → `/studio`) and retired the authenticated **My Profile** page.
+
+- Sidebar (`frontend/src/sidebarConfig.js`): "Dashboard" → "Studio" (`/studio`) for
+  every role that has it; removed the "My Profile" item from all five role groups.
+- Routing (`frontend/src/App.jsx`): `Dashboard` now mounts at `/studio`. `/dashboard`
+  renders `DashboardRedirect`, a query/hash-preserving `<Navigate>` to `/studio`, so
+  legacy links/bookmarks and server-driven OAuth callbacks (`?google=ok`, `?advisor=1`,
+  `?profile_pending=1`, `?google_signup=1`) keep working. Deleted the `/profile` route +
+  `ProfilePage` lazy import; repointed the legacy `/skills` and `/values` redirects to
+  `/studio`. Updated `ROLE_DEFAULT_PATH` (admin, investor) and all `|| '/dashboard'`
+  fallbacks to `/studio`.
+- Deleted `frontend/src/pages/ProfilePage.jsx` (the underlying
+  SkillsProfilePage/ValuesAssessmentPage data stores are left intact on disk).
+- In-app `/dashboard` nav links repointed to `/studio`: CommandPalette, TicketsPage,
+  OnboardingChatPage, LoginPage (passkey/login/Google `redirect`), KYCPage,
+  InvestorPricingPage, PartnerDealPortal, OnboardingPersonaPage, OnboardingInvestorPage,
+  AcademyLessonPage, RouteErrorBoundary, OnboardingSettingsTab.
+- Studio page (`frontend/src/pages/Dashboard.jsx`) trimmed: removed the four quick-stat
+  tiles (This Month / Compounding / Syndicates / AI Score Avg), Proprietary Deal Flow,
+  Performance Analytics, AI-Scored Opportunities, Syndication Tools, and Quick Links.
+  Kept the header/search/notifications/refresh, Personal Advisor, Profile-fit section,
+  "My Studio Ops Tasks", and "Independent Subsidiaries". Preserved the exported
+  `StatusBadge`/`WeekBadge` helpers other pages import; dropped now-unused local helpers.
+- Apex routing (`wrangler.toml`): added `axal.vc/studio` + `axal.vc/studio/*` to BOTH the
+  top-level `[[routes]]` and `[[env.production.routes]]` blocks (kept in lockstep), and
+  left the `/dashboard` (+ `/dashboard/*`) patterns in place so the redirect resolves on a
+  hard-load. Routes only take effect on `npm run deploy`.
+- No backend/API changes — the dashboard payload is unchanged, just no longer fully rendered.
+
 ## Dependency updates (Task #2)
 
 Adopted the pending Dependabot upgrades directly on `main` (supersedes the open

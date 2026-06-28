@@ -5,6 +5,58 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## "Dashboard" is now "Studio"
+
+Your home page is now called **Studio**, and its web address moved from
+`/dashboard` to `/studio`. Old links and bookmarks to `/dashboard` still work —
+they take you straight to Studio.
+
+We also streamlined the Studio page to focus on your Personal Advisor and your
+best-fit matches. The earnings, deal-flow, performance-analytics, AI-opportunities
+and syndication panels — along with the Quick Links box — have been removed.
+
+The separate **My Profile** page has been retired; it's no longer in the sidebar.
+
+---
+
+## Security & privacy hardening
+
+We tightened who can see sensitive founder information. Investor accounts now
+only ever see the limited, NDA-gated view of a founder's data — access to
+detailed financials, scoring, progress, deals and legal documents is restricted
+to the studio team and the founder who owns them.
+
+We also made the platform behave more safely when it's under heavy load: a few
+sensitive actions (like AI requests and sign-up) now return a clear "please try
+again in a moment" message instead of quietly letting requests through when our
+rate-limiting service is briefly unavailable.
+
+---
+
+## Consistent sector picker everywhere you set a sector
+
+The "Sector" field now works the same way across the whole platform — whether you're creating a new project, editing an existing one, submitting through the Founder Portal, or setting up your Brand & Landing page. In each place you now get the same searchable dropdown with the same list of ~80 industry sectors: type to filter, click to select, and clear with the ✕ button. Previously the field behaved differently in each screen (free-text input in Edit Project and Brand Builder, a short 18-item list in the Founder Portal), which could cause the sector to show up as a dash in your Spinout deck or Brand Builder if it was set in the wrong place.
+
+---
+
+## Admin Console: pick a section from one clean dropdown
+
+The Admin Console used to show all of its sections as a long row of tabs that crowded together and wrapped onto two lines on smaller screens. That row is now a single dropdown menu: click it to see every section in one tidy list, each with its icon, and pick the one you want. The currently open section shows at the top, the "pending" counts on Partner Profiles and KYC Queue still appear, and links that open a specific section directly still work. (Admins only — nothing changes for other members.)
+
+---
+
+## Best-Fit Console loads reliably again
+
+The admin Best-Fit Console no longer shows an "Internal server error" when opened. The consultation queue now loads every time — showing an empty state when there are no requests yet — and opening a person's Best-Fit report works even when they haven't completed their profile yet, showing whatever signal is available instead of failing.
+
+---
+
+## Help options now live in the Support Hub
+
+The floating Help button that used to sit in the bottom-right corner of every page is gone. All of its options now live in one place — the Support Hub (your "Support" page). Open it to search the docs, ask the Personal Advisor, open a support ticket, and — on the Studio, Institutional, and Partner plans — chat with the Axal VC team, all from a single "How can we help?" panel next to your tickets.
+
+---
+
 ## Cleaner page tips — less purple, less vertical space
 
 The informational help strip that sits under each page's title is now compact and low-key — a slim inline line instead of a wide purple banner. All pages get the lighter treatment automatically, so your KPI cards and content no longer get pushed far down by a big header block. The Metrics page no longer shows the same description twice. You can still dismiss the tip and it stays gone across devices, exactly as before.
