@@ -6,7 +6,7 @@
  * JS is required for rendering.
  */
 
-export const TEMPLATE_KEYS = ['minimal', 'bold-hero', 'video-first', 'editorial', 'product-mock', 'advisor-connect', 'proof-builder', 'capital-ready-kit'] as const;
+export const TEMPLATE_KEYS = ['minimal', 'bold-hero', 'video-first', 'editorial', 'product-mock', 'advisor-connect', 'proof-builder', 'capital-ready-kit', 'capital-storyteller', 'seed-stage-spark', 'distribution-deck', 'pilot-partner-page', 'partner-hub', 'partner-pipeline-pro', 'co-founder-builder', 'co-founder-canvas', 'cofounder-connect', 'co-founder-quest', 'mentor-connect', 'mentor-connect-page', 'builders-launchpad'] as const;
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
 
 export interface TemplateMeta {
@@ -84,6 +84,113 @@ export const TEMPLATE_REGISTRY: TemplateMeta[] = [
     label: 'Capital Ready Kit',
     description: 'Dark investor brief — raise, traction, round and use of funds.',
     thumbnailPlaceholder: 'capital-ready-kit',
+    usesHero: false,
+    usesProduct: false,
+  },
+  // Task #25 — ported uploaded landing designs (batches 2+). Each is a distinct,
+  // self-contained server-rendered layout driven by the primary brand fields,
+  // with on-brand default narrative copy. No hero/product media needed.
+  {
+    key: 'capital-storyteller',
+    label: 'Capital Storyteller',
+    description: 'Dark confidential investor brief — numbered memo with stat grids.',
+    thumbnailPlaceholder: 'capital-storyteller',
+    usesHero: false,
+    usesProduct: false,
+  },
+  {
+    key: 'seed-stage-spark',
+    label: 'Seed Stage Spark',
+    description: 'High-energy dark seed teaser — grid backdrop, live metrics, pillars.',
+    thumbnailPlaceholder: 'seed-stage-spark',
+    usesHero: false,
+    usesProduct: false,
+  },
+  {
+    key: 'distribution-deck',
+    label: 'Distribution Deck',
+    description: 'Blueprint partnership memo — overlap tables, channel value, rollout.',
+    thumbnailPlaceholder: 'distribution-deck',
+    usesHero: false,
+    usesProduct: false,
+  },
+  {
+    key: 'pilot-partner-page',
+    label: 'Pilot Partner Page',
+    description: 'Swiss-grid pilot recruiter — at-a-glance stats, who/includes/process.',
+    thumbnailPlaceholder: 'pilot-partner-page',
+    usesHero: false,
+    usesProduct: false,
+  },
+  {
+    key: 'partner-hub',
+    label: 'Partner Hub',
+    description: 'Calm BD landing — teal serif, shared-fit overlap, collaboration models.',
+    thumbnailPlaceholder: 'partner-hub',
+    usesHero: false,
+    usesProduct: false,
+  },
+  {
+    key: 'partner-pipeline-pro',
+    label: 'Partner Pipeline Pro',
+    description: 'Financial-tech distribution pitch — overlap, channel economics, rollout.',
+    thumbnailPlaceholder: 'partner-pipeline-pro',
+    usesHero: false,
+    usesProduct: false,
+  },
+  {
+    key: 'co-founder-builder',
+    label: 'Co-Founder Builder',
+    description: 'Engineering-doc co-founder brief — signal-green grid, shipped vs gaps.',
+    thumbnailPlaceholder: 'co-founder-builder',
+    usesHero: false,
+    usesProduct: false,
+  },
+  {
+    key: 'co-founder-canvas',
+    label: 'Co-Founder Canvas',
+    description: 'Editorial founder letter — serif canvas, the-gap section, offer grid.',
+    thumbnailPlaceholder: 'co-founder-canvas',
+    usesHero: false,
+    usesProduct: false,
+  },
+  {
+    key: 'cofounder-connect',
+    label: 'Co-founder Connect',
+    description: 'Warm founder letter — grain hero, built rows with status, role terms.',
+    thumbnailPlaceholder: 'cofounder-connect',
+    usesHero: false,
+    usesProduct: false,
+  },
+  {
+    key: 'co-founder-quest',
+    label: 'Co-Founder Quest',
+    description: 'Mission-framed co-founder call — ideal-profile box, transparent equity.',
+    thumbnailPlaceholder: 'co-founder-quest',
+    usesHero: false,
+    usesProduct: false,
+  },
+  {
+    key: 'mentor-connect',
+    label: 'Mentor Connect',
+    description: 'Minimal mentor note — single column, where-we-need-help, low-friction ask.',
+    thumbnailPlaceholder: 'mentor-connect',
+    usesHero: false,
+    usesProduct: false,
+  },
+  {
+    key: 'mentor-connect-page',
+    label: 'Mentor Connect Page',
+    description: 'Narrative mentor letter — serif editorial with sidebar labels & timeline.',
+    thumbnailPlaceholder: 'mentor-connect-page',
+    usesHero: false,
+    usesProduct: false,
+  },
+  {
+    key: 'builders-launchpad',
+    label: "Builder's Launchpad",
+    description: 'Dark terminal launch teaser — quick facts, status badges, shell CTA.',
+    thumbnailPlaceholder: 'builders-launchpad',
     usesHero: false,
     usesProduct: false,
   },
@@ -370,6 +477,19 @@ export const TEMPLATE_SIGNATURE_PALETTES: Record<string, {
   'advisor-connect': { theme_color: '#b06a32', palette_bg: '#f6f1e7', palette_ink: '#33302a', palette_secondary: '#ddd3c0', palette_accent: '#b06a32' },
   'proof-builder': { theme_color: '#1f7a52', palette_bg: '#fbfbf9', palette_ink: '#1f2630', palette_secondary: '#e2e5e1', palette_accent: '#1f7a52' },
   'capital-ready-kit': { theme_color: '#c7e83f', palette_bg: '#1b1a16', palette_ink: '#f4f1e6', palette_secondary: '#3a382f', palette_accent: '#c7e83f' },
+  'capital-storyteller': { theme_color: '#f2a618', palette_bg: '#07090b', palette_ink: '#f2f6f8', palette_secondary: '#26292c', palette_accent: '#f2a618' },
+  'seed-stage-spark': { theme_color: '#abf051', palette_bg: '#0b0e0f', palette_ink: '#f2f6f8', palette_secondary: '#25292c', palette_accent: '#abf051' },
+  'distribution-deck': { theme_color: '#0072d5', palette_bg: '#f9f8f5', palette_ink: '#0e1218', palette_secondary: '#e9e8e2', palette_accent: '#0072d5' },
+  'pilot-partner-page': { theme_color: '#25984d', palette_bg: '#f6f5f1', palette_ink: '#1b150f', palette_secondary: '#e7e4dd', palette_accent: '#25984d' },
+  'partner-hub': { theme_color: '#429595', palette_bg: '#fbfaf6', palette_ink: '#121c23', palette_secondary: '#dad7cf', palette_accent: '#429595' },
+  'partner-pipeline-pro': { theme_color: '#ef852e', palette_bg: '#fbfaf8', palette_ink: '#15110d', palette_secondary: '#dbd7d0', palette_accent: '#ef852e' },
+  'co-founder-builder': { theme_color: '#5bbe62', palette_bg: '#fbfaf6', palette_ink: '#14171d', palette_secondary: '#dfded8', palette_accent: '#5bbe62' },
+  'co-founder-canvas': { theme_color: '#cc572a', palette_bg: '#f8f5ee', palette_ink: '#1d140d', palette_secondary: '#ede7dd', palette_accent: '#cc572a' },
+  'cofounder-connect': { theme_color: '#bf4500', palette_bg: '#fbfaf7', palette_ink: '#15110d', palette_secondary: '#cac3ba', palette_accent: '#bf4500' },
+  'co-founder-quest': { theme_color: '#ad524d', palette_bg: '#f9f8f6', palette_ink: '#0d1016', palette_secondary: '#d4d7de', palette_accent: '#ad524d' },
+  'mentor-connect': { theme_color: '#c56a3e', palette_bg: '#fbfaf8', palette_ink: '#16100c', palette_secondary: '#e2ddd7', palette_accent: '#c56a3e' },
+  'mentor-connect-page': { theme_color: '#b05139', palette_bg: '#fcfaf6', palette_ink: '#221811', palette_secondary: '#e2ddd5', palette_accent: '#b05139' },
+  'builders-launchpad': { theme_color: '#dcb400', palette_bg: '#090e11', palette_ink: '#e8ecee', palette_secondary: '#2c343a', palette_accent: '#dcb400' },
 };
 
 // ── Template: Minimal (the original layout) ──────────────────────
@@ -1167,6 +1287,1690 @@ ${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
 </html>`;
 }
 
+// ── Shared system-font stacks for the ported designs (CSP: no @import) ──
+const PORT_SERIF = `"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif`;
+const PORT_SANS = `-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif`;
+const PORT_MONO = `"SF Mono","JetBrains Mono",ui-monospace,"Cascadia Code",Menlo,Consolas,monospace`;
+
+// ── Template: Capital Storyteller (Task #25) — dark numbered investor memo ──
+function renderCapitalStoryteller(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud.investor; const brand = name || 'our company'; const btnInk = contrastText(color);
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+<style>
+  :root{color-scheme:dark;}*{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}.wrap{max-width:1120px;margin:0 auto;padding:0 32px;}
+  .mono{font-family:${PORT_MONO};font-size:11px;letter-spacing:.2em;text-transform:uppercase;}
+  nav{border-bottom:1px solid ${secondary};}
+  nav .row{display:flex;align-items:center;justify-content:space-between;padding:18px 0;}
+  .brand{display:flex;align-items:center;gap:11px;}.brand .mark{width:30px;height:30px;border-radius:7px;overflow:hidden;display:flex;}
+  .brand .mark :is(svg,img){width:100%!important;height:100%!important;border-radius:0!important;}
+  .brand b{font-family:${PORT_SERIF};font-weight:400;font-size:19px;}
+  .conf{color:${accent};}
+  .navcta{font-family:${PORT_MONO};font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;border:1px solid ${accent};color:${accent};border-radius:6px;padding:8px 14px;}
+  .hero{padding:88px 0 64px;border-bottom:1px solid ${secondary};}
+  .hero h1{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(46px,7vw,86px);line-height:1.0;letter-spacing:-.02em;margin:22px 0 22px;}
+  .hero .lede{font-size:19px;opacity:.74;max-width:62ch;margin:0 0 34px;}
+  .diamond{display:inline-block;width:7px;height:7px;background:${accent};transform:rotate(45deg);margin-right:10px;vertical-align:middle;}
+  .btn{display:inline-block;font-family:${PORT_MONO};font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;background:${color};color:${btnInk};text-decoration:none;border:0;border-radius:8px;padding:14px 24px;cursor:pointer;}
+  .btn[disabled]{opacity:.6;cursor:not-allowed;}
+  .raise{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:${secondary};border:1px solid ${secondary};margin-top:52px;}
+  .raise .cell{background:${bgColor};padding:24px 22px;}
+  .raise .k{font-family:${PORT_MONO};font-size:10px;letter-spacing:.16em;text-transform:uppercase;opacity:.5;}
+  .raise .v{font-family:${PORT_SERIF};font-size:clamp(26px,3vw,34px);margin-top:8px;color:${accent};}
+  section{padding:66px 0;border-bottom:1px solid ${secondary};}
+  .num{display:flex;align-items:center;gap:16px;margin-bottom:24px;}
+  .num span{font-family:${PORT_MONO};font-size:11px;letter-spacing:.2em;color:${accent};}
+  .num .ln{flex:1;height:1px;background:${secondary};}
+  h2{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(28px,3.6vw,44px);margin:0 0 18px;letter-spacing:-.01em;}
+  .lead{font-size:18px;opacity:.8;max-width:66ch;margin:0;}
+  .bento{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:${secondary};border:1px solid ${secondary};margin-top:8px;}
+  .bento .cell{background:${bgColor};padding:30px 26px;}
+  .bento .v{font-family:${PORT_SERIF};font-size:clamp(30px,4vw,48px);color:${accent};}
+  .bento .l{opacity:.72;font-size:15px;margin-top:8px;}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:${secondary};border:1px solid ${secondary};margin-top:8px;}
+  .two .pane{background:${bgColor};padding:30px 26px;}
+  .two h3{font-family:${PORT_SERIF};font-weight:400;font-size:20px;margin:0 0 16px;}
+  .term{display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid ${secondary};font-size:14px;}
+  .term:first-of-type{border-top:0;}.term .v{color:${accent};font-family:${PORT_MONO};}
+  .cta{padding:80px 0 88px;text-align:center;}
+  .cta h2{font-size:clamp(32px,4.4vw,52px);}
+  .cta p{opacity:.78;margin:0 auto 28px;max-width:52ch;}
+  form{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;max-width:460px;margin:0 auto;}
+  input{font-family:${PORT_MONO};flex:1 1 240px;padding:14px 16px;border:1px solid ${inkColor}33;border-radius:8px;font-size:14px;background:${inkColor}0d;color:${inkColor};outline:none;}
+  input::placeholder{color:${inkColor}66;}input:focus{border-color:${accent};box-shadow:0 0 0 3px ${accent}33;}
+  .wl-ok,.wl-err{margin-top:14px;font-size:13px;min-height:18px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
+  footer{display:flex;justify-content:space-between;padding:28px 0;font-size:11px;opacity:.5;flex-wrap:wrap;gap:8px;font-family:${PORT_MONO};letter-spacing:.08em;text-transform:uppercase;}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+  @media(max-width:820px){.raise,.bento,.two{grid-template-columns:1fr;}}
+</style></head><body>
+  <nav><div class="wrap row">
+    <div class="brand"><span class="mark">${logoMarkup}</span><b>${name}</b> <span class="mono conf">· Confidential</span></div>
+    <a class="navcta" href="#raise">${a.c}</a>
+  </div></nav>
+  <div class="wrap">
+    <header class="hero">
+      <div class="mono conf"><span class="diamond"></span>Investor brief · Series Seed</div>
+      <h1>${a.h}</h1>
+      <p class="lede">${a.b}</p>
+      <a class="btn" href="#raise">${a.c}</a>
+      <div class="raise">
+        <div class="cell"><div class="k">Raising</div><div class="v">Seed</div></div>
+        <div class="cell"><div class="k">Stage</div><div class="v">Early</div></div>
+        <div class="cell"><div class="k">Runway</div><div class="v">18 mo</div></div>
+        <div class="cell"><div class="k">Status</div><div class="v">Open</div></div>
+      </div>
+    </header>
+    <section>
+      <div class="num"><span>01 — Thesis</span><div class="ln"></div></div>
+      <h2>The story behind ${brand}</h2>
+      <p class="lead">${brand} exists because the gap between intent and outcome is still paved with manual work. We close it — and the market is finally ready to pay for that.</p>
+    </section>
+    <section>
+      <div class="num"><span>02 — Market</span><div class="ln"></div></div>
+      <h2>Why the window is open now</h2>
+      <div class="bento">
+        <div class="cell"><div class="v">Large</div><div class="l">Addressable market expanding as the workflow goes digital.</div></div>
+        <div class="cell"><div class="v">Shifting</div><div class="l">Buyer behaviour just changed in our favour.</div></div>
+        <div class="cell"><div class="v">Underserved</div><div class="l">Incumbents are slow and built for a prior era.</div></div>
+        <div class="cell"><div class="v">Timed</div><div class="l">The wedge is clear and defensible from day one.</div></div>
+      </div>
+    </section>
+    <section>
+      <div class="num"><span>03 — Traction</span><div class="ln"></div></div>
+      <h2>Signal so far</h2>
+      <div class="bento">
+        <div class="cell"><div class="v">Live</div><div class="l">In market with real, recurring usage.</div></div>
+        <div class="cell"><div class="v">Growing</div><div class="l">Pipeline compounding week over week.</div></div>
+      </div>
+    </section>
+    <section id="raise">
+      <div class="num"><span>04 — The round</span><div class="ln"></div></div>
+      <h2>Round &amp; use of funds</h2>
+      <div class="two">
+        <div class="pane"><h3>Round details</h3>
+          <div class="term"><span>Stage</span><span class="v">Seed</span></div>
+          <div class="term"><span>Instrument</span><span class="v">SAFE</span></div>
+          <div class="term"><span>Runway</span><span class="v">~18 months</span></div>
+          <div class="term"><span>Close</span><span class="v">Rolling</span></div>
+        </div>
+        <div class="pane"><h3>Use of funds</h3>
+          <div class="term"><span>Product &amp; engineering</span><span class="v">45%</span></div>
+          <div class="term"><span>Go-to-market</span><span class="v">30%</span></div>
+          <div class="term"><span>Operations</span><span class="v">15%</span></div>
+          <div class="term"><span>Reserve</span><span class="v">10%</span></div>
+        </div>
+      </div>
+    </section>
+    <div class="cta">
+      <h2>${a.c}</h2>
+      <p>Leave your email for the full data room and a 30-minute intro with the founding team.</p>
+      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+        <input id="wl-email" type="email" name="email" placeholder="you@fund.com" required />
+        <button type="submit" class="btn">${a.c}</button></form>
+      <div id="wl-msg" aria-live="polite"></div>
+    </div>
+    <footer><span>${name} · Confidential</span><span>Built with Axal VC</span></footer>
+  </div>
+${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
+</body></html>`;
+}
+
+// ── Template: Seed Stage Spark (Task #25) — dark grid-backed seed teaser ──
+function renderSeedStageSpark(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud.investor; const brand = name || 'our company'; const btnInk = contrastText(color);
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+<style>
+  :root{color-scheme:dark;}*{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}.wrap{max-width:1180px;margin:0 auto;padding:0 32px;}
+  .mono{font-family:${PORT_MONO};font-size:10px;letter-spacing:.2em;text-transform:uppercase;}
+  nav{position:sticky;top:0;z-index:5;height:56px;display:flex;align-items:center;background:${bgColor}d9;backdrop-filter:blur(8px);border-bottom:1px solid ${secondary};}
+  nav .row{display:flex;align-items:center;justify-content:space-between;width:100%;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .mark{width:26px;height:26px;border-radius:6px;overflow:hidden;display:flex;}.brand .mark :is(svg,img){width:100%!important;height:100%!important;border-radius:0!important;}
+  .brand b{font-family:${PORT_MONO};font-weight:600;font-size:14px;letter-spacing:.02em;}
+  .pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:${accent};box-shadow:0 0 0 0 ${accent};animation:pg 1.8s infinite;}
+  @keyframes pg{0%{box-shadow:0 0 0 0 ${accent}66;}70%{box-shadow:0 0 0 8px ${accent}00;}100%{box-shadow:0 0 0 0 ${accent}00;}}
+  .navcta{font-family:${PORT_MONO};font-size:11px;text-decoration:none;background:${color};color:${btnInk};border-radius:5px;padding:7px 13px;font-weight:600;}
+  .hero{position:relative;padding:96px 0 64px;border-bottom:1px solid ${secondary};overflow:hidden;}
+  .hero .grid{position:absolute;inset:0;background-image:linear-gradient(${secondary}55 1px,transparent 1px),linear-gradient(90deg,${secondary}55 1px,transparent 1px);background-size:44px 44px;-webkit-mask-image:radial-gradient(ellipse at 30% 20%,#000,transparent 75%);mask-image:radial-gradient(ellipse at 30% 20%,#000,transparent 75%);opacity:.6;}
+  .hero .in{position:relative;}
+  .badge{display:inline-flex;align-items:center;gap:9px;font-family:${PORT_MONO};font-size:11px;letter-spacing:.1em;text-transform:uppercase;border:1px solid ${secondary};border-radius:999px;padding:6px 13px;color:${accent};}
+  .hero h1{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(46px,7vw,80px);line-height:1.04;letter-spacing:-.02em;margin:24px 0 18px;}
+  .hero h1 em{font-style:italic;color:${accent};}
+  .hero .lede{font-size:18px;opacity:.76;max-width:60ch;margin:0 0 30px;}
+  .btn{display:inline-block;font-family:${PORT_MONO};font-size:12px;font-weight:600;background:${color};color:${btnInk};text-decoration:none;border:0;border-radius:7px;padding:13px 22px;cursor:pointer;}
+  .btn[disabled]{opacity:.6;cursor:not-allowed;}
+  .ghost{display:inline-block;margin-left:8px;font-family:${PORT_MONO};font-size:12px;text-decoration:none;opacity:.8;}
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:${secondary};border:1px solid ${secondary};margin-top:48px;}
+  .metrics .cell{background:${bgColor};padding:22px 20px;}
+  .metrics .v{font-family:${PORT_MONO};font-size:clamp(22px,2.6vw,30px);color:${accent};}
+  .metrics .l{font-size:11px;text-transform:uppercase;letter-spacing:.1em;opacity:.55;margin-top:6px;}
+  .logos{padding:26px 0;border-bottom:1px solid ${secondary};display:flex;align-items:center;gap:26px;flex-wrap:wrap;}
+  .logos .lbl{font-family:${PORT_MONO};font-size:10px;letter-spacing:.16em;text-transform:uppercase;opacity:.5;}
+  .logos .n{font-family:${PORT_MONO};font-size:13px;opacity:.75;}
+  section{padding:64px 0;border-bottom:1px solid ${secondary};}
+  .eyebrow{font-family:${PORT_MONO};font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:${accent};margin-bottom:12px;}
+  h2{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(28px,3.6vw,42px);margin:0 0 26px;letter-spacing:-.01em;}
+  .pillars{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+  .pill{border:1px solid ${secondary};border-radius:14px;padding:24px;background:${secondary}26;}
+  .pill .v{font-family:${PORT_MONO};font-size:30px;color:${accent};}
+  .pill h3{font-size:16px;margin:12px 0 6px;}.pill p{margin:0;opacity:.7;font-size:14px;}
+  .bars{display:flex;align-items:flex-end;gap:14px;height:160px;margin-top:10px;}
+  .bars .b{flex:1;background:${accent};border-radius:6px 6px 0 0;position:relative;opacity:.85;}
+  .bars .b span{position:absolute;bottom:-22px;left:0;right:0;text-align:center;font-family:${PORT_MONO};font-size:10px;opacity:.6;}
+  .cta{padding:84px 0;text-align:center;}
+  .cta h2{font-size:clamp(32px,4.4vw,52px);}
+  .cta p{opacity:.76;margin:0 auto 26px;max-width:50ch;}
+  form{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;max-width:460px;margin:0 auto;}
+  input{font-family:${PORT_MONO};flex:1 1 240px;padding:14px 16px;border:1px solid ${inkColor}33;border-radius:7px;font-size:14px;background:${inkColor}0d;color:${inkColor};outline:none;}
+  input::placeholder{color:${inkColor}66;}input:focus{border-color:${accent};box-shadow:0 0 0 3px ${accent}33;}
+  .wl-ok,.wl-err{margin-top:14px;font-size:13px;min-height:18px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
+  footer{display:flex;justify-content:space-between;padding:26px 0;font-size:11px;opacity:.5;flex-wrap:wrap;gap:8px;font-family:${PORT_MONO};}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+  @media(max-width:820px){.metrics,.pillars{grid-template-columns:1fr 1fr;}}
+</style></head><body>
+  <nav><div class="wrap row">
+    <div class="brand"><span class="mark">${logoMarkup}</span><b>${name}</b></div>
+    <a class="navcta" href="#raise">${a.c}</a>
+  </div></nav>
+  <div class="wrap">
+    <header class="hero"><div class="grid"></div><div class="in">
+      <span class="badge"><span class="pulse"></span> Round open · Seed</span>
+      <h1>${a.h}</h1>
+      <p class="lede">${a.b}</p>
+      <a class="btn" href="#raise">${a.c}</a><a class="ghost" href="#traction">See traction ↓</a>
+      <div class="metrics">
+        <div class="cell"><div class="v">Live</div><div class="l">In market</div></div>
+        <div class="cell"><div class="v">Weekly</div><div class="l">Active use</div></div>
+        <div class="cell"><div class="v">Growing</div><div class="l">Pipeline</div></div>
+        <div class="cell"><div class="v">Lean</div><div class="l">Burn</div></div>
+      </div>
+    </div></header>
+    <div class="logos"><span class="lbl">Built for teams like</span><span class="n">Operators</span><span class="n">Builders</span><span class="n">Early adopters</span><span class="n">Design partners</span></div>
+    <section>
+      <div class="eyebrow">01 / Product</div><h2>What makes ${brand} spark</h2>
+      <div class="pillars">
+        <div class="pill"><div class="v">1</div><h3>One sharp wedge</h3><p>We own the moment of highest pain and expand from there.</p></div>
+        <div class="pill"><div class="v">2</div><h3>Built to compound</h3><p>Every user makes the product more useful for the next.</p></div>
+        <div class="pill"><div class="v">3</div><h3>Defensible by design</h3><p>Data and workflow lock-in deepen with usage.</p></div>
+      </div>
+    </section>
+    <section id="traction">
+      <div class="eyebrow">02 / Traction</div><h2>Momentum is building</h2>
+      <div class="bars">
+        <div class="b" style="height:34%"><span>Q1</span></div>
+        <div class="b" style="height:52%"><span>Q2</span></div>
+        <div class="b" style="height:71%"><span>Q3</span></div>
+        <div class="b" style="height:100%"><span>Q4</span></div>
+      </div>
+    </section>
+    <div class="cta" id="raise">
+      <h2>${a.c}</h2>
+      <p>We're sharing the deck and metrics with a small group of seed investors. Add your email.</p>
+      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+        <input id="wl-email" type="email" name="email" placeholder="you@fund.com" required />
+        <button type="submit" class="btn">${a.c}</button></form>
+      <div id="wl-msg" aria-live="polite"></div>
+    </div>
+    <footer><span>${name}</span><span>Built with Axal VC</span></footer>
+  </div>
+${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
+</body></html>`;
+}
+
+// ── Template: Distribution Deck (Task #25) — light blueprint partnership memo ──
+function renderDistributionDeck(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud.investor; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const ctaInk = contrastText(inkColor);
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}.wrap{max-width:1120px;margin:0 auto;padding:0 32px;}
+  .mono{font-family:${PORT_MONO};font-size:10px;letter-spacing:.16em;text-transform:uppercase;}
+  nav{position:sticky;top:0;z-index:5;background:${bgColor}e6;backdrop-filter:blur(8px);border-bottom:1px solid ${secondary};}
+  nav .row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .mark{width:24px;height:24px;border-radius:5px;background:${accent};display:flex;align-items:center;justify-content:center;color:${contrastText(accent)};font-weight:800;font-size:13px;}
+  .brand b{font-weight:700;font-size:15px;}.brand .tag{font-family:${PORT_MONO};font-size:10px;opacity:.55;letter-spacing:.12em;}
+  .navcta{font-size:13px;text-decoration:none;background:${color};color:${btnInk};border-radius:6px;padding:8px 14px;font-weight:600;}
+  .strip{border-bottom:1px solid ${secondary};background:${secondary}55;}
+  .strip .row{padding:9px 0;font-family:${PORT_MONO};font-size:10px;letter-spacing:.1em;text-transform:uppercase;opacity:.6;}
+  .eyebrow{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
+  .eyebrow .n{font-family:${PORT_MONO};font-size:11px;color:${accent};letter-spacing:.12em;}
+  .eyebrow .ln{width:48px;height:1px;background:${secondary};}
+  .eyebrow .t{font-family:${PORT_MONO};font-size:10px;letter-spacing:.16em;text-transform:uppercase;opacity:.55;}
+  .hero{padding:64px 0;border-bottom:1px solid ${secondary};display:grid;grid-template-columns:1.6fr 1fr;gap:48px;align-items:start;}
+  .hero h1{font-size:clamp(36px,5vw,58px);line-height:1.05;letter-spacing:-.025em;margin:0 0 18px;font-weight:700;}
+  .hero h1 .hl{color:${accent};}
+  .hero p{font-size:17px;opacity:.78;margin:0 0 24px;}
+  .btn{display:inline-block;font-size:13px;font-weight:600;background:${color};color:${btnInk};text-decoration:none;border:0;border-radius:7px;padding:12px 20px;cursor:pointer;}
+  .btn[disabled]{opacity:.6;cursor:not-allowed;}
+  .side{border:1px solid ${secondary};border-radius:10px;padding:6px 18px;}
+  .side .r{display:flex;justify-content:space-between;gap:12px;padding:14px 0;border-top:1px solid ${secondary};font-size:13px;}
+  .side .r:first-child{border-top:0;}.side .r .v{font-family:${PORT_MONO};color:${accent};}
+  section{padding:60px 0;border-bottom:1px solid ${secondary};}
+  h2{font-size:clamp(24px,3vw,34px);margin:0 0 8px;letter-spacing:-.01em;font-weight:700;}
+  .lead{font-size:16px;opacity:.76;max-width:62ch;margin:0 0 28px;}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th,td{text-align:left;padding:13px 12px;border-bottom:1px solid ${secondary};}
+  th{font-family:${PORT_MONO};font-size:10px;letter-spacing:.1em;text-transform:uppercase;opacity:.55;}
+  td .track{height:7px;border-radius:99px;background:${secondary};overflow:hidden;margin-top:6px;}
+  td .fill{height:100%;background:${accent};}
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:${secondary};border:1px solid ${secondary};}
+  .cards .c{background:${bgColor};padding:22px 18px;}
+  .cards .v{font-family:${PORT_MONO};font-size:clamp(22px,2.6vw,30px);color:${accent};}
+  .cards .l{font-size:13px;opacity:.7;margin-top:6px;}
+  .opts{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:${secondary};border:1px solid ${secondary};}
+  .opts .o{background:${bgColor};padding:24px 20px;}
+  .opts .o h3{margin:0 0 6px;font-size:17px;}.opts .o p{margin:0 0 14px;opacity:.72;font-size:14px;}
+  .opts .meta{font-family:${PORT_MONO};font-size:11px;border-top:1px solid ${secondary};padding-top:12px;display:flex;justify-content:space-between;opacity:.7;}
+  .ctaSec{background:${inkColor};color:${ctaInk};border:0;}
+  .ctaSec .two{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center;}
+  .ctaSec h2{color:${ctaInk};}
+  .ctaSec p{opacity:.82;font-size:15px;}
+  form{display:flex;flex-direction:column;gap:10px;max-width:380px;}
+  input{font-size:14px;padding:13px 14px;border:0;border-bottom:1px solid ${ctaInk}4d;background:transparent;color:${ctaInk};outline:none;}
+  input::placeholder{color:${ctaInk}80;}input:focus{border-color:${accent};}
+  .ctaSec .btn{align-self:flex-start;}
+  .wl-ok,.wl-err{font-size:13px;min-height:18px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
+  footer{display:flex;justify-content:space-between;padding:24px 0;font-size:11px;opacity:.55;font-family:${PORT_MONO};flex-wrap:wrap;gap:8px;}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+  @media(max-width:840px){.hero,.ctaSec .two{grid-template-columns:1fr;}.cards{grid-template-columns:1fr 1fr;}.opts{grid-template-columns:1fr;}}
+</style></head><body>
+  <nav><div class="wrap row">
+    <div class="brand"><span class="mark">${(name||'A').slice(0,1).toUpperCase()}</span><b>${name}</b><span class="tag">Distribution brief</span></div>
+    <a class="navcta" href="#next">${a.c}</a>
+  </div></nav>
+  <div class="strip"><div class="wrap row">Read-me · A partnership memo — edit the bracketed figures with your real numbers before sending.</div></div>
+  <div class="wrap">
+    <header class="hero">
+      <div>
+        <div class="eyebrow"><span class="n">01</span><span class="ln"></span><span class="t">Hero</span></div>
+        <h1>A distribution case for <span class="hl">${brand}</span>, written for partners.</h1>
+        <p>${a.b}</p>
+        <a class="btn" href="#next">${a.c}</a>
+      </div>
+      <div class="side">
+        <div class="r"><span>Partner type</span><span class="v">Platform</span></div>
+        <div class="r"><span>Addressable overlap</span><span class="v">High</span></div>
+        <div class="r"><span>Revenue model</span><span class="v">Rev-share</span></div>
+        <div class="r"><span>Time to value</span><span class="v">Weeks</span></div>
+      </div>
+    </header>
+    <section>
+      <div class="eyebrow"><span class="n">02</span><span class="ln"></span><span class="t">Overlap</span></div>
+      <h2>Where our customers already meet</h2>
+      <p class="lead">The fastest distribution is the customer you both already serve. Here's the shape of the overlap.</p>
+      <table>
+        <tr><th>Segment</th><th>Shared base</th><th>Overlap</th></tr>
+        <tr><td>Enterprise</td><td>Strong</td><td><div class="track"><div class="fill" style="width:72%"></div></div></td></tr>
+        <tr><td>Mid-market</td><td>Core</td><td><div class="track"><div class="fill" style="width:58%"></div></div></td></tr>
+        <tr><td>SMB</td><td>Emerging</td><td><div class="track"><div class="fill" style="width:34%"></div></div></td></tr>
+      </table>
+    </section>
+    <section>
+      <div class="eyebrow"><span class="n">03</span><span class="ln"></span><span class="t">Channel value</span></div>
+      <h2>The unit economics of the channel</h2>
+      <div class="cards">
+        <div class="c"><div class="v">+ARPU</div><div class="l">Lift per shared account</div></div>
+        <div class="c"><div class="v">Lower</div><div class="l">Blended CAC</div></div>
+        <div class="c"><div class="v">Higher</div><div class="l">Retention together</div></div>
+        <div class="c"><div class="v">Faster</div><div class="l">Time to revenue</div></div>
+      </div>
+    </section>
+    <section>
+      <div class="eyebrow"><span class="n">04</span><span class="ln"></span><span class="t">Rollout</span></div>
+      <h2>Three ways to integrate</h2>
+      <div class="opts">
+        <div class="o"><h3>Referral handoff</h3><p>Lightest lift — a clean handoff between teams.</p><div class="meta"><span>Eng lift: low</span><span>2–4 wks</span></div></div>
+        <div class="o"><h3>Embedded surface</h3><p>The default — ${brand} lives inside your product.</p><div class="meta"><span>Eng lift: med</span><span>6–8 wks</span></div></div>
+        <div class="o"><h3>Native rebuild</h3><p>Deepest — fully co-built and co-branded.</p><div class="meta"><span>Eng lift: high</span><span>12+ wks</span></div></div>
+      </div>
+    </section>
+    <section class="ctaSec" id="next"><div class="wrap two" style="padding:0;max-width:none;">
+      <div><h2>${a.c}</h2><p>Send your overlap assumptions and we'll come back with a modelled channel plan — no slideware.</p></div>
+      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+        <input id="wl-email" type="email" name="email" placeholder="you@partner.com" required />
+        <button type="submit" class="btn">${a.c}</button>
+        <div id="wl-msg" aria-live="polite"></div>
+      </form>
+    </div></section>
+    <footer><span>${name} · Distribution brief</span><span>Built with Axal VC</span></footer>
+  </div>
+${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
+</body></html>`;
+}
+
+// ── Template: Pilot Partner Page (Task #25) — Swiss 12-col pilot recruiter ──
+function renderPilotPartnerPage(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud.partner; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const ctaInk = contrastText(inkColor);
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}.wrap{max-width:1080px;margin:0 auto;padding:0 32px;}
+  .label{font-family:${PORT_MONO};font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:${accent};}
+  .muted{opacity:.6;}
+  nav{border-bottom:1px solid ${secondary};}
+  nav .row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;}
+  .brand{display:flex;align-items:center;gap:9px;}
+  .brand b{font-family:${PORT_SERIF};font-weight:400;font-size:20px;}
+  .brand .vc{font-family:${PORT_MONO};font-size:10px;letter-spacing:.14em;opacity:.55;}
+  .navcta{font-size:13px;text-decoration:none;background:${color};color:${btnInk};border-radius:999px;padding:8px 16px;font-weight:600;}
+  hr{border:0;border-top:1px solid ${secondary};margin:0;}
+  .sec{display:grid;grid-template-columns:4fr 8fr;gap:40px;padding:56px 0;}
+  .sec .head .t{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(24px,3vw,34px);margin:10px 0 0;letter-spacing:-.01em;}
+  .hero .h1{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(40px,6vw,72px);line-height:1.02;letter-spacing:-.02em;margin:14px 0 18px;}
+  .hero p{font-size:18px;opacity:.78;margin:0 0 26px;max-width:54ch;}
+  .btn{display:inline-block;font-size:13px;font-weight:600;background:${color};color:${btnInk};text-decoration:none;border:0;border-radius:999px;padding:13px 24px;cursor:pointer;}
+  .btn[disabled]{opacity:.6;cursor:not-allowed;}
+  .glance{border:1px solid ${secondary};border-radius:12px;padding:6px 20px;}
+  .glance .r{display:flex;justify-content:space-between;gap:12px;padding:14px 0;border-top:1px dashed ${secondary};font-size:14px;}
+  .glance .r:first-child{border-top:0;}.glance .r .v{font-family:${PORT_MONO};color:${accent};}
+  .who{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .who .c{border:1px solid ${secondary};border-radius:10px;padding:20px;background:${secondary}33;}
+  .who .c h3{font-family:${PORT_SERIF};font-weight:400;font-size:18px;margin:0 0 6px;}.who .c p{margin:0;font-size:14px;opacity:.72;}
+  .incl{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:${secondary};border:1px solid ${secondary};border-radius:10px;overflow:hidden;}
+  .incl .c{background:${bgColor};padding:22px 20px;}
+  .incl .n{font-family:${PORT_MONO};font-size:11px;color:${accent};}
+  .incl h3{font-size:16px;margin:8px 0 6px;}.incl p{margin:0;font-size:14px;opacity:.72;}
+  .steps{display:flex;gap:0;flex-wrap:wrap;}
+  .steps .s{flex:1;min-width:120px;border-left:1px solid ${secondary};padding:0 16px;}
+  .steps .s:first-child{border-left:0;padding-left:0;}
+  .steps .k{font-family:${PORT_MONO};font-size:11px;color:${accent};}
+  .steps .v{font-size:14px;margin-top:6px;}
+  .ctaSec{background:${inkColor};color:${ctaInk};padding:64px 0;}
+  .ctaSec .in{display:grid;grid-template-columns:4fr 8fr;gap:40px;align-items:center;}
+  .ctaSec h2{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(28px,4vw,44px);margin:0;color:${ctaInk};}
+  .ctaSec p{opacity:.82;margin:0 0 20px;}
+  form{display:flex;gap:10px;flex-wrap:wrap;max-width:440px;}
+  input{flex:1 1 220px;font-size:14px;padding:13px 15px;border:1px solid ${ctaInk}40;border-radius:999px;background:transparent;color:${ctaInk};outline:none;}
+  input::placeholder{color:${ctaInk}80;}input:focus{border-color:${accent};}
+  .wl-ok,.wl-err{font-size:13px;min-height:18px;margin-top:10px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
+  footer{display:flex;justify-content:space-between;padding:22px 0;font-size:11px;opacity:.55;font-family:${PORT_MONO};flex-wrap:wrap;gap:8px;}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+  @media(max-width:820px){.sec,.ctaSec .in{grid-template-columns:1fr;}.who{grid-template-columns:1fr;}.incl{grid-template-columns:1fr;}}
+</style></head><body>
+  <nav><div class="wrap row">
+    <div class="brand"><b>${name}</b><span class="vc">/ pilot</span></div>
+    <a class="navcta" href="#apply">${a.c}</a>
+  </div></nav>
+  <div class="wrap">
+    <header class="sec hero">
+      <div class="head"><div class="label">Pilot cohort · rolling intake</div></div>
+      <div>
+        <div class="h1">${a.h}</div>
+        <p>${a.b}</p>
+        <a class="btn" href="#apply">${a.c}</a>
+        <div class="label muted" style="margin-top:16px;">Next kickoff — within 2 weeks of fit call</div>
+      </div>
+    </header>
+    <hr/>
+    <section class="sec">
+      <div class="head"><div class="label">At a glance</div><div class="t">The shape of the pilot</div></div>
+      <div class="glance">
+        <div class="r"><span>Commitment</span><span class="v">~2 hrs / week</span></div>
+        <div class="r"><span>Length</span><span class="v">6 weeks</span></div>
+        <div class="r"><span>Cost</span><span class="v">No fee</span></div>
+        <div class="r"><span>Output</span><span class="v">Joint findings memo</span></div>
+      </div>
+    </section>
+    <hr/>
+    <section class="sec">
+      <div class="head"><div class="label">01 — Who it's for</div><div class="t">A good pilot partner</div></div>
+      <div class="who">
+        <div class="c"><h3>Has the pain</h3><p>Lives the problem ${brand} solves, today.</p></div>
+        <div class="c"><h3>Can decide</h3><p>One owner who can say yes within the team.</p></div>
+        <div class="c"><h3>Will engage</h3><p>Shows up weekly and tells us the truth.</p></div>
+      </div>
+    </section>
+    <hr/>
+    <section class="sec">
+      <div class="head"><div class="label">02 — What it includes</div><div class="t">What you get</div></div>
+      <div class="incl">
+        <div class="c"><div class="n">01</div><h3>Hands-on setup</h3><p>We configure ${brand} around your real workflow.</p></div>
+        <div class="c"><div class="n">02</div><h3>Weekly sessions</h3><p>Direct line to the founders, every week.</p></div>
+        <div class="c"><div class="n">03</div><h3>Priority shaping</h3><p>Your feedback steers what we build next.</p></div>
+        <div class="c"><div class="n">04</div><h3>Closing memo</h3><p>A written read-out you can act on.</p></div>
+      </div>
+    </section>
+    <hr/>
+    <section class="sec">
+      <div class="head"><div class="label">03 — Process</div><div class="t">From hello to results</div></div>
+      <div class="steps">
+        <div class="s"><div class="k">Day 0</div><div class="v">Fit call</div></div>
+        <div class="s"><div class="k">Wk 1</div><div class="v">Setup</div></div>
+        <div class="s"><div class="k">Wk 2–5</div><div class="v">Run &amp; learn</div></div>
+        <div class="s"><div class="k">Wk 6</div><div class="v">Memo &amp; next steps</div></div>
+      </div>
+    </section>
+  </div>
+  <section class="ctaSec" id="apply"><div class="wrap in">
+    <h2>${a.c}</h2>
+    <div><p>Tell us where it hurts. If there's a fit, we'll set up a 30-minute call this week.</p>
+      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+        <input id="wl-email" type="email" name="email" placeholder="you@company.com" required />
+        <button type="submit" class="btn">${a.c}</button></form>
+      <div id="wl-msg" aria-live="polite"></div>
+    </div>
+  </div></section>
+  <div class="wrap"><footer><span>${name} · Pilot</span><span>Built with Axal VC</span></footer></div>
+${singleWaitlistScript(bk.apiWaitlist, 'partner', bk.nonce)}
+</body></html>`;
+}
+
+// ── Template: Partner Hub (Task #25) — calm teal BD landing ──
+function renderPartnerHub(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud.partner; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const ctaInk = contrastText(inkColor);
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.65;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}.wrap{max-width:1100px;margin:0 auto;padding:0 32px;}
+  .eyebrow{display:inline-flex;align-items:center;gap:12px;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:${accent};font-weight:600;}
+  .eyebrow::before{content:"";width:24px;height:1px;background:${accent};}
+  nav{position:sticky;top:0;z-index:5;height:64px;display:flex;align-items:center;background:${bgColor}cc;backdrop-filter:blur(8px);border-bottom:1px solid ${secondary};}
+  nav .row{display:flex;align-items:center;justify-content:space-between;width:100%;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .mark{width:28px;height:28px;border-radius:7px;background:${inkColor};display:flex;align-items:center;justify-content:center;color:${ctaInk};font-weight:800;font-size:14px;}
+  .brand b{font-family:${PORT_SERIF};font-weight:400;font-size:20px;}
+  .navcta{font-size:13px;text-decoration:none;background:${color};color:${btnInk};border-radius:8px;padding:9px 16px;font-weight:600;}
+  .hero{padding:84px 0 60px;background:linear-gradient(180deg,${accent}14,transparent);}
+  .hero h1{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(42px,6.2vw,74px);line-height:1.04;letter-spacing:-.02em;margin:18px 0 18px;}
+  .hero p{font-size:19px;opacity:.78;max-width:60ch;margin:0 0 28px;}
+  .btn{display:inline-block;font-size:14px;font-weight:600;background:${color};color:${btnInk};text-decoration:none;border:0;border-radius:9px;padding:13px 22px;cursor:pointer;}
+  .btn[disabled]{opacity:.6;cursor:not-allowed;}
+  .ghost{display:inline-block;margin-left:8px;font-size:14px;text-decoration:none;border:1px solid ${secondary};border-radius:9px;padding:12px 20px;}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;border-top:1px solid ${secondary};margin-top:48px;padding-top:28px;}
+  .stats .v{font-family:${PORT_SERIF};font-size:clamp(26px,3vw,38px);color:${accent};}
+  .stats .l{font-size:11px;text-transform:uppercase;letter-spacing:.1em;opacity:.6;margin-top:4px;}
+  section{padding:60px 0;border-top:1px solid ${secondary};}
+  h2{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(26px,3.4vw,40px);margin:14px 0 0;letter-spacing:-.01em;}
+  .split{display:grid;grid-template-columns:1fr 2fr;gap:40px;align-items:start;}
+  .split p{opacity:.76;font-size:16px;margin:14px 0 0;}
+  .why{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:${secondary};border:1px solid ${secondary};border-radius:14px;overflow:hidden;}
+  .why .c{background:${bgColor};padding:26px 22px;}
+  .why .n{font-family:${PORT_MONO};font-size:12px;color:${accent};}
+  .why h3{font-family:${PORT_SERIF};font-weight:400;font-size:19px;margin:10px 0 6px;}.why p{margin:0;opacity:.74;font-size:14px;}
+  .models{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+  .model{border:1px solid ${secondary};border-radius:14px;padding:24px;box-shadow:0 10px 30px ${inkColor}0d;}
+  .model .tag{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:${accent};font-weight:700;}
+  .model h3{font-family:${PORT_SERIF};font-weight:400;font-size:20px;margin:10px 0 12px;}
+  .model ul{margin:0;padding-left:18px;font-size:14px;opacity:.78;}.model li{margin-bottom:6px;}
+  .quote{border:1px solid ${secondary};border-radius:16px;padding:30px;background:${secondary}33;}
+  .quote p{font-family:${PORT_SERIF};font-size:clamp(20px,2.4vw,26px);margin:0 0 14px;line-height:1.35;}
+  .quote .who{font-size:13px;opacity:.6;}
+  .ctaSec{background:${inkColor};color:${ctaInk};}
+  .ctaSec .in{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:start;padding:64px 0;}
+  .ctaSec h2{color:${ctaInk};margin:0 0 14px;}.ctaSec p{opacity:.82;}
+  .ctaSec ul{padding-left:18px;opacity:.82;font-size:14px;}
+  .card{background:${bgColor};color:${inkColor};border-radius:14px;padding:26px;}
+  form{display:flex;flex-direction:column;gap:12px;}
+  input,textarea{font-family:inherit;font-size:14px;padding:12px 14px;border:1px solid ${secondary};border-radius:9px;background:${bgColor};color:${inkColor};outline:none;}
+  input:focus,textarea:focus{border-color:${accent};box-shadow:0 0 0 3px ${accent}26;}
+  .card .btn{align-self:flex-start;}
+  .wl-ok,.wl-err{font-size:13px;min-height:18px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
+  footer{display:flex;justify-content:space-between;padding:24px 0;font-size:12px;opacity:.55;flex-wrap:wrap;gap:8px;}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+  @media(max-width:840px){.stats,.why,.models{grid-template-columns:1fr;}.split,.ctaSec .in{grid-template-columns:1fr;}}
+</style></head><body>
+  <nav><div class="wrap row">
+    <div class="brand"><span class="mark">${(name||'A').slice(0,1).toUpperCase()}</span><b>${name}</b></div>
+    <a class="navcta" href="#partner">${a.c} →</a>
+  </div></nav>
+  <header class="hero"><div class="wrap">
+    <div class="eyebrow">Partnerships</div>
+    <h1>${a.h}</h1>
+    <p>${a.b}</p>
+    <a class="btn" href="#partner">${a.c}</a><a class="ghost" href="#models">See models</a>
+    <div class="stats">
+      <div><div class="v">Pilot</div><div class="l">90-day model</div></div>
+      <div><div class="v">Named</div><div class="l">Owners both sides</div></div>
+      <div><div class="v">Shared</div><div class="l">Success criteria</div></div>
+      <div><div class="v">On date</div><div class="l">We ship</div></div>
+    </div>
+  </div></header>
+  <div class="wrap">
+    <section><div class="split">
+      <div><div class="eyebrow">Why partner</div><h2>Serious collaboration, not logos</h2></div>
+      <div class="why">
+        <div class="c"><div class="n">01</div><h3>Shared accountability</h3><p>Named owners on both sides, and a plan we both sign.</p></div>
+        <div class="c"><div class="n">02</div><h3>Productized surfaces</h3><p>Real integration points, not a one-off favour.</p></div>
+        <div class="c"><div class="n">03</div><h3>We ship on date</h3><p>A 90-day pilot with criteria agreed up front.</p></div>
+      </div>
+    </div></section>
+    <section><div class="split">
+      <div><div class="eyebrow">Shared fit</div><h2>The same customer wins twice</h2></div>
+      <p>We start where our ideal customers already overlap — so the pilot proves value fast and the economics are obvious to both teams.</p>
+    </div></section>
+    <section id="models"><div class="eyebrow">Models</div><h2 style="margin-bottom:24px;">Three ways to work together</h2>
+      <div class="models">
+        <div class="model"><div class="tag">Commercial</div><h3>Co-sell</h3><ul><li>Joint pipeline</li><li>Shared targets</li><li>Rev-share</li></ul></div>
+        <div class="model"><div class="tag">Technical</div><h3>Integrate</h3><ul><li>Embedded surface</li><li>Shared data model</li><li>Co-built roadmap</li></ul></div>
+        <div class="model"><div class="tag">Distribution</div><h3>Channel</h3><ul><li>Bundled offer</li><li>Referral motion</li><li>Co-marketing</li></ul></div>
+      </div>
+    </section>
+    <section><div class="split">
+      <div><div class="eyebrow">Traction</div><h2>What partners say</h2></div>
+      <div class="quote"><p>"The pilot paid for itself before it ended — and our customers noticed."</p><div class="who">Head of Partnerships</div></div>
+    </div></section>
+  </div>
+  <section class="ctaSec" id="partner"><div class="wrap in">
+    <div><h2>${a.c}</h2><p>Tell us about your customers and we'll come back with a concrete partnership shape.</p>
+      <ul><li>Who your customers are</li><li>The overlap you see</li><li>What a win looks like</li></ul>
+    </div>
+    <div class="card"><form id="wl-form">
+      <label for="wl-email" class="sr">Email</label>
+      <input id="wl-email" type="email" name="email" placeholder="you@partner.com" required />
+      <button type="submit" class="btn">${a.c}</button>
+    </form><div id="wl-msg" aria-live="polite"></div></div>
+  </div></section>
+  <div class="wrap"><footer><span>${name}</span><span>Built with Axal VC</span></footer></div>
+${singleWaitlistScript(bk.apiWaitlist, 'partner', bk.nonce)}
+</body></html>`;
+}
+
+// ── Template: Partner Pipeline Pro (Task #25) — financial-tech distribution pitch ──
+function renderPartnerPipelinePro(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud.partner; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const ctaInk = contrastText(inkColor);
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}.wrap{max-width:1100px;margin:0 auto;padding:0 32px;}
+  .slabel{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
+  .slabel .n{font-family:${PORT_MONO};font-size:11px;color:${accent};letter-spacing:.1em;}
+  .slabel .ln{width:40px;height:1px;background:${secondary};}
+  .slabel .t{font-family:${PORT_MONO};font-size:10px;letter-spacing:.16em;text-transform:uppercase;opacity:.55;}
+  nav{position:sticky;top:0;z-index:5;background:${bgColor}e6;backdrop-filter:blur(8px);border-bottom:1px solid ${secondary};}
+  nav .row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .mark{width:26px;height:26px;border-radius:6px;background:${inkColor};color:${ctaInk};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;}
+  .brand b{font-weight:700;font-size:15px;}.brand .tag{font-size:12px;opacity:.55;}
+  .navcta{font-size:13px;text-decoration:none;background:${color};color:${btnInk};border-radius:7px;padding:8px 15px;font-weight:600;}
+  .hero{padding:66px 0;border-bottom:1px solid ${secondary};display:grid;grid-template-columns:2fr 1fr;gap:44px;align-items:start;}
+  .hero h1{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(40px,5.6vw,68px);line-height:1.02;letter-spacing:-.02em;margin:0 0 18px;}
+  .hero h1 em{font-style:italic;color:${accent};}
+  .hero p{font-size:17px;opacity:.78;margin:0 0 24px;}
+  .btn{display:inline-block;font-size:13px;font-weight:600;background:${color};color:${btnInk};text-decoration:none;border:0;border-radius:7px;padding:12px 22px;cursor:pointer;}
+  .btn[disabled]{opacity:.6;cursor:not-allowed;}
+  .glance{border:1px solid ${secondary};border-radius:10px;padding:6px 18px;}
+  .glance .r{display:flex;justify-content:space-between;gap:12px;padding:13px 0;border-top:1px solid ${secondary};font-size:13px;}
+  .glance .r:first-child{border-top:0;}.glance .r .v{font-family:${PORT_MONO};color:${accent};}
+  section{padding:58px 0;border-bottom:1px solid ${secondary};}
+  h2{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(26px,3.2vw,40px);margin:0 0 8px;letter-spacing:-.01em;}
+  .lead{font-size:16px;opacity:.76;max-width:62ch;margin:0 0 26px;}
+  .nums{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:${secondary};border:1px solid ${secondary};border-radius:10px;overflow:hidden;}
+  .nums .c{background:${bgColor};padding:22px 18px;}
+  .nums .v{font-family:${PORT_SERIF};font-style:italic;font-size:clamp(26px,3vw,38px);color:${accent};}
+  .nums .l{font-size:12px;opacity:.7;margin-top:6px;}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th,td{text-align:left;padding:13px 12px;border-bottom:1px dashed ${secondary};}
+  th{font-family:${PORT_MONO};font-size:10px;letter-spacing:.1em;text-transform:uppercase;opacity:.55;}
+  td.delta{color:${accent};font-family:${PORT_MONO};}
+  .opts{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .opt{border:1px solid ${secondary};border-radius:12px;padding:22px;}
+  .opt.hl{border-color:${accent};box-shadow:0 0 0 1px ${accent};background:${accent}0d;}
+  .opt h3{margin:0 0 6px;font-size:17px;}.opt p{margin:0;opacity:.72;font-size:14px;}
+  .opt .pin{font-family:${PORT_MONO};font-size:10px;color:${accent};letter-spacing:.12em;text-transform:uppercase;}
+  .timeline{display:flex;gap:0;flex-wrap:wrap;margin-top:24px;}
+  .timeline .s{flex:1;min-width:110px;border-left:1px solid ${secondary};padding:0 14px;}
+  .timeline .s:first-child{border-left:0;padding-left:0;}
+  .timeline .k{font-family:${PORT_MONO};font-size:11px;color:${accent};}.timeline .v{font-size:14px;margin-top:6px;}
+  .quote{border-left:3px solid ${accent};padding-left:20px;}
+  .quote p{font-family:${PORT_SERIF};font-size:clamp(20px,2.4vw,26px);margin:0 0 10px;}.quote .w{font-size:13px;opacity:.6;}
+  .ctaBox{border:1px dashed ${secondary};border-radius:14px;padding:30px;margin-top:8px;}
+  .ctaBox h2{margin-bottom:8px;}
+  form{display:flex;gap:10px;flex-wrap:wrap;max-width:460px;margin-top:8px;}
+  input{flex:1 1 240px;font-size:14px;padding:13px 15px;border:1px solid ${secondary};border-radius:8px;background:${bgColor};color:${inkColor};outline:none;}
+  input:focus{border-color:${accent};box-shadow:0 0 0 3px ${accent}26;}
+  .wl-ok,.wl-err{font-size:13px;min-height:18px;margin-top:10px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
+  footer{display:flex;justify-content:space-between;padding:22px 0;font-size:11px;opacity:.55;font-family:${PORT_MONO};flex-wrap:wrap;gap:8px;}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+  @media(max-width:840px){.hero{grid-template-columns:1fr;}.nums,.opts{grid-template-columns:1fr;}}
+</style></head><body>
+  <nav><div class="wrap row">
+    <div class="brand"><span class="mark">${(name||'A').slice(0,1).toUpperCase()}</span><b>${name}</b><span class="tag">Distribution brief</span></div>
+    <a class="navcta" href="#fit">${a.c} →</a>
+  </div></nav>
+  <div class="wrap">
+    <header class="hero">
+      <div>
+        <h1>The <em>${brand}</em> distribution case, modelled — not asserted.</h1>
+        <p>${a.b}</p>
+        <a class="btn" href="#fit">${a.c}</a>
+      </div>
+      <div class="glance">
+        <div class="r"><span>Partner type</span><span class="v">Platform</span></div>
+        <div class="r"><span>Addressable overlap</span><span class="v">High</span></div>
+        <div class="r"><span>ARPU lift</span><span class="v">Net new</span></div>
+        <div class="r"><span>Revenue timing</span><span class="v">Quarter one</span></div>
+      </div>
+    </header>
+    <section>
+      <div class="slabel"><span class="n">01</span><span class="ln"></span><span class="t">Customer overlap</span></div>
+      <h2>The same customers, twice the value</h2>
+      <p class="lead">We don't have to convince you the market exists — you already serve it. Here's the overlap.</p>
+      <div class="nums">
+        <div class="c"><div class="v">61%</div><div class="l">Shared ICP</div></div>
+        <div class="c"><div class="v">High</div><div class="l">Geographic fit</div></div>
+        <div class="c"><div class="v">Strong</div><div class="l">Income match</div></div>
+        <div class="c"><div class="v">Aligned</div><div class="l">Buying preference</div></div>
+      </div>
+    </section>
+    <section>
+      <div class="slabel"><span class="n">02</span><span class="ln"></span><span class="t">Channel value</span></div>
+      <h2>What changes with ${brand}</h2>
+      <table>
+        <tr><th>Lever</th><th>Baseline</th><th>With ${brand}</th><th>Delta</th></tr>
+        <tr><td>ARPU</td><td>Flat</td><td>Higher</td><td class="delta">+lift</td></tr>
+        <tr><td>Retention</td><td>Standard</td><td>Stickier</td><td class="delta">+pts</td></tr>
+        <tr><td>CAC</td><td>Full</td><td>Shared</td><td class="delta">−cost</td></tr>
+      </table>
+    </section>
+    <section>
+      <div class="slabel"><span class="n">03</span><span class="ln"></span><span class="t">Integration &amp; rollout</span></div>
+      <h2>Pick the path your risk team will sign</h2>
+      <div class="opts">
+        <div class="opt"><div class="pin">Lightest</div><h3>Referral</h3><p>Clean handoff, minimal lift.</p></div>
+        <div class="opt hl"><div class="pin">Default</div><h3>Embedded</h3><p>${brand} inside your product surface.</p></div>
+        <div class="opt"><div class="pin">Deepest</div><h3>Native</h3><p>Fully co-built and co-branded.</p></div>
+      </div>
+      <div class="timeline">
+        <div class="s"><div class="k">Wk 0</div><div class="v">Scoping</div></div>
+        <div class="s"><div class="k">Wk 4</div><div class="v">Build</div></div>
+        <div class="s"><div class="k">Wk 8</div><div class="v">Pilot</div></div>
+        <div class="s"><div class="k">Wk 14</div><div class="v">Scale</div></div>
+      </div>
+    </section>
+    <section>
+      <div class="slabel"><span class="n">04</span><span class="ln"></span><span class="t">Proof of demand</span></div>
+      <div class="quote"><p>"We saw the overlap immediately. The model held up under our own assumptions."</p><div class="w">VP, Strategic Partnerships</div></div>
+    </section>
+    <div class="ctaBox" id="fit">
+      <h2>${a.c}</h2>
+      <p class="lead">Send your overlap assumptions ahead and we'll bring a modelled channel plan to a working session.</p>
+      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+        <input id="wl-email" type="email" name="email" placeholder="you@partner.com" required />
+        <button type="submit" class="btn">${a.c}</button></form>
+      <div id="wl-msg" aria-live="polite"></div>
+    </div>
+    <footer><span>${name} · Distribution brief</span><span>Built with Axal VC</span></footer>
+  </div>
+${singleWaitlistScript(bk.apiWaitlist, 'partner', bk.nonce)}
+</body></html>`;
+}
+
+// ── Template: Co-Founder Builder (Task #25) — engineering-doc co-founder brief ──
+function renderCoFounderBuilder(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud.cofounder; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const danger = '#c2452f';
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}.wrap{max-width:1080px;margin:0 auto;padding:0 32px;}
+  .lm{font-family:${PORT_MONO};font-size:10px;letter-spacing:.16em;text-transform:uppercase;}
+  nav{position:sticky;top:0;z-index:5;height:56px;display:flex;align-items:center;background:${bgColor}d9;backdrop-filter:blur(6px);border-bottom:1px solid ${secondary};}
+  nav .row{display:flex;align-items:center;justify-content:space-between;width:100%;}
+  .brand{display:flex;align-items:center;gap:9px;}
+  .sq{width:12px;height:12px;border-radius:3px;background:${accent};}
+  .brand b{font-family:${PORT_MONO};font-size:13px;}.brand .m{font-family:${PORT_MONO};font-size:13px;opacity:.5;}
+  .navcta{font-family:${PORT_MONO};font-size:12px;text-decoration:none;background:${color};color:${btnInk};border-radius:6px;padding:7px 14px;font-weight:600;}
+  .hero{position:relative;padding:84px 0 56px;border-bottom:1px solid ${secondary};overflow:hidden;}
+  .hero .grid{position:absolute;inset:0;background-image:linear-gradient(${secondary} 1px,transparent 1px),linear-gradient(90deg,${secondary} 1px,transparent 1px);background-size:56px 56px;-webkit-mask-image:radial-gradient(ellipse at 25% 15%,#000,transparent 70%);mask-image:radial-gradient(ellipse at 25% 15%,#000,transparent 70%);opacity:.5;}
+  .hero .in{position:relative;}
+  .badge{display:inline-flex;align-items:center;gap:9px;font-family:${PORT_MONO};font-size:11px;border:1px solid ${secondary};border-radius:999px;padding:6px 13px;}
+  .pulse{width:8px;height:8px;border-radius:50%;background:${accent};box-shadow:0 0 0 0 ${accent};animation:pg 1.8s infinite;}
+  @keyframes pg{0%{box-shadow:0 0 0 0 ${accent}66;}70%{box-shadow:0 0 0 8px ${accent}00;}100%{box-shadow:0 0 0 0 ${accent}00;}}
+  .hero h1{font-size:clamp(38px,5.4vw,64px);line-height:1.05;letter-spacing:-.02em;margin:22px 0 16px;font-weight:600;}
+  .hero p{font-size:18px;opacity:.74;max-width:58ch;margin:0 0 26px;}
+  .btn{display:inline-block;font-family:${PORT_MONO};font-size:12px;font-weight:600;background:${color};color:${btnInk};text-decoration:none;border:0;border-radius:7px;padding:13px 22px;cursor:pointer;}
+  .btn[disabled]{opacity:.6;cursor:not-allowed;}
+  .ghost{display:inline-block;margin-left:8px;font-family:${PORT_MONO};font-size:12px;text-decoration:none;border:1px solid ${secondary};border-radius:7px;padding:12px 18px;}
+  .data{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:${secondary};border:1px solid ${secondary};margin-top:44px;}
+  .data .c{background:${bgColor};padding:20px 18px;}
+  .data .k{font-family:${PORT_MONO};font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.5;}
+  .data .v{font-family:${PORT_MONO};font-size:20px;margin-top:6px;color:${accent};}
+  section{padding:58px 0;border-bottom:1px solid ${secondary};}
+  .eyebrow{display:flex;align-items:center;gap:14px;margin-bottom:18px;}
+  .eyebrow .n{font-family:${PORT_MONO};font-size:12px;color:${accent};}
+  .eyebrow .t{font-family:${PORT_MONO};font-size:10px;letter-spacing:.16em;text-transform:uppercase;opacity:.55;}
+  .eyebrow .ln{flex:1;height:1px;background:${secondary};}
+  h2{font-size:clamp(24px,3vw,34px);margin:0 0 16px;font-weight:600;letter-spacing:-.01em;}
+  .lead{font-size:16px;opacity:.78;max-width:60ch;}
+  .panes{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:${secondary};border:1px solid ${secondary};}
+  .panes .p{background:${bgColor};padding:24px 22px;}
+  .panes h3{font-family:${PORT_MONO};font-size:11px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 14px;}
+  .panes ul{list-style:none;margin:0;padding:0;font-size:14px;}
+  .panes li{display:flex;gap:10px;margin-bottom:10px;opacity:.85;}
+  .panes li .ic{font-family:${PORT_MONO};font-weight:700;}
+  .ship .ic{color:${accent};}.weak .ic{color:${danger};}
+  ol.road{counter-reset:r;list-style:none;margin:0;padding:0;}
+  ol.road li{display:flex;gap:14px;padding:14px 0;border-top:1px solid ${secondary};font-size:15px;}
+  ol.road li:first-child{border-top:0;}
+  ol.road li::before{counter-increment:r;content:"0" counter(r);font-family:${PORT_MONO};color:${accent};font-size:13px;}
+  .equity{border:1px solid ${secondary};border-radius:12px;padding:24px;}
+  .equity .r{display:flex;gap:12px;padding:11px 0;border-top:1px solid ${secondary};font-size:14px;}
+  .equity .r:first-child{border-top:0;}.equity .r .arr{color:${accent};font-family:${PORT_MONO};}
+  .ctaSec{position:relative;padding:76px 0;text-align:center;overflow:hidden;}
+  .ctaSec .grid{position:absolute;inset:0;background-image:linear-gradient(${secondary} 1px,transparent 1px),linear-gradient(90deg,${secondary} 1px,transparent 1px);background-size:56px 56px;-webkit-mask-image:radial-gradient(ellipse at 50% 50%,#000,transparent 70%);mask-image:radial-gradient(ellipse at 50% 50%,#000,transparent 70%);opacity:.45;}
+  .ctaSec .in{position:relative;}
+  .ctaSec h2{font-size:clamp(28px,4vw,46px);}
+  .ctaSec p{opacity:.76;margin:0 auto 24px;max-width:48ch;}
+  form{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;max-width:440px;margin:0 auto;}
+  input{font-family:${PORT_MONO};flex:1 1 230px;font-size:14px;padding:13px 15px;border:1px solid ${secondary};border-radius:7px;background:${bgColor};color:${inkColor};outline:none;}
+  input:focus{border-color:${accent};box-shadow:0 0 0 3px ${accent}26;}
+  .wl-ok,.wl-err{font-size:13px;min-height:18px;margin-top:12px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
+  footer{display:flex;justify-content:space-between;padding:22px 0;font-family:${PORT_MONO};font-size:10px;letter-spacing:.1em;text-transform:uppercase;opacity:.5;flex-wrap:wrap;gap:8px;}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+  @media(max-width:820px){.data,.panes{grid-template-columns:1fr;}}
+</style></head><body>
+  <nav><div class="wrap row">
+    <div class="brand"><span class="sq"></span><b>${name}</b><span class="m">/founding-eng</span></div>
+    <a class="navcta" href="#apply">${a.c}</a>
+  </div></nav>
+  <div class="wrap">
+    <header class="hero"><div class="grid"></div><div class="in">
+      <span class="badge"><span class="pulse"></span> Pre-seed · Founding engineer · Equity-led</span>
+      <h1>${a.h}</h1>
+      <p>${a.b}</p>
+      <a class="btn" href="#apply">${a.c}</a><a class="ghost" href="#state">Where we actually are</a>
+      <div class="data">
+        <div class="c"><div class="k">Stage</div><div class="v">Pre-seed</div></div>
+        <div class="c"><div class="k">Users</div><div class="v">Early</div></div>
+        <div class="c"><div class="k">Working</div><div class="v">Core</div></div>
+        <div class="c"><div class="k">Equity</div><div class="v">Founding</div></div>
+      </div>
+    </div></header>
+    <section>
+      <div class="eyebrow"><span class="n">01</span><span class="t">Vision</span><span class="ln"></span></div>
+      <h2>What ${brand} is really building</h2>
+      <p class="lead">Teams are shipping faster than they can reason about what they ship. ${brand} is the layer that gives them confidence — and it's a problem worth a decade.</p>
+    </section>
+    <section id="state">
+      <div class="eyebrow"><span class="n">02</span><span class="t">Current state</span><span class="ln"></span></div>
+      <h2>Honest, not polished</h2>
+      <div class="panes">
+        <div class="p ship"><h3>Shipped</h3><ul>
+          <li><span class="ic">+</span><span>Core engine running in production.</span></li>
+          <li><span class="ic">+</span><span>First users on real workflows.</span></li>
+          <li><span class="ic">+</span><span>The hard primitive works.</span></li>
+        </ul></div>
+        <div class="p weak"><h3>Weak points</h3><ul>
+          <li><span class="ic">!</span><span>Billing is duct tape.</span></li>
+          <li><span class="ic">!</span><span>No real test coverage yet.</span></li>
+          <li><span class="ic">!</span><span>Ops is one person deep.</span></li>
+        </ul></div>
+      </div>
+    </section>
+    <section>
+      <div class="eyebrow"><span class="n">03</span><span class="t">Roadmap</span><span class="ln"></span></div>
+      <h2>Your first 90 days</h2>
+      <ol class="road">
+        <li>Own the runtime end to end and harden it.</li>
+        <li>Stand up the durable replay and event-sourcing layer.</li>
+        <li>Turn the prototype billing into something real.</li>
+      </ol>
+    </section>
+    <section>
+      <div class="eyebrow"><span class="n">04</span><span class="t">Equity</span><span class="ln"></span></div>
+      <h2>The offer, plainly</h2>
+      <div class="equity">
+        <div class="r"><span class="arr">&rarr;</span><span>Founding equity — single to low-double-digit %.</span></div>
+        <div class="r"><span class="arr">&rarr;</span><span>Standard vesting, 1-year cliff.</span></div>
+        <div class="r"><span class="arr">&rarr;</span><span>Market-aware salary once we raise.</span></div>
+        <div class="r"><span class="arr">&rarr;</span><span>Real ownership of the technical direction.</span></div>
+      </div>
+    </section>
+  </div>
+  <section class="ctaSec" id="apply"><div class="grid"></div><div class="in wrap">
+    <h2>${a.c}</h2>
+    <p>No CV theater — we'd rather read your code. Drop your email and we'll send the brief and a time.</p>
+    <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
+      <button type="submit" class="btn">${a.c}</button></form>
+    <div id="wl-msg" aria-live="polite"></div>
+  </div></section>
+  <div class="wrap"><footer><span><span class="sq" style="display:inline-block;vertical-align:middle;margin-right:6px;"></span>${name} · founding eng</span><span>Built with Axal VC</span></footer></div>
+${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
+</body></html>`;
+}
+
+// ── Template: Co-Founder Canvas (Task #25) — editorial serif founder letter ──
+function renderCoFounderCanvas(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud.cofounder; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const gapInk = contrastText(inkColor);
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.7;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}.wrap{max-width:1040px;margin:0 auto;padding:0 32px;}
+  .lm{font-family:${PORT_MONO};font-size:10px;letter-spacing:.2em;text-transform:uppercase;}
+  nav{padding:22px 0;}
+  nav .row{display:flex;align-items:center;justify-content:space-between;}
+  .brand{display:flex;align-items:center;gap:9px;}
+  .dot{width:8px;height:8px;border-radius:50%;background:${accent};}
+  .brand b{font-family:${PORT_SERIF};font-size:22px;}
+  .navcta{font-size:13px;text-decoration:none;border:1px solid ${inkColor};border-radius:999px;padding:8px 18px;}
+  .slabel{display:flex;align-items:center;gap:14px;margin-bottom:18px;}
+  .slabel .n{font-family:${PORT_MONO};font-size:11px;color:${accent};}
+  .slabel .ln{flex:1;height:1px;background:${secondary};}
+  .slabel .t{font-family:${PORT_MONO};font-size:10px;letter-spacing:.18em;text-transform:uppercase;opacity:.55;}
+  .hero{padding:48px 0 56px;}
+  .hero h1{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(46px,7.4vw,88px);line-height:1.0;letter-spacing:-.02em;margin:16px 0 26px;}
+  .hero h1 em{font-style:italic;color:${accent};}
+  .hero .body{font-size:20px;max-width:62ch;margin:0 0 16px;}
+  .hero .body.muted{opacity:.7;font-size:17px;}
+  .actions{margin:28px 0 0;}
+  .btn{display:inline-block;font-size:14px;font-weight:600;background:${inkColor};color:${gapInk};text-decoration:none;border:0;border-radius:999px;padding:13px 26px;cursor:pointer;}
+  .btn.acc{background:${color};color:${btnInk};}
+  .btn[disabled]{opacity:.6;cursor:not-allowed;}
+  .link{margin-left:16px;font-family:${PORT_MONO};font-size:12px;text-decoration:underline;}
+  .facts{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;border-top:1px solid ${secondary};margin-top:44px;padding-top:24px;}
+  .facts .k{font-family:${PORT_MONO};font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.55;}
+  .facts .v{font-size:20px;margin-top:6px;}
+  section{padding:54px 0;border-top:1px solid ${secondary};}
+  .split{display:grid;grid-template-columns:5fr 7fr;gap:40px;align-items:start;}
+  h2{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(28px,4vw,48px);margin:0;letter-spacing:-.01em;line-height:1.08;}
+  .split p{font-size:17px;opacity:.82;margin:0;}
+  .three{display:grid;grid-template-columns:repeat(3,1fr);gap:30px;}
+  .three .c .n{font-family:${PORT_MONO};font-size:12px;color:${accent};border-top:1px solid ${secondary};padding-top:14px;display:block;}
+  .three .c h3{font-family:${PORT_SERIF};font-weight:400;font-size:22px;margin:10px 0 8px;}.three .c p{margin:0;opacity:.78;font-size:15px;}
+  .builtlist{margin:0;padding:0;list-style:none;}
+  .builtlist li{border-left:2px solid ${accent};padding:4px 0 4px 18px;margin-bottom:18px;}
+  .builtlist li h3{font-family:${PORT_SERIF};font-weight:400;font-size:19px;margin:0 0 4px;}.builtlist li p{margin:0;opacity:.78;font-size:15px;}
+  .gap{background:${inkColor};color:${gapInk};}
+  .gap h2{color:${gapInk};font-size:clamp(40px,6vw,72px);}
+  .gap .two{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin-top:24px;}
+  .gap p{opacity:.85;font-size:16px;margin:0;}
+  .cmp{display:grid;grid-template-columns:1fr 1fr;gap:36px;}
+  .cmp h3{font-family:${PORT_MONO};font-size:11px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 14px;}
+  .cmp ul{margin:0;padding:0;list-style:none;font-size:15px;}.cmp li{padding:7px 0;opacity:.82;}.cmp li::before{content:"— ";color:${accent};}
+  .offer{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:${secondary};border:1px solid ${secondary};margin-top:26px;}
+  .offer .c{background:${bgColor};padding:24px 20px;}
+  .offer .k{font-family:${PORT_MONO};font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.55;}
+  .offer .v{font-size:clamp(20px,2.4vw,28px);margin-top:6px;}
+  .cta{text-align:center;padding:72px 0;}
+  .cta h2{font-size:clamp(40px,6vw,72px);}
+  .cta h2 em{font-style:italic;color:${accent};}
+  .steps{max-width:420px;margin:24px auto 28px;text-align:left;list-style:none;padding:0;counter-reset:s;}
+  .steps li{display:flex;gap:14px;padding:12px 0;border-top:1px solid ${secondary};font-size:15px;}.steps li:first-child{border-top:0;}
+  .steps li::before{counter-increment:s;content:"0" counter(s);font-family:${PORT_MONO};color:${accent};font-size:12px;}
+  form{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;max-width:440px;margin:0 auto;}
+  input{flex:1 1 230px;font-size:14px;padding:13px 16px;border:1px solid ${secondary};border-radius:999px;background:${bgColor};color:${inkColor};outline:none;}
+  input:focus{border-color:${accent};box-shadow:0 0 0 3px ${accent}26;}
+  .sig{font-family:${PORT_SERIF};font-style:italic;font-size:24px;margin-top:30px;}
+  .sig .ti{font-family:${PORT_MONO};font-style:normal;font-size:11px;letter-spacing:.12em;text-transform:uppercase;opacity:.6;display:block;margin-top:6px;}
+  .wl-ok,.wl-err{font-size:13px;min-height:18px;margin-top:12px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
+  footer{display:flex;justify-content:space-between;padding:22px 0;font-family:${PORT_MONO};font-size:10px;letter-spacing:.1em;text-transform:uppercase;opacity:.5;flex-wrap:wrap;gap:8px;}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+  @media(max-width:820px){.facts,.three,.offer{grid-template-columns:1fr;}.split,.gap .two,.cmp{grid-template-columns:1fr;}}
+</style></head><body>
+  <nav><div class="wrap row">
+    <div class="brand"><span class="dot"></span><b>${name}</b></div>
+    <a class="navcta" href="#talk">Talk to me</a>
+  </div></nav>
+  <div class="wrap">
+    <header class="hero">
+      <div class="lm">A letter from the founder · 2026</div>
+      <h1>${a.h} <em>I can't do it alone.</em></h1>
+      <p class="body">${a.b}</p>
+      <p class="body muted">I'd rather you see the shape of the hole than read a polished pitch. So here's the whole thing.</p>
+      <div class="actions"><a class="btn acc" href="#talk">${a.c}</a><a class="link" href="#building">Read the whole thing first</a></div>
+      <div class="facts">
+        <div><div class="k">Stage</div><div class="v">Early</div></div>
+        <div><div class="k">Team</div><div class="v">Small</div></div>
+        <div><div class="k">Runway</div><div class="v">Funded</div></div>
+        <div><div class="k">Equity</div><div class="v">Co-founder</div></div>
+      </div>
+    </header>
+    <section id="building"><div class="split">
+      <h2>What we are building</h2>
+      <p>${brand} is the execution layer for work that's currently held together by people copying things between tools. We're turning that into something dependable.</p>
+    </div></section>
+    <section>
+      <div class="slabel"><span class="n">02</span><span class="ln"></span><span class="t">Why now</span></div>
+      <div class="three">
+        <div class="c"><span class="n">01</span><h3>The tools arrived</h3><p>What needed a team last year is buildable by two people now.</p></div>
+        <div class="c"><span class="n">02</span><h3>The buyers shifted</h3><p>People will finally pay to remove this work.</p></div>
+        <div class="c"><span class="n">03</span><h3>The window is short</h3><p>Whoever owns the workflow first, owns it.</p></div>
+      </div>
+    </section>
+    <section>
+      <div class="slabel"><span class="n">03</span><span class="ln"></span><span class="t">Already built</span></div>
+      <div class="split">
+        <h2>You're not joining an idea</h2>
+        <ul class="builtlist">
+          <li><h3>The core, working</h3><p>The hard part runs in production today.</p></li>
+          <li><h3>First believers</h3><p>Real users who'd be upset if it disappeared.</p></li>
+          <li><h3>A clear next mile</h3><p>We know exactly what comes next.</p></li>
+        </ul>
+      </div>
+    </section>
+  </div>
+  <section class="gap"><div class="wrap">
+    <div class="lm" style="color:${accent}">04 — What's missing</div>
+    <h2>The gap is me.</h2>
+    <div class="two">
+      <p>I can hold the vision and talk to customers all day. What I can't do is be the depth on the build — the architecture, the rigor, the parts that have to be right.</p>
+      <p>That's the seat. Not a hire reporting to me — a partner who owns the half of this company I can't.</p>
+    </div>
+  </div></section>
+  <div class="wrap">
+    <section>
+      <div class="slabel"><span class="n">05</span><span class="ln"></span><span class="t">The role</span></div>
+      <div class="cmp">
+        <div><h3>You have probably</h3><ul><li>Built and shipped real systems</li><li>Owned something end to end</li><li>Been the person others trust to be right</li></ul></div>
+        <div><h3>You probably do not</h3><ul><li>Need a detailed spec to start</li><li>Want to be managed</li><li>Care about titles over ownership</li></ul></div>
+      </div>
+      <div class="offer">
+        <div class="c"><div class="k">Equity</div><div class="v">Co-founder</div></div>
+        <div class="c"><div class="k">Salary</div><div class="v">On raise</div></div>
+        <div class="c"><div class="k">Location</div><div class="v">Flexible</div></div>
+      </div>
+    </section>
+    <div class="cta" id="talk">
+      <h2>Let's <em>talk</em>.</h2>
+      <ol class="steps"><li>You email me and we trade notes.</li><li>We spend a day building something small.</li><li>If it clicks, we go.</li></ol>
+      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+        <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit" class="btn acc">${a.c}</button></form>
+      <div id="wl-msg" aria-live="polite"></div>
+      <div class="sig">— The founder<span class="ti">${name}</span></div>
+    </div>
+    <footer><span>${name}</span><span>Built with Axal VC</span></footer>
+  </div>
+${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
+</body></html>`;
+}
+
+// ── Template: Co-founder Connect (Task #25) — warm grain founder letter ──
+function renderCofounderConnect(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud.cofounder; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const ctaInk = contrastText(inkColor);
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.7;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}.wrap{max-width:1080px;margin:0 auto;padding:0 32px;}
+  .lm{font-family:${PORT_MONO};font-size:11px;letter-spacing:.18em;text-transform:uppercase;}
+  nav{position:sticky;top:0;z-index:5;background:${bgColor}cc;backdrop-filter:blur(8px);border-bottom:1px solid ${secondary};}
+  nav .row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;}
+  .brand{display:flex;align-items:center;gap:9px;}.dot{width:8px;height:8px;border-radius:50%;background:${accent};}
+  .brand b{font-family:${PORT_SERIF};font-size:22px;}.brand em{font-style:italic;}
+  .navcta{font-size:13px;text-decoration:none;background:${color};color:${btnInk};border-radius:999px;padding:8px 18px;font-weight:600;}
+  .hero{position:relative;padding:72px 0 56px;border-bottom:1px solid ${secondary};}
+  .hero::before{content:"";position:absolute;inset:0;background-image:radial-gradient(${inkColor}0d 1px,transparent 1px);background-size:5px 5px;opacity:.5;pointer-events:none;}
+  .hero .in{position:relative;}
+  .eyebrow{display:inline-flex;align-items:center;gap:10px;}
+  .pulse{width:9px;height:9px;border-radius:50%;background:${accent};box-shadow:0 0 0 0 ${accent};animation:pg 1.8s infinite;}
+  @keyframes pg{0%{box-shadow:0 0 0 0 ${accent}66;}70%{box-shadow:0 0 0 8px ${accent}00;}100%{box-shadow:0 0 0 0 ${accent}00;}}
+  .hero h1{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(44px,6.8vw,84px);line-height:1.02;letter-spacing:-.02em;margin:20px 0 22px;}
+  .hero h1 em{font-style:italic;color:${accent};}
+  .hero p{font-size:19px;max-width:60ch;margin:0 0 14px;}
+  .hero p.muted{opacity:.72;font-size:17px;}
+  .actions{margin:26px 0 0;}
+  .btn{display:inline-block;font-size:14px;font-weight:600;background:${color};color:${btnInk};text-decoration:none;border:0;border-radius:999px;padding:13px 26px;cursor:pointer;}
+  .btn[disabled]{opacity:.6;cursor:not-allowed;}
+  .ghost{display:inline-block;margin-left:10px;font-size:13px;text-decoration:none;border:1px solid ${inkColor};border-radius:999px;padding:12px 22px;}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;border-top:1px solid ${secondary};margin-top:44px;padding-top:24px;}
+  .stats .k{font-family:${PORT_MONO};font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.55;}
+  .stats .v{font-family:${PORT_SERIF};font-size:24px;margin-top:4px;}
+  section{padding:56px 0;border-bottom:1px solid ${secondary};}
+  .split{display:grid;grid-template-columns:5fr 7fr;gap:40px;align-items:start;}
+  h2{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(26px,3.6vw,42px);margin:0;letter-spacing:-.01em;}
+  .split p{font-size:17px;opacity:.82;margin:0;}
+  .why{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:${secondary};border:1px solid ${secondary};margin-top:24px;}
+  .why .c{background:${bgColor};padding:26px 22px;}
+  .why .n{font-family:${PORT_MONO};font-size:12px;color:${accent};}
+  .why h3{font-family:${PORT_SERIF};font-weight:400;font-size:20px;margin:10px 0 6px;}.why p{margin:0;opacity:.76;font-size:14px;}
+  .rows{margin:0;padding:0;list-style:none;}
+  .rows li{display:grid;grid-template-columns:1fr 2fr auto;gap:16px;align-items:center;padding:14px 0;border-top:1px solid ${secondary};}
+  .rows li:first-child{border-top:0;}
+  .rows .nm{font-family:${PORT_SERIF};font-size:18px;}.rows .ds{opacity:.74;font-size:14px;}
+  .pill{font-family:${PORT_MONO};font-size:10px;letter-spacing:.1em;text-transform:uppercase;border:1px solid ${secondary};border-radius:999px;padding:4px 11px;}
+  .pill.on{color:${accent};border-color:${accent};}
+  .missing{background:${secondary}40;}
+  .missing .grid{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:20px;}
+  .missing h3{font-family:${PORT_SERIF};font-weight:400;font-size:22px;margin:0 0 8px;}
+  .mark{background:linear-gradient(transparent 65%,${accent}40 65%);}
+  .missing p{margin:0;opacity:.8;font-size:15px;}
+  .role .terms{margin:0;padding:0;list-style:none;}
+  .role .terms li{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid ${secondary};font-size:14px;}
+  .role .terms li:first-child{border-top:0;}.role .terms .v{font-family:${PORT_MONO};color:${accent};}
+  .cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:8px;}
+  .cols3 h4{font-family:${PORT_MONO};font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin:0 0 10px;}
+  .cols3 ul{margin:0;padding:0;list-style:none;font-size:14px;}.cols3 li{padding:5px 0;opacity:.82;}.cols3 li::before{content:"— ";color:${accent};}
+  .ctaSec{background:${inkColor};color:${ctaInk};padding:64px 0;}
+  .ctaSec h2{color:${ctaInk};}.ctaSec h2 em{font-style:italic;color:${accent};}
+  .ctaSec .steps{counter-reset:s;list-style:none;padding:0;max-width:520px;margin:22px 0 26px;}
+  .ctaSec .steps li{display:flex;gap:14px;padding:11px 0;border-top:1px solid ${ctaInk}26;font-size:15px;opacity:.9;}.ctaSec .steps li:first-child{border-top:0;}
+  .ctaSec .steps li::before{counter-increment:s;content:"0" counter(s);font-family:${PORT_MONO};color:${accent};font-size:12px;}
+  form{display:flex;gap:10px;flex-wrap:wrap;max-width:440px;}
+  input{flex:1 1 230px;font-size:14px;padding:13px 16px;border:1px solid ${ctaInk}40;border-radius:999px;background:transparent;color:${ctaInk};outline:none;}
+  input::placeholder{color:${ctaInk}80;}input:focus{border-color:${accent};}
+  .sig{font-family:${PORT_SERIF};font-style:italic;font-size:22px;margin-top:24px;}
+  .wl-ok,.wl-err{font-size:13px;min-height:18px;margin-top:10px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
+  footer{display:flex;justify-content:space-between;padding:22px 0;font-size:11px;opacity:.55;flex-wrap:wrap;gap:8px;}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+  @media(max-width:820px){.stats,.why,.cols3{grid-template-columns:1fr;}.split,.missing .grid{grid-template-columns:1fr;}.rows li{grid-template-columns:1fr;}}
+</style></head><body>
+  <nav><div class="wrap row">
+    <div class="brand"><span class="dot"></span><b>${name}</b></div>
+    <a class="navcta" href="#talk">Talk about joining</a>
+  </div></nav>
+  <header class="hero"><div class="wrap in">
+    <div class="eyebrow lm"><span class="pulse"></span> A letter from the founder · June 2026</div>
+    <h1>${a.h}</h1>
+    <p>${a.b}</p>
+    <p class="muted">I'd rather you see the shape of the hole than a polished pitch — so this is the honest version.</p>
+    <div class="actions"><a class="btn" href="#talk">${a.c}</a><a class="ghost" href="#built">See what's built</a></div>
+    <div class="stats">
+      <div><div class="k">Stage</div><div class="v">Early</div></div>
+      <div><div class="k">Team</div><div class="v">Small</div></div>
+      <div><div class="k">Runway</div><div class="v">Funded</div></div>
+      <div><div class="k">Equity</div><div class="v">Co-founder</div></div>
+    </div>
+  </div></header>
+  <div class="wrap">
+    <section><div class="split">
+      <h2>The mission, in one line</h2>
+      <p>${brand} is the accountability layer for autonomous work — so teams can trust what their software does on their behalf.</p>
+    </div></section>
+    <section>
+      <h2 style="margin-bottom:24px;">Why now</h2>
+      <div class="why">
+        <div class="c"><div class="n">01</div><h3>Capability jumped</h3><p>What was research last year is shippable today.</p></div>
+        <div class="c"><div class="n">02</div><h3>Trust is missing</h3><p>Everyone's adopting; nobody can verify.</p></div>
+        <div class="c"><div class="n">03</div><h3>First mover wins</h3><p>The standard isn't set yet. It could be ours.</p></div>
+      </div>
+    </section>
+    <section id="built"><div class="split">
+      <h2>You are not joining an idea</h2>
+      <ul class="rows">
+        <li><span class="nm">Core engine</span><span class="ds">The hard primitive, running in production.</span><span class="pill on">Working</span></li>
+        <li><span class="nm">First users</span><span class="ds">Real teams on real workflows.</span><span class="pill on">Live</span></li>
+        <li><span class="nm">Billing</span><span class="ds">Functional, but held together with tape.</span><span class="pill">Rough</span></li>
+        <li><span class="nm">Test suite</span><span class="ds">Not yet — this is part of the job.</span><span class="pill">Open</span></li>
+      </ul>
+    </div></section>
+    <section class="missing">
+      <h2>What's missing, said plainly</h2>
+      <div class="grid">
+        <div><h3 class="mark">Depth on the build</h3><p>The architecture and rigor I can't give it alone.</p></div>
+        <div><h3 class="mark">A true partner</h3><p>Someone who owns half of this, not reports to me.</p></div>
+      </div>
+    </section>
+    <section class="role">
+      <div class="split">
+        <div><h2>The role</h2>
+          <ul class="terms">
+            <li><span>Equity</span><span class="v">Co-founder</span></li>
+            <li><span>Salary</span><span class="v">On raise</span></li>
+            <li><span>Location</span><span class="v">Flexible</span></li>
+          </ul>
+        </div>
+        <div class="cols3">
+          <div><h4>First 90 days</h4><ul><li>Own the runtime</li><li>Harden the core</li><li>Ship to users</li></ul></div>
+          <div><h4>You look like</h4><ul><li>A builder</li><li>An owner</li><li>Direct</li></ul></div>
+          <div><h4>Not looking for</h4><ul><li>A spec-follower</li><li>A title-chaser</li><li>A spectator</li></ul></div>
+        </div>
+      </div>
+    </section>
+  </div>
+  <section class="ctaSec" id="talk"><div class="wrap">
+    <h2>Let's <em>talk</em> about building this together.</h2>
+    <ol class="steps"><li>You send a note — anything, even a paragraph.</li><li>We trade context and spend a day building.</li><li>If it clicks, we make it official.</li></ol>
+    <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
+      <button type="submit" class="btn">${a.c}</button></form>
+    <div id="wl-msg" aria-live="polite"></div>
+    <div class="sig">— The founder, ${name}</div>
+  </div></section>
+  <div class="wrap"><footer><span>${name}</span><span>Built with Axal VC</span></footer></div>
+${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
+</body></html>`;
+}
+
+// ── Template: Co-Founder Quest (Task #25) — mission-framed co-founder call ──
+function renderCoFounderQuest(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud.cofounder; const brand = name || 'our company'; const btnInk = contrastText(color);
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.7;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}.wrap{max-width:880px;margin:0 auto;padding:0 28px;}
+  .label{font-size:12px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:${accent};}
+  nav{padding:24px 0;}
+  nav .row{display:flex;align-items:center;justify-content:space-between;}
+  .brand{font-weight:700;font-size:18px;}
+  .navlink{font-size:14px;opacity:.65;text-decoration:none;}
+  .hr{height:1px;background:${secondary};border:0;margin:0;}
+  .hero{padding:40px 0 60px;}
+  .hero h1{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(44px,7.4vw,80px);line-height:1.04;letter-spacing:-.01em;margin:18px 0 22px;}
+  .hero p{font-size:19px;opacity:.82;max-width:60ch;margin:0 0 28px;}
+  .btn{display:inline-block;font-size:14px;font-weight:600;background:${inkColor};color:${contrastText(inkColor)};text-decoration:none;border:0;border-radius:10px;padding:13px 24px;cursor:pointer;}
+  .btn.acc{background:${color};color:${btnInk};}
+  .btn[disabled]{opacity:.6;cursor:not-allowed;}
+  .btn.ghost{background:transparent;color:${inkColor};border:1px solid ${secondary};margin-left:10px;}
+  section{padding:54px 0;}
+  .two{display:grid;grid-template-columns:1fr 1.4fr;gap:36px;align-items:start;}
+  h2{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(26px,3.6vw,40px);margin:0;letter-spacing:-.01em;}
+  .two p{margin:0 0 14px;opacity:.82;font-size:16px;}
+  .built{margin:0;padding:0;list-style:none;}
+  .built li{padding:14px 0;border-top:1px solid ${secondary};}
+  .built li:first-child{border-top:0;}
+  .built b{font-weight:700;}.built span{opacity:.78;}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:24px;}
+  .card{border:1px solid ${secondary};border-radius:12px;padding:22px;}
+  .card h3{font-family:${PORT_SERIF};font-weight:400;font-size:19px;margin:0 0 8px;}.card p{margin:0;opacity:.78;font-size:14px;}
+  .boxes{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px;}
+  .box{border:1px solid ${secondary};border-radius:12px;padding:22px;}
+  .box.ideal{background:${accent}0d;border-color:${accent}55;}
+  .box h3{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin:0 0 12px;}
+  .box ul{margin:0;padding:0;list-style:none;font-size:14px;}
+  .box li{display:flex;gap:10px;padding:5px 0;opacity:.86;}
+  .box li::before{content:"";width:7px;height:7px;border-radius:50%;background:${accent};margin-top:8px;flex:none;}
+  .equity{background:${secondary}66;border-radius:14px;padding:26px;}
+  .equity h3{font-family:${PORT_SERIF};font-weight:400;font-size:20px;margin:0 0 14px;}
+  .equity .r{display:flex;justify-content:space-between;gap:12px;padding:9px 0;font-size:15px;}
+  .equity .r .v{font-weight:700;}
+  .team{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+  .member b{font-family:${PORT_SERIF};font-weight:400;font-size:18px;}.member p{margin:6px 0 0;opacity:.76;font-size:14px;}
+  .cta{text-align:center;padding:68px 0;}
+  .cta h2{font-size:clamp(32px,5vw,52px);}
+  .steps{max-width:420px;margin:22px auto 26px;text-align:left;list-style:none;padding:0;counter-reset:s;}
+  .steps li{display:flex;gap:14px;padding:11px 0;border-top:1px solid ${secondary};font-size:15px;}.steps li:first-child{border-top:0;}
+  .steps li::before{counter-increment:s;content:"0" counter(s);color:${accent};font-weight:700;font-size:13px;}
+  form{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;max-width:440px;margin:0 auto;}
+  input{flex:1 1 230px;font-size:14px;padding:13px 16px;border:1px solid ${secondary};border-radius:10px;background:${bgColor};color:${inkColor};outline:none;}
+  input:focus{border-color:${accent};box-shadow:0 0 0 3px ${accent}26;}
+  .note{font-size:13px;opacity:.6;margin-top:14px;}
+  .wl-ok,.wl-err{font-size:13px;min-height:18px;margin-top:12px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
+  footer{padding:22px 0;font-size:12px;opacity:.55;text-align:center;}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+  @media(max-width:760px){.two,.boxes,.team{grid-template-columns:1fr;}.cards{grid-template-columns:1fr;}}
+</style></head><body>
+  <div class="wrap">
+    <nav><div class="row"><div class="brand">${name}</div><a class="navlink" href="#join">The role →</a></div></nav>
+    <header class="hero">
+      <div class="label">Co-founder search</div>
+      <h1>${a.h}</h1>
+      <p>${a.b}</p>
+      <a class="btn acc" href="#join">${a.c}</a><a class="btn ghost" href="#need">What we need</a>
+    </header>
+    <hr class="hr"/>
+    <section><div class="two">
+      <div><div class="label">Timing</div><h2>Why this matters now</h2></div>
+      <div><p>The capability to build ${brand} only just arrived. The teams who plant a flag in this space this year will define how it works for everyone else.</p><p>We'd rather be early and right than safe and late.</p></div>
+    </div></section>
+    <hr class="hr"/>
+    <section><div class="two">
+      <div><div class="label">Progress</div><h2>What we have built</h2></div>
+      <ul class="built">
+        <li><b>Product</b> — <span>core engine live in production.</span></li>
+        <li><b>Traction</b> — <span>first users on real workflows.</span></li>
+        <li><b>Team</b> — <span>small, senior, and shipping.</span></li>
+        <li><b>Runway</b> — <span>funded to find product-market fit.</span></li>
+      </ul>
+    </div></section>
+    <hr class="hr"/>
+    <section id="need">
+      <div class="label">The gap</div><h2 style="margin-bottom:8px;">What we need</h2>
+      <p style="opacity:.82;max-width:60ch;">A technical co-founder to own the build while we own the market. Here's the mission, in three parts.</p>
+      <div class="cards">
+        <div class="card"><h3>Own the runtime</h3><p>Architecture, reliability, the parts that must be right.</p></div>
+        <div class="card"><h3>Set the pace</h3><p>Decide what ships and make it ship.</p></div>
+        <div class="card"><h3>Raise the bar</h3><p>Bring rigor the whole team levels up to.</p></div>
+      </div>
+      <div class="boxes">
+        <div class="box ideal"><h3>Ideal profile</h3><ul><li>Shipped real systems end to end</li><li>Comfortable with ambiguity</li><li>Argues well, decides fast</li></ul></div>
+        <div class="box"><h3>First 90 days</h3><ul><li>Own and harden the core</li><li>Ship to first users</li><li>Set the technical direction</li></ul></div>
+      </div>
+    </section>
+    <hr class="hr"/>
+    <section><div class="two">
+      <div><div class="label">Honest terms</div><h2>Equity &amp; collaboration</h2></div>
+      <div class="equity"><h3>No games</h3>
+        <div class="r"><span>Role</span><span class="v">Co-founder</span></div>
+        <div class="r"><span>Equity</span><span class="v">Significant</span></div>
+        <div class="r"><span>Salary</span><span class="v">Funded</span></div>
+        <div class="r"><span>How we work</span><span class="v">Direct &amp; fast</span></div>
+      </div>
+    </div></section>
+    <hr class="hr"/>
+    <section>
+      <div class="label">The team so far</div><h2 style="margin-bottom:20px;">Who you'd build with</h2>
+      <div class="team">
+        <div class="member"><b>The founder</b><p>Owns vision, customers, and the company's story.</p></div>
+        <div class="member"><b>Early team</b><p>Operators close to the problem, shipping weekly.</p></div>
+      </div>
+    </section>
+    <hr class="hr"/>
+    <div class="cta" id="join">
+      <div class="label">Join the build</div>
+      <h2>Let's find out if it clicks</h2>
+      <ol class="steps"><li>Send a note — no résumé required.</li><li>We trade context over a call.</li><li>We build something small together.</li></ol>
+      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+        <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit" class="btn acc">${a.c}</button></form>
+      <div id="wl-msg" aria-live="polite"></div>
+      <div class="note">No résumé required. A one-line "not now" is a complete reply.</div>
+    </div>
+    <footer>${name} · Built with Axal VC</footer>
+  </div>
+${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
+</body></html>`;
+}
+
+// ── Template: Mentor Connect (Task #25) — minimal single-column mentor note ──
+function renderMentorConnect(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud.mentor; const brand = name || 'our company'; const btnInk = contrastText(color);
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.7;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}.wrap{max-width:720px;margin:0 auto;padding:0 28px;}
+  .mono{font-family:${PORT_MONO};font-size:11px;}
+  .eyebrow{font-family:${PORT_MONO};font-size:12px;color:${accent};}
+  nav{padding:22px 0;}
+  nav .row{display:flex;align-items:center;justify-content:space-between;}
+  .brand{display:flex;align-items:center;gap:9px;font-size:15px;}
+  .dot{width:8px;height:8px;border-radius:50%;background:${accent};}
+  .brand b{font-weight:700;}.brand span{opacity:.55;}
+  .navlink{font-size:13px;opacity:.6;text-decoration:none;}
+  .hero{padding:34px 0 44px;}
+  .hero h1{font-size:clamp(34px,5.4vw,52px);line-height:1.1;letter-spacing:-.02em;font-weight:700;margin:0 0 20px;}
+  .hero p{font-size:18px;opacity:.84;margin:0 0 12px;}
+  .hero p.muted{opacity:.6;font-size:15px;}
+  .toc{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px;}
+  .toc a{font-size:13px;text-decoration:none;border:1px solid ${secondary};border-radius:999px;padding:6px 13px;opacity:.8;}
+  section{padding:34px 0;border-top:1px solid ${secondary};}
+  .sh{display:flex;align-items:baseline;gap:14px;margin-bottom:14px;}
+  .sh .n{font-family:${PORT_MONO};font-size:12px;color:${accent};}
+  .sh h2{font-size:21px;margin:0;font-weight:700;}
+  p.body{margin:0 0 10px;opacity:.85;}
+  .oneline{color:${inkColor};font-weight:600;opacity:1;}
+  ol.help{margin:0;padding:0 0 0 20px;border-left:1px solid ${secondary};list-style:none;counter-reset:h;}
+  ol.help li{padding:0 0 16px;}
+  ol.help li b{display:block;}ol.help li span{font-size:14px;opacity:.78;}
+  ul.qual{list-style:none;margin:0;padding:0;}
+  ul.qual li{display:flex;gap:10px;padding:5px 0;opacity:.85;}
+  ul.qual li::before{content:"";width:7px;height:7px;border-radius:50%;background:${accent};margin-top:9px;flex:none;}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+  .stats .k{font-family:${PORT_MONO};font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.55;}
+  .stats .v{font-size:18px;font-weight:700;margin-top:4px;}
+  .ask{border:1px solid ${secondary};border-radius:18px;padding:30px;box-shadow:0 12px 36px ${inkColor}0a;margin:34px 0;}
+  .ask .eyebrow{margin-bottom:8px;}
+  .ask h2{font-size:24px;margin:0 0 8px;font-weight:700;}
+  .ask p{opacity:.82;margin:0 0 18px;}
+  .btn{display:inline-block;font-size:14px;font-weight:600;background:${color};color:${btnInk};text-decoration:none;border:0;border-radius:10px;padding:12px 22px;cursor:pointer;}
+  .btn.ghost{background:transparent;color:${inkColor};border:1px solid ${secondary};margin-left:8px;}
+  .btn[disabled]{opacity:.6;cursor:not-allowed;}
+  form{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;}
+  input{flex:1 1 220px;font-size:14px;padding:12px 15px;border:1px solid ${secondary};border-radius:10px;background:${bgColor};color:${inkColor};outline:none;}
+  input:focus{border-color:${accent};box-shadow:0 0 0 3px ${accent}26;}
+  .wl-ok,.wl-err{font-size:13px;min-height:18px;margin-top:10px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
+  footer{display:flex;justify-content:space-between;padding:20px 0;font-size:12px;opacity:.55;}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+  @media(max-width:560px){.stats{grid-template-columns:1fr;}}
+</style></head><body>
+  <div class="wrap">
+    <nav><div class="row">
+      <div class="brand"><span class="dot"></span><b>${name}</b><span>· a note for a mentor</span></div>
+      <a class="navlink" href="#ask">Skip to the ask</a>
+    </div></nav>
+    <header class="hero">
+      <h1>${a.h}</h1>
+      <p>${a.b}</p>
+      <p class="muted">No pitch, no prep needed — we'd just value 30 minutes of your perspective.</p>
+      <div class="toc"><a href="#building">What we're building</a><a href="#help">Where we need help</a><a href="#who">Why you</a><a href="#ask">The ask</a></div>
+    </header>
+    <section id="building">
+      <div class="sh"><span class="n">01</span><h2>What we're building</h2></div>
+      <p class="body">${brand} removes the busywork between a team's intent and the outcome they're after.</p>
+      <p class="body oneline">One line: we make a painful manual workflow feel automatic.</p>
+    </section>
+    <section id="help">
+      <div class="sh"><span class="n">02</span><h2>Where we need help</h2></div>
+      <ol class="help">
+        <li><b>Pricing &amp; packaging</b><span>How to price without leaving value — or trust — on the table.</span></li>
+        <li><b>Positioning</b><span>Which wedge to lead with for the sharpest pull.</span></li>
+        <li><b>Go-to-market</b><span>The first repeatable motion that actually compounds.</span></li>
+      </ol>
+    </section>
+    <section id="who">
+      <div class="sh"><span class="n">03</span><h2>Experience that matters</h2></div>
+      <ul class="qual"><li>You've built or scaled in this space.</li><li>You've made the calls we're facing now.</li><li>You're generous with hard-won lessons.</li></ul>
+    </section>
+    <section>
+      <div class="sh"><span class="n">04</span><h2>Progress so far</h2></div>
+      <div class="stats">
+        <div><div class="k">Product</div><div class="v">Live</div></div>
+        <div><div class="k">Users</div><div class="v">Early</div></div>
+        <div><div class="k">Stage</div><div class="v">Pre-seed</div></div>
+      </div>
+    </section>
+    <div class="ask" id="ask">
+      <div class="eyebrow">The ask</div>
+      <h2>${a.c}</h2>
+      <p>Thirty minutes, whenever suits you. A one-line "not this quarter" is a complete reply.</p>
+      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+        <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit" class="btn">${a.c}</button></form>
+      <div id="wl-msg" aria-live="polite"></div>
+    </div>
+    <footer><span>${name} · 2026</span><a class="navlink" href="#">Back to top ↑</a></footer>
+  </div>
+${singleWaitlistScript(bk.apiWaitlist, 'mentor', bk.nonce)}
+</body></html>`;
+}
+
+// ── Template: Mentor Connect Page (Task #25) — narrative serif mentor letter ──
+function renderMentorConnectPage(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud.mentor; const brand = name || 'our company'; const btnInk = contrastText(color);
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.7;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}.wrap{max-width:880px;margin:0 auto;padding:0 28px;}
+  .lm{font-family:${PORT_MONO};font-size:11px;letter-spacing:.18em;text-transform:uppercase;opacity:.6;}
+  nav{padding:20px 0;border-bottom:1px solid ${secondary};}
+  nav .row{display:flex;align-items:center;justify-content:space-between;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .sq{width:24px;height:24px;border-radius:6px;background:${inkColor};color:${contrastText(inkColor)};display:flex;align-items:center;justify-content:center;font-family:${PORT_MONO};font-size:12px;font-weight:700;}
+  .brand b{font-family:${PORT_SERIF};font-size:20px;}
+  .hero{padding:60px 0 48px;}
+  .hero h1{font-family:${PORT_SERIF};font-weight:400;font-size:clamp(40px,6vw,56px);line-height:1.06;letter-spacing:-.01em;margin:18px 0 22px;}
+  .hero h1 em{font-style:italic;opacity:.62;}
+  .hero p{font-size:17px;opacity:.84;max-width:54ch;margin:0 0 22px;}
+  .actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .btn{display:inline-block;font-size:14px;font-weight:600;background:${inkColor};color:${contrastText(inkColor)};text-decoration:none;border:0;border-radius:10px;padding:12px 22px;cursor:pointer;}
+  .btn.acc{background:${color};color:${btnInk};}
+  .btn.ghost{background:transparent;color:${inkColor};border:1px solid ${secondary};}
+  .btn[disabled]{opacity:.6;cursor:not-allowed;}
+  .read{font-family:${PORT_MONO};font-size:11px;opacity:.55;}
+  section{display:grid;grid-template-columns:140px 1fr;gap:24px;padding:38px 0;border-top:1px solid ${secondary};}
+  section .lbl{font-family:${PORT_MONO};font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.55;padding-top:4px;}
+  h2{font-family:${PORT_SERIF};font-weight:400;font-size:26px;margin:0 0 12px;letter-spacing:-.01em;}
+  p.body{margin:0 0 12px;opacity:.85;}
+  ul.arrows{list-style:none;margin:0;padding:0;}
+  ul.arrows li{display:flex;gap:12px;padding:7px 0;opacity:.86;}
+  ul.arrows li::before{content:"→";color:${accent};font-weight:700;}
+  ul.arrows li b{font-weight:700;}
+  .card{border:1px solid ${secondary};border-radius:14px;padding:24px;background:${bgColor};}
+  .card .opt{display:flex;gap:12px;padding:11px 0;border-top:1px solid ${secondary};font-size:15px;}
+  .card .opt:first-child{border-top:0;}.card .opt .k{font-family:${PORT_MONO};color:${accent};font-size:13px;}
+  .timeline{list-style:none;margin:0;padding:0;}
+  .timeline li{display:grid;grid-template-columns:90px 1fr;gap:14px;padding:9px 0;}
+  .timeline .t{font-family:${PORT_MONO};font-size:12px;color:${accent};}
+  form{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;}
+  input{flex:1 1 220px;font-size:14px;padding:12px 15px;border:1px solid ${secondary};border-radius:10px;background:${bgColor};color:${inkColor};outline:none;}
+  input:focus{border-color:${accent};box-shadow:0 0 0 3px ${accent}26;}
+  .wl-ok,.wl-err{font-size:13px;min-height:18px;margin-top:10px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
+  .signoff{font-family:${PORT_SERIF};font-style:italic;font-size:22px;margin-top:8px;}
+  footer{display:flex;justify-content:space-between;padding:20px 0;font-family:${PORT_MONO};font-size:11px;opacity:.55;flex-wrap:wrap;gap:8px;}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+  @media(max-width:680px){section{grid-template-columns:1fr;}section .lbl{padding-top:0;}.timeline li{grid-template-columns:1fr;}}
+</style></head><body>
+  <nav><div class="wrap row">
+    <div class="brand"><span class="sq">${(name||'A').slice(0,1).toUpperCase()}</span><b>${name}</b></div>
+    <span class="lm">A note for mentors</span>
+  </div></nav>
+  <div class="wrap">
+    <header class="hero">
+      <div class="lm">A letter</div>
+      <h1>${a.h} <em>We could use your perspective.</em></h1>
+      <p>${a.b}</p>
+      <div class="actions"><a class="btn acc" href="#ask">${a.c}</a><a class="btn ghost" href="#building">Read first</a><span class="read">3 min read</span></div>
+    </header>
+    <section id="building"><div class="lbl">01 — Building</div>
+      <div><h2>What we're building</h2><p class="body">${brand} takes a workflow that's currently stitched together by hand and makes it dependable — so teams stop babysitting it.</p></div>
+    </section>
+    <section><div class="lbl">02 — Stuck</div>
+      <div><h2>Where we're stuck</h2>
+        <ul class="arrows"><li><b>Pricing</b> — what to charge without capping value.</li><li><b>Positioning</b> — which wedge pulls hardest.</li><li><b>Playbook</b> — the first motion that repeats.</li></ul>
+      </div>
+    </section>
+    <section><div class="lbl">03 — You</div>
+      <div><h2>Why you</h2><p class="body">You've sat where we're sitting and made these calls for real. Even your hypothetical feedback would save us months — and we're not afraid to hear that we were wrong.</p></div>
+    </section>
+    <section id="ask"><div class="lbl">04 — The ask</div>
+      <div><h2>${a.c}</h2>
+        <div class="card">
+          <div class="opt"><span class="k">A</span><span>A 30-minute call, whenever suits.</span></div>
+          <div class="opt"><span class="k">B</span><span>A few lines by email — async is great.</span></div>
+          <div class="opt"><span class="k">C</span><span>An intro to someone better placed.</span></div>
+        </div>
+        <form id="wl-form" style="margin-top:16px;"><label for="wl-email" class="sr">Email</label>
+          <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
+          <button type="submit" class="btn acc">${a.c}</button></form>
+        <div id="wl-msg" aria-live="polite"></div>
+      </div>
+    </section>
+    <section><div class="lbl">05 — Context</div>
+      <div><h2>How we got here</h2>
+        <ul class="timeline">
+          <li><span class="t">2024</span><span>The idea, and the first ugly prototype.</span></li>
+          <li><span class="t">2025</span><span>First users, and the hard parts working.</span></li>
+          <li><span class="t">2026</span><span>Finding the motion that repeats — that's now.</span></li>
+        </ul>
+      </div>
+    </section>
+    <section><div class="lbl">— Thanks</div>
+      <div><p class="body">Pick whichever is easiest. There's no wrong answer, and "not now" is completely fine.</p>
+        <div class="signoff">Thank you, truly. — the ${name} team</div>
+      </div>
+    </section>
+    <footer><span>${name} · 2026</span><span>Private link · please don't share</span></footer>
+  </div>
+${singleWaitlistScript(bk.apiWaitlist, 'mentor', bk.nonce)}
+</body></html>`;
+}
+
+// ── Template: Builder's Launchpad (Task #25) — dark terminal launch teaser ──
+function renderBuildersLaunchpad(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud.customer; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const ok = '#7bbf5a', warn = accent, danger = '#d9544e';
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+<style>
+  :root{color-scheme:dark;}*{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_MONO};line-height:1.65;font-size:15px;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}.wrap{max-width:1040px;margin:0 auto;padding:0 28px;}
+  .um{font-size:11px;letter-spacing:.14em;text-transform:uppercase;}
+  nav{border-bottom:1px solid ${secondary};}
+  nav .row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;font-size:13px;}
+  .brand{display:flex;align-items:center;gap:9px;}
+  .sq{width:11px;height:11px;border-radius:2px;background:${accent};}
+  .brand b{font-weight:600;}.brand .m{opacity:.5;}
+  .navcta{text-decoration:none;color:${accent};}
+  .hero{padding:80px 0 56px;border-bottom:1px solid ${secondary};}
+  .hero .sub{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:${accent};}
+  .hero h1{font-size:clamp(34px,5.2vw,58px);line-height:1.06;letter-spacing:-.02em;font-weight:600;margin:18px 0 18px;font-family:${PORT_MONO};}
+  .hero p{font-size:17px;opacity:.74;max-width:60ch;margin:0 0 26px;}
+  .btn{display:inline-block;font-family:${PORT_MONO};font-size:13px;font-weight:600;background:${color};color:${btnInk};text-decoration:none;border:0;border-radius:6px;padding:12px 20px;cursor:pointer;}
+  .btn[disabled]{opacity:.6;cursor:not-allowed;}
+  .ghost{display:inline-block;margin-left:8px;font-size:13px;text-decoration:none;border:1px solid ${secondary};border-radius:6px;padding:11px 17px;opacity:.85;}
+  .facts{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:${secondary};border:1px solid ${secondary};margin-top:44px;}
+  .facts .c{background:${bgColor};padding:18px 16px;}
+  .facts .k{font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.5;}
+  .facts .v{font-size:18px;margin-top:6px;color:${accent};}
+  section{display:grid;grid-template-columns:200px 1fr;gap:30px;padding:48px 0;border-bottom:1px solid ${secondary};}
+  section .side .idx{font-size:13px;color:${accent};}
+  section .side .lbl{font-size:11px;letter-spacing:.16em;text-transform:uppercase;opacity:.55;margin-top:4px;}
+  h2{font-size:22px;margin:0 0 14px;font-weight:600;letter-spacing:-.01em;}
+  p.body{margin:0 0 12px;opacity:.8;}
+  .state{list-style:none;margin:0;padding:0;}
+  .state li{display:flex;gap:12px;align-items:baseline;padding:10px 0;border-top:1px solid ${secondary};font-size:14px;}
+  .state li:first-child{border-top:0;}
+  .badge{font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:2px 8px;border-radius:4px;flex:none;}
+  .b-ok{background:${ok}26;color:${ok};}.b-warn{background:${warn}26;color:${warn};}.b-dn{background:${danger}26;color:${danger};}
+  ol.road{list-style:none;counter-reset:r;margin:0;padding:0;}
+  ol.road li{display:flex;gap:14px;padding:10px 0;border-top:1px solid ${secondary};font-size:14px;}ol.road li:first-child{border-top:0;}
+  ol.road li::before{counter-increment:r;content:"0" counter(r);color:${accent};}
+  .term{border:1px solid ${secondary};border-radius:10px;overflow:hidden;}
+  .term .bar{display:flex;align-items:center;gap:7px;background:${secondary};padding:9px 14px;font-size:12px;}
+  .term .bar .tl{width:11px;height:11px;border-radius:50%;}
+  .tl.r{background:${danger};}.tl.y{background:${warn};}.tl.g{background:${ok};}
+  .term .bar .name{margin-left:8px;opacity:.6;}
+  .term .body{padding:18px 16px;font-size:13px;background:${bgColor};}
+  .term .body .ln{margin:0 0 6px;opacity:.85;}
+  .term .body .pr{color:${accent};}
+  .term .foot{display:flex;gap:10px;padding:14px 16px;border-top:1px solid ${secondary};flex-wrap:wrap;}
+  form{display:flex;gap:10px;flex-wrap:wrap;}
+  input{font-family:${PORT_MONO};flex:1 1 220px;font-size:14px;padding:12px 14px;border:1px solid ${secondary};border-radius:6px;background:${inkColor}0d;color:${inkColor};outline:none;}
+  input::placeholder{color:${inkColor}66;}input:focus{border-color:${accent};box-shadow:0 0 0 3px ${accent}33;}
+  .wl-ok,.wl-err{font-size:13px;min-height:18px;margin-top:10px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
+  footer{display:flex;justify-content:space-between;padding:22px 0;font-size:11px;opacity:.5;flex-wrap:wrap;gap:8px;}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+  @media(max-width:820px){.facts{grid-template-columns:1fr 1fr;}section{grid-template-columns:1fr;}}
+</style></head><body>
+  <nav><div class="wrap row">
+    <div class="brand"><span class="sq"></span><b>${name}</b><span class="m">/ launch brief</span></div>
+    <a class="navcta" href="#apply">${a.c} →</a>
+  </div></nav>
+  <div class="wrap">
+    <header class="hero">
+      <div class="sub">Early access · shipping now</div>
+      <h1>${a.h}</h1>
+      <p>${a.b}</p>
+      <a class="btn" href="#apply">${a.c}</a><a class="ghost" href="#state">See where we are</a>
+      <div class="facts">
+        <div class="c"><div class="k">Stage</div><div class="v">Beta</div></div>
+        <div class="c"><div class="k">Access</div><div class="v">Invite</div></div>
+        <div class="c"><div class="k">Status</div><div class="v">Live</div></div>
+        <div class="c"><div class="k">Next</div><div class="v">v1</div></div>
+      </div>
+    </header>
+    <section>
+      <div class="side"><div class="idx">01</div><div class="lbl">Product vision</div></div>
+      <div><h2>What ${brand} does</h2><p class="body">${brand} takes the manual, error-prone parts of your day and makes them automatic — so you ship instead of babysitting tools.</p></div>
+    </section>
+    <section id="state">
+      <div class="side"><div class="idx">02</div><div class="lbl">Current state</div></div>
+      <div><h2>The honest status</h2>
+        <ul class="state">
+          <li><span class="badge b-ok">Working</span><span>Core flow is live and used daily.</span></li>
+          <li><span class="badge b-warn">Half</span><span>Integrations — the big ones are in.</span></li>
+          <li><span class="badge b-dn">Soon</span><span>Polish and onboarding still rough.</span></li>
+        </ul>
+      </div>
+    </section>
+    <section>
+      <div class="side"><div class="idx">03</div><div class="lbl">Roadmap</div></div>
+      <div><h2>What ships next</h2>
+        <ol class="road"><li>Smoother onboarding for new teams.</li><li>The two integrations you keep asking for.</li><li>v1, stable enough to depend on.</li></ol>
+      </div>
+    </section>
+    <section id="apply">
+      <div class="side"><div class="idx">04</div><div class="lbl">Get access</div></div>
+      <div><h2>${a.c}</h2>
+        <div class="term">
+          <div class="bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="name">~/join.sh</span></div>
+          <div class="body">
+            <p class="ln"><span class="pr">$</span> request access --product ${(name||'app').toLowerCase().replace(/[^a-z0-9]+/g,'-')}</p>
+            <p class="ln">› drop your email below and you're on the list.</p>
+          </div>
+          <div class="foot">
+            <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+              <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
+              <button type="submit" class="btn">${a.c}</button></form>
+          </div>
+        </div>
+        <div id="wl-msg" aria-live="polite"></div>
+      </div>
+    </section>
+    <footer><span>${name}</span><span>commit ${(name||'axal').toLowerCase().slice(0,4)}0x9f3a · Built with Axal VC</span></footer>
+  </div>
+${singleWaitlistScript(bk.apiWaitlist, 'customer', bk.nonce)}
+</body></html>`;
+}
+
 // ── Dispatcher ───────────────────────────────────────────────────
 const RENDERERS: Record<TemplateKey, (bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any) => string> = {
   minimal: renderMinimal,
@@ -1177,6 +2981,19 @@ const RENDERERS: Record<TemplateKey, (bk: BrandKit, aud: Record<string, { h: str
   'advisor-connect': renderAdvisorConnect,
   'proof-builder': renderProofBuilder,
   'capital-ready-kit': renderCapitalReadyKit,
+  'capital-storyteller': renderCapitalStoryteller,
+  'seed-stage-spark': renderSeedStageSpark,
+  'distribution-deck': renderDistributionDeck,
+  'pilot-partner-page': renderPilotPartnerPage,
+  'partner-hub': renderPartnerHub,
+  'partner-pipeline-pro': renderPartnerPipelinePro,
+  'co-founder-builder': renderCoFounderBuilder,
+  'co-founder-canvas': renderCoFounderCanvas,
+  'cofounder-connect': renderCofounderConnect,
+  'co-founder-quest': renderCoFounderQuest,
+  'mentor-connect': renderMentorConnect,
+  'mentor-connect-page': renderMentorConnectPage,
+  'builders-launchpad': renderBuildersLaunchpad,
 };
 
 export function renderLandingTemplate(

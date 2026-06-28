@@ -5,6 +5,20 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Cap-Table Simulator now works per project
+
+The Cap-Table Simulator now ties each cap table to a specific project. Instead of
+typing a scenario name, you pick the project from a dropdown, and the simulator
+loads that project's saved cap table (or sensible defaults if it's new). Each
+project keeps a single cap table, so saving updates it rather than piling up
+duplicates. You can jump straight to a project's cap table from its detail page.
+
+On top of that, the Spin-Out Demo Day deck's ownership chart (the "Cap table"
+slide) now reflects whatever you've modeled in the simulator for that project,
+both in the live preview and the downloaded PowerPoint. If a project has no
+simulator data yet, the deck falls back to its recorded shareholders, and then to
+a neutral placeholder.
+
 ## Spin-Out deck editor: "Review the deal" slide removed
 
 The "Review the deal" slide has been removed from the Spin-Out Demo Day deck
@@ -12,6 +26,23 @@ editor. The slide was always blank in the editor (the deal-room CTA only works
 on the shared investor link, not in the editor itself), so it was causing
 confusion. The deck now shows 9 slides — Cover through Ask — without the
 placeholder at the end.
+
+## Thirteen more landing page designs to choose from
+
+The Brand & Landing page builder now has a full library of page designs. We've
+added thirteen more distinct looks — so there's a ready-made style for whoever
+you're talking to, all still fully editable with your own words:
+
+- **For investors** — Capital Storyteller, Seed Stage Spark and Distribution Deck.
+- **For partners** — Pilot Partner Page, Partner Hub and Partner Pipeline Pro.
+- **For co-founders** — Co-Founder Builder, Co-Founder Canvas, Co-founder Connect
+  and Co-Founder Quest.
+- **For mentors** — Mentor Connect and Mentor Connect Page.
+- **For early customers** — Builder's Launchpad.
+
+Each one loads with its own matching colour palette you can fine-tune any time.
+
+---
 
 ## Three new landing page designs to choose from
 

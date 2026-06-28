@@ -48,6 +48,7 @@ import { computeRadar, type RadarResult } from '../radar';
 import { RADAR_AXES, ensureSkillsTaxonomySchema } from '../skillsTaxonomySchema';
 import { ensureSkillProfileSchema } from '../skillProfileSchema';
 import { parseUseOfFundsValue } from '../../util/useOfFunds';
+import { simulate, type Inputs, type SimulateResult } from '../captable';
 
 /**
  * Task #1 — Load admin-managed mentor/partner network profiles.
@@ -372,6 +373,11 @@ export type SpinoutDemoDayData = {
     eyebrow: string; headline: string;
     holders: Array<{ name: string; role: string; ownership_pct: string; kind: string }>;
     note: string;
+    // Task #28 — ownership segments derived from the project's saved
+    // Cap-Table Simulator scenario (fully-diluted ledger). Preferred over the
+    // standalone cap_table_holders table for Slide 08's donut. Empty when no
+    // simulator scenario exists for the project (falls back to holders).
+    sim_segments?: Array<[string, number]>;
   };
   ask: {
     eyebrow: string; headline: string;
@@ -520,6 +526,53 @@ const padTo = <T>(arr: T[], min: number, filler: T): T[] => {
  * which the adapter renders as <Nudge> cues pointing the founder back
  * to the right Lab page.
  */
+/**
+ * Task #28 — Derive Slide 08 ownership segments from a Cap-Table Simulator
+ * result. Uses the fully-diluted ledger (last round if any, else founding),
+ * keeps holders with a positive %, and caps at 6 wedges. Returns [] when the
+ * result is missing/empty so callers fall back to the holders table.
+ */
+function segmentsFromSimResult(result: SimulateResult | null | undefined): Array<[string, number]> {
+  if (!result || !Array.isArray(result.rounds)) return [];
+  const ledger = result.rounds.length
+    ? result.rounds[result.rounds.length - 1].ledger
+    : (result.founding || []);
+  return (ledger || [])
+    .map((h) => [String(h.holder || ''), Number(h.pct) || 0] as [string, number])
+    .filter((s) => s[0] && s[1] > 0)
+    .slice(0, 6);
+}
+
+/**
+ * Task #28 — Load the project's saved Cap-Table Simulator scenario (one per
+ * project) and compute its ownership segments. Prefers the cached result_json;
+ * re-simulates inputs_json when the cache is missing. Returns [] on any error
+ * (e.g. table absent) so the deck silently falls back to cap_table_holders.
+ */
+async function loadSimSegments(env: Env, projectId: number): Promise<Array<[string, number]>> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT inputs_json, result_json FROM cap_table_scenarios
+       WHERE project_id = ? ORDER BY updated_at DESC LIMIT 1`,
+    ).bind(projectId).first<{ inputs_json: string | null; result_json: string | null }>();
+    if (!row) return [];
+    let result: SimulateResult | null = null;
+    if (row.result_json) {
+      try { result = JSON.parse(row.result_json) as SimulateResult; } catch { result = null; }
+    }
+    if ((!result || !Array.isArray(result.rounds)) && row.inputs_json) {
+      try {
+        const inputs = JSON.parse(row.inputs_json) as Inputs;
+        const sim = simulate(inputs);
+        if (!('errors' in sim)) result = sim;
+      } catch { /* ignore malformed inputs */ }
+    }
+    return segmentsFromSimResult(result);
+  } catch {
+    return [];
+  }
+}
+
 export async function fillAxalSpinoutDemoDay(
   env: Env,
   userId: number,
@@ -816,6 +869,10 @@ export async function fillAxalSpinoutDemoDay(
       ownership_pct: pct != null ? `${Math.round(pct * 10) / 10}%` : DASH,
       kind: (row.kind || '').trim() || DASH,
     }));
+
+  // Task #28 — ownership segments from the project's Cap-Table Simulator
+  // scenario (preferred over the holders table on Slide 08).
+  const simSegments = await loadSimSegments(env, projectId);
 
   // ------ Task #14: activity log (last 30 days of Lab events) ---------
   // Aggregates milestones + interviews + advisor answers by day so the
@@ -1159,6 +1216,7 @@ export async function fillAxalSpinoutDemoDay(
         ? 'Seeded in Week 3. Clean. Founder-controlled.'
         : 'Cap table — to be seeded in Week 3.',
       holders: allHolders,
+      sim_segments: simSegments,
       note: doneMap.has('incorporation_completed')
         ? 'Incorporated in Week 4.'
         : 'Pre-incorporation — entity stands up in Week 4.',

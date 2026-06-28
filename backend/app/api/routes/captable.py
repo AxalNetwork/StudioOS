@@ -43,8 +43,49 @@ class ScenarioIn(BaseModel):
     project_id: Optional[int] = None
 
 
+def _role(user: User) -> str:
+    return (getattr(user.role, "value", user.role) or "").lower()
+
+
 def _is_admin(user: User) -> bool:
-    return (getattr(user.role, "value", user.role) or "").lower() == "admin"
+    return _role(user) == "admin"
+
+
+def _founder_owns(user: User, proj: Project) -> bool:
+    owner_fid = getattr(proj, "founder_id", None)
+    return owner_fid is not None and owner_fid == user.founder_id
+
+
+def _can_read_project(user: User, proj: Project) -> bool:
+    """Mirror of Projects visibility: founder (own only) · admin · partner · investor."""
+    r = _role(user)
+    if r in ("admin", "partner", "investor"):
+        return True
+    return _founder_owns(user, proj)
+
+
+def _can_write_project(user: User, proj: Project) -> bool:
+    """Cap-table writes: founder (own only) · admin · partner (investors excluded)."""
+    r = _role(user)
+    if r in ("admin", "partner"):
+        return True
+    return _founder_owns(user, proj)
+
+
+def _can_read_scenario(user: User, s: CapTableScenario, proj: Optional[Project]) -> bool:
+    if s.owner_user_id == user.id or _is_admin(user):
+        return True
+    if s.project_id is not None and proj is not None:
+        return _can_read_project(user, proj)
+    return False
+
+
+def _can_write_scenario(user: User, s: CapTableScenario, proj: Optional[Project]) -> bool:
+    if s.owner_user_id == user.id or _is_admin(user):
+        return True
+    if s.project_id is not None and proj is not None:
+        return _can_write_project(user, proj)
+    return False
 
 
 def _serialize(s: CapTableScenario, with_result: bool = True) -> dict:
@@ -63,27 +104,36 @@ def _serialize(s: CapTableScenario, with_result: bool = True) -> dict:
     return out
 
 
-def _ensure_project_access(session: Session, project_id: Optional[int], user: User) -> None:
-    """If the caller passes a project_id, prove they may attach to it.
-    Admins can attach to any project; otherwise the project must be owned by
-    the caller's founder_id (the standard Project.founder_id ownership)."""
+def _ensure_project_write_access(session: Session, project_id: Optional[int], user: User) -> None:
+    """If the caller passes a project_id, prove they may write a cap table to it
+    (founder-owner · admin · partner)."""
     if project_id is None:
         return
     proj = session.get(Project, project_id)
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found")
-    if _is_admin(user):
-        return
-    owner_fid = getattr(proj, "founder_id", None)
-    if owner_fid is None or owner_fid != user.founder_id:
-        raise HTTPException(status_code=403, detail="You don't own that project")
+    if not _can_write_project(user, proj):
+        raise HTTPException(status_code=403, detail="You don't have access to that project")
 
 
-def _own_or_404(session: Session, uid: str, user: User) -> CapTableScenario:
+def _scenario_project(session: Session, s: CapTableScenario) -> Optional[Project]:
+    return session.get(Project, s.project_id) if s.project_id is not None else None
+
+
+def _read_or_404(session: Session, uid: str, user: User) -> CapTableScenario:
     s = session.exec(select(CapTableScenario).where(CapTableScenario.uid == uid)).first()
     if not s:
         raise HTTPException(status_code=404, detail="Scenario not found")
-    if s.owner_user_id != user.id and not _is_admin(user):
+    if not _can_read_scenario(user, s, _scenario_project(session, s)):
+        raise HTTPException(status_code=403, detail="Not your scenario")
+    return s
+
+
+def _write_or_404(session: Session, uid: str, user: User) -> CapTableScenario:
+    s = session.exec(select(CapTableScenario).where(CapTableScenario.uid == uid)).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    if not _can_write_scenario(user, s, _scenario_project(session, s)):
         raise HTTPException(status_code=403, detail="Not your scenario")
     return s
 
@@ -123,9 +173,29 @@ def create_scenario(
     errs = validate_inputs(body.inputs)
     if errs:
         raise HTTPException(status_code=400, detail={"code": "invalid_inputs", "errors": errs})
-    _ensure_project_access(session, body.project_id, user)
+    _ensure_project_write_access(session, body.project_id, user)
     result = simulate(body.inputs)
     now = datetime.utcnow()
+
+    # Task #28 — one cap table per project. When a project is provided and a
+    # scenario already exists for it, UPDATE that row instead of inserting a
+    # duplicate (guards against stale frontend state). Access to the existing
+    # project's scenario is already gated by _ensure_project_write_access above.
+    if body.project_id is not None:
+        existing = session.exec(
+            select(CapTableScenario)
+            .where(CapTableScenario.project_id == body.project_id)
+            .order_by(desc(CapTableScenario.updated_at))
+        ).first()
+        if existing is not None:
+            existing.name = body.name
+            existing.inputs_json = json.dumps(body.inputs)
+            existing.result_json = json.dumps(result)
+            existing.computed_at = now
+            existing.updated_at = now
+            session.add(existing); session.commit(); session.refresh(existing)
+            return _serialize(existing)
+
     s = CapTableScenario(
         owner_user_id=user.id,
         project_id=body.project_id,
@@ -138,13 +208,35 @@ def create_scenario(
     return _serialize(s)
 
 
+# Task #28 — load a project's single cap table (project-scoped, NOT owner-
+# scoped) so partners/admins can open a founder's cap table from the dropdown.
+# Declared before /scenarios/{uid} so "by-project" isn't captured as a uid.
+@router.get("/scenarios/by-project/{project_id}")
+def read_scenario_by_project(
+    project_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    proj = session.get(Project, project_id)
+    if not proj:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not _can_read_project(user, proj):
+        raise HTTPException(status_code=403, detail="You don't have access to that project")
+    s = session.exec(
+        select(CapTableScenario)
+        .where(CapTableScenario.project_id == project_id)
+        .order_by(desc(CapTableScenario.updated_at))
+    ).first()
+    return {"scenario": _serialize(s) if s else None}
+
+
 @router.get("/scenarios/{uid}")
 def read_scenario(
     uid: str,
     session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ):
-    s = _own_or_404(session, uid, user)
+    s = _read_or_404(session, uid, user)
     return _serialize(s)
 
 
@@ -155,12 +247,27 @@ def update_scenario(
     session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ):
-    s = _own_or_404(session, uid, user)
+    s = _write_or_404(session, uid, user)
     errs = validate_inputs(body.inputs)
     if errs:
         raise HTTPException(status_code=400, detail={"code": "invalid_inputs", "errors": errs})
     if body.project_id is not None:
-        _ensure_project_access(session, body.project_id, user)
+        _ensure_project_write_access(session, body.project_id, user)
+        # Task #28 — one cap table per project: refuse to bind this scenario to a
+        # project that a DIFFERENT scenario already owns (prevents PUT duplicates).
+        clash = session.exec(
+            select(CapTableScenario)
+            .where(CapTableScenario.project_id == body.project_id)
+            .where(CapTableScenario.uid != uid)
+        ).first()
+        if clash is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "project_has_cap_table",
+                    "message": "This project already has a cap table. Edit that one instead.",
+                },
+            )
     result = simulate(body.inputs)
     now = datetime.utcnow()
     s.name = body.name
@@ -180,7 +287,7 @@ def delete_scenario(
     session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ):
-    s = _own_or_404(session, uid, user)
+    s = _write_or_404(session, uid, user)
     session.delete(s); session.commit()
     return {"ok": True}
 
@@ -191,7 +298,7 @@ def export_csv(
     session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ):
-    s = _own_or_404(session, uid, user)
+    s = _read_or_404(session, uid, user)
     result = json.loads(s.result_json) if s.result_json else simulate(json.loads(s.inputs_json))
     csv = to_csv(result)
     return PlainTextResponse(

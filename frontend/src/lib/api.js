@@ -1750,6 +1750,7 @@ export const api = {
   simulateCapTable: (inputs) =>
     request('/captable/simulate', { method: 'POST', body: JSON.stringify({ inputs }) }),
   listCapTableScenarios: () => request('/captable/scenarios'),
+  getCapTableByProject: (projectId) => request(`/captable/scenarios/by-project/${projectId}`),
   getCapTableScenario: (uid) => request(`/captable/scenarios/${uid}`),
   createCapTableScenario: (data) =>
     request('/captable/scenarios', { method: 'POST', body: JSON.stringify(data) }),
