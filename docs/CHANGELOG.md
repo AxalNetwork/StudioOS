@@ -10,6 +10,64 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Compare multiple cap-table scenarios per project (draft variants)
+
+Teams can now model alternative cap tables for a project — different SAFE caps,
+round sizes, option-pool topups — as named DRAFT variants and view them
+side-by-side, WITHOUT disturbing the project's single canonical cap table that
+the Demo Day deck Slide 08 and every "the project's cap table" lookup depend on.
+
+- Schema: new `cap_table_scenarios.is_variant` (0 = canonical, 1 = draft variant).
+  `cloudflare-worker/sql/migrations/118_captable_scenario_variants.sql` adds the
+  column + `idx_captable_project_variant`. Both runtimes self-heal on the cold
+  path (no `ADD COLUMN IF NOT EXISTS` on SQLite/D1): worker
+  `cloudflare-worker/src/services/captableSchema.ts::ensureCapTableVariantColumn`
+  (mounted as a `captable.use('*')` middleware), backend
+  `backend/app/api/routes/captable.py::_ensure_schema` (via the
+  `_session_with_schema` dependency).
+- Canonical-only invariant: every "one cap table per project" path now filters
+  `COALESCE(is_variant,0) = 0` — the POST upsert SELECT, GET
+  `/scenarios/by-project/:id`, and the PUT clash guard (which now only fires when
+  editing a canonical row, so a variant edit never 409s). Mirrored in the worker
+  (`routes/captable.ts`) and backend (`captable.py`).
+- Deck invariant: `services/decks/axalSpinoutDemoDay.ts::loadSimSegments` adds the
+  canonical filter and calls `ensureCapTableVariantColumn`, so Slide 08 reads ONLY
+  the canonical scenario even when a newer variant exists.
+- New endpoints (worker + backend): `POST /scenarios/by-project/:id/variants`
+  (Growth tier, project WRITE, always INSERT `is_variant=1`) and
+  `GET /scenarios/by-project/:id/compare` (project READ → `{ canonical, variants[] }`).
+  `serialize()` now exposes `is_variant`.
+- Frontend: `frontend/src/lib/api.js` adds `createCapTableVariant` +
+  `getCapTableCompare`. `frontend/src/pages/CapTablePage.jsx` adds a "Save as
+  variant" action and a read-only Compare panel (final ownership + founders-combined
+  per scenario, canonical vs draft labels, dark: variants). Variants are managed in
+  the Compare panel and excluded from the "Saved scenarios" list so editing the
+  canonical cap table stays unambiguous.
+- Tests: `cloudflare-worker/test/captable_variants.test.ts` locks variant-create
+  never tripping the 409, canonical lookups ignoring a NEWER variant, compare
+  returning canonical + variants, and investors being denied. Appended to the
+  `test:drift` strip-types list (the gate only runs files named there).
+
+## Publish-time render guard for every landing visual template
+
+Added a committed test that renders all 21 landing visual templates and catches
+broken designs before a founder publishes — no behavior change, test-only.
+
+- `cloudflare-worker/test/landing_templates_render.test.ts`: iterates every key
+  in `TEMPLATE_KEYS` (5 original six-tab layouts + 16 ported single-audience
+  designs) and asserts each rendered page: starts/ends well-formed with no
+  unresolved `${...}` tokens; carries the provided nonce on every inline
+  `<script>`; HTML-escapes hostile founder copy (`<x-pwn>`-style payload) so it
+  is never injected raw; contains no `@import` and no external font/stylesheet
+  URLs (CSP). Waitlist capture is checked per architecture — ported designs must
+  expose exactly one `#wl-form`/`#wl-msg` posting a single fixed audience that
+  matches its `frontend/src/lib/brand/templates.js` catalog entry; original
+  designs expose the six-tab `#wl-<audience>`/`#msg-<audience>` capture.
+- Complements `landing_templates.test.ts` (palette lockstep / signature colours)
+  by adding the XSS-escaping + CSP-font invariants and covering the original 5.
+- `package.json`: appended the new file to the `test:drift` strip-types list
+  (the gate only runs files named there).
+
 ## Spin-Out Demo Day deck: 11-slide alignment + Product demo source
 
 Fixed an off-by-one in the Spin-Out Demo Day deck (`axal_spinout_demoday`) where
@@ -68,8 +126,20 @@ derives its ownership donut (Slide 08) from that simulator data.
 - `cloudflare-worker/test/spinoutDeckData.test.ts`: added tests for the
   sim_segments precedence, filtering/cap, holders fallback, empty→FALLBACK gap,
   and checklist independence.
+- One-cap-table-per-project upsert is now regression-covered end-to-end on BOTH
+  API paths (Task #30):
+  - `cloudflare-worker/test/captable_project_upsert.test.ts`: drives the real
+    Hono captable app via a stateful in-memory D1 stub — bootstrap (null) →
+    POST save → bootstrap (finds uid) → POST edit+save → asserts exactly one
+    `cap_table_scenarios` row with a stable uid; plus the PUT-409
+    `project_has_cap_table` clash path. Appended to the `test:drift` worker file
+    list in `package.json`.
+  - `tests/test_captable_project_upsert.py`: same flow against the FastAPI dev
+    route with isolated in-memory SQLite + admin override.
+  - `cloudflare-worker/src/routes/captable.ts`: expanded the `HttpError`
+    parameter-property constructor to explicit field assignments so the route
+    module loads under the repo's strip-types test loader (behavior-preserving).
 
-<<<<<<< HEAD
 ## Removed "Review the deal" slide from the Spin-Out Demo Day deck editor
 
 Dropped the "Review the deal" slide (slide 11) from the `axal_spinout_demoday`
@@ -89,7 +159,7 @@ preserved in the database but no longer shown.
   left rail, slide counter, and nav bounds all use `displaySlides`.
 - `frontend/test/spinout_demoday_deck.test.mjs`: updated slide count 10 → 9;
   removed `deal.contact` render assertions (field no longer in any rendered slide).
-=======
+
 ## Thirteen more selectable landing-page designs in the Brand & Landing builder (Task #25)
 
 Recreated the remaining 13 of 16 uploaded landing designs as new, distinct,
@@ -118,7 +188,6 @@ only, no `@import`).
   typedef, and repointed each matching catalog entry's `visualTemplate` to its
   own ported design (previously aliased to a generic built-in style).
 - `npm run test:drift` passes (incl. `tsc --noEmit` in `cloudflare-worker/`).
->>>>>>> 67a666f3 (Add thirteen new landing page designs for users to select from)
 
 ## Three new selectable landing-page designs in the Brand & Landing builder (Task #24)
 
