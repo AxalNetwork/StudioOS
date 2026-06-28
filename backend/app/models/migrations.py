@@ -144,6 +144,27 @@ def ensure_project_revenue_proof_columns() -> None:
         session.commit()
 
 
+def ensure_project_product_demo_columns() -> None:
+    """Task #31 — add product-demo source columns to `projects` for the
+    Spin-Out Demo Day "Product demo" slide. Idempotent (uses
+    `ADD COLUMN IF NOT EXISTS`). Mirrors the Worker D1 migration so the dev
+    FastAPI backend persists the same fields."""
+    with Session(engine) as session:
+        for col in (
+            "product_demo_video_url",
+            "product_demo_live_url",
+            "product_demo_caption",
+            "product_demo_screenshot_url",
+        ):
+            try:
+                session.exec(text(
+                    f"ALTER TABLE projects ADD COLUMN IF NOT EXISTS {col} VARCHAR"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_project_product_demo_columns: %s ALTER failed: %s", col, exc)
+        session.commit()
+
+
 def ensure_user_access_level_column() -> None:
     """Idempotently add `users.access_level` for the limited-access feature.
 

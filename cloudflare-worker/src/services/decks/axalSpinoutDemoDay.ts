@@ -412,7 +412,7 @@ export type SpinoutDemoDayData = {
   // URL + caption. Falls back to a static screenshot when missing.
   product_demo: {
     eyebrow: string; headline: string; body: string;
-    loop_url: string; screenshot_url: string; caption: string;
+    loop_url: string; live_url: string; screenshot_url: string; caption: string;
   };
 };
 
@@ -440,6 +440,12 @@ type ProjectRow = {
   paying_customers: number | null;
   first_payment_date: string | null;
   paid_pilot_status: string | null;
+  // Task #31 — Product demo source (slot 6). Editable on the project detail
+  // page; the deck reads these as its single source of truth.
+  product_demo_video_url: string | null;
+  product_demo_live_url: string | null;
+  product_demo_caption: string | null;
+  product_demo_screenshot_url: string | null;
 };
 type UserRow = {
   id: number; name: string | null; display_name: string | null; email: string | null;
@@ -1070,14 +1076,22 @@ export async function fillAxalSpinoutDemoDay(
     cta_label: 'Review the deal',
   };
 
-  // ------ Task #14: product demo (slot 6) -----------------------------
+  // ------ Task #14 / #31: product demo (slot 6) -----------------------
+  // Single source of truth: the project's Product demo columns (editable on
+  // the project detail page). Each falls back to an honest placeholder so the
+  // slide layout never collapses when the founder hasn't filled it in.
+  const pdVideo = (p.product_demo_video_url || '').trim();
+  const pdLive = (p.product_demo_live_url || '').trim();
+  const pdCaption = (p.product_demo_caption || '').trim();
+  const pdShot = (p.product_demo_screenshot_url || '').trim();
   const productDemo = {
     eyebrow: '06 · Product demo',
     headline: 'See it in motion.',
     body: orDash(p.description || p.solution),
-    loop_url: '',
-    screenshot_url: '',
-    caption: 'A 30-second loop of the MVP — drop a video URL on the project to surface here.',
+    loop_url: pdVideo,
+    live_url: pdLive,
+    screenshot_url: pdShot,
+    caption: pdCaption || 'A 30-second loop of the MVP — drop a video URL on the project to surface here.',
   };
 
   // ------ assemble all sections ---------------------------------------
@@ -1471,6 +1485,7 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
         para('product_demo_headline', pd.headline),
         para('product_demo_body', pd.body),
         para('product_demo_loop_url', pd.loop_url, 'Demo video URL (YouTube, Vimeo, or direct .mp4/.webm link)'),
+        para('product_demo_live_url', pd.live_url, 'Live demo URL (link investors to the running product)'),
         para('product_demo_screenshot_url', pd.screenshot_url),
         para('product_demo_caption', pd.caption),
       ],
@@ -1599,7 +1614,7 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
 
 /**
  * Task #8 — per-slide coverage map for the "Fill from project" grid in
- * PitchDeckPage. 14 cells in the canonical slide order; each cell
+ * PitchDeckPage. 11 cells in the canonical slide order; each cell
  * records (a) the source table(s) it reads, (b) whether the slide will
  * populate vs. needs founder input, and (c) a short count_label the UI
  * shows as a badge ("3/5 interviews", "0 holders", "score: ✓").

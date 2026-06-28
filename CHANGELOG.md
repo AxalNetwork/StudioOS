@@ -68,6 +68,39 @@ broken designs before a founder publishes — no behavior change, test-only.
 - `package.json`: appended the new file to the `test:drift` strip-types list
   (the gate only runs files named there).
 
+## Spin-Out Demo Day deck: 11-slide alignment + Product demo source
+
+Fixed an off-by-one in the Spin-Out Demo Day deck (`axal_spinout_demoday`) where
+the rail, preview, field editor, and PPTX disagreed on slide count, and added a
+project-owned **Product demo** slide as the new slot 6. Canonical order is now:
+Cover, Problem, Validation, Market, Solution, Product demo, Roadmap, Team &
+network, Cap table, Ask, Review the deal.
+
+- `frontend/src/data/spinout/deckData.js` / `.tsx` / `buildDeck.js`: render 11
+  slides; added `SlideProductDemo` (pos 6) and restored `SlideDealReadiness`
+  (pos 11); eyebrows now read `/11`; PPTX builds 11 slides + notes.
+- `frontend/src/pages/PitchDeckPage.jsx`: removed the off-by-one `displaySlides`
+  filter that hid `review_the_deal`; the coverage grid comment now reads
+  "11-cell".
+- Product demo data source: Worker D1 migration
+  `cloudflare-worker/sql/migrations/118_project_product_demo.sql` (adds
+  `product_demo_video_url` / `product_demo_live_url` / `product_demo_caption` /
+  `product_demo_screenshot_url` to `projects`), `ensureProjectProductDemoColumns()`
+  in `routes/projects.ts` (bootstrap + GET/PUT whitelist), dev FastAPI parity via
+  `ensure_project_product_demo_columns()` in `backend/app/models/migrations.py`
+  (+ `entities.py` Project model, `schemas/scoring.py` ProjectUpdate).
+- `frontend/src/pages/ProjectDetail.jsx`: new `ProductDemoSection` editor (video
+  URL, live URL, screenshot, caption) saving via `PUT /projects/:id`.
+- Deck assembler wiring: `axalSpinoutDemoDay.ts` reads the project columns for
+  the product-demo slide; `spinoutDeckData.ts` maps `productDemo` (idx `06`),
+  renumbers roadmap..deal, adds a gap when no demo media, and carries a
+  `productDemo` speaker note.
+- One source of truth: `routes/decks.ts` PUT now writes Problem/Solution/Product
+  demo slide-field edits back to their project columns.
+- Tests: `cloudflare-worker/test/spinoutDeckData.test.ts` updated to 11 slides /
+  `productDemo`; frontend deck + PPTX tests updated (10→11). `npm run test:drift`
+  passes.
+
 ## Cap-Table Simulator is now project-aware and feeds Demo Day Slide 08
 
 The Cap-Table Simulator now binds a cap table to a project (one per project)
@@ -107,7 +140,6 @@ derives its ownership donut (Slide 08) from that simulator data.
     parameter-property constructor to explicit field assignments so the route
     module loads under the repo's strip-types test loader (behavior-preserving).
 
-<<<<<<< HEAD
 ## Removed "Review the deal" slide from the Spin-Out Demo Day deck editor
 
 Dropped the "Review the deal" slide (slide 11) from the `axal_spinout_demoday`
@@ -127,7 +159,7 @@ preserved in the database but no longer shown.
   left rail, slide counter, and nav bounds all use `displaySlides`.
 - `frontend/test/spinout_demoday_deck.test.mjs`: updated slide count 10 → 9;
   removed `deal.contact` render assertions (field no longer in any rendered slide).
-=======
+
 ## Thirteen more selectable landing-page designs in the Brand & Landing builder (Task #25)
 
 Recreated the remaining 13 of 16 uploaded landing designs as new, distinct,
@@ -156,7 +188,6 @@ only, no `@import`).
   typedef, and repointed each matching catalog entry's `visualTemplate` to its
   own ported design (previously aliased to a generic built-in style).
 - `npm run test:drift` passes (incl. `tsc --noEmit` in `cloudflare-worker/`).
->>>>>>> 67a666f3 (Add thirteen new landing page designs for users to select from)
 
 ## Three new selectable landing-page designs in the Brand & Landing builder (Task #24)
 

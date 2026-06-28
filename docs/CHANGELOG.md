@@ -10,6 +10,157 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Spin-Out Demo Day deck: 11-slide alignment + Product demo source
+
+Fixed an off-by-one in the Spin-Out Demo Day deck (`axal_spinout_demoday`) where
+the rail, preview, field editor, and PPTX disagreed on slide count, and added a
+project-owned **Product demo** slide as the new slot 6. Canonical order is now:
+Cover, Problem, Validation, Market, Solution, Product demo, Roadmap, Team &
+network, Cap table, Ask, Review the deal.
+
+- `frontend/src/data/spinout/deckData.js` / `.tsx` / `buildDeck.js`: render 11
+  slides; added `SlideProductDemo` (pos 6) and restored `SlideDealReadiness`
+  (pos 11); eyebrows now read `/11`; PPTX builds 11 slides + notes.
+- `frontend/src/pages/PitchDeckPage.jsx`: removed the off-by-one `displaySlides`
+  filter that hid `review_the_deal`; the coverage grid comment now reads
+  "11-cell".
+- Product demo data source: Worker D1 migration
+  `cloudflare-worker/sql/migrations/118_project_product_demo.sql` (adds
+  `product_demo_video_url` / `product_demo_live_url` / `product_demo_caption` /
+  `product_demo_screenshot_url` to `projects`), `ensureProjectProductDemoColumns()`
+  in `routes/projects.ts` (bootstrap + GET/PUT whitelist), dev FastAPI parity via
+  `ensure_project_product_demo_columns()` in `backend/app/models/migrations.py`
+  (+ `entities.py` Project model, `schemas/scoring.py` ProjectUpdate).
+- `frontend/src/pages/ProjectDetail.jsx`: new `ProductDemoSection` editor (video
+  URL, live URL, screenshot, caption) saving via `PUT /projects/:id`.
+- Deck assembler wiring: `axalSpinoutDemoDay.ts` reads the project columns for
+  the product-demo slide; `spinoutDeckData.ts` maps `productDemo` (idx `06`),
+  renumbers roadmap..deal, adds a gap when no demo media, and carries a
+  `productDemo` speaker note.
+- One source of truth: `routes/decks.ts` PUT now writes Problem/Solution/Product
+  demo slide-field edits back to their project columns.
+- Tests: `cloudflare-worker/test/spinoutDeckData.test.ts` updated to 11 slides /
+  `productDemo`; frontend deck + PPTX tests updated (10→11). `npm run test:drift`
+  passes.
+
+## Cap-Table Simulator is now project-aware and feeds Demo Day Slide 08
+
+The Cap-Table Simulator now binds a cap table to a project (one per project)
+instead of free-text "Untitled scenario" naming, and the Spin-Out Demo Day deck
+derives its ownership donut (Slide 08) from that simulator data.
+
+- `frontend/src/pages/CapTablePage.jsx`: replaced the scenario-name text input
+  with a role-scoped project `<select>`; bootstrap loads projects + scenarios and
+  honors `?project=` deep links; save requires a selected project and persists
+  `project_id`; `runSim` guards on loaded founders.
+- `frontend/src/pages/ProjectDetail.jsx`: added a Cap Table quick link
+  (`/build/captable?project=<id>`).
+- `cloudflare-worker/src/routes/captable.ts` + `backend/app/api/routes/captable.py`:
+  `POST /captable/scenarios` upserts the existing scenario when `project_id` is
+  set (one cap table per project, no duplicates).
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`: loads the
+  project's latest scenario (prefers `result_json`, re-simulates `inputs_json`
+  fallback) and computes `sim_segments`.
+- `cloudflare-worker/src/services/decks/spinoutDeckData.ts`: Slide 08 segments
+  now prefer `sim_segments` → `cap_table_holders` → neutral FALLBACK; the
+  readiness checklist stays tied to holders. Applies to both the in-app preview
+  and the PPTX export (shared Worker bundle).
+- `cloudflare-worker/test/spinoutDeckData.test.ts`: added tests for the
+  sim_segments precedence, filtering/cap, holders fallback, empty→FALLBACK gap,
+  and checklist independence.
+
+<<<<<<< HEAD
+## Removed "Review the deal" slide from the Spin-Out Demo Day deck editor
+
+Dropped the "Review the deal" slide (slide 11) from the `axal_spinout_demoday`
+editor. The slide was rendering blank in the preview pane and its interactive
+CTA only activates in share/publish mode — not in the editor — making it a
+source of confusion. Stored decks that already have a `review_the_deal` spec
+entry are gracefully filtered out of the left rail on load; the field data is
+preserved in the database but no longer shown.
+
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx`: removed
+  `SlideReviewTheDeal` component + `useReviewDealSlot` import; removed
+  `review_the_deal` entry from `SLIDES`; updated header + inline comments.
+- `frontend/src/decks/templates/index.ts`: `slide_count` 10 → 9; description
+  updated.
+- `frontend/src/pages/PitchDeckPage.jsx`: added `displaySlides` useMemo that
+  filters `spec_id === 'review_the_deal'` from the left rail for spinout decks;
+  left rail, slide counter, and nav bounds all use `displaySlides`.
+- `frontend/test/spinout_demoday_deck.test.mjs`: updated slide count 10 → 9;
+  removed `deal.contact` render assertions (field no longer in any rendered slide).
+=======
+## Thirteen more selectable landing-page designs in the Brand & Landing builder (Task #25)
+
+Recreated the remaining 13 of 16 uploaded landing designs as new, distinct,
+server-rendered visual templates selectable in the Brand & Landing page builder,
+completing the set (Task #24 shipped the first 3). Each is a self-contained,
+single-audience full HTML document with its own signature palette and layout
+language, and stays CSP-safe (inline `<style>` + nonce'd script, system fonts
+only, no `@import`).
+
+- `cloudflare-worker/src/services/landingTemplates.ts`:
+  - Added 13 keys to `TEMPLATE_KEYS` and 13 entries to `TEMPLATE_REGISTRY`
+    (all `usesHero/usesProduct: false`, so the `/templates` API auto-drives the
+    builder's labels/meta): `capital-storyteller`, `seed-stage-spark`,
+    `distribution-deck`, `pilot-partner-page`, `partner-hub`,
+    `partner-pipeline-pro`, `co-founder-builder`, `co-founder-canvas`,
+    `cofounder-connect`, `co-founder-quest`, `mentor-connect`,
+    `mentor-connect-page`, `builders-launchpad`.
+  - Added a signature palette per design to `TEMPLATE_SIGNATURE_PALETTES`.
+  - Added shared system-font stacks (`PORT_SERIF`/`PORT_SANS`/`PORT_MONO`) and
+    13 renderer functions, each registered in the `RENDERERS` dispatcher. Every
+    renderer reuses `buildAudienceData` (escaped copy), `contrastText` (legible
+    button text) and `singleWaitlistScript` (single `#wl-form`/`#wl-msg` posting
+    the correct audience — investor/partner/cofounder/mentor/customer).
+- `frontend/src/lib/brand/templates.js`: mirrored all 13 keys into
+  `VISUAL_TEMPLATE_KEYS`, `VISUAL_TEMPLATE_PALETTES` and the `VisualTemplate`
+  typedef, and repointed each matching catalog entry's `visualTemplate` to its
+  own ported design (previously aliased to a generic built-in style).
+- `npm run test:drift` passes (incl. `tsc --noEmit` in `cloudflare-worker/`).
+>>>>>>> 67a666f3 (Add thirteen new landing page designs for users to select from)
+
+## Three new selectable landing-page designs in the Brand & Landing builder (Task #24)
+
+Recreated the first batch (3 of 16) of the uploaded landing designs as new,
+distinct, server-rendered visual templates selectable in the Brand & Landing page
+builder, keeping the existing fill-in-the-blanks editor. Each ships its own
+signature palette and renders as a faithful, single-audience page.
+
+- `cloudflare-worker/src/services/landingTemplates.ts`:
+  - Added `advisor-connect`, `proof-builder`, `capital-ready-kit` to
+    `TEMPLATE_KEYS` and `TEMPLATE_REGISTRY` (all `usesHero/usesProduct: false`, so
+    the `/templates` API auto-drives the builder's labels/meta).
+  - New shared helpers: `contrastText(hex)` (relative-luminance pick of a legible
+    button-text colour, so accent-coloured buttons stay readable — e.g. the lime
+    Capital Ready Kit accent) and `singleWaitlistScript(api, audience, nonce)`
+    (CSP-safe, nonce'd, single-form capture wiring `#wl-form`/`#wl-msg` and
+    posting a fixed audience — these designs are single-narrative, unlike the
+    shared six-tab `waitlistScript`).
+  - Exported `TEMPLATE_SIGNATURE_PALETTES` (per-design palette) and three full
+    renderers: `renderAdvisorConnect` (warm cream/ochre, serif, advisory invite),
+    `renderProofBuilder` (light, green accent, evidence-first proof card),
+    `renderCapitalReadyKit` (dark mono+serif, lime signal, investor brief). All
+    three registered in `RENDERERS`. System fonts only; inline `<style>` +
+    nonce'd script (CSP-safe). Honest qualitative default copy (Live/Weekly/
+    Growing) where no real metric exists.
+- `cloudflare-worker/src/routes/brand.ts`: `renderTemplatePreview` now merges
+  `TEMPLATE_SIGNATURE_PALETTES[key]` into the placeholder row so the public,
+  no-auth template-picker previews render on-brand instead of the generic violet.
+- `frontend/src/lib/brand/templates.js`: added the three keys to
+  `VISUAL_TEMPLATE_KEYS` + the `VisualTemplate` typedef; added a new
+  `VISUAL_TEMPLATE_PALETTES` export (mirror of the Worker constant — keep in
+  lockstep); repointed the `advisor-connect`, `proof-builder` and
+  `capital-ready-kit` catalog entries from generic visual styles to their own
+  recreated designs.
+- `frontend/src/pages/BrandBuilderPage.jsx`: `chooseTemplate` seeds the signature
+  palette into the editable colour fields when one of the recreated designs is
+  picked, and restores the default violet palette when switching from a recreated
+  design back to a generic one (generic→generic switches leave the palette
+  untouched). The palette still flows through and can be re-tuned.
+- No D1 migration required: render-only change; the `template` column already
+  stores an arbitrary key.
+
 ## Ticket filing from the Personal Advisor + legacy help-surface removal (Task #9)
 
 Users can now file tracked support tickets directly from the Personal Advisor

@@ -175,8 +175,22 @@ export const SAMPLE_DATA = {
     ],
   },
 
+  productDemo: {
+    eyebrow: 'Product demo', idx: '06',
+    title: 'See the live risk score in action.',
+    walkthroughLabel: 'WALKTHROUGH',
+    body: 'A 90-second walkthrough: connect a loan tape, generate a real-time risk score, and watch continuous monitoring flag risk the moment it moves.',
+    // Demo media — a link (or uploaded asset URL) to a short product loop, the
+    // live product URL, and a still screenshot. Empty by default so the slide
+    // shows its "add a demo" placeholder identically in preview and export.
+    videoUrl: '',
+    liveUrl: '',
+    screenshot: '',
+    caption: 'Real-time scoring dashboard \u2014 explainable risk drivers update as new borrower data lands.',
+  },
+
   roadmap: {
-    eyebrow: 'Roadmap', idx: '06',
+    eyebrow: 'Roadmap', idx: '07',
     title: 'Now, next, later \u2014 on a 30-day operating clock.',
     days: ['Day 0', 'Day 30', 'Day 60', 'Day 90'],
     currentDay: 1, // index into days marked as "today"
@@ -200,7 +214,7 @@ export const SAMPLE_DATA = {
   },
 
   team: {
-    eyebrow: 'Team & Network', idx: '07',
+    eyebrow: 'Team & Network', idx: '08',
     title: 'A founder backed by an operating network.',
     founder: {
       initials: 'MO', name: 'Maya Osei', role: 'Founder & CEO',
@@ -243,7 +257,7 @@ export const SAMPLE_DATA = {
   },
 
   captable: {
-    eyebrow: 'Cap table & incorporation', idx: '08',
+    eyebrow: 'Cap table & incorporation', idx: '09',
     title: 'Entity-ready: clean cap table and founder setup.',
     checklistLabel: 'FOUNDER & ENTITY SETUP',
     items: [
@@ -266,7 +280,7 @@ export const SAMPLE_DATA = {
   },
 
   ask: {
-    eyebrow: 'The ask', idx: '09',
+    eyebrow: 'The ask', idx: '10',
     title: 'Raising $750K pre-seed to reach revenue.',
     kpis: [
       ['$750K', 'Target raise'],
@@ -285,7 +299,7 @@ export const SAMPLE_DATA = {
   },
 
   deal: {
-    eyebrow: 'Deal readiness', idx: '10',
+    eyebrow: 'Deal readiness', idx: '11',
     title: 'Data room open. Ready to move.',
     diligenceLabel: 'DILIGENCE PACKAGE',
     ready: [
@@ -315,6 +329,7 @@ export const SAMPLE_NOTES = {
   validation: 'VALIDATION. Message: measurable signal from the sprint.\nAUTO: scorecard values, funnel stage counts, conversion rate.\nMANUAL: none (computed).',
   market: 'MARKET. Message: credible bottom-up serviceable market.\nAUTO: TAM/SAM/SOM figures, ACV + lender-count assumptions.\nMANUAL: the three why-now lines.',
   solution: 'SOLUTION. Message: data \u2192 live score, four steps.\nAUTO: step copy, outcome metrics.\nMANUAL: confirm outcome numbers vs. latest pilot.',
+  productDemo: 'PRODUCT DEMO. Message: show the product, do not just describe it.\nAUTO: walkthrough copy.\nMANUAL: paste a live demo URL + short loop video link or screenshot from the project.',
   roadmap: 'ROADMAP. Message: operating plan on the 30-day cadence.\nAUTO: milestones + status flags (milestone tracker).\nMANUAL: none if tracker is current.',
   team: 'TEAM & NETWORK. Message: founder inside a structured operating network.\nAUTO: profiles, network node labels (people graph).\nMANUAL: advisor consent; swap initials for headshots.',
   captable: 'CAP TABLE & INCORPORATION. Message: legal + equity setup is investor-ready.\nAUTO: checklist statuses, cap-table splits (data-room module).\nMANUAL: none if module current.',

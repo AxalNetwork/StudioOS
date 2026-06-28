@@ -60,6 +60,12 @@ export interface SpinoutDeckData {
     steps: Array<[string, string, string]>;
     outcomeLabel: string; outcomes: Array<[string, string]>;
   };
+  // Task #31 — slot 6. Sourced from the project's Product demo columns.
+  productDemo: {
+    eyebrow: string; idx: string; title: string;
+    walkthroughLabel: string; body: string;
+    videoUrl: string; liveUrl: string; screenshot: string; caption: string;
+  };
   roadmap: {
     eyebrow: string; idx: string; title: string;
     days: string[]; currentDay: number;
@@ -217,6 +223,7 @@ const NOTES: SpinoutDeckNotes = {
   validation: 'VALIDATION. Message: measurable signal from the sprint.\nAUTO: scorecard values, funnel stage counts, conversion rate.\nMANUAL: confirm funnel stages (outreach / LOIs) where not tracked.',
   market: 'MARKET. Message: credible bottom-up serviceable market.\nAUTO: TAM/SAM/SOM figures, why-now lines.\nMANUAL: sizing assumptions + citation basis.',
   solution: 'SOLUTION. Message: data \u2192 live score, four steps.\nAUTO: step copy from capabilities.\nMANUAL: confirm target outcome metrics vs. latest pilot.',
+  productDemo: 'PRODUCT DEMO. Message: show the product, don\u2019t just describe it.\nAUTO: walkthrough copy.\nMANUAL: paste a live demo URL + short loop video link or screenshot from the project.',
   roadmap: 'ROADMAP. Message: operating plan on the 30-day cadence.\nAUTO: Now/Next/Later from OKRs + status flags.\nMANUAL: none if tracker is current.',
   team: 'TEAM & NETWORK. Message: founder inside a structured operating network.\nAUTO: founder profile, advisor/mentor roster, network nodes.\nMANUAL: advisor consent; swap initials for headshots.',
   captable: 'CAP TABLE & INCORPORATION. Message: legal + equity setup is investor-ready.\nAUTO: readiness checklist statuses, cap-table splits.\nMANUAL: none if module current.',
@@ -408,6 +415,31 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     ],
   };
 
+  /* ---- product demo (slot 6) ---- */
+  // Sourced from the project's Product demo columns (editable on the project
+  // detail page). Empty media URLs are emitted as '' and dropped by the
+  // flatten step, so the slide falls back to its "add a demo" placeholder
+  // identically in the preview and the PPTX export.
+  const pd = src.product_demo;
+  const pdVideo = has(pd?.loop_url) ? pd.loop_url : '';
+  const pdLive = has(pd?.live_url) ? pd.live_url : '';
+  const pdShot = has(pd?.screenshot_url) ? pd.screenshot_url : '';
+  const pdCaption = has(pd?.caption) ? pd.caption : '';
+  const pdBody = has(pd?.body) ? pd.body : '';
+  const productDemo: SpinoutDeckData['productDemo'] = {
+    eyebrow: 'Product demo', idx: '06',
+    title: has(pd?.headline) ? pd.headline : 'See the product in action.',
+    walkthroughLabel: 'WALKTHROUGH',
+    body: pdBody,
+    videoUrl: pdVideo,
+    liveUrl: pdLive,
+    screenshot: pdShot,
+    caption: pdCaption,
+  };
+  if (!has(pdVideo) && !has(pdLive) && !has(pdShot)) {
+    gap('Product demo: add a demo video link, live demo URL, or screenshot on the project.');
+  }
+
   /* ---- roadmap ---- */
   const rm = src.roadmap || ({} as SpinoutDemoDayData['roadmap']);
   const nowItems = (rm.now || []).filter(has);
@@ -433,7 +465,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   }
 
   const roadmap: SpinoutDeckData['roadmap'] = {
-    eyebrow: 'Roadmap', idx: '06',
+    eyebrow: 'Roadmap', idx: '07',
     title: has(rm.headline) ? rm.headline : 'Now, next, later \u2014 on a 30-day operating clock.',
     days: ['Day 0', 'Day 30', 'Day 60', 'Day 90'],
     currentDay: programDay >= 15 ? 1 : 0,
@@ -494,7 +526,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   }
 
   const team: SpinoutDeckData['team'] = {
-    eyebrow: 'Team & Network', idx: '07',
+    eyebrow: 'Team & Network', idx: '08',
     title: has(src.team?.headline) ? src.team.headline : 'A founder backed by an operating network.',
     founder,
     founders,
@@ -537,7 +569,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   else { segments = FALLBACK.segments; gap('Cap table: add holders in the Incorporate / Cap Table module.'); }
 
   const captable: SpinoutDeckData['captable'] = {
-    eyebrow: 'Cap table & incorporation', idx: '08',
+    eyebrow: 'Cap table & incorporation', idx: '09',
     title: has(src.cap_table?.headline) ? src.cap_table.headline : 'Entity-ready: clean cap table and founder setup.',
     checklistLabel: 'FOUNDER & ENTITY SETUP',
     items,
@@ -571,7 +603,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   else if (!nextMilestones.length) gap('The ask: add your next funding milestone in the Capital module.');
 
   const ask: SpinoutDeckData['ask'] = {
-    eyebrow: 'The ask', idx: '09',
+    eyebrow: 'The ask', idx: '10',
     title: has(ak.headline) ? ak.headline : (has(ak.raise_amount) ? `Raising ${ak.raise_amount} to reach the next milestone.` : 'Raising a pre-seed round to reach revenue.'),
     kpis,
     useLabel: 'USE OF FUNDS',
@@ -592,7 +624,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   if (!has(contactEmail)) gap('Review the deal: add a contact email / deal-room link in the Compliance module.');
 
   const deal: SpinoutDeckData['deal'] = {
-    eyebrow: 'Deal readiness', idx: '10',
+    eyebrow: 'Deal readiness', idx: '11',
     title: has(src.contact?.headline) ? src.contact.headline : 'Data room open. Ready to move.',
     diligenceLabel: 'DILIGENCE PACKAGE',
     ready,
@@ -607,7 +639,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   };
 
   const data: SpinoutDeckData = {
-    brand, cover, problem, validation, market, solution, roadmap, team, captable, ask, deal,
+    brand, cover, problem, validation, market, solution, productDemo, roadmap, team, captable, ask, deal,
   };
 
   const draft = programDay < PROGRAM_DAYS || gaps.length > 0;
@@ -670,7 +702,7 @@ export function flattenSpinoutDeckData(data: SpinoutDeckData): Record<string, st
 
 const SECTIONS = new Set([
   'brand', 'cover', 'problem', 'validation', 'market', 'solution',
-  'roadmap', 'team', 'captable', 'ask', 'deal',
+  'productDemo', 'roadmap', 'team', 'captable', 'ask', 'deal',
 ]);
 
 /* ============================================================================

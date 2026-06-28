@@ -1,7 +1,7 @@
 // Task #41 — Spin-Out deck DATA assembler: pure-map guarantees.
 //
 // mapToSpinoutDeckData(src: SpinoutDemoDayData) is a PURE remap of the
-// existing fillAxalSpinoutDemoDay() output into the NEW 10-slide buildDeck()
+// existing fillAxalSpinoutDemoDay() output into the 11-slide buildDeck()
 // contract. This test pins the two ends of the spectrum WITHOUT any D1 mock:
 //
 //   1. A FULLY-completed project at Day 28 (days_remaining = 0) =>
@@ -27,7 +27,7 @@ import type { SpinoutDemoDayData } from '../src/services/decks/axalSpinoutDemoDa
 
 const SLIDE_KEYS = [
   'brand', 'cover', 'problem', 'validation', 'market',
-  'solution', 'roadmap', 'team', 'captable', 'ask', 'deal',
+  'solution', 'productDemo', 'roadmap', 'team', 'captable', 'ask', 'deal',
 ] as const;
 
 const SOLUTION_ICONS = new Set(['ingest', 'score', 'monitor', 'act']);
@@ -169,8 +169,12 @@ function makeFullSrc(): SpinoutDemoDayData {
       },
     },
     product_demo: {
-      eyebrow: 'Demo', headline: 'Product', body: '',
-      loop_url: '', screenshot_url: '', caption: '',
+      eyebrow: 'Demo', headline: 'See Basepoint score a loan tape live.',
+      body: 'A two-minute walkthrough from raw loan tape to live risk score.',
+      loop_url: 'https://example.com/basepoint-demo.mp4',
+      live_url: 'https://app.basepoint.xyz',
+      screenshot_url: 'https://example.com/basepoint-shot.png',
+      caption: 'Live scoring dashboard.',
     },
   } as SpinoutDemoDayData;
 }
@@ -186,6 +190,7 @@ function makePartialSrc(): SpinoutDemoDayData {
     validation: { ...full.validation, headline: '', body: '', metrics: [], quotes: [], ratings: [] },
     market: { ...full.market, headline: '', tam: '', sam: '', som: '', why_now: [] },
     solution: { ...full.solution, headline: '', capabilities: [] },
+    product_demo: { ...full.product_demo, headline: '', body: '', loop_url: '', live_url: '', screenshot_url: '', caption: '' },
     roadmap: { ...full.roadmap, headline: '', now: [], next: [], later: [] },
     brand: { ...full.brand, tagline: '', brand_kit_ready: false, pitch_deck_ready: false, incorporated: false },
     team: { ...full.team, headline: '', founders: [] },
@@ -296,7 +301,7 @@ test('flattenSpinoutDeckData: scalars become dotted keys, arrays become _json ke
 
   // All SLIDE_KEYS sections present.
   const sections = new Set(Object.keys(fields).map((k) => k.split('.')[0]));
-  for (const s of ['cover', 'problem', 'validation', 'market', 'solution', 'roadmap', 'team', 'captable', 'ask', 'deal']) {
+  for (const s of ['cover', 'problem', 'validation', 'market', 'solution', 'productDemo', 'roadmap', 'team', 'captable', 'ask', 'deal']) {
     assert.ok(sections.has(s), `section "${s}" present in flat fields`);
   }
 });

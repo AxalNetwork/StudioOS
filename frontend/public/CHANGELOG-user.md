@@ -17,6 +17,22 @@ ownership laid out column by column.
 Variants are drafts for exploration only: your project still has one official cap
 table, and the Demo Day deck always uses that one — never a draft.
 
+## Spin-Out Demo Day deck now has a Product demo slide
+
+The Spin-Out Demo Day deck now shows all of its slides correctly — an earlier
+glitch left the slide list, the live preview, the editor, and the downloaded
+PowerPoint out of sync, and that's fixed. The deck has a clear 11-slide order:
+Cover, Problem, Validation, Market, Solution, Product demo, Roadmap, Team &
+network, Cap table, Ask, and Review the deal.
+
+There's a new **Product demo** slide so you can show the product, not just
+describe it. Add a demo video link, a live demo URL, a screenshot, and a short
+caption right on the project's page, and they flow straight into the deck — in
+both the live preview and the downloaded PowerPoint. Edits you make to the
+Problem, Solution, and Product demo text on a slide now save back to the project
+too, so the deck and the project always tell the same story. Each slide also shows
+whether it's ready or still needs your input.
+
 ## Cap-Table Simulator now works per project
 
 The Cap-Table Simulator now ties each cap table to a specific project. Instead of
