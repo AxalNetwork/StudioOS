@@ -10,6 +10,26 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Removed "Review the deal" slide from the Spin-Out Demo Day deck editor
+
+Dropped the "Review the deal" slide (slide 11) from the `axal_spinout_demoday`
+editor. The slide was rendering blank in the preview pane and its interactive
+CTA only activates in share/publish mode — not in the editor — making it a
+source of confusion. Stored decks that already have a `review_the_deal` spec
+entry are gracefully filtered out of the left rail on load; the field data is
+preserved in the database but no longer shown.
+
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx`: removed
+  `SlideReviewTheDeal` component + `useReviewDealSlot` import; removed
+  `review_the_deal` entry from `SLIDES`; updated header + inline comments.
+- `frontend/src/decks/templates/index.ts`: `slide_count` 10 → 9; description
+  updated.
+- `frontend/src/pages/PitchDeckPage.jsx`: added `displaySlides` useMemo that
+  filters `spec_id === 'review_the_deal'` from the left rail for spinout decks;
+  left rail, slide counter, and nav bounds all use `displaySlides`.
+- `frontend/test/spinout_demoday_deck.test.mjs`: updated slide count 10 → 9;
+  removed `deal.contact` render assertions (field no longer in any rendered slide).
+
 ## Three new selectable landing-page designs in the Brand & Landing builder (Task #24)
 
 Recreated the first batch (3 of 16) of the uploaded landing designs as new,

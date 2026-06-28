@@ -1,5 +1,5 @@
 /**
- * Axal Spin-Out Demo Day deck — 10-slide BASEPOINT design regression tests.
+ * Axal Spin-Out Demo Day deck — 9-slide BASEPOINT design regression tests.
  *
  * The in-app renderer (`Deck_axal_spinout_demoday`) reproduces the PPTX export
  * one-to-one and is fully data-driven: every narrative string + structured viz
@@ -11,8 +11,8 @@
  *     full BASEPOINT sample, byte-for-byte equal to render(SAMPLE_DATA),
  *   - dotted-key overrides (scalar + `_json`) binding onto the sample, with a
  *     type-mismatch guard, and
- *   - the 10-slide registry shape (old Axal-Signal / Product-Demo / people /
- *     brand slides dropped; Review-the-deal last).
+ *   - the 9-slide registry shape (Axal-Signal / Product-Demo / people / brand /
+ *     Review-the-deal slides dropped).
  *
  * The TSX is loaded through the Vite-Oxc loader hook (see _deck-loader.mjs) so
  * no build step is needed.
@@ -57,9 +57,8 @@ test('empty data degrades to the full BASEPOINT sample deck', () => {
   const empty = render(EMPTY);
   // render({}) === render(SAMPLE_DATA), byte-for-byte (the autofill default).
   assert.equal(empty, render(SAMPLE_DATA), 'empty render should equal the sample render');
-  // Anchor a few stable BASEPOINT copy strings so the sample is the fallback.
+  // Anchor a stable BASEPOINT copy string so the sample is the fallback.
   assert.ok(empty.includes('BASEPOINT'), 'BASEPOINT brand copy missing on empty');
-  assert.ok(empty.includes('maya@basepoint.xyz'), 'BASEPOINT contact missing on empty');
 });
 
 test('passing the nested SAMPLE_DATA object is equivalent to passing {}', () => {
@@ -83,7 +82,6 @@ test('scalar dotted-key overrides bind onto the sample + clear the sample value'
   const html = render(POPULATED);
   assert.ok(html.includes('ZZACME'), 'cover.company override did not bind');
   assert.ok(html.includes('A wholly different thesis sentence for ZZACME.'), 'cover.thesis override did not bind');
-  assert.ok(html.includes('founder@zzacme.com'), 'deal.contact override did not bind');
   // The overridden sample thesis must not leak through.
   assert.ok(!html.includes('Basepoint scores it in real time'), 'sample thesis leaked into the override');
 });
@@ -117,17 +115,17 @@ test('hydrate is prototype-pollution safe (dotted path + JSON.parse payload)', (
   assert.equal(render({ 'cover.__proto__.polluted': 'x' }), render(EMPTY), 'forbidden dotted key changed the render');
 });
 
-test('SLIDES registry — 10 slides; Axal-Signal / Product-Demo / people / brand dropped; Review last', () => {
-  assert.equal(SLIDES.length, 10, 'expected exactly 10 slides');
+test('SLIDES registry — 9 slides; Axal-Signal / Product-Demo / people / brand / deal dropped', () => {
+  assert.equal(SLIDES.length, 9, 'expected exactly 9 slides');
   const ids = SLIDES.map((s) => s.id);
   assert.deepEqual(ids, [
     'cover', 'problem', 'validation', 'market', 'solution',
-    'roadmap', 'team_network', 'cap_table', 'ask', 'review_the_deal',
+    'roadmap', 'team_network', 'cap_table', 'ask',
   ], 'slide ids / order changed');
-  for (const gone of ['axal_signal', 'product_demo', 'team_readiness', 'mentor_network', 'brand']) {
+  for (const gone of ['axal_signal', 'product_demo', 'team_readiness', 'mentor_network', 'brand', 'review_the_deal']) {
     assert.ok(!ids.includes(gone), `${gone} slide must be absent`);
   }
-  assert.equal(SLIDES[SLIDES.length - 1].id, 'review_the_deal', 'Review-the-deal must be the last slide');
+  assert.equal(SLIDES[SLIDES.length - 1].id, 'ask', 'Ask must be the last slide');
   // The rendered deck emits exactly one frame per slide.
-  assert.equal(countFrames(render(EMPTY)), 10, 'rendered deck should emit 10 slide frames');
+  assert.equal(countFrames(render(EMPTY)), 9, 'rendered deck should emit 9 slide frames');
 });

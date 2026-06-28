@@ -184,7 +184,18 @@ export default function PitchDeckPage() {
     }
   }, [deck]);
 
-  const activeSlide = slides[activeIdx] || null;
+  // For the Spin-Out deck, filter out any stored slide with spec_id
+  // 'review_the_deal' — that slide has been removed from the React component
+  // array (SLIDES) and should no longer appear in the editor rail or field
+  // editor. For all other deck types this is the same as slides.
+  const displaySlides = useMemo(() => {
+    const isSpinout = deck?.method_id === 'axal_spinout_demoday' ||
+      slides.some((s) => s?.method_id === 'axal_spinout_demoday');
+    if (!isSpinout) return slides;
+    return slides.filter((s) => s?.spec_id !== 'review_the_deal');
+  }, [slides, deck]);
+
+  const activeSlide = displaySlides[activeIdx] || null;
   const activeMethodId = activeSlide?.method_id || null;
   const activeMethod = useMemo(
     () => methods.find((m) => m.id === activeMethodId) || null,
@@ -644,7 +655,7 @@ export default function PitchDeckPage() {
                   )}
                 </div>
                 <div className="space-y-1 max-h-[60vh] overflow-y-auto">
-                  {slides.map((s, i) => (
+                  {displaySlides.map((s, i) => (
                     <div
                       key={i}
                       // The Spin-Out deck is a fixed-structure template — slide
@@ -745,7 +756,7 @@ export default function PitchDeckPage() {
               )}
               <div className="bg-white dark:bg-slate-900 rounded-lg border dark:border-slate-800 p-6 min-h-[60vh]" data-card>
                 <div className="flex items-center justify-between mb-3 text-xs text-gray-500 dark:text-slate-400">
-                  <span>Slide {activeIdx + 1} / {slides.length}</span>
+                  <span>Slide {activeIdx + 1} / {displaySlides.length}</span>
                   <span>{savingState === 'saving' ? 'Saving…' : savingState === 'saved' ? 'Saved' : ''}</span>
                   <div className="flex gap-1">
                     <button
@@ -754,8 +765,8 @@ export default function PitchDeckPage() {
                       className="p-1 disabled:opacity-30"
                     ><ChevronLeft className="w-4 h-4" /></button>
                     <button
-                      onClick={() => setActiveIdx(Math.min(slides.length - 1, activeIdx + 1))}
-                      disabled={activeIdx >= slides.length - 1}
+                      onClick={() => setActiveIdx(Math.min(displaySlides.length - 1, activeIdx + 1))}
+                      disabled={activeIdx >= displaySlides.length - 1}
                       className="p-1 disabled:opacity-30"
                     ><ChevronRight className="w-4 h-4" /></button>
                   </div>
