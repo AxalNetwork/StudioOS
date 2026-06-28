@@ -1733,6 +1733,71 @@ def ensure_cofounder_tables() -> None:
             session.rollback()
 
 
+def ensure_project_membership_tables() -> None:
+    """Task #1 (Spin-Out Teams Collaboration) — project membership layer.
+
+    Additive layer (never ALTERs ``projects``) so a Spin-Out project can be
+    built by a TEAM: co-founders (read+edit) and advisors (read + advisory).
+    Mirrors the D1 migration ``119_project_membership.sql`` in Postgres dialect.
+    Idempotent; each block has its own try/except/rollback.
+    """
+    with Session(engine) as session:
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS project_members (
+                    id SERIAL PRIMARY KEY,
+                    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    role VARCHAR NOT NULL DEFAULT 'cofounder',
+                    status VARCHAR NOT NULL DEFAULT 'accepted',
+                    source VARCHAR,
+                    invitation_id INTEGER,
+                    cofounder_connection_id INTEGER,
+                    added_by_user_id INTEGER,
+                    accepted_at TIMESTAMP,
+                    removed_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    CONSTRAINT uq_project_members_pair UNIQUE (project_id, user_id)
+                )
+            """))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_project_members_user ON project_members(user_id, status)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_project_members_project ON project_members(project_id, status)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_project_membership_tables: project_members: %s", exc)
+            session.rollback()
+
+        try:
+            session.exec(text("""
+                CREATE TABLE IF NOT EXISTS project_member_invitations (
+                    id SERIAL PRIMARY KEY,
+                    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    role VARCHAR NOT NULL DEFAULT 'cofounder',
+                    status VARCHAR NOT NULL DEFAULT 'pending',
+                    source VARCHAR,
+                    invitee_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    invitee_email VARCHAR,
+                    token_hash VARCHAR,
+                    cofounder_connection_id INTEGER,
+                    invited_by_user_id INTEGER,
+                    accepted_by_user_id INTEGER,
+                    expires_at TIMESTAMP,
+                    accepted_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            session.exec(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_pmi_token ON project_member_invitations(token_hash)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_pmi_project ON project_member_invitations(project_id, status)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_pmi_invitee_user ON project_member_invitations(invitee_user_id, status)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_pmi_invitee_email ON project_member_invitations(invitee_email, status)"))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_project_membership_tables: project_member_invitations: %s", exc)
+            session.rollback()
+
+
 def ensure_user_handle_column() -> None:
     """Task #55 — Public profile pages.
 

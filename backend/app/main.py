@@ -102,6 +102,7 @@ async def lifespan(app: FastAPI):
             ensure_task54_tables,
             ensure_task46_tables,
             ensure_cofounder_tables,
+            ensure_project_membership_tables,
             ensure_portfolio_health_tables,
             ensure_watchlist_decision_tables,
             ensure_push_subscriptions_table,
@@ -174,6 +175,9 @@ async def lifespan(app: FastAPI):
         # Task #38 — co-founder matching tables.
         ensure_cofounder_tables()
         logger.info("StudioOS migrations: cofounder tables ensured")
+        # Task #1 — Spin-Out teams collaboration (project membership layer).
+        ensure_project_membership_tables()
+        logger.info("StudioOS migrations: project membership tables ensured")
         # Task #31 — 83(b) tracker idempotency unique index.
         ensure_section_83b_tracker_table()
         logger.info("StudioOS migrations: section_83b_trackers unique index ensured")
@@ -392,6 +396,10 @@ async def security_and_observability(request: Request, call_next):
 # ---------------------------------------------------------------------------
 app.include_router(scoring.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
+# Task #1 — Spin-Out teams collaboration: member + invitation routes (shares
+# the /api/projects prefix with the projects router above).
+from backend.app.api.routes import project_members as _project_members  # noqa: E402
+app.include_router(_project_members.router, prefix="/api")
 app.include_router(legal.router, prefix="/api")
 app.include_router(partners.router, prefix="/api")
 app.include_router(capital.router, prefix="/api")

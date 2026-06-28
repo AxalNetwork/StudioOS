@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { safeExternalUrl } from '../lib/url';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, FileText, Target, Building, Rocket, Pencil, Trash2, X, Database, Search, ExternalLink, AlertCircle, PieChart } from 'lucide-react';
+import { ArrowLeft, ChevronRight, FileText, Target, Building, Rocket, Pencil, Trash2, X, Database, Search, ExternalLink, AlertCircle, PieChart, Users, UserPlus, Link2, Copy, Lock, Mail, Check } from 'lucide-react';
 import SectorSelect from '../components/SectorSelect';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
@@ -32,6 +32,9 @@ export default function ProjectDetail() {
   const [loadError, setLoadError] = useState('');
   const [editing, setEditing] = useState(false);
   const [cbOpen, setCbOpen] = useState(false);
+  // Task #1 — caller's membership permissions ({ can_edit, can_manage, my_role }).
+  // 403 (e.g. investors) resolves to null → no edit rights.
+  const [perm, setPerm] = useState(null);
 
   const load = () => {
     setLoadError('');
@@ -39,8 +42,9 @@ export default function ProjectDetail() {
       api.getProject(id),
       api.getScores(id).catch(() => []),
       api.listDocuments(id).catch(() => []),
-    ]).then(([p, s, d]) => {
-      setProject(p); setScores(s); setDocs(d);
+      api.listProjectMembers(id).catch(() => null),
+    ]).then(([p, s, d, m]) => {
+      setProject(p); setScores(s); setDocs(d); setPerm(m);
     }).catch((e) => {
       setLoadError(e?.message || 'Failed to load project');
     }).finally(() => setLoading(false));
@@ -92,7 +96,9 @@ export default function ProjectDetail() {
 
   const isAdmin = user?.role === 'admin';
   const isOwner = !!user?.founder_id && project && project.founder_id === user.founder_id;
-  const canEdit = isAdmin || isOwner;
+  // Task #1 — co-founders (and admin/partner managers) may edit project DATA;
+  // advisors/investors may not. perm.can_edit comes from GET /:id/members.
+  const canEdit = isAdmin || isOwner || !!perm?.can_edit;
   const canDelete = isAdmin || isOwner;
   const tier = (user?.tier || user?.subscription_plan || 'free').toLowerCase();
   const isElevated = ['admin','partner','investor','mentor'].includes((user?.role || '').toLowerCase());
@@ -939,6 +945,368 @@ const PAID_PILOT_STATUS_OPTIONS = [
   { value: 'paid', label: 'Paid — live revenue' },
 ];
 
+const MEMBER_ROLE_BADGE = {
+  owner: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+  cofounder: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  advisor: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+};
+const MEMBER_ROLE_LABEL = { owner: 'Owner', cofounder: 'Co-founder', advisor: 'Advisor' };
+const ADD_MODES = [
+  { key: 'email', label: 'Email invite' },
+  { key: 'link', label: 'Share link' },
+  { key: 'user_id', label: 'User ID' },
+  { key: 'match', label: 'Co-founder match' },
+];
+
+// Task #1 (Spin-Out Teams Collaboration) — the roster + invite controls that
+// live inside Edit Project. Drives entirely off GET /projects/:id/members:
+// `can_manage` decides whether management UI shows; `locked` + `gate_reason`
+// render the stage-gate banner (new founders unlock in lab Week 2). Co-founders
+// edit project data; advisors are read-only; investors are never members.
+function ProjectMembersSection({ projectId, onError }) {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState('email');
+  const [role, setRole] = useState('cofounder');
+  const [email, setEmail] = useState('');
+  const [userId, setUserId] = useState('');
+  const [connections, setConnections] = useState(null);
+  const [selectedConn, setSelectedConn] = useState('');
+  const [generatedLink, setGeneratedLink] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setData(await api.listProjectMembers(projectId));
+    } catch (e) {
+      onError(e?.message || 'Failed to load the team roster');
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, onError]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Lazily fetch the owner's *active* (mutually NDA-signed) co-founder
+  // connections the first time the match tab is opened.
+  useEffect(() => {
+    if (mode !== 'match' || connections !== null) return;
+    api.cofounderListConnections()
+      .then((r) => {
+        const items = Array.isArray(r) ? r : (r?.items || []);
+        setConnections(items.filter((c) => c.status === 'active'));
+      })
+      .catch(() => setConnections([]));
+  }, [mode, connections]);
+
+  const absoluteLink = (acceptPath) => `${window.location.origin}${acceptPath}`;
+  const resetInputs = () => { setEmail(''); setUserId(''); setSelectedConn(''); };
+
+  const addByUserId = async () => {
+    const idNum = parseInt(userId, 10);
+    if (!Number.isInteger(idNum) || idNum <= 0) { onError('Enter a valid user ID'); return; }
+    setBusy(true); setNotice(''); setGeneratedLink('');
+    try {
+      await api.addProjectMember(projectId, { mode: 'user_id', user_id: idNum, role });
+      setNotice('Member added.'); resetInputs(); await load();
+    } catch (e) { onError(e?.message || 'Failed to add member'); }
+    finally { setBusy(false); }
+  };
+
+  const addByMatch = async () => {
+    if (!selectedConn) { onError('Choose a connection'); return; }
+    setBusy(true); setNotice(''); setGeneratedLink('');
+    try {
+      await api.addProjectMember(projectId, { mode: 'cofounder_match', connection_uid: selectedConn, role });
+      setNotice('Co-founder added from your match.'); resetInputs(); await load();
+    } catch (e) { onError(e?.message || 'Failed to add co-founder'); }
+    finally { setBusy(false); }
+  };
+
+  const inviteByEmail = async () => {
+    const e = email.trim();
+    if (!e) { onError('Enter an email address'); return; }
+    setBusy(true); setNotice(''); setGeneratedLink('');
+    try {
+      const res = await api.createProjectInvitation(projectId, { mode: 'email', email: e, role });
+      setGeneratedLink(absoluteLink(res.accept_path));
+      setNotice('Invitation created — share the link below.'); setEmail(''); await load();
+    } catch (err) { onError(err?.message || 'Failed to create invitation'); }
+    finally { setBusy(false); }
+  };
+
+  const inviteByLink = async () => {
+    setBusy(true); setNotice(''); setGeneratedLink('');
+    try {
+      const res = await api.createProjectInvitation(projectId, { mode: 'link', role });
+      setGeneratedLink(absoluteLink(res.accept_path));
+      setNotice('Share link created.'); await load();
+    } catch (e) { onError(e?.message || 'Failed to create link'); }
+    finally { setBusy(false); }
+  };
+
+  const revoke = async (invId) => {
+    setBusy(true);
+    try { await api.revokeProjectInvitation(projectId, invId); await load(); }
+    catch (e) { onError(e?.message || 'Failed to revoke invitation'); }
+    finally { setBusy(false); }
+  };
+
+  const removeMember = async (uid) => {
+    setBusy(true);
+    try { await api.removeProjectMember(projectId, uid); await load(); }
+    catch (e) { onError(e?.message || 'Failed to remove member'); }
+    finally { setBusy(false); }
+  };
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(generatedLink);
+      setCopied(true); setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard blocked — link is still visible to copy manually */ }
+  };
+
+  const shareMsg = 'Join my project on Axal StudioOS';
+  const waHref = `https://wa.me/?text=${encodeURIComponent(`${shareMsg}: ${generatedLink}`)}`;
+  const tgHref = `https://t.me/share/url?url=${encodeURIComponent(generatedLink)}&text=${encodeURIComponent(shareMsg)}`;
+  const mailHref = `mailto:?subject=${encodeURIComponent(shareMsg)}&body=${encodeURIComponent(`${shareMsg}:\n\n${generatedLink}`)}`;
+
+  const members = data?.members || [];
+  const invitations = data?.invitations || [];
+  const canManage = !!data?.can_manage;
+  const locked = !!data?.locked;
+
+  const inputCls = 'w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100';
+
+  return (
+    <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+      <div className="mb-3 flex items-center gap-2">
+        <Users size={16} className="text-gray-500 dark:text-gray-400" />
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Team</h3>
+      </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+        Co-founders can read &amp; edit project data; advisors have read-only access.
+      </p>
+
+      {loading ? (
+        <p className="text-xs text-gray-500 dark:text-gray-400">Loading team…</p>
+      ) : (
+        <>
+          <div className="space-y-2">
+            {members.map((m) => (
+              <div
+                key={m.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-800"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm text-gray-900 dark:text-gray-100">{m.name || `User #${m.user_id}`}</span>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${MEMBER_ROLE_BADGE[m.role] || ''}`}>
+                      {MEMBER_ROLE_LABEL[m.role] || m.role}
+                    </span>
+                  </div>
+                  {m.email && <div className="truncate text-xs text-gray-500 dark:text-gray-400">{m.email}</div>}
+                </div>
+                {canManage && m.role !== 'owner' && (
+                  <button
+                    type="button"
+                    onClick={() => removeMember(m.user_id)}
+                    disabled={busy}
+                    className="shrink-0 text-gray-400 hover:text-red-600 disabled:opacity-50"
+                    aria-label={`Remove ${m.name || 'member'}`}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
+              </div>
+            ))}
+            {members.length === 0 && (
+              <p className="text-xs text-gray-500 dark:text-gray-400">No team members yet.</p>
+            )}
+          </div>
+
+          {canManage && locked && (
+            <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-300">
+              <Lock size={14} className="mt-0.5 shrink-0" />
+              <span>{data.gate_reason || 'Team building is locked at this stage.'}</span>
+            </div>
+          )}
+
+          {canManage && !locked && (
+            <div className="mt-4 rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+              <div className="mb-3 flex flex-wrap gap-1">
+                {ADD_MODES.map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => { setMode(t.key); setNotice(''); setGeneratedLink(''); }}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                      mode === t.key
+                        ? 'bg-violet-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mb-3">
+                <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Role</label>
+                <select value={role} onChange={(e) => setRole(e.target.value)} className={inputCls}>
+                  <option value="cofounder">Co-founder (read &amp; edit)</option>
+                  <option value="advisor">Advisor (read-only)</option>
+                </select>
+              </div>
+
+              {mode === 'email' && (
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={email}
+                    placeholder="name@example.com"
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={inputCls}
+                  />
+                  <button
+                    type="button"
+                    onClick={inviteByEmail}
+                    disabled={busy}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                  >
+                    <Mail size={14} /> Invite
+                  </button>
+                </div>
+              )}
+
+              {mode === 'link' && (
+                <button
+                  type="button"
+                  onClick={inviteByLink}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                >
+                  <Link2 size={14} /> Generate share link
+                </button>
+              )}
+
+              {mode === 'user_id' && (
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={userId}
+                    placeholder="Numeric user ID"
+                    onChange={(e) => setUserId(e.target.value)}
+                    className={inputCls}
+                  />
+                  <button
+                    type="button"
+                    onClick={addByUserId}
+                    disabled={busy}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                  >
+                    <UserPlus size={14} /> Add
+                  </button>
+                </div>
+              )}
+
+              {mode === 'match' && (
+                <div className="flex gap-2">
+                  <select
+                    value={selectedConn}
+                    onChange={(e) => setSelectedConn(e.target.value)}
+                    className={inputCls}
+                  >
+                    <option value="">
+                      {connections === null
+                        ? 'Loading matches…'
+                        : connections.length === 0
+                          ? 'No active co-founder matches'
+                          : 'Choose a match…'}
+                    </option>
+                    {(connections || []).map((c) => (
+                      <option key={c.uid} value={c.uid}>
+                        {c.counterparty?.name || c.counterparty?.email || 'Connection'}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={addByMatch}
+                    disabled={busy || !selectedConn}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                  >
+                    <UserPlus size={14} /> Add
+                  </button>
+                </div>
+              )}
+
+              {notice && <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">{notice}</p>}
+
+              {generatedLink && (
+                <div className="mt-3 rounded-lg bg-gray-50 p-2.5 dark:bg-gray-800/60">
+                  <div className="flex items-center gap-2">
+                    <input readOnly value={generatedLink} className={`${inputCls} font-mono text-xs`} />
+                    <button
+                      type="button"
+                      onClick={copyLink}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-xs text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                    >
+                      {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                  <div className="mt-2 flex gap-2 text-xs">
+                    <a href={waHref} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:underline dark:text-violet-400">WhatsApp</a>
+                    <a href={tgHref} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:underline dark:text-violet-400">Telegram</a>
+                    <a href={mailHref} className="text-violet-600 hover:underline dark:text-violet-400">Email</a>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {canManage && invitations.length > 0 && (
+            <div className="mt-4">
+              <h4 className="mb-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Pending invitations</h4>
+              <div className="space-y-2">
+                {invitations.map((inv) => (
+                  <div
+                    key={inv.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-gray-300 px-3 py-2 dark:border-gray-700"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-sm text-gray-700 dark:text-gray-300">
+                          {inv.invitee_email || 'Share link'}
+                        </span>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${MEMBER_ROLE_BADGE[inv.role] || ''}`}>
+                          {MEMBER_ROLE_LABEL[inv.role] || inv.role}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-400 dark:text-gray-500">Pending</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => revoke(inv.id)}
+                      disabled={busy}
+                      className="shrink-0 text-xs text-gray-400 hover:text-red-600 disabled:opacity-50"
+                    >
+                      Revoke
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function EditProjectModal({ project, onClose, onSaved, onError }) {
   const [form, setForm] = useState(() => ({
     name: project.name || '',
@@ -1127,6 +1495,9 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
               </div>
             </div>
           </div>
+
+          {/* Task #1 — Spin-Out teams: co-founders + advisors roster + invites. */}
+          <ProjectMembersSection projectId={project.id} onError={onError} />
         </div>
         <div className="flex gap-3 px-5 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl dark:border-gray-800">
           <button

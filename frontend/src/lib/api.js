@@ -353,6 +353,21 @@ export const api = {
   adminHardDeleteProject: (id) => request(`/admin/projects/${id}/hard-delete`, { method: 'DELETE' }),
   advanceWeek: (id) => request(`/projects/${id}/advance-week`, { method: 'POST' }),
 
+  // Task #1 — Spin-Out teams collaboration: project membership (co-founders +
+  // advisors). Management (add/invite/remove/revoke) is owner + admin/partner
+  // only and stage-gated server-side; the UI mirrors `can_manage` + `locked`.
+  listProjectMembers: (id) => request(`/projects/${id}/members`),
+  addProjectMember: (id, data) =>
+    request(`/projects/${id}/members`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  createProjectInvitation: (id, data) =>
+    request(`/projects/${id}/invitations`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  revokeProjectInvitation: (id, invId) =>
+    request(`/projects/${id}/invitations/${invId}/revoke`, { method: 'POST' }),
+  removeProjectMember: (id, userId) =>
+    request(`/projects/${id}/members/${userId}`, { method: 'DELETE' }),
+  acceptProjectInvitation: (token) =>
+    request('/projects/invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
+
   // Epic 5: scoreStartup honours `is_sandbox` (founder practice mode). The
   // server rejects any client-supplied `score`/`tier`/`score_breakdown`.
   scoreStartup: (data) => request('/scoring/score', { method: 'POST', body: JSON.stringify(data) }),

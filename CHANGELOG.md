@@ -10,6 +10,49 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Spin-Out projects can be built by a team (co-founders + advisors) — Task #1
+
+A single-founder Spin-Out project (`projects.founder_id`) can now be built by a
+TEAM. The owner (and admin/partner staff) add co-founders and advisors from
+"Edit Project" via co-founder match, user id, email, or a tokenized invite link.
+Co-founders read+edit project DATA; advisors are read-only; investors are never
+members and can never edit.
+
+- Schema: new `project_members` + `project_member_invitations` tables. Worker
+  migration `cloudflare-worker/sql/migrations/119_project_membership.sql`; both
+  runtimes self-heal on the cold path — worker
+  `cloudflare-worker/src/services/projectAccess.ts::ensureProjectMembershipSchema`,
+  backend `backend/app/api/routes/project_members.py` ensure-on-boot wired in
+  `backend/app/main.py` (logs "project membership tables ensured").
+- Access predicate unions `founder_id` ownership with accepted `project_members`
+  rows. Worker `services/projectAccess.ts::canAccessProject` + backend
+  `services/project_access.py::can_access_project` gate list/get/PUT/spinout/
+  deck-data: advisors fail write checks, co-founders pass, admin/partner bypass.
+  Investors NEVER pass a write check on either layer and are excluded from the
+  roster view; in dev FastAPI they keep their existing privileged deal READ only
+  (the Worker is the stricter, deployed source of truth).
+- Endpoints (Worker `routes/projects.ts` + FastAPI `routes/project_members.py`):
+  GET `/:id/members` (roster + invitations + stage gate + `can_manage`/`can_edit`/
+  `my_role`), POST `/:id/members` (direct add: `user_id` | `cofounder_match`),
+  POST `/:id/invitations` (tokenized link, token sha256-hashed at rest, raw token
+  returned once, 14-day expiry), DELETE `/:id/invitations/:invId`, DELETE
+  `/:id/members/:userId` (never the owner), POST `/invitations/accept` (binds to
+  `invitee_user_id` or normalized email; client cannot supply role/status/
+  project_id; idempotent re-add reactivates a previously removed row).
+- Roster MANAGEMENT (invite/add/remove) is owner + admin/partner only and is
+  stage-gated: NEW founders (Spin-Out Lab active, pre-incorporation) are locked
+  until lab week ≥ `TEAM_BUILDING_MIN_LAB_WEEK` (2); EXISTING founders are
+  unlocked. Dev FastAPI users carry no spinout-lab columns, so dev resolves to
+  unlocked; the Worker enforces the real gate in prod.
+- Frontend: `frontend/src/lib/api.js` membership methods; `ProjectMembersSection`
+  inside `EditProjectModal` (`frontend/src/pages/ProjectDetail.jsx`) drives off
+  `can_manage`/`locked`/`gate_reason`/`unlock_week`; new
+  `frontend/src/pages/AcceptInvitePage.jsx` + public route
+  `/projects/invitations/accept` in `App.jsx`; share links (WhatsApp/Telegram/
+  mailto) built from `window.location.origin`. "Edit Project" now shows for
+  accepted co-founders and admin/partner managers (not just owner/admin) via the
+  new `can_edit` flag from GET `/:id/members`.
+
 ## Compare multiple cap-table scenarios per project (draft variants)
 
 Teams can now model alternative cap tables for a project — different SAFE caps,

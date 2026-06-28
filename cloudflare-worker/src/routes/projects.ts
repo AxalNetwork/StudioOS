@@ -2,7 +2,17 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
 import { getSQL } from '../db';
-import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
+import { requireAuth, requireRole, canAccessFounderResource, generateToken } from '../auth';
+import {
+  canAccessProject,
+  getProjectMembershipRole,
+  getMemberProjectIds,
+  ensureProjectMembershipSchema,
+  isProjectManager,
+  evaluateTeamGate,
+  hashInviteToken,
+  normalizeEmail,
+} from '../services/projectAccess';
 import { runFullScore } from '../services/scoring';
 import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
 import { assembleSpinoutDeckData } from '../services/decks/spinoutDeckData';
@@ -109,10 +119,22 @@ async function listProjectsHandler(c: any) {
         : await sql`SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY created_at DESC`;
     }
   } else {
-    if (!user.founder_id) { await sql.end(); return c.json([]); }
-    rows = status
-      ? await sql`SELECT * FROM projects WHERE status = ${status} AND founder_id = ${user.founder_id} AND deleted_at IS NULL ORDER BY created_at DESC`
-      : await sql`SELECT * FROM projects WHERE founder_id = ${user.founder_id} AND deleted_at IS NULL ORDER BY created_at DESC`;
+    // Task #1 — founders see their OWN projects + any they're an accepted
+    // member of (co-founder / advisor). Union founder_id ownership with the
+    // membership project-id set.
+    const memberIds = await getMemberProjectIds(c.env, user.id);
+    const ownsFounder = !!user.founder_id;
+    if (!ownsFounder && memberIds.length === 0) { await sql.end(); return c.json([]); }
+    const conds: string[] = [];
+    const params: any[] = [];
+    if (ownsFounder) { conds.push('founder_id = ?'); params.push(user.founder_id); }
+    if (memberIds.length) {
+      conds.push(`id IN (${memberIds.map(() => '?').join(',')})`);
+      params.push(...memberIds);
+    }
+    let where = `(${conds.join(' OR ')}) AND deleted_at IS NULL`;
+    if (status) { where = `status = ? AND ${where}`; params.unshift(status); }
+    rows = await sql.unsafe(`SELECT * FROM projects WHERE ${where} ORDER BY created_at DESC`, params);
   }
   await sql.end();
   if (user.role === 'investor') {
@@ -147,9 +169,15 @@ projects.get('/:id', async (c) => {
   // so an un-NDA'd investor still only ever sees the public-key subset. This is
   // the ONE route with a masked investor fallback; canAccessFounderResource
   // denies investors on every other founder-resource route (audit M2).
-  if (user.role !== 'investor' && !canAccessFounderResource(user, project.founder_id)) {
-    await sql.end();
-    return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
+  // Task #1 — owner, accepted member (co-founder/advisor), or privileged may
+  // read. Investors are deliberately let PAST to the fail-closed masked branch
+  // below (NDA-gated); they never receive membership access.
+  if (user.role !== 'investor') {
+    const allowed = await canAccessProject(c.env, user, project, { write: false });
+    if (!allowed) {
+      await sql.end();
+      return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
+    }
   }
   let founder = null;
   let founderUserId: number | null = null;
@@ -439,7 +467,16 @@ projects.put('/:id', async (c) => {
   const project = rows[0];
   const isPrivileged = user.role === 'admin' || user.role === 'partner';
   const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
-  if (!isPrivileged && !isOwner) {
+  // Task #1 — accepted co-founders may also edit project DATA. Advisors are
+  // read-only (membership role 'advisor' is NOT granted write), and investors
+  // are never editors. privilegedFields (stage/status/playbook_week) stay
+  // admin/partner-only via the `isPrivileged` gate further below.
+  let isCofounderEditor = false;
+  if (!isPrivileged && !isOwner && user.role !== 'investor') {
+    const memberRole = await getProjectMembershipRole(c.env, id, user.id);
+    isCofounderEditor = memberRole === 'cofounder' || memberRole === 'owner';
+  }
+  if (!isPrivileged && !isOwner && !isCofounderEditor) {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
   }
@@ -684,11 +721,19 @@ projects.post('/:projectId/spinout-deck', async (c) => {
   }
   const isStaff = user.role === 'admin' || user.role === 'partner';
   const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
-  if (!isStaff && !isOwner) {
+  // Task #1 — accepted co-founders may also generate the deck (advisors are
+  // read-only on data; investors/mentors stay excluded). The deck is ALWAYS
+  // sourced from the OWNER's Lab data, never the co-founder's.
+  let isCofounderMember = false;
+  if (!isStaff && !isOwner && user.role !== 'investor') {
+    const memberRole = await getProjectMembershipRole(c.env, projectId, user.id);
+    isCofounderMember = memberRole === 'cofounder' || memberRole === 'owner';
+  }
+  if (!isStaff && !isOwner && !isCofounderMember) {
     return c.json({ detail: "Forbidden: you cannot generate this project's deck" }, 403);
   }
   // Founder generating their own deck sources from themselves (the verified
-  // happy path); staff-on-behalf sources from the resolved owner account.
+  // happy path); staff / co-founder generate sources from the resolved owner.
   const sourceUserId = isOwner ? Number(user.id) : ownerUserId;
   if (sourceUserId == null) {
     return c.json({ error: 'This project has no founder account to source deck data from' }, 409);
@@ -715,6 +760,342 @@ projects.post('/:projectId/spinout-deck', async (c) => {
     program_day: bundle.programDay,
     fields: bundle.fields,
   });
+});
+
+// ===========================================================================
+// Task #1 — Spin-Out Teams Collaboration: member + invitation management.
+//
+// All routes here are mounted under /api/projects. Roster MANAGEMENT
+// (add/invite/remove/revoke) is owner + admin/partner only; new founders are
+// stage-gated (evaluateTeamGate). Accepted co-founders edit project DATA;
+// advisors are read-only. Investors are never granted membership.
+// ===========================================================================
+
+const MEMBER_ROLES = new Set(['cofounder', 'advisor']);
+function sanitizeMemberRole(raw: any): 'cofounder' | 'advisor' {
+  const r = String(raw || '').trim().toLowerCase();
+  return MEMBER_ROLES.has(r) ? (r as 'cofounder' | 'advisor') : 'cofounder';
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+async function resolveOwnerUserId(env: Env, project: { id: number; founder_id: number | null }): Promise<number | null> {
+  if (project.founder_id == null) return null;
+  const sql = getSQL(env);
+  try {
+    const rows = await sql`SELECT id FROM users WHERE founder_id = ${project.founder_id} ORDER BY id ASC LIMIT 1`;
+    return rows.length ? Number(rows[0].id) : null;
+  } finally {
+    await sql.end();
+  }
+}
+
+// Mirror the founder_id owner as an `owner` member row so the roster is
+// complete. Idempotent — re-runs just re-assert role='owner'.
+async function seedOwnerMember(env: Env, project: { id: number; founder_id: number | null }): Promise<number | null> {
+  const ownerId = await resolveOwnerUserId(env, project);
+  if (ownerId == null) return null;
+  await ensureProjectMembershipSchema(env);
+  const sql = getSQL(env);
+  try {
+    await sql`INSERT INTO project_members (project_id, user_id, role, status, source, accepted_at)
+      VALUES (${project.id}, ${ownerId}, 'owner', 'accepted', 'owner_seed', datetime('now'))
+      ON CONFLICT(project_id, user_id) DO UPDATE SET role='owner', status='accepted', removed_at=NULL, updated_at=datetime('now')`;
+  } finally {
+    await sql.end();
+  }
+  return ownerId;
+}
+
+// GET /api/projects/:id/members — roster + (managers only) pending invitations
+// + the stage gate. Accepted members may view; only managers get can_manage.
+projects.get('/:id/members', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid project id' }, 400);
+  await ensureProjectMembershipSchema(c.env);
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT id, founder_id FROM projects WHERE id = ${id} AND deleted_at IS NULL`;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+  const project = rows[0];
+  await sql.end();
+
+  const manager = isProjectManager(user, project);
+  let canView = manager;
+  if (!canView && user.role !== 'investor') {
+    canView = await canAccessProject(c.env, user, project, { write: false });
+  }
+  if (!canView) return c.json({ detail: 'Forbidden: you do not have access to this project' }, 403);
+
+  await seedOwnerMember(c.env, project);
+
+  const sql2 = getSQL(c.env);
+  try {
+    const members = await sql2`SELECT pm.id, pm.user_id, pm.role, pm.source, pm.accepted_at, pm.created_at,
+        u.uid, u.name, u.email, u.role AS account_role
+      FROM project_members pm JOIN users u ON u.id = pm.user_id
+      WHERE pm.project_id = ${id} AND pm.status = 'accepted'
+      ORDER BY CASE pm.role WHEN 'owner' THEN 0 WHEN 'cofounder' THEN 1 ELSE 2 END, pm.created_at ASC`;
+    let invitations: any[] = [];
+    if (manager) {
+      invitations = await sql2`SELECT id, role, status, source, invitee_email, invitee_user_id, expires_at, created_at
+        FROM project_member_invitations
+        WHERE project_id = ${id} AND status = 'pending'
+        ORDER BY created_at DESC`;
+    }
+    const gate = evaluateTeamGate(user as any);
+    // Caller's effective edit rights, so the UI can show "Edit Project" to
+    // co-founders/owner/managers and hide it from advisors/investors.
+    const myRole = await getProjectMembershipRole(c.env, id, user.id);
+    const canEdit = manager || myRole === 'owner' || myRole === 'cofounder';
+    return c.json({
+      members,
+      invitations,
+      can_manage: manager,
+      can_edit: canEdit,
+      my_role: myRole,
+      locked: manager ? gate.locked : false,
+      gate_reason: manager ? gate.reason : null,
+      unlock_week: gate.unlock_week,
+    });
+  } finally {
+    await sql2.end();
+  }
+});
+
+// Shared manager + stage-gate guard for mutation routes. Returns the project
+// row (id, founder_id) on success, or a Response to short-circuit.
+async function requireRosterManager(c: any, user: any, projectId: number): Promise<{ project: any } | { res: Response }> {
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT id, founder_id FROM projects WHERE id = ${projectId} AND deleted_at IS NULL`;
+  await sql.end();
+  if (rows.length === 0) return { res: c.json({ error: 'Project not found' }, 404) };
+  const project = rows[0];
+  if (!isProjectManager(user, project)) {
+    return { res: c.json({ detail: 'Forbidden: only the project owner can manage the team' }, 403) };
+  }
+  const gate = evaluateTeamGate(user as any);
+  if (gate.locked) {
+    return { res: c.json({ detail: gate.reason, code: 'team_locked', unlock_week: gate.unlock_week }, 403) };
+  }
+  return { project };
+}
+
+// POST /api/projects/:id/members — direct add (mode: user_id | cofounder_match).
+projects.post('/:id/members', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid project id' }, 400);
+  await ensureProjectMembershipSchema(c.env);
+  const guard = await requireRosterManager(c, user, id);
+  if ('res' in guard) return guard.res;
+  const project = guard.project;
+
+  const body = await c.req.json().catch(() => ({}));
+  const mode = String(body.mode || 'user_id').trim();
+  const role = sanitizeMemberRole(body.role);
+
+  const sql = getSQL(c.env);
+  try {
+    let targetUserId: number | null = null;
+    let connectionId: number | null = null;
+
+    if (mode === 'cofounder_match') {
+      const ownerUserId = await resolveOwnerUserId(c.env, project);
+      if (ownerUserId == null) return c.json({ detail: 'Project has no founder account' }, 409);
+      const connUid = String(body.connection_uid || '').trim();
+      if (!connUid) return c.json({ detail: 'connection_uid is required' }, 400);
+      const conns = await sql`SELECT id, user_a_id, user_b_id, status FROM cofounder_connections WHERE uid = ${connUid} LIMIT 1`;
+      if (conns.length === 0) return c.json({ detail: 'Connection not found' }, 404);
+      const conn = conns[0];
+      if (conn.status !== 'active') return c.json({ detail: 'Connection must be active (NDA signed by both sides)' }, 400);
+      if (conn.user_a_id !== ownerUserId && conn.user_b_id !== ownerUserId) {
+        return c.json({ detail: 'This connection does not belong to the project owner' }, 403);
+      }
+      targetUserId = conn.user_a_id === ownerUserId ? Number(conn.user_b_id) : Number(conn.user_a_id);
+      connectionId = Number(conn.id);
+    } else {
+      // mode user_id — accept numeric id or public uid.
+      if (body.user_id != null && Number.isFinite(Number(body.user_id))) {
+        const r = await sql`SELECT id FROM users WHERE id = ${Number(body.user_id)} LIMIT 1`;
+        if (r.length) targetUserId = Number(r[0].id);
+      } else if (body.user_uid) {
+        const r = await sql`SELECT id FROM users WHERE uid = ${String(body.user_uid)} LIMIT 1`;
+        if (r.length) targetUserId = Number(r[0].id);
+      } else {
+        return c.json({ detail: 'user_id or user_uid is required' }, 400);
+      }
+    }
+
+    if (targetUserId == null) return c.json({ detail: 'User not found' }, 404);
+
+    const trows = await sql`SELECT id, role, is_active, founder_id FROM users WHERE id = ${targetUserId} LIMIT 1`;
+    if (trows.length === 0 || !trows[0].is_active) return c.json({ detail: 'User not found' }, 404);
+    const target = trows[0];
+    if (target.role === 'investor') return c.json({ detail: 'Investors cannot be added as project members' }, 400);
+    // Already the owner? Nothing to add.
+    if (project.founder_id != null && Number(target.founder_id) === Number(project.founder_id)) {
+      return c.json({ detail: 'This user already owns the project' }, 409);
+    }
+
+    // Audit invitation row (accepted immediately for direct add).
+    const [inv] = await sql`INSERT INTO project_member_invitations
+        (project_id, role, status, source, invitee_user_id, cofounder_connection_id, invited_by_user_id, accepted_by_user_id, accepted_at)
+      VALUES (${id}, ${role}, 'accepted', ${mode}, ${targetUserId}, ${connectionId}, ${user.id}, ${targetUserId}, datetime('now'))
+      RETURNING id`;
+
+    await sql`INSERT INTO project_members
+        (project_id, user_id, role, status, source, invitation_id, cofounder_connection_id, added_by_user_id, accepted_at)
+      VALUES (${id}, ${targetUserId}, ${role}, 'accepted', ${mode}, ${inv.id}, ${connectionId}, ${user.id}, datetime('now'))
+      ON CONFLICT(project_id, user_id) DO UPDATE SET
+        role=excluded.role, status='accepted', source=excluded.source,
+        invitation_id=excluded.invitation_id, cofounder_connection_id=excluded.cofounder_connection_id,
+        accepted_at=datetime('now'), removed_at=NULL, updated_at=datetime('now')`;
+
+    return c.json({ ok: true, user_id: targetUserId, role });
+  } finally {
+    await sql.end();
+  }
+});
+
+// POST /api/projects/:id/invitations — tokenized invite (mode: email | link).
+projects.post('/:id/invitations', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid project id' }, 400);
+  await ensureProjectMembershipSchema(c.env);
+  const guard = await requireRosterManager(c, user, id);
+  if ('res' in guard) return guard.res;
+
+  const body = await c.req.json().catch(() => ({}));
+  const mode = String(body.mode || 'link').trim();
+  const role = sanitizeMemberRole(body.role);
+  let inviteeEmail: string | null = null;
+  if (mode === 'email') {
+    inviteeEmail = normalizeEmail(body.email);
+    if (!inviteeEmail || !isValidEmail(inviteeEmail)) return c.json({ detail: 'A valid email is required' }, 400);
+  }
+
+  const token = generateToken();
+  const tokenHash = await hashInviteToken(token);
+  const sql = getSQL(c.env);
+  try {
+    const [inv] = await sql`INSERT INTO project_member_invitations
+        (project_id, role, status, source, invitee_email, token_hash, invited_by_user_id, expires_at)
+      VALUES (${id}, ${role}, 'pending', ${mode}, ${inviteeEmail}, ${tokenHash}, ${user.id}, datetime('now','+14 days'))
+      RETURNING id, role, status, source, invitee_email, expires_at, created_at`;
+    return c.json({
+      invitation: inv,
+      token, // returned ONCE — only the hash is persisted.
+      accept_path: `/projects/invitations/accept?token=${token}`,
+    });
+  } finally {
+    await sql.end();
+  }
+});
+
+// POST /api/projects/:id/invitations/:invId/revoke
+projects.post('/:id/invitations/:invId/revoke', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  const invId = parseInt(c.req.param('invId'));
+  if (!Number.isFinite(id) || !Number.isFinite(invId)) return c.json({ error: 'Invalid id' }, 400);
+  await ensureProjectMembershipSchema(c.env);
+  const guard = await requireRosterManager(c, user, id);
+  if ('res' in guard) return guard.res;
+  const sql = getSQL(c.env);
+  try {
+    await sql`UPDATE project_member_invitations SET status='revoked', updated_at=datetime('now')
+      WHERE id = ${invId} AND project_id = ${id} AND status='pending'`;
+    return c.json({ ok: true });
+  } finally {
+    await sql.end();
+  }
+});
+
+// DELETE /api/projects/:id/members/:userId — remove a member (never the owner).
+projects.delete('/:id/members/:userId', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  const memberUserId = parseInt(c.req.param('userId'));
+  if (!Number.isFinite(id) || !Number.isFinite(memberUserId)) return c.json({ error: 'Invalid id' }, 400);
+  await ensureProjectMembershipSchema(c.env);
+  const guard = await requireRosterManager(c, user, id);
+  if ('res' in guard) return guard.res;
+  const project = guard.project;
+  const sql = getSQL(c.env);
+  try {
+    const ownerUserId = await resolveOwnerUserId(c.env, project);
+    if (ownerUserId != null && memberUserId === ownerUserId) {
+      return c.json({ detail: 'The project owner cannot be removed' }, 400);
+    }
+    await sql`UPDATE project_members SET status='removed', removed_at=datetime('now'), updated_at=datetime('now')
+      WHERE project_id = ${id} AND user_id = ${memberUserId} AND role <> 'owner'`;
+    // Cancel any still-pending invitations for that user.
+    await sql`UPDATE project_member_invitations SET status='revoked', updated_at=datetime('now')
+      WHERE project_id = ${id} AND invitee_user_id = ${memberUserId} AND status='pending'`;
+    return c.json({ ok: true });
+  } finally {
+    await sql.end();
+  }
+});
+
+// POST /api/projects/invitations/accept — bind a tokenized invite to the
+// authed user. Static path; registered after the parametric routes above but
+// Hono matches the literal segment first.
+projects.post('/invitations/accept', async (c) => {
+  const user = await requireAuth(c);
+  if (user.role === 'investor') return c.json({ detail: 'Investors cannot join projects as members' }, 403);
+  const body = await c.req.json().catch(() => ({}));
+  const token = String(body.token || '').trim();
+  if (!token) return c.json({ detail: 'token is required' }, 400);
+  await ensureProjectMembershipSchema(c.env);
+  const tokenHash = await hashInviteToken(token);
+  const sql = getSQL(c.env);
+  try {
+    const invs = await sql`SELECT * FROM project_member_invitations WHERE token_hash = ${tokenHash} LIMIT 1`;
+    if (invs.length === 0) return c.json({ detail: 'Invitation not found' }, 404);
+    const inv = invs[0];
+    if (inv.status !== 'pending') return c.json({ detail: 'This invitation is no longer valid', code: inv.status }, 410);
+    // Expiry check (datetime() string comparison — both sides same format).
+    const exp = await sql`SELECT CASE WHEN ${inv.expires_at} IS NOT NULL AND ${inv.expires_at} < datetime('now') THEN 1 ELSE 0 END AS expired`;
+    if (exp.length && Number(exp[0].expired) === 1) {
+      await sql`UPDATE project_member_invitations SET status='expired', updated_at=datetime('now') WHERE id = ${inv.id}`;
+      return c.json({ detail: 'This invitation has expired', code: 'expired' }, 410);
+    }
+    // Binding: a user-scoped invite must match the authed user; an email
+    // invite must match the authed user's email; a bare link binds to anyone.
+    if (inv.invitee_user_id != null && Number(inv.invitee_user_id) !== Number(user.id)) {
+      return c.json({ detail: 'This invitation was issued to a different account' }, 403);
+    }
+    if (inv.invitee_email != null && normalizeEmail(user.email) !== normalizeEmail(inv.invitee_email)) {
+      return c.json({ detail: 'This invitation was issued to a different email address' }, 403);
+    }
+
+    const prows = await sql`SELECT id, founder_id FROM projects WHERE id = ${inv.project_id} AND deleted_at IS NULL`;
+    if (prows.length === 0) return c.json({ detail: 'Project no longer exists' }, 404);
+    const project = prows[0];
+    // Owner accepting their own invite is a no-op (they already own it).
+    if (project.founder_id != null && !!user.founder_id && Number(user.founder_id) === Number(project.founder_id)) {
+      await sql`UPDATE project_member_invitations SET status='accepted', accepted_by_user_id=${user.id}, accepted_at=datetime('now'), updated_at=datetime('now') WHERE id = ${inv.id}`;
+      return c.json({ ok: true, project_id: project.id, role: 'owner', already_owner: true });
+    }
+
+    await seedOwnerMember(c.env, project);
+    const role = sanitizeMemberRole(inv.role);
+    await sql`INSERT INTO project_members
+        (project_id, user_id, role, status, source, invitation_id, cofounder_connection_id, added_by_user_id, accepted_at)
+      VALUES (${project.id}, ${user.id}, ${role}, 'accepted', ${inv.source}, ${inv.id}, ${inv.cofounder_connection_id}, ${inv.invited_by_user_id}, datetime('now'))
+      ON CONFLICT(project_id, user_id) DO UPDATE SET
+        role=excluded.role, status='accepted', source=excluded.source,
+        invitation_id=excluded.invitation_id, accepted_at=datetime('now'), removed_at=NULL, updated_at=datetime('now')`;
+    await sql`UPDATE project_member_invitations SET status='accepted', invitee_user_id=COALESCE(invitee_user_id, ${user.id}), accepted_by_user_id=${user.id}, accepted_at=datetime('now'), updated_at=datetime('now') WHERE id = ${inv.id}`;
+    return c.json({ ok: true, project_id: project.id, role });
+  } finally {
+    await sql.end();
+  }
 });
 
 export default projects;

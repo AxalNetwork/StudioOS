@@ -28,6 +28,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
+const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
 const IncorporatePage = lazy(() => import('./pages/IncorporatePage'));
 const IncorporateSuccessPage = lazy(() => import('./pages/IncorporateSuccessPage'));
@@ -1155,6 +1156,10 @@ function AppInner() {
       <Route path="/auth/recover" element={<RecoverPage />} />
       <Route path="/auth/recover/*" element={<RecoverPage />} />
       <Route path="/esign/:token" element={<ESignPage />} />
+      {/* Task #1 (Spin-Out Teams) — tokenized co-founder/advisor invite
+          acceptance. Public route; the page bounces logged-out visitors to
+          sign-in with a `?next=` return path, then POSTs the bound token. */}
+      <Route path="/projects/invitations/accept" element={<AcceptInvitePage />} />
       {/* Task #9 (X-2) — Public token-gated partner onboarding wizard.
           Mounted at the path embedded in admin-emailed magic links AND a
           query-string variant for fallback share-by-link channels. */}
