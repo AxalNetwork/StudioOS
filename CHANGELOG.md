@@ -10,6 +10,7 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+<<<<<<< HEAD
 ## Removed "Review the deal" slide from the Spin-Out Demo Day deck editor
 
 Dropped the "Review the deal" slide (slide 11) from the `axal_spinout_demoday`
@@ -29,6 +30,36 @@ preserved in the database but no longer shown.
   left rail, slide counter, and nav bounds all use `displaySlides`.
 - `frontend/test/spinout_demoday_deck.test.mjs`: updated slide count 10 → 9;
   removed `deal.contact` render assertions (field no longer in any rendered slide).
+=======
+## Thirteen more selectable landing-page designs in the Brand & Landing builder (Task #25)
+
+Recreated the remaining 13 of 16 uploaded landing designs as new, distinct,
+server-rendered visual templates selectable in the Brand & Landing page builder,
+completing the set (Task #24 shipped the first 3). Each is a self-contained,
+single-audience full HTML document with its own signature palette and layout
+language, and stays CSP-safe (inline `<style>` + nonce'd script, system fonts
+only, no `@import`).
+
+- `cloudflare-worker/src/services/landingTemplates.ts`:
+  - Added 13 keys to `TEMPLATE_KEYS` and 13 entries to `TEMPLATE_REGISTRY`
+    (all `usesHero/usesProduct: false`, so the `/templates` API auto-drives the
+    builder's labels/meta): `capital-storyteller`, `seed-stage-spark`,
+    `distribution-deck`, `pilot-partner-page`, `partner-hub`,
+    `partner-pipeline-pro`, `co-founder-builder`, `co-founder-canvas`,
+    `cofounder-connect`, `co-founder-quest`, `mentor-connect`,
+    `mentor-connect-page`, `builders-launchpad`.
+  - Added a signature palette per design to `TEMPLATE_SIGNATURE_PALETTES`.
+  - Added shared system-font stacks (`PORT_SERIF`/`PORT_SANS`/`PORT_MONO`) and
+    13 renderer functions, each registered in the `RENDERERS` dispatcher. Every
+    renderer reuses `buildAudienceData` (escaped copy), `contrastText` (legible
+    button text) and `singleWaitlistScript` (single `#wl-form`/`#wl-msg` posting
+    the correct audience — investor/partner/cofounder/mentor/customer).
+- `frontend/src/lib/brand/templates.js`: mirrored all 13 keys into
+  `VISUAL_TEMPLATE_KEYS`, `VISUAL_TEMPLATE_PALETTES` and the `VisualTemplate`
+  typedef, and repointed each matching catalog entry's `visualTemplate` to its
+  own ported design (previously aliased to a generic built-in style).
+- `npm run test:drift` passes (incl. `tsc --noEmit` in `cloudflare-worker/`).
+>>>>>>> 67a666f3 (Add thirteen new landing page designs for users to select from)
 
 ## Three new selectable landing-page designs in the Brand & Landing builder (Task #24)
 

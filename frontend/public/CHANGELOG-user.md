@@ -13,6 +13,23 @@ on the shared investor link, not in the editor itself), so it was causing
 confusion. The deck now shows 9 slides — Cover through Ask — without the
 placeholder at the end.
 
+## Thirteen more landing page designs to choose from
+
+The Brand & Landing page builder now has a full library of page designs. We've
+added thirteen more distinct looks — so there's a ready-made style for whoever
+you're talking to, all still fully editable with your own words:
+
+- **For investors** — Capital Storyteller, Seed Stage Spark and Distribution Deck.
+- **For partners** — Pilot Partner Page, Partner Hub and Partner Pipeline Pro.
+- **For co-founders** — Co-Founder Builder, Co-Founder Canvas, Co-founder Connect
+  and Co-Founder Quest.
+- **For mentors** — Mentor Connect and Mentor Connect Page.
+- **For early customers** — Builder's Launchpad.
+
+Each one loads with its own matching colour palette you can fine-tune any time.
+
+---
+
 ## Three new landing page designs to choose from
 
 The Brand & Landing page builder now offers three brand-new, ready-to-use page

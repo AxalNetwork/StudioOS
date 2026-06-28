@@ -29,7 +29,7 @@
  * One of the existing built-in landing visual styles the page renders with.
  * MUST mirror TEMPLATE_KEYS in
  * `cloudflare-worker/src/services/landingTemplates.ts`.
- * @typedef {'minimal'|'bold-hero'|'video-first'|'editorial'|'product-mock'|'advisor-connect'|'proof-builder'|'capital-ready-kit'} VisualTemplate
+ * @typedef {'minimal'|'bold-hero'|'video-first'|'editorial'|'product-mock'|'advisor-connect'|'proof-builder'|'capital-ready-kit'|'capital-storyteller'|'seed-stage-spark'|'distribution-deck'|'pilot-partner-page'|'partner-hub'|'partner-pipeline-pro'|'co-founder-builder'|'co-founder-canvas'|'cofounder-connect'|'co-founder-quest'|'mentor-connect'|'mentor-connect-page'|'builders-launchpad'} VisualTemplate
  */
 
 /**
@@ -60,7 +60,7 @@ export const GOALS = ['join_waitlist', 'request_intro', 'start_pilot', 'book_cal
  * here so the catalog + its tests stay self-contained on the frontend.
  * @type {VisualTemplate[]}
  */
-export const VISUAL_TEMPLATE_KEYS = ['minimal', 'bold-hero', 'video-first', 'editorial', 'product-mock', 'advisor-connect', 'proof-builder', 'capital-ready-kit'];
+export const VISUAL_TEMPLATE_KEYS = ['minimal', 'bold-hero', 'video-first', 'editorial', 'product-mock', 'advisor-connect', 'proof-builder', 'capital-ready-kit', 'capital-storyteller', 'seed-stage-spark', 'distribution-deck', 'pilot-partner-page', 'partner-hub', 'partner-pipeline-pro', 'co-founder-builder', 'co-founder-canvas', 'cofounder-connect', 'co-founder-quest', 'mentor-connect', 'mentor-connect-page', 'builders-launchpad'];
 
 /**
  * Signature palettes for the recreated designs (Task #24). Selecting one of
@@ -74,6 +74,19 @@ export const VISUAL_TEMPLATE_PALETTES = {
   'advisor-connect': { theme_color: '#b06a32', palette_bg: '#f6f1e7', palette_ink: '#33302a', palette_secondary: '#ddd3c0', palette_accent: '#b06a32' },
   'proof-builder': { theme_color: '#1f7a52', palette_bg: '#fbfbf9', palette_ink: '#1f2630', palette_secondary: '#e2e5e1', palette_accent: '#1f7a52' },
   'capital-ready-kit': { theme_color: '#c7e83f', palette_bg: '#1b1a16', palette_ink: '#f4f1e6', palette_secondary: '#3a382f', palette_accent: '#c7e83f' },
+  'capital-storyteller': { theme_color: '#f2a618', palette_bg: '#07090b', palette_ink: '#f2f6f8', palette_secondary: '#26292c', palette_accent: '#f2a618' },
+  'seed-stage-spark': { theme_color: '#abf051', palette_bg: '#0b0e0f', palette_ink: '#f2f6f8', palette_secondary: '#25292c', palette_accent: '#abf051' },
+  'distribution-deck': { theme_color: '#0072d5', palette_bg: '#f9f8f5', palette_ink: '#0e1218', palette_secondary: '#e9e8e2', palette_accent: '#0072d5' },
+  'pilot-partner-page': { theme_color: '#25984d', palette_bg: '#f6f5f1', palette_ink: '#1b150f', palette_secondary: '#e7e4dd', palette_accent: '#25984d' },
+  'partner-hub': { theme_color: '#429595', palette_bg: '#fbfaf6', palette_ink: '#121c23', palette_secondary: '#dad7cf', palette_accent: '#429595' },
+  'partner-pipeline-pro': { theme_color: '#ef852e', palette_bg: '#fbfaf8', palette_ink: '#15110d', palette_secondary: '#dbd7d0', palette_accent: '#ef852e' },
+  'co-founder-builder': { theme_color: '#5bbe62', palette_bg: '#fbfaf6', palette_ink: '#14171d', palette_secondary: '#dfded8', palette_accent: '#5bbe62' },
+  'co-founder-canvas': { theme_color: '#cc572a', palette_bg: '#f8f5ee', palette_ink: '#1d140d', palette_secondary: '#ede7dd', palette_accent: '#cc572a' },
+  'cofounder-connect': { theme_color: '#bf4500', palette_bg: '#fbfaf7', palette_ink: '#15110d', palette_secondary: '#cac3ba', palette_accent: '#bf4500' },
+  'co-founder-quest': { theme_color: '#ad524d', palette_bg: '#f9f8f6', palette_ink: '#0d1016', palette_secondary: '#d4d7de', palette_accent: '#ad524d' },
+  'mentor-connect': { theme_color: '#c56a3e', palette_bg: '#fbfaf8', palette_ink: '#16100c', palette_secondary: '#e2ddd7', palette_accent: '#c56a3e' },
+  'mentor-connect-page': { theme_color: '#b05139', palette_bg: '#fcfaf6', palette_ink: '#221811', palette_secondary: '#e2ddd5', palette_accent: '#b05139' },
+  'builders-launchpad': { theme_color: '#dcb400', palette_bg: '#090e11', palette_ink: '#e8ecee', palette_secondary: '#2c343a', palette_accent: '#dcb400' },
 };
 
 /**
@@ -115,7 +128,7 @@ export const TEMPLATES = [
     primaryGoal: 'request_intro',
     defaultCtaLabel: 'Request intro',
     defaultSlug: 'capital-story',
-    visualTemplate: 'editorial',
+    visualTemplate: 'capital-storyteller',
     recommended: true,
     notes: 'Narrative investor memo — long-form story of why now and why you.',
   },
@@ -127,7 +140,7 @@ export const TEMPLATES = [
     primaryGoal: 'request_intro',
     defaultCtaLabel: 'Request intro',
     defaultSlug: 'seed-spark',
-    visualTemplate: 'bold-hero',
+    visualTemplate: 'seed-stage-spark',
     notes: 'High-energy seed teaser to spark investor interest.',
   },
   {
@@ -138,7 +151,7 @@ export const TEMPLATES = [
     primaryGoal: 'request_intro',
     defaultCtaLabel: 'Request intro',
     defaultSlug: 'distribution-deck',
-    visualTemplate: 'product-mock',
+    visualTemplate: 'distribution-deck',
     notes: 'Go-to-market / distribution story for investor conversations.',
   },
 
@@ -151,7 +164,7 @@ export const TEMPLATES = [
     primaryGoal: 'start_pilot',
     defaultCtaLabel: 'Start a pilot',
     defaultSlug: 'pilot-partner',
-    visualTemplate: 'product-mock',
+    visualTemplate: 'pilot-partner-page',
     recommended: true,
     notes: 'Landing page to recruit pilot partners and design partners.',
   },
@@ -163,7 +176,7 @@ export const TEMPLATES = [
     primaryGoal: 'book_call',
     defaultCtaLabel: 'Book a call',
     defaultSlug: 'partner-hub',
-    visualTemplate: 'minimal',
+    visualTemplate: 'partner-hub',
     notes: 'Clean overview of the partnership program with a booking CTA.',
   },
   {
@@ -174,7 +187,7 @@ export const TEMPLATES = [
     primaryGoal: 'start_pilot',
     defaultCtaLabel: 'Start a pilot',
     defaultSlug: 'partner-pipeline',
-    visualTemplate: 'bold-hero',
+    visualTemplate: 'partner-pipeline-pro',
     notes: 'Pitch the partnership pipeline and value exchange to prospective partners.',
   },
 
@@ -187,7 +200,7 @@ export const TEMPLATES = [
     primaryGoal: 'apply',
     defaultCtaLabel: 'Apply to join',
     defaultSlug: 'cofounder-builder',
-    visualTemplate: 'minimal',
+    visualTemplate: 'co-founder-builder',
     recommended: true,
     notes: 'Recruit a technical/founding co-founder — what you are building and who you need.',
   },
@@ -199,7 +212,7 @@ export const TEMPLATES = [
     primaryGoal: 'apply',
     defaultCtaLabel: 'Apply to join',
     defaultSlug: 'cofounder-canvas',
-    visualTemplate: 'editorial',
+    visualTemplate: 'co-founder-canvas',
     notes: 'Long-form canvas of the vision, roles and equity for a prospective co-founder.',
   },
   {
@@ -210,7 +223,7 @@ export const TEMPLATES = [
     primaryGoal: 'apply',
     defaultCtaLabel: "Let's talk",
     defaultSlug: 'cofounder-connect',
-    visualTemplate: 'minimal',
+    visualTemplate: 'cofounder-connect',
     notes: 'Lightweight reach-out page for warm co-founder conversations.',
   },
   {
@@ -221,7 +234,7 @@ export const TEMPLATES = [
     primaryGoal: 'apply',
     defaultCtaLabel: 'Apply to join',
     defaultSlug: 'cofounder-quest',
-    visualTemplate: 'bold-hero',
+    visualTemplate: 'co-founder-quest',
     notes: 'High-energy call for a co-founder framed as a mission to join.',
   },
 
@@ -248,7 +261,7 @@ export const TEMPLATES = [
     primaryGoal: 'offer_guidance',
     defaultCtaLabel: 'Become a mentor',
     defaultSlug: 'mentor-connect',
-    visualTemplate: 'minimal',
+    visualTemplate: 'mentor-connect',
     recommended: true,
     notes: 'Recruit mentors for the studio / founders — clean directory-style page.',
   },
@@ -260,7 +273,7 @@ export const TEMPLATES = [
     primaryGoal: 'offer_guidance',
     defaultCtaLabel: 'Become a mentor',
     defaultSlug: 'mentor-connect-page',
-    visualTemplate: 'editorial',
+    visualTemplate: 'mentor-connect-page',
     notes: 'Narrative variant of the mentor invite with more story.',
   },
 
@@ -285,7 +298,7 @@ export const TEMPLATES = [
     primaryGoal: 'join_waitlist',
     defaultCtaLabel: 'Join the waitlist',
     defaultSlug: 'builders-launchpad',
-    visualTemplate: 'bold-hero',
+    visualTemplate: 'builders-launchpad',
     notes: 'Bold product launch teaser for early customers.',
   },
 ];
