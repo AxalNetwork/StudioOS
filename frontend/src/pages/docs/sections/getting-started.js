@@ -147,22 +147,22 @@ export default {
     },
     {
       id: 'help-and-shortcuts',
-      title: 'Help widget & keyboard shortcuts',
+      title: 'Getting help & keyboard shortcuts',
       overview:
-        "Every page has a help button at the bottom-right (the life-ring icon) — click it any time you need a hand or want to reach the team. Power users can press Ctrl/Cmd-K from anywhere to open a search bar that jumps to pages, recent activity, and documentation in one place.",
+        "Need a hand? Open the Personal Advisor on the Studio page — it knows your projects and can answer questions or file a tracked support ticket for you right from the chat. Power users can press Ctrl/Cmd-K from anywhere to open a search bar that jumps to pages, recent activity, and documentation in one place.",
       howto: [
+        'Go to the Studio page and use the Personal Advisor to ask a question or get unstuck.',
+        'Click "Open a ticket" in the Personal Advisor header to file a tracked support ticket — the advisor confirms it inline and links you to the Support Hub.',
         'Press Ctrl/Cmd-K to open the command palette from any page.',
-        'Start typing — results group by pages, recent activity, doc anchors, and quick actions.',
-        'Press Enter to jump to the highlighted result; Esc closes the palette.',
-        'Click the life-ring icon at the bottom-right to open the help widget for contact and shortcut tips.',
+        'Start typing — results group by pages, recent activity, doc anchors, and quick actions; Enter jumps to the highlighted result, Esc closes the palette.',
       ],
       tips: [
         'The palette remembers your recent activity for five minutes, so the latest thing you touched is usually one or two keystrokes away.',
-        'Press "?" anywhere outside an input field to open the help widget without reaching for the mouse.',
+        'Press "?" anywhere outside an input field to open the keyboard-shortcuts overlay without reaching for the mouse.',
       ],
       pitfalls: [
         'The palette searches documentation by title and content — niche features are easier to find by their docs anchor than by guessing the page name.',
-        'Quiet hours and notification preferences are managed in Settings, not from the help widget — the widget is for contact and shortcuts.',
+        'Quiet hours and notification preferences are managed in Settings — the Personal Advisor and Support Hub are for questions and tickets.',
       ],
       related: [
         { label: 'Notifications', href: '#account/notifications' },

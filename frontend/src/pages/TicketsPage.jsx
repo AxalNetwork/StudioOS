@@ -1,163 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { safeReadJSON } from '../lib/storage';
 import { api } from '../lib/api';
 import {
-  Ticket, Plus, ChevronDown, X, RefreshCw, MessageSquare, Clock, ArrowLeft,
-  LifeBuoy, Search, Brain, Loader2, ArrowRight,
+  Ticket, Plus, ChevronDown, RefreshCw, MessageSquare, Clock, ArrowLeft,
 } from 'lucide-react';
 import VirtualList from '../components/VirtualList';
-import CustomerChatWidget from '../components/CustomerChatWidget';
-import { useAuth } from '../hooks/useAuthSync';
-
-// Mirrors the worker's tier gate: paid (Studio / Institutional) founders &
-// investors, plus admin / mentor / partner, get live chat with the team.
-function isChatEligible(user) {
-  if (!user) return false;
-  const role = String(user.role || '').toLowerCase();
-  if (role === 'admin' || role === 'mentor' || role === 'partner') return true;
-  if (role === 'investor') return String(user.investor_tier || 'free').toLowerCase() === 'institutional';
-  return String(user.subscription_tier || 'free').toLowerCase() === 'studio';
-}
-
-function HelpRow({ icon, title, hint, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md border border-gray-200 dark:border-gray-800 hover:border-violet-300 dark:hover:border-violet-700 hover:bg-violet-50/40 dark:hover:bg-violet-900/20 text-left transition-colors"
-    >
-      <span className="text-violet-600 dark:text-violet-300">{icon}</span>
-      <span className="flex-1">
-        <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">{title}</span>
-        {hint && <span className="block text-xs text-gray-500">{hint}</span>}
-      </span>
-      <ArrowRight size={14} className="text-gray-300" />
-    </button>
-  );
-}
-
-// "How can we help?" panel — the four options that used to live in the
-// floating Help widget, now surfaced inside the Support Hub.
-function SupportHelpPanel({ onOpenTicket }) {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const [q, setQ] = useState('');
-  const [results, setResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
-
-  // Doc search — debounced, calls /api/docs/search.
-  useEffect(() => {
-    const term = q.trim();
-    if (term.length < 2) { setResults([]); setSearching(false); return; }
-    let cancelled = false;
-    setSearching(true);
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/docs/search?q=${encodeURIComponent(term)}`, {
-          credentials: 'include',
-        });
-        if (!res.ok) throw new Error('search failed');
-        const data = await res.json().catch(() => ({}));
-        if (cancelled) return;
-        const items = Array.isArray(data?.items) ? data.items
-          : Array.isArray(data?.results) ? data.results
-          : [];
-        setResults(items.slice(0, 6));
-      } catch {
-        if (!cancelled) setResults([]);
-      } finally {
-        if (!cancelled) setSearching(false);
-      }
-    }, 250);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [q]);
-
-  const openDoc = (anchor) => {
-    if (anchor) navigate(`/docs#${anchor}`);
-    else navigate('/docs');
-  };
-
-  const showChat = isChatEligible(user);
-
-  return (
-    <aside className="lg:sticky lg:top-20">
-      <div className="bg-white border border-gray-200 rounded-xl dark:bg-gray-900 dark:border-gray-800">
-        <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-200 dark:border-gray-800">
-          <LifeBuoy size={18} className="text-violet-600 dark:text-violet-300" />
-          <h2 className="font-semibold text-gray-900 dark:text-gray-100">How can we help?</h2>
-        </div>
-
-        <div className="p-5 space-y-5">
-          {/* Doc search */}
-          <section>
-            <label htmlFor="support-docs-search" className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2 block">Search the docs</label>
-            <div className="relative">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                id="support-docs-search"
-                type="search"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="e.g. invite a co-founder"
-                className="w-full pl-8 pr-2 py-2 text-sm rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500/40"
-              />
-              {searching && <Loader2 size={12} className="absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-gray-400" />}
-            </div>
-            {results.length > 0 && (
-              <ul className="mt-2 border border-gray-200 dark:border-gray-800 rounded-md divide-y divide-gray-100 dark:divide-gray-800">
-                {results.map((r, i) => {
-                  const anchor = r.anchor || (r.sectionId && r.subsectionId ? `${r.sectionId}/${r.subsectionId}` : '');
-                  const title = r.subsectionTitle || r.title || r.label || anchor;
-                  const hint = r.sectionTitle || '';
-                  return (
-                    <li key={r.id || anchor || i}>
-                      <button
-                        type="button"
-                        onClick={() => openDoc(anchor)}
-                        className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200"
-                      >
-                        <span className="flex-1 truncate">{title}</span>
-                        {hint && <span className="text-[11px] text-gray-400">{hint}</span>}
-                        <ArrowRight size={12} className="text-gray-300" />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            {q.trim().length >= 2 && !searching && results.length === 0 && (
-              <div className="mt-2 text-xs text-gray-500">No matching docs. Try another phrase or open a ticket below.</div>
-            )}
-          </section>
-
-          {/* Primary actions */}
-          <section className="space-y-2">
-            <HelpRow icon={<Brain size={16} />} title="Ask Personal Advisor" hint="The AI advisor knows your projects." onClick={() => navigate('/studio?advisor=1')} />
-            {showChat && (
-              <HelpRow
-                icon={<MessageSquare size={16} />}
-                title="Chat with the Axal VC team"
-                hint="Connects you to Slack — usually replies within a business day."
-                onClick={() => setChatOpen(true)}
-              />
-            )}
-            <HelpRow icon={<Ticket size={16} />} title="Open a ticket" hint="Files a tracked support ticket." onClick={onOpenTicket} />
-          </section>
-
-          {!showChat && (
-            <section className="text-[11px] text-gray-500 border-t border-gray-100 dark:border-gray-800 pt-3">
-              Live chat with the Axal VC team is included on the Studio, Institutional, and Partner plans.
-            </section>
-          )}
-        </div>
-      </div>
-
-      {showChat && <CustomerChatWidget open={chatOpen} onClose={() => setChatOpen(false)} />}
-    </aside>
-  );
-}
 
 // T24 — Title + 1-line description + py-3.
 const TICKET_ROW_HEIGHT = 64;
@@ -387,8 +234,7 @@ export default function TicketsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        <div className="lg:col-span-2 space-y-6">
+      <div className="space-y-6">
       {showForm && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
           <h2 className="font-semibold text-gray-900 text-sm mb-4 dark:text-gray-100">Submit a Support Ticket</h2>
@@ -506,14 +352,6 @@ export default function TicketsPage() {
           </VirtualList>
         )}
       </div>
-        </div>
-
-        <SupportHelpPanel
-          onOpenTicket={() => {
-            setShowForm(true);
-            if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-        />
       </div>
     </div>
   );

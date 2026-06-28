@@ -5,6 +5,20 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## File a support ticket right from your Personal Advisor
+
+You can now open a support ticket without leaving the chat. On the Studio page,
+your Personal Advisor has an **Open a ticket** button — add a short summary, pick
+a priority, and send. The advisor confirms it on the spot and links you straight
+to the Support Hub to track it.
+
+To make room for this, we tidied up a few older help spots: the "How can we help?"
+panel on the Support Hub and the floating help button in the bottom-right corner
+have been removed. For help or to file a ticket, head to your Personal Advisor on
+the Studio page.
+
+---
+
 ## "Dashboard" is now "Studio"
 
 Your home page is now called **Studio**, and its web address moved from

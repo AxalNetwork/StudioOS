@@ -10,6 +10,39 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Ticket filing from the Personal Advisor + legacy help-surface removal (Task #9)
+
+Users can now file tracked support tickets directly from the Personal Advisor
+(the AI advisor on the Studio page), and three legacy help surfaces were removed.
+
+- `frontend/src/components/advisor/PersonalAdvisor.jsx`: added an "Open a ticket"
+  affordance in both the embedded (`Header`) and fullscreen (`FullscreenHeader`)
+  views. Toggling it renders a new inline `AdvisorTicketPanel` (title required,
+  priority select low/medium/high/urgent, optional description) that posts via the
+  existing `api.createTicket` → `POST /api/tickets` (no backend changes). On success
+  the advisor confirms inline in the transcript with a CTA to the Support Hub
+  (`/tickets`) plus a `View on GitHub` link when the response carries
+  `github_issue_url`. `CtaButtons` now renders an external `<a>` when
+  `cta.secondary.external` is set.
+- `frontend/src/pages/TicketsPage.jsx`: removed the "How can we help?" side panel
+  (`SupportHelpPanel`) and its `HelpRow` helper, reflowed the page back to a single
+  column, and dropped now-unused imports (`useNavigate`, `CustomerChatWidget`,
+  `useAuth`, `LifeBuoy`, `Search`, `Brain`, `ArrowRight`, `Loader2`, `X`) and the
+  `isChatEligible` helper.
+- Removed the floating bottom-right "Assistant" launcher: deleted
+  `frontend/src/components/PersonalAssistant.jsx`, its `GlobalAssistantMount` +
+  `SafeMount` wiring in `frontend/src/App.jsx`, and the now-dead `api.assistant`
+  block in `frontend/src/lib/api.js`. Backend assistant route/tables/`assistant_enabled`
+  flag left untouched.
+- `frontend/src/pages/TicketsPage.jsx` removal also orphaned the paid-tier in-app
+  customer-chat entry point (it only mounted inside `SupportHelpPanel`); rewrote the
+  `customer-chat` troubleshooting doc section to route support to the Personal Advisor
+  + Tickets flow instead of the removed bottom-right chat button / help widget.
+- `frontend/src/pages/docs/sections/getting-started.js`: rewrote the
+  `help-and-shortcuts` section to point users to the Personal Advisor for help and
+  ticket filing instead of the removed floating life-ring widget; kept the
+  Cmd/Ctrl-K command palette and "?" shortcuts overlay guidance.
+
 ## Studio rename — leftover copy cleanup (Task #8)
 
 Finished the Dashboard → Studio rename in user-facing strings that still read

@@ -123,25 +123,25 @@ export default {
     },
     {
       id: 'customer-chat',
-      title: 'Reaching the team via in-app chat',
+      title: 'Reaching the studio team',
       overview:
-        "Paid-tier members can reach the studio team via an in-app chat thread without leaving the platform. Look for the chat button at the bottom-right of the screen. Replies come back to the same thread, in-app and (optionally) by email.",
+        "Need to reach the studio team? Open the Personal Advisor on the Studio page — it answers questions about your projects and can file a tracked support ticket for you in one step. Tickets keep a written record the team follows up on, in-app and (optionally) by email.",
       howto: [
-        'Click the chat button at the bottom-right of any page.',
-        'Type your question — attach a screenshot if it helps explain.',
-        'A studio team member replies in the same thread, usually within business hours.',
-        'You\'ll get an in-app notification (and email, depending on your settings) when there\'s a reply.',
+        'Go to the Studio page and open the Personal Advisor.',
+        'Ask your question, or click "Open a ticket" to file a tracked support request.',
+        'Track replies and status from the Tickets page in the sidebar.',
+        "You'll get an in-app notification (and email, depending on your settings) when there's an update.",
       ],
       tips: [
         'Mention the page URL where the issue happens — it cuts triage time in half.',
-        'Use chat for quick questions; for anything formal (refunds, security, contracts), file a ticket from the Tickets page instead so it lives in the audit trail.',
+        'For anything formal (refunds, security, contracts), file a ticket so it lives in the audit trail.',
       ],
       pitfalls: [
-        'Eligibility depends on your plan — Free founders and angel-tier investors see the help widget but the chat itself unlocks on the paid plans.',
-        'Chat history is visible to the studio team; never send passwords, recovery codes, or other secrets through it.',
+        'Filing the same ticket twice fragments the conversation — update the original instead.',
+        'Never send passwords, recovery codes, or other secrets when describing an issue.',
       ],
       related: [
-        { label: 'Help widget & keyboard shortcuts', href: '#getting-started/help-and-shortcuts' },
+        { label: 'Getting help & keyboard shortcuts', href: '#getting-started/help-and-shortcuts' },
         { label: 'Contact support', href: '#troubleshooting/contact-support' },
       ],
     },

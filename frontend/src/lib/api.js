@@ -724,22 +724,6 @@ export const api = {
   miPlatformPersonasExportUrl: (format = 'csv') =>
     `/api/market-intel/platform-personas/export?format=${encodeURIComponent(format)}`,
 
-  // ── Task #5 — Dashboard personal assistant. The /message endpoint is
-  // SSE; consume it via fetch + ReadableStream in the component, NOT
-  // through this helper. Everything else is plain JSON.
-  assistant: {
-    listConversations: () => request('/assistant/conversations'),
-    getConversation: (uid) => request(`/assistant/conversations/${encodeURIComponent(uid)}`),
-    renameConversation: (uid, title) =>
-      request(`/assistant/conversations/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
-    deleteConversation: (uid) =>
-      request(`/assistant/conversations/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
-    feedback: (message_id, rating, comment) =>
-      request('/assistant/feedback', { method: 'POST', body: JSON.stringify({ message_id, rating, comment }) }),
-    getRetention: () => request('/assistant/retention/preference'),
-    setRetention: (extended) =>
-      request('/assistant/retention/preference', { method: 'POST', body: JSON.stringify({ extended: !!extended }) }),
-  },
   optOutInvestorSignals: () => request('/investor-profile/me/opt-out', { method: 'POST' }),
   getInvestorSignals: () => request('/investor-signals/latest'),
 

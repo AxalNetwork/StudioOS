@@ -3,7 +3,6 @@ import { safeReadJSON } from './lib/storage';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
-import PersonalAssistant from './components/PersonalAssistant';
 import SpinoutLabListener from './components/SpinoutLabListener';
 import SafeMount from './components/SafeMount';
 import CookieConsent from './components/CookieConsent';
@@ -1350,15 +1349,6 @@ function AppInner() {
   );
 }
 
-// Mount the assistant at the auth-shell level so it persists across
-// route changes (Task #5: "pinned… persistent across pages"). The
-// component itself fail-closes when assistant_enabled !== 1, so it's
-// safe to render for unauthenticated users too.
-function GlobalAssistantMount() {
-  const { user } = useAuth();
-  return <PersonalAssistant user={user} />;
-}
-
 // Task #6 — Mount the tier paywall once at the app shell so any 402
 // `tier_required` response (or sidebar lock click) opens the same modal.
 function GlobalPaywallMount() {
@@ -1406,7 +1396,6 @@ export default function App() {
             degrades to "that one widget is missing" instead of "the
             whole app is gone". */}
         <SafeMount name="SpinoutLabListener"><SpinoutLabListener /></SafeMount>
-        <SafeMount name="GlobalAssistantMount"><GlobalAssistantMount /></SafeMount>
         <SafeMount name="GlobalPaywallMount"><GlobalPaywallMount /></SafeMount>
         <SafeMount name="CookieConsent"><CookieConsent /></SafeMount>
       </SettingsProvider>
