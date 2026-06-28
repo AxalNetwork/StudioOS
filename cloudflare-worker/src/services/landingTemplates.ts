@@ -302,6 +302,1157 @@ function buildAudienceData(row: any): Record<string, { h: string; b: string; c: 
   };
 }
 
+// ── Task #3: Template-driven editable content ──────────────────────────────
+// Per-template editable fields shown in the Brand & Landing step-3 editor and
+// rendered into the page. This schema is the single source of truth for the
+// worker renderers AND (mirrored as TEMPLATE_CONTENT_SCHEMA in
+// frontend/src/lib/brand/templates.js, guarded by landing_content_schema.test.ts)
+// the editor form + AI auto-fill. Defaults are RAW text (NOT HTML-escaped) — the
+// renderer escapes them on the way out, so write "Run & learn", not "Run &amp; learn".
+export type ContentFieldKind = 'text' | 'textarea' | 'groupList';
+export interface ContentItemField {
+  key: string;
+  label: string;
+  kind: 'text' | 'textarea';
+}
+export interface ContentField {
+  key: string;
+  label: string;
+  kind: ContentFieldKind;
+  default: string | Array<Record<string, string>>;
+  itemFields?: ContentItemField[];
+  max?: number;
+}
+
+// Shared hero fields — stored in existing landing_pages columns (NOT content_json),
+// listed here so the editor + auto-fill know the full editable surface.
+export const SHARED_LANDING_FIELDS: ContentField[] = [
+  { key: 'name', label: 'Brand name', kind: 'text', default: '' },
+  { key: 'headline', label: 'Headline', kind: 'text', default: '' },
+  { key: 'subheadline', label: 'Subheadline', kind: 'textarea', default: '' },
+  { key: 'cta_text', label: 'Button text', kind: 'text', default: '' },
+];
+
+// Per-template content blocks. Originals (minimal/bold-hero/video-first/editorial/
+// product-mock) carry no extra fields. Signature templates are filled in below.
+export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
+  'minimal': [],
+  'bold-hero': [],
+  'video-first': [],
+  'editorial': [],
+  'product-mock': [],
+  'advisor-connect': [
+    {
+      key: 'help_areas', label: 'Where you can help', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'title', label: 'Area', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'Go-to-market', body: 'Positioning, first customers, pricing.' },
+        { title: 'Product', body: 'Scope, sequencing, what to say no to.' },
+        { title: 'Hiring', body: 'Early team, founding engineers, networks.' },
+        { title: 'Fundraising', body: 'Story, metrics, and warm introductions.' },
+      ],
+    },
+    {
+      key: 'arrangement', label: 'The arrangement', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { label: 'Commitment', value: '~2 hrs / month' },
+        { label: 'Format', value: 'Calls + async' },
+        { label: 'Term', value: '12 months, renewable' },
+        { label: 'Recognition', value: 'Advisory equity' },
+        { label: 'Start', value: 'A 30-min intro' },
+      ],
+    },
+    {
+      key: 'signals', label: 'Early signal', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'value', label: 'Stat', kind: 'text' },
+        { key: 'label', label: 'Caption', kind: 'text' },
+      ],
+      default: [
+        { value: 'Live', label: 'Product in market' },
+        { value: 'Weekly', label: 'Active conversations' },
+        { value: 'Growing', label: 'Waitlist & pipeline' },
+      ],
+    },
+    {
+      key: 'quote', label: 'Closing quote', kind: 'textarea',
+      default: `The best advisors don't just open doors — they help you see around the next corner.`,
+    },
+  ],
+  'proof-builder': [
+    {
+      key: 'steps', label: 'How it works', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Step', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'Show the problem', body: `We name the pain precisely — the way the people living it would.` },
+        { title: 'Show the change', body: `What's different, demonstrated rather than asserted.` },
+        { title: 'Show the receipts', body: 'Quotes, usage, and outcomes you can trace back to a source.' },
+      ],
+    },
+    {
+      key: 'transformation', label: 'Before & after', kind: 'groupList', max: 2,
+      itemFields: [
+        { key: 'title', label: 'Heading', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+      ],
+      default: [
+        { title: 'Today', body: `The work is manual, scattered, and hard to trust. People route around the tools instead of through them — and the evidence lives in someone's head.` },
+        { title: 'With it', body: `One clear flow, less busywork, and a trail of proof at every step — so the next person doesn't have to take your word for it.` },
+      ],
+    },
+    {
+      key: 'metrics', label: 'Signal metrics', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'value', label: 'Stat', kind: 'text' },
+        { key: 'label', label: 'Caption', kind: 'text' },
+      ],
+      default: [
+        { value: 'Live', label: 'In real customer hands' },
+        { value: 'Weekly', label: 'New signal coming in' },
+        { value: 'Traceable', label: 'Every claim has a source' },
+      ],
+    },
+    {
+      key: 'testimonials', label: 'In their words', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'quote', label: 'Quote', kind: 'textarea' },
+        { key: 'who', label: 'Attribution', kind: 'text' },
+      ],
+      default: [
+        { quote: `"It did in an afternoon what used to take us a week — and we could show our team exactly why."`, who: 'Early customer · operations' },
+        { quote: `"The difference is you can actually check the claims. That's rare, and it's why we stayed."`, who: 'Design partner · founder' },
+      ],
+    },
+  ],
+  'capital-ready-kit': [
+    {
+      key: 'raise_summary', label: 'Raise summary', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'label', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { label: 'Raising', value: 'Seed' },
+        { label: 'Stage', value: 'Early' },
+        { label: 'Use', value: '18 mo' },
+        { label: 'Status', value: 'Open' },
+      ],
+    },
+    {
+      key: 'why_now', label: 'Why now', kind: 'groupList', max: 3,
+      itemFields: [
+        { key: 'title', label: 'Heading', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'The market shifted', body: 'Behaviour and technology just changed in a way that makes this buildable today.' },
+        { title: 'The wedge is clear', body: 'We start where the pain is sharpest and own that workflow end to end.' },
+        { title: 'Early but real', body: 'Live product, real users, and a roadmap the capital directly accelerates.' },
+      ],
+    },
+    {
+      key: 'traction', label: 'Traction', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'value', label: 'Stat', kind: 'text' },
+        { key: 'label', label: 'Caption', kind: 'text' },
+      ],
+      default: [
+        { value: 'Live', label: 'In market' },
+        { value: 'Weekly', label: 'Active use' },
+        { value: 'Growing', label: 'Pipeline' },
+        { value: 'Lean', label: 'Burn' },
+      ],
+    },
+    {
+      key: 'round_details', label: 'Round details', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { label: 'Stage', value: 'Seed' },
+        { label: 'Instrument', value: 'SAFE' },
+        { label: 'Runway', value: '~18 months' },
+        { label: 'Lead', value: 'Open to a lead' },
+        { label: 'Close', value: 'Rolling' },
+      ],
+    },
+    {
+      key: 'use_of_funds', label: 'Use of funds', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'Line', kind: 'text' },
+        { key: 'pct', label: 'Percent', kind: 'text' },
+      ],
+      default: [
+        { label: 'Product & engineering', pct: '45' },
+        { label: 'Go-to-market', pct: '30' },
+        { label: 'Operations', pct: '15' },
+        { label: 'Reserve', pct: '10' },
+      ],
+    },
+    {
+      key: 'team', label: 'Team', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'name', label: 'Name / role', kind: 'text' },
+        { key: 'role', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { name: 'Founder', role: 'Sets the vision and owns the product.' },
+        { name: 'Co-founder', role: 'Leads build and the technical roadmap.' },
+        { name: 'Early team', role: 'Operators close to the customer.' },
+      ],
+    },
+  ],
+  'capital-storyteller': [
+    {
+      key: 'raise_summary', label: 'Raise summary', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'label', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { label: 'Raising', value: 'Seed' },
+        { label: 'Stage', value: 'Early' },
+        { label: 'Runway', value: '18 mo' },
+        { label: 'Status', value: 'Open' },
+      ],
+    },
+    {
+      key: 'thesis', label: 'Thesis', kind: 'textarea',
+      default: `The gap between intent and outcome is still paved with manual work. We close it — and the market is finally ready to pay for that.`,
+    },
+    {
+      key: 'market', label: 'Why now', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'value', label: 'Headline', kind: 'text' },
+        { key: 'label', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { value: 'Large', label: 'Addressable market expanding as the workflow goes digital.' },
+        { value: 'Shifting', label: 'Buyer behaviour just changed in our favour.' },
+        { value: 'Underserved', label: 'Incumbents are slow and built for a prior era.' },
+        { value: 'Timed', label: 'The wedge is clear and defensible from day one.' },
+      ],
+    },
+    {
+      key: 'traction', label: 'Traction', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'value', label: 'Headline', kind: 'text' },
+        { key: 'label', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { value: 'Live', label: 'In market with real, recurring usage.' },
+        { value: 'Growing', label: 'Pipeline compounding week over week.' },
+      ],
+    },
+    {
+      key: 'round_details', label: 'Round details', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { label: 'Stage', value: 'Seed' },
+        { label: 'Instrument', value: 'SAFE' },
+        { label: 'Runway', value: '~18 months' },
+        { label: 'Close', value: 'Rolling' },
+      ],
+    },
+    {
+      key: 'use_of_funds', label: 'Use of funds', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'Line', kind: 'text' },
+        { key: 'pct', label: 'Percent', kind: 'text' },
+      ],
+      default: [
+        { label: 'Product & engineering', pct: '45' },
+        { label: 'Go-to-market', pct: '30' },
+        { label: 'Operations', pct: '15' },
+        { label: 'Reserve', pct: '10' },
+      ],
+    },
+  ],
+  'seed-stage-spark': [
+    {
+      key: 'metrics', label: 'Hero metrics', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'value', label: 'Stat', kind: 'text' },
+        { key: 'label', label: 'Caption', kind: 'text' },
+      ],
+      default: [
+        { value: 'Live', label: 'In market' },
+        { value: 'Weekly', label: 'Active use' },
+        { value: 'Growing', label: 'Pipeline' },
+        { value: 'Lean', label: 'Burn' },
+      ],
+    },
+    {
+      key: 'pillars', label: 'Product pillars', kind: 'groupList', max: 3,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'One sharp wedge', body: 'We own the moment of highest pain and expand from there.' },
+        { title: 'Built to compound', body: 'Every user makes the product more useful for the next.' },
+        { title: 'Defensible by design', body: 'Data and workflow lock-in deepen with usage.' },
+      ],
+    },
+    {
+      key: 'traction_bars', label: 'Traction bars', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'Label', kind: 'text' },
+        { key: 'pct', label: 'Height %', kind: 'text' },
+      ],
+      default: [
+        { label: 'Q1', pct: '34' },
+        { label: 'Q2', pct: '52' },
+        { label: 'Q3', pct: '71' },
+        { label: 'Q4', pct: '100' },
+      ],
+    },
+  ],
+  'distribution-deck': [
+    {
+      key: 'side_facts', label: 'At a glance', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { label: 'Partner type', value: 'Platform' },
+        { label: 'Addressable overlap', value: 'High' },
+        { label: 'Revenue model', value: 'Rev-share' },
+        { label: 'Time to value', value: 'Weeks' },
+      ],
+    },
+    {
+      key: 'overlap', label: 'Customer overlap', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'segment', label: 'Segment', kind: 'text' },
+        { key: 'base', label: 'Shared base', kind: 'text' },
+        { key: 'pct', label: 'Overlap %', kind: 'text' },
+      ],
+      default: [
+        { segment: 'Enterprise', base: 'Strong', pct: '72' },
+        { segment: 'Mid-market', base: 'Core', pct: '58' },
+        { segment: 'SMB', base: 'Emerging', pct: '34' },
+      ],
+    },
+    {
+      key: 'channel_value', label: 'Channel economics', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'value', label: 'Headline', kind: 'text' },
+        { key: 'label', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { value: '+ARPU', label: 'Lift per shared account' },
+        { value: 'Lower', label: 'Blended CAC' },
+        { value: 'Higher', label: 'Retention together' },
+        { value: 'Faster', label: 'Time to revenue' },
+      ],
+    },
+    {
+      key: 'rollout', label: 'Integration options', kind: 'groupList', max: 3,
+      itemFields: [
+        { key: 'title', label: 'Option', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+        { key: 'lift', label: 'Eng lift', kind: 'text' },
+        { key: 'time', label: 'Timeline', kind: 'text' },
+      ],
+      default: [
+        { title: 'Referral handoff', body: 'Lightest lift — a clean handoff between teams.', lift: 'Eng lift: low', time: '2–4 wks' },
+        { title: 'Embedded surface', body: 'The default — it lives inside your product.', lift: 'Eng lift: med', time: '6–8 wks' },
+        { title: 'Native rebuild', body: 'Deepest — fully co-built and co-branded.', lift: 'Eng lift: high', time: '12+ wks' },
+      ],
+    },
+  ],
+  'pilot-partner-page': [
+    {
+      key: 'glance', label: 'At a glance', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { label: 'Commitment', value: '~2 hrs / week' },
+        { label: 'Length', value: '6 weeks' },
+        { label: 'Cost', value: 'No fee' },
+        { label: 'Output', value: 'Joint findings memo' },
+      ],
+    },
+    {
+      key: 'who', label: "Who it's for", kind: 'groupList', max: 3,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'Has the pain', body: 'Lives the problem we solve, today.' },
+        { title: 'Can decide', body: 'One owner who can say yes within the team.' },
+        { title: 'Will engage', body: 'Shows up weekly and tells us the truth.' },
+      ],
+    },
+    {
+      key: 'includes', label: 'What it includes', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'Hands-on setup', body: 'We configure the product around your real workflow.' },
+        { title: 'Weekly sessions', body: 'Direct line to the founders, every week.' },
+        { title: 'Priority shaping', body: 'Your feedback steers what we build next.' },
+        { title: 'Closing memo', body: 'A written read-out you can act on.' },
+      ],
+    },
+    {
+      key: 'steps', label: 'Process', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'When', kind: 'text' },
+        { key: 'value', label: 'Step', kind: 'text' },
+      ],
+      default: [
+        { label: 'Day 0', value: 'Fit call' },
+        { label: 'Wk 1', value: 'Setup' },
+        { label: 'Wk 2–5', value: 'Run & learn' },
+        { label: 'Wk 6', value: 'Memo & next steps' },
+      ],
+    },
+  ],
+  'partner-hub': [
+    {
+      key: 'stats', label: 'Hero stats', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'value', label: 'Stat', kind: 'text' },
+        { key: 'label', label: 'Caption', kind: 'text' },
+      ],
+      default: [
+        { value: 'Pilot', label: '90-day model' },
+        { value: 'Named', label: 'Owners both sides' },
+        { value: 'Shared', label: 'Success criteria' },
+        { value: 'On date', label: 'We ship' },
+      ],
+    },
+    {
+      key: 'why', label: 'Why partner', kind: 'groupList', max: 3,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'Shared accountability', body: 'Named owners on both sides, and a plan we both sign.' },
+        { title: 'Productized surfaces', body: 'Real integration points, not a one-off favour.' },
+        { title: 'We ship on date', body: 'A 90-day pilot with criteria agreed up front.' },
+      ],
+    },
+    {
+      key: 'shared_fit', label: 'Shared fit', kind: 'textarea',
+      default: `We start where our ideal customers already overlap — so the pilot proves value fast and the economics are obvious to both teams.`,
+    },
+    {
+      key: 'models', label: 'Ways to work together', kind: 'groupList', max: 3,
+      itemFields: [
+        { key: 'tag', label: 'Tag', kind: 'text' },
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'li1', label: 'Point 1', kind: 'text' },
+        { key: 'li2', label: 'Point 2', kind: 'text' },
+        { key: 'li3', label: 'Point 3', kind: 'text' },
+      ],
+      default: [
+        { tag: 'Commercial', title: 'Co-sell', li1: 'Joint pipeline', li2: 'Shared targets', li3: 'Rev-share' },
+        { tag: 'Technical', title: 'Integrate', li1: 'Embedded surface', li2: 'Shared data model', li3: 'Co-built roadmap' },
+        { tag: 'Distribution', title: 'Channel', li1: 'Bundled offer', li2: 'Referral motion', li3: 'Co-marketing' },
+      ],
+    },
+    {
+      key: 'quote', label: 'Quote', kind: 'textarea',
+      default: `The pilot paid for itself before it ended — and our customers noticed.`,
+    },
+    {
+      key: 'quote_by', label: 'Quote attribution', kind: 'text',
+      default: `Head of Partnerships`,
+    },
+  ],
+  'partner-pipeline-pro': [
+    {
+      key: 'glance', label: 'At a glance', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { label: 'Partner type', value: 'Platform' },
+        { label: 'Addressable overlap', value: 'High' },
+        { label: 'ARPU lift', value: 'Net new' },
+        { label: 'Revenue timing', value: 'Quarter one' },
+      ],
+    },
+    {
+      key: 'overlap_nums', label: 'Customer overlap', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'value', label: 'Stat', kind: 'text' },
+        { key: 'label', label: 'Caption', kind: 'text' },
+      ],
+      default: [
+        { value: '61%', label: 'Shared ICP' },
+        { value: 'High', label: 'Geographic fit' },
+        { value: 'Strong', label: 'Income match' },
+        { value: 'Aligned', label: 'Buying preference' },
+      ],
+    },
+    {
+      key: 'levers', label: 'Channel value', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'lever', label: 'Lever', kind: 'text' },
+        { key: 'baseline', label: 'Baseline', kind: 'text' },
+        { key: 'with', label: 'With us', kind: 'text' },
+        { key: 'delta', label: 'Delta', kind: 'text' },
+      ],
+      default: [
+        { lever: 'ARPU', baseline: 'Flat', with: 'Higher', delta: '+lift' },
+        { lever: 'Retention', baseline: 'Standard', with: 'Stickier', delta: '+pts' },
+        { lever: 'CAC', baseline: 'Full', with: 'Shared', delta: '−cost' },
+      ],
+    },
+    {
+      key: 'options', label: 'Integration options', kind: 'groupList', max: 3,
+      itemFields: [
+        { key: 'pin', label: 'Pin', kind: 'text' },
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { pin: 'Lightest', title: 'Referral', body: 'Clean handoff, minimal lift.' },
+        { pin: 'Default', title: 'Embedded', body: 'It lives inside your product surface.' },
+        { pin: 'Deepest', title: 'Native', body: 'Fully co-built and co-branded.' },
+      ],
+    },
+    {
+      key: 'timeline', label: 'Timeline', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'When', kind: 'text' },
+        { key: 'value', label: 'Step', kind: 'text' },
+      ],
+      default: [
+        { label: 'Wk 0', value: 'Scoping' },
+        { label: 'Wk 4', value: 'Build' },
+        { label: 'Wk 8', value: 'Pilot' },
+        { label: 'Wk 14', value: 'Scale' },
+      ],
+    },
+    {
+      key: 'quote', label: 'Quote', kind: 'textarea',
+      default: `We saw the overlap immediately. The model held up under our own assumptions.`,
+    },
+    {
+      key: 'quote_by', label: 'Quote attribution', kind: 'text',
+      default: `VP, Strategic Partnerships`,
+    },
+  ],
+  'co-founder-builder': [
+    {
+      key: 'data', label: 'Hero data', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'key', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { key: 'Stage', value: 'Pre-seed' },
+        { key: 'Users', value: 'Early' },
+        { key: 'Working', value: 'Core' },
+        { key: 'Equity', value: 'Founding' },
+      ],
+    },
+    {
+      key: 'vision', label: 'Vision', kind: 'textarea',
+      default: `Teams are shipping faster than they can reason about what they ship. We're the layer that gives them confidence — and it's a problem worth a decade.`,
+    },
+    {
+      key: 'shipped', label: 'Shipped', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Item', kind: 'textarea' },
+      ],
+      default: [
+        { body: 'Core engine running in production.' },
+        { body: 'First users on real workflows.' },
+        { body: 'The hard primitive works.' },
+      ],
+    },
+    {
+      key: 'weak', label: 'Weak points', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Item', kind: 'textarea' },
+      ],
+      default: [
+        { body: 'Billing is duct tape.' },
+        { body: 'No real test coverage yet.' },
+        { body: 'Ops is one person deep.' },
+      ],
+    },
+    {
+      key: 'roadmap', label: 'First 90 days', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Step', kind: 'textarea' },
+      ],
+      default: [
+        { body: 'Own the runtime end to end and harden it.' },
+        { body: 'Stand up the durable replay and event-sourcing layer.' },
+        { body: 'Turn the prototype billing into something real.' },
+      ],
+    },
+    {
+      key: 'equity', label: 'The offer', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Term', kind: 'textarea' },
+      ],
+      default: [
+        { body: 'Founding equity — single to low-double-digit %.' },
+        { body: 'Standard vesting, 1-year cliff.' },
+        { body: 'Market-aware salary once we raise.' },
+        { body: 'Real ownership of the technical direction.' },
+      ],
+    },
+  ],
+  'co-founder-canvas': [
+    {
+      key: 'facts', label: 'Hero facts', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'key', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { key: 'Stage', value: 'Early' },
+        { key: 'Team', value: 'Small' },
+        { key: 'Runway', value: 'Funded' },
+        { key: 'Equity', value: 'Co-founder' },
+      ],
+    },
+    {
+      key: 'building', label: 'What we are building', kind: 'textarea',
+      default: `We're the execution layer for work that's currently held together by people copying things between tools. We're turning that into something dependable.`,
+    },
+    {
+      key: 'whynow', label: 'Why now', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+      ],
+      default: [
+        { title: 'The tools arrived', body: 'What needed a team last year is buildable by two people now.' },
+        { title: 'The buyers shifted', body: 'People will finally pay to remove this work.' },
+        { title: 'The window is short', body: 'Whoever owns the workflow first, owns it.' },
+      ],
+    },
+    {
+      key: 'built', label: 'Already built', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+      ],
+      default: [
+        { title: 'The core, working', body: 'The hard part runs in production today.' },
+        { title: 'First believers', body: "Real users who'd be upset if it disappeared." },
+        { title: 'A clear next mile', body: 'We know exactly what comes next.' },
+      ],
+    },
+    {
+      key: 'gap', label: "What's missing", kind: 'groupList', max: 2,
+      itemFields: [
+        { key: 'body', label: 'Paragraph', kind: 'textarea' },
+      ],
+      default: [
+        { body: "I can hold the vision and talk to customers all day. What I can't do is be the depth on the build — the architecture, the rigor, the parts that have to be right." },
+        { body: "That's the seat. Not a hire reporting to me — a partner who owns the half of this company I can't." },
+      ],
+    },
+    {
+      key: 'role_have', label: 'You have probably', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Item', kind: 'text' },
+      ],
+      default: [
+        { body: 'Built and shipped real systems' },
+        { body: 'Owned something end to end' },
+        { body: 'Been the person others trust to be right' },
+      ],
+    },
+    {
+      key: 'role_not', label: 'You probably do not', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Item', kind: 'text' },
+      ],
+      default: [
+        { body: 'Need a detailed spec to start' },
+        { body: 'Want to be managed' },
+        { body: 'Care about titles over ownership' },
+      ],
+    },
+    {
+      key: 'offer', label: 'Offer', kind: 'groupList', max: 3,
+      itemFields: [
+        { key: 'key', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { key: 'Equity', value: 'Co-founder' },
+        { key: 'Salary', value: 'On raise' },
+        { key: 'Location', value: 'Flexible' },
+      ],
+    },
+    {
+      key: 'steps', label: 'Next steps', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Step', kind: 'text' },
+      ],
+      default: [
+        { body: 'You email me and we trade notes.' },
+        { body: 'We spend a day building something small.' },
+        { body: 'If it clicks, we go.' },
+      ],
+    },
+  ],
+  'cofounder-connect': [
+    {
+      key: 'stats', label: 'Hero stats', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'key', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { key: 'Stage', value: 'Early' },
+        { key: 'Team', value: 'Small' },
+        { key: 'Runway', value: 'Funded' },
+        { key: 'Equity', value: 'Co-founder' },
+      ],
+    },
+    {
+      key: 'mission', label: 'Mission', kind: 'textarea',
+      default: `We're the accountability layer for autonomous work — so teams can trust what their software does on their behalf.`,
+    },
+    {
+      key: 'whynow', label: 'Why now', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+      ],
+      default: [
+        { title: 'Capability jumped', body: 'What was research last year is shippable today.' },
+        { title: 'Trust is missing', body: "Everyone's adopting; nobody can verify." },
+        { title: 'First mover wins', body: "The standard isn't set yet. It could be ours." },
+      ],
+    },
+    {
+      key: 'built', label: 'What is built', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'name', label: 'Name', kind: 'text' },
+        { key: 'desc', label: 'Detail', kind: 'textarea' },
+        { key: 'pill', label: 'Status label', kind: 'text' },
+        { key: 'on', label: 'Highlight (yes/no)', kind: 'text' },
+      ],
+      default: [
+        { name: 'Core engine', desc: 'The hard primitive, running in production.', pill: 'Working', on: 'yes' },
+        { name: 'First users', desc: 'Real teams on real workflows.', pill: 'Live', on: 'yes' },
+        { name: 'Billing', desc: 'Functional, but held together with tape.', pill: 'Rough', on: 'no' },
+        { name: 'Test suite', desc: 'Not yet — this is part of the job.', pill: 'Open', on: 'no' },
+      ],
+    },
+    {
+      key: 'missing', label: "What's missing", kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+      ],
+      default: [
+        { title: 'Depth on the build', body: "The architecture and rigor I can't give it alone." },
+        { title: 'A true partner', body: 'Someone who owns half of this, not reports to me.' },
+      ],
+    },
+    {
+      key: 'role_terms', label: 'The role', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'key', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { key: 'Equity', value: 'Co-founder' },
+        { key: 'Salary', value: 'On raise' },
+        { key: 'Location', value: 'Flexible' },
+      ],
+    },
+    {
+      key: 'cols3', label: 'Role columns', kind: 'groupList', max: 3,
+      itemFields: [
+        { key: 'heading', label: 'Heading', kind: 'text' },
+        { key: 'li1', label: 'Point 1', kind: 'text' },
+        { key: 'li2', label: 'Point 2', kind: 'text' },
+        { key: 'li3', label: 'Point 3', kind: 'text' },
+      ],
+      default: [
+        { heading: 'First 90 days', li1: 'Own the runtime', li2: 'Harden the core', li3: 'Ship to users' },
+        { heading: 'You look like', li1: 'A builder', li2: 'An owner', li3: 'Direct' },
+        { heading: 'Not looking for', li1: 'A spec-follower', li2: 'A title-chaser', li3: 'A spectator' },
+      ],
+    },
+    {
+      key: 'steps', label: 'Next steps', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Step', kind: 'text' },
+      ],
+      default: [
+        { body: 'You send a note — anything, even a paragraph.' },
+        { body: 'We trade context and spend a day building.' },
+        { body: 'If it clicks, we make it official.' },
+      ],
+    },
+  ],
+  'co-founder-quest': [
+    {
+      key: 'timing', label: 'Why now', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'body', label: 'Paragraph', kind: 'textarea' },
+      ],
+      default: [
+        { body: 'The capability to build this only just arrived. The teams who plant a flag in this space this year will define how it works for everyone else.' },
+        { body: "We'd rather be early and right than safe and late." },
+      ],
+    },
+    {
+      key: 'built', label: 'What we have built', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'Label', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+      ],
+      default: [
+        { label: 'Product', body: 'core engine live in production.' },
+        { label: 'Traction', body: 'first users on real workflows.' },
+        { label: 'Team', body: 'small, senior, and shipping.' },
+        { label: 'Runway', body: 'funded to find product-market fit.' },
+      ],
+    },
+    {
+      key: 'mission_cards', label: 'What we need', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+      ],
+      default: [
+        { title: 'Own the runtime', body: 'Architecture, reliability, the parts that must be right.' },
+        { title: 'Set the pace', body: 'Decide what ships and make it ship.' },
+        { title: 'Raise the bar', body: 'Bring rigor the whole team levels up to.' },
+      ],
+    },
+    {
+      key: 'ideal', label: 'Ideal profile', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Item', kind: 'text' },
+      ],
+      default: [
+        { body: 'Shipped real systems end to end' },
+        { body: 'Comfortable with ambiguity' },
+        { body: 'Argues well, decides fast' },
+      ],
+    },
+    {
+      key: 'first90', label: 'First 90 days', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Item', kind: 'text' },
+      ],
+      default: [
+        { body: 'Own and harden the core' },
+        { body: 'Ship to first users' },
+        { body: 'Set the technical direction' },
+      ],
+    },
+    {
+      key: 'equity', label: 'Equity & collaboration', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'key', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { key: 'Role', value: 'Co-founder' },
+        { key: 'Equity', value: 'Significant' },
+        { key: 'Salary', value: 'Funded' },
+        { key: 'How we work', value: 'Direct & fast' },
+      ],
+    },
+    {
+      key: 'team', label: 'The team so far', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'name', label: 'Name', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+      ],
+      default: [
+        { name: 'The founder', body: "Owns vision, customers, and the company's story." },
+        { name: 'Early team', body: 'Operators close to the problem, shipping weekly.' },
+      ],
+    },
+    {
+      key: 'steps', label: 'Next steps', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Step', kind: 'text' },
+      ],
+      default: [
+        { body: 'Send a note — no résumé required.' },
+        { body: 'We trade context over a call.' },
+        { body: 'We build something small together.' },
+      ],
+    },
+  ],
+  'mentor-connect': [
+    {
+      key: 'building', label: "What we're building", kind: 'textarea',
+      default: `We remove the busywork between a team's intent and the outcome they're after.`,
+    },
+    {
+      key: 'oneline', label: 'One-line summary', kind: 'textarea',
+      default: `One line: we make a painful manual workflow feel automatic.`,
+    },
+    {
+      key: 'help', label: 'Where we need help', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+      ],
+      default: [
+        { title: 'Pricing & packaging', body: 'How to price without leaving value — or trust — on the table.' },
+        { title: 'Positioning', body: 'Which wedge to lead with for the sharpest pull.' },
+        { title: 'Go-to-market', body: 'The first repeatable motion that actually compounds.' },
+      ],
+    },
+    {
+      key: 'qual', label: 'Experience that matters', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Item', kind: 'textarea' },
+      ],
+      default: [
+        { body: "You've built or scaled in this space." },
+        { body: "You've made the calls we're facing now." },
+        { body: "You're generous with hard-won lessons." },
+      ],
+    },
+    {
+      key: 'stats', label: 'Progress so far', kind: 'groupList', max: 3,
+      itemFields: [
+        { key: 'key', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { key: 'Product', value: 'Live' },
+        { key: 'Users', value: 'Early' },
+        { key: 'Stage', value: 'Pre-seed' },
+      ],
+    },
+  ],
+  'mentor-connect-page': [
+    {
+      key: 'building', label: "What we're building", kind: 'textarea',
+      default: `We take a workflow that's currently stitched together by hand and make it dependable — so teams stop babysitting it.`,
+    },
+    {
+      key: 'stuck', label: "Where we're stuck", kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'Label', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+      ],
+      default: [
+        { label: 'Pricing', body: 'what to charge without capping value.' },
+        { label: 'Positioning', body: 'which wedge pulls hardest.' },
+        { label: 'Playbook', body: 'the first motion that repeats.' },
+      ],
+    },
+    {
+      key: 'why', label: 'Why you', kind: 'textarea',
+      default: `You've sat where we're sitting and made these calls for real. Even your hypothetical feedback would save us months — and we're not afraid to hear that we were wrong.`,
+    },
+    {
+      key: 'ask_options', label: 'The ask — options', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'key', label: 'Marker', kind: 'text' },
+        { key: 'body', label: 'Option', kind: 'textarea' },
+      ],
+      default: [
+        { key: 'A', body: 'A 30-minute call, whenever suits.' },
+        { key: 'B', body: 'A few lines by email — async is great.' },
+        { key: 'C', body: 'An intro to someone better placed.' },
+      ],
+    },
+    {
+      key: 'timeline', label: 'How we got here', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'year', label: 'Year', kind: 'text' },
+        { key: 'body', label: 'Milestone', kind: 'textarea' },
+      ],
+      default: [
+        { year: '2024', body: 'The idea, and the first ugly prototype.' },
+        { year: '2025', body: 'First users, and the hard parts working.' },
+        { year: '2026', body: "Finding the motion that repeats — that's now." },
+      ],
+    },
+  ],
+  'builders-launchpad': [
+    {
+      key: 'facts', label: 'Hero facts', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'key', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { key: 'Stage', value: 'Beta' },
+        { key: 'Access', value: 'Invite' },
+        { key: 'Status', value: 'Live' },
+        { key: 'Next', value: 'v1' },
+      ],
+    },
+    {
+      key: 'vision', label: 'Product vision', kind: 'textarea',
+      default: `We take the manual, error-prone parts of your day and make them automatic — so you ship instead of babysitting tools.`,
+    },
+    {
+      key: 'state', label: 'Current state', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'badge', label: 'Badge', kind: 'text' },
+        { key: 'tone', label: 'Tone (ok/warn/dn)', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+      ],
+      default: [
+        { badge: 'Working', tone: 'ok', body: 'Core flow is live and used daily.' },
+        { badge: 'Half', tone: 'warn', body: 'Integrations — the big ones are in.' },
+        { badge: 'Soon', tone: 'dn', body: 'Polish and onboarding still rough.' },
+      ],
+    },
+    {
+      key: 'road', label: 'What ships next', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Item', kind: 'textarea' },
+      ],
+      default: [
+        { body: 'Smoother onboarding for new teams.' },
+        { body: 'The two integrations you keep asking for.' },
+        { body: 'v1, stable enough to depend on.' },
+      ],
+    },
+  ],
+};
+
+function parseLandingContent(row: any): Record<string, any> {
+  const raw = row && row.content_json;
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw as Record<string, any>;
+  try {
+    const o = JSON.parse(String(raw));
+    return o && typeof o === 'object' ? (o as Record<string, any>) : {};
+  } catch {
+    return {};
+  }
+}
+
+interface ContentItemAccessor {
+  t(key: string): string;
+  pct(key: string): string;
+}
+interface ContentAccessor {
+  t(field: string): string;
+  list(field: string): ContentItemAccessor[];
+}
+
+// Build an accessor over a row's saved content for one template. `.t(field)`
+// returns the escaped string (falling back to the schema default when blank);
+// `.list(field)` returns escaped per-item accessors (falling back to the schema
+// default list when the user left it empty, clamped to the field's max).
+function landingContent(row: any, templateKey: TemplateKey): ContentAccessor {
+  const all = parseLandingContent(row);
+  const tc: Record<string, any> = (all && typeof all[templateKey] === 'object' && all[templateKey]) || {};
+  const fields = LANDING_CONTENT_SCHEMA[templateKey] || [];
+  const byKey: Record<string, ContentField> = {};
+  for (const f of fields) byKey[f.key] = f;
+
+  function itemAccessor(item: any): ContentItemAccessor {
+    return {
+      t(key: string): string {
+        const v = item && typeof item === 'object' ? item[key] : '';
+        return escapeHtml(typeof v === 'string' ? v : '');
+      },
+      pct(key: string): string {
+        const v = item && typeof item === 'object' ? item[key] : '';
+        const n = parseInt(String(v == null ? '' : v).replace(/[^0-9]/g, ''), 10);
+        if (!isFinite(n)) return '0';
+        return String(Math.max(0, Math.min(100, n)));
+      },
+    };
+  }
+
+  return {
+    t(field: string): string {
+      const spec = byKey[field];
+      const def = spec && typeof spec.default === 'string' ? spec.default : '';
+      const v = tc[field];
+      const s = typeof v === 'string' && v.trim() ? v : def;
+      return escapeHtml(s);
+    },
+    list(field: string): ContentItemAccessor[] {
+      const spec = byKey[field];
+      const defList: Array<Record<string, string>> = spec && Array.isArray(spec.default) ? spec.default : [];
+      const max = (spec && spec.max) || 12;
+      let items: any[] = Array.isArray(tc[field]) ? tc[field] : [];
+      items = items.filter(
+        (it) => it && typeof it === 'object' && Object.values(it).some((x) => typeof x === 'string' && x.trim()),
+      );
+      if (items.length === 0) items = defList;
+      return items.slice(0, max).map(itemAccessor);
+    },
+  };
+}
+
+// Validate + clamp an incoming content_json payload against the schema. Drops
+// unknown templates/fields, coerces strings, caps lengths and list sizes — so the
+// PUT route never persists unbounded or off-schema content.
+export function sanitizeLandingContent(input: any): Record<string, Record<string, any>> {
+  const out: Record<string, Record<string, any>> = {};
+  if (!input || typeof input !== 'object') return out;
+  const MAX_STR = 2000;
+  for (const tkey of TEMPLATE_KEYS) {
+    const fields = LANDING_CONTENT_SCHEMA[tkey];
+    if (!fields || !fields.length) continue;
+    const src = (input as Record<string, any>)[tkey];
+    if (!src || typeof src !== 'object') continue;
+    const tout: Record<string, any> = {};
+    for (const f of fields) {
+      const v = src[f.key];
+      if (f.kind === 'groupList') {
+        if (!Array.isArray(v)) continue;
+        const max = f.max || 12;
+        const itemFields = f.itemFields || [];
+        tout[f.key] = v.slice(0, max).map((item: any) => {
+          const io: Record<string, string> = {};
+          if (item && typeof item === 'object') {
+            for (const itf of itemFields) {
+              const iv = item[itf.key];
+              if (typeof iv === 'string') io[itf.key] = iv.slice(0, MAX_STR);
+            }
+          }
+          return io;
+        });
+      } else if (typeof v === 'string') {
+        tout[f.key] = v.slice(0, MAX_STR);
+      }
+    }
+    if (Object.keys(tout).length) out[tkey] = tout;
+  }
+  return out;
+}
+
 function fontStack(pairing: string): string {
   const stacks: Record<string, string> = {
     editorial: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Georgia", "Times New Roman", serif',
@@ -783,6 +1934,7 @@ ${waitlistScript(bk.apiWaitlist, bk.nonce)}
 function renderAdvisorConnect(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
   const a = aud.advisor;
+  const c = landingContent(row, 'advisor-connect');
   const brand = name || 'this venture';
   const btnInk = contrastText(color);
   const serif = `"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif`;
@@ -895,19 +2047,12 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
           <div class="sec-head"><h2>Where we'd value your guidance</h2></div>
           <p class="lead">Pick the lane where you're strongest — we'll make the time count.</p>
           <div class="points" style="grid-template-columns:1fr 1fr;">
-            <div class="point"><h3>Go-to-market</h3><p>Positioning, first customers, pricing.</p></div>
-            <div class="point"><h3>Product</h3><p>Scope, sequencing, what to say no to.</p></div>
-            <div class="point"><h3>Hiring</h3><p>Early team, founding engineers, networks.</p></div>
-            <div class="point"><h3>Fundraising</h3><p>Story, metrics, and warm introductions.</p></div>
+            ${c.list('help_areas').map((it) => `<div class="point"><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
           </div>
         </div>
         <aside class="card">
           <h3>The arrangement</h3>
-          <div class="term"><span>Commitment</span><span>~2 hrs / month</span></div>
-          <div class="term"><span>Format</span><span>Calls + async</span></div>
-          <div class="term"><span>Term</span><span>12 months, renewable</span></div>
-          <div class="term"><span>Recognition</span><span>Advisory equity</span></div>
-          <div class="term"><span>Start</span><span>A 30-min intro</span></div>
+          ${c.list('arrangement').map((it) => `<div class="term"><span>${it.t('label')}</span><span>${it.t('value')}</span></div>`).join('')}
         </aside>
       </div>
     </section>
@@ -915,14 +2060,12 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <section>
       <div class="sec-head"><div class="eyebrow">Early signal</div></div>
       <div class="stats">
-        <div class="stat"><div class="v">Live</div><div class="l">Product in market</div></div>
-        <div class="stat"><div class="v">Weekly</div><div class="l">Active conversations</div></div>
-        <div class="stat"><div class="v">Growing</div><div class="l">Waitlist &amp; pipeline</div></div>
+        ${c.list('signals').map((it) => `<div class="stat"><div class="v">${it.t('value')}</div><div class="l">${it.t('label')}</div></div>`).join('')}
       </div>
     </section>
 
     <section style="border-bottom:0;">
-      <blockquote>The best advisors don't just open doors — they help you see around the next corner.<cite>— Why we're reaching out to you</cite></blockquote>
+      <blockquote>${c.t('quote')}<cite>— Why we're reaching out to you</cite></blockquote>
     </section>
 
     <div class="cta" id="join">
@@ -950,7 +2093,7 @@ ${singleWaitlistScript(bk.apiWaitlist, 'advisor', bk.nonce)}
 function renderProofBuilder(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
   const a = aud.customer;
-  const brand = name || 'our product';
+  const c = landingContent(row, 'proof-builder');
   const btnInk = contrastText(color);
   const serif = `Georgia, "Times New Roman", "Iowan Old Style", serif`;
   const sans = `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`;
@@ -1053,9 +2196,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <section id="how">
       <div class="sec-head"><div class="eyebrow">How it works</div><h2>Claims you can verify</h2></div>
       <div class="steps">
-        <div class="step"><div class="n">1</div><h3>Show the problem</h3><p>We name the pain precisely — the way the people living it would.</p></div>
-        <div class="step"><div class="n">2</div><h3>Show the change</h3><p>What's different with ${brand}, demonstrated rather than asserted.</p></div>
-        <div class="step"><div class="n">3</div><h3>Show the receipts</h3><p>Quotes, usage, and outcomes you can trace back to a source.</p></div>
+        ${c.list('steps').map((it, i) => `<div class="step"><div class="n">${i + 1}</div><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
       </div>
     </section>
 
@@ -1069,24 +2210,20 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <section>
       <div class="sec-head"><div class="eyebrow">Before &amp; after</div><h2>What actually changes</h2></div>
       <div class="two">
-        <div class="panel"><h3>Today</h3><p>The work is manual, scattered, and hard to trust. People route around the tools instead of through them — and the evidence lives in someone's head.</p></div>
-        <div class="panel alt"><h3>With ${brand}</h3><p>One clear flow, less busywork, and a trail of proof at every step — so the next person doesn't have to take your word for it.</p></div>
+        ${c.list('transformation').map((it, i) => `<div class="panel${i === 0 ? '' : ' alt'}"><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
       </div>
     </section>
 
     <section>
       <div class="metrics">
-        <div class="metric"><div class="v">Live</div><div class="l">In real customer hands</div></div>
-        <div class="metric"><div class="v">Weekly</div><div class="l">New signal coming in</div></div>
-        <div class="metric"><div class="v">Traceable</div><div class="l">Every claim has a source</div></div>
+        ${c.list('metrics').map((it) => `<div class="metric"><div class="v">${it.t('value')}</div><div class="l">${it.t('label')}</div></div>`).join('')}
       </div>
     </section>
 
     <section>
       <div class="sec-head"><div class="eyebrow">In their words</div><h2>What people tell us</h2></div>
       <div class="cases">
-        <div class="case"><blockquote>"It did in an afternoon what used to take us a week — and we could show our team exactly why."</blockquote><div class="who">Early customer · operations</div></div>
-        <div class="case"><blockquote>"The difference is you can actually check the claims. That's rare, and it's why we stayed."</blockquote><div class="who">Design partner · founder</div></div>
+        ${c.list('testimonials').map((it) => `<div class="case"><blockquote>${it.t('quote')}</blockquote><div class="who">${it.t('who')}</div></div>`).join('')}
       </div>
     </section>
 
@@ -1115,6 +2252,7 @@ ${singleWaitlistScript(bk.apiWaitlist, 'customer', bk.nonce)}
 function renderCapitalReadyKit(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
   const a = aud.investor;
+  const c = landingContent(row, 'capital-ready-kit');
   const brand = name || 'our company';
   const btnInk = contrastText(color);
   const mono = `"SF Mono", "JetBrains Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace`;
@@ -1203,10 +2341,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <a class="btn" href="#intro">${a.c}</a>
       <a class="ghost" href="#round">Round details →</a>
       <div class="raise">
-        <div class="cell"><div class="k">Raising</div><div class="v">Seed</div></div>
-        <div class="cell"><div class="k">Stage</div><div class="v">Early</div></div>
-        <div class="cell"><div class="k">Use</div><div class="v">18 mo</div></div>
-        <div class="cell"><div class="k">Status</div><div class="v">Open</div></div>
+        ${c.list('raise_summary').map((it) => `<div class="cell"><div class="k">${it.t('label')}</div><div class="v">${it.t('value')}</div></div>`).join('')}
       </div>
     </header>
 
@@ -1218,19 +2353,14 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <section>
       <div class="sec-head"><div class="eyebrow">Why now</div><h2>The timing is the moat</h2></div>
       <div class="points">
-        <div class="point"><div class="n">01</div><h3>The market shifted</h3><p>Behaviour and technology just changed in a way that makes this buildable today.</p></div>
-        <div class="point"><div class="n">02</div><h3>The wedge is clear</h3><p>We start where the pain is sharpest and own that workflow end to end.</p></div>
-        <div class="point"><div class="n">03</div><h3>Early but real</h3><p>Live product, real users, and a roadmap the capital directly accelerates.</p></div>
+        ${c.list('why_now').map((it, i) => `<div class="point"><div class="n">${String(i + 1).padStart(2, '0')}</div><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
       </div>
     </section>
 
     <section>
       <div class="sec-head"><div class="eyebrow">Traction</div><h2>Signal so far</h2></div>
       <div class="metrics">
-        <div class="metric"><div class="v">Live</div><div class="l">In market</div></div>
-        <div class="metric"><div class="v">Weekly</div><div class="l">Active use</div></div>
-        <div class="metric"><div class="v">Growing</div><div class="l">Pipeline</div></div>
-        <div class="metric"><div class="v">Lean</div><div class="l">Burn</div></div>
+        ${c.list('traction').map((it) => `<div class="metric"><div class="v">${it.t('value')}</div><div class="l">${it.t('label')}</div></div>`).join('')}
       </div>
     </section>
 
@@ -1239,19 +2369,12 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <div class="two">
         <div class="card">
           <h3>Round details</h3>
-          <div class="term"><span>Stage</span><span class="v">Seed</span></div>
-          <div class="term"><span>Instrument</span><span class="v">SAFE</span></div>
-          <div class="term"><span>Runway</span><span class="v">~18 months</span></div>
-          <div class="term"><span>Lead</span><span class="v">Open to a lead</span></div>
-          <div class="term"><span>Close</span><span class="v">Rolling</span></div>
+          ${c.list('round_details').map((it) => `<div class="term"><span>${it.t('label')}</span><span class="v">${it.t('value')}</span></div>`).join('')}
         </div>
         <div class="card">
           <h3>Where it goes</h3>
           <div class="fund">
-            <div class="row"><span>Product &amp; engineering</span><span>45%</span></div><div class="track"><div class="fill" style="width:45%"></div></div>
-            <div class="row"><span>Go-to-market</span><span>30%</span></div><div class="track"><div class="fill" style="width:30%"></div></div>
-            <div class="row"><span>Operations</span><span>15%</span></div><div class="track"><div class="fill" style="width:15%"></div></div>
-            <div class="row"><span>Reserve</span><span>10%</span></div><div class="track"><div class="fill" style="width:10%"></div></div>
+            ${c.list('use_of_funds').map((it) => `<div class="row"><span>${it.t('label')}</span><span>${it.pct('pct')}%</span></div><div class="track"><div class="fill" style="width:${it.pct('pct')}%"></div></div>`).join('')}
           </div>
         </div>
       </div>
@@ -1260,9 +2383,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <section>
       <div class="sec-head"><div class="eyebrow">Team</div><h2>Who's building ${brand}</h2></div>
       <div class="team">
-        <div class="member"><div class="av"></div><h3>Founder</h3><p>Sets the vision and owns the product.</p></div>
-        <div class="member"><div class="av"></div><h3>Co-founder</h3><p>Leads build and the technical roadmap.</p></div>
-        <div class="member"><div class="av"></div><h3>Early team</h3><p>Operators close to the customer.</p></div>
+        ${c.list('team').map((it) => `<div class="member"><div class="av"></div><h3>${it.t('name')}</h3><p>${it.t('role')}</p></div>`).join('')}
       </div>
     </section>
 
@@ -1293,9 +2414,10 @@ const PORT_SANS = `-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica
 const PORT_MONO = `"SF Mono","JetBrains Mono",ui-monospace,"Cascadia Code",Menlo,Consolas,monospace`;
 
 // ── Template: Capital Storyteller (Task #25) — dark numbered investor memo ──
-function renderCapitalStoryteller(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+function renderCapitalStoryteller(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
   const a = aud.investor; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const c = landingContent(row, 'capital-storyteller');
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1361,33 +2483,26 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <p class="lede">${a.b}</p>
       <a class="btn" href="#raise">${a.c}</a>
       <div class="raise">
-        <div class="cell"><div class="k">Raising</div><div class="v">Seed</div></div>
-        <div class="cell"><div class="k">Stage</div><div class="v">Early</div></div>
-        <div class="cell"><div class="k">Runway</div><div class="v">18 mo</div></div>
-        <div class="cell"><div class="k">Status</div><div class="v">Open</div></div>
+        ${c.list('raise_summary').map((it) => `<div class="cell"><div class="k">${it.t('label')}</div><div class="v">${it.t('value')}</div></div>`).join('')}
       </div>
     </header>
     <section>
       <div class="num"><span>01 — Thesis</span><div class="ln"></div></div>
       <h2>The story behind ${brand}</h2>
-      <p class="lead">${brand} exists because the gap between intent and outcome is still paved with manual work. We close it — and the market is finally ready to pay for that.</p>
+      <p class="lead">${c.t('thesis')}</p>
     </section>
     <section>
       <div class="num"><span>02 — Market</span><div class="ln"></div></div>
       <h2>Why the window is open now</h2>
       <div class="bento">
-        <div class="cell"><div class="v">Large</div><div class="l">Addressable market expanding as the workflow goes digital.</div></div>
-        <div class="cell"><div class="v">Shifting</div><div class="l">Buyer behaviour just changed in our favour.</div></div>
-        <div class="cell"><div class="v">Underserved</div><div class="l">Incumbents are slow and built for a prior era.</div></div>
-        <div class="cell"><div class="v">Timed</div><div class="l">The wedge is clear and defensible from day one.</div></div>
+        ${c.list('market').map((it) => `<div class="cell"><div class="v">${it.t('value')}</div><div class="l">${it.t('label')}</div></div>`).join('')}
       </div>
     </section>
     <section>
       <div class="num"><span>03 — Traction</span><div class="ln"></div></div>
       <h2>Signal so far</h2>
       <div class="bento">
-        <div class="cell"><div class="v">Live</div><div class="l">In market with real, recurring usage.</div></div>
-        <div class="cell"><div class="v">Growing</div><div class="l">Pipeline compounding week over week.</div></div>
+        ${c.list('traction').map((it) => `<div class="cell"><div class="v">${it.t('value')}</div><div class="l">${it.t('label')}</div></div>`).join('')}
       </div>
     </section>
     <section id="raise">
@@ -1395,16 +2510,10 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <h2>Round &amp; use of funds</h2>
       <div class="two">
         <div class="pane"><h3>Round details</h3>
-          <div class="term"><span>Stage</span><span class="v">Seed</span></div>
-          <div class="term"><span>Instrument</span><span class="v">SAFE</span></div>
-          <div class="term"><span>Runway</span><span class="v">~18 months</span></div>
-          <div class="term"><span>Close</span><span class="v">Rolling</span></div>
+          ${c.list('round_details').map((it) => `<div class="term"><span>${it.t('label')}</span><span class="v">${it.t('value')}</span></div>`).join('')}
         </div>
         <div class="pane"><h3>Use of funds</h3>
-          <div class="term"><span>Product &amp; engineering</span><span class="v">45%</span></div>
-          <div class="term"><span>Go-to-market</span><span class="v">30%</span></div>
-          <div class="term"><span>Operations</span><span class="v">15%</span></div>
-          <div class="term"><span>Reserve</span><span class="v">10%</span></div>
+          ${c.list('use_of_funds').map((it) => `<div class="term"><span>${it.t('label')}</span><span class="v">${it.pct('pct')}%</span></div>`).join('')}
         </div>
       </div>
     </section>
@@ -1423,9 +2532,10 @@ ${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
 }
 
 // ── Template: Seed Stage Spark (Task #25) — dark grid-backed seed teaser ──
-function renderSeedStageSpark(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+function renderSeedStageSpark(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
   const a = aud.investor; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const c = landingContent(row, 'seed-stage-spark');
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1494,28 +2604,20 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <p class="lede">${a.b}</p>
       <a class="btn" href="#raise">${a.c}</a><a class="ghost" href="#traction">See traction ↓</a>
       <div class="metrics">
-        <div class="cell"><div class="v">Live</div><div class="l">In market</div></div>
-        <div class="cell"><div class="v">Weekly</div><div class="l">Active use</div></div>
-        <div class="cell"><div class="v">Growing</div><div class="l">Pipeline</div></div>
-        <div class="cell"><div class="v">Lean</div><div class="l">Burn</div></div>
+        ${c.list('metrics').map((it) => `<div class="cell"><div class="v">${it.t('value')}</div><div class="l">${it.t('label')}</div></div>`).join('')}
       </div>
     </div></header>
     <div class="logos"><span class="lbl">Built for teams like</span><span class="n">Operators</span><span class="n">Builders</span><span class="n">Early adopters</span><span class="n">Design partners</span></div>
     <section>
       <div class="eyebrow">01 / Product</div><h2>What makes ${brand} spark</h2>
       <div class="pillars">
-        <div class="pill"><div class="v">1</div><h3>One sharp wedge</h3><p>We own the moment of highest pain and expand from there.</p></div>
-        <div class="pill"><div class="v">2</div><h3>Built to compound</h3><p>Every user makes the product more useful for the next.</p></div>
-        <div class="pill"><div class="v">3</div><h3>Defensible by design</h3><p>Data and workflow lock-in deepen with usage.</p></div>
+        ${c.list('pillars').map((it, i) => `<div class="pill"><div class="v">${i + 1}</div><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
       </div>
     </section>
     <section id="traction">
       <div class="eyebrow">02 / Traction</div><h2>Momentum is building</h2>
       <div class="bars">
-        <div class="b" style="height:34%"><span>Q1</span></div>
-        <div class="b" style="height:52%"><span>Q2</span></div>
-        <div class="b" style="height:71%"><span>Q3</span></div>
-        <div class="b" style="height:100%"><span>Q4</span></div>
+        ${c.list('traction_bars').map((it) => `<div class="b" style="height:${it.pct('pct')}%"><span>${it.t('label')}</span></div>`).join('')}
       </div>
     </section>
     <div class="cta" id="raise">
@@ -1533,10 +2635,11 @@ ${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
 }
 
 // ── Template: Distribution Deck (Task #25) — light blueprint partnership memo ──
-function renderDistributionDeck(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+function renderDistributionDeck(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
   const a = aud.investor; const brand = name || 'our company'; const btnInk = contrastText(color);
   const ctaInk = contrastText(inkColor);
+  const c = landingContent(row, 'distribution-deck');
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1612,10 +2715,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
         <a class="btn" href="#next">${a.c}</a>
       </div>
       <div class="side">
-        <div class="r"><span>Partner type</span><span class="v">Platform</span></div>
-        <div class="r"><span>Addressable overlap</span><span class="v">High</span></div>
-        <div class="r"><span>Revenue model</span><span class="v">Rev-share</span></div>
-        <div class="r"><span>Time to value</span><span class="v">Weeks</span></div>
+        ${c.list('side_facts').map((it) => `<div class="r"><span>${it.t('label')}</span><span class="v">${it.t('value')}</span></div>`).join('')}
       </div>
     </header>
     <section>
@@ -1624,28 +2724,21 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <p class="lead">The fastest distribution is the customer you both already serve. Here's the shape of the overlap.</p>
       <table>
         <tr><th>Segment</th><th>Shared base</th><th>Overlap</th></tr>
-        <tr><td>Enterprise</td><td>Strong</td><td><div class="track"><div class="fill" style="width:72%"></div></div></td></tr>
-        <tr><td>Mid-market</td><td>Core</td><td><div class="track"><div class="fill" style="width:58%"></div></div></td></tr>
-        <tr><td>SMB</td><td>Emerging</td><td><div class="track"><div class="fill" style="width:34%"></div></div></td></tr>
+        ${c.list('overlap').map((it) => `<tr><td>${it.t('segment')}</td><td>${it.t('base')}</td><td><div class="track"><div class="fill" style="width:${it.pct('pct')}%"></div></div></td></tr>`).join('')}
       </table>
     </section>
     <section>
       <div class="eyebrow"><span class="n">03</span><span class="ln"></span><span class="t">Channel value</span></div>
       <h2>The unit economics of the channel</h2>
       <div class="cards">
-        <div class="c"><div class="v">+ARPU</div><div class="l">Lift per shared account</div></div>
-        <div class="c"><div class="v">Lower</div><div class="l">Blended CAC</div></div>
-        <div class="c"><div class="v">Higher</div><div class="l">Retention together</div></div>
-        <div class="c"><div class="v">Faster</div><div class="l">Time to revenue</div></div>
+        ${c.list('channel_value').map((it) => `<div class="c"><div class="v">${it.t('value')}</div><div class="l">${it.t('label')}</div></div>`).join('')}
       </div>
     </section>
     <section>
       <div class="eyebrow"><span class="n">04</span><span class="ln"></span><span class="t">Rollout</span></div>
       <h2>Three ways to integrate</h2>
       <div class="opts">
-        <div class="o"><h3>Referral handoff</h3><p>Lightest lift — a clean handoff between teams.</p><div class="meta"><span>Eng lift: low</span><span>2–4 wks</span></div></div>
-        <div class="o"><h3>Embedded surface</h3><p>The default — ${brand} lives inside your product.</p><div class="meta"><span>Eng lift: med</span><span>6–8 wks</span></div></div>
-        <div class="o"><h3>Native rebuild</h3><p>Deepest — fully co-built and co-branded.</p><div class="meta"><span>Eng lift: high</span><span>12+ wks</span></div></div>
+        ${c.list('rollout').map((it) => `<div class="o"><h3>${it.t('title')}</h3><p>${it.t('body')}</p><div class="meta"><span>${it.t('lift')}</span><span>${it.t('time')}</span></div></div>`).join('')}
       </div>
     </section>
     <section class="ctaSec" id="next"><div class="wrap two" style="padding:0;max-width:none;">
@@ -1663,10 +2756,11 @@ ${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
 }
 
 // ── Template: Pilot Partner Page (Task #25) — Swiss 12-col pilot recruiter ──
-function renderPilotPartnerPage(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+function renderPilotPartnerPage(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
-  const a = aud.partner; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const a = aud.partner; const btnInk = contrastText(color);
   const ctaInk = contrastText(inkColor);
+  const c = landingContent(row, 'pilot-partner-page');
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1737,39 +2831,28 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <section class="sec">
       <div class="head"><div class="label">At a glance</div><div class="t">The shape of the pilot</div></div>
       <div class="glance">
-        <div class="r"><span>Commitment</span><span class="v">~2 hrs / week</span></div>
-        <div class="r"><span>Length</span><span class="v">6 weeks</span></div>
-        <div class="r"><span>Cost</span><span class="v">No fee</span></div>
-        <div class="r"><span>Output</span><span class="v">Joint findings memo</span></div>
+        ${c.list('glance').map((it) => `<div class="r"><span>${it.t('label')}</span><span class="v">${it.t('value')}</span></div>`).join('')}
       </div>
     </section>
     <hr/>
     <section class="sec">
       <div class="head"><div class="label">01 — Who it's for</div><div class="t">A good pilot partner</div></div>
       <div class="who">
-        <div class="c"><h3>Has the pain</h3><p>Lives the problem ${brand} solves, today.</p></div>
-        <div class="c"><h3>Can decide</h3><p>One owner who can say yes within the team.</p></div>
-        <div class="c"><h3>Will engage</h3><p>Shows up weekly and tells us the truth.</p></div>
+        ${c.list('who').map((it) => `<div class="c"><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
       </div>
     </section>
     <hr/>
     <section class="sec">
       <div class="head"><div class="label">02 — What it includes</div><div class="t">What you get</div></div>
       <div class="incl">
-        <div class="c"><div class="n">01</div><h3>Hands-on setup</h3><p>We configure ${brand} around your real workflow.</p></div>
-        <div class="c"><div class="n">02</div><h3>Weekly sessions</h3><p>Direct line to the founders, every week.</p></div>
-        <div class="c"><div class="n">03</div><h3>Priority shaping</h3><p>Your feedback steers what we build next.</p></div>
-        <div class="c"><div class="n">04</div><h3>Closing memo</h3><p>A written read-out you can act on.</p></div>
+        ${c.list('includes').map((it, i) => `<div class="c"><div class="n">${String(i + 1).padStart(2, '0')}</div><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
       </div>
     </section>
     <hr/>
     <section class="sec">
       <div class="head"><div class="label">03 — Process</div><div class="t">From hello to results</div></div>
       <div class="steps">
-        <div class="s"><div class="k">Day 0</div><div class="v">Fit call</div></div>
-        <div class="s"><div class="k">Wk 1</div><div class="v">Setup</div></div>
-        <div class="s"><div class="k">Wk 2–5</div><div class="v">Run &amp; learn</div></div>
-        <div class="s"><div class="k">Wk 6</div><div class="v">Memo &amp; next steps</div></div>
+        ${c.list('steps').map((it) => `<div class="s"><div class="k">${it.t('label')}</div><div class="v">${it.t('value')}</div></div>`).join('')}
       </div>
     </section>
   </div>
@@ -1788,10 +2871,11 @@ ${singleWaitlistScript(bk.apiWaitlist, 'partner', bk.nonce)}
 }
 
 // ── Template: Partner Hub (Task #25) — calm teal BD landing ──
-function renderPartnerHub(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+function renderPartnerHub(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
-  const a = aud.partner; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const a = aud.partner; const btnInk = contrastText(color);
   const ctaInk = contrastText(inkColor);
+  const c = landingContent(row, 'partner-hub');
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1859,35 +2943,28 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <p>${a.b}</p>
     <a class="btn" href="#partner">${a.c}</a><a class="ghost" href="#models">See models</a>
     <div class="stats">
-      <div><div class="v">Pilot</div><div class="l">90-day model</div></div>
-      <div><div class="v">Named</div><div class="l">Owners both sides</div></div>
-      <div><div class="v">Shared</div><div class="l">Success criteria</div></div>
-      <div><div class="v">On date</div><div class="l">We ship</div></div>
+      ${c.list('stats').map((it) => `<div><div class="v">${it.t('value')}</div><div class="l">${it.t('label')}</div></div>`).join('')}
     </div>
   </div></header>
   <div class="wrap">
     <section><div class="split">
       <div><div class="eyebrow">Why partner</div><h2>Serious collaboration, not logos</h2></div>
       <div class="why">
-        <div class="c"><div class="n">01</div><h3>Shared accountability</h3><p>Named owners on both sides, and a plan we both sign.</p></div>
-        <div class="c"><div class="n">02</div><h3>Productized surfaces</h3><p>Real integration points, not a one-off favour.</p></div>
-        <div class="c"><div class="n">03</div><h3>We ship on date</h3><p>A 90-day pilot with criteria agreed up front.</p></div>
+        ${c.list('why').map((it, i) => `<div class="c"><div class="n">${String(i + 1).padStart(2, '0')}</div><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
       </div>
     </div></section>
     <section><div class="split">
       <div><div class="eyebrow">Shared fit</div><h2>The same customer wins twice</h2></div>
-      <p>We start where our ideal customers already overlap — so the pilot proves value fast and the economics are obvious to both teams.</p>
+      <p>${c.t('shared_fit')}</p>
     </div></section>
     <section id="models"><div class="eyebrow">Models</div><h2 style="margin-bottom:24px;">Three ways to work together</h2>
       <div class="models">
-        <div class="model"><div class="tag">Commercial</div><h3>Co-sell</h3><ul><li>Joint pipeline</li><li>Shared targets</li><li>Rev-share</li></ul></div>
-        <div class="model"><div class="tag">Technical</div><h3>Integrate</h3><ul><li>Embedded surface</li><li>Shared data model</li><li>Co-built roadmap</li></ul></div>
-        <div class="model"><div class="tag">Distribution</div><h3>Channel</h3><ul><li>Bundled offer</li><li>Referral motion</li><li>Co-marketing</li></ul></div>
+        ${c.list('models').map((it) => `<div class="model"><div class="tag">${it.t('tag')}</div><h3>${it.t('title')}</h3><ul><li>${it.t('li1')}</li><li>${it.t('li2')}</li><li>${it.t('li3')}</li></ul></div>`).join('')}
       </div>
     </section>
     <section><div class="split">
       <div><div class="eyebrow">Traction</div><h2>What partners say</h2></div>
-      <div class="quote"><p>"The pilot paid for itself before it ended — and our customers noticed."</p><div class="who">Head of Partnerships</div></div>
+      <div class="quote"><p>"${c.t('quote')}"</p><div class="who">${c.t('quote_by')}</div></div>
     </div></section>
   </div>
   <section class="ctaSec" id="partner"><div class="wrap in">
@@ -1906,10 +2983,11 @@ ${singleWaitlistScript(bk.apiWaitlist, 'partner', bk.nonce)}
 }
 
 // ── Template: Partner Pipeline Pro (Task #25) — financial-tech distribution pitch ──
-function renderPartnerPipelinePro(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+function renderPartnerPipelinePro(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
   const a = aud.partner; const brand = name || 'our company'; const btnInk = contrastText(color);
   const ctaInk = contrastText(inkColor);
+  const c = landingContent(row, 'partner-pipeline-pro');
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1983,10 +3061,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
         <a class="btn" href="#fit">${a.c}</a>
       </div>
       <div class="glance">
-        <div class="r"><span>Partner type</span><span class="v">Platform</span></div>
-        <div class="r"><span>Addressable overlap</span><span class="v">High</span></div>
-        <div class="r"><span>ARPU lift</span><span class="v">Net new</span></div>
-        <div class="r"><span>Revenue timing</span><span class="v">Quarter one</span></div>
+        ${c.list('glance').map((it) => `<div class="r"><span>${it.t('label')}</span><span class="v">${it.t('value')}</span></div>`).join('')}
       </div>
     </header>
     <section>
@@ -1994,10 +3069,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <h2>The same customers, twice the value</h2>
       <p class="lead">We don't have to convince you the market exists — you already serve it. Here's the overlap.</p>
       <div class="nums">
-        <div class="c"><div class="v">61%</div><div class="l">Shared ICP</div></div>
-        <div class="c"><div class="v">High</div><div class="l">Geographic fit</div></div>
-        <div class="c"><div class="v">Strong</div><div class="l">Income match</div></div>
-        <div class="c"><div class="v">Aligned</div><div class="l">Buying preference</div></div>
+        ${c.list('overlap_nums').map((it) => `<div class="c"><div class="v">${it.t('value')}</div><div class="l">${it.t('label')}</div></div>`).join('')}
       </div>
     </section>
     <section>
@@ -2005,29 +3077,22 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <h2>What changes with ${brand}</h2>
       <table>
         <tr><th>Lever</th><th>Baseline</th><th>With ${brand}</th><th>Delta</th></tr>
-        <tr><td>ARPU</td><td>Flat</td><td>Higher</td><td class="delta">+lift</td></tr>
-        <tr><td>Retention</td><td>Standard</td><td>Stickier</td><td class="delta">+pts</td></tr>
-        <tr><td>CAC</td><td>Full</td><td>Shared</td><td class="delta">−cost</td></tr>
+        ${c.list('levers').map((it) => `<tr><td>${it.t('lever')}</td><td>${it.t('baseline')}</td><td>${it.t('with')}</td><td class="delta">${it.t('delta')}</td></tr>`).join('')}
       </table>
     </section>
     <section>
       <div class="slabel"><span class="n">03</span><span class="ln"></span><span class="t">Integration &amp; rollout</span></div>
       <h2>Pick the path your risk team will sign</h2>
       <div class="opts">
-        <div class="opt"><div class="pin">Lightest</div><h3>Referral</h3><p>Clean handoff, minimal lift.</p></div>
-        <div class="opt hl"><div class="pin">Default</div><h3>Embedded</h3><p>${brand} inside your product surface.</p></div>
-        <div class="opt"><div class="pin">Deepest</div><h3>Native</h3><p>Fully co-built and co-branded.</p></div>
+        ${c.list('options').map((it, i) => `<div class="opt${i === 1 ? ' hl' : ''}"><div class="pin">${it.t('pin')}</div><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
       </div>
       <div class="timeline">
-        <div class="s"><div class="k">Wk 0</div><div class="v">Scoping</div></div>
-        <div class="s"><div class="k">Wk 4</div><div class="v">Build</div></div>
-        <div class="s"><div class="k">Wk 8</div><div class="v">Pilot</div></div>
-        <div class="s"><div class="k">Wk 14</div><div class="v">Scale</div></div>
+        ${c.list('timeline').map((it) => `<div class="s"><div class="k">${it.t('label')}</div><div class="v">${it.t('value')}</div></div>`).join('')}
       </div>
     </section>
     <section>
       <div class="slabel"><span class="n">04</span><span class="ln"></span><span class="t">Proof of demand</span></div>
-      <div class="quote"><p>"We saw the overlap immediately. The model held up under our own assumptions."</p><div class="w">VP, Strategic Partnerships</div></div>
+      <div class="quote"><p>"${c.t('quote')}"</p><div class="w">${c.t('quote_by')}</div></div>
     </section>
     <div class="ctaBox" id="fit">
       <h2>${a.c}</h2>
@@ -2044,9 +3109,10 @@ ${singleWaitlistScript(bk.apiWaitlist, 'partner', bk.nonce)}
 }
 
 // ── Template: Co-Founder Builder (Task #25) — engineering-doc co-founder brief ──
-function renderCoFounderBuilder(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+function renderCoFounderBuilder(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
   const a = aud.cofounder; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const c = landingContent(row, 'co-founder-builder');
   const danger = '#c2452f';
   return `<!doctype html>
 <html lang="en"><head>
@@ -2125,30 +3191,23 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <p>${a.b}</p>
       <a class="btn" href="#apply">${a.c}</a><a class="ghost" href="#state">Where we actually are</a>
       <div class="data">
-        <div class="c"><div class="k">Stage</div><div class="v">Pre-seed</div></div>
-        <div class="c"><div class="k">Users</div><div class="v">Early</div></div>
-        <div class="c"><div class="k">Working</div><div class="v">Core</div></div>
-        <div class="c"><div class="k">Equity</div><div class="v">Founding</div></div>
+        ${c.list('data').map((it) => `<div class="c"><div class="k">${it.t('key')}</div><div class="v">${it.t('value')}</div></div>`).join('')}
       </div>
     </div></header>
     <section>
       <div class="eyebrow"><span class="n">01</span><span class="t">Vision</span><span class="ln"></span></div>
       <h2>What ${brand} is really building</h2>
-      <p class="lead">Teams are shipping faster than they can reason about what they ship. ${brand} is the layer that gives them confidence — and it's a problem worth a decade.</p>
+      <p class="lead">${c.t('vision')}</p>
     </section>
     <section id="state">
       <div class="eyebrow"><span class="n">02</span><span class="t">Current state</span><span class="ln"></span></div>
       <h2>Honest, not polished</h2>
       <div class="panes">
         <div class="p ship"><h3>Shipped</h3><ul>
-          <li><span class="ic">+</span><span>Core engine running in production.</span></li>
-          <li><span class="ic">+</span><span>First users on real workflows.</span></li>
-          <li><span class="ic">+</span><span>The hard primitive works.</span></li>
+          ${c.list('shipped').map((it) => `<li><span class="ic">+</span><span>${it.t('body')}</span></li>`).join('')}
         </ul></div>
         <div class="p weak"><h3>Weak points</h3><ul>
-          <li><span class="ic">!</span><span>Billing is duct tape.</span></li>
-          <li><span class="ic">!</span><span>No real test coverage yet.</span></li>
-          <li><span class="ic">!</span><span>Ops is one person deep.</span></li>
+          ${c.list('weak').map((it) => `<li><span class="ic">!</span><span>${it.t('body')}</span></li>`).join('')}
         </ul></div>
       </div>
     </section>
@@ -2156,19 +3215,14 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <div class="eyebrow"><span class="n">03</span><span class="t">Roadmap</span><span class="ln"></span></div>
       <h2>Your first 90 days</h2>
       <ol class="road">
-        <li>Own the runtime end to end and harden it.</li>
-        <li>Stand up the durable replay and event-sourcing layer.</li>
-        <li>Turn the prototype billing into something real.</li>
+        ${c.list('roadmap').map((it) => `<li>${it.t('body')}</li>`).join('')}
       </ol>
     </section>
     <section>
       <div class="eyebrow"><span class="n">04</span><span class="t">Equity</span><span class="ln"></span></div>
       <h2>The offer, plainly</h2>
       <div class="equity">
-        <div class="r"><span class="arr">&rarr;</span><span>Founding equity — single to low-double-digit %.</span></div>
-        <div class="r"><span class="arr">&rarr;</span><span>Standard vesting, 1-year cliff.</span></div>
-        <div class="r"><span class="arr">&rarr;</span><span>Market-aware salary once we raise.</span></div>
-        <div class="r"><span class="arr">&rarr;</span><span>Real ownership of the technical direction.</span></div>
+        ${c.list('equity').map((it) => `<div class="r"><span class="arr">&rarr;</span><span>${it.t('body')}</span></div>`).join('')}
       </div>
     </section>
   </div>
@@ -2186,9 +3240,10 @@ ${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
 }
 
 // ── Template: Co-Founder Canvas (Task #25) — editorial serif founder letter ──
-function renderCoFounderCanvas(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+function renderCoFounderCanvas(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
-  const a = aud.cofounder; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const a = aud.cofounder; const btnInk = contrastText(color);
+  const c = landingContent(row, 'co-founder-canvas');
   const gapInk = contrastText(inkColor);
   return `<!doctype html>
 <html lang="en"><head>
@@ -2273,22 +3328,17 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <p class="body muted">I'd rather you see the shape of the hole than read a polished pitch. So here's the whole thing.</p>
       <div class="actions"><a class="btn acc" href="#talk">${a.c}</a><a class="link" href="#building">Read the whole thing first</a></div>
       <div class="facts">
-        <div><div class="k">Stage</div><div class="v">Early</div></div>
-        <div><div class="k">Team</div><div class="v">Small</div></div>
-        <div><div class="k">Runway</div><div class="v">Funded</div></div>
-        <div><div class="k">Equity</div><div class="v">Co-founder</div></div>
+        ${c.list('facts').map((it) => `<div><div class="k">${it.t('key')}</div><div class="v">${it.t('value')}</div></div>`).join('')}
       </div>
     </header>
     <section id="building"><div class="split">
       <h2>What we are building</h2>
-      <p>${brand} is the execution layer for work that's currently held together by people copying things between tools. We're turning that into something dependable.</p>
+      <p>${c.t('building')}</p>
     </div></section>
     <section>
       <div class="slabel"><span class="n">02</span><span class="ln"></span><span class="t">Why now</span></div>
       <div class="three">
-        <div class="c"><span class="n">01</span><h3>The tools arrived</h3><p>What needed a team last year is buildable by two people now.</p></div>
-        <div class="c"><span class="n">02</span><h3>The buyers shifted</h3><p>People will finally pay to remove this work.</p></div>
-        <div class="c"><span class="n">03</span><h3>The window is short</h3><p>Whoever owns the workflow first, owns it.</p></div>
+        ${c.list('whynow').map((it, i) => `<div class="c"><span class="n">${String(i + 1).padStart(2, '0')}</span><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
       </div>
     </section>
     <section>
@@ -2296,9 +3346,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <div class="split">
         <h2>You're not joining an idea</h2>
         <ul class="builtlist">
-          <li><h3>The core, working</h3><p>The hard part runs in production today.</p></li>
-          <li><h3>First believers</h3><p>Real users who'd be upset if it disappeared.</p></li>
-          <li><h3>A clear next mile</h3><p>We know exactly what comes next.</p></li>
+          ${c.list('built').map((it) => `<li><h3>${it.t('title')}</h3><p>${it.t('body')}</p></li>`).join('')}
         </ul>
       </div>
     </section>
@@ -2307,26 +3355,23 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <div class="lm" style="color:${accent}">04 — What's missing</div>
     <h2>The gap is me.</h2>
     <div class="two">
-      <p>I can hold the vision and talk to customers all day. What I can't do is be the depth on the build — the architecture, the rigor, the parts that have to be right.</p>
-      <p>That's the seat. Not a hire reporting to me — a partner who owns the half of this company I can't.</p>
+      ${c.list('gap').map((it) => `<p>${it.t('body')}</p>`).join('')}
     </div>
   </div></section>
   <div class="wrap">
     <section>
       <div class="slabel"><span class="n">05</span><span class="ln"></span><span class="t">The role</span></div>
       <div class="cmp">
-        <div><h3>You have probably</h3><ul><li>Built and shipped real systems</li><li>Owned something end to end</li><li>Been the person others trust to be right</li></ul></div>
-        <div><h3>You probably do not</h3><ul><li>Need a detailed spec to start</li><li>Want to be managed</li><li>Care about titles over ownership</li></ul></div>
+        <div><h3>You have probably</h3><ul>${c.list('role_have').map((it) => `<li>${it.t('body')}</li>`).join('')}</ul></div>
+        <div><h3>You probably do not</h3><ul>${c.list('role_not').map((it) => `<li>${it.t('body')}</li>`).join('')}</ul></div>
       </div>
       <div class="offer">
-        <div class="c"><div class="k">Equity</div><div class="v">Co-founder</div></div>
-        <div class="c"><div class="k">Salary</div><div class="v">On raise</div></div>
-        <div class="c"><div class="k">Location</div><div class="v">Flexible</div></div>
+        ${c.list('offer').map((it) => `<div class="c"><div class="k">${it.t('key')}</div><div class="v">${it.t('value')}</div></div>`).join('')}
       </div>
     </section>
     <div class="cta" id="talk">
       <h2>Let's <em>talk</em>.</h2>
-      <ol class="steps"><li>You email me and we trade notes.</li><li>We spend a day building something small.</li><li>If it clicks, we go.</li></ol>
+      <ol class="steps">${c.list('steps').map((it) => `<li>${it.t('body')}</li>`).join('')}</ol>
       <form id="wl-form"><label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
         <button type="submit" class="btn acc">${a.c}</button></form>
@@ -2340,9 +3385,10 @@ ${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
 }
 
 // ── Template: Co-founder Connect (Task #25) — warm grain founder letter ──
-function renderCofounderConnect(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+function renderCofounderConnect(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
-  const a = aud.cofounder; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const a = aud.cofounder; const btnInk = contrastText(color);
+  const c = landingContent(row, 'cofounder-connect');
   const ctaInk = contrastText(inkColor);
   return `<!doctype html>
 <html lang="en"><head>
@@ -2427,61 +3473,48 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <p class="muted">I'd rather you see the shape of the hole than a polished pitch — so this is the honest version.</p>
     <div class="actions"><a class="btn" href="#talk">${a.c}</a><a class="ghost" href="#built">See what's built</a></div>
     <div class="stats">
-      <div><div class="k">Stage</div><div class="v">Early</div></div>
-      <div><div class="k">Team</div><div class="v">Small</div></div>
-      <div><div class="k">Runway</div><div class="v">Funded</div></div>
-      <div><div class="k">Equity</div><div class="v">Co-founder</div></div>
+      ${c.list('stats').map((it) => `<div><div class="k">${it.t('key')}</div><div class="v">${it.t('value')}</div></div>`).join('')}
     </div>
   </div></header>
   <div class="wrap">
     <section><div class="split">
       <h2>The mission, in one line</h2>
-      <p>${brand} is the accountability layer for autonomous work — so teams can trust what their software does on their behalf.</p>
+      <p>${c.t('mission')}</p>
     </div></section>
     <section>
       <h2 style="margin-bottom:24px;">Why now</h2>
       <div class="why">
-        <div class="c"><div class="n">01</div><h3>Capability jumped</h3><p>What was research last year is shippable today.</p></div>
-        <div class="c"><div class="n">02</div><h3>Trust is missing</h3><p>Everyone's adopting; nobody can verify.</p></div>
-        <div class="c"><div class="n">03</div><h3>First mover wins</h3><p>The standard isn't set yet. It could be ours.</p></div>
+        ${c.list('whynow').map((it, i) => `<div class="c"><div class="n">${String(i + 1).padStart(2, '0')}</div><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
       </div>
     </section>
     <section id="built"><div class="split">
       <h2>You are not joining an idea</h2>
       <ul class="rows">
-        <li><span class="nm">Core engine</span><span class="ds">The hard primitive, running in production.</span><span class="pill on">Working</span></li>
-        <li><span class="nm">First users</span><span class="ds">Real teams on real workflows.</span><span class="pill on">Live</span></li>
-        <li><span class="nm">Billing</span><span class="ds">Functional, but held together with tape.</span><span class="pill">Rough</span></li>
-        <li><span class="nm">Test suite</span><span class="ds">Not yet — this is part of the job.</span><span class="pill">Open</span></li>
+        ${c.list('built').map((it) => `<li><span class="nm">${it.t('name')}</span><span class="ds">${it.t('desc')}</span><span class="pill${it.t('on') === 'yes' ? ' on' : ''}">${it.t('pill')}</span></li>`).join('')}
       </ul>
     </div></section>
     <section class="missing">
       <h2>What's missing, said plainly</h2>
       <div class="grid">
-        <div><h3 class="mark">Depth on the build</h3><p>The architecture and rigor I can't give it alone.</p></div>
-        <div><h3 class="mark">A true partner</h3><p>Someone who owns half of this, not reports to me.</p></div>
+        ${c.list('missing').map((it) => `<div><h3 class="mark">${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
       </div>
     </section>
     <section class="role">
       <div class="split">
         <div><h2>The role</h2>
           <ul class="terms">
-            <li><span>Equity</span><span class="v">Co-founder</span></li>
-            <li><span>Salary</span><span class="v">On raise</span></li>
-            <li><span>Location</span><span class="v">Flexible</span></li>
+            ${c.list('role_terms').map((it) => `<li><span>${it.t('key')}</span><span class="v">${it.t('value')}</span></li>`).join('')}
           </ul>
         </div>
         <div class="cols3">
-          <div><h4>First 90 days</h4><ul><li>Own the runtime</li><li>Harden the core</li><li>Ship to users</li></ul></div>
-          <div><h4>You look like</h4><ul><li>A builder</li><li>An owner</li><li>Direct</li></ul></div>
-          <div><h4>Not looking for</h4><ul><li>A spec-follower</li><li>A title-chaser</li><li>A spectator</li></ul></div>
+          ${c.list('cols3').map((it) => `<div><h4>${it.t('heading')}</h4><ul><li>${it.t('li1')}</li><li>${it.t('li2')}</li><li>${it.t('li3')}</li></ul></div>`).join('')}
         </div>
       </div>
     </section>
   </div>
   <section class="ctaSec" id="talk"><div class="wrap">
     <h2>Let's <em>talk</em> about building this together.</h2>
-    <ol class="steps"><li>You send a note — anything, even a paragraph.</li><li>We trade context and spend a day building.</li><li>If it clicks, we make it official.</li></ol>
+    <ol class="steps">${c.list('steps').map((it) => `<li>${it.t('body')}</li>`).join('')}</ol>
     <form id="wl-form"><label for="wl-email" class="sr">Email</label>
       <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
       <button type="submit" class="btn">${a.c}</button></form>
@@ -2494,9 +3527,10 @@ ${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
 }
 
 // ── Template: Co-Founder Quest (Task #25) — mission-framed co-founder call ──
-function renderCoFounderQuest(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+function renderCoFounderQuest(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
-  const a = aud.cofounder; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const a = aud.cofounder; const btnInk = contrastText(color);
+  const c = landingContent(row, 'co-founder-quest');
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -2569,16 +3603,13 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <hr class="hr"/>
     <section><div class="two">
       <div><div class="label">Timing</div><h2>Why this matters now</h2></div>
-      <div><p>The capability to build ${brand} only just arrived. The teams who plant a flag in this space this year will define how it works for everyone else.</p><p>We'd rather be early and right than safe and late.</p></div>
+      <div>${c.list('timing').map((it) => `<p>${it.t('body')}</p>`).join('')}</div>
     </div></section>
     <hr class="hr"/>
     <section><div class="two">
       <div><div class="label">Progress</div><h2>What we have built</h2></div>
       <ul class="built">
-        <li><b>Product</b> — <span>core engine live in production.</span></li>
-        <li><b>Traction</b> — <span>first users on real workflows.</span></li>
-        <li><b>Team</b> — <span>small, senior, and shipping.</span></li>
-        <li><b>Runway</b> — <span>funded to find product-market fit.</span></li>
+        ${c.list('built').map((it) => `<li><b>${it.t('label')}</b> — <span>${it.t('body')}</span></li>`).join('')}
       </ul>
     </div></section>
     <hr class="hr"/>
@@ -2586,38 +3617,32 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <div class="label">The gap</div><h2 style="margin-bottom:8px;">What we need</h2>
       <p style="opacity:.82;max-width:60ch;">A technical co-founder to own the build while we own the market. Here's the mission, in three parts.</p>
       <div class="cards">
-        <div class="card"><h3>Own the runtime</h3><p>Architecture, reliability, the parts that must be right.</p></div>
-        <div class="card"><h3>Set the pace</h3><p>Decide what ships and make it ship.</p></div>
-        <div class="card"><h3>Raise the bar</h3><p>Bring rigor the whole team levels up to.</p></div>
+        ${c.list('mission_cards').map((it) => `<div class="card"><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
       </div>
       <div class="boxes">
-        <div class="box ideal"><h3>Ideal profile</h3><ul><li>Shipped real systems end to end</li><li>Comfortable with ambiguity</li><li>Argues well, decides fast</li></ul></div>
-        <div class="box"><h3>First 90 days</h3><ul><li>Own and harden the core</li><li>Ship to first users</li><li>Set the technical direction</li></ul></div>
+        <div class="box ideal"><h3>Ideal profile</h3><ul>${c.list('ideal').map((it) => `<li>${it.t('body')}</li>`).join('')}</ul></div>
+        <div class="box"><h3>First 90 days</h3><ul>${c.list('first90').map((it) => `<li>${it.t('body')}</li>`).join('')}</ul></div>
       </div>
     </section>
     <hr class="hr"/>
     <section><div class="two">
       <div><div class="label">Honest terms</div><h2>Equity &amp; collaboration</h2></div>
       <div class="equity"><h3>No games</h3>
-        <div class="r"><span>Role</span><span class="v">Co-founder</span></div>
-        <div class="r"><span>Equity</span><span class="v">Significant</span></div>
-        <div class="r"><span>Salary</span><span class="v">Funded</span></div>
-        <div class="r"><span>How we work</span><span class="v">Direct &amp; fast</span></div>
+        ${c.list('equity').map((it) => `<div class="r"><span>${it.t('key')}</span><span class="v">${it.t('value')}</span></div>`).join('')}
       </div>
     </div></section>
     <hr class="hr"/>
     <section>
       <div class="label">The team so far</div><h2 style="margin-bottom:20px;">Who you'd build with</h2>
       <div class="team">
-        <div class="member"><b>The founder</b><p>Owns vision, customers, and the company's story.</p></div>
-        <div class="member"><b>Early team</b><p>Operators close to the problem, shipping weekly.</p></div>
+        ${c.list('team').map((it) => `<div class="member"><b>${it.t('name')}</b><p>${it.t('body')}</p></div>`).join('')}
       </div>
     </section>
     <hr class="hr"/>
     <div class="cta" id="join">
       <div class="label">Join the build</div>
       <h2>Let's find out if it clicks</h2>
-      <ol class="steps"><li>Send a note — no résumé required.</li><li>We trade context over a call.</li><li>We build something small together.</li></ol>
+      <ol class="steps">${c.list('steps').map((it) => `<li>${it.t('body')}</li>`).join('')}</ol>
       <form id="wl-form"><label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
         <button type="submit" class="btn acc">${a.c}</button></form>
@@ -2631,9 +3656,10 @@ ${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
 }
 
 // ── Template: Mentor Connect (Task #25) — minimal single-column mentor note ──
-function renderMentorConnect(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+function renderMentorConnect(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
-  const a = aud.mentor; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const a = aud.mentor; const btnInk = contrastText(color);
+  const c = landingContent(row, 'mentor-connect');
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -2701,27 +3727,23 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     </header>
     <section id="building">
       <div class="sh"><span class="n">01</span><h2>What we're building</h2></div>
-      <p class="body">${brand} removes the busywork between a team's intent and the outcome they're after.</p>
-      <p class="body oneline">One line: we make a painful manual workflow feel automatic.</p>
+      <p class="body">${c.t('building')}</p>
+      <p class="body oneline">${c.t('oneline')}</p>
     </section>
     <section id="help">
       <div class="sh"><span class="n">02</span><h2>Where we need help</h2></div>
       <ol class="help">
-        <li><b>Pricing &amp; packaging</b><span>How to price without leaving value — or trust — on the table.</span></li>
-        <li><b>Positioning</b><span>Which wedge to lead with for the sharpest pull.</span></li>
-        <li><b>Go-to-market</b><span>The first repeatable motion that actually compounds.</span></li>
+        ${c.list('help').map((it) => `<li><b>${it.t('title')}</b><span>${it.t('body')}</span></li>`).join('')}
       </ol>
     </section>
     <section id="who">
       <div class="sh"><span class="n">03</span><h2>Experience that matters</h2></div>
-      <ul class="qual"><li>You've built or scaled in this space.</li><li>You've made the calls we're facing now.</li><li>You're generous with hard-won lessons.</li></ul>
+      <ul class="qual">${c.list('qual').map((it) => `<li>${it.t('body')}</li>`).join('')}</ul>
     </section>
     <section>
       <div class="sh"><span class="n">04</span><h2>Progress so far</h2></div>
       <div class="stats">
-        <div><div class="k">Product</div><div class="v">Live</div></div>
-        <div><div class="k">Users</div><div class="v">Early</div></div>
-        <div><div class="k">Stage</div><div class="v">Pre-seed</div></div>
+        ${c.list('stats').map((it) => `<div><div class="k">${it.t('key')}</div><div class="v">${it.t('value')}</div></div>`).join('')}
       </div>
     </section>
     <div class="ask" id="ask">
@@ -2740,9 +3762,10 @@ ${singleWaitlistScript(bk.apiWaitlist, 'mentor', bk.nonce)}
 }
 
 // ── Template: Mentor Connect Page (Task #25) — narrative serif mentor letter ──
-function renderMentorConnectPage(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+function renderMentorConnectPage(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
-  const a = aud.mentor; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const a = aud.mentor; const btnInk = contrastText(color);
+  const c = landingContent(row, 'mentor-connect-page');
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -2804,22 +3827,20 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <div class="actions"><a class="btn acc" href="#ask">${a.c}</a><a class="btn ghost" href="#building">Read first</a><span class="read">3 min read</span></div>
     </header>
     <section id="building"><div class="lbl">01 — Building</div>
-      <div><h2>What we're building</h2><p class="body">${brand} takes a workflow that's currently stitched together by hand and makes it dependable — so teams stop babysitting it.</p></div>
+      <div><h2>What we're building</h2><p class="body">${c.t('building')}</p></div>
     </section>
     <section><div class="lbl">02 — Stuck</div>
       <div><h2>Where we're stuck</h2>
-        <ul class="arrows"><li><b>Pricing</b> — what to charge without capping value.</li><li><b>Positioning</b> — which wedge pulls hardest.</li><li><b>Playbook</b> — the first motion that repeats.</li></ul>
+        <ul class="arrows">${c.list('stuck').map((it) => `<li><b>${it.t('label')}</b> — ${it.t('body')}</li>`).join('')}</ul>
       </div>
     </section>
     <section><div class="lbl">03 — You</div>
-      <div><h2>Why you</h2><p class="body">You've sat where we're sitting and made these calls for real. Even your hypothetical feedback would save us months — and we're not afraid to hear that we were wrong.</p></div>
+      <div><h2>Why you</h2><p class="body">${c.t('why')}</p></div>
     </section>
     <section id="ask"><div class="lbl">04 — The ask</div>
       <div><h2>${a.c}</h2>
         <div class="card">
-          <div class="opt"><span class="k">A</span><span>A 30-minute call, whenever suits.</span></div>
-          <div class="opt"><span class="k">B</span><span>A few lines by email — async is great.</span></div>
-          <div class="opt"><span class="k">C</span><span>An intro to someone better placed.</span></div>
+          ${c.list('ask_options').map((it) => `<div class="opt"><span class="k">${it.t('key')}</span><span>${it.t('body')}</span></div>`).join('')}
         </div>
         <form id="wl-form" style="margin-top:16px;"><label for="wl-email" class="sr">Email</label>
           <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
@@ -2830,9 +3851,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <section><div class="lbl">05 — Context</div>
       <div><h2>How we got here</h2>
         <ul class="timeline">
-          <li><span class="t">2024</span><span>The idea, and the first ugly prototype.</span></li>
-          <li><span class="t">2025</span><span>First users, and the hard parts working.</span></li>
-          <li><span class="t">2026</span><span>Finding the motion that repeats — that's now.</span></li>
+          ${c.list('timeline').map((it) => `<li><span class="t">${it.t('year')}</span><span>${it.t('body')}</span></li>`).join('')}
         </ul>
       </div>
     </section>
@@ -2848,9 +3867,10 @@ ${singleWaitlistScript(bk.apiWaitlist, 'mentor', bk.nonce)}
 }
 
 // ── Template: Builder's Launchpad (Task #25) — dark terminal launch teaser ──
-function renderBuildersLaunchpad(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, _row: any): string {
+function renderBuildersLaunchpad(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
   const a = aud.customer; const brand = name || 'our company'; const btnInk = contrastText(color);
+  const c = landingContent(row, 'builders-launchpad');
   const ok = '#7bbf5a', warn = accent, danger = '#d9544e';
   return `<!doctype html>
 <html lang="en"><head>
@@ -2921,30 +3941,25 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <p>${a.b}</p>
       <a class="btn" href="#apply">${a.c}</a><a class="ghost" href="#state">See where we are</a>
       <div class="facts">
-        <div class="c"><div class="k">Stage</div><div class="v">Beta</div></div>
-        <div class="c"><div class="k">Access</div><div class="v">Invite</div></div>
-        <div class="c"><div class="k">Status</div><div class="v">Live</div></div>
-        <div class="c"><div class="k">Next</div><div class="v">v1</div></div>
+        ${c.list('facts').map((it) => `<div class="c"><div class="k">${it.t('key')}</div><div class="v">${it.t('value')}</div></div>`).join('')}
       </div>
     </header>
     <section>
       <div class="side"><div class="idx">01</div><div class="lbl">Product vision</div></div>
-      <div><h2>What ${brand} does</h2><p class="body">${brand} takes the manual, error-prone parts of your day and makes them automatic — so you ship instead of babysitting tools.</p></div>
+      <div><h2>What ${brand} does</h2><p class="body">${c.t('vision')}</p></div>
     </section>
     <section id="state">
       <div class="side"><div class="idx">02</div><div class="lbl">Current state</div></div>
       <div><h2>The honest status</h2>
         <ul class="state">
-          <li><span class="badge b-ok">Working</span><span>Core flow is live and used daily.</span></li>
-          <li><span class="badge b-warn">Half</span><span>Integrations — the big ones are in.</span></li>
-          <li><span class="badge b-dn">Soon</span><span>Polish and onboarding still rough.</span></li>
+          ${c.list('state').map((it) => `<li><span class="badge b-${it.t('tone')}">${it.t('badge')}</span><span>${it.t('body')}</span></li>`).join('')}
         </ul>
       </div>
     </section>
     <section>
       <div class="side"><div class="idx">03</div><div class="lbl">Roadmap</div></div>
       <div><h2>What ships next</h2>
-        <ol class="road"><li>Smoother onboarding for new teams.</li><li>The two integrations you keep asking for.</li><li>v1, stable enough to depend on.</li></ol>
+        <ol class="road">${c.list('road').map((it) => `<li>${it.t('body')}</li>`).join('')}</ol>
       </div>
     </section>
     <section id="apply">

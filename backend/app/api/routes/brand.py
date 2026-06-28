@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import re
 import secrets
 from datetime import datetime
@@ -127,6 +128,8 @@ def _ensure_schema(session: Session) -> None:
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience TEXT",
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS goal TEXT",
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS template_kit TEXT",
+        # Task #3 — per-template editable content blocks (JSON).
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS content_json TEXT",
         "CREATE INDEX IF NOT EXISTS idx_landing_preview_token ON landing_pages(preview_token)",
         "CREATE INDEX IF NOT EXISTS idx_waitlist_audience ON waitlist_signups(project_id, audience)",
     ]:
@@ -196,6 +199,35 @@ def _valid_goal(v: Optional[str]) -> Optional[str]:
     if isinstance(v, str) and v.strip() in _GOAL_SET:
         return v.strip()
     return None
+
+
+def _content_json_str(v: Any) -> str:
+    """Serialize per-template content blocks for storage. The dev backend has no
+    schema mirror (it lives in the Worker/frontend), so this just enforces a
+    dict-of-dict shape and caps the size — the Worker is the validating path."""
+    if not isinstance(v, dict):
+        return "{}"
+    try:
+        out: Dict[str, Any] = {}
+        for tkey, fields in v.items():
+            if isinstance(tkey, str) and isinstance(fields, dict):
+                out[tkey] = fields
+        s = json.dumps(out, separators=(",", ":"))
+        return s if len(s) <= 20000 else "{}"
+    except Exception:
+        return "{}"
+
+
+def _parse_content_json(raw: Any) -> Dict[str, Any]:
+    if not raw:
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    try:
+        o = json.loads(raw)
+        return o if isinstance(o, dict) else {}
+    except Exception:
+        return {}
 
 
 def _clean_template_kit(v: Optional[str]) -> Optional[str]:
@@ -412,6 +444,7 @@ def _row_to_landing(row) -> Dict[str, Any]:
         "audience": row.get("audience") or None,
         "goal": row.get("goal") or None,
         "template_kit": row.get("template_kit") or None,
+        "content_json": _parse_content_json(row.get("content_json")),
         "logo_url": row.get("logo_url") or None,
     }
 
@@ -469,6 +502,7 @@ class LandingUpsert(BaseModel):
     audience: Optional[str] = None
     goal: Optional[str] = None
     template_kit: Optional[str] = None
+    content_json: Optional[Dict[str, Any]] = None
 
 
 class PalettePayload(BaseModel):
@@ -848,6 +882,7 @@ def upsert_landing(
         "audience": _valid_page_audience(payload.audience),
         "goal": _valid_goal(payload.goal),
         "template_kit": _clean_template_kit(payload.template_kit),
+        "content_json": _content_json_str(payload.content_json),
     }
     if existing:
         preview_token = existing.get("preview_token") or secrets.token_hex(16)
@@ -868,7 +903,7 @@ def upsert_landing(
             "audience_mentor_headline=:men_h, audience_mentor_body=:men_b, audience_mentor_cta=:men_c, "
             "audience_cofounder_headline=:cof_h, audience_cofounder_body=:cof_b, audience_cofounder_cta=:cof_c, "
             "template=:template, hero_media_url=:hero_media_url, product_screenshot_url=:product_screenshot_url, "
-            "audience=:audience, goal=:goal, template_kit=:template_kit, "
+            "audience=:audience, goal=:goal, template_kit=:template_kit, content_json=:content_json, "
             "preview_token=:preview_token, updated_at=CURRENT_TIMESTAMP WHERE project_id=:pid"
         ), params=params)
         slug = existing["slug"]
@@ -890,13 +925,13 @@ def upsert_landing(
             "audience_advisor_headline, audience_advisor_body, audience_advisor_cta, "
             "audience_mentor_headline, audience_mentor_body, audience_mentor_cta, "
             "audience_cofounder_headline, audience_cofounder_body, audience_cofounder_cta, "
-            "template, hero_media_url, product_screenshot_url, audience, goal, template_kit) "
+            "template, hero_media_url, product_screenshot_url, audience, goal, template_kit, content_json) "
             "VALUES (:pid, :slug, :preview_token, :name, :tagline, :headline, :subheadline, :cta, :logo_url, "
             ":logo_svg, :logo_asset_id, :color, :palette_bg, :palette_ink, "
             ":palette_secondary, :palette_accent, :font_pairing, "
             ":ac_h, :ac_b, :ac_c, :ap_h, :ap_b, :ap_c, :ai_h, :ai_b, :ai_c, "
             ":adv_h, :adv_b, :adv_c, :men_h, :men_b, :men_c, :cof_h, :cof_b, :cof_c, "
-            ":template, :hero_media_url, :product_screenshot_url, :audience, :goal, :template_kit)"
+            ":template, :hero_media_url, :product_screenshot_url, :audience, :goal, :template_kit, :content_json)"
         ), params=params)
     session.commit()
     row = session.exec(text(

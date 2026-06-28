@@ -19,7 +19,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { ensureLandingPageBrandKitColumns } from '../services/landingPageSchema';
-import { renderLandingTemplate, TEMPLATE_REGISTRY, TEMPLATE_KEYS, TEMPLATE_SIGNATURE_PALETTES } from '../services/landingTemplates';
+import { renderLandingTemplate, TEMPLATE_REGISTRY, TEMPLATE_KEYS, TEMPLATE_SIGNATURE_PALETTES, sanitizeLandingContent } from '../services/landingTemplates';
 import { requireAuth } from '../auth';
 import { run as aiRouterRun } from '../services/aiRouter';
 
@@ -321,7 +321,20 @@ function rowToLanding(row: any) {
     audience: row.audience || null,
     goal: row.goal || null,
     template_kit: row.template_kit || null,
+    content_json: parseContentJson(row.content_json),
   };
+}
+
+// Parse the stored content_json string into an object for the editor to rehydrate.
+function parseContentJson(raw: unknown): Record<string, any> {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw as Record<string, any>;
+  try {
+    const o = JSON.parse(String(raw));
+    return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+  } catch {
+    return {};
+  }
 }
 
 const HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -697,6 +710,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
   const goal = VALID_GOAL(body?.goal);
   const templateKit = cleanTemplateKit(body?.template_kit);
   const logoUrl = sanitizeLogoUrl(String(body?.logo_url || '').trim());
+  const contentJson = JSON.stringify(sanitizeLandingContent(body?.content_json));
   if (existing) {
     const previewToken = existing.preview_token || Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, '0')).join('');
     await c.env.DB.prepare(
@@ -710,7 +724,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
        audience_mentor_headline=?, audience_mentor_body=?, audience_mentor_cta=?,
        audience_cofounder_headline=?, audience_cofounder_body=?, audience_cofounder_cta=?,
        template=?, hero_media_url=?, product_screenshot_url=?,
-       audience=?, goal=?, template_kit=?,
+       audience=?, goal=?, template_kit=?, content_json=?,
        preview_token=?, updated_at=datetime('now') WHERE project_id=?`
     ).bind(
       name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
@@ -723,7 +737,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
       audMentorHeadline, audMentorBody, audMentorCta,
       audCofounderHeadline, audCofounderBody, audCofounderCta,
       template, heroMediaUrl, productScreenshotUrl,
-      audience, goal, templateKit,
+      audience, goal, templateKit, contentJson,
       previewToken, pid,
     ).run();
   } else {
@@ -739,12 +753,12 @@ brand.put('/landing/by-project/:pid', async (c) => {
        audience_mentor_headline, audience_mentor_body, audience_mentor_cta,
        audience_cofounder_headline, audience_cofounder_body, audience_cofounder_cta,
        template, hero_media_url, product_screenshot_url,
-       audience, goal, template_kit)
+       audience, goal, template_kit, content_json)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                ?, ?, ?, ?, ?, ?, ?, ?, ?,
                ?, ?, ?, ?, ?, ?, ?, ?, ?,
                ?, ?, ?,
-               ?, ?, ?)`
+               ?, ?, ?, ?)`
     ).bind(
       pid, slug, previewToken, name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
       logoUrl, sanitizeSvg(body?.logo_svg) || null, logoAssetId, color,
@@ -756,7 +770,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
       audMentorHeadline, audMentorBody, audMentorCta,
       audCofounderHeadline, audCofounderBody, audCofounderCta,
       template, heroMediaUrl, productScreenshotUrl,
-      audience, goal, templateKit,
+      audience, goal, templateKit, contentJson,
     ).run();
   }
   const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE project_id = ?').bind(pid).first<any>();
