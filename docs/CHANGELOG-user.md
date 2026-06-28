@@ -5,6 +5,21 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Build your Spin-Out with a team
+
+Your Spin-Out project no longer has to be a solo effort. From **Edit Project**,
+the project owner can invite co-founders and advisors — by matching with a
+suggested co-founder, entering someone's email, or sharing a private invite link
+over WhatsApp, Telegram, or email.
+
+- **Co-founders** can view and edit the project's data, just like the owner.
+- **Advisors** get read-only access, so they can follow along without making changes.
+- Only the owner (and the Axal team) can manage who's on the team.
+
+If you're a new founder in the Spin-Out Lab, team invites unlock in Week 2 —
+you'll see a friendly note until then. Founders who've already incorporated can
+invite their team right away.
+
 ## Compare cap-table scenarios side-by-side
 
 You can now explore "what if" cap tables for a project without touching its real

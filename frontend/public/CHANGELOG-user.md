@@ -5,6 +5,23 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your Spin-Out pitch deck now fills itself in from your venture data
+
+When you open the Spin-Out demo-day deck in the Pitch Deck Builder, the editor
+now mirrors how the deck is actually built: most of each slide fills in
+automatically from your venture's pages, so you can't accidentally overwrite it.
+Auto-filled fields are clearly marked and link straight to the page they come
+from — your Project, Customer Discovery, Roadmap, Cap Table, Incorporation, Team,
+and more — so you change them at the source and the deck refreshes.
+
+Only the few story-driven fields stay editable: your Problem statement, your
+Solution (with guidance to frame it the Axal way — turning raw inputs into a
+live, actionable result), and your Product demo links and caption. Saving any of
+these updates your deck preview and downloads right away.
+
+And the Cover no longer asks you to pick a project or type your name — your
+project is already selected, and your name comes from your account.
+
 ## Build your Spin-Out with a team
 
 Your Spin-Out project no longer has to be a solo effort. From **Edit Project**,

@@ -10,6 +10,35 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Spin-Out pitch deck — source-driven slide editor — Task #2
+
+For the `axal_spinout_demoday` template ONLY, the Pitch Deck Builder's
+center-rail slide editor is now a dedicated, source-driven panel
+(`frontend/src/components/SpinoutSlideEditor.jsx`); all other templates keep the
+generic `SlideEditor`. `PitchDeckPage.jsx` branches on `isSpinoutDeck`.
+
+- Most fields are AUTO: read-only, pulled from the live project-derived deck data
+  (the dotted-key `fields` map from `api.spinoutDeck`), rendered as dashed
+  read-only cards with an "Auto" badge and a react-router `Link` to their source
+  page. Config is keyed by `slide.spec_id`: cover (project, founder(s) from
+  account, description, sector, validation signal — all auto), validation
+  (data-driven from `validation.cards_json` so labels never drift), market
+  (TAM/SAM/SOM + why-now), roadmap, team_network, cap_table (+ a separate
+  incorporation row), ask (raise / use-of-funds / milestone), review_the_deal.
+- A few NARRATIVE fields are EDITABLE and write back to PROJECT columns via
+  `api.updateProject` (explicit Save → `api.getProject` refetch → `onSaved()`
+  bumps `deckDataReload` so the live preview + PPTX export refresh): problem
+  (`problem_statement`); solution (`solution`, help text tailored to Axal's
+  "solution-side" data→decision framing); product_demo
+  (`product_demo_{video,live,screenshot}_url` + `product_demo_caption`).
+- Cover drops the editable project selector + founder-name input (both now auto).
+- Founders auto-row falls back to `team.founder.name` (dev mirror exposes a
+  singular `founder`; the worker exposes the `founders` array).
+- No assembler change: the editor consumes the existing
+  `cloudflare-worker/src/services/decks/spinoutDeckData.ts` /
+  `backend/app/api/routes/projects.py` dotted-key contract. `npm run test:drift`
+  green (incl. `check-dark-mode`, `spinoutDeckData`, `useOfFunds`, `tsc`).
+
 ## Spin-Out projects can be built by a team (co-founders + advisors) — Task #1
 
 A single-founder Spin-Out project (`projects.founder_id`) can now be built by a
