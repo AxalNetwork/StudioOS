@@ -17,6 +17,10 @@ import { ensureTier } from '../middleware/requireTier';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { simulate, validateInputs, toCsv, type Inputs, type SimulateResult } from '../services/captable';
+import {
+  canReadProject, canWriteProject, canReadScenario, canWriteScenario,
+  type AccessUser,
+} from '../services/captableAccess';
 
 const captable = new Hono<{ Bindings: Env }>();
 
@@ -53,22 +57,37 @@ async function loadByUid(env: Env, uid: string): Promise<ScenarioRow | null> {
     .bind(uid).first<ScenarioRow>();
 }
 
-async function ensureOwnerOr404(env: Env, uid: string, user: { id: number; role: string }): Promise<ScenarioRow> {
+type AuthUser = AccessUser & { id: number; role: string };
+
+async function loadProject(env: Env, projectId: number): Promise<{ id: number; founder_id: number | null } | null> {
+  return env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
+    .bind(projectId).first<{ id: number; founder_id: number | null }>();
+}
+
+/** Read-gate a scenario by uid: owner / admin / (project-bound → project read). */
+async function ensureScenarioReadOr404(env: Env, uid: string, user: AuthUser): Promise<ScenarioRow> {
   const row = await loadByUid(env, uid);
   if (!row) throw new HttpError(404, 'Scenario not found');
-  if (row.owner_user_id !== user.id && !isAdmin(user.role)) throw new HttpError(403, 'Not your scenario');
+  const proj = row.project_id != null ? await loadProject(env, row.project_id) : null;
+  if (!canReadScenario(user, row, proj)) throw new HttpError(403, 'Not your scenario');
   return row;
 }
 
-async function ensureProjectAccess(env: Env, projectId: number | null | undefined, user: { id: number; role: string; founder_id?: number | null }) {
+/** Write-gate a scenario by uid: owner / admin / (project-bound → project write). */
+async function ensureScenarioWriteOr404(env: Env, uid: string, user: AuthUser): Promise<ScenarioRow> {
+  const row = await loadByUid(env, uid);
+  if (!row) throw new HttpError(404, 'Scenario not found');
+  const proj = row.project_id != null ? await loadProject(env, row.project_id) : null;
+  if (!canWriteScenario(user, row, proj)) throw new HttpError(403, 'Not your scenario');
+  return row;
+}
+
+/** Attaching a cap table to a project requires project WRITE access. */
+async function ensureProjectWriteAccess(env: Env, projectId: number | null | undefined, user: AuthUser) {
   if (projectId == null) return;
-  const proj = await env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
-    .bind(projectId).first<{ id: number; founder_id: number | null }>();
+  const proj = await loadProject(env, projectId);
   if (!proj) throw new HttpError(404, 'Project not found');
-  if (isAdmin(user.role)) return;
-  if (proj.founder_id == null || proj.founder_id !== user.founder_id) {
-    throw new HttpError(403, "You don't own that project");
-  }
+  if (!canWriteProject(user, proj)) throw new HttpError(403, "You don't have access to that project");
 }
 
 class HttpError extends Error { constructor(public status: number, public body: any) { super(typeof body === 'string' ? body : 'http_error'); } }
@@ -113,10 +132,31 @@ captable.post('/scenarios', async (c) => {
   const errs = validateInputs(inputs);
   if (errs.length) return c.json({ detail: { code: 'invalid_inputs', errors: errs } }, 400);
   const projectId = body?.project_id ?? null;
-  try { await ensureProjectAccess(c.env, projectId, user); }
+  try { await ensureProjectWriteAccess(c.env, projectId, user); }
   catch (e) { return asJsonError(c, e); }
   const result = simulate(inputs);
   const now = new Date().toISOString();
+
+  // Task #28 — one cap table per project. When a project is provided and a
+  // scenario already exists for it, UPDATE that row instead of inserting a
+  // duplicate (guards against stale frontend state). Access to the existing
+  // project's scenario is already gated by ensureProjectAccess above.
+  if (projectId != null) {
+    const existing = await c.env.DB.prepare(
+      'SELECT * FROM cap_table_scenarios WHERE project_id = ? ORDER BY updated_at DESC LIMIT 1',
+    ).bind(projectId).first<ScenarioRow>();
+    if (existing) {
+      await c.env.DB.prepare(
+        `UPDATE cap_table_scenarios
+            SET name = ?, inputs_json = ?, result_json = ?, computed_at = ?, updated_at = ?
+          WHERE id = ?`,
+      ).bind(name, JSON.stringify(inputs), JSON.stringify(result), now, now, existing.id).run();
+      const updated = await loadByUid(c.env, existing.uid);
+      if (!updated) return c.json({ detail: 'Update failed' }, 500);
+      return c.json(serialize(updated));
+    }
+  }
+
   const uid = crypto.randomUUID();
   await c.env.DB.prepare(
     `INSERT INTO cap_table_scenarios
@@ -128,10 +168,26 @@ captable.post('/scenarios', async (c) => {
   return c.json(serialize(row));
 });
 
+// Task #28 — load a project's single cap table (project-scoped, NOT owner-
+// scoped) so partners/admins can open a founder's cap table from the dropdown.
+// Returns { scenario: <serialized> | null }. Registered before /scenarios/:uid.
+captable.get('/scenarios/by-project/:projectId', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const proj = await loadProject(c.env, projectId);
+  if (!proj) return c.json({ detail: 'Project not found' }, 404);
+  if (!canReadProject(user, proj)) return c.json({ detail: "You don't have access to that project" }, 403);
+  const row = await c.env.DB.prepare(
+    'SELECT * FROM cap_table_scenarios WHERE project_id = ? ORDER BY updated_at DESC LIMIT 1',
+  ).bind(projectId).first<ScenarioRow>();
+  return c.json({ scenario: row ? serialize(row) : null });
+});
+
 captable.get('/scenarios/:uid', async (c) => {
   const user = await requireAuth(c);
   try {
-    const row = await ensureOwnerOr404(c.env, c.req.param('uid'), user);
+    const row = await ensureScenarioReadOr404(c.env, c.req.param('uid'), user);
     return c.json(serialize(row));
   } catch (e) { return asJsonError(c, e); }
 });
@@ -140,7 +196,7 @@ captable.put('/scenarios/:uid', async (c) => {
   ensureTier(await requireAuth(c), 'growth');
   const user = await requireAuth(c);
   let row: ScenarioRow;
-  try { row = await ensureOwnerOr404(c.env, c.req.param('uid'), user); }
+  try { row = await ensureScenarioWriteOr404(c.env, c.req.param('uid'), user); }
   catch (e) { return asJsonError(c, e); }
   const body = await c.req.json().catch(() => ({}));
   const name = String(body?.name || '').trim();
@@ -149,8 +205,16 @@ captable.put('/scenarios/:uid', async (c) => {
   const errs = validateInputs(inputs);
   if (errs.length) return c.json({ detail: { code: 'invalid_inputs', errors: errs } }, 400);
   if (body?.project_id !== undefined && body?.project_id !== null) {
-    try { await ensureProjectAccess(c.env, body.project_id, user); }
+    try { await ensureProjectWriteAccess(c.env, body.project_id, user); }
     catch (e) { return asJsonError(c, e); }
+    // Task #28 — one cap table per project: refuse to bind this scenario to a
+    // project that a DIFFERENT scenario already owns (prevents PUT duplicates).
+    const clash = await c.env.DB.prepare(
+      'SELECT uid FROM cap_table_scenarios WHERE project_id = ? AND uid != ? LIMIT 1',
+    ).bind(body.project_id, row.uid).first<{ uid: string }>();
+    if (clash) {
+      return c.json({ detail: { code: 'project_has_cap_table', message: 'This project already has a cap table. Edit that one instead.' } }, 409);
+    }
   }
   const result = simulate(inputs);
   const now = new Date().toISOString();
@@ -168,7 +232,7 @@ captable.put('/scenarios/:uid', async (c) => {
 captable.delete('/scenarios/:uid', async (c) => {
   ensureTier(await requireAuth(c), 'growth');
   const user = await requireAuth(c);
-  try { await ensureOwnerOr404(c.env, c.req.param('uid'), user); }
+  try { await ensureScenarioWriteOr404(c.env, c.req.param('uid'), user); }
   catch (e) { return asJsonError(c, e); }
   await c.env.DB.prepare('DELETE FROM cap_table_scenarios WHERE uid = ?').bind(c.req.param('uid')).run();
   return c.json({ ok: true });
@@ -177,7 +241,7 @@ captable.delete('/scenarios/:uid', async (c) => {
 captable.get('/scenarios/:uid/export.csv', async (c) => {
   const user = await requireAuth(c);
   let row: ScenarioRow;
-  try { row = await ensureOwnerOr404(c.env, c.req.param('uid'), user); }
+  try { row = await ensureScenarioReadOr404(c.env, c.req.param('uid'), user); }
   catch (e) { return asJsonError(c, e); }
   const result: SimulateResult = row.result_json
     ? safeJson(row.result_json, simulate(safeJson<Inputs>(row.inputs_json, {} as Inputs)) as SimulateResult)

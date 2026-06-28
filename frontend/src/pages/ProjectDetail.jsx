@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { safeExternalUrl } from '../lib/url';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, FileText, Target, Building, Rocket, Pencil, Trash2, X, Database, Search, ExternalLink, AlertCircle } from 'lucide-react';
+import { ArrowLeft, ChevronRight, FileText, Target, Building, Rocket, Pencil, Trash2, X, Database, Search, ExternalLink, AlertCircle, PieChart } from 'lucide-react';
 import SectorSelect from '../components/SectorSelect';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
@@ -146,6 +146,13 @@ export default function ProjectDetail() {
                 <Pencil size={12} /> Edit
               </button>
             )}
+            <Link
+              to={`/build/captable?project=${project.id}`}
+              className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-xs text-gray-700 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300"
+              title="Open this project's cap table in the simulator"
+            >
+              <PieChart size={12} /> Cap Table
+            </Link>
             {canEdit && (
               <button
                 onClick={handleCbClick}

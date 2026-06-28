@@ -332,3 +332,65 @@ test('flattenSpinoutDeckData: empty strings and DASH placeholders are skipped', 
     assert.ok(typeof v === 'string' && v.length > 0 && v !== '—', `field "${k}" must be a non-empty non-DASH string`);
   }
 });
+
+// ─────────────────────────── Task #28 ───────────────────────────────────────
+// Slide 08 cap-table donut: segments now derive from the project's Cap-Table
+// Simulator scenario (src.cap_table.sim_segments) in preference to the
+// standalone cap_table_holders table, falling back to holders, then the
+// neutral FALLBACK placeholder. The readiness checklist stays tied to holders.
+
+test('captable segments: simulator sim_segments win over the holders table', () => {
+  const src = makeFullSrc();
+  // Holders say 80/15/5; the simulator scenario says something different.
+  src.cap_table.sim_segments = [
+    ['Founders', 62.5],
+    ['Seed investors', 22.5],
+    ['Option Pool', 15],
+  ];
+  const { data } = mapToSpinoutDeckData(src);
+  const labels = data.captable.segments.map((s) => s[0]);
+  const values = data.captable.segments.map((s) => s[1]);
+  assert.deepEqual(labels, ['Founders', 'Seed investors', 'Option Pool'], 'sim_segments labels drive the donut');
+  // pctNum rounds to integers (same as the holders path), so 62.5/22.5 → 63/23.
+  assert.deepEqual(values, [63, 23, 15], 'sim_segments values drive the donut (rounded)');
+});
+
+test('captable segments: sim_segments are filtered (>0, named) and capped at 6', () => {
+  const src = makeFullSrc();
+  src.cap_table.sim_segments = [
+    ['A', 30], ['B', 20], ['', 10], ['C', 0], ['D', 8],
+    ['E', 7], ['F', 6], ['G', 5], ['H', 4], // 7 valid → capped to 6
+  ];
+  const { data } = mapToSpinoutDeckData(src);
+  assert.ok(data.captable.segments.length <= 6, 'no more than 6 wedges');
+  const labels = data.captable.segments.map((s) => s[0]);
+  assert.ok(!labels.includes(''), 'empty-name segment dropped');
+  assert.ok(!labels.includes('C'), 'zero-% segment dropped');
+});
+
+test('captable segments: falls back to holders when no sim_segments', () => {
+  const src = makeFullSrc();
+  // No sim_segments at all → holders (80/15/5) drive the donut.
+  delete (src.cap_table as any).sim_segments;
+  const { data, gaps } = mapToSpinoutDeckData(src);
+  assert.deepEqual(data.captable.segments.map((s) => s[0]), ['Maya Osei', 'Option pool', 'SAFE (reserved)']);
+  assert.ok(!gaps.some((g) => /Cap table: add holders/.test(g)), 'no cap-table gap when holders exist');
+});
+
+test('captable segments: empty sim_segments + empty holders → FALLBACK + gap', () => {
+  const src = makePartialSrc();
+  src.cap_table.sim_segments = []; // no simulator data either
+  const { data, gaps } = mapToSpinoutDeckData(src);
+  assert.ok(data.captable.segments.length > 0, 'FALLBACK keeps the donut renderable');
+  assert.ok(gaps.some((g) => /Cap table: add holders/.test(g)), 'a cap-table gap is recorded');
+});
+
+test('captable readiness checklist stays tied to holders, not sim_segments', () => {
+  const src = makePartialSrc();           // holders: [] → "Cap table recorded" pending
+  src.cap_table.sim_segments = [['Founders', 100]]; // simulator present
+  const { data } = mapToSpinoutDeckData(src);
+  const recorded = data.captable.items.find((it) => it[0] === 'Cap table recorded');
+  assert.ok(recorded && recorded[1] === 'pending', 'checklist still reflects the holders table');
+  // …yet the donut already shows the simulator segments.
+  assert.deepEqual(data.captable.segments, [['Founders', 100]], 'donut uses sim_segments');
+});

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
@@ -82,6 +83,12 @@ export default function CapTablePage() {
   const [scenarios, setScenarios] = useState([]);
   const [activeUid, setActiveUid] = useState(null);
   const [scenarioName, setScenarioName] = useState('Untitled scenario');
+  // Task #28 — the simulator is project-aware: one cap table per project.
+  // `projects` populates the top-right dropdown (role-scoped via listProjects);
+  // `selectedProjectId` drives load/save. Deep-linkable via ?project=<id>.
+  const [projects, setProjects] = useState([]);
+  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
   // T19 — toast hook auto-clears on unmount. Replaces the inline
   // `setTimeout(() => setSavedFlash(''), 1500)` that leaked on quick navigation.
   const { toast: savedFlash, showToast: setSavedFlash } = useToast(1500);
@@ -92,9 +99,27 @@ export default function CapTablePage() {
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveError, setLiveError] = useState(null);
 
-  useEffect(() => { loadScenarios(); }, []);
-  useEffect(() => { runSim(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { bootstrap(); /* eslint-disable-next-line */ }, []);
   useEffect(() => { loadLive(); }, []);
+
+  // Task #28 — load projects + scenarios, then honour a ?project=<id> deep
+  // link (from the Project detail quick link). Falls back to a default sim.
+  async function bootstrap() {
+    const [projList, scenList] = await Promise.all([
+      api.listProjects()
+        .then((r) => (Array.isArray(r) ? r : (r?.projects || [])))
+        .catch(() => []),
+      api.listCapTableScenarios().then((r) => r.items || []).catch(() => []),
+    ]);
+    setProjects(projList);
+    setScenarios(scenList);
+    const deepLink = searchParams.get('project');
+    if (deepLink && projList.some((p) => String(p.id) === String(deepLink))) {
+      await selectProject(deepLink, scenList, projList);
+    } else {
+      runSim();
+    }
+  }
 
   async function loadLive() {
     setLiveLoading(true); setLiveError(null);
@@ -119,10 +144,13 @@ export default function CapTablePage() {
     } catch (e) { /* user may not have any yet */ }
   }
 
-  async function runSim() {
+  async function runSim(overrideInputs) {
+    // onClick passes a synthetic event as the first arg — ignore non-objects
+    // that aren't a valid inputs payload and fall back to current state.
+    const toSim = overrideInputs && overrideInputs.founders ? overrideInputs : inputs;
     setLoading(true); setErrors([]); setApiError(null);
     try {
-      const r = await api.simulateCapTable(inputs);
+      const r = await api.simulateCapTable(toSim);
       setResult(r);
     } catch (e) {
       // Distinguish transport/availability problems from real input-validation
@@ -159,16 +187,63 @@ export default function CapTablePage() {
     setLoading(false);
   }
 
+  // Task #28 — selecting a project loads (or starts) that project's cap table.
+  // Optional scenList/projList overrides avoid stale state during bootstrap.
+  async function selectProject(pid, scenList = scenarios, projList = projects) {
+    const id = pid ? String(pid) : '';
+    setSelectedProjectId(id);
+    setApiError(null);
+    setSearchParams(id ? { project: id } : {}, { replace: true });
+    if (!id) {
+      // Detached from any project — keep current inputs as a scratch sim.
+      setActiveUid(null);
+      return;
+    }
+    const proj = projList.find((p) => String(p.id) === id);
+    // Load the project's single cap table via the project-scoped endpoint so
+    // partners/admins can open a founder's cap table they don't personally own
+    // (the owner-scoped scenarios list wouldn't include it).
+    let scen = null;
+    try {
+      const r = await api.getCapTableByProject(id);
+      scen = r?.scenario || null;
+    } catch (e) {
+      if (e?.status === 403) {
+        setApiError("You don't have access to that project's cap table.");
+      } else if (e?.status && e.status !== 404) {
+        setApiError("Couldn't load that project's cap table. Please retry.");
+      }
+    }
+    if (scen) {
+      setInputs(scen.inputs);
+      setResult(scen.result);
+      setActiveUid(scen.uid);
+      setScenarioName(scen.name);
+    } else {
+      // No cap table yet for this project — start from defaults.
+      setInputs(DEFAULT_INPUTS);
+      setActiveUid(null);
+      setScenarioName(proj ? proj.name : 'Untitled scenario');
+      runSim(DEFAULT_INPUTS);
+    }
+  }
+
   async function saveScenario() {
     setSavedFlash(''); setApiError(null);
+    if (!selectedProjectId) {
+      setApiError('Select a project first — each cap table belongs to a project.');
+      return;
+    }
+    const projectId = Number(selectedProjectId);
+    const proj = projects.find((p) => String(p.id) === selectedProjectId);
+    const name = scenarioName?.trim() || (proj ? proj.name : 'Cap table');
     try {
-      let s;
-      if (activeUid) {
-        s = await api.updateCapTableScenario(activeUid, { name: scenarioName, inputs });
-      } else {
-        s = await api.createCapTableScenario({ name: scenarioName, inputs });
-        setActiveUid(s.uid);
-      }
+      // Always save through the project upsert (POST). It updates the project's
+      // single cap table in place (one per project) and is gated by project
+      // WRITE access — so partners/admins can save a founder's cap table they
+      // don't personally own, which the owner-scoped PUT path would reject.
+      const s = await api.createCapTableScenario({ name, inputs, project_id: projectId });
+      setActiveUid(s.uid);
       setResult(s.result || result);
       setSavedFlash('Saved');
       loadScenarios();
@@ -194,6 +269,7 @@ export default function CapTablePage() {
     setResult(s.result);
     setActiveUid(uid);
     setScenarioName(s.name);
+    if (s.project_id != null) setSelectedProjectId(String(s.project_id));
   }
 
   async function delScenario(uid) {
@@ -206,11 +282,13 @@ export default function CapTablePage() {
     loadScenarios();
   }
 
+  // Reset the canvas to defaults for the selected project (Save then overwrites
+  // that project's one cap table). Keeps the project selection intact.
   function newScenario() {
     setInputs(DEFAULT_INPUTS);
-    setActiveUid(null);
-    setScenarioName('Untitled scenario');
     setResult(null);
+    const proj = projects.find((p) => String(p.id) === selectedProjectId);
+    setScenarioName(proj ? proj.name : 'Untitled scenario');
   }
 
   // ---------- Founder dilution chart data
@@ -244,12 +322,17 @@ export default function CapTablePage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <input
-            value={scenarioName}
-            onChange={e => setScenarioName(e.target.value)}
-            className="flex-1 min-w-0 sm:flex-none sm:w-48 px-3 py-1.5 text-sm border border-gray-300 rounded dark:border-gray-700"
-            placeholder="Scenario name"
-          />
+          <select
+            value={selectedProjectId}
+            onChange={e => selectProject(e.target.value)}
+            className="flex-1 min-w-0 sm:flex-none sm:w-56 px-3 py-1.5 text-sm border border-gray-300 rounded bg-white dark:bg-gray-900 dark:border-gray-700"
+            title="Pick a project to load or start its cap table"
+          >
+            <option value="">Select a project…</option>
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
           <button onClick={newScenario}
             className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
             <Plus size={14} /> New

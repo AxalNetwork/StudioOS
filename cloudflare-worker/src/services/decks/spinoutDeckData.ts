@@ -520,12 +520,20 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     ['Data room ready', src.contact?.deal_access?.data_room_ready ? 'done' : 'pending'],
   ];
 
+  // Task #28 — prefer the project's Cap-Table Simulator segments (fully-diluted
+  // ledger) over the standalone holders table; fall back to holders, then the
+  // neutral placeholder. The readiness checklist above stays tied to holders.
   let segments: Array<[string, number]>;
+  const simSegments = (src.cap_table?.sim_segments || [])
+    .map((s) => [s[0], pctNum(s[1])] as [string, number])
+    .filter((s) => has(s[0]) && s[1] > 0)
+    .slice(0, 6);
   const realSegments = holders
     .map((h) => [h.name, pctNum(h.ownership_pct)] as [string, number])
     .filter((s) => has(s[0]) && s[1] > 0)
     .slice(0, 6);
-  if (realSegments.length) segments = realSegments;
+  if (simSegments.length) segments = simSegments;
+  else if (realSegments.length) segments = realSegments;
   else { segments = FALLBACK.segments; gap('Cap table: add holders in the Incorporate / Cap Table module.'); }
 
   const captable: SpinoutDeckData['captable'] = {

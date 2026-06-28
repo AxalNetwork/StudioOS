@@ -10,6 +10,32 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Cap-Table Simulator is now project-aware and feeds Demo Day Slide 08
+
+The Cap-Table Simulator now binds a cap table to a project (one per project)
+instead of free-text "Untitled scenario" naming, and the Spin-Out Demo Day deck
+derives its ownership donut (Slide 08) from that simulator data.
+
+- `frontend/src/pages/CapTablePage.jsx`: replaced the scenario-name text input
+  with a role-scoped project `<select>`; bootstrap loads projects + scenarios and
+  honors `?project=` deep links; save requires a selected project and persists
+  `project_id`; `runSim` guards on loaded founders.
+- `frontend/src/pages/ProjectDetail.jsx`: added a Cap Table quick link
+  (`/build/captable?project=<id>`).
+- `cloudflare-worker/src/routes/captable.ts` + `backend/app/api/routes/captable.py`:
+  `POST /captable/scenarios` upserts the existing scenario when `project_id` is
+  set (one cap table per project, no duplicates).
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts`: loads the
+  project's latest scenario (prefers `result_json`, re-simulates `inputs_json`
+  fallback) and computes `sim_segments`.
+- `cloudflare-worker/src/services/decks/spinoutDeckData.ts`: Slide 08 segments
+  now prefer `sim_segments` → `cap_table_holders` → neutral FALLBACK; the
+  readiness checklist stays tied to holders. Applies to both the in-app preview
+  and the PPTX export (shared Worker bundle).
+- `cloudflare-worker/test/spinoutDeckData.test.ts`: added tests for the
+  sim_segments precedence, filtering/cap, holders fallback, empty→FALLBACK gap,
+  and checklist independence.
+
 <<<<<<< HEAD
 ## Removed "Review the deal" slide from the Spin-Out Demo Day deck editor
 
