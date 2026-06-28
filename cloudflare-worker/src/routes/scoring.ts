@@ -7,6 +7,7 @@ import { getSQL } from '../db';
 import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
 import { ensureTier } from '../middleware/requireTier';
 import { runFullScore, tierLabel } from '../services/scoring';
+import { formatUseOfFundsText } from '../util/useOfFunds';
 import { autoCreateStudioOpsForProject } from './studioops';
 import {
   assertNoReservedFields,
@@ -387,7 +388,7 @@ scoring.post('/score/:projectId/deal-memo', async (c) => {
     tier: memo.tier, tier_label: tierLabel(memo.tier),
     problem: memo.problem, solution: memo.solution, why_now: memo.why_now,
     traction: { users: memo.users, revenue: memo.revenue_info, growth_signals: memo.growth_signals },
-    economics: { cost_to_mvp: memo.cost_to_mvp, funding_needed: memo.funding_needed, use_of_funds: memo.use_of_funds },
+    economics: { cost_to_mvp: memo.cost_to_mvp, funding_needed: memo.funding_needed, use_of_funds: formatUseOfFundsText(memo.use_of_funds) || memo.use_of_funds },
     axal_fit: { strategic_alignment: memo.strategic_alignment, partner_synergies: memo.partner_synergies },
     risks: memo.risks, decision: memo.decision,
     terms: { amount: memo.terms_amount, equity: memo.terms_equity, structure: memo.terms_structure },

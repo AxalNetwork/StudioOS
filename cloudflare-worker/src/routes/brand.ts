@@ -19,7 +19,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { ensureLandingPageBrandKitColumns } from '../services/landingPageSchema';
-import { renderLandingTemplate, TEMPLATE_REGISTRY } from '../services/landingTemplates';
+import { renderLandingTemplate, TEMPLATE_REGISTRY, TEMPLATE_KEYS } from '../services/landingTemplates';
 import { requireAuth } from '../auth';
 import { run as aiRouterRun } from '../services/aiRouter';
 
@@ -254,6 +254,27 @@ async function projectOwned(env: Env, user: any, projectId: number): Promise<any
 const AUDIENCE_SET = new Set(['customer', 'partner', 'investor']);
 const VALID_AUDIENCE = (v: unknown): string | null => (typeof v === 'string' && AUDIENCE_SET.has(v.trim())) ? v.trim() : null;
 
+// Audience-first flow — the landing page's PRIMARY audience carries the full
+// 6-value taxonomy (mirrors AUDIENCES in frontend/src/lib/brand/templates.js).
+// This is deliberately separate from AUDIENCE_SET above, which is the narrow
+// waitlist segmentation (DB CHECK limited to customer/partner/investor).
+const PAGE_AUDIENCE_SET = new Set(['customer', 'investor', 'partner', 'advisor', 'mentor', 'cofounder']);
+const VALID_PAGE_AUDIENCE = (v: unknown): string | null =>
+  (typeof v === 'string' && PAGE_AUDIENCE_SET.has(v.trim())) ? v.trim() : null;
+// Normalized goal (mirrors GOALS in the frontend catalog).
+const GOAL_SET = new Set(['join_waitlist', 'request_intro', 'start_pilot', 'book_call', 'apply', 'offer_guidance']);
+const VALID_GOAL = (v: unknown): string | null =>
+  (typeof v === 'string' && GOAL_SET.has(v.trim())) ? v.trim() : null;
+// Catalog template id (kebab-case). Stored after a strict sanitise; NOT
+// validated against the catalog itself — that lives frontend-side in
+// lib/brand/templates.js, so duplicating it here would just invite drift.
+const TEMPLATE_KIT_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const cleanTemplateKit = (v: unknown): string | null => {
+  if (typeof v !== 'string') return null;
+  const s = v.trim().toLowerCase();
+  return TEMPLATE_KIT_RE.test(s) ? s : null;
+};
+
 function rowToLanding(row: any) {
   return {
     id: row.id,
@@ -285,9 +306,21 @@ function rowToLanding(row: any) {
     audience_investor_headline: row.audience_investor_headline || null,
     audience_investor_body: row.audience_investor_body || null,
     audience_investor_cta: row.audience_investor_cta || null,
+    audience_advisor_headline: row.audience_advisor_headline || null,
+    audience_advisor_body: row.audience_advisor_body || null,
+    audience_advisor_cta: row.audience_advisor_cta || null,
+    audience_mentor_headline: row.audience_mentor_headline || null,
+    audience_mentor_body: row.audience_mentor_body || null,
+    audience_mentor_cta: row.audience_mentor_cta || null,
+    audience_cofounder_headline: row.audience_cofounder_headline || null,
+    audience_cofounder_body: row.audience_cofounder_body || null,
+    audience_cofounder_cta: row.audience_cofounder_cta || null,
     template: row.template || 'minimal',
     hero_media_url: row.hero_media_url || null,
     product_screenshot_url: row.product_screenshot_url || null,
+    audience: row.audience || null,
+    goal: row.goal || null,
+    template_kit: row.template_kit || null,
   };
 }
 
@@ -648,9 +681,21 @@ brand.put('/landing/by-project/:pid', async (c) => {
   const audInvestorHeadline = String(body?.audience_investor_headline || '').trim() || null;
   const audInvestorBody = String(body?.audience_investor_body || '').trim() || null;
   const audInvestorCta = String(body?.audience_investor_cta || '').trim() || null;
+  const audAdvisorHeadline = String(body?.audience_advisor_headline || '').trim() || null;
+  const audAdvisorBody = String(body?.audience_advisor_body || '').trim() || null;
+  const audAdvisorCta = String(body?.audience_advisor_cta || '').trim() || null;
+  const audMentorHeadline = String(body?.audience_mentor_headline || '').trim() || null;
+  const audMentorBody = String(body?.audience_mentor_body || '').trim() || null;
+  const audMentorCta = String(body?.audience_mentor_cta || '').trim() || null;
+  const audCofounderHeadline = String(body?.audience_cofounder_headline || '').trim() || null;
+  const audCofounderBody = String(body?.audience_cofounder_body || '').trim() || null;
+  const audCofounderCta = String(body?.audience_cofounder_cta || '').trim() || null;
   const template = String(body?.template || '').trim() || 'minimal';
   const heroMediaUrl = sanitizeUrl(String(body?.hero_media_url || '').trim());
   const productScreenshotUrl = sanitizeUrl(String(body?.product_screenshot_url || '').trim());
+  const audience = VALID_PAGE_AUDIENCE(body?.audience);
+  const goal = VALID_GOAL(body?.goal);
+  const templateKit = cleanTemplateKit(body?.template_kit);
   const logoUrl = sanitizeLogoUrl(String(body?.logo_url || '').trim());
   if (existing) {
     const previewToken = existing.preview_token || Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -661,7 +706,11 @@ brand.put('/landing/by-project/:pid', async (c) => {
        audience_customer_headline=?, audience_customer_body=?, audience_customer_cta=?,
        audience_partner_headline=?, audience_partner_body=?, audience_partner_cta=?,
        audience_investor_headline=?, audience_investor_body=?, audience_investor_cta=?,
+       audience_advisor_headline=?, audience_advisor_body=?, audience_advisor_cta=?,
+       audience_mentor_headline=?, audience_mentor_body=?, audience_mentor_cta=?,
+       audience_cofounder_headline=?, audience_cofounder_body=?, audience_cofounder_cta=?,
        template=?, hero_media_url=?, product_screenshot_url=?,
+       audience=?, goal=?, template_kit=?,
        preview_token=?, updated_at=datetime('now') WHERE project_id=?`
     ).bind(
       name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
@@ -670,7 +719,11 @@ brand.put('/landing/by-project/:pid', async (c) => {
       audCustomerHeadline, audCustomerBody, audCustomerCta,
       audPartnerHeadline, audPartnerBody, audPartnerCta,
       audInvestorHeadline, audInvestorBody, audInvestorCta,
+      audAdvisorHeadline, audAdvisorBody, audAdvisorCta,
+      audMentorHeadline, audMentorBody, audMentorCta,
+      audCofounderHeadline, audCofounderBody, audCofounderCta,
       template, heroMediaUrl, productScreenshotUrl,
+      audience, goal, templateKit,
       previewToken, pid,
     ).run();
   } else {
@@ -682,9 +735,16 @@ brand.put('/landing/by-project/:pid', async (c) => {
        audience_customer_headline, audience_customer_body, audience_customer_cta,
        audience_partner_headline, audience_partner_body, audience_partner_cta,
        audience_investor_headline, audience_investor_body, audience_investor_cta,
-       template, hero_media_url, product_screenshot_url)
+       audience_advisor_headline, audience_advisor_body, audience_advisor_cta,
+       audience_mentor_headline, audience_mentor_body, audience_mentor_cta,
+       audience_cofounder_headline, audience_cofounder_body, audience_cofounder_cta,
+       template, hero_media_url, product_screenshot_url,
+       audience, goal, template_kit)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-               ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+               ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               ?, ?, ?,
+               ?, ?, ?)`
     ).bind(
       pid, slug, previewToken, name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
       logoUrl, sanitizeSvg(body?.logo_svg) || null, logoAssetId, color,
@@ -692,7 +752,11 @@ brand.put('/landing/by-project/:pid', async (c) => {
       audCustomerHeadline, audCustomerBody, audCustomerCta,
       audPartnerHeadline, audPartnerBody, audPartnerCta,
       audInvestorHeadline, audInvestorBody, audInvestorCta,
+      audAdvisorHeadline, audAdvisorBody, audAdvisorCta,
+      audMentorHeadline, audMentorBody, audMentorCta,
+      audCofounderHeadline, audCofounderBody, audCofounderCta,
       template, heroMediaUrl, productScreenshotUrl,
+      audience, goal, templateKit,
     ).run();
   }
   const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE project_id = ?').bind(pid).first<any>();
@@ -840,6 +904,36 @@ export async function renderLandingPreview(env: Env, token: string, nonce?: stri
     return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain' } });
   }
   return buildLandingPageHtml(row, { token, noindex: true, nonce });
+}
+
+// Task #20 — public (no-auth) visual preview of a landing template. Renders one
+// of the five visual styles with generic placeholder copy + Axal brand colours
+// so the template picker can show a true-to-life preview before selection. No
+// DB read, no slug/token — pure render. Always noindex.
+export function renderTemplatePreview(env: Env, style: string, nonce?: string): Response {
+  const key = (TEMPLATE_KEYS as readonly string[]).includes(style) ? style : 'minimal';
+  const row = {
+    name: 'Northwind Labs',
+    tagline: 'The operating system for ambitious founders.',
+    headline: 'Build, launch, and grow — all in one place.',
+    subheadline: 'Northwind Labs gives early-stage teams everything they need to go from idea to traction without the busywork.',
+    cta_text: 'Join the waitlist',
+    theme_color: '#7c3aed',
+    palette_bg: '#faf7ff',
+    palette_ink: '#1b1430',
+    palette_secondary: '#c4b5fd',
+    palette_accent: '#f59e0b',
+    font_pairing: 'editorial',
+    template: key,
+  };
+  const html = renderLandingTemplate(row, { noindex: true, nonce });
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=300',
+      'X-Robots-Tag': 'noindex, nofollow',
+    },
+  });
 }
 
 export default brand;

@@ -1,14 +1,3 @@
-# Operating Agreement (LLC) — Axal StudioOS
-
-> **v1 draft — subject to legal review.** This template is a working
-> draft and must be reviewed and approved by qualified counsel before
-> execution or public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Company:** {{company.legal_name}}, a {{company.entity_type}} (the "Company")
-**Registered office:** {{company.registered_address}}
-
 ## Article I — Formation
 
 1.1 The Company is organized as a limited liability company under the laws of the {{company.jurisdiction}}, with file number {{company.registration_number}}.
@@ -54,7 +43,3 @@
 ## Article X — Governing Law
 
 10.1 This Agreement is governed by {{governing_law}}.
-
----
-
-Signed electronically by {{founder.legal_name}} and {{cofounder.legal_name}} on the date(s) appearing below.

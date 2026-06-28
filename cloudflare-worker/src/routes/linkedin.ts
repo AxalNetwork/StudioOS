@@ -37,47 +37,14 @@ const LINKEDIN_USERINFO_URL = 'https://api.linkedin.com/v2/userinfo';
 const STATE_TTL_SECONDS = 600; // 10 minutes per task spec.
 
 // ---------------------------------------------------------------------------
-// Lazy migration. The `users` table is created by the worker's main schema
-// long before LinkedIn was a feature, so the three columns may not exist on
-// older deployments. We add them defensively on the first request to this
-// router. SQLite ignores `ADD COLUMN` failures only via best-effort: we
-// catch and swallow "duplicate column" errors so subsequent boots no-op.
+// LinkedIn identity columns (linkedin_sub / linkedin_email / linkedin_name /
+// linkedin_connected_at) live in the worker's main schema (sql/schema.sql).
+// Existing D1 databases are migrated MANUALLY via sql/linkedin_alter.sql
+// (audit L4). There is deliberately NO request-path lazy ALTER here: it
+// swallowed DDL errors and masked real schema drift. If a column is missing
+// in prod, the query below fails loudly (handled per-route) rather than
+// silently degrading.
 // ---------------------------------------------------------------------------
-let migrationDone = false;
-const REQUIRED_COLS = ['linkedin_sub', 'linkedin_email', 'linkedin_name', 'linkedin_connected_at'];
-
-async function ensureColumns(env: Env): Promise<void> {
-  if (migrationDone) return;
-  const sql = getSQL(env);
-  // Try ALTERs (idempotent — duplicate-column errors are expected on warm
-  // starts; most other failure modes are also benign).
-  for (const col of REQUIRED_COLS) {
-    try {
-      await sql.unsafe(`ALTER TABLE users ADD COLUMN ${col} TEXT`);
-    } catch (e: any) {
-      const msg = String(e?.message || e || '').toLowerCase();
-      if (!msg.includes('duplicate') && !msg.includes('already exists')) {
-        console.warn('[LINKEDIN] ensureColumns:', col, msg);
-      }
-    }
-  }
-  // Verify all required columns landed before flipping the cache flag.
-  // Without this, a transient ALTER failure pins migrationDone=true for the
-  // life of the isolate and every subsequent call would touch a missing
-  // column. PRAGMA table_info is the SQLite-native introspection.
-  let allPresent = false;
-  try {
-    const rows = await sql.unsafe(`PRAGMA table_info(users)`);
-    const present = new Set((rows as any[]).map((r: any) => String(r?.name || '').toLowerCase()));
-    allPresent = REQUIRED_COLS.every(c => present.has(c));
-  } catch (e: any) {
-    console.warn('[LINKEDIN] ensureColumns PRAGMA failed:', e?.message || e);
-  }
-  await sql.end();
-  // Only cache the success — a partial migration will be retried on the next
-  // request rather than silently failing forever.
-  if (allPresent) migrationDone = true;
-}
 
 // Task #5 (DC) — derive the LinkedIn redirect URI from APP_URL when the
 // LINKEDIN_REDIRECT_URI env var is unset. The explicit env var still wins
@@ -201,7 +168,6 @@ linkedin.post('/oauth/start', async (c) => {
     } catch { /* body may be empty */ }
   }
   try {
-    await ensureColumns(c.env);
     const state = await makeState(c.env, user.id);
     const params = new URLSearchParams({
       response_type: 'code',
@@ -344,7 +310,6 @@ linkedin.get('/oauth/callback', async (c) => {
 
   // Attach to the user row.
   try {
-    await ensureColumns(c.env);
     const sql = getSQL(c.env);
     const nowIso = new Date().toISOString();
     await sql`UPDATE users
@@ -373,7 +338,6 @@ linkedin.get('/oauth/callback', async (c) => {
 linkedin.post('/disconnect', async (c) => {
   const user = await requireAuth(c);
   try {
-    await ensureColumns(c.env);
     const sql = getSQL(c.env);
     await sql`UPDATE users
               SET linkedin_sub = NULL, linkedin_email = NULL, linkedin_name = NULL, linkedin_connected_at = NULL
@@ -402,7 +366,6 @@ linkedin.get('/status', async (c) => {
   // (with `configured` honestly reported) rather than 500-ing — the UI uses
   // this on every page load and a 500 here would noisily flash banners.
   try {
-    await ensureColumns(c.env);
     const sql = getSQL(c.env);
     const rows = await sql`SELECT linkedin_sub, linkedin_email, linkedin_name, linkedin_connected_at
                            FROM users WHERE id = ${user.id}`;

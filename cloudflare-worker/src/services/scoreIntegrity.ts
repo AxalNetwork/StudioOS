@@ -84,37 +84,61 @@ export function assertOfficialInputsComplete(body: Record<string, unknown>): voi
   if (missing.length) throw new MissingOfficialInputsError(missing);
 }
 
-// HMAC keying. SCORING_HMAC_SECRET wins when present; otherwise JWT_SECRET.
-// The boot guard enforces ≥32 bytes for JWT_SECRET in production.
-// In ALL environments we FAIL FAST if neither is set (or is too short to
-// be secure). A previous version returned a hardcoded fallback string in
-// non-production environments, which is unsafe defense-in-depth: if a
-// deploy ever ran without ENVIRONMENT=production by mistake, score
-// signatures could be forged by anyone reading the public source. Local
-// devs and tests must set JWT_SECRET (or SCORING_HMAC_SECRET) explicitly
-// — see .env.example.
-function hmacKey(env: Env): string {
-  const k = env.SCORING_HMAC_SECRET || env.JWT_SECRET || '';
-  if (!k || k.length < 16) {
+// HMAC keying with domain separation.
+//
+//   • SCORING_HMAC_SECRET set → use it VERBATIM. It is a dedicated key
+//     (production hard-requires it at ≥32 bytes — see auth.ts), so there is
+//     no key-reuse concern and every stored hash keeps verifying.
+//   • otherwise (dev/preview only) → DERIVE an independent subkey from
+//     JWT_SECRET via HKDF-SHA256 rather than reusing JWT_SECRET verbatim.
+//     Reusing the auth-signing key verbatim to also sign scores is textbook
+//     key reuse across two protocols: one leaked secret would forge BOTH
+//     JWTs and scores. HKDF with a fixed salt+info yields a cryptographically
+//     separate key with NO new secret to provision.
+//
+// In ALL environments we FAIL FAST if no usable key (≥16 chars) is present.
+// A previous version returned a hardcoded fallback string in non-production
+// environments, which is unsafe: if a deploy ever ran without
+// ENVIRONMENT=production by mistake, score signatures could be forged by
+// anyone reading the public source. Local devs and tests must set JWT_SECRET
+// (or SCORING_HMAC_SECRET) explicitly — see .env.example.
+//
+// NOTE: the HKDF fallback changes derived hashes vs. the old verbatim path,
+// but ONLY in dev/preview (prod always has the explicit secret), so prod
+// hashes are unaffected. INTEGRITY_VERSION is intentionally NOT bumped — the
+// prod canonical message + key are unchanged.
+const HKDF_SALT = 'axal:score-integrity';
+const HKDF_INFO = 'scoring-hmac:v1';
+
+async function deriveScoringKey(env: Env): Promise<CryptoKey> {
+  const enc = new TextEncoder();
+  const explicit = env.SCORING_HMAC_SECRET || '';
+  if (explicit) {
+    if (explicit.length < 16) {
+      throw new Error('SCORING_HMAC_SECRET is shorter than 16 chars. Refusing to sign with an insecure key.');
+    }
+    return crypto.subtle.importKey('raw', enc.encode(explicit), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  }
+  const jwt = env.JWT_SECRET || '';
+  if (!jwt || jwt.length < 16) {
     throw new Error(
       'SCORING_HMAC_SECRET (or JWT_SECRET) is missing or shorter than 16 chars. ' +
-      'Set it via `wrangler secret put SCORING_HMAC_SECRET` in production, ' +
-      'or in your local .env for dev. Refusing to sign with an insecure key.',
+      'Set SCORING_HMAC_SECRET via `wrangler secret put` in production, ' +
+      'or JWT_SECRET in your local .env for dev. Refusing to sign with an insecure key.',
     );
   }
-  return k;
+  // Domain-separate the auth key into an independent score-signing subkey.
+  const ikm = await crypto.subtle.importKey('raw', enc.encode(jwt), 'HKDF', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: enc.encode(HKDF_SALT), info: enc.encode(HKDF_INFO) },
+    ikm,
+    256,
+  );
+  return crypto.subtle.importKey('raw', new Uint8Array(bits), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
 }
 
-async function hmacSha256(key: string, message: string): Promise<string> {
-  const enc = new TextEncoder();
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(key),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
+async function hmacSha256(key: CryptoKey, message: string): Promise<string> {
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message));
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
@@ -131,16 +155,18 @@ export async function signScore(
   timestamp: string,
   version: string = INTEGRITY_VERSION,
 ): Promise<string> {
-  return hmacSha256(hmacKey(env), canonicalMessage(projectId, score, version, timestamp));
+  const key = await deriveScoringKey(env);
+  return hmacSha256(key, canonicalMessage(projectId, score, version, timestamp));
 }
 
 // Generic HMAC over an already-canonicalized message, reusing the exact same
-// keying (SCORING_HMAC_SECRET || JWT_SECRET, ≥16 chars or it throws) and
-// SHA-256 algorithm as signScore. Used by the assessment engine
-// (services/assessmentScoring.ts) so result signing shares one source of truth
-// for the secret + algorithm rather than re-implementing crypto.subtle.
+// domain-separated keying (deriveScoringKey) and SHA-256 algorithm as
+// signScore. Used by the assessment engine (services/assessmentScoring.ts) so
+// result signing shares one source of truth for the key derivation + algorithm
+// rather than re-implementing crypto.subtle.
 export async function signHmac(env: Env, message: string): Promise<string> {
-  return hmacSha256(hmacKey(env), message);
+  const key = await deriveScoringKey(env);
+  return hmacSha256(key, message);
 }
 
 // Minimal shape a score snapshot row exposes for verification + visibility.

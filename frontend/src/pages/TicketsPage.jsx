@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { safeReadJSON } from '../lib/storage';
 import { api } from '../lib/api';
-import { Ticket, Plus, ChevronDown, X, RefreshCw, MessageSquare, Clock, ArrowLeft } from 'lucide-react';
+import {
+  Ticket, Plus, ChevronDown, RefreshCw, MessageSquare, Clock, ArrowLeft,
+} from 'lucide-react';
 import VirtualList from '../components/VirtualList';
 
 // T24 — Title + 1-line description + py-3.
@@ -232,8 +234,9 @@ export default function TicketsPage() {
         </div>
       </div>
 
+      <div className="space-y-6">
       {showForm && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800">
           <h2 className="font-semibold text-gray-900 text-sm mb-4 dark:text-gray-100">Submit a Support Ticket</h2>
           <div className="grid md:grid-cols-2 gap-4">
             <div>
@@ -348,6 +351,7 @@ export default function TicketsPage() {
             )}
           </VirtualList>
         )}
+      </div>
       </div>
     </div>
   );

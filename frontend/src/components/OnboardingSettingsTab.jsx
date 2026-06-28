@@ -40,7 +40,7 @@ export default function OnboardingSettingsTab() {
   };
 
   const reset = async () => {
-    if (!window.confirm('Reset your onboarding checklist? This clears manual and auto-detected completions; auto-detect will re-fire on next dashboard load.')) return;
+    if (!window.confirm('Reset your onboarding checklist? This clears manual and auto-detected completions; auto-detect will re-fire on next Studio load.')) return;
     setBusy(true);
     try {
       await api.resetOnboardingChecklist();
@@ -53,9 +53,9 @@ export default function OnboardingSettingsTab() {
     setBusy(true);
     try {
       await api.patchOnboardingMeta({ rerun_tour: true });
-      setMsg('Tour will re-run on your next dashboard load.');
+      setMsg('Tour will re-run on your next Studio load.');
       // Take the user there so the tour fires immediately.
-      setTimeout(() => navigate('/dashboard'), 600);
+      setTimeout(() => navigate('/studio'), 600);
     } finally { setBusy(false); }
   };
 

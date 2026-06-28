@@ -116,6 +116,12 @@ zone_name  = "axal.vc"
 pattern    = "axal.vc/dashboard/*"
 zone_name  = "axal.vc"
 [[routes]]
+pattern    = "axal.vc/studio"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/studio/*"
+zone_name  = "axal.vc"
+[[routes]]
 pattern    = "axal.vc/admin"
 zone_name  = "axal.vc"
 [[routes]]
@@ -205,6 +211,17 @@ pattern    = "axal.vc/invite"
 zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/invite/*"
+zone_name  = "axal.vc"
+# Task #20 — Brand & Landing pages. The Worker (Hono) already serves
+# /landing/:slug (published), /landing/preview/:token (draft), and
+# /landing/template-preview/:style (picker preview), but without these apex
+# routes every /landing/* request fell through to Jekyll/GitHub Pages and
+# 404'd. Exact + wildcard, mirrored in [[env.production.routes]] below.
+[[routes]]
+pattern    = "axal.vc/landing"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/landing/*"
 zone_name  = "axal.vc"
 
 # ---------- Static Assets (SPA) ----------
@@ -572,7 +589,8 @@ custom_domain  = true
 # Jekyll (404). Patterns are conservative — only paths we own:
 #   /api/*                     — Worker API (cross-origin from axal.vc OK)
 #   /app, /app/*               — generic app shell catch-all
-#   /dashboard, /dashboard/*   — founder/investor dashboards
+#   /dashboard, /dashboard/*   — legacy dashboard path (301s to /studio)
+#   /studio, /studio/*         — Studio home (renamed from /dashboard)
 #   /admin, /admin/*           — admin console (incl. /admin/due-diligence)
 #   /register, /register/*     — sign-up (referral landing: /register?ref=)
 #   /login, /login/*           — sign-in
@@ -593,6 +611,12 @@ pattern    = "axal.vc/dashboard"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/dashboard/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/studio"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/studio/*"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/admin"
@@ -721,6 +745,15 @@ pattern    = "axal.vc/invite"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/invite/*"
+zone_name  = "axal.vc"
+# Task #20 — Brand & Landing pages. Mirror of the top-level [[routes]] block.
+# /landing/:slug + /landing/preview/:token + /landing/template-preview/:style
+# are Worker-served; without these apex routes they 404 on Jekyll.
+[[env.production.routes]]
+pattern    = "axal.vc/landing"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/landing/*"
 zone_name  = "axal.vc"
 
 [env.production.vars]

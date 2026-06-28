@@ -1994,9 +1994,24 @@ def ensure_brand_landing_columns() -> None:
             ("landing_pages", "audience_investor_headline", "TEXT"),
             ("landing_pages", "audience_investor_body", "TEXT"),
             ("landing_pages", "audience_investor_cta", "TEXT"),
+            ("landing_pages", "audience_advisor_headline", "TEXT"),
+            ("landing_pages", "audience_advisor_body", "TEXT"),
+            ("landing_pages", "audience_advisor_cta", "TEXT"),
+            ("landing_pages", "audience_mentor_headline", "TEXT"),
+            ("landing_pages", "audience_mentor_body", "TEXT"),
+            ("landing_pages", "audience_mentor_cta", "TEXT"),
+            ("landing_pages", "audience_cofounder_headline", "TEXT"),
+            ("landing_pages", "audience_cofounder_body", "TEXT"),
+            ("landing_pages", "audience_cofounder_cta", "TEXT"),
             ("landing_pages", "template", "TEXT"),
             ("landing_pages", "hero_media_url", "TEXT"),
             ("landing_pages", "product_screenshot_url", "TEXT"),
+            # Audience-first flow — primary page audience (full 6-value
+            # taxonomy), goal, and catalog template id. Distinct from the
+            # narrow waitlist audience below.
+            ("landing_pages", "audience", "TEXT"),
+            ("landing_pages", "goal", "TEXT"),
+            ("landing_pages", "template_kit", "TEXT"),
             ("waitlist_signups", "audience", "TEXT"),
         ]
         for table, col, ddl in cols:

@@ -367,6 +367,244 @@ export async function findCatalogProductByPriceId(
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Stripe mode detection.
+// ---------------------------------------------------------------------------
+
+export type StripeMode = 'test' | 'live' | 'unconfigured';
+
+/** Infer Test vs Live from the STRIPE_SECRET_KEY prefix. Never returns the key itself. */
+export function stripeMode(env: Env): StripeMode {
+  const key = env.STRIPE_SECRET_KEY;
+  if (!key) return 'unconfigured';
+  if (key.startsWith('sk_live_') || key.startsWith('rk_live_')) return 'live';
+  return 'test';
+}
+
+// ---------------------------------------------------------------------------
+// Publishable key store (KV-backed runtime config).
+// ---------------------------------------------------------------------------
+
+const PK_KV_KEY = 'config:stripe:pk';
+
+/**
+ * Read the Stripe publishable key at runtime. Priority:
+ *   1. KV (admin-set via PUT /api/admin/stripe/config)
+ *   2. STRIPE_PUBLISHABLE_KEY env var (if deployed with it)
+ *   3. null (unconfigured)
+ */
+export async function getPublishableKey(env: Env): Promise<string | null> {
+  try {
+    const kv = await env.RATE_LIMITS.get(PK_KV_KEY);
+    if (kv) return kv;
+  } catch {
+    /* fall through on KV miss / error */
+  }
+  const envKey = (env as unknown as Record<string, string | undefined>).STRIPE_PUBLISHABLE_KEY;
+  return envKey || null;
+}
+
+/** Persist the publishable key in KV so the runtime config endpoint serves it immediately. */
+export async function setPublishableKey(env: Env, key: string): Promise<void> {
+  await env.RATE_LIMITS.put(PK_KV_KEY, key);
+}
+
+// ---------------------------------------------------------------------------
+// Metadata taxonomy validation.
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate the required metadata keys for a product kind.
+ * Returns an array of human-readable error strings (empty = valid).
+ *
+ * Taxonomy (from the product catalog spec):
+ *   subscription  → plan=mi_pro OR tier=growth|studio OR investor_tier=professional|institutional
+ *   incorporation → kind=incorporation
+ *   session       → kind=session
+ *   alacarte      → kind=alacarte + feature_key (non-empty) + unlock_days (positive integer)
+ */
+export function validateProductMetadata(
+  kind: ProductKind,
+  metadata: Record<string, string>,
+): string[] {
+  const errs: string[] = [];
+  if (kind === 'subscription') {
+    const hasPlan = metadata.plan === 'mi_pro';
+    const hasTier = metadata.tier === 'growth' || metadata.tier === 'studio';
+    const hasInv =
+      metadata.investor_tier === 'professional' || metadata.investor_tier === 'institutional';
+    if (!hasPlan && !hasTier && !hasInv) {
+      errs.push(
+        'subscription requires metadata.plan=mi_pro, metadata.tier=growth|studio, ' +
+          'or metadata.investor_tier=professional|institutional',
+      );
+    }
+  } else if (kind === 'incorporation') {
+    if (metadata.kind !== 'incorporation')
+      errs.push('incorporation products require metadata.kind=incorporation');
+  } else if (kind === 'session') {
+    if (metadata.kind !== 'session')
+      errs.push('session products require metadata.kind=session');
+  } else if (kind === 'alacarte') {
+    if (metadata.kind !== 'alacarte')
+      errs.push('alacarte products require metadata.kind=alacarte');
+    if (!metadata.feature_key?.trim())
+      errs.push('alacarte products require metadata.feature_key (non-empty)');
+    const days = Number(metadata.unlock_days);
+    if (!Number.isInteger(days) || days <= 0)
+      errs.push('alacarte products require metadata.unlock_days (positive integer string)');
+  }
+  return errs;
+}
+
+// ---------------------------------------------------------------------------
+// Catalog write helpers — each mutation re-syncs the D1 mirror.
+// ---------------------------------------------------------------------------
+
+export interface CreateProductBody {
+  name: string;
+  kind: ProductKind;
+  metadata: Record<string, string>;
+  description?: string;
+}
+
+export interface UpdateProductBody {
+  name?: string;
+  metadata?: Record<string, string>;
+  description?: string;
+}
+
+export interface CreatePriceBody {
+  currency: string;
+  unit_amount: number; // smallest currency unit (e.g. cents)
+  type: 'recurring' | 'one_time';
+  interval?: 'month' | 'year' | 'week' | 'day'; // required when type=recurring
+  interval_count?: number;
+  nickname?: string;
+}
+
+/** Flatten a metadata object into Stripe's nested form-encoding (`metadata[key]=value`). */
+function metadataParams(meta: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(meta)) out[`metadata[${k}]`] = v;
+  return out;
+}
+
+interface StripeProductRawResp {
+  id: string;
+  name: string;
+  active: boolean;
+  metadata: Record<string, string>;
+}
+
+/** Create a Stripe Product, then re-sync the D1 mirror. */
+export async function createProduct(env: Env, body: CreateProductBody): Promise<CatalogProduct> {
+  const form: Record<string, string> = {
+    name: body.name.trim(),
+    ...metadataParams(body.metadata),
+  };
+  if (body.description) form.description = body.description;
+
+  const prod = await stripeCall<StripeProductRawResp>(env, '/products', form);
+  await syncCatalog(env);
+
+  // Return the freshly synced mirror row (carries derived prices = [] initially).
+  const all = await getCatalog(env);
+  return (
+    all.find((p) => p.id === prod.id) ?? {
+      id: prod.id,
+      name: prod.name,
+      kind: body.kind,
+      active: prod.active,
+      metadata: prod.metadata ?? body.metadata,
+      prices: [],
+      synced_at: new Date().toISOString(),
+    }
+  );
+}
+
+/** Update a Stripe Product's name / metadata / description, then re-sync. */
+export async function updateProduct(env: Env, id: string, body: UpdateProductBody): Promise<void> {
+  const form: Record<string, string> = {};
+  if (body.name) form.name = body.name.trim();
+  if (body.description) form.description = body.description;
+  if (body.metadata) Object.assign(form, metadataParams(body.metadata));
+  if (Object.keys(form).length === 0) return; // nothing to update
+  await stripeCall(env, `/products/${encodeURIComponent(id)}`, form);
+  await syncCatalog(env);
+}
+
+/** Set a Stripe Product to `active=false` (Stripe doesn't support hard deletion). */
+export async function archiveProduct(env: Env, id: string): Promise<void> {
+  await stripeCall(env, `/products/${encodeURIComponent(id)}`, { active: 'false' });
+  await syncCatalog(env);
+}
+
+/** Create a Stripe Price on an existing Product, then re-sync. */
+export async function createPrice(
+  env: Env,
+  productId: string,
+  body: CreatePriceBody,
+): Promise<CatalogPrice> {
+  const form: Record<string, string> = {
+    product: productId,
+    currency: body.currency.toLowerCase(),
+    unit_amount: String(body.unit_amount),
+  };
+  if (body.nickname) form.nickname = body.nickname;
+  if (body.type === 'recurring') {
+    form['recurring[interval]'] = body.interval ?? 'month';
+    if (body.interval_count && body.interval_count > 1)
+      form['recurring[interval_count]'] = String(body.interval_count);
+  }
+
+  interface StripePriceResp {
+    id: string;
+    currency: string;
+    unit_amount: number | null;
+    type: string;
+    recurring: { interval: string; interval_count: number } | null;
+    nickname: string | null;
+    active: boolean;
+  }
+  const price = await stripeCall<StripePriceResp>(env, '/prices', form);
+  await syncCatalog(env);
+  return {
+    id: price.id,
+    currency: price.currency,
+    unit_amount: price.unit_amount,
+    interval: price.recurring?.interval ?? null,
+    interval_count: price.recurring?.interval_count ?? null,
+    nickname: price.nickname,
+    type: price.type,
+    active: price.active,
+  };
+}
+
+/**
+ * Update a Stripe Price's mutable fields (nickname, metadata).
+ * Amount, currency, and interval are immutable on Stripe Prices — only nickname
+ * and metadata can be changed post-creation.  Re-syncs D1 mirror after the call.
+ */
+export async function updatePrice(
+  env: Env,
+  priceId: string,
+  body: { nickname?: string; metadata?: Record<string, string> },
+): Promise<void> {
+  const form: Record<string, string> = {};
+  if (body.nickname !== undefined) form.nickname = body.nickname;
+  if (body.metadata) Object.assign(form, metadataParams(body.metadata));
+  if (Object.keys(form).length === 0) return; // nothing to update
+  await stripeCall(env, `/prices/${encodeURIComponent(priceId)}`, form);
+  await syncCatalog(env);
+}
+
+/** Set a Stripe Price to `active=false` (Stripe Prices cannot be hard-deleted). */
+export async function archivePrice(env: Env, priceId: string): Promise<void> {
+  await stripeCall(env, `/prices/${encodeURIComponent(priceId)}`, { active: 'false' });
+  await syncCatalog(env);
+}
+
 /**
  * Plan-keyed price lookup. Resolves the active product whose Stripe metadata
  * carries `metaKey === metaValue`, then returns its price for the requested

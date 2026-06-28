@@ -140,6 +140,11 @@ export interface Env {
   // falls back to a dev /dev-upgrade flow and Atlas calls are stubbed.
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
+  // Task #16 — Stripe publishable key as a Worker env var (optional — the
+  // admin can also set it via PUT /api/admin/stripe/config which stores it
+  // in KV; the KV value takes precedence over this env var). The runtime
+  // config endpoint GET /api/payments/config reads KV-first, then this.
+  STRIPE_PUBLISHABLE_KEY?: string;
   // Task #12 — master switch for Stripe Tax (automatic_tax). Default OFF.
   // `automatic_tax[enabled]=true` is only valid on Checkout Sessions, Invoices
   // and Subscriptions (NOT raw PaymentIntents) and only succeeds once Stripe

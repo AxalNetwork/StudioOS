@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
 import { DollarSign, TrendingUp, Users, Plus, ChevronDown } from 'lucide-react';
 
 function ModernSelect({ value, onChange, children, ...props }) {
@@ -16,6 +17,11 @@ function ModernSelect({ value, onChange, children, ...props }) {
 }
 
 export default function CapitalPage() {
+  // Task #9 — creating capital calls is a fund/GP (admin) action. Investors
+  // keep read + pay-own-call access, so hide the create control for non-admins
+  // (the server also enforces admin-only on POST /api/capital/calls).
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
   const [portfolio, setPortfolio] = useState(null);
   const [investors, setInvestors] = useState([]);
   const [calls, setCalls] = useState([]);
@@ -61,12 +67,14 @@ export default function CapitalPage() {
         <PageExplainer pageKey="capital" />
           <p className="text-sm text-gray-600">Portfolio performance, LP management, and capital calls</p>
         </div>
-        <button onClick={() => setShowCallForm(!showCallForm)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-medium text-white">
-          <Plus size={14} /> Capital Call
-        </button>
+        {isAdmin && (
+          <button onClick={() => setShowCallForm(!showCallForm)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-medium text-white">
+            <Plus size={14} /> Capital Call
+          </button>
+        )}
       </div>
 
-      {showCallForm && (
+      {isAdmin && showCallForm && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
           <div className="grid md:grid-cols-3 gap-4">
             <div>

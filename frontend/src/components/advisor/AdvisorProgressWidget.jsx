@@ -3,7 +3,7 @@
  *
  * Three buckets — Proposed, Pending, Completed — driven by the
  * deterministic state machine's queue (`GET /api/advisor/queue`)
- * and the field_sources audit (`GET /api/advisor/sources`).
+ * and the captured-answer list (`GET /api/advisor/answered`).
  *
  * Buckets:
  *   - Proposed: queue items the user has not started, sorted by
@@ -12,7 +12,11 @@
  *   - Pending: the currently-asked question (current `next_question`)
  *     plus any `pendingEvidence`-flagged items the chat host passes in.
  *     Sorted by completion % desc, then priority.
- *   - Completed: most recent 10 entries from /sources, newest first.
+ *   - Completed: every captured reply from /answered (saved + noop),
+ *     newest first. Task #13 moved this off /sources (field_sources,
+ *     structured saves only) so free-form / reflection answers that
+ *     never map to a typed column still show up — keeping the bucket
+ *     count in lockstep with the header's "N answered" figure.
  *
  * Spin-Out variant: when `labState.active`, a week badge and a
  * per-week milestone strip render above the buckets, with progress
@@ -358,15 +362,15 @@ export default function AdvisorProgressWidget({
 }) {
   const navigate = useNavigate();
   const [queue, setQueue] = useState({ next_question: null, queue: [], paywall_ctas: [], complete: false });
-  const [sources, setSources] = useState([]);
+  const [answered, setAnswered] = useState([]);
   const [loading, setLoading] = useState(true);
   const rootRef = useRef(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [q, s] = await Promise.allSettled([
+      const [q, a] = await Promise.allSettled([
         api.advisor.queue(focusSection || undefined),
-        api.advisor.sources(),
+        api.advisor.answered(),
       ]);
       if (q.status === 'fulfilled' && q.value) {
         setQueue({
@@ -376,8 +380,8 @@ export default function AdvisorProgressWidget({
           complete: !!q.value.complete,
         });
       }
-      if (s.status === 'fulfilled' && s.value && Array.isArray(s.value.sources)) {
-        setSources(s.value.sources);
+      if (a.status === 'fulfilled' && a.value && Array.isArray(a.value.answered)) {
+        setAnswered(a.value.answered);
       }
     } catch { /* non-fatal — widget degrades to empty buckets */ }
     finally { setLoading(false); }
@@ -397,9 +401,9 @@ export default function AdvisorProgressWidget({
   // ---------- Bucket assembly ------------------------------------------
   const completedSet = useMemo(() => {
     const s = new Set();
-    for (const r of sources) if (r.question_id) s.add(r.question_id);
+    for (const r of answered) if (r.question_id) s.add(r.question_id);
     return s;
-  }, [sources]);
+  }, [answered]);
 
   const proposedItems = useMemo(() => {
     // Drop the current question (rendered in Pending) and anything
@@ -434,17 +438,19 @@ export default function AdvisorProgressWidget({
   }, [currentQuestion, queue.next_question, pendingEvidence, completedSet]);
 
   const completedItems = useMemo(() => {
-    // Newest first, last 10. Field source rows are already sorted desc.
-    return sources.slice(0, 10).map((r) => ({
+    // Every captured reply, newest first (server already sorts desc).
+    // No slice cap: the bucket count must equal the header's "N answered"
+    // figure, and both derive from the same saved+noop predicate.
+    return answered.map((r) => ({
       id: r.question_id,
       question_id: r.question_id,
       prompt: r.label || r.question_id,
       section: r.section || null,
       page_target: r.page_target || null,
       importance: 'normal',
-      completed_at: r.filled_at || null,
+      completed_at: r.completed_at || null,
     }));
-  }, [sources]);
+  }, [answered]);
 
   const lockedCtas = queue.paywall_ctas || [];
 

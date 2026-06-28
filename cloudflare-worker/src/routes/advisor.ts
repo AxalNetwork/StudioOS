@@ -52,6 +52,7 @@ import {
   bankFor,
   questionById,
   DYNAMIC_ID_RE,
+  FIT_ID_RE,
   filterByContext,
   groupByPage,
   groupBySection,
@@ -60,6 +61,9 @@ import {
   type Persona,
   type Question,
 } from '../services/advisor/questionBank';
+// Task #19 — Best-Fit. Recompute the user's persona fit scores after a fit
+// answer lands (the raw score is persisted to field_sources below).
+import { recomputeUserFit } from '../services/axalFit';
 import { routeAnswer, recordFieldSource, type WriteResult } from '../services/advisor/writeRouter';
 import { hashEmail } from '../util/hashEmail';
 // Task #4 (AW) — 7-layer advisor guardrails.
@@ -853,6 +857,12 @@ advisor.post('/answer', async (c) => {
     ? await routeAnswer(c.env, user, q.id, valueStr, evidenceStr)
     : { status: 'skipped' };
 
+  // Task #19 — Best-Fit. axalFit.loadAnsweredScores() reconstructs rubric +
+  // red-flag scores from field_sources.evidence_text, so for fit.* questions we
+  // persist the RAW 0..5 score there (not the free-text citation). Non-fit
+  // questions keep the verbatim evidence-gate citation.
+  const fieldEvidence = FIT_ID_RE.test(q.id) ? valueStr : evidenceStr;
+
   // Surface evidence-gate / schema-invalid as 4xx so the frontend
   // can run optimistic-rollback + inline retry instead of treating
   // it as a successful turn. We still record the user message above
@@ -921,7 +931,7 @@ advisor.post('/answer', async (c) => {
         result.saved_to?.table || null,
         result.saved_to?.column || null,
         result.saved_to?.id != null ? String(result.saved_to.id) : null,
-        evidenceStr,
+        fieldEvidence,
       ));
       const actorHash = await hashEmail(user.email || '');
       stmts.push(c.env.DB.prepare(
@@ -949,8 +959,20 @@ advisor.post('/answer', async (c) => {
     if (result.status === 'saved') {
       await recordFieldSource(
         c.env, user.id, q.id, q.page_target || null,
-        result.saved_to || null, 'advisor', evidenceStr,
+        result.saved_to || null, 'advisor', fieldEvidence,
       );
+    }
+  }
+
+  // Task #19 — Best-Fit. Recompute the user's persona fit scores after a fit
+  // answer lands. The raw score is now in field_sources (above), so
+  // recomputeUserFit → loadAnsweredScores picks it up. Best-effort: a recompute
+  // failure must not break the user's chat turn.
+  if (result.status === 'saved' && FIT_ID_RE.test(q.id)) {
+    try {
+      await recomputeUserFit(c.env, user.id);
+    } catch (e) {
+      console.warn('[advisor] recomputeUserFit failed', (e as Error).message);
     }
   }
 
@@ -1283,6 +1305,67 @@ advisor.get('/sources', async (c) => {
   } catch (e) {
     console.error('[advisor] /sources:', (e as Error).message);
     return c.json({ page, sources: [] });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /answered  —  Task #13 captured-answer list for the right-rail
+// "Completed" bucket. Returns every reply the user actually committed in
+// their LATEST conversation where `saved_status IN ('saved','noop')` — the
+// exact same scope + predicate that drives `answered_count` (refreshCounts)
+// and the /progress captured set, so the Completed list can never disagree
+// with the "N / total answered" figure shown in the header.
+//
+// This differs from /sources (which reads field_sources, populated only on
+// structured `saved` writes): /answered also includes `noop` captures —
+// reflections, partner answers made before the partner profile is bound,
+// and dynamic reflection ids — which never produce a field_sources row and
+// were therefore invisible in the old Completed bucket. Rows are decorated
+// with the question-bank label / section / page_target so the widget needs
+// no second round-trip.
+// ---------------------------------------------------------------------------
+advisor.get('/answered', async (c) => {
+  const user = await requireAuth(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
+  await ensureSchema(c.env);
+  try {
+    const conv = await getLatestConversation(c.env, user);
+    if (!conv) return c.json({ conversation_uid: null, answered: [] });
+    const rows = await c.env.DB.prepare(
+      `SELECT question_id, saved_to_table, saved_to_column, saved_to_id,
+              saved_status, created_at
+         FROM advisor_answers
+        WHERE conversation_id = ? AND saved_status IN ('saved', 'noop')
+        ORDER BY created_at DESC, id DESC
+        -- advisor_answers has UNIQUE(conversation_id, question_id), so a single
+        -- conversation can hold at most one row per bank question (~210 total);
+        -- the 500 cap is a safety bound that can never truncate the list, so the
+        -- "count == list" invariant with answered_count/refreshCounts holds.
+        LIMIT 500`,
+    ).bind(conv.id).all<{
+      question_id: string;
+      saved_to_table: string | null; saved_to_column: string | null;
+      saved_to_id: string | null; saved_status: string; created_at: string;
+    }>();
+    const answered = (rows.results || []).map((r) => {
+      const q = questionById(r.question_id);
+      return {
+        question_id: r.question_id,
+        label: q?.prompt || r.question_id,
+        section: q?.section || null,
+        page_target: q?.page_target || null,
+        saved_status: r.saved_status,
+        saved_to_table: r.saved_to_table,
+        saved_to_column: r.saved_to_column,
+        saved_to_id: r.saved_to_id,
+        completed_at: r.created_at,
+      };
+    });
+    return c.json({ conversation_uid: conv.uid, answered });
+  } catch (e) {
+    console.error('[advisor] /answered:', (e as Error).message);
+    return c.json({ conversation_uid: null, answered: [] });
   }
 });
 

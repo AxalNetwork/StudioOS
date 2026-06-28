@@ -153,9 +153,11 @@ async function readJson(c: any): Promise<{ ok: boolean; body: any; res: any }> {
 import { hashEmail } from '../util/hashEmail';
 
 async function checkRateLimit(env: Env, key: string, max: number, windowSec: number): Promise<boolean> {
-  // Fail-open on any KV error (incl. daily-write-limit exceeded on the free
-  // plan). Auth/registration must keep working; a small over-allowance during
-  // a KV outage is acceptable for a venture-studio scale workload.
+  // Fail-CLOSED on any KV error (audit M1). These limiters guard sensitive
+  // auth / registration / magic-link / step-up endpoints, so a KV outage must
+  // DENY rather than silently disable throttling — fail-open would re-open
+  // credential-stuffing / OTP brute-force during the very window it's needed.
+  // Log only the bucket prefix (the key tail carries the email → PII, L5).
   let attempts: number[] = [];
   try {
     const data = await env.RATE_LIMITS.get(key);
@@ -166,8 +168,8 @@ async function checkRateLimit(env: Env, key: string, max: number, windowSec: num
     attempts.push(now);
     await env.RATE_LIMITS.put(key, JSON.stringify(attempts), { expirationTtl: windowSec });
   } catch (e) {
-    console.error('checkRateLimit KV error (failing open)', key, e);
-    return true;
+    console.error('checkRateLimit KV error (failing closed) bucket=%s', key.split(':')[0], e);
+    return false;
   }
   return true;
 }

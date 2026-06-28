@@ -15,6 +15,12 @@ import { upsertPlanFromStripeSubscription } from '../services/subscriptionPlans'
 import { priceForPlanMetadata, getCatalog } from '../services/catalog';
 import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
 import { devPaymentFallbackAllowed } from '../util/paymentMode';
+import {
+  StripeApiError,
+  classifyStripeError,
+  resolveCoreOutcome,
+  type StripeErrorKind,
+} from '../util/stripeError';
 
 // Epic 6 — Market Intel Pro billing surface.
 //
@@ -78,7 +84,10 @@ export async function stripeCall<T>(
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`stripe_error:${res.status}:${text.slice(0, 200)}`);
+    // StripeApiError carries the HTTP status + parsed Stripe error code so
+    // callers can branch on the failure kind. Its `.message` keeps the legacy
+    // `stripe_error:STATUS:body` shape, so existing callers are unaffected.
+    throw new StripeApiError(res.status, text);
   }
   return (await res.json()) as T;
 }
@@ -715,89 +724,158 @@ async function resolveScopePrice(
   return null;
 }
 
+// Fetch one billing section, capturing any Stripe failure as a classified kind
+// instead of throwing — so one failing call never takes the whole overview down.
+type SectionResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; kind: StripeErrorKind };
+
+async function section<T>(p: Promise<T>): Promise<SectionResult<T>> {
+  try {
+    return { ok: true, data: await p };
+  } catch (e) {
+    return { ok: false, kind: classifyStripeError(e) };
+  }
+}
+
+// After a test→live (or otherwise mismatched) Stripe cutover, a user can carry
+// a stored customer id that no longer resolves under the active secret key.
+// Null the stale column for this scope so the next purchase re-creates a fresh
+// customer in the live account (via ensurePaymentsCustomer) and real data
+// flows from then on. The column name comes from a fixed allowlist, never user
+// input. Best-effort: a failed self-heal must never turn a graceful empty
+// response into a 502.
+async function clearStaleScopeCustomer(
+  env: Env, userId: number | string, scope: BillingScope,
+): Promise<void> {
+  const col = scope === 'investor' ? 'investor_stripe_customer_id' : 'stripe_customer_id';
+  try {
+    await env.DB.prepare(`UPDATE users SET ${col} = NULL WHERE id = ?`).bind(userId).run();
+  } catch {
+    /* swallow — self-heal is best-effort */
+  }
+}
+
 billing.get('/overview', async (c) => {
   const user = (await requireAuth(c)) as TierUser & InvestorUser;
   const scope = billingScope(c.req.query('scope'));
   const customer = resolveScopeCustomer(user, scope);
   const base = { scope, has_customer: !!customer, stripe_configured: !!c.env.STRIPE_SECRET_KEY };
+  const emptyOverview = (over: Partial<typeof base> = {}) => ({
+    ...base, ...over,
+    subscriptions: [], payment_methods: [], upcoming_invoice: null, invoices: [], charges: [],
+  });
   if (!customer || !c.env.STRIPE_SECRET_KEY) {
-    return c.json({ ...base, subscriptions: [], payment_methods: [], upcoming_invoice: null, invoices: [], charges: [] });
+    return c.json(emptyOverview());
   }
+
+  // One-off (à la carte) purchases always live on the general payments
+  // customer — `users.stripe_customer_id`, the id `ensurePaymentsCustomer`
+  // creates — even when this dashboard is showing a different subscription
+  // scope (e.g. the investor scope reads `investor_stripe_customer_id`). Pull
+  // the charge history from the general customer so every role's "Payment
+  // history" reflects their actual buys, not just charges on the scope customer.
+  const chargesCustomer = user.stripe_customer_id ?? null;
+
+  // Fetch every section independently. A single failure is captured, not
+  // thrown, so it can never 502 the whole Billing tab.
+  const [subsR, pmR, custR, invR, chgR] = await Promise.all([
+    section(stripeCall<StripeList<StripeSubscription>>(c.env, '/subscriptions', {
+      customer, status: 'all', limit: '10', 'expand[0]': 'data.items.data.price',
+    }, { method: 'GET' })),
+    section(stripeCall<StripeList<StripePaymentMethod>>(c.env, '/payment_methods', {
+      customer, type: 'card', limit: '10',
+    }, { method: 'GET' })),
+    section(stripeCall<StripeCustomer>(c.env, `/customers/${customer}`, {}, { method: 'GET' })),
+    section(stripeCall<StripeList<StripeInvoice>>(c.env, '/invoices', {
+      customer, limit: '12',
+    }, { method: 'GET' })),
+    // Payment history is additive enrichment, not core billing data, so it is
+    // never allowed to influence the overall outcome below.
+    chargesCustomer
+      ? section(stripeCall<StripeList<StripeCharge>>(c.env, '/charges', {
+          customer: chargesCustomer, limit: '20',
+        }, { method: 'GET' }))
+      : Promise.resolve({ ok: true, data: { data: [] } } as SectionResult<StripeList<StripeCharge>>),
+  ]);
+
+  const coreKinds = [subsR, pmR, custR, invR].map((r) => (r.ok ? null : r.kind));
+  const outcome = resolveCoreOutcome(coreKinds);
+
+  // The stored customer no longer exists under the active key (classic
+  // test→live mismatch) — treat as "no customer", self-heal the stale id, and
+  // return the same clean empty payload the no-customer path returns. The UI
+  // then shows the friendly "no billing activity yet" empty state.
+  if (outcome === 'customer_missing') {
+    await clearStaleScopeCustomer(c.env, user.id, scope);
+    return c.json(emptyOverview({ has_customer: false }));
+  }
+  // Hard misconfiguration (bad/expired/wrong-mode key) or a total outage of
+  // every core section — surface an explicit, structured error the UI maps to a
+  // friendly "billing temporarily unavailable" message (never a silent empty
+  // page that would misrepresent the user's real billing state).
+  if (outcome === 'unavailable') {
+    return c.json({ ...base, error: 'billing_unavailable' }, 502);
+  }
+
+  // Partial success — degrade any individually-failed section to empty and
+  // render the rest. Record which core sections were degraded so the UI can
+  // tell the user the view may be incomplete (explicit over a silent empty).
+  const subsData = subsR.ok ? (subsR.data.data ?? []) : [];
+  const pmData = pmR.ok ? (pmR.data.data ?? []) : [];
+  const customerObj = custR.ok ? custR.data : null;
+  const invoicesData = invR.ok ? (invR.data.data ?? []) : [];
+  const chargesData = chgR.ok ? (chgR.data.data ?? []) : [];
+  const degraded: string[] = [];
+  if (!subsR.ok) degraded.push('subscriptions');
+  if (!pmR.ok) degraded.push('payment_methods');
+  if (!custR.ok) degraded.push('customer');
+  if (!invR.ok) degraded.push('invoices');
+
+  // Upcoming invoice 404s when nothing is scheduled — treat as "none".
+  let upcoming: StripeInvoice | null = null;
   try {
-    // One-off (à la carte) purchases always live on the general payments
-    // customer — `users.stripe_customer_id`, the id `ensurePaymentsCustomer`
-    // creates — even when this dashboard is showing a different subscription
-    // scope (e.g. the investor scope reads `investor_stripe_customer_id`). Pull
-    // the charge history from the general customer so every role's "Payment
-    // history" reflects their actual buys, not just charges on the scope customer.
-    const chargesCustomer = user.stripe_customer_id ?? null;
-    const [subsRes, pmRes, customerObj, invoicesRes, chargesRes] = await Promise.all([
-      stripeCall<StripeList<StripeSubscription>>(c.env, '/subscriptions', {
-        customer, status: 'all', limit: '10', 'expand[0]': 'data.items.data.price',
-      }, { method: 'GET' }),
-      stripeCall<StripeList<StripePaymentMethod>>(c.env, '/payment_methods', {
-        customer, type: 'card', limit: '10',
-      }, { method: 'GET' }),
-      stripeCall<StripeCustomer>(c.env, `/customers/${customer}`, {}, { method: 'GET' }),
-      stripeCall<StripeList<StripeInvoice>>(c.env, '/invoices', {
-        customer, limit: '12',
-      }, { method: 'GET' }),
-      // Payment history is an additive enrichment, not core billing data. If the
-      // charge list specifically fails (e.g. a restricted key without charge:read),
-      // degrade to an empty history rather than 502-ing the whole overview and
-      // taking subscriptions/invoices/cards down with it.
-      chargesCustomer
-        ? stripeCall<StripeList<StripeCharge>>(c.env, '/charges', {
-            customer: chargesCustomer, limit: '20',
-          }, { method: 'GET' }).catch(() => ({ data: [] } as StripeList<StripeCharge>))
-        : Promise.resolve({ data: [] } as StripeList<StripeCharge>),
-    ]);
-    // Upcoming invoice 404s when nothing is scheduled — treat as "none".
-    let upcoming: StripeInvoice | null = null;
-    try {
-      upcoming = await stripeCall<StripeInvoice>(c.env, '/invoices/upcoming', { customer }, { method: 'GET' });
-    } catch {
-      upcoming = null;
-    }
-    const defaultPm = customerObj?.invoice_settings?.default_payment_method ?? null;
-    // Surface only active-ish subscriptions in the dashboard (hide fully
-    // cancelled/incomplete-expired rows) so the UI shows what the user pays for.
-    const liveSubs = (subsRes.data ?? []).filter(
-      (s) => !['canceled', 'incomplete_expired'].includes(s.status),
-    );
-    return c.json({
-      ...base,
-      subscriptions: liveSubs.map(normSub),
-      payment_methods: (pmRes.data ?? []).map((pm) => ({
-        id: pm.id,
-        brand: pm.card?.brand ?? 'card',
-        last4: pm.card?.last4 ?? '••••',
-        exp_month: pm.card?.exp_month ?? null,
-        exp_year: pm.card?.exp_year ?? null,
-        is_default: pm.id === defaultPm,
-      })),
-      upcoming_invoice: upcoming
-        ? {
-            currency: upcoming.currency,
-            total: upcoming.total ?? upcoming.amount_due ?? 0,
-            amount_due: upcoming.amount_due ?? 0,
-            next_attempt: upcoming.next_payment_attempt
-              ? new Date(upcoming.next_payment_attempt * 1000).toISOString()
-              : (upcoming.period_end ? new Date(upcoming.period_end * 1000).toISOString() : null),
-          }
-        : null,
-      invoices: (invoicesRes.data ?? []).map(normInvoice),
-      // One-off (non-invoice) purchases for the "Payment history" section.
-      // Charges created by a subscription/invoice carry `invoice` and already
-      // surface under "Recent invoices", so we drop them to avoid duplication
-      // and only show paid à la carte buys (incorporation, unlocks, sessions).
-      charges: (chargesRes.data ?? [])
-        .filter((ch) => ch.paid && !ch.invoice)
-        .map(normCharge),
-    });
-  } catch (e) {
-    return c.json({ error: 'overview_failed', detail: (e as Error).message }, 502);
+    upcoming = await stripeCall<StripeInvoice>(c.env, '/invoices/upcoming', { customer }, { method: 'GET' });
+  } catch {
+    upcoming = null;
   }
+  const defaultPm = customerObj?.invoice_settings?.default_payment_method ?? null;
+  // Surface only active-ish subscriptions in the dashboard (hide fully
+  // cancelled/incomplete-expired rows) so the UI shows what the user pays for.
+  const liveSubs = subsData.filter(
+    (s) => !['canceled', 'incomplete_expired'].includes(s.status),
+  );
+  return c.json({
+    ...base,
+    ...(degraded.length ? { degraded } : {}),
+    subscriptions: liveSubs.map(normSub),
+    payment_methods: pmData.map((pm) => ({
+      id: pm.id,
+      brand: pm.card?.brand ?? 'card',
+      last4: pm.card?.last4 ?? '••••',
+      exp_month: pm.card?.exp_month ?? null,
+      exp_year: pm.card?.exp_year ?? null,
+      is_default: pm.id === defaultPm,
+    })),
+    upcoming_invoice: upcoming
+      ? {
+          currency: upcoming.currency,
+          total: upcoming.total ?? upcoming.amount_due ?? 0,
+          amount_due: upcoming.amount_due ?? 0,
+          next_attempt: upcoming.next_payment_attempt
+            ? new Date(upcoming.next_payment_attempt * 1000).toISOString()
+            : (upcoming.period_end ? new Date(upcoming.period_end * 1000).toISOString() : null),
+        }
+      : null,
+    invoices: invoicesData.map(normInvoice),
+    // One-off (non-invoice) purchases for the "Payment history" section.
+    // Charges created by a subscription/invoice carry `invoice` and already
+    // surface under "Recent invoices", so we drop them to avoid duplication
+    // and only show paid à la carte buys (incorporation, unlocks, sessions).
+    charges: chargesData
+      .filter((ch) => ch.paid && !ch.invoice)
+      .map(normCharge),
+  });
 });
 
 async function setCancelAtPeriodEnd(c: Context<{ Bindings: Env }>, value: boolean) {

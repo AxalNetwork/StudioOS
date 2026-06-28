@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { reportError } from '../lib/log';
 import { api } from '../lib/api';
-import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, Clock, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2, ShieldAlert, KeyRound, Trash2, AlertTriangle, Heart, Eye, EyeOff, BadgeCheck, Ticket, Plus, CreditCard } from 'lucide-react';
+import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, Clock, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2, ShieldAlert, KeyRound, Trash2, AlertTriangle, Heart, Eye, EyeOff, BadgeCheck, Ticket, Plus, CreditCard, Package, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PERSONAS as PERSONA_TAXONOMY } from '../lib/personas';
 import { useToast } from '../components/useToast';
@@ -43,6 +43,68 @@ const ROLE_BADGES = {
   investor: 'bg-amber-100 text-amber-700',
   mentor: 'bg-sky-100 text-sky-700',
 };
+
+function RoleDropdown({ user, onRoleChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const OPTIONS = [
+    { value: 'founder', label: 'Founder' },
+    { value: 'partner', label: 'Partner' },
+    { value: 'investor', label: 'Investor' },
+  ];
+  const currentLabel = OPTIONS.find(o => o.value === user.role)?.label ?? user.role;
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        type="button"
+        aria-label={`Change role for ${user.name || user.email}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title="Click to change this user's role"
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border border-transparent hover:border-current hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:ring-offset-1 transition-all cursor-pointer ${ROLE_BADGES[user.role] || 'bg-gray-100 text-gray-700'}`}
+      >
+        {currentLabel}
+        <ChevronDown size={11} className={`shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Select role"
+          className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-50 min-w-[120px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg py-1 overflow-hidden"
+        >
+          {OPTIONS.map(opt => (
+            <li
+              key={opt.value}
+              role="option"
+              aria-selected={user.role === opt.value}
+              onClick={(e) => { e.stopPropagation(); setOpen(false); onRoleChange(user, opt.value); }}
+              className={`flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer select-none transition-colors ${
+                user.role === opt.value
+                  ? `${ROLE_BADGES[opt.value] || 'bg-gray-100 text-gray-700'} font-semibold`
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium'
+              }`}
+            >
+              <span className="w-[11px] shrink-0">
+                {user.role === opt.value && <Check size={11} />}
+              </span>
+              {opt.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 const STATUS_BADGES = {
   pending: 'bg-amber-100 text-amber-700',
@@ -99,8 +161,113 @@ const TRACK_BADGES = {
   'Strategic Scale (Existing)': 'bg-indigo-100 text-indigo-700',
 };
 
+// Task #15 — single ordered source for the Admin Console section nav. The
+// dropdown trigger and menu both render from this list instead of a hardcoded
+// row of 12 tab buttons. Pending counts are computed per-render in the page
+// and passed in via `badges` keyed by section value.
+const ADMIN_SECTIONS = [
+  { value: 'users', label: 'Users', Icon: Users },
+  { value: 'profiles', label: 'Partner Profiles', Icon: Briefcase },
+  { value: 'kyc', label: 'KYC Queue', Icon: ShieldCheck },
+  { value: 'legal', label: 'Legal', Icon: FileText },
+  { value: 'personas', label: 'Personas', Icon: Sparkles },
+  { value: 'directory', label: 'Directory', Icon: Sparkles },
+  { value: 'integration-keys', label: 'Integration Keys', Icon: KeyRound },
+  { value: 'promos', label: 'Promo Codes', Icon: Ticket },
+  { value: 'payments', label: 'Payments', Icon: Package },
+  { value: 'billing', label: 'Billing', Icon: CreditCard },
+  { value: 'wellbeing', label: 'Wellbeing', Icon: Heart },
+  { value: 'network-profiles', label: 'Mentors & Partners', Icon: Users },
+];
+const ADMIN_SECTION_VALUES = new Set(ADMIN_SECTIONS.map(s => s.value));
+
+// Dropdown replacing the old horizontal tab row. Closes on selection, outside
+// click, and Escape; full light/dark support. Preserves the `admin-page` and
+// `admin-tab-*` data-testid hooks so existing selectors keep working.
+function AdminSectionNav({ value, onChange, badges }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const active = ADMIN_SECTIONS.find(s => s.value === value) || ADMIN_SECTIONS[0];
+  const ActiveIcon = active.Icon;
+  const activeBadge = badges?.[active.value] || 0;
+
+  return (
+    <div ref={ref} className="relative inline-block mb-6" data-testid="admin-page">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Select admin section"
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-2 min-w-[240px] px-4 py-2.5 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 hover:border-violet-400 dark:hover:border-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-500/40 transition-colors"
+      >
+        <ActiveIcon size={16} className="text-violet-600 dark:text-violet-300 shrink-0" />
+        <span className="flex-1 text-left truncate">{active.label}</span>
+        {activeBadge > 0 && (
+          <span className="bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0">{activeBadge} pending</span>
+        )}
+        <ChevronDown size={14} className={`shrink-0 text-gray-400 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Admin sections"
+          className="absolute left-0 top-full mt-1.5 z-50 w-[260px] max-h-[70vh] overflow-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg py-1"
+        >
+          {ADMIN_SECTIONS.map(s => {
+            const Icon = s.Icon;
+            const isActive = s.value === value;
+            const badge = badges?.[s.value] || 0;
+            return (
+              <li key={s.value} role="option" aria-selected={isActive}>
+                <button
+                  type="button"
+                  data-testid={`admin-tab-${s.value}`}
+                  onClick={() => { onChange(s.value); setOpen(false); }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-colors ${
+                    isActive
+                      ? 'bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-200 font-semibold'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium'
+                  }`}
+                >
+                  <Icon size={14} className={`shrink-0 ${isActive ? 'text-violet-600 dark:text-violet-300' : 'text-gray-400 dark:text-gray-500'}`} />
+                  <span className="flex-1 truncate">{s.label}</span>
+                  {badge > 0 && (
+                    <span className="bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0">{badge} pending</span>
+                  )}
+                  {isActive && <Check size={14} className="shrink-0 text-violet-600 dark:text-violet-300" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage({ onImpersonate }) {
-  const [tab, setTab] = useState('users');
+  // Initial section honors a `?tab=` deep-link (e.g. /admin?tab=network-profiles)
+  // when it names a known section; otherwise defaults to Users.
+  const [tab, setTab] = useState(() => {
+    if (typeof window === 'undefined') return 'users';
+    const t = new URLSearchParams(window.location.search).get('tab');
+    return t && ADMIN_SECTION_VALUES.has(t) ? t : 'users';
+  });
   const [users, setUsers] = useState([]);
   // Task #40 — batched trust-score map keyed by user_id, populated by a
   // single POST /api/trust/score/batch after each users-list refresh.
@@ -248,58 +415,14 @@ export default function AdminPage({ onImpersonate }) {
       </div>
       <p className="text-gray-600 mb-6">Manage users, roles, and partner profiles</p>
 
-      <div className="flex gap-2 mb-6 border-b border-gray-200 dark:border-gray-800" data-testid="admin-page">
-        <button data-testid="admin-tab-users" onClick={() => setTab('users')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'users' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <Users size={14} className="inline mr-1.5" /> Users
-        </button>
-        <button data-testid="admin-tab-profiles" onClick={() => setTab('profiles')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'profiles' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <Briefcase size={14} className="inline mr-1.5" /> Partner Profiles
-          {pendingProfiles > 0 && (
-            <span className="ml-2 bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">{pendingProfiles} pending</span>
-          )}
-        </button>
-        <button data-testid="admin-tab-kyc" onClick={() => setTab('kyc')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'kyc' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <ShieldCheck size={14} className="inline mr-1.5" /> KYC Queue
-          {kycFilter === 'pending' && kycQueue.length > 0 && (
-            <span className="ml-2 bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">{kycQueue.length} pending</span>
-          )}
-        </button>
-        <button data-testid="admin-tab-legal" onClick={() => setTab('legal')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'legal' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <FileText size={14} className="inline mr-1.5" /> Legal
-        </button>
-        <button data-testid="admin-tab-personas" onClick={() => setTab('personas')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'personas' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <Sparkles size={14} className="inline mr-1.5" /> Personas
-        </button>
-        <button data-testid="admin-tab-directory" onClick={() => setTab('directory')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'directory' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <Sparkles size={14} className="inline mr-1.5" /> Directory
-        </button>
-        <button data-testid="admin-tab-integration-keys" onClick={() => setTab('integration-keys')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'integration-keys' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <KeyRound size={14} className="inline mr-1.5" /> Integration Keys
-        </button>
-        <button data-testid="admin-tab-promos" onClick={() => setTab('promos')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'promos' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <Ticket size={14} className="inline mr-1.5" /> Promo Codes
-        </button>
-        <button data-testid="admin-tab-billing" onClick={() => setTab('billing')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'billing' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <CreditCard size={14} className="inline mr-1.5" /> Billing
-        </button>
-        <button data-testid="admin-tab-wellbeing" onClick={() => setTab('wellbeing')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'wellbeing' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <Heart size={14} className="inline mr-1.5" /> Wellbeing
-        </button>
-        <button data-testid="admin-tab-network-profiles" onClick={() => setTab('network-profiles')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'network-profiles' ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-          <Users size={14} className="inline mr-1.5" /> Mentors & Partners
-        </button>
-      </div>
+      <AdminSectionNav
+        value={tab}
+        onChange={setTab}
+        badges={{
+          profiles: pendingProfiles,
+          kyc: kycFilter === 'pending' ? kycQueue.length : 0,
+        }}
+      />
 
       {tab === 'network-profiles' && (
         <div data-testid="admin-network-profiles-panel"><AdminNetworkProfiles /></div>
@@ -310,6 +433,7 @@ export default function AdminPage({ onImpersonate }) {
       {tab === 'directory' && <div data-testid="admin-directory-panel"><DirectoryPanel /></div>}
       {tab === 'integration-keys' && <div data-testid="admin-integration-keys-panel"><IntegrationKeysPanel /></div>}
       {tab === 'promos' && <div data-testid="admin-promos-panel"><PromoCodesPanel /></div>}
+      {tab === 'payments' && <div data-testid="admin-payments-panel"><PaymentsPanel /></div>}
       {tab === 'billing' && <div data-testid="admin-billing-panel"><BillingPanel /></div>}
       {tab === 'wellbeing' && <div data-testid="admin-wellbeing-panel"><WellbeingExpertsPanel /></div>}
 
@@ -365,17 +489,8 @@ export default function AdminPage({ onImpersonate }) {
                               Admin
                             </span>
                           ) : (
-                            <div className="relative inline-block group" title="Click to change this user's role">
-                              <select value={u.role} onChange={(e) => handleRoleChange(u, e.target.value)}
-                                aria-label={`Change role for ${u.name || u.email}`}
-                                className={`appearance-none text-xs font-semibold px-3 py-1 pr-7 rounded-full cursor-pointer border border-transparent hover:border-current hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:ring-offset-1 transition-all ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>
-                                {/* Admin promotion intentionally not offered — see span branch above. */}
-                                <option value="founder">Founder</option>
-                                <option value="partner">Partner</option>
-                                <option value="investor">Investor</option>
-                              </select>
-                              <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-70 group-hover:opacity-100" />
-                            </div>
+                            // Admin promotion intentionally not offered — see span branch above.
+                            <RoleDropdown user={u} onRoleChange={handleRoleChange} />
                           )}
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -3124,6 +3239,724 @@ function DirectoryPanel() {
 // Coupons + Promotion Codes (percent / fixed; free-trial-days descoped). Each
 // mutation hits a TOTP + step-up-gated endpoint; the global `request` helper
 // auto-handles the 403 `step_up_required` challenge, so no extra wiring here.
+
+// Task #16 — Metadata field component for the Payments panel create-product
+// form. Defined outside PaymentsPanel to avoid React re-mounting on every
+// parent render. Receives `kind`, `metadata`, `onChange`, and `inputCls`.
+function MetadataFields({ kind, metadata, onChange, inputCls }) {
+  const setMeta = (k, v) => onChange({ ...metadata, [k]: v });
+  if (kind === 'subscription') {
+    const currentSel = metadata.plan
+      ? 'mi_pro'
+      : metadata.tier
+      ? metadata.tier
+      : metadata.investor_tier
+      ? metadata.investor_tier
+      : '';
+    return (
+      <div className="space-y-2">
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Subscription type</label>
+        <select
+          className={inputCls}
+          value={currentSel}
+          onChange={e => {
+            const v = e.target.value;
+            const clean = {};
+            if (v === 'mi_pro') onChange({ ...clean, plan: 'mi_pro' });
+            else if (v === 'growth' || v === 'studio') onChange({ ...clean, tier: v });
+            else if (v === 'professional' || v === 'institutional') onChange({ ...clean, investor_tier: v });
+            else onChange(clean);
+          }}
+        >
+          <option value="">— select —</option>
+          <option value="mi_pro">MI Pro (plan=mi_pro)</option>
+          <option value="growth">Founder Growth (tier=growth)</option>
+          <option value="studio">Founder Studio (tier=studio)</option>
+          <option value="professional">Investor Professional (investor_tier=professional)</option>
+          <option value="institutional">Investor Institutional (investor_tier=institutional)</option>
+        </select>
+        {'commission_pct' in metadata ? (
+          <input
+            className={inputCls}
+            placeholder="commission_pct (e.g. 10)"
+            value={metadata.commission_pct || ''}
+            onChange={e => setMeta('commission_pct', e.target.value)}
+          />
+        ) : (
+          <button type="button" className="text-xs text-violet-600 hover:underline"
+            onClick={() => onChange({ ...metadata, commission_pct: '' })}>+ referral commission %</button>
+        )}
+      </div>
+    );
+  }
+  if (kind === 'incorporation' || kind === 'session') {
+    return (
+      <p className="text-xs text-gray-500 dark:text-gray-400">
+        Metadata: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">kind={kind}</code> (auto-set)
+      </p>
+    );
+  }
+  if (kind === 'alacarte') {
+    return (
+      <div className="space-y-2">
+        <input className={inputCls} placeholder="feature_key (e.g. export_csv)"
+          value={metadata.feature_key || ''} onChange={e => setMeta('feature_key', e.target.value)} />
+        <input className={inputCls} placeholder="unlock_days (e.g. 30)"
+          value={metadata.unlock_days || ''} onChange={e => setMeta('unlock_days', e.target.value)} />
+        {'commission_pct' in metadata ? (
+          <input
+            className={inputCls}
+            placeholder="commission_pct (e.g. 10)"
+            value={metadata.commission_pct || ''}
+            onChange={e => setMeta('commission_pct', e.target.value)}
+          />
+        ) : (
+          <button type="button" className="text-xs text-violet-600 hover:underline"
+            onClick={() => onChange({ ...metadata, commission_pct: '' })}>+ referral commission %</button>
+        )}
+      </div>
+    );
+  }
+  return null;
+}
+
+// Task #16 — Admin Payments panel: Stripe publishable key, product catalog
+// CRUD, and webhook endpoint management. All mutations are rate-limited
+// (admin_catalog_writes bucket) and audit-logged server-side.
+function PaymentsPanel() {
+  const { toast, showToast } = useToast(4000);
+  const inputCls = 'rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500 w-full';
+  const cardCls = 'bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800 mb-6';
+  const headerCls = 'px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2 flex-wrap';
+
+  const [config, setConfig] = useState(null);
+  const [pkInput, setPkInput] = useState('');
+  const [savingPk, setSavingPk] = useState(false);
+
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [expanded, setExpanded] = useState(null);
+
+  const EMPTY_PROD = { name: '', kind: 'subscription', metadata: {} };
+  const [showCreate, setShowCreate] = useState(false);
+  const [prodForm, setProdForm] = useState(EMPTY_PROD);
+  const [creating, setCreating] = useState(false);
+
+  const EMPTY_PRICE = { currency: 'usd', unit_amount: '', type: 'recurring', interval: 'month', nickname: '' };
+  const [addPriceFor, setAddPriceFor] = useState(null);
+  const [priceForm, setPriceForm] = useState(EMPTY_PRICE);
+  const [addingPrice, setAddingPrice] = useState(false);
+
+  const [editingProductId, setEditingProductId] = useState(null);
+  const [editProdForm, setEditProdForm] = useState({ name: '', kind: 'subscription', metadata: {} });
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const [editingPriceId, setEditingPriceId] = useState(null);
+  const [editPriceNickname, setEditPriceNickname] = useState('');
+  const [savingPrice, setSavingPrice] = useState(false);
+
+  const [webhooks, setWebhooks] = useState(null);
+  const [webhookBusy, setWebhookBusy] = useState(false);
+
+  const loadConfig = useCallback(async () => {
+    try { setConfig(await api.adminStripeGetConfig()); } catch { /* unconfigured */ }
+  }, []);
+
+  const loadProducts = useCallback(async () => {
+    setProductsLoading(true);
+    try {
+      const r = await api.adminCatalogList();
+      setProducts(r.products || []);
+    } catch (e) {
+      showToast({ kind: 'err', msg: e.message || 'Failed to load products' });
+    } finally { setProductsLoading(false); }
+  }, [showToast]);
+
+  const loadWebhooks = useCallback(async () => {
+    try { setWebhooks(await api.adminStripeListWebhooks()); } catch { /* stripe not yet configured */ }
+  }, []);
+
+  useEffect(() => {
+    loadConfig();
+    loadProducts();
+    loadWebhooks();
+  }, [loadConfig, loadProducts, loadWebhooks]);
+
+  const syncCatalog = async () => {
+    setSyncing(true);
+    try {
+      const r = await api.adminCatalogSync();
+      showToast({ kind: 'ok', msg: `Synced ${r.synced ?? 0} products from Stripe` });
+      loadProducts();
+    } catch (e) {
+      showToast({ kind: 'err', msg: e.message || 'Sync failed' });
+    } finally { setSyncing(false); }
+  };
+
+  const savePk = async (e) => {
+    e.preventDefault();
+    if (!pkInput.trim() || savingPk) return;
+    setSavingPk(true);
+    try {
+      const r = await api.adminStripeSetConfig(pkInput.trim());
+      showToast({ kind: 'ok', msg: `Key saved (${r.mode} mode)` });
+      setPkInput('');
+      loadConfig();
+    } catch (e) {
+      showToast({ kind: 'err', msg: e.message || 'Failed to save key' });
+    } finally { setSavingPk(false); }
+  };
+
+  const handleKindChange = (kind) => {
+    const autoMeta = {
+      incorporation: { kind: 'incorporation' },
+      session: { kind: 'session' },
+      alacarte: { kind: 'alacarte', feature_key: '', unlock_days: '' },
+      subscription: {},
+    }[kind] || {};
+    setProdForm(f => ({ ...f, kind, metadata: autoMeta }));
+  };
+
+  const createProduct = async (e) => {
+    e.preventDefault();
+    if (creating) return;
+    setCreating(true);
+    try {
+      await api.adminCatalogCreateProduct({ name: prodForm.name.trim(), kind: prodForm.kind, metadata: prodForm.metadata });
+      showToast({ kind: 'ok', msg: 'Product created' });
+      setProdForm(EMPTY_PROD);
+      setShowCreate(false);
+      loadProducts();
+    } catch (e) {
+      const details = e?.data?.details;
+      showToast({ kind: 'err', msg: details ? details.join('; ') : (e.message || 'Create failed') });
+    } finally { setCreating(false); }
+  };
+
+  const archiveProduct = async (id) => {
+    if (!confirm('Archive this product? It will no longer be available for new purchases.')) return;
+    try {
+      await api.adminCatalogArchiveProduct(id);
+      showToast({ kind: 'ok', msg: 'Product archived' });
+      loadProducts();
+    } catch (e) { showToast({ kind: 'err', msg: e.message || 'Archive failed' }); }
+  };
+
+  const startEdit = (p) => {
+    setEditingProductId(p.id);
+    setEditProdForm({ name: p.name, kind: p.kind, metadata: { ...p.metadata } });
+    setAddPriceFor(null);
+  };
+
+  const saveEdit = async (e) => {
+    e.preventDefault();
+    if (savingEdit || !editingProductId) return;
+    setSavingEdit(true);
+    try {
+      await api.adminCatalogUpdateProduct(editingProductId, {
+        name: editProdForm.name.trim(),
+        kind: editProdForm.kind,
+        metadata: editProdForm.metadata,
+      });
+      showToast({ kind: 'ok', msg: 'Product updated' });
+      setEditingProductId(null);
+      loadProducts();
+    } catch (e) {
+      const details = e?.data?.details;
+      showToast({ kind: 'err', msg: details ? details.join('; ') : (e.message || 'Update failed') });
+    } finally { setSavingEdit(false); }
+  };
+
+  const addPrice = async (e) => {
+    e.preventDefault();
+    if (addingPrice || !addPriceFor) return;
+    setAddingPrice(true);
+    try {
+      await api.adminCatalogAddPrice(addPriceFor, {
+        currency: priceForm.currency,
+        unit_amount: Math.round(Number(priceForm.unit_amount) * 100),
+        type: priceForm.type,
+        interval: priceForm.type === 'recurring' ? priceForm.interval : undefined,
+        nickname: priceForm.nickname || undefined,
+      });
+      showToast({ kind: 'ok', msg: 'Price added' });
+      setPriceForm(EMPTY_PRICE);
+      setAddPriceFor(null);
+      loadProducts();
+    } catch (e) { showToast({ kind: 'err', msg: e.message || 'Failed to add price' }); }
+    finally { setAddingPrice(false); }
+  };
+
+  const archivePrice = async (priceId) => {
+    if (!confirm('Archive this price?')) return;
+    try {
+      await api.adminCatalogArchivePrice(priceId);
+      showToast({ kind: 'ok', msg: 'Price archived' });
+      loadProducts();
+    } catch (e) { showToast({ kind: 'err', msg: e.message || 'Archive failed' }); }
+  };
+
+  const saveEditPrice = async (e) => {
+    e.preventDefault();
+    if (savingPrice || !editingPriceId) return;
+    setSavingPrice(true);
+    try {
+      await api.adminCatalogUpdatePrice(editingPriceId, { nickname: editPriceNickname });
+      showToast({ kind: 'ok', msg: 'Price nickname updated' });
+      setEditingPriceId(null);
+      loadProducts();
+    } catch (e) {
+      showToast({ kind: 'err', msg: e.message || 'Update failed' });
+    } finally { setSavingPrice(false); }
+  };
+
+  const registerWebhook = async () => {
+    if (webhookBusy) return;
+    setWebhookBusy(true);
+    try {
+      const r = await api.adminStripeRegisterWebhook();
+      showToast({ kind: 'ok', msg: 'Webhook registered — signing secret stored automatically.' });
+      loadWebhooks();
+    } catch (e) { showToast({ kind: 'err', msg: e.message || 'Registration failed' }); }
+    finally { setWebhookBusy(false); }
+  };
+
+  const updateWebhookEvents = async (endpointId) => {
+    if (webhookBusy) return;
+    setWebhookBusy(true);
+    try {
+      await api.adminStripeUpdateWebhookEvents(endpointId);
+      showToast({ kind: 'ok', msg: 'Webhook events updated' });
+      loadWebhooks();
+    } catch (e) { showToast({ kind: 'err', msg: e.message || 'Update failed' }); }
+    finally { setWebhookBusy(false); }
+  };
+
+  const mode = config?.mode || 'unconfigured';
+  const modeBadge = mode === 'live'
+    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-300'
+    : mode === 'test'
+    ? 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300'
+    : 'bg-gray-50 border-gray-200 text-gray-600 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400';
+
+  const fmtAmount = (cents, currency) =>
+    cents != null ? `${(cents / 100).toFixed(2)} ${(currency || 'usd').toUpperCase()}` : 'free';
+
+  const kindBadge = (k) => ({
+    subscription: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
+    incorporation: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+    session: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
+    alacarte: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+  }[k] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400');
+
+  return (
+    <div>
+      {toast}
+
+      {/* Mode banner */}
+      <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border mb-6 text-sm font-medium ${modeBadge}`}>
+        <Zap size={14} />
+        Stripe mode: <strong className="ml-0.5">{mode === 'live' ? 'Live' : mode === 'test' ? 'Test' : 'Unconfigured'}</strong>
+        {mode === 'unconfigured' && <span className="font-normal ml-1">— configure STRIPE_SECRET_KEY to enable payments</span>}
+        {mode === 'live' && <span className="ml-auto font-normal text-xs">✓ Production payments enabled</span>}
+      </div>
+
+      {/* Publishable key */}
+      <div className={cardCls}>
+        <div className={headerCls}>
+          <KeyRound size={14} className="text-gray-500" />
+          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Publishable Key</span>
+          {config?.configured && (
+            <span className="ml-2 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded dark:bg-emerald-900/30 dark:text-emerald-300">configured</span>
+          )}
+        </div>
+        <div className="px-4 py-3 space-y-3">
+          {config?.publishable_key && (
+            <p className="text-xs font-mono text-gray-500 dark:text-gray-400 truncate">{config.publishable_key}</p>
+          )}
+          <form onSubmit={savePk} className="flex gap-2">
+            <input
+              className={`${inputCls} flex-1`}
+              placeholder="pk_test_… or pk_live_…"
+              value={pkInput}
+              onChange={e => setPkInput(e.target.value)}
+              autoComplete="off"
+            />
+            <button
+              type="submit"
+              disabled={savingPk || !pkInput.trim()}
+              className="px-3 py-1.5 text-sm font-medium bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+            >
+              {savingPk ? 'Saving…' : 'Save Key'}
+            </button>
+          </form>
+          <p className="text-xs text-gray-400 dark:text-gray-500">Stored in KV — takes effect immediately without a frontend rebuild.</p>
+        </div>
+      </div>
+
+      {/* Product catalog */}
+      <div className={cardCls}>
+        <div className={headerCls}>
+          <Package size={14} className="text-gray-500" />
+          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Product Catalog</span>
+          <span className="text-xs text-gray-400 ml-0.5">({products.length})</span>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={syncCatalog}
+              disabled={syncing}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
+            >
+              <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
+              {syncing ? 'Syncing…' : 'Sync from Stripe'}
+            </button>
+            <button
+              onClick={() => setShowCreate(s => !s)}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-violet-600 text-white rounded-md hover:bg-violet-700 transition-colors"
+            >
+              <Plus size={12} />
+              New Product
+            </button>
+          </div>
+        </div>
+
+        {showCreate && (
+          <form onSubmit={createProduct} className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 bg-violet-50 dark:bg-violet-900/10 space-y-3">
+            <p className="text-xs font-semibold text-violet-700 dark:text-violet-300">New product</p>
+            <input
+              className={inputCls}
+              placeholder="Product name (e.g. Axal MI Pro)"
+              value={prodForm.name}
+              onChange={e => setProdForm(f => ({ ...f, name: e.target.value }))}
+              required
+            />
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Kind</label>
+              <select className={inputCls} value={prodForm.kind} onChange={e => handleKindChange(e.target.value)}>
+                <option value="subscription">Subscription</option>
+                <option value="incorporation">Incorporation</option>
+                <option value="session">Session</option>
+                <option value="alacarte">À la carte</option>
+              </select>
+            </div>
+            <MetadataFields
+              kind={prodForm.kind}
+              metadata={prodForm.metadata}
+              onChange={meta => setProdForm(f => ({ ...f, metadata: meta }))}
+              inputCls={inputCls}
+            />
+            <div className="flex gap-2">
+              <button type="submit" disabled={creating}
+                className="px-3 py-1.5 text-sm font-medium bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50">
+                {creating ? 'Creating…' : 'Create'}
+              </button>
+              <button type="button" onClick={() => { setShowCreate(false); setProdForm(EMPTY_PROD); }}
+                className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:underline">Cancel</button>
+            </div>
+          </form>
+        )}
+
+        {productsLoading ? (
+          <div className="px-4 py-6 text-center text-gray-400 text-sm">Loading catalog…</div>
+        ) : products.length === 0 ? (
+          <div className="px-4 py-6 text-center text-gray-400 text-sm">
+            No products yet — sync from Stripe or create one above.
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            {products.map((p) => (
+              <div key={p.id}>
+                <div
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer select-none"
+                  onClick={() => setExpanded(expanded === p.id ? null : p.id)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-sm font-medium truncate ${p.active ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 line-through'}`}>
+                        {p.name}
+                      </span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${kindBadge(p.kind)}`}>{p.kind}</span>
+                      {!p.active && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">archived</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {p.prices.filter(pr => pr.active).length} active price{p.prices.filter(pr => pr.active).length !== 1 ? 's' : ''}
+                      <span className="mx-1.5 opacity-50">·</span>
+                      <span className="font-mono text-[10px]">{p.id}</span>
+                    </div>
+                  </div>
+                  <ChevronDown size={14} className={`text-gray-400 flex-shrink-0 transition-transform ${expanded === p.id ? 'rotate-180' : ''}`} />
+                </div>
+
+                {expanded === p.id && (
+                  <div className="px-4 pb-4 bg-gray-50 dark:bg-gray-800/30 space-y-3">
+                    {Object.keys(p.metadata || {}).length > 0 && (
+                      <div className="pt-2">
+                        <p className="text-[10px] uppercase font-semibold text-gray-500 mb-1">Metadata</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Object.entries(p.metadata).map(([k, v]) => (
+                            <span key={k} className="text-[10px] font-mono bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-1.5 py-0.5 rounded">
+                              {k}={v}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <p className="text-[10px] uppercase font-semibold text-gray-500 mb-1.5">Prices</p>
+                      {p.prices.length === 0 ? (
+                        <p className="text-xs text-gray-400 mb-1">No prices yet.</p>
+                      ) : (
+                        <div className="space-y-1.5 mb-2">
+                          {p.prices.map((pr) => (
+                            <div key={pr.id}>
+                              {editingPriceId === pr.id ? (
+                                <form onSubmit={saveEditPrice} className="flex items-center gap-2">
+                                  <input
+                                    className={`${inputCls} flex-1 text-xs`}
+                                    placeholder="Nickname (e.g. Monthly billing)"
+                                    value={editPriceNickname}
+                                    onChange={e => setEditPriceNickname(e.target.value)}
+                                    autoFocus
+                                  />
+                                  <button type="submit" disabled={savingPrice}
+                                    className="text-[10px] font-medium text-violet-600 hover:underline disabled:opacity-50 flex-shrink-0">
+                                    {savingPrice ? 'Saving…' : 'Save'}
+                                  </button>
+                                  <button type="button" onClick={() => setEditingPriceId(null)}
+                                    className="text-[10px] text-gray-500 hover:underline flex-shrink-0">Cancel</button>
+                                </form>
+                              ) : (
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className={`flex-1 font-medium ${pr.active ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 line-through'}`}>
+                                    {fmtAmount(pr.unit_amount, pr.currency)}
+                                    {pr.interval && (
+                                      <span className="font-normal text-gray-500">
+                                        {' / '}{pr.interval}{pr.interval_count > 1 ? ` × ${pr.interval_count}` : ''}
+                                      </span>
+                                    )}
+                                    {pr.nickname && <span className="ml-1 text-gray-400">({pr.nickname})</span>}
+                                  </span>
+                                  <span className="font-mono text-[10px] text-gray-400 hidden sm:inline">{pr.id.slice(0, 18)}…</span>
+                                  {pr.active && (
+                                    <>
+                                      <button
+                                        onClick={() => { setEditingPriceId(pr.id); setEditPriceNickname(pr.nickname || ''); }}
+                                        className="text-[10px] text-violet-600 hover:underline flex-shrink-0">
+                                        edit
+                                      </button>
+                                      <button onClick={() => archivePrice(pr.id)}
+                                        className="text-[10px] text-red-500 hover:underline flex-shrink-0">
+                                        archive
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {addPriceFor === p.id ? (
+                        <form onSubmit={addPrice} className="space-y-2 p-3 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+                          <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Add price</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <input className={inputCls} placeholder="Amount (e.g. 29.00)" type="number" step="0.01" min="0"
+                              value={priceForm.unit_amount}
+                              onChange={e => setPriceForm(f => ({ ...f, unit_amount: e.target.value }))} required />
+                            <input className={inputCls} placeholder="Currency (e.g. usd)"
+                              value={priceForm.currency}
+                              onChange={e => setPriceForm(f => ({ ...f, currency: e.target.value }))} />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <select className={inputCls} value={priceForm.type}
+                              onChange={e => setPriceForm(f => ({ ...f, type: e.target.value }))}>
+                              <option value="recurring">Recurring</option>
+                              <option value="one_time">One-time</option>
+                            </select>
+                            {priceForm.type === 'recurring' && (
+                              <select className={inputCls} value={priceForm.interval}
+                                onChange={e => setPriceForm(f => ({ ...f, interval: e.target.value }))}>
+                                <option value="month">Monthly</option>
+                                <option value="year">Yearly</option>
+                                <option value="week">Weekly</option>
+                                <option value="day">Daily</option>
+                              </select>
+                            )}
+                          </div>
+                          <input className={inputCls} placeholder="Nickname (optional)"
+                            value={priceForm.nickname}
+                            onChange={e => setPriceForm(f => ({ ...f, nickname: e.target.value }))} />
+                          <div className="flex gap-2">
+                            <button type="submit" disabled={addingPrice}
+                              className="px-3 py-1.5 text-xs font-medium bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50">
+                              {addingPrice ? 'Adding…' : 'Add Price'}
+                            </button>
+                            <button type="button"
+                              onClick={() => { setAddPriceFor(null); setPriceForm(EMPTY_PRICE); }}
+                              className="px-3 py-1.5 text-xs text-gray-500 hover:underline">Cancel</button>
+                          </div>
+                        </form>
+                      ) : (
+                        <button
+                          onClick={() => { setAddPriceFor(p.id); setPriceForm(EMPTY_PRICE); }}
+                          className="text-xs text-violet-600 hover:underline flex items-center gap-1"
+                        >
+                          <Plus size={11} /> Add price
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Edit product */}
+                    {p.active && editingProductId === p.id ? (
+                      <form onSubmit={saveEdit} className="space-y-2 p-3 bg-white dark:bg-gray-900 rounded-lg border border-violet-200 dark:border-violet-800 mt-2">
+                        <p className="text-xs font-semibold text-violet-700 dark:text-violet-300">Edit product</p>
+                        <input
+                          className={inputCls}
+                          placeholder="Product name"
+                          value={editProdForm.name}
+                          onChange={e => setEditProdForm(f => ({ ...f, name: e.target.value }))}
+                          required
+                        />
+                        <MetadataFields
+                          kind={editProdForm.kind}
+                          metadata={editProdForm.metadata}
+                          onChange={meta => setEditProdForm(f => ({ ...f, metadata: meta }))}
+                          inputCls={inputCls}
+                        />
+                        <div className="flex gap-2">
+                          <button type="submit" disabled={savingEdit}
+                            className="px-3 py-1.5 text-xs font-medium bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50">
+                            {savingEdit ? 'Saving…' : 'Save Changes'}
+                          </button>
+                          <button type="button" onClick={() => setEditingProductId(null)}
+                            className="px-3 py-1.5 text-xs text-gray-500 hover:underline">Cancel</button>
+                        </div>
+                      </form>
+                    ) : (
+                      p.active && (
+                        <div className="flex items-center gap-4 mt-1">
+                          <button onClick={() => startEdit(p)}
+                            className="text-xs text-violet-600 hover:underline">
+                            Edit product
+                          </button>
+                          <button onClick={() => archiveProduct(p.id)}
+                            className="text-xs text-red-500 hover:underline">
+                            Archive product
+                          </button>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Webhook management */}
+      <div className={cardCls}>
+        <div className={headerCls}>
+          <Zap size={14} className="text-gray-500" />
+          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Billing Webhook</span>
+          <button onClick={loadWebhooks}
+            className="ml-auto text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1">
+            <RefreshCw size={11} /> Refresh
+          </button>
+        </div>
+        <div className="px-4 py-3">
+          {!webhooks ? (
+            <p className="text-sm text-gray-400 dark:text-gray-500">
+              {mode === 'unconfigured'
+                ? 'Configure STRIPE_SECRET_KEY to manage webhooks.'
+                : 'Loading webhook data…'}
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {webhooks.our_url && (
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Target URL: <code className="font-mono bg-gray-100 dark:bg-gray-800 px-1 rounded">{webhooks.our_url}</code>
+                </p>
+              )}
+
+              {webhooks.endpoints?.length === 0 ? (
+                <div>
+                  <p className="text-sm text-amber-600 dark:text-amber-400 mb-2">No webhook endpoints found in Stripe.</p>
+                  <button
+                    onClick={registerWebhook}
+                    disabled={webhookBusy}
+                    className="px-3 py-1.5 text-sm font-medium bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50"
+                  >
+                    {webhookBusy ? 'Registering…' : 'Register Webhook'}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {webhooks.endpoints.map((ep) => (
+                    <div key={ep.id} className={`p-3 rounded-lg border ${
+                      ep.is_ours
+                        ? 'border-violet-200 bg-violet-50 dark:border-violet-800 dark:bg-violet-900/10'
+                        : 'border-gray-200 dark:border-gray-700'
+                    }`}>
+                      <p className="text-xs font-mono text-gray-700 dark:text-gray-300 break-all">{ep.url}</p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">
+                        {ep.is_ours && <span className="text-violet-600 dark:text-violet-400 font-medium mr-1.5">← our endpoint</span>}
+                        status: {ep.status}
+                        <span className="mx-1.5 opacity-40">·</span>
+                        <span className="font-mono">{ep.id}</span>
+                      </p>
+                      {ep.missing_events?.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mb-1">Missing events:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {ep.missing_events.map(ev => (
+                              <span key={ev} className="text-[10px] font-mono bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 px-1.5 py-0.5 rounded">
+                                {ev}
+                              </span>
+                            ))}
+                          </div>
+                          {ep.is_ours && (
+                            <button
+                              onClick={() => updateWebhookEvents(ep.id)}
+                              disabled={webhookBusy}
+                              className="mt-2 px-2.5 py-1 text-xs font-medium bg-amber-600 text-white rounded-md hover:bg-amber-700 disabled:opacity-50"
+                            >
+                              {webhookBusy ? 'Updating…' : 'Fix: Add Missing Events'}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {ep.is_ours && (!ep.missing_events || ep.missing_events.length === 0) && (
+                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1">✓ All required events enabled</p>
+                      )}
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-3 flex-wrap pt-1">
+                    <button
+                      onClick={registerWebhook}
+                      disabled={webhookBusy}
+                      className="px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                    >
+                      {webhookBusy ? 'Working…' : 'Register New Endpoint'}
+                    </button>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                      New registration automatically captures and stores the signing secret.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Task #11 — Billing admin: refunds (per-product policy + referral commission
 // clawback), dispute evidence, and customer LTV. Each action is step-up gated
 // server-side; the api `request` helper transparently handles the challenge.

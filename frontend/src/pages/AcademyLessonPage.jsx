@@ -10,8 +10,8 @@ export default function AcademyLessonPage() {
   const { slug } = useParams();
   return (
     <div className="max-w-3xl mx-auto">
-      <Link to="/dashboard" className="inline-flex items-center gap-1 text-sm text-violet-600 hover:text-violet-700 mb-4">
-        <ArrowLeft size={14} /> Back to dashboard
+      <Link to="/studio" className="inline-flex items-center gap-1 text-sm text-violet-600 hover:text-violet-700 mb-4">
+        <ArrowLeft size={14} /> Back to Studio
       </Link>
       <div className="bg-white border border-gray-200 rounded-xl p-8 dark:bg-gray-900 dark:border-gray-800">
         <div className="flex items-center gap-3 mb-4">

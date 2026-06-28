@@ -102,7 +102,7 @@ function cover(pres, data, notes) {
   });
   s.addText(String(d.signalY[d.signalY.length - 1]), { x: 11.85, y: 2.62, w: 0.95, h: 0.35, margin: 0,
     align: 'right', fontFace: F.head, fontSize: 16, bold: true, color: C.accentLt });
-  s.addText(d.signalCaption, { x: 8.55, y: 5.05, w: 4.25, h: 0.3, margin: 0, fontFace: F.body,
+  s.addText(d.signalCaption, { x: 8.55, y: 5.5, w: 4.25, h: 0.3, margin: 0, fontFace: F.body,
     fontSize: 9, italic: true, color: C.dfaint });
 
   d.meta.forEach((m, i) => {
@@ -329,38 +329,167 @@ function roadmap(pres, data, notes, ICON) {
   s.addNotes(notes.roadmap || '');
 }
 
+/* ---- SLIDE 7 helpers — profile photos + circular avatars ---------------- *
+ * Mirrors the in-app `Avatar` (templates/axal_spinout_demoday_app.tsx): show a
+ * circular profile photo when one is available, else fall back to the initials
+ * monogram. Photos are normalised to embeddable raster data URLs UP FRONT so a
+ * slow / CORS-blocked / non-image URL degrades to initials instead of breaking
+ * the whole export (pptxgenjs would otherwise throw at write() time on a bad
+ * `path`). SVG/unknown sources are rejected — PowerPoint can't embed them. */
+function abToBase64(bytes) {
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return (typeof btoa === 'function') ? btoa(bin) : Buffer.from(bin, 'binary').toString('base64');
+}
+// Sniff the image type from magic bytes (Content-Type is unreliable for many
+// file/auth endpoints). Returns a raster MIME or null for unsupported formats.
+function sniffImageMime(b) {
+  if (b.length >= 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png';
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (b.length >= 4 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return 'image/gif';
+  if (b.length >= 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+      b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp';
+  return null;
+}
+async function resolvePhotoData(photo) {
+  if (!photo || typeof photo !== 'string') return null;
+  const src = photo.trim();
+  if (!src) return null;
+  // Already an embeddable raster data URL — pass through untouched.
+  if (/^data:image\/(?:png|jpe?g|gif|webp);base64,/i.test(src)) return src;
+  // Other data: URLs (e.g. svg+xml;utf8) aren't reliably embeddable → initials.
+  if (/^data:/i.test(src)) return null;
+  // Remote or root-relative → fetch, verify it's really a raster image, inline it.
+  if (!/^https?:\/\//i.test(src) && !src.startsWith('/')) return null;
+  try {
+    const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 5000) : null;
+    let res;
+    try {
+      res = await fetch(src, ctrl ? { signal: ctrl.signal } : undefined);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    if (!res || !res.ok) return null;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const mime = sniffImageMime(bytes);
+    if (!mime) return null;
+    return `data:${mime};base64,${abToBase64(bytes)}`;
+  } catch {
+    return null;
+  }
+}
+// Circular avatar: cover-cropped photo when present, else accent/panel oval +
+// initials. `dataUrl` is the pre-resolved embeddable photo (or null).
+function avatar(pres, s, x, y, d, { dataUrl, initials, fill, fontSize, textColor }) {
+  if (dataUrl) {
+    s.addImage({ data: dataUrl, x, y, w: d, h: d, rounding: true, sizing: { type: 'cover', w: d, h: d } });
+    return;
+  }
+  s.addShape(pres.shapes.OVAL, { x, y, w: d, h: d, fill: { color: fill }, line: { type: 'none' } });
+  s.addText(initials || '', { x, y, w: d, h: d, margin: 0, align: 'center', valign: 'middle',
+    fontFace: F.head, fontSize, bold: true, color: textColor });
+}
+
 /* ---- SLIDE 7 — TEAM / NETWORK ---- */
-function team(pres, data, notes) {
+async function team(pres, data, notes) {
   const d = data.team, s = pres.addSlide();
   s.background = { color: C.white };
   eyebrow(s, d.eyebrow, d.idx);
   title(s, d.title);
 
   const lx = ML, lw = 4.7;
-  panel(pres, s, lx, 2.0, lw, 2.0, { r: 0.1 });
-  s.addShape(pres.shapes.OVAL, { x: lx + 0.3, y: 2.3, w: 1.05, h: 1.05, fill: { color: C.accent }, line: { type: 'none' } });
-  s.addText(d.founder.initials, { x: lx + 0.3, y: 2.3, w: 1.05, h: 1.05, margin: 0, align: 'center',
-    valign: 'middle', fontFace: F.head, fontSize: 24, bold: true, color: C.white });
-  s.addText(d.founder.name, { x: lx + 1.55, y: 2.32, w: lw - 1.8, h: 0.4, margin: 0, fontFace: F.head,
-    fontSize: 19, bold: true, color: C.ink });
-  s.addText(d.founder.role, { x: lx + 1.55, y: 2.72, w: lw - 1.8, h: 0.3, margin: 0, fontFace: F.head,
-    fontSize: 12, bold: true, color: C.accent });
-  s.addText(d.founder.bio, { x: lx + 0.3, y: 3.45, w: lw - 0.6, h: 0.5, margin: 0, valign: 'top',
-    fontFace: F.body, fontSize: 11.5, color: C.body, lineSpacingMultiple: 1.1 });
+  // Mirror the in-app roster: prefer the founder roster, fall back to the single
+  // founder, and drop empty rows. >1 founder switches to compact stacked cards.
+  const f = d.founder || {};
+  const rawFounders = Array.isArray(d.founders) && d.founders.length ? d.founders : [f];
+  const founders = rawFounders.filter((x) => x && (x.name || x.initials || x.photo));
+  const multi = founders.length > 1;
+  const advisors = Array.isArray(d.advisors) ? d.advisors : [];
 
-  s.addText(d.advisorsLabel, { x: lx, y: 4.25, w: lw, h: 0.3, margin: 0, fontFace: F.head,
+  // Pre-resolve every headshot to an embeddable data URL (null → initials).
+  const founderPhotos = await Promise.all(founders.map((fo) => resolvePhotoData(fo && fo.photo)));
+  const advisorPhotos = await Promise.all(advisors.map((a) => resolvePhotoData(a && a[3])));
+
+  const TOP = 2.0, BOTTOM = 6.92;
+  let founderBottom;
+
+  if (!multi) {
+    // Single founder — unchanged geometry; only the avatar gains photo support.
+    const fo = founders[0] || f;
+    panel(pres, s, lx, 2.0, lw, 2.0, { r: 0.1 });
+    avatar(pres, s, lx + 0.3, 2.3, 1.05,
+      { dataUrl: founderPhotos[0], initials: fo.initials, fill: C.accent, fontSize: 24, textColor: C.white });
+    s.addText(fo.name, { x: lx + 1.55, y: 2.32, w: lw - 1.8, h: 0.4, margin: 0, fontFace: F.head,
+      fontSize: 19, bold: true, color: C.ink });
+    s.addText(fo.role, { x: lx + 1.55, y: 2.72, w: lw - 1.8, h: 0.3, margin: 0, fontFace: F.head,
+      fontSize: 12, bold: true, color: C.accent });
+    s.addText(fo.bio, { x: lx + 0.3, y: 3.45, w: lw - 0.6, h: 0.5, margin: 0, valign: 'top',
+      fontFace: F.body, fontSize: 11.5, color: C.body, lineSpacingMultiple: 1.1 });
+    founderBottom = TOP + 2.0;
+  } else {
+    // Co-founders — compact stacked cards (smaller avatar, name + role, no bio).
+    const rowH = founders.length >= 3 ? 0.82 : 0.96;
+    const cardH = rowH - 0.12;
+    const avD = Math.max(0.4, cardH - 0.26);
+    founders.forEach((fo, i) => {
+      const y = TOP + i * rowH;
+      const tx = lx + 0.16 + avD + 0.18;
+      const tw = lw - (0.16 + avD + 0.18) - 0.2;
+      panel(pres, s, lx, y, lw, cardH, { r: 0.1 });
+      avatar(pres, s, lx + 0.16, y + (cardH - avD) / 2, avD,
+        { dataUrl: founderPhotos[i], initials: fo.initials, fill: C.accent, fontSize: 15, textColor: C.white });
+      s.addText(fo.name || '', { x: tx, y: y + 0.16, w: tw, h: 0.34, margin: 0, fontFace: F.head,
+        fontSize: 15, bold: true, color: C.ink });
+      s.addText(fo.role || '', { x: tx, y: y + 0.5, w: tw, h: 0.3, margin: 0, fontFace: F.head,
+        fontSize: 11, bold: true, color: C.accent });
+    });
+    founderBottom = TOP + founders.length * rowH;
+  }
+
+  // ── roster (advisors / mentors / partners) ──────────────────────────────
+  // Single founder keeps today's fixed geometry exactly; with co-founders the
+  // roster adopts the in-app vertical-fit so the last row never crosses BOTTOM.
+  let labelY, rosterTop, rowH, visibleCount, avD, nameSize, roleSize;
+  if (!multi) {
+    labelY = 4.25; rosterTop = 4.62; rowH = 0.62;
+    visibleCount = advisors.length; avD = 0.5; nameSize = 12.5; roleSize = 11;
+  } else {
+    labelY = founderBottom + 0.16;
+    rosterTop = labelY + 0.36;
+    const avail = Math.max(0, BOTTOM - rosterTop);
+    const MAX_ROW = 0.62, MIN_ROW = 0.46;
+    rowH = MAX_ROW;
+    visibleCount = advisors.length;
+    if (advisors.length > 0) {
+      rowH = Math.min(MAX_ROW, avail / advisors.length);
+      if (rowH < MIN_ROW) {
+        const maxRows = Math.max(1, Math.floor(avail / MIN_ROW));
+        visibleCount = Math.min(advisors.length, maxRows);
+        rowH = Math.min(MAX_ROW, avail / visibleCount);
+      }
+    }
+    avD = Math.max(0.34, Math.min(0.5, rowH - 0.12));
+    nameSize = Math.max(10.5, Math.min(12.5, rowH * 20));
+    roleSize = Math.max(9.5, nameSize - 1.5);
+  }
+
+  s.addText(d.advisorsLabel, { x: lx, y: labelY, w: lw, h: 0.3, margin: 0, fontFace: F.head,
     fontSize: 10, bold: true, charSpacing: 2, color: C.muted });
-  let ay = 4.62;
-  d.advisors.forEach(a => {
-    s.addShape(pres.shapes.OVAL, { x: lx, y: ay, w: 0.5, h: 0.5, fill: { color: C.panel2 }, line: { type: 'none' } });
-    s.addText(a[0], { x: lx, y: ay, w: 0.5, h: 0.5, margin: 0, align: 'center', valign: 'middle',
-      fontFace: F.head, fontSize: 11, bold: true, color: C.body });
+  for (let i = 0; i < visibleCount; i++) {
+    const a = advisors[i];
+    const ay = rosterTop + i * rowH;
+    const tx = multi ? lx + avD + 0.15 : lx + 0.65;
+    avatar(pres, s, lx, multi ? ay + (rowH - avD) / 2 : ay, avD,
+      { dataUrl: advisorPhotos[i], initials: a[0], fill: C.panel2, fontSize: 11, textColor: C.body });
     s.addText([
-      { text: a[1] + '   ', options: { bold: true, color: C.ink, fontSize: 12.5 } },
-      { text: a[2], options: { color: C.muted, fontSize: 11 } },
-    ], { x: lx + 0.65, y: ay, w: lw - 0.65, h: 0.5, margin: 0, valign: 'middle', fontFace: F.head });
-    ay += 0.62;
-  });
+      { text: a[1] + '   ', options: { bold: true, color: C.ink, fontSize: nameSize } },
+      { text: a[2], options: { color: C.muted, fontSize: roleSize } },
+    ], { x: tx, y: ay, w: lw - (tx - lx), h: multi ? rowH : 0.5, margin: 0, valign: 'middle', fontFace: F.head });
+  }
 
   const cX = 9.35, cY = 4.15, nw = 2.2, nh = 0.92;
   d.nodes.forEach(nd => {
@@ -552,7 +681,7 @@ export async function buildDeck(data = SAMPLE_DATA, opts = {}) {
   market(pres, data, notes);
   solution(pres, data, notes, ICON);
   roadmap(pres, data, notes, ICON);
-  team(pres, data, notes);
+  await team(pres, data, notes);
   captable(pres, data, notes, ICON);
   ask(pres, data, notes);
   deal(pres, data, notes);

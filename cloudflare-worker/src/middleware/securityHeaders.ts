@@ -51,9 +51,15 @@ export function securityHeadersMiddleware() {
 
     await next();
     const h = c.res.headers;
+    // Task #20 — the in-app template picker embeds the public
+    // /landing/template-preview/:style endpoint in a same-origin <iframe>.
+    // The default anti-framing posture (X-Frame-Options: DENY + CSP
+    // frame-ancestors 'none') would block that, so this one path is relaxed to
+    // SAMEORIGIN / frame-ancestors 'self'. Everything else keeps DENY/'none'.
+    const allowSameOriginFraming = c.req.path.startsWith('/landing/template-preview/');
     h.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
     h.set('X-Content-Type-Options', 'nosniff');
-    h.set('X-Frame-Options', 'DENY');
+    h.set('X-Frame-Options', allowSameOriginFraming ? 'SAMEORIGIN' : 'DENY');
     // Canonical for the authenticated app/API surface (NICE-SEC-01). The
     // public marketing site deliberately uses strict-origin-when-cross-origin.
     h.set('Referrer-Policy', 'no-referrer');
@@ -90,7 +96,7 @@ export function securityHeadersMiddleware() {
         `img-src 'self' data: https:; ` +
         `connect-src 'self' https://axal.vc https://app.axal.vc https://www.axal.vc https://api.stripe.com https://*.cloudflareaccess.com; ` +
         `frame-src https://js.stripe.com https://hooks.stripe.com https://*.stripe.network; ` +
-        `frame-ancestors 'none'; ` +
+        `frame-ancestors ${allowSameOriginFraming ? "'self'" : "'none'"}; ` +
         `base-uri 'self'; ` +
         `form-action 'self'; ` +
         `object-src 'none'`,

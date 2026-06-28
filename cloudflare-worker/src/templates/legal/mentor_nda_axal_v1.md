@@ -1,14 +1,3 @@
-# Mentor Mutual NDA (Axal) — Axal StudioOS
-
-> **v1 draft — subject to legal review.** This template is a working
-> draft and must be reviewed and approved by qualified counsel before
-> execution or public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Counterparty:** Axal VC Management LLC, a Delaware limited liability company ("Axal")
-**Mentor:** {{partner.legal_name}}, acting through {{partner.contact_name}} ({{partner.email}}), engaged in the capacity of {{partner.role}}
-
 ## 1. Purpose
 
 To enable Mentor to provide guidance, advice, and feedback to founders and Axal personnel through the Axal StudioOS platform (office hours, mentor matching, and deep-dive reviews).
@@ -44,7 +33,3 @@ Mentor acknowledges that monetary damages may be inadequate for a breach and tha
 ## 9. Governing Law
 
 This NDA is governed by {{governing_law}}.
-
----
-
-Signed electronically by {{partner.contact_name}}, for and on behalf of {{partner.legal_name}}, and by Axal VC Management LLC on the date(s) appearing below.

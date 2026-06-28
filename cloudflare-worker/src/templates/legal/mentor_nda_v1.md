@@ -1,13 +1,3 @@
-# Mentor Mutual NDA — Axal StudioOS
-
-> **Subject to legal review.** This template is a working draft. Final
-> binding terms must be reviewed and approved by qualified counsel
-> before public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Mentor:** {{mentor_name}} ({{mentor_email}})
-**Counterparty:** Axal VC Management LLC, a Delaware limited liability
 company ("Axal")
 
 ## 1. Purpose
@@ -38,8 +28,3 @@ written instrument.
 ## 5. Term
 
 This NDA expires 24 months after the Effective Date.
-
----
-
-Signed electronically by {{mentor_name}} and Axal VC Management LLC
-on the date(s) appearing below.

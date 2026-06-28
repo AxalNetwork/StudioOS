@@ -10,6 +10,7 @@ from backend.app.models.entities import Project, Founder, ScoreSnapshot, Deal, A
 from backend.app.services.pain_groups import compute_pain_bars
 from backend.app.schemas.scoring import ProjectCreate, ProjectUpdate, FounderSubmitRequest
 from backend.app.services.scoring import run_full_score
+from backend.app.services.use_of_funds import parse_use_of_funds_value, normalize_use_of_funds
 from backend.app.services.score_integrity import assert_no_reserved_fields
 from backend.app.api.routes.auth import get_current_user
 from backend.app.api.deps import require_admin, is_privileged, ensure_founder_access
@@ -212,6 +213,13 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
         },
     }
 
+    # Task #2 — THE ASK: reflect the founder's structured Use-of-Funds
+    # allocation when present (JSON or legacy free-text); otherwise keep the
+    # deterministic sample split. parse_use_of_funds_value drops 0% sections.
+    parsed_funds = parse_use_of_funds_value(project.use_of_funds)
+    if parsed_funds:
+        data["ask"]["funds"] = [[f["label"], f["pct"]] for f in parsed_funds]
+
     notes = {
         "cover": "COVER. Focal: thesis statement; area chart is the data hero (cumulative discovery interviews over the sprint).\nAUTO: company, thesis, sector/stage/founder, lab-day counter, validation-signal series.\nMANUAL: final thesis wording.",
         "problem": "PROBLEM. Message: a few high-frequency, evidenced pains, ranked.\nAUTO: pain themes, frequency %, interview counts, pull quote.\nMANUAL: choose which quote to surface; trim labels.",
@@ -410,6 +418,12 @@ async def founder_submit_startup(
         # body wasn't JSON-parseable — Pydantic will surface a 422 below.
         pass
 
+    # Task #2 — validate + canonicalize the structured Use-of-Funds allocation
+    # before any DB writes (defense in depth; the intake UI also enforces this).
+    uof_value, uof_error = normalize_use_of_funds(data.use_of_funds)
+    if uof_error:
+        raise HTTPException(status_code=400, detail={"error": uof_error, "code": "invalid_use_of_funds"})
+
     stmt = select(Founder).where(Founder.email == data.founder_email)
     founder = session.exec(stmt).first()
     if not founder:
@@ -434,7 +448,7 @@ async def founder_submit_startup(
         sam=data.sam,
         cost_to_mvp=data.cost_to_mvp,
         funding_needed=data.funding_needed,
-        use_of_funds=data.use_of_funds,
+        use_of_funds=uof_value,
     )
     session.add(project)
     session.commit()
@@ -598,6 +612,14 @@ def update_project(project_id: int, data: ProjectUpdate, session: Session = Depe
     if not is_privileged(user):
         for protected in ("status", "stage", "playbook_week"):
             update_data.pop(protected, None)
+    # Task #8 — validate + canonicalize the structured Use-of-Funds allocation
+    # on update, mirroring the /submit intake path. An invalid total is
+    # rejected; an all-zero / empty allocation clears the field (stored NULL).
+    if "use_of_funds" in update_data:
+        uof_value, uof_error = normalize_use_of_funds(update_data["use_of_funds"])
+        if uof_error:
+            raise HTTPException(status_code=400, detail={"error": uof_error, "code": "invalid_use_of_funds"})
+        update_data["use_of_funds"] = uof_value
     for key, val in update_data.items():
         setattr(project, key, val)
     project.updated_at = datetime.utcnow()

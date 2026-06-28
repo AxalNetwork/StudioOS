@@ -1,11 +1,27 @@
+import { useLayoutEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Compass, ArrowLeft, Home } from 'lucide-react';
+import { setSuppressAuthRedirect } from '../lib/api';
 
 // Task #11 — Catch-all 404. Rendered by the `path="*"` route at the end of the
 // main route table when no other route matches, so unknown URLs show a clear
 // "Not Found" page (with a way home) instead of a blank screen in the layout.
 export default function NotFoundPage() {
   const navigate = useNavigate();
+  // Task #8 — show this page to logged-OUT visitors too. On any page load a
+  // background fetch (SettingsProvider's /settings/appearance probe) 401s for
+  // an anonymous visitor; the API layer would otherwise bounce them to /login
+  // for any non-allowlisted path — including an unknown URL. While this 404 is
+  // mounted we suppress that bounce so anonymous (and expired-session) visitors
+  // see the 404. Cleared on unmount so a real protected page still bounces.
+  // useLayoutEffect (not useEffect): it sets the flag before SettingsProvider's
+  // passive effect fires the /settings/appearance probe on first paint, and its
+  // cleanup runs synchronously on unmount so navigating to a protected page
+  // can't briefly leave the flag set for an in-flight 401.
+  useLayoutEffect(() => {
+    setSuppressAuthRedirect(true);
+    return () => setSuppressAuthRedirect(false);
+  }, []);
   return (
     <div className="min-h-[60vh] flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-md text-center">

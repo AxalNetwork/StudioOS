@@ -70,7 +70,10 @@ capital.get('/investors', async (c) => {
 
 capital.post('/investors', async (c) => {
   const __u = await requireAuth(c);
-  if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
+  // Task #9 — adding an LP/investor record is a fund/GP operation, not
+  // something an LP does for themselves. Admin-only (investors keep read +
+  // pay-own-call access). Inlined to match the role checks in the scoped reads.
+  if (__u.role !== 'admin') return c.json({ error: "Forbidden: admin access required" }, 403);
   const data = await c.req.json();
   const sql = getSQL(c.env);
   const fundName = data.fund_name || 'Axal Fund I';
@@ -144,7 +147,9 @@ capital.get('/investors/:id', async (c) => {
 
 capital.post('/calls', async (c) => {
   const __u = await requireAuth(c);
-  if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
+  // Task #9 — capital calls are issued by the fund/GP, never by an individual
+  // LP. Admin-only; investors keep read + pay-own-call access.
+  if (__u.role !== 'admin') return c.json({ error: "Forbidden: admin access required" }, 403);
   const data = await c.req.json();
   // Accept either canonical or legacy field name.
   const lpId = data.limited_partner_id ?? data.lp_investor_id;
@@ -294,7 +299,9 @@ capital.post('/calls/:id/pay', async (c) => {
 
 capital.post('/capitalCall', async (c) => {
   const __u = await requireAuth(c);
-  if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
+  // Task #9 — issuing a capital call to all active investors at once is a
+  // fund/GP operation. Admin-only; investors keep read + pay-own-call access.
+  if (__u.role !== 'admin') return c.json({ error: "Forbidden: admin access required" }, 403);
   const data = await c.req.json();
   const sql = getSQL(c.env);
   const projects = await sql`SELECT * FROM projects WHERE id = ${data.startup_id}`;

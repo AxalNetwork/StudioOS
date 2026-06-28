@@ -90,3 +90,68 @@ test('fmt centralizes money/number formatting', () => {
   assert.equal(fmt.pct(undefined), '');
   assert.equal(fmt.compactMoney(NaN), '');
 });
+
+// ── Task #7 — multi-founder + profile photos in the PPTX export ────────────
+// (.pptx parts are STORE-compressed, so run text / media filenames are greppable
+// in the raw buffer — see the speaker-notes assertion above.)
+function cloneTeamData(mutate) {
+  const data = JSON.parse(JSON.stringify(SAMPLE_DATA));
+  mutate(data.team);
+  return data;
+}
+
+test('multi-founder deck renders every co-founder (compact cards)', async () => {
+  // SAMPLE_DATA ships two founders; the old export only rendered d.founder.
+  const buf = await buildDeck(SAMPLE_DATA, { outputType: 'nodebuffer' });
+  const text = Buffer.from(buf).toString('latin1');
+  assert.ok(text.includes('Maya Osei'), 'primary founder name missing');
+  assert.ok(text.includes('Sofia Reyes'), 'co-founder name missing (multi-founder not rendered)');
+});
+
+test('single-founder deck renders only the primary founder', async () => {
+  const data = cloneTeamData((t) => { t.founders = [t.founders[0]]; });
+  const buf = await buildDeck(data, { outputType: 'nodebuffer' });
+  assertValidPptx(buf, 'single-founder');
+  const text = Buffer.from(buf).toString('latin1');
+  assert.ok(text.includes('Maya Osei'), 'primary founder missing');
+  assert.ok(!text.includes('Sofia Reyes'), 'co-founder must not appear in a single-founder deck');
+});
+
+test('founder & advisor photos are embedded (more media than the photo-less deck)', async () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+P+/HgAFhAJ/wlseKgAAAABJRU5ErkJggg==';
+  const GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  // pptxgenjs names embedded media `media/image-{slide}-{seq}.{ext}`.
+  const mediaFiles = (buf) =>
+    new Set((Buffer.from(buf).toString('latin1').match(/media\/image-\d+-\d+\.\w+/g) || []));
+
+  const noPhotos = cloneTeamData((t) => {
+    delete t.founder.photo;
+    t.founders.forEach((f) => delete f.photo);
+    t.advisors = t.advisors.map((a) => [a[0], a[1], a[2]]);
+  });
+  const withPhotos = cloneTeamData((t) => {
+    delete t.founder.photo;
+    t.founders.forEach((f) => delete f.photo);
+    t.advisors = t.advisors.map((a) => [a[0], a[1], a[2]]);
+    t.founders[0].photo = PNG;
+    t.advisors[0] = [t.advisors[0][0], t.advisors[0][1], t.advisors[0][2], GIF];
+  });
+
+  const before = mediaFiles(await buildDeck(noPhotos, { outputType: 'nodebuffer' }));
+  const after = mediaFiles(await buildDeck(withPhotos, { outputType: 'nodebuffer' }));
+  assert.ok(after.size > before.size,
+    `expected more media files once photos are embedded (before=${before.size}, after=${after.size})`);
+});
+
+test('unsupported / unreachable photos fall back to initials without breaking export', async () => {
+  const data = cloneTeamData((t) => {
+    t.founders[0].photo = 'ftp://example.invalid/x.png';        // unsupported scheme
+    t.founders[1].photo = 'data:image/svg+xml;utf8,<svg/>';     // SVG — not embeddable
+    t.advisors[0] = [t.advisors[0][0], t.advisors[0][1], t.advisors[0][2], 'blob:whatever'];
+  });
+  const buf = await buildDeck(data, { outputType: 'nodebuffer' });
+  assertValidPptx(buf, 'fallback-deck');
+  const text = Buffer.from(buf).toString('latin1');
+  assert.ok(text.includes('Maya Osei') && text.includes('Sofia Reyes'),
+    'founder names should still render when photos fall back');
+});

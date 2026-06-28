@@ -110,7 +110,7 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
           <Check size={22} />
         </div>
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">You're all set</h2>
-        <p className="text-sm text-gray-600 mt-2">Onboarding complete — redirecting you to your dashboard.</p>
+        <p className="text-sm text-gray-600 mt-2">Onboarding complete — redirecting you to Studio.</p>
       </div>
     );
   }

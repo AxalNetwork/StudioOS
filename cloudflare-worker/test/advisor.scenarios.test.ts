@@ -50,6 +50,7 @@ import {
 } from '../src/services/advisor/questionBank.ts';
 import { routeAnswer } from '../src/services/advisor/writeRouter.ts';
 import { isAdvisorDisabled } from '../src/services/advisor/rollout.ts';
+import { gateToolCall, type ToolCallContext } from '../src/services/advisor/guardrails.ts';
 
 // ---------------------------------------------------------------------------
 // In-memory D1 mock — minimal SELECT/INSERT/UPDATE/PRAGMA surface.
@@ -496,6 +497,64 @@ test('kill switch: stale ADVISOR_V2_DISABLED=0 cannot override ADVISOR_DISABLED=
   // vice versa.
   assert.equal(isAdvisorDisabled({ ADVISOR_DISABLED: '1', ADVISOR_V2_DISABLED: '0' } as any), true);
   assert.equal(isAdvisorDisabled({ ADVISOR_DISABLED: 'false', ADVISOR_V2_DISABLED: '1' } as any), true);
+});
+
+// ---------------------------------------------------------------------------
+// L2 tool-gating arg scan (Task #13 regression).
+//
+// Bug: typing an ordinary prose answer that happened to contain English
+// words like "select", "update" or "grant ... to" tripped the SQL-injection
+// heuristic and hard-failed the write with `arg pattern: sql`. Two fixes,
+// both asserted here:
+//   1. Free-text payload fields (`value`, `evidence`) are no longer scanned
+//      for SQL/shell/HTML grammar — only structural fields (ids, queries) are.
+//   2. The SQL detector is grammar-based (SELECT…FROM, UNION SELECT,
+//      DROP TABLE, …), so bare keywords with no companion clause stop
+//      false-positiving while real injection in a structural field is still
+//      blocked.
+// ---------------------------------------------------------------------------
+const GATE_ENV = {} as any; // no TOKENS binding -> KV rate/cost checks skipped
+function gateCtx(persona: Persona = 'founder'): ToolCallContext {
+  return { user: { id: 1 } as any, persona, tiers: new Set<string>(), conversationId: 123 };
+}
+
+test('gate: free-text value with SQL-ish English saves (no arg-pattern block)', async () => {
+  const res = await gateToolCall(GATE_ENV, gateCtx(), 'writeAnswer', {
+    question_id: 'founder.vision',
+    value: 'We will select the best deals, update our roadmap, and grant equity to early advisors.',
+  });
+  assert.equal(res.ok, true, res.detail);
+});
+
+test('gate: free-text value AND evidence are both exempt from the arg scan', async () => {
+  const res = await gateToolCall(GATE_ENV, gateCtx(), 'writeAnswer', {
+    question_id: 'capital.raise.terms',
+    value: 'Raising $2M on a SAFE',
+    evidence: 'Per the board deck we grant options and update the cap table; see the data room.',
+  });
+  assert.equal(res.ok, true, res.detail);
+});
+
+test('gate: a bare keyword in a structural field (no grammar) passes', async () => {
+  // `exploreDocs.query` IS scanned (not a free-text field); "select" with no
+  // FROM clause is no longer treated as SQL.
+  const res = await gateToolCall(GATE_ENV, gateCtx(), 'exploreDocs', { query: 'select a good template' });
+  assert.equal(res.ok, true, res.detail);
+});
+
+test('gate: real injection in a scanned structural field is still blocked', async () => {
+  const union = await gateToolCall(GATE_ENV, gateCtx(), 'exploreDocs', {
+    query: '1 UNION SELECT password FROM users',
+  });
+  assert.equal(union.ok, false);
+  assert.equal(union.reason, 'invalid_args');
+
+  const drop = await gateToolCall(GATE_ENV, gateCtx(), 'writeAnswer', {
+    question_id: "x'; DROP TABLE users; --",
+    value: 'ok',
+  });
+  assert.equal(drop.ok, false);
+  assert.equal(drop.reason, 'invalid_args');
 });
 
 // keep ts-strip-types happy

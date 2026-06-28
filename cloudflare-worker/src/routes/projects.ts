@@ -8,6 +8,7 @@ import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '.
 import { assembleSpinoutDeckData } from '../services/decks/spinoutDeckData';
 import { ensureMethodAllowed } from '../services/decks/branding';
 import { PREMIUM_METHOD_IDS } from '../services/decks/methods';
+import { normalizeUseOfFunds, formatUseOfFundsText } from '../util/useOfFunds';
 
 const projects = new Hono<{ Bindings: Env }>();
 
@@ -119,8 +120,13 @@ projects.get('/:id', async (c) => {
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = rows[0];
-  // IDOR guard: a founder can only read their own project; admins/partners read all.
-  if (!canAccessFounderResource(user, project.founder_id)) {
+  // IDOR guard: a founder can only read their own project; admins/partners read
+  // all. Investors are intentionally allowed PAST this gate so they reach the
+  // maskFounderForInvestor branch below — that mask is fail-closed and NDA-gated,
+  // so an un-NDA'd investor still only ever sees the public-key subset. This is
+  // the ONE route with a masked investor fallback; canAccessFounderResource
+  // denies investors on every other founder-resource route (audit M2).
+  if (user.role !== 'investor' && !canAccessFounderResource(user, project.founder_id)) {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
   }
@@ -291,6 +297,12 @@ projects.post('/submit', async (c) => {
     return c.json({ error: message, code: 'reserved_field' }, 400);
   }
 
+  // Task #2 — validate + canonicalize the structured Use-of-Funds allocation
+  // before any DB writes (defense in depth; the intake UI also enforces this).
+  const uof = normalizeUseOfFunds(data.use_of_funds);
+  if (uof.error) return c.json({ error: uof.error, code: 'invalid_use_of_funds' }, 400);
+  const useOfFunds = uof.value;
+
   const sql = getSQL(c.env);
 
   const existingFounders = await sql`SELECT id FROM founders WHERE email = ${data.founder_email}`;
@@ -302,7 +314,7 @@ projects.post('/submit', async (c) => {
     founderId = f.id;
   }
 
-  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, 'idea', ${founderId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${data.use_of_funds || null}) RETURNING *`;
+  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, 'idea', ${founderId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${useOfFunds}) RETURNING *`;
 
   const result = runFullScore(data);
   const b = result.breakdown;
@@ -316,7 +328,7 @@ projects.post('/submit', async (c) => {
   for (const k of ['tam','sam','market_urgency','market_trend','team_expertise','team_execution','team_network','mvp_time_days','product_complexity','product_dependencies','cost_to_mvp','time_to_revenue_months','burn_risk','fit_alignment','fit_synergy','distribution_channels','distribution_virality']) {
     if (data[k] !== undefined) inputsSnapshot[k] = data[k];
   }
-  const qualText = [data.problem_statement, data.solution, data.why_now, data.use_of_funds, data.growth_signals]
+  const qualText = [data.problem_statement, data.solution, data.why_now, formatUseOfFundsText(useOfFunds), data.growth_signals]
     .filter(v => typeof v === 'string' && v.trim()).map(v => (v as string).trim().toLowerCase()).join('\n---\n') || null;
   const lockedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
 
@@ -398,9 +410,13 @@ projects.put('/:id', async (c) => {
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
 
-  // RBAC: admins/partners/investors can edit any project; founders can only edit their own.
+  // RBAC: admins/partners can edit any project; founders can only edit their own.
+  // Investors are NOT editors (audit M2) — their project access is the read-only,
+  // NDA-masked view in GET '/:id'. Letting an investor through here is a
+  // write-IDOR (they could mutate any founder's project, incl. the
+  // admin/partner-only stage/status/playbook_week fields below).
   const project = rows[0];
-  const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
+  const isPrivileged = user.role === 'admin' || user.role === 'partner';
   const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
   if (!isPrivileged && !isOwner) {
     await sql.end();
@@ -452,6 +468,15 @@ projects.put('/:id', async (c) => {
     const s = (data.paid_pilot_status == null ? '' : String(data.paid_pilot_status).trim().toLowerCase());
     const allowed = new Set(['paid', 'pilot_paid', 'pilot_signed', 'pre_revenue']);
     data.paid_pilot_status = allowed.has(s) ? s : null;
+  }
+  // Task #8 — validate + canonicalize the structured Use-of-Funds allocation
+  // on update, mirroring the /submit intake path. Founders revise THE ASK
+  // allocation from the deck-side editor; an invalid total is rejected and an
+  // all-zero / empty allocation clears the field (stored NULL).
+  if (data.use_of_funds !== undefined) {
+    const uof = normalizeUseOfFunds(data.use_of_funds);
+    if (uof.error) { await sql.end(); return c.json({ error: uof.error, code: 'invalid_use_of_funds' }, 400); }
+    data.use_of_funds = uof.value;
   }
   const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status'];
   // Normalise: coerce boolean → 0/1 for the NDA flag, trim URL, allow

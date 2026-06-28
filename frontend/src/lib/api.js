@@ -54,6 +54,18 @@ function requestStepUp(ttlMinutes) {
   return _stepUpInFlight;
 }
 
+// Task #8 — the catch-all 404 page marks itself as a no-auth-redirect surface
+// while it is mounted (setSuppressAuthRedirect(true) on mount, false on
+// unmount). A background 401 — e.g. SettingsProvider probing
+// /api/settings/appearance on first paint — must NOT bounce a logged-OUT
+// visitor who hit an UNKNOWN url to /login; they should see the 404 page.
+// Deliberately scoped to the 404 surface only: the flag is false on every
+// real page, so genuinely-expired sessions on protected pages still bounce.
+let _suppressAuthRedirect = false;
+export function setSuppressAuthRedirect(v) {
+  _suppressAuthRedirect = !!v;
+}
+
 export async function request(path, options = {}) {
   try {
     // FormData uploads must NOT carry an explicit Content-Type — the browser
@@ -126,7 +138,10 @@ export async function request(path, options = {}) {
           || currentPath === '/events'
           || currentPath.startsWith('/events/')
           || currentPath.startsWith('/invite/');
-        if (!isPublicPath) {
+        // `_suppressAuthRedirect` is set only while the catch-all 404 page is
+        // mounted (an unknown URL), so a logged-out visitor there sees the 404
+        // instead of being bounced to /login by this background 401.
+        if (!isPublicPath && !_suppressAuthRedirect) {
           window.location.href = '/login';
         }
         throw new Error('Session expired');
@@ -217,6 +232,15 @@ async function _analyticsRead(path) {
 }
 
 export const api = {
+  // Task #19 — Best-Fit consultations + admin report.
+  bookConsultation: (data) =>
+    request('/consultations/book', { method: 'POST', body: JSON.stringify(data || {}) }),
+  getMyConsultations: () => request('/consultations/me'),
+  adminListConsultations: (status) =>
+    request(`/admin/consultations${status ? `?status=${status}` : ''}`),
+  adminUpdateConsultationStatus: (id, data) =>
+    request(`/admin/consultations/${id}/status`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  adminGetBestFitReport: (userId) => request(`/admin/best-fit/${userId}`),
   register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
   login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
   // T6 — server-side logout: clears the httpOnly auth + CSRF cookies and
@@ -583,6 +607,11 @@ export const api = {
     // <AdvisorFilledBanner> + the per-field sparkle icons.
     sources: (page) =>
       request(`/advisor/sources${page ? `?page=${encodeURIComponent(page)}` : ''}`),
+    // Task #13 — captured-answer list (saved + noop) for the right-rail
+    // "Completed" bucket. Same scope/predicate as the header answered count,
+    // so it includes free-form/reflection replies that never reach
+    // field_sources (and thus were missing from /sources).
+    answered: () => request('/advisor/answered'),
     // Voice-to-text for the composer mic. Posts a base64-encoded audio clip
     // + its mime type to the Workers AI Whisper endpoint; returns { text }.
     // The UI mic button that calls this is a separate task.
@@ -695,22 +724,6 @@ export const api = {
   miPlatformPersonasExportUrl: (format = 'csv') =>
     `/api/market-intel/platform-personas/export?format=${encodeURIComponent(format)}`,
 
-  // ── Task #5 — Dashboard personal assistant. The /message endpoint is
-  // SSE; consume it via fetch + ReadableStream in the component, NOT
-  // through this helper. Everything else is plain JSON.
-  assistant: {
-    listConversations: () => request('/assistant/conversations'),
-    getConversation: (uid) => request(`/assistant/conversations/${encodeURIComponent(uid)}`),
-    renameConversation: (uid, title) =>
-      request(`/assistant/conversations/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
-    deleteConversation: (uid) =>
-      request(`/assistant/conversations/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
-    feedback: (message_id, rating, comment) =>
-      request('/assistant/feedback', { method: 'POST', body: JSON.stringify({ message_id, rating, comment }) }),
-    getRetention: () => request('/assistant/retention/preference'),
-    setRetention: (extended) =>
-      request('/assistant/retention/preference', { method: 'POST', body: JSON.stringify({ extended: !!extended }) }),
-  },
   optOutInvestorSignals: () => request('/investor-profile/me/opt-out', { method: 'POST' }),
   getInvestorSignals: () => request('/investor-signals/latest'),
 
@@ -922,6 +935,73 @@ export const api = {
     request(`/admin/billing/disputes/${encodeURIComponent(id)}/evidence`, { method: 'POST', body: JSON.stringify(body || {}) }),
   adminBillingLTV: (userId) =>
     request(`/admin/billing/ltv?user_id=${encodeURIComponent(userId)}`),
+
+  // Task #16 — Admin Stripe catalog CRUD + webhook/config management.
+  //
+  // Catalog:
+  //   adminCatalogMode()                       → { mode: 'test'|'live'|'unconfigured' }
+  //   adminCatalogList()                       → { products, mode }
+  //   adminCatalogSync()                       → { ok, synced }
+  //   adminCatalogCreateProduct(body)          → { ok, product }
+  //   adminCatalogUpdateProduct(id, body)      → { ok }
+  //   adminCatalogArchiveProduct(id)           → { ok }
+  //   adminCatalogAddPrice(productId, body)    → { ok, price }
+  //   adminCatalogArchivePrice(priceId)        → { ok }
+  // Webhook:
+  //   adminStripeListWebhooks()                → { endpoints, required_events, our_url }
+  //   adminStripeRegisterWebhook()             → { ok, endpoint_id, url, secret_stored }
+  //   adminStripeUpdateWebhookEvents(epId)     → { ok, endpoint_id, url }
+  // Config (publishable key):
+  //   adminStripeGetConfig()                   → { publishable_key, mode, configured }
+  //   adminStripeSetConfig(pk)                 → { ok, mode }
+  adminCatalogMode: () => request('/admin/catalog/mode'),
+  adminCatalogList: () => request('/admin/catalog/products'),
+  adminCatalogSync: () => request('/admin/catalog/sync', { method: 'POST', body: '{}' }),
+  adminCatalogCreateProduct: (body) =>
+    request('/admin/catalog/products', { method: 'POST', body: JSON.stringify(body || {}) }),
+  adminCatalogUpdateProduct: (id, body) =>
+    request(`/admin/catalog/products/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body || {}),
+    }),
+  adminCatalogArchiveProduct: (id) =>
+    request(`/admin/catalog/products/${encodeURIComponent(id)}/archive`, {
+      method: 'POST',
+      body: '{}',
+    }),
+  adminCatalogAddPrice: (productId, body) =>
+    request(`/admin/catalog/products/${encodeURIComponent(productId)}/prices`, {
+      method: 'POST',
+      body: JSON.stringify(body || {}),
+    }),
+  adminCatalogUpdatePrice: (priceId, body) =>
+    request(`/admin/catalog/prices/${encodeURIComponent(priceId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body || {}),
+    }),
+  adminCatalogArchivePrice: (priceId) =>
+    request(`/admin/catalog/prices/${encodeURIComponent(priceId)}/archive`, {
+      method: 'POST',
+      body: '{}',
+    }),
+  adminStripeListWebhooks: () => request('/admin/stripe/webhook'),
+  adminStripeRegisterWebhook: () =>
+    request('/admin/stripe/webhook', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'register' }),
+    }),
+  adminStripeUpdateWebhookEvents: (endpointId) =>
+    request('/admin/stripe/webhook', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'update', endpoint_id: endpointId }),
+    }),
+  adminStripeGetConfig: () => request('/admin/stripe/config'),
+  adminStripeSetConfig: (publishableKey) =>
+    request('/admin/stripe/config', {
+      method: 'PUT',
+      body: JSON.stringify({ publishable_key: publishableKey }),
+    }),
+
   adminVoidContract: (uid) => request(`/admin/contracts/${uid}/void`, { method: 'POST' }),
   adminDownloadContractUrl: (uid) => `/api/admin/contracts/${uid}/download`,
   adminIssueContractShareLink: (uid, ttl_seconds = 300) =>
@@ -1846,6 +1926,19 @@ export const api = {
   recomputeFounderRisk: (founderId) =>
     request(`/founder-risk/${founderId}/recompute`, { method: 'POST' }),
 
+  // ---------- Venture risk (Task #10 — 10-layer rating system) ----------
+  // Worker-only (D1); the dev FastAPI backend 404s on the whole prefix.
+  // Reads gate to admin/partner/investor; analyst writes (override/recompute)
+  // gate to admin/partner.
+  ventureRiskMatrix: () => request('/venture-risk/matrix'),
+  ventureRiskByProject: (projectId) => request(`/venture-risk/by-project/${projectId}`),
+  ventureRiskRecompute: (projectId) =>
+    request(`/venture-risk/${projectId}/recompute`, { method: 'POST' }),
+  ventureRiskSetLayer: (projectId, layerKey, body) =>
+    request(`/venture-risk/${projectId}/layers/${layerKey}`, { method: 'PUT', body: JSON.stringify(body || {}) }),
+  ventureRiskClearLayer: (projectId, layerKey) =>
+    request(`/venture-risk/${projectId}/layers/${layerKey}`, { method: 'DELETE' }),
+
   // ---------- Reference checks (Task #43, admin/investor only) ----------
   listReferences: (dealId) =>
     request(`/references${dealId != null ? `?deal_id=${dealId}` : ''}`),
@@ -2208,6 +2301,24 @@ export const api = {
     me: () => request('/radar/me'),
     team: (userIds) =>
       request('/radar/team', { method: 'POST', body: JSON.stringify({ user_ids: userIds }) }),
+  },
+
+  // Task #20 — Best-Fit cross-counterparty match summary (Worker-only).
+  // Default (no detail) ALWAYS returns 200: counts + one anonymized teaser per
+  // type for free callers, full ranked matches for studio/bypass roles.
+  // detail:'full' from a non-unlocked caller 402s → PaywallModal (auto-handled
+  // by `request` above). The UI gates the explicit "unlock" action via
+  // openPaywall() instead of forcing that 402, so prefer the default call.
+  matches: {
+    summary: ({ detail } = {}) =>
+      request(`/matches/summary${detail ? `?detail=${encodeURIComponent(detail)}` : ''}`),
+  },
+
+  // Task #20 — self Best-Fit (Worker-only). The caller's own per-persona Axal Fit
+  // scorecard + 5 Axal behavioral values. Read-only; no matches/spin-out (those
+  // stay gated via matches.summary / admin-only report).
+  bestFit: {
+    me: () => request('/best-fit/me'),
   },
 };
 

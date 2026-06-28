@@ -25,6 +25,7 @@ import json
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "cloudflare-worker", "sql", "migrations", "085_seed_legal_templates.sql")
 OUT_105 = os.path.join(ROOT, "cloudflare-worker", "sql", "migrations", "105_fill_legal_template_bodies.sql")
+OUT_113 = os.path.join(ROOT, "cloudflare-worker", "sql", "migrations", "113_refresh_legal_template_bodies.sql")
 MD_DIR = os.path.join(ROOT, "cloudflare-worker", "src", "templates", "legal")
 
 VALID_CATEGORIES = {"gp", "fund", "portfolio", "compliance"}
@@ -56,30 +57,13 @@ ESIGN_MD = [
 # Task #29 — the partner_* deal slugs and finders_fee_intro_agreement moved to
 # FULL_BODY_V1 below (they now have authored v1 bodies), so they are removed
 # from the stub catalog.
-CATALOG_STUBS = [
-    ("ip_background_schedule",       "IP Background Schedule",          "portfolio"),
-    ("data_access_acknowledgment_admin", "Data Access Acknowledgment (Admin)", "compliance"),
-    ("investor_subscription_pro",    "Investor Subscription \u2014 Pro Tier",          "fund"),
-    ("investor_subscription_inst",   "Investor Subscription \u2014 Institutional Tier", "fund"),
-]
+CATALOG_STUBS = []
 
 # --- C2. Admin agreement dropdown options (AGREEMENT_OPTIONS) ---------------
 # slug == the literal option value; category per the dropdown group.
 # Task #29 — Venture Share (FAST), MSA + Equity-for-Services, Engagement Letter
 # (Spin-Out Package) and White-Label Service Agreement moved to FULL_BODY_V1.
-AGREEMENT_STUBS = [
-    ("Subscription Booklet & LPA",              "Subscription Booklet & LPA (LP)",                 "fund"),
-    ("SPV Joinder Agreement",                   "SPV Joinder Agreement (Syndicate)",               "fund"),
-    ("Co-Investment Side Letter",               "Co-Investment Side Letter",                       "fund"),
-    ("Strategic Side Letter / Focused SPV",     "Strategic Side Letter / Focused SPV (Sector LP)", "fund"),
-    ("Founder Collaboration Agreement",         "Founder Collaboration Agreement",                 "portfolio"),
-    ("Spin-Out Subsidiary SPA + IP Transfer",   "Spin-Out Subsidiary SPA (Founder)",               "portfolio"),
-    ("Strategic Scale Partnership Agreement",   "Strategic Scale Partnership Agreement",           "portfolio"),
-    ("Technology Integration / JV Agreement",   "Technology Integration / JV (StudioOS AI)",       "portfolio"),
-    ("Referral / Agency Agreement",             "Referral / Agency Agreement (Distribution / GTM)", "portfolio"),
-    ("M&A Advisory Mandate",                    "M&A Advisory Mandate",                            "portfolio"),
-    ("Secondary Purchase Agreement",            "Secondary Purchase Agreement (Liquidity)",        "portfolio"),
-]
+AGREEMENT_STUBS = []
 
 # --- D. Task #29 — authored v1 bodies for the 21 previously-blank templates.
 # slug == the join-key literal (spaced slugs stay spaced); only the filename is
@@ -110,6 +94,41 @@ FULL_BODY_V1 = [
     ("Venture Share Agreement (FAST)",        "venture_share_agreement_fast_v1.md",          "Venture Share Agreement / FAST (Advisor)",         "gp"),
     ("White-Label Service Agreement",         "white_label_service_agreement_v1.md",         "White-Label Service Agreement (Technical Partner)", "gp"),
 ]
+
+# --- E. Legal-architecture refresh — newly authored v1 bodies for the
+# previously-empty catalog/agreement stubs (clause-only bodies; the renderer
+# now supplies the title, preamble, footer and signature block as static
+# chrome — see cloudflare-worker/src/services/legalDocFormat.ts).
+NEW_BODY_V1 = [
+    # slug,                                    md file,                                       title,                                              category
+    ("Subscription Booklet & LPA",            "subscription_booklet_lpa_v1.md",              "Subscription Booklet & LPA (LP)",                  "fund"),
+    ("SPV Joinder Agreement",                 "spv_joinder_agreement_v1.md",                 "SPV Joinder Agreement (Syndicate)",                "fund"),
+    ("Co-Investment Side Letter",             "co_investment_side_letter_v1.md",             "Co-Investment Side Letter",                        "fund"),
+    ("Strategic Side Letter / Focused SPV",   "strategic_side_letter_focused_spv_v1.md",     "Strategic Side Letter / Focused SPV (Sector LP)",  "fund"),
+    ("investor_subscription_pro",             "investor_subscription_pro_v1.md",             "Investor Subscription — Pro Tier",            "fund"),
+    ("investor_subscription_inst",            "investor_subscription_inst_v1.md",            "Investor Subscription — Institutional Tier",  "fund"),
+    ("Founder Collaboration Agreement",       "founder_collaboration_agreement_v1.md",       "Founder Collaboration Agreement",                  "portfolio"),
+    ("Spin-Out Subsidiary SPA + IP Transfer", "spin_out_subsidiary_spa_v1.md",               "Spin-Out Subsidiary SPA (Founder)",                "portfolio"),
+    ("Strategic Scale Partnership Agreement", "strategic_scale_partnership_agreement_v1.md", "Strategic Scale Partnership Agreement",            "portfolio"),
+    ("Technology Integration / JV Agreement", "technology_integration_jv_v1.md",             "Technology Integration / JV (StudioOS AI)",        "portfolio"),
+    ("Referral / Agency Agreement",           "referral_agency_agreement_v1.md",             "Referral / Agency Agreement (Distribution / GTM)", "portfolio"),
+    ("M&A Advisory Mandate",                  "ma_advisory_mandate_v1.md",                   "M&A Advisory Mandate",                             "portfolio"),
+    ("Secondary Purchase Agreement",          "secondary_purchase_agreement_v1.md",          "Secondary Purchase Agreement (Liquidity)",         "portfolio"),
+    ("ip_background_schedule",                "ip_background_schedule_v1.md",                "IP Background Schedule",                           "portfolio"),
+    ("data_access_acknowledgment_admin",      "data_access_acknowledgment_admin_v1.md",      "Data Access Acknowledgment (Admin)",               "compliance"),
+]
+
+# All `.md`-backed slugs, de-duplicated with FULL_BODY_V1 taking precedence over
+# the older ESIGN_MD mappings (e.g. mentor_nda_axal -> the fuller *_axal body).
+def all_md_bodies():
+    seen = set()
+    out = []
+    for slug, fname, title, category in FULL_BODY_V1 + NEW_BODY_V1 + ESIGN_MD:
+        if slug in seen:
+            continue
+        seen.add(slug)
+        out.append((slug, fname, title, category))
+    return out
 
 SINGLE_BRACE = re.compile(r"(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})")
 MERGE_TOKEN = re.compile(r"\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}")
@@ -166,6 +185,31 @@ def upsert_sql(slug, title, category, body):
     )
 
 
+def force_upsert_sql(slug, title, category, body):
+    """Unconditional body-refresh upsert for migration 113.
+
+    Unlike the stub-gated 105, this overwrites the body for the slug regardless
+    of is_stub — a deliberate, owner-authorized one-time refresh that aligns
+    every `.md`-backed template with the clean clause-only convention the new
+    renderer expects (no embedded title/preamble/signature/Markdown noise)."""
+    assert category in VALID_CATEGORIES, f"bad category {category} for {slug}"
+    mf = json.dumps(merge_fields(body))
+    return (
+        "INSERT INTO legal_templates\n"
+        "  (slug, title, category, body_md, merge_fields, version, is_active, is_stub) VALUES\n"
+        f"  ('{esc(slug)}', '{esc(title)}', '{esc(category)}', '{esc(body)}', '{esc(mf)}', 1, 1, 0)\n"
+        "ON CONFLICT(slug) DO UPDATE SET\n"
+        "  title        = excluded.title,\n"
+        "  category     = excluded.category,\n"
+        "  body_md      = excluded.body_md,\n"
+        "  merge_fields = excluded.merge_fields,\n"
+        "  is_active    = 1,\n"
+        "  is_stub      = 0,\n"
+        "  version      = legal_templates.version + 1,\n"
+        "  updated_at   = CURRENT_TIMESTAMP;"
+    )
+
+
 def read_md(fname):
     with open(os.path.join(MD_DIR, fname), "r", encoding="utf-8") as fh:
         return fh.read()
@@ -187,8 +231,8 @@ def gen_085():
         seen.add(slug)
         rows.append(row_sql(slug, title, category, body, is_stub))
 
-    # D. Task #29 authored v1 bodies (full bodies, take precedence over stubs)
-    for slug, fname, title, category in FULL_BODY_V1:
+    # D. Authored v1 bodies (full bodies, take precedence over stubs)
+    for slug, fname, title, category in FULL_BODY_V1 + NEW_BODY_V1:
         add(slug, title, category, read_md(fname), 0)
 
     # A. FastAPI full-content templates
@@ -220,7 +264,14 @@ def gen_085():
 
 
 def gen_105():
-    """Task #29 — stub-gated body-fill for the 21 authored v1 templates."""
+    """Task #29 — stub-gated body-fill for the 21 authored v1 templates.
+
+    Frozen once applied: like 085, this historical migration is byte-frozen so
+    re-running the generator never mutates an already-applied migration. The
+    clean-architecture refresh now lives in 113 (gen_refresh)."""
+    if os.path.exists(OUT_105):
+        print(f"Skip {os.path.relpath(OUT_105, ROOT)} (exists; frozen — not regenerated)")
+        return
     rows = [upsert_sql(slug, title, category, read_md(fname))
             for slug, fname, title, category in FULL_BODY_V1]
 
@@ -239,9 +290,36 @@ def gen_105():
     print(f"Wrote {len(rows)} body-fill upserts -> {os.path.relpath(OUT_105, ROOT)}")
 
 
+def gen_refresh():
+    """Migration 113 — clean-architecture body refresh.
+
+    Force-upserts the clean clause-only body for every `.md`-backed template so
+    deployed D1 rows (which carry a mix of older plain-text and raw-Markdown
+    bodies, plus inline title/preamble/signature) are realigned with the
+    static-chrome renderer. ALWAYS regenerated from the `.md` sources."""
+    rows = [force_upsert_sql(slug, title, category, read_md(fname))
+            for slug, fname, title, category in all_md_bodies()]
+
+    header = (
+        "-- Legal-architecture refresh — realign every .md-backed legal_template with\n"
+        "-- the clean clause-only convention (title/preamble/footer/signature are now\n"
+        "-- supplied by the renderer, not the body; Markdown is normalized at render).\n"
+        "-- Source: scripts/gen-legal-templates-seed.py (all_md_bodies) — DO NOT hand-edit.\n"
+        "-- Unconditional upsert (NOT stub-gated): a deliberate one-time content refresh.\n"
+        "-- Bodies are v1 drafts pending legal review.\n\n"
+    )
+    with open(OUT_113, "w", encoding="utf-8") as fh:
+        fh.write(header)
+        fh.write("\n\n".join(rows))
+        fh.write("\n")
+
+    print(f"Wrote {len(rows)} body-refresh upserts -> {os.path.relpath(OUT_113, ROOT)}")
+
+
 def main():
     gen_085()
     gen_105()
+    gen_refresh()
 
 
 if __name__ == "__main__":

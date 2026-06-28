@@ -2,20 +2,53 @@
 //
 // Centralises Stripe.js loading and the Elements *appearance* config so every
 // embedded-checkout surface looks like the rest of the app. The publishable
-// key is a PUBLIC value (safe to ship in the client bundle) injected by Vite
-// from `VITE_STRIPE_PUBLISHABLE_KEY`. The SECRET key never leaves the Worker.
+// key is resolved at runtime via GET /api/payments/config (Task #16), falling
+// back to the build-time VITE_STRIPE_PUBLISHABLE_KEY. The SECRET key never
+// leaves the Worker.
 import { loadStripe } from '@stripe/stripe-js';
 
 export const STRIPE_PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
+
+// Task #16 — runtime key cache. Fetched once per page load from
+// /api/payments/config so a key change takes effect without a frontend
+// rebuild. Falls back to STRIPE_PUBLISHABLE_KEY (build-time env) if the
+// endpoint is unavailable or returns no key.
+let _runtimeKey = null;
+let _runtimeKeyFetched = false;
+let _runtimeKeyPromise = null;
+
+async function fetchRuntimeKey() {
+  if (_runtimeKeyFetched) return _runtimeKey;
+  if (_runtimeKeyPromise) return _runtimeKeyPromise;
+  _runtimeKeyPromise = (async () => {
+    try {
+      const res = await fetch('/api/payments/config');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.publishable_key) {
+          _runtimeKey = data.publishable_key;
+        }
+      }
+    } catch {
+      // Network error — fall back to build-time key silently.
+    }
+    _runtimeKeyFetched = true;
+    _runtimeKeyPromise = null;
+    return _runtimeKey;
+  })();
+  return _runtimeKeyPromise;
+}
 
 // Single, lazily-created Stripe.js promise. loadStripe injects js.stripe.com on
 // first call; we memoise so it's only ever loaded once per page. Returns null
 // when no publishable key is configured so callers can render a graceful
 // "checkout unavailable" state instead of throwing.
 let _stripePromise = null;
-export function getStripe() {
-  if (!STRIPE_PUBLISHABLE_KEY) return null;
-  if (!_stripePromise) _stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
+export async function getStripe() {
+  const runtimeKey = await fetchRuntimeKey();
+  const key = runtimeKey || STRIPE_PUBLISHABLE_KEY;
+  if (!key) return null;
+  if (!_stripePromise) _stripePromise = loadStripe(key);
   return _stripePromise;
 }
 

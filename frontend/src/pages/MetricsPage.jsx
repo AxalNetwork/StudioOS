@@ -181,8 +181,7 @@ export default function MetricsPage() {
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Metrics</h1>
-        <PageExplainer pageKey="metrics" />
-          <p className="text-sm text-gray-500 mt-1">Snapshot MRR, ARR, CAC, LTV, churn. Feeds users + revenue traction signals.</p>
+          <PageExplainer pageKey="metrics" />
         </div>
         <div className="flex gap-2">
           <select

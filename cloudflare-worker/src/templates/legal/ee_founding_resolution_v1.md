@@ -1,14 +1,3 @@
-# Founding Resolution (Estonia OÜ)
-
-> **v1 draft — subject to legal review.** This template is a working
-> draft and must be reviewed and approved by qualified counsel before
-> execution or public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Company:** {{company.legal_name}}, a private limited company (osaühing) registered in the {{company.jurisdiction}} (registry code {{company.registration_number}}) (the "Company")
-**Registered address:** {{company.registered_address}}
-
 ## Resolution of the Founder(s) (Asutamisotsus)
 
 The undersigned founder(s) hereby adopt the following founding resolutions in respect of the Company, pursuant to the Estonian Commercial Code.
@@ -36,7 +25,3 @@ RESOLVED, that the principal field of activity of the Company be {{company.busin
 ## 6. Authority
 
 RESOLVED, that the management board be authorised to take all actions necessary to complete the registration of the Company in the Estonian Commercial Register and to open the Company's bank or payment-institution account.
-
----
-
-Signed electronically by {{founder.legal_name}}, founder, for and on behalf of {{company.legal_name}}, on the date appearing below.

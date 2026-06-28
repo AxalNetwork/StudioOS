@@ -68,6 +68,14 @@ export default function AxalCheckout(props) {
   const isDark = effectiveTheme === 'dark';
 
   const stripePromise = useMemo(() => getStripe(), []);
+  // Task #16 — runtime key: resolve the async getStripe() promise so we can
+  // distinguish loading (null) → configured (true) → not configured (false)
+  // without hard-gating on the build-time STRIPE_PUBLISHABLE_KEY env var.
+  const [stripeConfigured, setStripeConfigured] = useState(null); // null=loading
+  useEffect(() => {
+    stripePromise.then((s) => setStripeConfigured(s !== null));
+  }, [stripePromise]);
+
   const [clientSecret, setClientSecret] = useState(providedClientSecret || null);
   const [intentKind, setIntentKind] = useState(providedClientSecret ? 'payment' : null);
   const [loadError, setLoadError] = useState(null);
@@ -94,7 +102,11 @@ export default function AxalCheckout(props) {
   }
 
   useEffect(() => {
-    if (!stripePromise) return; // not configured — handled in render
+    // Wait until the runtime key check resolves. stripeConfigured===null means
+    // still loading; false means no key configured. Either way, no backend
+    // intent/subscription call should be made — Stripe would reject it anyway
+    // and we'd be creating orphan/incomplete objects in Stripe.
+    if (stripeConfigured !== true) return;
     // Caller-supplied secret (e.g. a booking PaymentIntent created server-side
     // with a Connect destination transfer) — render it directly, no fetch.
     if (providedClientSecret) {
@@ -156,10 +168,20 @@ export default function AxalCheckout(props) {
     return () => {
       cancelled = true;
     };
-  }, [stripePromise, priceId, amount, currency, quantity, description, providedClientSecret, promoCode, promoFree, freeConfirm]);
+  }, [stripeConfigured, priceId, amount, currency, quantity, description, providedClientSecret, promoCode, promoFree, freeConfirm]);
 
-  // No publishable key configured → graceful unavailable state.
-  if (!STRIPE_PUBLISHABLE_KEY || !stripePromise) {
+  // Still resolving the runtime key — show a neutral loading placeholder.
+  if (stripeConfigured === null) {
+    return (
+      <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-4 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2 animate-pulse">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        <span>Loading payment form…</span>
+      </div>
+    );
+  }
+
+  // Publishable key unavailable at runtime → graceful unavailable state.
+  if (!stripeConfigured) {
     return (
       <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2">
         <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />

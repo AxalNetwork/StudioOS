@@ -1,12 +1,3 @@
-# Terms of Service — Axal StudioOS
-
-> **Subject to legal review.** This template is a working draft. Final
-> binding terms must be reviewed and approved by qualified counsel
-> before public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Operator:** Axal VC Management LLC, a Delaware limited liability
 company ("Axal VC Management" or the "Company")
 **Counterparty:** {{counterparty_name}} ({{counterparty_email}})
 
@@ -73,9 +64,3 @@ Terms. You may close your account at any time via Settings → Account.
 
 These Terms are governed by the laws of the State of Delaware, USA,
 without regard to conflict-of-laws principles.
-
----
-
-By signing electronically below, {{counterparty_name}} acknowledges
-having read and agreed to these Terms of Service with Axal VC
-Management LLC.

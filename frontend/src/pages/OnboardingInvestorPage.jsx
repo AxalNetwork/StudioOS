@@ -230,7 +230,7 @@ export default function OnboardingInvestorPage() {
       // Surfacing this in the wizard would be confusing; the user can
       // re-save anytime from Settings → Privacy.
     }
-    navigate('/dashboard');
+    navigate('/studio');
   };
 
   return (

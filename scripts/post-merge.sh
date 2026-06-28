@@ -2,7 +2,7 @@
 set -e
 
 if [ -f pyproject.toml ] && command -v uv >/dev/null 2>&1; then
-  uv sync --frozen 2>/dev/null || uv sync
+  UV_PROJECT_ENVIRONMENT=.venv uv sync --frozen 2>/dev/null || UV_PROJECT_ENVIRONMENT=.venv uv sync
 elif [ -f requirements.txt ]; then
   pip install -q -r requirements.txt
 fi

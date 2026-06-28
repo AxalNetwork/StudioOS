@@ -3,7 +3,7 @@ import { reportError } from '../lib/log';
 
 /**
  * Task #28 — Defense-in-depth wrapper for the global "always-on" mounts
- * (SpinoutLabListener, GlobalAssistantMount, GlobalPaywallMount, etc.)
+ * (SpinoutLabListener, GlobalPaywallMount, etc.)
  * that sit outside <Routes> at the app root.
  *
  * Without this boundary, a render-time throw inside any of those leaf

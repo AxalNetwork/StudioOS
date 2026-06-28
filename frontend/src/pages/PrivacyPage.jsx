@@ -91,7 +91,18 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">7. CONTACT US</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">7. COOKIES &amp; SIMILAR TECHNOLOGIES</h2>
+            <p>We use cookies and similar browser storage to operate the Platform and to remember your preferences. On your first visit a cookie banner lets you accept all, reject all, or choose specific categories; you can change your choice at any time via the <strong>"Cookie preferences"</strong> link in our site footer. Your choice is stored in your browser. We group cookies into four categories:</p>
+            <ul className="list-disc list-inside space-y-2">
+              <li><strong>Essential:</strong> Required for the Platform to function — signing in, keeping your session secure, and remembering your privacy choices. Always on; cannot be turned off.</li>
+              <li><strong>Functional:</strong> Remember your preferences and settings (such as theme and layout) to improve your experience.</li>
+              <li><strong>Analytics:</strong> Help us understand how the Platform is used so we can improve it. We record your preference now; the Platform does not currently load third-party analytics.</li>
+              <li><strong>Advertising:</strong> Would support measuring or tailoring marketing. We record your preference now; the Platform does not currently load advertising cookies.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">8. CONTACT US</h2>
             <p>For privacy requests or to report a suspected security issue:</p>
             <p><strong>Privacy Officer</strong><br />Axal VC Management LLC<br /><strong>Email:</strong> privacy@axal.vc</p>
           </section>

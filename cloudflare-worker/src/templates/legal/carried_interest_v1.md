@@ -1,14 +1,3 @@
-# Carried Interest Allocation Agreement — Axal StudioOS
-
-> **v1 draft — subject to legal review.** This template is a working
-> draft and must be reviewed and approved by qualified counsel before
-> execution or public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Allocating entity:** Axal VC GP LLC, the general partner of Axal VC Fund I, LP ("Axal GP")
-**Recipient:** {{partner.legal_name}}, a {{partner.entity_type}} ("Recipient"), acting through {{partner.contact_name}} ({{partner.email}})
-
 ## Recitals
 
 WHEREAS, Axal GP serves as the general partner of Axal VC Fund I, LP (the "Fund") and is entitled to receive carried interest distributions in respect of the Fund's investment proceeds; and
@@ -50,7 +39,3 @@ Recipient shall keep confidential the terms of this Agreement and all non-public
 ## 7. Governing Law
 
 This Agreement is governed by {{governing_law}}.
-
----
-
-Signed electronically by {{partner.contact_name}}, for and on behalf of {{partner.legal_name}}, and by Axal VC GP LLC on the date(s) appearing below.

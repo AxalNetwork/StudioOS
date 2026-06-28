@@ -263,10 +263,9 @@ function LatestArticles() {
   );
 }
 
-// Task #7 — Landing teasers: "Discover your archetype" (→ assessment) and
-// "Upcoming events" (public feed). Public surface — the events half renders a
+// Landing "Upcoming events" teaser (public feed). Public surface — renders a
 // graceful empty state and never breaks the page on a fetch error.
-function DiscoverTeaser() {
+function UpcomingEventsTeaser() {
   const [events, setEvents] = React.useState(null);
   React.useEffect(() => {
     let alive = true;
@@ -293,25 +292,7 @@ function DiscoverTeaser() {
 
   return (
     <section className="py-20 px-6 bg-gray-50 dark:bg-gray-900/40">
-      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Discover your archetype */}
-        <div className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-8 dark:border-violet-900/40 dark:from-violet-900/20 dark:to-gray-900">
-          <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center mb-5 dark:bg-violet-900/40">
-            <Sparkles size={22} className="text-violet-600 dark:text-violet-300" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Discover your archetype</h2>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-            A short, game-like assessment maps your values and skills to a founder archetype —
-            then tailors the people and events the network surfaces to you.
-          </p>
-          <Link
-            to="/play"
-            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-violet-600 hover:bg-violet-700 transition-all px-6 py-3 text-sm font-medium text-white shadow-lg shadow-violet-600/20"
-          >
-            Take the assessment <ArrowRight size={16} />
-          </Link>
-        </div>
-
+      <div className="max-w-3xl mx-auto">
         {/* Upcoming events */}
         <div className="rounded-2xl border border-gray-200 bg-white p-8 dark:border-gray-800 dark:bg-gray-900">
           <div className="flex items-center justify-between mb-5">
@@ -665,8 +646,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Task #7 — Discover-your-archetype + upcoming-events teasers (public surface). */}
-      <DiscoverTeaser />
+      {/* Upcoming-events teaser (public surface). */}
+      <UpcomingEventsTeaser />
 
       {/* Task #1 — Latest from the network (3 most recent published articles).
           Public surface; renders nothing on empty/fetch error so it never breaks the page. */}

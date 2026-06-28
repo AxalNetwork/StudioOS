@@ -3,9 +3,9 @@ import { safeReadJSON } from './lib/storage';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
-import PersonalAssistant from './components/PersonalAssistant';
 import SpinoutLabListener from './components/SpinoutLabListener';
 import SafeMount from './components/SafeMount';
+import CookieConsent from './components/CookieConsent';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
@@ -19,6 +19,11 @@ import PaywallModal, { openPaywall } from './components/PaywallModal';
 import { Lock as LockIcon } from 'lucide-react';
 import { api } from './lib/api';
 import SpinoutLabSidebar from './components/SpinoutLabSidebar';
+// Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
+// renders synchronously on first paint. It marks itself a no-auth-redirect
+// surface on mount; a lazy chunk could load AFTER the background settings 401
+// returns, racing the flag and still bouncing logged-out visitors to /login.
+import NotFoundPage from './pages/NotFoundPage';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
@@ -26,7 +31,6 @@ const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
 const IncorporatePage = lazy(() => import('./pages/IncorporatePage'));
 const IncorporateSuccessPage = lazy(() => import('./pages/IncorporateSuccessPage'));
-const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const CofounderAgreementPage = lazy(() => import('./pages/CofounderAgreementPage'));
 const Section83bPage = lazy(() => import('./pages/Section83bPage'));
 const CompliancePage = lazy(() => import('./pages/CompliancePage'));
@@ -53,10 +57,6 @@ const AdminAssessment = lazy(() => import('./pages/admin/assessment/AdminAssessm
 // Task #1 — Articles surfaces (public + author + admin queue).
 const ArticlesPage = lazy(() => import('./pages/ArticlesPage'));
 const ArticleReaderPage = lazy(() => import('./pages/ArticleReaderPage'));
-// Task #2 — Gamified assessment player surface.
-const AssessmentHubPage = lazy(() => import('./pages/play/AssessmentHubPage'));
-const AssessmentGamePage = lazy(() => import('./pages/play/AssessmentGamePage'));
-const ProfileCardPage = lazy(() => import('./pages/play/ProfileCardPage'));
 const ArticleAuthorPage = lazy(() => import('./pages/ArticleAuthorPage'));
 const AuthorProfilePage = lazy(() => import('./pages/AuthorProfilePage'));
 const ArticlesQueuePage = lazy(() => import('./pages/admin/ArticlesQueuePage'));
@@ -92,10 +92,13 @@ const MyEventsPage = lazy(() => import('./pages/events/MyEventsPage'));
 const EventEditorPage = lazy(() => import('./pages/events/EventEditorPage'));
 const EventManagePage = lazy(() => import('./pages/events/EventManagePage'));
 const CofounderPage = lazy(() => import('./pages/CofounderPage'));
-const SkillsProfilePage = lazy(() => import('./pages/SkillsProfilePage'));
-const ValuesAssessmentPage = lazy(() => import('./pages/ValuesAssessmentPage'));
+// Task #20 — /skills and /values are consolidated into the advisor flow.
+// The underlying SkillsProfilePage/ValuesAssessmentPage files are kept intact on
+// disk (data stores), but their routes now redirect to /studio.
+const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
 const PortfolioHealthPage = lazy(() => import('./pages/PortfolioHealthPage'));
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
+const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
 const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
 const ReferEarnPage = lazy(() => import('./pages/ReferEarnPage'));
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
@@ -165,8 +168,6 @@ const EmailChangeRevokePage = lazy(() => import('./pages/EmailChangeRevokePage')
 import InactivityWarningModal from './components/InactivityWarningModal';
 import NotificationBell from './components/NotificationBell';
 import CommandPalette from './components/CommandPalette';
-// Task #7 (IG) — Contextual help (+ paid-tier customer chat) on every signed-in page.
-import HelpWidget from './components/HelpWidget';
 import StepUpModal from './components/StepUpModal';
 import InstallPrompt from './components/InstallPrompt';
 import KeyboardShortcutsOverlay from './components/KeyboardShortcutsOverlay';
@@ -191,10 +192,10 @@ const ROLE_COLORS = {
 };
 
 const ROLE_DEFAULT_PATH = {
-  admin: '/dashboard',
+  admin: '/studio',
   founder: '/founder',
   partner: '/partner-portal',
-  investor: '/dashboard',
+  investor: '/studio',
   mentor: '/office-hours',
   // Task #51 follow-up — fresh Google signups land with role='pending' until
   // the onboarding chatbot classifies them. The pending-gate in RequireAuth
@@ -202,6 +203,14 @@ const ROLE_DEFAULT_PATH = {
   // role-lookup (e.g. landing-page fallback) from 404-ing them out.
   pending: '/onboarding/chat',
 };
+
+// Legacy /dashboard → /studio. Preserve the query string and hash so old links
+// and server-driven OAuth callbacks (?google=ok, ?advisor=1, ?profile_pending=1)
+// keep working after the rename.
+function DashboardRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/studio', search: loc.search, hash: loc.hash }} replace />;
+}
 
 const ViewModeContext = createContext(null);
 export const useViewMode = () => useContext(ViewModeContext);
@@ -732,7 +741,6 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         onLogout={logoutNow}
       />
       <CommandPalette />
-      <HelpWidget />
       <KeyboardShortcutsOverlay />
       <InstallPrompt />
       <StepUpModal />
@@ -742,6 +750,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
 function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate }) {
   const location = useLocation();
+  const { oauthBootstrapping } = useAuth();
   const [kycStatus, setKycStatus] = useState(user?.kyc_status || null);
   const [accessLevel, setAccessLevel] = useState(user?.access_level || null);
   // Task #24 — authoritative role from /api/me. The login token / stored
@@ -803,6 +812,23 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     })();
     return () => { cancelled = true; };
   }, [user?.id]);
+
+  // Post-OAuth bootstrap in flight. The Google callback set the session
+  // cookie entirely server-side and 302'd us to a protected route;
+  // useAuthSync is force-probing /me to reconcile the cookie-backed identity.
+  // Show a spinner until it settles — checked BEFORE the `!user` branch so we
+  // (a) never bounce to /login (which lands on AuthScreen and would tear the
+  // freshly-minted session down as an "account switch"), and (b) never flash
+  // protected UI under a STALE cached user (e.g. a prior browser user still
+  // in localStorage) before the fresh /me lands. Cleared on settle, so a
+  // genuinely failed bootstrap falls through to the normal checks below.
+  if (oauthBootstrapping) {
+    return (
+      <div className="flex items-center justify-center min-h-screen text-sm text-gray-500 dark:text-gray-400">
+        Signing you in…
+      </div>
+    );
+  }
 
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
@@ -934,7 +960,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
 function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImpersonating }) {
   const effectiveRole = isImpersonating ? user?.role : ((realUser || user)?.role === 'admin' ? viewMode : user?.role);
   if (!allowedRoles.includes(effectiveRole)) {
-    const defaultPath = ROLE_DEFAULT_PATH[effectiveRole] || '/dashboard';
+    const defaultPath = ROLE_DEFAULT_PATH[effectiveRole] || '/studio';
     return <Navigate to={defaultPath} replace />;
   }
   return children;
@@ -986,7 +1012,7 @@ function AppInner() {
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
     localStorage.setItem('viewMode', mode);
-    const defaultPath = ROLE_DEFAULT_PATH[mode] || '/dashboard';
+    const defaultPath = ROLE_DEFAULT_PATH[mode] || '/studio';
     navigate(defaultPath);
   };
 
@@ -1001,7 +1027,7 @@ function AppInner() {
     setUser(impersonatedUser);
     setViewMode(impersonatedUser.role);
     localStorage.setItem('viewMode', impersonatedUser.role);
-    navigate(ROLE_DEFAULT_PATH[impersonatedUser.role] || '/dashboard');
+    navigate(ROLE_DEFAULT_PATH[impersonatedUser.role] || '/studio');
     // T20 — bypass the 5-min /me throttle so the impersonated session is
     // immediately reconciled against the server (KYC, access_level, etc.).
     refresh({ force: true });
@@ -1118,7 +1144,7 @@ function AppInner() {
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
 <RouteErrorBoundary>
 <Routes>
-      <Route path="/" element={user ? <Navigate to={ROLE_DEFAULT_PATH[user.role] || '/dashboard'} replace /> : <LandingPage />} />
+      <Route path="/" element={user ? <Navigate to={ROLE_DEFAULT_PATH[user.role] || '/studio'} replace /> : <LandingPage />} />
       <Route path="/spinout-lab" element={<SpinoutLabPage />} />
       <Route path="/pricing/investor" element={<InvestorPricingPage />} />
       <Route path="/register" element={<AuthScreen user={user} clearSession={clearSession}><RegisterPage /></AuthScreen>} />
@@ -1142,7 +1168,8 @@ function AppInner() {
           passes. Investor-only nav is curated above (NAV_BY_ROLE.investor)
           so we get a tighter capital-allocator surface; per-route guards
           stay permissive so deep links keep working during the split. */}
-      <Route path="/dashboard" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <Dashboard />)} />
+      <Route path="/studio" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <Dashboard />)} />
+      <Route path="/dashboard" element={<DashboardRedirect />} />
       <Route path="/onboarding/chat" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor', 'pending'], <OnboardingChatPage />)} />
       <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor'], <OnboardingPersonaPage />)} />
       <Route path="/onboarding/founder" element={guard(['admin', 'founder'], <OnboardingFounderPage />)} />
@@ -1180,6 +1207,8 @@ function AppInner() {
       <Route path="/admin/telegram" element={guard(['admin'], <AdminTelegram />)} />
       <Route path="/admin/x" element={guard(['admin'], <AdminX />)} />
       <Route path="/admin/assessment" element={guard(['admin'], <AdminAssessment />)} />
+      {/* Task #20 — Admin Best-Fit console (consultation queue + full report). */}
+      <Route path="/admin/best-fit" element={guard(['admin'], <AdminBestFitPage />)} />
       {/* Task #3 — News & Articles admin queues merged into one Content Queue. Legacy routes redirect. */}
       <Route path="/admin/news" element={<Navigate to="/admin/articles" replace />} />
       <Route path="/news" element={<Navigate to="/articles/draft" replace />} />
@@ -1187,8 +1216,8 @@ function AppInner() {
       <Route path="/articles" element={<ArticlesPage />} />
       <Route path="/articles/draft" element={authOnly(<ArticleAuthorPage />)} />
       <Route path="/articles/edit/:id" element={authOnly(<ArticleAuthorPage />)} />
-      {/* Task #5 — Articles hub: /articles (Browse) + /articles/mine (My Articles tab). */}
-      <Route path="/articles/mine" element={authOnly(<ArticlesPage />)} />
+      {/* Articles hub is public-only; the writing workspace lives at /articles/draft. Legacy /articles/mine redirects there. */}
+      <Route path="/articles/mine" element={<Navigate to="/articles/draft" replace />} />
       <Route path="/authors/:userId" element={<AuthorProfilePage />} />
       <Route path="/admin/articles" element={guard(['admin'], <ArticlesQueuePage />)} />
       <Route path="/articles/:slug" element={<ArticleReaderPage />} />
@@ -1228,18 +1257,17 @@ function AppInner() {
       <Route path="/events/new" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <EventEditorPage />)} />
       <Route path="/events/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <EventEditorPage />)} />
       <Route path="/events/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <EventManagePage />)} />
-      {/* Task #2 — Gamified assessment player (hub, shareable card, game runner). */}
-      <Route path="/play" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <AssessmentHubPage />)} />
-      <Route path="/play/card" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ProfileCardPage />)} />
-      <Route path="/play/:gameSlug" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <AssessmentGamePage />)} />
       <Route path="/cofounder" element={guard(['admin', 'founder'], <CofounderPage />)} />
-      {/* Task #11 — User Skill Profile (self ratings + peer endorsements). */}
-      <Route path="/skills" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SkillsProfilePage />)} />
-      {/* Task #12 — Personal-Values Assessment. */}
-      <Route path="/values" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ValuesAssessmentPage />)} />
+      {/* Task #20 — Consolidated profile/advisor flow. The advisor conversation
+          now builds the skill + values profile; the legacy /skills and /values
+          routes redirect here (underlying data stores kept intact). */}
+      <Route path="/skills" element={<Navigate to="/studio" replace />} />
+      <Route path="/values" element={<Navigate to="/studio" replace />} />
       <Route path="/portfolio/health" element={guard(['admin', 'founder', 'partner', 'investor'], <PortfolioHealthPage />)} />
       {/* Task #18 — Partner Coverage Analytics (admin/partner-only internal dashboard). */}
       <Route path="/portfolio/coverage" element={guard(['admin', 'partner'], <PortfolioCoveragePage />)} />
+      {/* Task #10 — portfolio Venture Risk matrix (internal deal team). */}
+      <Route path="/portfolio/risk-matrix" element={guard(['admin', 'partner', 'investor'], <RiskMatrixPage />)} />
       <Route path="/watchlist" element={guard(['admin', 'partner', 'investor'], <WatchlistJournalPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
@@ -1321,15 +1349,6 @@ function AppInner() {
   );
 }
 
-// Mount the assistant at the auth-shell level so it persists across
-// route changes (Task #5: "pinned… persistent across pages"). The
-// component itself fail-closes when assistant_enabled !== 1, so it's
-// safe to render for unauthenticated users too.
-function GlobalAssistantMount() {
-  const { user } = useAuth();
-  return <PersonalAssistant user={user} />;
-}
-
 // Task #6 — Mount the tier paywall once at the app shell so any 402
 // `tier_required` response (or sidebar lock click) opens the same modal.
 function GlobalPaywallMount() {
@@ -1377,8 +1396,8 @@ export default function App() {
             degrades to "that one widget is missing" instead of "the
             whole app is gone". */}
         <SafeMount name="SpinoutLabListener"><SpinoutLabListener /></SafeMount>
-        <SafeMount name="GlobalAssistantMount"><GlobalAssistantMount /></SafeMount>
         <SafeMount name="GlobalPaywallMount"><GlobalPaywallMount /></SafeMount>
+        <SafeMount name="CookieConsent"><CookieConsent /></SafeMount>
       </SettingsProvider>
     </AuthProvider>
   );

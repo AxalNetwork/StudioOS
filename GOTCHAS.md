@@ -10,7 +10,7 @@ find. Content below is preserved verbatim from the original `replit.md`
 - Apply via `wrangler d1 execute studioos-db --remote --env production --file=cloudflare-worker/sql/migrations/<file>.sql`. Wrangler needs Node 22+; use `export PATH=/nix/store/51gywl5jn4nna7al9waj142pw4vfhy0k-nodejs-22.19.0/bin:$PATH` first.
 - New migrations: additive-only, `IF NOT EXISTS`. If an ALTER is needed, add a lazy PRAGMA-check in the consuming route (`ensureAdvisorWeekColumn()` / `ensureMarketIntelSchema()` are the reference patterns).
 - **`users` table has hit D1's ALTER-rewrite column limit** — `ALTER TABLE users ADD COLUMN` now fails with `too many columns on sqlite_altertab_users`. New user-attached fields must use a side table keyed by `user_id PRIMARY KEY` (see `user_google_links` from migration 065 for the canonical pattern).
-- **Pending / partial migrations**: `039_project_cascade.sql` partial (deleted_at + index applied; FK-cascade rebuilds blocked by D1's BEGIN/COMMIT rejection); `034_unmounted_routes.sql` unapplied (missing `owner_user_id`); `056_customer_chat_threads.sql` unapplied; `057_data_imports.sql` applied 2026-05-22 (fixes `/api/imports/quota` 500s); `060_auth_recovery.sql` **partial** (`auth_recovery_tickets` + `auth_trusted_contacts` tables + indexes applied 2026-05-22; the two `users` ALTERs for `recovery_cooling_off_until`/`recovery_step_up_due_at` blocked by the column-limit — move to a side table when needed; `user_sessions.assurance_level` ALTER still pending); `061_google_sub.sql` **superseded by 065** (don't re-apply); `062`/`063`/`064` unapplied; `066_team_members.sql` unapplied (Task #10 LD; worker carries `ensureTeamMembersSchema()` lazy bootstrap so the public /team endpoint works regardless — applying the migration also seeds the Guillaume Lauzier row).
+- **Pending / partial migrations**: `039_project_cascade.sql` partial (deleted_at + index applied; FK-cascade rebuilds blocked by D1's BEGIN/COMMIT rejection); `034_unmounted_routes.sql` unapplied (missing `owner_user_id`); `056_customer_chat_threads.sql` unapplied; `057_data_imports.sql` applied 2026-05-22 (fixes `/api/imports/quota` 500s); `060_auth_recovery.sql` **partial** (`auth_recovery_tickets` + `auth_trusted_contacts` tables + indexes applied 2026-05-22; the two `users` ALTERs for `recovery_cooling_off_until`/`recovery_step_up_due_at` blocked by the column-limit — move to a side table when needed; `user_sessions.assurance_level` ALTER still pending); `061_google_sub.sql` **superseded by 065** (don't re-apply); `062`/`063`/`064` unapplied; `066_team_members.sql` unapplied (Task #10 LD; worker carries `ensureTeamMembersSchema()` lazy bootstrap so the public /team endpoint works regardless — applying the migration also seeds the Guillaume Lauzier row); `115_axal_fit.sql` **applied 2026-06-20** (fixed the Best-Fit Console 500 — `admin_consultation_bookings` + `axal_values`/`axal_fit_scores`/`axal_fit_reports` were missing in prod; worker now also carries `services/axalFitSchema.ts::ensureAxalFitSchema()` lazy bootstrap, wired into the consultations / best-fit / self-best-fit routes, so these self-heal on a cold D1).
 
 ### Skills & values taxonomy (Task #10)
 - **Canonical reference data, not per-user data.** Migration `089_skills_values_taxonomy.sql` (schema) + `090_seed_skills_values_taxonomy.sql` (seed) create `skill_categories`, `skills`, `value_dimensions` — the single source of truth every downstream feature (skill profiles, radar graph, co-founder/partner/investor matching, deck spider) reads from. Both additive + idempotent (`CREATE TABLE IF NOT EXISTS` / `INSERT OR IGNORE` on UNIQUE `slug`), so re-applying is a clean no-op. Apply 089 then 090 via wrangler (same `npx wrangler d1 execute studioos-db --config wrangler.toml --remote --file=…` shape as 085/088); neither is applied to prod yet.
@@ -50,7 +50,7 @@ find. Content below is preserved verbatim from the original `replit.md`
 - **Admin role changes** — direct SQL only, no UI.
 - **Referrer-Policy is two-tier (NICE-SEC-01)** — the authenticated app/API surface (`middleware/securityHeaders.ts` on the Worker + dev `backend/app/main.py`) emits `no-referrer` (canonical; never leak IDs/query-params); the public Jekyll marketing site (`github.toml`) + static/Pages header config (`cloudflare.toml`) keep `strict-origin-when-cross-origin` (no sensitive URLs, wants referral attribution). The split is deliberate — don't "unify" them.
 - **`activity_logs.actor`** — 16-hex SHA-256-truncated `email_hash` for all writes (`util/hashEmail.ts`); never plaintext. Join on `user_id`. Legacy reads in `routes/activity.ts` keep `LOWER(actor)=LOWER(email)`.
-- **`SCORING_HMAC_SECRET`** — ≥32 bytes hard-required in production; worker refuses to boot otherwise. Dev falls back to `JWT_SECRET` with a warning.
+- **`SCORING_HMAC_SECRET`** — ≥32 bytes hard-required in production; worker refuses to boot otherwise. When unset in dev, the scoring-integrity key is now an **HKDF-SHA256 subkey derived from `JWT_SECRET`** (salt `axal:score-integrity`, info `scoring-hmac:v1`, 256-bit) — domain-separated, **never the raw `JWT_SECRET`** (audit M4). A provided `SCORING_HMAC_SECRET` (≥16 bytes) is used verbatim. `INTEGRITY_VERSION` was not bumped (no stored-hash format change).
 - **`AXAL_ENCRYPTION_SECRET || JWT_SECRET`** keys all `cryptoBox` AES-GCM at-rest encryption. PBKDF2 iterations are **100,000** (Workers runtime caps PBKDF2 at 100k — values above throw `NotSupportedError: PBKDF2 failed: iterations exceeds the maximum`). `decryptString`/`decryptBytes` retain a 200k LEGACY fallback via `decryptWithFallback()` so ciphertext written by older isolates (whose key was cached before the limit tightened) stays readable. Never change `ITERATIONS` without keeping the legacy in the fallback list.
 - **Pagination clamps** — always use `util/pagination.ts` (`/api/activity` ≤200, `/api/admin/users` ≤50, `/api/dashboard?days` ≤365).
 - **CI audit gates** — `npm audit --omit=dev --audit-level=high` (frontend + worker) + `pip-audit` (backend) block high/critical CVEs in prod deps.
@@ -87,6 +87,91 @@ find. Content below is preserved verbatim from the original `replit.md`
 - **Continue with Google sign-in** — `users` is too wide for ALTER TABLE, so the Google link lives in side table `user_google_links(user_id PK, google_sub UNIQUE)` (migration 065). All link reads/writes in `routes/auth_google.ts` + `routes/settings.ts` use `INSERT OR IGNORE` to defend against double-click races (would otherwise 500 on UNIQUE → `internal_error` toast). Worker secrets `GOOGLE_AUTH_CLIENT_ID`/`SECRET` are pushed via `wrangler secret put` (NOT Replit Secrets — those only flow to dev). Google OAuth client must list `https://app.axal.vc/api/auth/google/callback` in Authorized redirect URIs.
 - **DD module** — admin/partner/investor/mentor read; founders never read. NDA upload enforced before any verdict ≠ `n_a`. Reports R2-encrypted (AES-GCM via `cryptoBox.encryptBytes`), download via short-lived HMAC token.
 
+### Stripe live-mode cutover runbook
+
+This is the end-to-end ops checklist for switching from Stripe test mode to live mode. All code infrastructure was built in previous tasks. These are the manual steps only an account owner can perform. Follow them in order — skipping step 2 makes step 3 fail silently.
+
+**Prerequisites (Stripe dashboard — no API surface)**
+- Activate the Stripe account for live charges: Dashboard → Settings → Business settings → complete business details + identity verification.
+- Stripe Tax (optional — can be deferred): Dashboard → Settings → Tax → activate, set origin address, add jurisdiction registrations. Do NOT set `STRIPE_TAX_ENABLED` until this is fully configured — enabling it before the dashboard is ready makes every checkout/subscription/invoice create 502.
+- Dashboard → Settings → Customer emails → turn OFF "Successful payments" and "Sent invoices/receipts" (so buyers receive only Axal-branded receipts, not duplicate Stripe emails).
+
+**Step 1: Set live API credentials as Cloudflare Worker secrets**
+```bash
+export PATH=/nix/store/51gywl5jn4nna7al9waj142pw4vfhy0k-nodejs-22.19.0/bin:$PATH
+wrangler secret put STRIPE_SECRET_KEY --env production
+# paste sk_live_…
+wrangler secret put STRIPE_CONNECT_CLIENT_ID --env production
+# paste ca_… (Connect platform client_id from Stripe Dashboard → Connect → Settings)
+```
+
+**Step 2: Set the live publishable key via Admin Console (no redeploy needed)**
+- Log in as admin → Admin Console → Payments tab.
+- In the "Publishable Key" field, paste `pk_live_…` → Save.
+- The mode badge should immediately flip to **Live**. The key is stored in KV and the frontend reads it at runtime without a rebuild.
+
+**Step 3: Provision the live product catalog via Admin Console → Payments**
+Create each product with the exact `kind` and metadata. The checkout routes resolve prices by metadata, not env vars (except incorporation — see step 4). Run "Sync from Stripe" after creating all products.
+
+| Product name | Kind | Required metadata |
+|---|---|---|
+| MI Pro | subscription | `plan=mi_pro`; add both a monthly and annual price |
+| Founder Growth | subscription | `tier=growth`; one recurring price |
+| Founder Studio | subscription | `tier=studio`; one recurring price |
+| Investor Professional | subscription | `investor_tier=professional`; monthly + yearly prices |
+| Investor Institutional | subscription | `investor_tier=institutional`; monthly + yearly prices |
+| US-DE C-Corp Incorporation | incorporation | `kind=incorporation`; one-time price (see step 4) |
+| US-DE LLC Incorporation | incorporation | `kind=incorporation`; one-time price |
+| UK Ltd Incorporation | incorporation | `kind=incorporation`; one-time price |
+| SG Pte Incorporation | incorporation | `kind=incorporation`; one-time price |
+| EE OÜ Incorporation | incorporation | `kind=incorporation`; one-time price |
+| Expert Session | session | `kind=session`; per-session price |
+| À la carte unlocks | alacarte | `kind=alacarte`, `feature_key=<key>`, `unlock_days=<N>`; one-time price per feature |
+
+Add `commission_pct=<number>` (e.g. `10`) to any SKU that should pay referral commission.
+
+**Step 4: Set incorporation price IDs as Worker secrets**
+After creating the five incorporation products, copy each Stripe price ID (`price_live_…`) from the catalog panel and set them:
+```bash
+wrangler secret put STRIPE_PRICE_INCORP_US_DE_CCORP --env production
+wrangler secret put STRIPE_PRICE_INCORP_US_DE_LLC --env production
+wrangler secret put STRIPE_PRICE_INCORP_UK_LTD --env production
+wrangler secret put STRIPE_PRICE_INCORP_SG_PTE --env production
+wrangler secret put STRIPE_PRICE_INCORP_EE_OY --env production
+```
+These are read by `routes/legal.ts::JURISDICTION_PRICE_ENV` — they do NOT come from the catalog mirror like subscription prices do.
+
+**Step 5: Register the live webhook via Admin Console → Payments**
+- Admin Console → Payments → Webhook panel → Register endpoint: `https://axal.vc/api/billing/webhook`.
+- The signing secret (`whsec_live_…`) is pushed to `STRIPE_WEBHOOK_SECRET` automatically. If the auto-push fails, the secret is shown in the response — copy it and run: `wrangler secret put STRIPE_WEBHOOK_SECRET --env production`.
+- Required webhook events (the panel shows drift if any are missing): `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.finalized`, `charge.succeeded`, `payment_intent.succeeded`.
+
+**Step 6: Enable Stripe Tax (only after dashboard configuration is fully complete)**
+```bash
+wrangler secret put STRIPE_TAX_ENABLED --env production
+# value: 1
+```
+**WARNING:** Flipping this before Stripe Tax is active in the dashboard makes EVERY checkout/subscription/invoice create 502. To roll back: `wrangler secret delete STRIPE_TAX_ENABLED --env production`.
+
+**Step 7: Build and deploy**
+```bash
+npm run test:drift   # must pass
+npm run build
+npm run deploy
+```
+
+**Step 8: Verify end-to-end (real transactions required)**
+- Subscription checkout: MI Pro, one founder tier, one investor tier — confirm fulfilment webhook fires + branded receipt email arrives.
+- Incorporation payment: one jurisdiction — confirm pending row created + price ID resolved correctly.
+- À la carte unlock: one feature — confirm `feature_unlocks` row written.
+- Expert booking with Connect payout — confirm booking confirmed + payout transfer.
+- Promo code redemption — confirm discount applied + `promo_redemptions` row.
+- If Tax enabled: confirm a tax line appears on a subscription invoice.
+
+**Step 9: Rollback procedure**
+- `wrangler secret put STRIPE_SECRET_KEY --env production` (paste sk_test_… back).
+- Admin Console → Payments → paste `pk_test_…` → Save. Mode badge returns to Test immediately; no redeploy required.
+
 ### Ops items still owned by user (not in code)
 - **(a)** Disable R2 public access + add 90-day Standard-IA lifecycle rule.
 - **(b)** Verify search/backfill cron in prod.
@@ -100,3 +185,4 @@ find. Content below is preserved verbatim from the original `replit.md`
 - **(k)** **Activate Stripe Tax before flipping `STRIPE_TAX_ENABLED`** (Task #12) — the worker keeps `automatic_tax` OFF until this env var is truthy (default unset = off). Before turning it on in prod: (1) Stripe Dashboard → Settings → **Tax** → activate Stripe Tax, set the **origin address**, and add the tax **registrations** for every jurisdiction you must collect in; (2) confirm subscription/incorporation customers carry a tax-determinable address (Checkout collects it; the incorporation Invoice path needs it pre-set); (3) `wrangler secret put STRIPE_TAX_ENABLED --env production` (value `1`) — or set it in `wrangler.toml` vars. **If you enable the flag before step (1), every checkout/subscription/invoice create 502s** (Stripe rejects `automatic_tax` until Tax is active). To roll back instantly, unset the var. **Not covered by the flag:** à la carte charges and expert-booking PaymentIntents (raw PIs can't take `automatic_tax`) — taxing those requires the Stripe Tax Calculation API (separate follow-up).
 - **(l)** **Repair the `advisor-ongoing` AI Gateway (Task #50).** The onboarding chat (`POST /api/profiling/chat`, AI task `advisor_turn`) and the Personal Advisor explainer (`advisor_explain`) route through the Cloudflare AI Gateway slug `CF_AI_GATEWAY_SLUG_ADVISOR = "advisor-ongoing"`. The router is now gateway-resilient (a failing gateway auto-retries the same Workers AI model un-gatewayed, so onboarding never dead-ends), but the gateway should still be restored so advisor analytics/cache/rate-limits are tracked again. In the Cloudflare dashboard → AI → AI Gateway → `advisor-ongoing`: (1) **turn OFF "Authenticated Gateway"** (the Worker does not send the cf-aig token — this is the most common trigger of the "trouble reaching the AI assistant" message), and (2) relax any rate-limit/cache rule that rejects calls. Confirm fixed by watching the admin AI-usage view (`/api/monitoring/ai-usage`) for `advisor_turn` refusals (`all_models_failed`) dropping back to zero, and by the absence of `[AI_ROUTER] advisor gateway bypassed after failure` warnings in `wrangler tail`.
 - **(i)** **Enable Stripe webhook event `payment_intent.succeeded`** (Task #7) — paid expert bookings and à la carte unlocks now fulfil on this event (embedded PaymentIntents, no Checkout redirect). In the Stripe Dashboard → Developers → Webhooks → the StudioOS endpoint, add `payment_intent.succeeded` to the delivered events. Until enabled, bookings stay `pending_payment` and unlocks never write even though the client UI shows "confirmed". Also create the `session`/`alacarte` Products in Stripe (`metadata.kind`, plus `metadata.feature_key`/`unlock_days` for à la carte) and run `POST /api/admin/catalog/sync`. Apply migration `098_feature_unlocks.sql` on deploy.
+- **(m)** **Stripe live-mode cutover** — no Stripe secrets are configured yet. Follow the "Stripe live-mode cutover runbook" section above for the complete operator sequence: activate your Stripe account for live charges, set `STRIPE_SECRET_KEY` + `STRIPE_CONNECT_CLIENT_ID` via `wrangler secret put`, paste the live publishable key in Admin Console → Payments, provision the full live product catalog, set `STRIPE_PRICE_INCORP_*` secrets for the five incorporation jurisdictions, register the live webhook (auto-pushes `STRIPE_WEBHOOK_SECRET`), optionally enable `STRIPE_TAX_ENABLED=1`, then build + deploy + run end-to-end verification. The runbook also documents the rollback procedure.

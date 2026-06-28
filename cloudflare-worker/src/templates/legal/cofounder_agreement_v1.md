@@ -1,15 +1,3 @@
-# Co-Founder Agreement — Axal StudioOS
-
-> **v1 draft — subject to legal review.** This template is a working
-> draft and must be reviewed and approved by qualified counsel before
-> execution or public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Company:** {{company.legal_name}}, a {{company.entity_type}} ("Company")
-**Founder:** {{founder.legal_name}}, {{founder.title}} ({{founder.email}})
-**Co-Founder:** {{cofounder.legal_name}}, {{cofounder.title}} ({{cofounder.email}})
-
 ## Recitals
 
 WHEREAS, {{founder.legal_name}} and {{cofounder.legal_name}} (each a "Founder" and together the "Founders") have agreed to establish and build {{company.short_name}} for the purpose of {{company.business_purpose}}; and
@@ -55,7 +43,3 @@ Material decisions require the unanimous consent of the Founders. In the event o
 ## 7. Governing Law
 
 This Agreement is governed by {{governing_law}}.
-
----
-
-Signed electronically by {{founder.legal_name}} and {{cofounder.legal_name}} on the date(s) appearing below.

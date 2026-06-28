@@ -1396,6 +1396,9 @@ adminContracts.get('/templates/store/:slug/preview.pdf', async (c) => {
   const pdf = await renderTemplatePreviewPdf({
     documentTitle: tpl.title,
     documentBody: body,
+    documentVersion: tpl.version,
+    documentType: slug,
+    category: tpl.category,
   });
 
   const filename = `${slug}-v${tpl.version}-preview.pdf`;

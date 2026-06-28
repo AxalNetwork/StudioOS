@@ -1,16 +1,3 @@
-# Venture Share Agreement (FAST) — Axal StudioOS
-
-> **v1 draft — subject to legal review.** This template is a working
-> draft and must be reviewed and approved by qualified counsel before
-> execution or public release. It is adapted from the Founder/Advisor
-> Standard Template (FAST) concept and is not affiliated with or
-> endorsed by its originators.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Company:** {{company.legal_name}}, a {{company.entity_type}} (the "Company")
-**Advisor:** {{partner.legal_name}}, acting through {{partner.contact_name}} ({{partner.email}}), serving in the capacity of {{partner.role}}
-
 ## Recitals
 
 WHEREAS, the Company wishes to receive strategic advice from Advisor; and
@@ -56,7 +43,3 @@ This Agreement continues until terminated by either party on thirty (30) days' w
 ## 8. Governing Law
 
 This Agreement is governed by {{governing_law}}.
-
----
-
-Signed electronically by {{partner.contact_name}}, for and on behalf of {{partner.legal_name}}, and by {{company.legal_name}} on the date(s) appearing below.

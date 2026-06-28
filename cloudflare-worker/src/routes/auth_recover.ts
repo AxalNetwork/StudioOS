@@ -96,7 +96,13 @@ async function rate(env: Env, key: string, max: number, windowSec: number): Prom
     if (cur >= max) return false;
     await env.RATE_LIMITS.put(k, String(cur + 1), { expirationTtl: windowSec + 5 });
     return true;
-  } catch { return true; }
+  } catch (e) {
+    // Fail-CLOSED on KV outage (audit M1): account-recovery throttles must deny
+    // on outage, not disable, or recovery (email/SMS/break-glass) becomes
+    // brute-forceable. Log only the bucket prefix — key tail is email/phone (PII, L5).
+    console.error('auth_recover rate KV error (failing closed) bucket=%s', key.split(':')[0], e);
+    return false;
+  }
 }
 
 async function readJson(c: any): Promise<any> {

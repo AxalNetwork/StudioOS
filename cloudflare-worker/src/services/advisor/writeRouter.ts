@@ -18,7 +18,8 @@
  */
 import type { Env } from '../../types';
 import type { User } from '../../types';
-import { questionById, mapRoleAnswer, DYNAMIC_ID_RE } from './questionBank.ts';
+import { questionById, mapRoleAnswer, DYNAMIC_ID_RE, FIT_ID_RE } from './questionBank.ts';
+import { ensureTaxonomyVersionColumns, getTaxonomyVersion } from '../taxonomyVersion.ts';
 
 export type WriteStatus = 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop' | 'needs_evidence' | 'invalid';
 
@@ -421,6 +422,138 @@ async function tierForInvestorThesis(env: Env, user: User): Promise<{ ok: boolea
   return { ok: false, upgrade_link: '/billing/investor-upgrade' };
 }
 
+// ---------------------------------------------------------------------------
+// Task #19 — Best-Fit. Fit-answer routing helpers.
+// ---------------------------------------------------------------------------
+
+/** Representative skill id for a radar-axis category (lowest display_order). */
+async function resolveCategorySkillId(env: Env, axisSlug: string): Promise<number | null> {
+  const row = await env.DB.prepare(
+    `SELECT id FROM skills WHERE category_slug = ? AND is_active = 1
+       ORDER BY display_order, id LIMIT 1`,
+  ).bind(axisSlug).first<{ id: number }>().catch(() => null);
+  return row?.id ?? null;
+}
+
+/** value_dimensions.id for a slug. */
+async function resolveValueDimensionId(env: Env, slug: string): Promise<number | null> {
+  const row = await env.DB.prepare(
+    `SELECT id FROM value_dimensions WHERE slug = ? LIMIT 1`,
+  ).bind(slug).first<{ id: number }>().catch(() => null);
+  return row?.id ?? null;
+}
+
+/**
+ * Route a conversational Best-Fit answer (a 0..5 `scale` self-rating). The raw
+ * score is persisted to `field_sources.evidence_text` by routes/advisor.ts
+ * (which `axalFit.loadAnsweredScores` reads for rubric + red-flag aggregation);
+ * here we fan the same score out to the structured profile tables it maps to:
+ *   - `axal_value` → axal_values  (score = raw/5, confidence = 1)
+ *   - `skill_axis` → user_skills  (self_level = raw, representative skill, raw>0)
+ *   - `value_dim`  → user_values  (raw 0..5 → -2..+2, confidence-blended)
+ * `rubric_category` / `red_flag` carry no structured write (computeFit reads
+ * them from field_sources). Returns `invalid` for a non-integer-0..5 answer.
+ */
+async function routeFitAnswer(
+  env: Env,
+  user: User,
+  q: NonNullable<ReturnType<typeof questionById>>,
+  value: string,
+): Promise<WriteResult> {
+  const m = q.measures;
+  if (!m) return { status: 'noop' };
+
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0 || n > 5) {
+    return {
+      status: 'invalid',
+      error: 'schema_validation_failed',
+      hint: 'Please answer with a whole number from 0 (not at all) to 5 (completely).',
+      evidence_kind: 'numeric',
+      field: q.id,
+      open_url: q.page_target || undefined,
+    };
+  }
+
+  let saved_to: WriteResult['saved_to'] | undefined;
+  try {
+    // axal_value → axal_values (0..1).
+    if (m.axal_value) {
+      await env.DB.prepare(
+        `INSERT INTO axal_values (user_id, value_key, score, confidence, updated_at)
+           VALUES (?, ?, ?, 1, datetime('now'))
+         ON CONFLICT(user_id, value_key) DO UPDATE SET
+           score = excluded.score,
+           confidence = excluded.confidence,
+           updated_at = excluded.updated_at`,
+      ).bind(user.id, m.axal_value, n / 5).run();
+      saved_to = { table: 'axal_values', column: 'score', id: user.id };
+    }
+
+    // skill_axis → user_skills (representative skill; MAX(self_level) per
+    // category in matchingVectors so one rep skill sets the axis cleanly).
+    // Only write a positive rating — a 0 shouldn't create a phantom skill row.
+    if (m.skill_axis && n > 0) {
+      const skillId = await resolveCategorySkillId(env, m.skill_axis);
+      if (skillId != null) {
+        await ensureTaxonomyVersionColumns(env);
+        const tv = await getTaxonomyVersion(env);
+        await env.DB.prepare(
+          `INSERT INTO user_skills (user_id, skill_id, self_level, taxonomy_version, updated_at)
+             VALUES (?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(user_id, skill_id) DO UPDATE SET
+             self_level = excluded.self_level,
+             taxonomy_version = excluded.taxonomy_version,
+             updated_at = excluded.updated_at`,
+        ).bind(user.id, skillId, n, tv).run();
+        if (!saved_to) saved_to = { table: 'user_skills', column: 'self_level', id: user.id };
+      }
+    }
+
+    // value_dim → user_values (raw 0..5 → -2..+2; 5 = pole_high). Blend with
+    // any existing (survey) row by confidence so a single fit nudge can't
+    // clobber a full survey vector.
+    if (m.value_dim) {
+      const dimId = await resolveValueDimensionId(env, m.value_dim);
+      if (dimId != null) {
+        await ensureTaxonomyVersionColumns(env);
+        const tv = await getTaxonomyVersion(env);
+        const fitScore = n * 0.8 - 2;   // 0 → -2, 5 → +2
+        const fitConf = 0.25;           // one self-rating = low confidence
+        const existing = await env.DB.prepare(
+          `SELECT score, confidence FROM user_values WHERE user_id = ? AND dimension_id = ?`,
+        ).bind(user.id, dimId).first<{ score: number; confidence: number }>().catch(() => null);
+        let score = fitScore;
+        let confidence = fitConf;
+        if (existing) {
+          const ec = Number(existing.confidence) || 0;
+          const denom = ec + fitConf;
+          score = denom > 0 ? (Number(existing.score) * ec + fitScore * fitConf) / denom : fitScore;
+          confidence = Math.min(1, Math.max(ec, fitConf));
+        }
+        score = Math.max(-2, Math.min(2, Math.round(score * 100) / 100));
+        await env.DB.prepare(
+          `INSERT INTO user_values (user_id, dimension_id, score, confidence, taxonomy_version, updated_at)
+             VALUES (?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(user_id, dimension_id) DO UPDATE SET
+             score = excluded.score,
+             confidence = excluded.confidence,
+             taxonomy_version = excluded.taxonomy_version,
+             updated_at = excluded.updated_at`,
+        ).bind(user.id, dimId, score, confidence, tv).run();
+        if (!saved_to) saved_to = { table: 'user_values', column: 'score', id: user.id };
+      }
+    }
+  } catch (e) {
+    return { status: 'failed', error: (e as Error).message };
+  }
+
+  // A rubric-only / red-flag-only fit answer still "saves": the raw score lands
+  // in field_sources (written by the route) and feeds computeFit.
+  if (!saved_to) saved_to = { table: 'field_sources', column: 'evidence_text', id: user.id };
+  return { status: 'saved', saved_to };
+}
+
 /**
  * Route a single answer to its persistence target.
  *
@@ -454,6 +587,14 @@ export async function routeAnswer(
   if (!q) return { status: 'failed', error: 'unknown question_id' };
   const value = String(rawValue ?? '').trim();
   if (!value) return { status: 'skipped' };
+
+  // Task #19 — Best-Fit. Conversational fit answers (0..5 scale) are routed
+  // BEFORE the persona branches below: a `fit.founder.*` question carries
+  // persona:'founder' and would otherwise be captured by the founder branch
+  // (which requires founder role + a project and has no fit id handling).
+  if (q.measures && FIT_ID_RE.test(questionId)) {
+    return routeFitAnswer(env, user, q, value);
+  }
 
   // Task #3 (AS) — evidence gate. Bank questions flagged
   // `requires_evidence` (high-risk financial fields) refuse to

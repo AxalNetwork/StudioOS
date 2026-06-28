@@ -10,6 +10,653 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Ticket filing from the Personal Advisor + legacy help-surface removal (Task #9)
+
+Users can now file tracked support tickets directly from the Personal Advisor
+(the AI advisor on the Studio page), and three legacy help surfaces were removed.
+
+- `frontend/src/components/advisor/PersonalAdvisor.jsx`: added an "Open a ticket"
+  affordance in both the embedded (`Header`) and fullscreen (`FullscreenHeader`)
+  views. Toggling it renders a new inline `AdvisorTicketPanel` (title required,
+  priority select low/medium/high/urgent, optional description) that posts via the
+  existing `api.createTicket` → `POST /api/tickets` (no backend changes). On success
+  the advisor confirms inline in the transcript with a CTA to the Support Hub
+  (`/tickets`) plus a `View on GitHub` link when the response carries
+  `github_issue_url`. `CtaButtons` now renders an external `<a>` when
+  `cta.secondary.external` is set.
+- `frontend/src/pages/TicketsPage.jsx`: removed the "How can we help?" side panel
+  (`SupportHelpPanel`) and its `HelpRow` helper, reflowed the page back to a single
+  column, and dropped now-unused imports (`useNavigate`, `CustomerChatWidget`,
+  `useAuth`, `LifeBuoy`, `Search`, `Brain`, `ArrowRight`, `Loader2`, `X`) and the
+  `isChatEligible` helper.
+- Removed the floating bottom-right "Assistant" launcher: deleted
+  `frontend/src/components/PersonalAssistant.jsx`, its `GlobalAssistantMount` +
+  `SafeMount` wiring in `frontend/src/App.jsx`, and the now-dead `api.assistant`
+  block in `frontend/src/lib/api.js`. Backend assistant route/tables/`assistant_enabled`
+  flag left untouched.
+- `frontend/src/pages/TicketsPage.jsx` removal also orphaned the paid-tier in-app
+  customer-chat entry point (it only mounted inside `SupportHelpPanel`); rewrote the
+  `customer-chat` troubleshooting doc section to route support to the Personal Advisor
+  + Tickets flow instead of the removed bottom-right chat button / help widget.
+- `frontend/src/pages/docs/sections/getting-started.js`: rewrote the
+  `help-and-shortcuts` section to point users to the Personal Advisor for help and
+  ticket filing instead of the removed floating life-ring widget; kept the
+  Cmd/Ctrl-K command palette and "?" shortcuts overlay guidance.
+
+## Studio rename — leftover copy cleanup (Task #8)
+
+Finished the Dashboard → Studio rename in user-facing strings that still read
+"dashboard" while pointing at `/studio`:
+
+- "Back to dashboard" → "Back to Studio": `frontend/src/pages/AcademyLessonPage.jsx`,
+  `frontend/src/pages/InvestorPricingPage.jsx`, `frontend/src/pages/KYCPage.jsx`,
+  `frontend/src/components/RouteErrorBoundary.jsx` (button label, render-error body
+  copy, and the header comment).
+- `frontend/src/pages/OnboardingPersonaPage.jsx`: "Go to dashboard" → "Go to Studio";
+  "Your sidebar and dashboard now reflect…" → "Your sidebar and Studio now reflect…".
+- `frontend/src/components/OnboardingWizard.jsx`: completion copy "redirecting you to
+  your dashboard" → "redirecting you to Studio".
+- `frontend/src/pages/CustomerDiscoveryPage.jsx`: empty-state "Create one from your
+  dashboard" → "Create one from Studio".
+- `frontend/src/pages/SpinoutLabPage.jsx`: Spin-Out Lab exit-success "Continue to
+  dashboard" → "Continue". (The button navigates to `/`, which routes to the role's
+  default — `/founder` for founders, not `/studio` — so a neutral label is accurate.)
+- `frontend/src/components/OnboardingSettingsTab.jsx`: "re-fire on next dashboard load"
+  and "Tour will re-run on your next dashboard load." → "…next Studio load" (the rerun
+  navigates to `/studio`).
+- `frontend/src/components/KeyboardShortcutsOverlay.jsx`: the `G H` shortcut label
+  "Go to Home / Dashboard" → "Go to Home" (Home routes per-role via `ROLE_DEFAULT_PATH`,
+  so the stale "Dashboard" qualifier is dropped rather than renamed to Studio).
+- Left as-is (out of scope): the PageExplainer `dashboard` help entry (already titled
+  "Your studio at a glance"); other/generic dashboards (Partnerships, Metrics, referral,
+  Market Intel, deck KPI); API paths `/api/dashboard*`; and the "Back to dashboard" pill
+  in `frontend/src/components/advisor/PersonalAdvisor.jsx`, deferred to avoid colliding
+  with Task #9 which owns that file.
+
+## Studio rename + My Profile removal (Task #7)
+
+Renamed the authenticated **Dashboard** to **Studio** (sidebar label + route
+`/dashboard` → `/studio`) and retired the authenticated **My Profile** page.
+
+- Sidebar (`frontend/src/sidebarConfig.js`): "Dashboard" → "Studio" (`/studio`) for
+  every role that has it; removed the "My Profile" item from all five role groups.
+- Routing (`frontend/src/App.jsx`): `Dashboard` now mounts at `/studio`. `/dashboard`
+  renders `DashboardRedirect`, a query/hash-preserving `<Navigate>` to `/studio`, so
+  legacy links/bookmarks and server-driven OAuth callbacks (`?google=ok`, `?advisor=1`,
+  `?profile_pending=1`, `?google_signup=1`) keep working. Deleted the `/profile` route +
+  `ProfilePage` lazy import; repointed the legacy `/skills` and `/values` redirects to
+  `/studio`. Updated `ROLE_DEFAULT_PATH` (admin, investor) and all `|| '/dashboard'`
+  fallbacks to `/studio`.
+- Deleted `frontend/src/pages/ProfilePage.jsx` (the underlying
+  SkillsProfilePage/ValuesAssessmentPage data stores are left intact on disk).
+- In-app `/dashboard` nav links repointed to `/studio`: CommandPalette, TicketsPage,
+  OnboardingChatPage, LoginPage (passkey/login/Google `redirect`), KYCPage,
+  InvestorPricingPage, PartnerDealPortal, OnboardingPersonaPage, OnboardingInvestorPage,
+  AcademyLessonPage, RouteErrorBoundary, OnboardingSettingsTab.
+- Studio page (`frontend/src/pages/Dashboard.jsx`) trimmed: removed the four quick-stat
+  tiles (This Month / Compounding / Syndicates / AI Score Avg), Proprietary Deal Flow,
+  Performance Analytics, AI-Scored Opportunities, Syndication Tools, and Quick Links.
+  Kept the header/search/notifications/refresh, Personal Advisor, Profile-fit section,
+  "My Studio Ops Tasks", and "Independent Subsidiaries". Preserved the exported
+  `StatusBadge`/`WeekBadge` helpers other pages import; dropped now-unused local helpers.
+- Apex routing (`wrangler.toml`): added `axal.vc/studio` + `axal.vc/studio/*` to BOTH the
+  top-level `[[routes]]` and `[[env.production.routes]]` blocks (kept in lockstep), and
+  left the `/dashboard` (+ `/dashboard/*`) patterns in place so the redirect resolves on a
+  hard-load. Routes only take effect on `npm run deploy`.
+- No backend/API changes — the dashboard payload is unchanged, just no longer fully rendered.
+
+## Dependency updates (Task #2)
+
+Adopted the pending Dependabot upgrades directly on `main` (supersedes the open
+Dependabot PRs — they auto-close once `main` carries equal-or-higher versions and
+refreshed lockfiles). Dependency manifests, lockfiles, and workflow action pins only.
+
+- **esbuild advisory cleared (L1, GHSA-g7r4-m6w7-qqqr).** Root `npm audit --omit=dev`
+  and the frontend tree both report 0 vulnerabilities.
+- **npm.** Refreshed lockfiles across root, `frontend/`, and `cloudflare-worker/` via
+  `npm update` + in-range `npm audit fix`. Widened the root `wrangler` devDependency
+  (`~4.98.0` → `^4.98.0`) to pull 4.105.x, clearing the dev-only undici / ws / miniflare
+  high-severity advisories. Frontend `dompurify` and worker `hono` advisories cleared.
+- **Python.** `uv lock --upgrade` bumped 37 packages within the existing `pyproject.toml`
+  `>=` floors (fastapi 0.135→0.138, cryptography 46→49, pydantic 2.12→2.13, sqlalchemy
+  2.0.48→2.0.51, uvicorn 0.42→0.49, starlette 1.0→1.3, …); `requirements.txt` re-exported
+  via `uv export --no-hashes --no-dev --no-emit-project`. Dev FastAPI backend boots and
+  serves `/api` (200).
+- **GitHub Actions.** `actions/checkout` v6 → v7 across all `.github/workflows/*.yml`.
+- Gate: `npm run test:drift` passes; both dev workflows (frontend Vite, FastAPI) green.
+
+## Security audit remediation — 2026-06-25 (Task #1)
+
+Full write-up in [`SECURITY_AUDIT.md`](./SECURITY_AUDIT.md). Summary:
+
+- **M1 — rate limiter fail-closed.** `middleware/rateLimit.ts` gained a per-bucket
+  `failClosed` flag. Sensitive buckets (`ai`, `promo_validate`, `admin_catalog_writes`,
+  `register`) now return `503 { code: 'rate_limit_unavailable', retry_after: 30 }` with
+  `Retry-After` / `X-RateLimit-Bucket` headers + `logBlock` on KV failure, instead of
+  silently failing open. Other buckets fail open explicitly (logged). The separate
+  auth/OTP KV limiters — `routes/auth.ts::checkRateLimit` (login/register/magic-link/
+  step-up) and the `rate` helpers in `routes/auth_sms.ts` (SMS OTP) and
+  `routes/auth_recover.ts` (account recovery) — now also fail **closed** on KV error
+  (deny → `429`), logging only the bucket prefix (key tail carries email/phone → L5).
+- **M2 — founder-resource IDOR (highest risk).** `auth.ts::canAccessFounderResource`
+  no longer blanket-bypasses investors — only admin/partner (studio staff) and the
+  owning founder pass. Investors keep founder-data access only via the NDA-gated,
+  fail-closed `maskFounderForInvestor` view; `routes/projects.ts` GET `/:id` keeps an
+  explicit `role !== 'investor'` branch so the mask still runs. Also removed `investor`
+  from `routes/founder_risk.ts::isPrivileged` (second copy of the same leak) and from
+  `routes/projects.ts` PUT `/:id` `isPrivileged` (third copy — a **write-IDOR** letting
+  an investor edit any founder's project incl. admin/partner-only stage/status/playbook_week;
+  investors now hit the existing 403). All remaining shared-predicate call sites fixed for
+  free. `projects.delete` was already admin/partner/owner-only. New test
+  `test/founderAccess.authz.test.ts` (wired into `test:drift`). Investor visibility on
+  `deals.get('/')` (deal-flow pipeline) and `legal.get('/documents')` (metadata via
+  `safeDoc`) left as documented, intentional product behavior — see `SECURITY_AUDIT.md`.
+- **M3 — `sql.unsafe` drift guard.** New `scripts/check-sql-unsafe.mjs` (allowlisted
+  `${…}` interpolations + non-literal `unsafe()` args), wired into `test:drift`.
+- **M4 — scoring HMAC domain separation.** `services/scoreIntegrity.ts::deriveScoringKey`
+  HKDF-SHA256-derives a subkey from `JWT_SECRET` (salt `axal:score-integrity`, info
+  `scoring-hmac:v1`) when `SCORING_HMAC_SECRET` is unset, instead of reusing `JWT_SECRET`
+  verbatim. `INTEGRITY_VERSION` not bumped.
+- **L2 — safe article preview.** `pages/ArticleAuthorPage.jsx` preview now renders via
+  `<ReactMarkdown>` instead of `dangerouslySetInnerHTML`.
+- **L4 — LinkedIn schema off the request path.** LinkedIn identity columns added to
+  `sql/schema.sql`; removed the lazy `ensureColumns()` ALTER (swallowed DDL errors) from
+  `routes/linkedin.ts`. Existing D1 migrated manually via `sql/linkedin_alter.sql`.
+- **L5 — logging hygiene.** Reviewed OAuth/Stripe/Telegram/auth error paths; no PII/token
+  leakage found, no change required.
+- Also wired the existing `test/aiRouter.bugfix.test.ts` into `test:drift`.
+
+## Unified sector dropdown across Edit Project, Brand Builder & Founder Portal (Task #16)
+
+Extracted a canonical ~80-item sector list to `frontend/src/lib/sectors.js` (base = the
+existing ~70-item list in ProjectsPage + `'Other'`). Created `frontend/src/components/SectorSelect.jsx`
+— a shared searchable dropdown (with outside-click handler that was missing in the original).
+
+Changes per entry point:
+- **New Project** (`ProjectsPage.jsx`) — was already using SectorSelect. Now imports the
+  shared component; inline `SECTORS` constant and `SectorSelect` definition removed.
+- **Edit Project** (`ProjectDetail.jsx`) — the `sector` field in `EditProjectModal` was a
+  plain `<input type="text">`. Now uses `SectorSelect` via a `sectorSelect: true` flag on
+  the `EDITABLE_FIELDS` entry.
+- **About Your Startup / Founder Portal** (`FounderPortal.jsx`) — was using a coarser
+  18-item hardcoded list. Now imports `SECTORS` from `lib/sectors.js`; existing
+  `ModernSelect` + `<option>` structure unchanged.
+- **Brand Builder** (`BrandBuilderPage.jsx`) — was a free-text `<input>`. Now uses
+  `SectorSelect`; project auto-fill (`setSector(p.sector)`) unchanged.
+
+Spinout deck and Brand Builder already read `project.sector` automatically; no additional
+wiring needed. Existing free-text DB values are not migrated (out of scope).
+
+## Admin Console section nav: dropdown instead of tab row (Task #15)
+
+Replaced the Admin Console's horizontal row of 12 section tabs (which crowded and
+wrapped on narrower widths) with a single dropdown menu in `frontend/src/pages/AdminPage.jsx`.
+
+- Added a module-level `ADMIN_SECTIONS` ordered list (value/label/Icon) as the single
+  source for both the trigger and the menu, plus `ADMIN_SECTION_VALUES` for validation.
+- New `AdminSectionNav` component: a trigger button showing the active section's icon,
+  label, and its "N pending" badge (when applicable), and a `role="listbox"` menu listing
+  all 12 options in the original tab order with icons, badges, violet active-highlight, and
+  a trailing check on the active item. Closes on selection, outside click, and Escape; full
+  light/dark support. Preserves the `admin-page` and `admin-tab-*` `data-testid` hooks
+  (testid = `admin-tab-${value}`) so existing selectors keep working.
+- Pending counts are passed in via a `badges` map (`profiles` → pendingProfiles,
+  `kyc` → pending KYC queue length when the KYC filter is "pending"), matching the prior
+  per-tab badge logic; the trigger reflects the badge when that section is selected.
+- The `tab` state initializer now reads the `?tab=` query param (validated against
+  `ADMIN_SECTION_VALUES`) so `/admin?tab=network-profiles` deep-links select the right
+  section on load — previously the documented deep-link had no reader and always opened Users.
+
+## Fix Best-Fit Console 500 (Task #14)
+
+The admin Best-Fit Console returned `Internal server error` in prod because its first call
+(`GET /api/admin/consultations`) hit `admin_consultation_bookings` with no schema bootstrap and
+no try/catch — on a prod D1 where migration `115_axal_fit.sql` was never applied, the table was
+missing and the raw `no such table` bubbled to the Worker's global `app.onError` → 500.
+
+- **New `cloudflare-worker/src/services/axalFitSchema.ts`** — `ensureAxalFitSchema(env)`, an
+  idempotent lazy bootstrap (`CREATE TABLE/INDEX IF NOT EXISTS`) for `axal_values`,
+  `axal_fit_scores`, `axal_fit_reports`, `admin_consultation_bookings`, mirrored from migration
+  115 / `schema.sql`. Follows the `ensureTelegramSchema` / `ensureXSchema` self-heal pattern.
+- **Wired `ensureAxalFitSchema()`** into `routes/consultations.ts` (book / me / admin list),
+  `routes/admin_bestfit.ts`, and `routes/best_fit.ts` before any query touching those tables.
+- **Hardened the report builder** (`services/bestFit.ts`): `loadSubject` now try/catches (missing
+  subject still returns null → clean 404); `computeCounterpartyMatches` and the `buildAssessment`
+  spin-out call degrade to `[]` / `null` instead of throwing — so a cold D1 yields a partial
+  report, never a 500.
+- **Hardened the admin consultations list** (`routes/consultations.ts`) to return `[]` on a
+  cold/missing table instead of surfacing the 500.
+- **Ops:** migration `115_axal_fit.sql` must be applied to prod D1 (manual migrations) and the
+  Worker redeployed. With the lazy bootstrap the endpoints self-heal on first hit regardless.
+
+
+## Move Help into Support Hub (Task #13)
+
+Removed the global floating Help widget (the bottom-right purple `LifeBuoy` button and its
+"How can we help?" slide-over) and relocated its four options into the Support Hub (`/tickets`).
+
+- **Deleted `frontend/src/components/HelpWidget.jsx`** — the floating launcher, the `?` open
+  hotkey, the `open-help-widget` window-event listener, and the slide-over panel are all gone.
+- **`frontend/src/App.jsx`** — dropped the `HelpWidget` import and its global mount in the
+  signed-in shell (and the stale Task #7 comment).
+- **`frontend/src/pages/TicketsPage.jsx`** — added a `SupportHelpPanel` ("How can we help?")
+  as a right-hand column (`lg:grid-cols-3`, `lg:sticky lg:top-20`; stacks on mobile). Reuses the
+  old widget's debounced `/api/docs/search` call, the `isChatEligible` tier gate, and mounts
+  `CustomerChatWidget` for eligible users. Options: Search the docs, Ask Personal Advisor
+  (`/dashboard?advisor=1`), Chat with the Axal VC team (gated), Open a ticket (reveals the
+  existing New Ticket form + scrolls to top). Form/table now share a `lg:col-span-2` column.
+- **`frontend/src/components/CommandPalette.jsx`** — the Cmd+K "Open Help" command now
+  navigates to `/tickets` instead of dispatching the removed `open-help-widget` event.
+- **`frontend/src/components/CustomerChatWidget.jsx`** — updated the parent-component doc comment.
+
+## Compact, consistent info help strips (Task #9)
+
+Replaced the heavy full-width purple `PageExplainer` banner (used on ~43 pages) with
+a compact, low-emphasis inline strip that sits directly under the page `<h1>` without
+pushing KPI cards far down. All pages that already used `PageExplainer` get the lighter
+treatment automatically.
+
+- **New `InfoStrip` component** (`frontend/src/components/InfoStrip.jsx`) — pure
+  presentational atom with `variant` (`info`|`tip`|`warning`), `title?`, `body`, `icon?`,
+  `dismissible` (default `true`), `storageKey?`, `onDismiss?`, `inline?` props. Uses
+  design-system surface tokens (`bg-blue-50/50`, `bg-green-50/50`, `bg-amber-50/60`) and
+  Tailwind 4 `dark:` variants; no new colors outside the existing system. Accessible:
+  `role="note"`, `aria-label`, keyboard-focusable dismiss button with `focus:ring-2`.
+- **`InfoStrip.examples.md`** added alongside `EmptyState.examples.md` convention.
+- **`PageExplainer` refactored** to render through `InfoStrip`. All existing behavior
+  preserved: EXPLAINERS registry lookup, "Learn more →" docs deep-link, mobile
+  collapsed tap-to-expand, localStorage cache + server sync dismissal persistence.
+  Removed heavy `bg-violet-50/60` / `border-violet-200` visual treatment.
+- **Metrics page** (`MetricsPage.jsx`): removed redundant subtitle paragraph
+  ("Snapshot MRR, ARR, CAC, LTV, churn…") — the `PageExplainer` strip is the single
+  source of truth; no empty gap on dismiss.
+- **API Bridge page** (`ApiBridgePage.jsx`): converted `bg-violet-50` "Clean Room
+  Architecture" info block to `<InfoStrip dismissible={false} inline={false} icon={Shield}>`.
+- **Dashboard** (`Dashboard.jsx`): converted "You're signed in with Google" notice
+  to `<InfoStrip variant="info" inline={false}>` (contextual system notice, keeps
+  `Link` inside via `children` prop).
+- Both drift guards pass: `check-dark-mode.mjs` ✅ · `check-api-drift.mjs` ✅.
+
+## Remove the "Play & Discover" surface everywhere (Task #8)
+
+The skills & values assessment is now collected conversationally inside the Personal
+Advisor ("Fit Banks"), so the standalone gamified "Play & Discover" surface is
+redundant and has been removed from every user-facing entry point.
+
+- **Sidebar**: dropped the `{ to: '/play', label: 'Discover' }` nav item from all five
+  role menus in `frontend/src/sidebarConfig.js`. The `Gamepad2` icon import stays —
+  it's still used by the admin "Assessment Studio" item.
+- **Entry points**: removed the onboarding "Discover your archetype" button in
+  `frontend/src/pages/OnboardingPersonaPage.jsx` (the "Go to dashboard" action
+  remains) and the "Discover your archetype" CTA card in
+  `frontend/src/pages/LandingPage.jsx`; the landing grid wrapper collapses from a
+  two-column grid to a single centered column so the remaining "Upcoming events"
+  card still renders correctly.
+- **Routes**: removed the `/play`, `/play/card`, and `/play/:gameSlug` routes and
+  their lazy imports from `frontend/src/App.jsx`, and deleted the three retired page
+  files under `frontend/src/pages/play/` (`AssessmentHubPage.jsx`,
+  `AssessmentGamePage.jsx`, `ProfileCardPage.jsx`). Removed the now-orphaned
+  `Task #2` header comments.
+- **Kept intact**: shared visuals under `frontend/src/components/play/*` (SkillRadar,
+  ArchetypeBadge, CardRadar, mechanics, SpectrumBar) reused by the Profile & Fit
+  section and admin consoles; the `assessment` API namespace in `lib/api.js`; and the
+  admin Assessment Studio (`/admin/assessment`) and Best-Fit console.
+- No API, worker, or schema change.
+
+## Fix dashboard & profile crash — api.assessment undefined (Task #7)
+
+`ProfileFitSection` imported only `{ api }` but called `api.assessment.myResults()`;
+`assessment` is a separate named export in `lib/api.js`, not a property of `api`, so
+the access threw synchronously before the `.catch()` could run and tripped the error
+boundary on every Dashboard and Profile page load for all roles.
+
+- **Fix**: `frontend/src/components/profile/ProfileFitSection.jsx` — add `assessment`
+  to the import and call `assessment.myResults()` directly (matches the pattern used
+  by other call sites).
+- Stale comment on line 6 updated to match.
+- No API, worker, or schema change.
+
+## Per-audience landing copy for all six audiences (Task #3)
+
+Extended per-audience headline/body/CTA copy from 3 audiences (customer/partner/investor) to all 6 (added advisor/mentor/cofounder) end-to-end.
+
+- **Prod (Worker/D1)**: migration `cloudflare-worker/sql/migrations/117_landing_audience_advisor_mentor_cofounder.sql` adds 9 additive TEXT columns (`audience_{advisor,mentor,cofounder}_{headline,body,cta}`). `services/landingPageSchema.ts` gains matching lazy-bootstrap ALTERs. `routes/brand.ts` extends `rowToLanding` serialization, PUT var parsing, and the UPDATE/INSERT column/placeholder/bind lists. `services/landingTemplates.ts` `buildAudienceData`, tab markup (tabs + panels) and the waitlist `forEach` list now cover all 6.
+- **Dev (FastAPI/SQLite)**: `backend/app/models/migrations.py` (`ensure_brand_landing_columns`) and `backend/app/api/routes/brand.py` `_ensure_schema` add the 9 columns; `_row_to_landing`, the Pydantic payload model, and the PUT params/UPDATE/INSERT extended; public HTML render `aud` dict, tab/panel markup and the JS `forEach` now render all 6.
+- **Frontend**: `frontend/src/pages/BrandBuilderPage.jsx` draft state + load mapping gain the 9 new fields; local `AUDIENCE_LABELS`/`AUDIENCE_COLORS` extended to 6; Step 3's audience tabs/panels now iterate `AUDIENCES` (all 6) instead of the hardcoded 3.
+- **Out of scope (deliberate)**: the `waitlist_signups.audience` CHECK + `VALID_AUDIENCE`/`AUDIENCE_SET` (3 values) are unchanged — new-audience tab signups post `audience=advisor|mentor|cofounder`, which resolves to NULL (CHECK allows NULL, no crash). Widening the CHECK would require a risky D1 table rebuild.
+
+User-facing line added to `frontend/public/CHANGELOG-user.md`.
+
+## Audience-first Brand & Landing wizard (Task #2)
+
+Reworked `frontend/src/pages/BrandBuilderPage.jsx` into the approved audience-first flow: (1) project & audience, (2) recommended template, (3) tune brand kit & copy, (4) share. Consumes the catalog + helpers in `frontend/src/lib/brand/` and the `audience`/`goal`/`template_kit` persistence API (Task #1). No backend/API or catalog changes.
+
+- Step 1 leads with project + sector + description and a 6-audience picker (`AUDIENCES`/`AUDIENCE_LABELS` from `lib/brand/templates.js`); selecting an audience prefills the primary `goal` via `suggestAudienceAndGoal`, editable through a goal `<select>` (`GOALS`).
+- Step 2 replaces the fixed visual-template picker with catalog-driven recommended cards for the audience (`getRecommendedTemplatesForAudience`, recommended-first). Each card shows label, recommended badge, goal, default CTA and mapped visual style. Picking a template sets `template_kit` (catalog id) + maps its `visualTemplate` → the persisted visual `template`, sets `goal`/`cta_text`, and seeds editable name/headline/subheadline via `generateInitialBrandKit`. Re-selecting the active template is a no-op so saved edits aren't clobbered. Hero/product-media inputs key off the mapped visual template's `usesHero`/`usesProduct` from the worker registry.
+- Step 3 folds all existing tuning: relocated brand-direction generation (`/brand/suggest` + pick), logo regenerate/upload, palette pickers + AI palette suggest, typography, name/headline/subheadline/CTA, tagline iterator, and the per-audience copy tabs. Save lives here.
+- Step 4 holds publish + public/preview URLs + counts (publish moved out of the tuning section). Waitlist list unchanged.
+- `draft` gains `audience`/`goal`/`template_kit`, restored from the landing row on load and sent on save (PUT already posts the whole draft). Dark-mode variants added to new/changed UI.
+
+User-facing line added to `frontend/public/CHANGELOG-user.md`.
+
+## Persist landing-page audience, goal & template kit (Task #1)
+
+Backend persistence for the audience-first Brand & Landing flow. A landing page now stores its primary `audience`, `goal`, and `template_kit` (catalog id) alongside the existing visual `template` key, on BOTH prod (Worker/D1) and dev (FastAPI). Re-fetching returns them so the wizard can restore the founder's selections. Public/preview rendering is unchanged. User-facing line added to `frontend/public/CHANGELOG-user.md`.
+
+- `cloudflare-worker/sql/migrations/116_landing_audience_goal_kit.sql`: additive — `audience`, `goal`, `template_kit` TEXT columns on `landing_pages`. NO CHECK on `audience` so it carries the full 6-value taxonomy (customer/investor/partner/advisor/mentor/cofounder), distinct from the narrow 3-value `waitlist_signups.audience` CHECK in migration 081. Validation lives at the API layer.
+- `cloudflare-worker/src/services/landingPageSchema.ts`: lazy-bootstrap ALTERs for the 3 new columns (prod self-heals if the migration lands un-applied).
+- `cloudflare-worker/src/routes/brand.ts`: PUT upsert validates + persists `audience` (6-value `PAGE_AUDIENCE_SET`, separate from the waitlist `AUDIENCE_SET`), `goal` (`GOAL_SET`), and `template_kit` (kebab-id sanitiser, NOT validated against the catalog — that's frontend-side in `lib/brand/templates.js`); `rowToLanding` returns all three. Visual `template` still defaults to `minimal`.
+- `backend/app/api/routes/brand.py`: mirror — `_ensure_schema` ALTERs, `LandingUpsert` fields, upsert read/write, `_row_to_landing` output, plus `_valid_page_audience`/`_valid_goal`/`_clean_template_kit` validators.
+
+## Brand template catalog & matching (Task #30)
+
+Data layer for the audience-first Brand & Landing wizard. Maps every supplied prebuilt template to an audience + goal and adds pure matching/seed helpers. No UI, DB, or API changes (those are Tasks #32 and #31). Not user-facing yet — no `CHANGELOG-user.md` line.
+
+- `frontend/src/lib/brand/templates.js`: typed (JSDoc) catalog. `TEMPLATES` covers all 16 supplied templates; each entry has `id` (kebab), `label`, `audience` (one of 6: customer/investor/partner/advisor/mentor/cofounder), `assetType`, `primaryGoal`, `defaultCtaLabel`, `defaultSlug`, `visualTemplate` (one of the existing `minimal|bold-hero|video-first|editorial|product-mock` keys — published pages keep built-in visual styles, designs are NOT recreated), optional `recommended`, `notes`. Exports the `AUDIENCES`/`ASSET_TYPES`/`GOALS`/`VISUAL_TEMPLATE_KEYS` enums + `AUDIENCE_LABELS`, and helpers `getTemplateById`, `getTemplatesByAudience` (recommended-first), `inferDefaultsFromTemplate`. `VISUAL_TEMPLATE_KEYS` mirrors `cloudflare-worker/src/services/landingTemplates.ts` TEMPLATE_KEYS — keep in lockstep.
+- `frontend/src/lib/brand/flow.js`: pure flow helpers — `suggestAudienceAndGoal(project, preferredAudience?)` (defaults to customer/join_waitlist; per-audience default goal), `getRecommendedTemplatesForAudience(audience)`, `generateInitialBrandKit(project, template, goal)` (deterministic placeholder brandName/headline/subheadline/ctaLabel the wizard can edit — no network, no AI).
+- `frontend/test/brand_templates.test.mjs`: 15 unit tests — catalog integrity (enum/kebab/uniqueness), per-audience coverage + recommended-first ordering, and helper behavior incl. copy seeding for every goal + graceful degradation. Wired into `test:decks` (runs under `npm run test:drift`).
+
+## Live deck preview follows the selected slide (Task #26)
+
+Spin-Out deck builder (`axal_spinout_demoday`) now shows ONE live-preview card above the slide editor instead of two fixed cards (cover + slide-2 pain-frequency).
+
+- `frontend/src/pages/PitchDeckPage.jsx`: removed the standalone "Slide 2 preview — pain frequency" card and merged the two preview components (`SpinoutCoverPreview` + `SpinoutProblemPreview`) into a single `SpinoutSlidePreview({ fields, slideIndex })` that renders the `axal_spinout_demoday` template clipped to `slideIndex` via the shared lazy `<Thumbnail>`.
+- The card is driven by `slideIndex={activeIdx}`, so it follows whichever slide is selected in the SLIDES list and stays in sync with the editor's prev/next arrows.
+- New `spinoutPreviewMeta` `useMemo` derives the per-slide header label + caption: cover (idx 0) keeps the validation-signal copy; problem (idx 1) keeps the pain-frequency copy + empty-data nudge via the retained `spinoutHasRealPains` helper; every other slide gets a neutral "live preview of this slide" caption + `Slide N preview — {title}` label.
+- No changes to PPTX/PDF export, template/deck data, or non-Spin-Out decks. `<Thumbnail slideIndex>` already supported any index (`top: -(slideIndex*INNER_H*scale)`); the template renders all 10 slides stacked.
+
+## Best-Fit dashboard & admin UI (Task #20)
+
+Frontend half of Conversational Profiling + Best-Fit Matching, built against the merged Task #19 backend shapes. One small read-only backend addition (below): `GET /api/best-fit/me`, the self equivalent of the admin-only Best-Fit report, scoped to the caller's own fit scorecard + Axal values (no matches/spin-out).
+
+### "Your Profile & Fit" — `frontend/src/components/profile/ProfileFitSection.jsx`
+- Self-only section rendered after `<PersonalAdvisor/>` on the dashboard (`pages/Dashboard.jsx`) and on the new `/profile` page. Reads existing self endpoints: `api.radar.me` (8-axis skills, score/20→0–5 domain), `api.values.getMe` (15-dim lean), `api.assessment.myResults` (latest archetype), `api.advisor.progress` (completion %), `api.matches.summary` (cross-counterparty match range).
+- Self Axal-Fit scorecard + the 5 Axal behavioral values render from `api.bestFit.me()` (`FitCard`): per-persona weighted-rubric score/band/narrative + behavioral-value bars; primary persona ringed. Before the advisor has enough signal (`fit` empty AND no Axal value has confidence > 0) it shows a "complete profiling to unlock" empty state instead of fabricated data. Every empty/error state nudges back to the advisor.
+- Backend (read-only): `cloudflare-worker/src/routes/best_fit.ts` → `GET /api/best-fit/me` returns `{ primary_persona, fit[], axal_values[], computed_at }` via `loadAllLatestFit` + `loadAxalValues` (auth-only). Mounted at `/api/best-fit` in `index.ts`; cross-counterparty matches deliberately excluded so they stay tier-gated via `matches.summary`. `api.js`: `api.bestFit.me()`.
+- Match card: counts + one free teaser per counterparty type; "Unlock full match list" calls `openPaywall('studio', …)` directly (api.js auto-402 path is once-per-session, wrong for an explicit click). Studio/bypass roles get the full list inline via `summary.unlocked`.
+- "Book with Guillaume" card uses `api.bookConsultation` + `api.getMyConsultations`.
+
+### Admin Best-Fit console — `frontend/src/pages/admin/AdminBestFitPage.jsx`
+- Consultation queue (`api.adminListConsultations` + per-row `api.adminUpdateConsultationStatus`) with status filter tabs; selecting a request loads the full report via `api.adminGetBestFitReport`.
+- Report viewer renders REAL shapes: skills radar + `gaps_to_fill`, 5 Axal values + 15-dim lean, per-persona fit scorecard (band, narrative, signal/coverage/confidence, red flags, rubric), counterparty matches (reasons/gaps/watch-outs), and the spin-out `venture` assessment using actual `ventureRisk.ts` fields (`overall_score`/`overall_band`/`overall_color`, `layers[].{score,band,color,signals,is_overridden,analyst_note,has_data}`).
+- Lazy-imported + admin-guarded `/admin/best-fit` route in `App.jsx`; sidebar entry added to the admin group.
+
+### Consolidation — `frontend/src/App.jsx`, `frontend/src/sidebarConfig.js`
+- New `/profile` route (auth-only) = PersonalAdvisor + ProfileFitSection. Legacy `/skills` and `/values` routes now `<Navigate to="/profile" replace/>`; the `SkillsProfilePage`/`ValuesAssessmentPage` files (data stores) are kept intact on disk.
+- Sidebar: the separate "Skills Profile" + "Values Assessment" entries collapse into a single "My Profile" entry across all 5 roles; CommandPalette auto-rebuilds from `SIDEBAR_GROUPS`.
+
+### Wiring & checks
+- New client wrapper `api.matches.summary({detail})` in `frontend/src/lib/api.js`. `npm run build` clean; `npm run test:drift` green; dark-mode `dark:` variants on all new styles.
+
+## Best-Fit backend — conversational profiling, fit scoring & matching APIs (Task #19)
+
+Backend-only half of Conversational Profiling + Best-Fit Matching (PR #92). All frontend/UI is Task #20; methodology doc is #21. Reuses `ventureRisk.ts`, `assessmentScoring.ts`, `matchingVectors.ts`.
+
+### Onboarding chat reliability — `services/aiRouter.ts`, `routes/profiling.ts`
+- Dedicated non-gateway task class for onboarding chat; the bypass-on-failure fallback always fires; nested AI response shapes (`r.result?.response`) are parsed; the stale `[PROFILING]` failure-log label is corrected.
+- Test: `test/aiRouter.bugfix.test.ts` (bypass-retry + shape parse).
+
+### Data model + scoring — `sql/migrations/115_axal_fit.sql`, `sql/schema.sql`, `services/axalFit.ts`
+- Migration 115 (mirrored idempotently in `schema.sql`): `axal_values`, `axal_fit_scores` (per-persona), `admin_consultation_bookings`, `axal_fit_reports`.
+- `axalFit.ts`: per-persona weighted rubrics, 5 Axal behavioral values, `computeFit` (0–100; bands strong_yes/yes_caution/hold/no; red flags; signal quality; narrative), reusing `assessmentScoring.ts`.
+
+### Conversational delivery — `services/advisor/questionBank.ts`, `banks/fit_*.ts`, `services/advisor/writeRouter.ts`
+- `scale` (0–5) input_kind + validator; `fit_<persona>` banks (founder/investor/partner/mentor/coach) registered in `BANKS` + `BANK_SIZE_TARGETS`.
+- writeRouter routes fit answers BEFORE the persona branches: `axal_value`→`axal_values`, `skill_axis`→`user_skills`, `value_dim`→`user_values` (confidence-blended); fit + vectors recompute after each batch; paywall/`paywalled` preserved.
+- Test: `test/writeRouter.fit.test.ts`.
+
+### Match summary — `routes/matches.ts`, `services/bestFit.ts`
+- `GET /api/matches/summary`: 5 counterparty types (cofounder/investor/partner/mentor/coach); counts + teasers free, detail tier-gated, bypass roles unrestricted. Reuses `matchingVectors.ts` (`loadUserVectorsBatch` added).
+- Matcher (`computeCounterpartyMatches`, bands) in `services/bestFit.ts`. Test: `test/bestFit.matches.test.ts`.
+
+### Consultation + admin report APIs — `services/bestFit.ts`, `routes/consultations.ts`, `routes/admin_bestfit.ts`
+- `buildBestFitReport`/`persistBestFitReport`: assembles skills / 15-dim values / 5 Axal values / archetype / per-persona fit / counterparty matches (reasons, gaps, watch-outs) / spin-out assessment (via `ventureRisk.ts`). Reads stored scores (no recompute on read); explicit nulls when data is absent.
+- `POST /api/consultations/book` precomputes + persists a report snapshot; `GET /api/consultations/me`. Admin: `GET /api/admin/consultations`, `POST /api/admin/consultations/:id/status`, `GET /api/admin/best-fit/:userId` (admin-only, NOT tier-gated). `frontend/src/lib/api.js` client methods added with matching worker mounts (drift).
+
+### Wiring & tests
+- Routes mounted in `src/index.ts` (admin best-fit surfaces mounted BEFORE the catch-all `/api/admin`). New `.ts` tests added to the `npm run test:drift` strip-types list; `tsc --noEmit` clean; `npm run test:drift` green.
+
+## All founders & profile photos in the Spin-Out deck PPTX export (Task #7)
+
+The PowerPoint export (`buildDeck`) now mirrors the in-app Slide 07 "Team & Network": it renders every founder/co-founder and embeds founder + advisor profile photos (circular, with an initials fallback). Previously the PPTX rendered only the single primary founder and ignored photos entirely. Single-founder decks export with their existing geometry unchanged.
+
+### Frontend — `frontend/src/decks/spinout/buildDeck.js`
+- **New photo helpers**: `resolvePhotoData(photo)` (async) normalizes a photo source to an embeddable raster data URL or `null`: raster base64 `data:` URLs (png/jpe?g/gif/webp) pass through; other `data:` URLs (e.g. SVG) → `null`; `http(s)`/root-relative URLs are fetched, MIME-sniffed by **magic bytes** (not the `Content-Type` header), and inlined as base64. A 5s `AbortController` timeout guards each fetch and any failure resolves to `null` — a slow/CORS-blocked/non-image URL degrades to initials instead of throwing at `pres.write()`. `abToBase64`/`sniffImageMime` are the supporting primitives. Photos are passed via `addImage({data})` (not `path`) so no deferred network work happens during write.
+- **New `avatar(pres, s, x, y, d, {dataUrl, initials, fill, fontSize, textColor})`**: draws a cover-cropped circular image (`rounding:true` + `sizing:{type:'cover'}`) when a photo resolved, else the existing OVAL + initials monogram.
+- **`team()` is now async** (and `await`ed in `buildDeck` before `captable()`, preserving slide order). It reads `d.founders[]` (falling back to the legacy singular `d.founder`), filters empty rows, and pre-resolves all founder + advisor photos via `Promise.all` before drawing.
+  - **Single founder** (`!multi`): geometry, panel, name/role/bio and the fixed advisor roster (label `y=4.25`, roster `ay=4.62`, `rowH 0.62`, avatar `0.5`) are unchanged — only the avatar gains photo support.
+  - **Multiple founders** (`multi`): compact stacked founder cards (avatar + name + role, no bio) plus a vertical-fit advisor roster (`MAX_ROW 0.62`/`MIN_ROW 0.46`, derived `avD`/`nameSize`/`roleSize`) so the last row never crosses the bottom margin — mirroring `templates/axal_spinout_demoday_app.tsx` (`SlideTeamNetwork`).
+
+### Tests — `frontend/test/spinout_pptx_build.test.mjs`
+- multi-founder SAMPLE renders every co-founder (asserts the co-founder name is present); single-founder clone renders only the primary founder (co-founder name absent); embedding founder + advisor raster photos increases the `media/image-*` file count vs a photo-stripped clone; unsupported/unreachable photos (ftp / SVG / blob) fall back to initials without throwing.
+- `npm run test:decks` green (51 tests). `npm run test:drift` otherwise green; the lone failure (`incorporationPacket` "tamper-evident hash is deterministic") is a pre-existing order-dependent flake — passes in isolation and is untouched by this change.
+
+## Edit Use of Funds allocation after intake (Task #8)
+
+Founders could only set THE ASK "Use of Funds" % once, on the FounderPortal intake (step 1). They can now revise it after intake from a deck-side editor, and the change flows through to THE ASK slide (live preview + PPTX) in both dev (FastAPI) and prod (Worker).
+
+### Backend — normalize on update (both stacks)
+- `cloudflare-worker/src/routes/projects.ts` — PUT `/:id` previously wrote `use_of_funds` raw (it was in `baseFields`). It now runs `normalizeUseOfFunds` (from `util/useOfFunds.ts`) when the field is present: `400 {error, code:'invalid_use_of_funds'}` on a non-100 total / malformed JSON, otherwise the canonical JSON (or `null` to clear). Mirrors the `/submit` intake path.
+- `backend/app/api/routes/projects.py` — PUT `/{id}` now runs `normalize_use_of_funds` (from `services/use_of_funds.py`) on `update_data['use_of_funds']` when present, raising the same 400 shape; `None` clears. Both stacks reuse the existing validators — no duplicate logic, contract unchanged (JSON `[{label,pct}]`, non-zero only, total exactly 100 or cleared).
+
+### Frontend — shared allocator + deck-side editor
+- `frontend/src/components/FundAllocator.jsx` — **new** shared module: extracted `FUND_SECTIONS` + the `FundAllocator` component (previously inline in `FounderPortal.jsx`), plus helpers `allocToValues(raw)→[5]` (maps stored `{label,pct}` onto the 5 canonical slots by exact label; legacy free-text / unknown labels → all-zeros), `valuesToUseOfFunds([5])→string`, `fundsTotal`, `fundsValid`.
+- `frontend/src/pages/FounderPortal.jsx` — imports the shared allocator + `valuesToUseOfFunds`; removed the inline `FUND_SECTIONS`/`FundAllocator`. Intake behavior unchanged.
+- `frontend/src/components/UseOfFundsEditor.jsx` — **new**: loads the project's current allocation (`api.getProject`), prefills the shared allocator, saves via `api.updateProject(id, {use_of_funds})`, and fires `onSaved()`.
+- `frontend/src/pages/PitchDeckPage.jsx` — mounts `UseOfFundsEditor` in the right rail (gated `isSpinoutDeck && projectId`, near the readiness panel). A `deckDataReload` counter is bumped on save and threaded into the spinout field hook + the readiness effect so the in-builder previews re-fetch live data. THE ASK slide stays in lockstep automatically: the print/share preview and PPTX export both derive funds from the project at fetch time.
+- `frontend/src/hooks/useSpinoutDeckFields.js` — added an optional `reloadKey` param (folded into the effect deps) to force a re-fetch after an edit.
+
+### Tests
+- `npm run test:drift` green (incl. `tsc --noEmit` and `cloudflare-worker/test/useOfFunds.test.ts`).
+
+## Fix Personal Advisor: prose answers rejected + empty "Completed" list (Task #13)
+
+Two independent Personal Advisor bugs.
+
+### Bug A — `arg pattern: sql` blocked ordinary answers (Worker)
+- `cloudflare-worker/src/services/advisor/guardrails.ts` — the L2 tool-gate arg scan (`gateToolCall`) was running every tool-call field through `SUSPICIOUS_ARG_PATTERNS`. The SQL heuristic matched bare English keywords (`select`, `update`, `grant … to`), so a normal answer like *"we select the best deals and grant equity to advisors"* hard-failed with `invalid_args` / `arg pattern: sql`. Two changes: (1) `SUSPICIOUS_ARG_PATTERNS.sql` is now **grammar-based** — `SELECT…FROM`, `INSERT INTO`, `UPDATE…SET`, `DELETE FROM`, `DROP/CREATE/ALTER TABLE`, `UNION [ALL] SELECT`, `GRANT…TO`, `; … --`, etc. with bounded `{0,200}?` gaps — so isolated keywords no longer trip it; (2) added `FREE_TEXT_ARG_KEYS = {value, evidence}` and the scan now only inspects **structural** object fields (ids, queries, page targets), skipping user prose. Bare-string args (no object) are still scanned wholesale; shell/HTML/path-traversal heuristics unchanged.
+
+### Bug B — "Completed" bucket always empty despite "N answered" (Worker + frontend)
+- `cloudflare-worker/src/routes/advisor.ts` — added `GET /answered`. It resolves the latest conversation (`getLatestConversation`) and returns `advisor_answers` rows with `saved_status IN ('saved','noop')`, newest-first, decorated via `questionById` → `{question_id, label, section, page_target, saved_status, saved_to_*, completed_at}`. The predicate + conversation scope match `refreshCounts` and `GET /progress`, so the list length now equals the header's answered count. The widget previously derived "Completed" from `GET /sources` (page-attribution `field_sources` rows), which is a different, often-empty table — hence the mismatch.
+- `frontend/src/lib/api.js` — `advisor.answered()` → `GET /advisor/answered`.
+- `frontend/src/components/advisor/AdvisorProgressWidget.jsx` — the Completed bucket (`completedSet` + `completedItems`) now reads `api.advisor.answered()` instead of `sources`; removed the prior 10-item cap so the bucket count matches the answered total.
+
+### Tests
+- `cloudflare-worker/test/advisor.scenarios.test.ts` — 4 new `gateToolCall` regression cases: free-text `value` with SQL-ish prose saves; `value`+`evidence` both exempt; a bare keyword in a scanned structural field passes; real injection (`UNION SELECT … FROM`, `DROP TABLE`) in a structural field is still blocked. `npm run test:drift` green (incl. `tsc --noEmit`).
+
+## Venture Risk — 10-layer rating system (Tasks #9–#11)
+
+Internal deal-team-only feature: a 10-layer Venture Risk rating per portfolio company (Founder, Market, Competition, Timing, Financing, Marketing, Distribution, Technology, Product, Hiring), hybrid auto + analyst scoring. Scores are a 0–100 "de-risk confidence" (higher = more proof = lower risk); risk bands invert: ≥67 low (emerald), ≥34 medium (amber), else high (red). Audience is admin/partner/investor (read); analyst writes are admin/partner.
+
+### Worker (Task #9)
+- `cloudflare-worker/src/services/ventureRisk.ts` — **new**: `LAYERS` metadata (per-layer thesis + proof_signal); pure scoring helpers (`computeAutoLayers`, `mergeLayers`, `overallFromLayers`, `scoreToBand`, `bandColor`, `clampScore`, `bandScore`). Auto scores derive live from the latest non-sandbox `score_snapshots` sub-scores (market/25, team/20, product/15, capital/15, fit/15, distribution/10, market_trend/5, market_urgency/10) + project row fields (revenue, users_count, growth_signals, why_now, employee_count) — real platform data, not placeholders. Layers with no feeding signal report `has_data:false` + score 0 (explicit "unknown", never a silent guess). DB twins: `loadProject`, `loadSnapshot`, `loadOverrides`, `upsertOverride`, `deleteOverride`, `buildAssessment`, `buildMatrix`.
+- `cloudflare-worker/src/routes/venture_risk.ts` — **new**, mounted at `/api/venture-risk`. READ (`GET /matrix`, `GET /by-project/:projectId`) gated to admin/partner/investor; analyst WRITE (`POST /:projectId/recompute`, `PUT`/`DELETE /:projectId/layers/:layerKey`) gated to admin/partner. Override validation: analyst_score 0..100, analyst_band low|medium|high, note ≤2000 chars.
+- `cloudflare-worker/sql/migrations/114_venture_risk.sql` — `venture_risk_overrides` (one row per project_id+layer_key: analyst_score, analyst_band, analyst_note, status, updated_by, created_at, updated_at).
+
+### Frontend (Task #10)
+- `frontend/src/lib/riskBands.js` — **new**: shared band thresholds/colors (`RISK_BAND_CHIP`/`CELL`/`HEX`/`LABEL`, `bandFromScore`, `shortLayerLabel`) kept in lockstep with the worker so the UI never re-bands a score differently from the API.
+- `frontend/src/components/RiskRadar.jsx`, `RiskLayerCard.jsx`, `VentureRiskPanel.jsx` — **new**: 10-axis radar (polygon tinted by overall band, each vertex tinted by that layer's effective band), per-layer card (thesis, proof signal, auto score, contributing signals, analyst override editor with score/band/status/note), per-company panel (overall gauge + radar + cards + recompute).
+- `frontend/src/pages/RiskMatrixPage.jsx` — **new**: portfolio company × 10-layer heatmap, sortable columns, override dot, legend.
+- Wiring: `frontend/src/lib/api.js` (`ventureRiskMatrix`, `ventureRiskByProject`, `ventureRiskRecompute`, `ventureRiskSetLayer`, `ventureRiskClearLayer`); `App.jsx` route `/portfolio/risk-matrix` (guard admin/partner/investor); `sidebarConfig.js` nav; `ProjectDetail.jsx` panel mount. The panel/matrix treat a `404` on the prefix as "unavailable in this environment" (the dev FastAPI has no venture-risk surface; it is worker-only on D1).
+
+### Closeout polish (Task #11)
+- Unified no-data states so a company/layer with no platform signal never renders a misleading red "0 / High risk": `VentureRiskPanel` overall gauge mutes (grey ring, "—") + shows a "not enough data yet" note; `RiskLayerCard` header shows "— / No data" instead of 0/high; `RiskMatrixPage` overall cell mutes to match the existing per-cell no-data style.
+- `RiskMatrixPage` gained a top-level first-load placeholder ("Loading risk matrix…"); previously the loading row was nested under `data && !unavailable`, so the first paint was blank.
+- All new states use the slate palette with paired `dark:` variants (passes `scripts/check-dark-mode.mjs`).
+- `npm run test:drift` green (incl. `tsc --noEmit` + `ventureRisk` unit tests); frontend build green. GitHub PR #91 / branch `claude/beautiful-dirac-xh904d` closed — the work landed via the Replit task flow, not the PR.
+
+## Fix Google sign-in redirect loop (Task #6)
+
+### Worker
+- `cloudflare-worker/src/auth.ts` — `authCookieDomainAttr` now derives the cookie `Domain` attribute from the **request host** instead of checking `env.ENVIRONMENT === 'production'`. For a request on `app.axal.vc`, the cookie is now scoped to `Domain=.axal.vc`, so the session cookie survives the edge 301 redirect from `app.axal.vc` to `axal.vc`. For localhost and `*.workers.dev`, the Domain attribute is omitted (host-only cookies) so dev/preview still works. `setAuthCookies` and `clearAuthCookies` updated to pass the Hono `Context` instead of `env`. The previous env-only check was inconsistent with the rest of `auth.ts` (which uses `env.STUDIOOS_ENV || env.ENVIRONMENT`) and could silently fall back to host-only cookies if the exact string didn't match, causing the Google sign-in loop.
+
+## Fix cover slide caption overlap (Task #5)
+
+### Frontend
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx` — SlideCover: moved `signalCaption` down from `t=5.05` to `t=5.5` (≈ 0.45" below the chart's x-axis labels). The chart's `AreaChart` renders axis labels at `ph + inch(0.06)` below its own container, so the caption was colliding with them at `t=5.05`. The new `t=5.5` leaves the labels at ~5.11 and the caption at ~5.5, with clear spacing between them. Signal value stays at `t=2.62` (top-right of chart). Meta row stays at `t=6.05` — no collision.
+
+### PPTX export
+- `frontend/src/decks/spinout/buildDeck.js` — cover slide: same caption shift, `y: 5.05` → `y: 5.5`. Matches the React renderer fix.
+
+## Fix blank 11th slide in deck viewer (Task #4)
+
+### Frontend
+- `frontend/src/pages/PitchDeckPrintPage.jsx` — `PrintStage` normal (non-fullscreen) mode now sets the `.deck-print-scaler` wrapper height to the scaled content height (`(INNER_H * slideCount + gap * (slideCount-1)) * scale`), matching the height-correction pattern already used in `Thumbnail.tsx`. The `slideCount` is tracked locally via `useState` and updated by the existing MutationObserver. Fixes the blank scroll region after the last real slide (10 slides → no extra "11th" blank region). Fullscreen path unchanged.
+
+## Founder intake sector dropdown expanded to 18 sectors (no task ID)
+
+### Frontend
+- `frontend/src/pages/FounderPortal.jsx` — `SECTORS` expanded from 9 to 18: `AI / ML`, `Developer tools / infrastructure`, `SaaS / enterprise software`, `FinTech / InsurTech`, `HealthTech / BioTech`, `ClimateTech / CleanTech / Energy`, `EdTech`, `Cybersecurity`, `Data / Analytics`, `Marketplaces`, `Consumer / Social / Creator economy`, `E-commerce / RetailTech`, `PropTech`, `HRTech / Future of work`, `Logistics / Supply chain`, `Blockchain / Web3`, `DeepTech / Robotics / Space`, `Other`. Order is alphabetical-ish (with "Other" at the end) and the existing dropdown (`ModernSelect`) consumes the array unchanged.
+
+## Use of Funds allocator → THE ASK (Task #2)
+
+Replaces the free-text "Use of Funds" box on founder intake (FounderPortal step 1) with a structured 5-section % allocator and feeds THE ASK slide (in-app preview + PPTX, dev + prod) from the same data. Canonical sections, in order: `Product & engineering`, `GTM: sales and marketing`, `Infrastructure & data`, `Operations, legal & compliance`, `Hiring / runway reserve`.
+
+### Storage contract
+- `use_of_funds` is now persisted as **JSON** (`[{ "label": string, "pct": number }, …]`) — JSON (not a delimited string) because canonical labels contain colons. Validation rule: each `pct` is `0–100`, sections sum to **exactly 100** to submit, OR all sections are `0` (no allocation → stored as `NULL`, submit allowed). Legacy free-text rows still render everywhere via a fallback path; no backfill.
+
+### Helper twins (parse JSON-first, fall back to legacy free-text)
+- `cloudflare-worker/src/util/useOfFunds.ts` — **new**: `parseUseOfFundsValue()` (→ `{label,pct}[]`, drops 0% sections, caps at 5), `normalizeUseOfFunds()` (→ `{ value, error? }`: validates + canonicalizes JSON, all-zero/empty → `null`, passes legacy text through), `formatUseOfFundsText()` (→ `"label pct%; …"`, free-text passthrough).
+- `backend/app/services/use_of_funds.py` — **new**: Python twin — `parse_use_of_funds_value()`, `normalize_use_of_funds()` (→ `(value, error)`), `format_use_of_funds_text()`. Same JSON-first/legacy-fallback semantics.
+
+### Frontend
+- `frontend/src/pages/FounderPortal.jsx` — `FUND_SECTIONS` const + `FundAllocator` component (slider + numeric 0–100 per section, live total, dark-mode paired). Step-1 Next + submit gated on `fundsValid` (total === 100 or all 0). `handleSubmit` serializes non-zero sections to the JSON contract; reset clears to `[0,0,0,0,0]`.
+
+### Worker
+- `cloudflare-worker/src/routes/projects.ts` — `POST /api/projects/submit` runs `normalizeUseOfFunds()` before the INSERT (rejects invalid splits with `400 invalid_use_of_funds`); writes the canonical value; qual-text snapshot uses the normalized value.
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts` — removed the local `parseUseOfFunds()`; THE ASK funds now derive from `parseUseOfFundsValue(p.use_of_funds)` (financials override still wins first).
+- `cloudflare-worker/src/routes/decks.ts`, `cloudflare-worker/src/services/decks/autofill.ts` (`ask_line` + `use_of_funds` column), `cloudflare-worker/src/routes/scoring.ts` (deal-memo economics) — render via `formatUseOfFundsText()` so the structured JSON never leaks raw into prose/decks.
+
+### Backend (dev FastAPI)
+- `backend/app/api/routes/projects.py` — `/submit` normalizes (same `400 invalid_use_of_funds` contract) and stores the canonical value; `_spinout_deck_payload` overrides `data["ask"]["funds"]` from `parse_use_of_funds_value()` when present (else keeps the deterministic sample split).
+- `backend/app/api/routes/decks.py`, `backend/app/api/routes/scoring.py` (deal-memo economics) — render via `format_use_of_funds_text()`. AI-context fields and the raw qual scoring input are left untouched.
+
+### Tests
+- `cloudflare-worker/test/useOfFunds.test.ts` — **new** (added to `test:drift`): 11 cases over parse (JSON-first, colon labels, drop-zero, cap-5, legacy fallback), normalize (valid-100, all-zero/empty → null, sum≠100, out-of-range, malformed JSON, free-text passthrough), and format.
+
+## Spin-Out deck Slide 07 "Team & Network" — vertical-fit left column, real photos, roles, multi-founder support (Task #1)
+
+### Frontend
+- `frontend/src/decks/templates/axal_spinout_demoday_app.tsx` — new `Avatar` component renders a circle-cropped `<img>` from a profile `photo` with an `onError` fallback to initials, so missing/broken photos degrade gracefully. `SlideTeamNetwork` rewritten with vertical-fit logic bounded by `TOP`/`BOTTOM`: single founder keeps today's large editable card (`team.founder.*`); multiple founders/co-founders render compact stacked cards; the advisor/mentor roster scales `rowH` between `MIN_ROW`/`MAX_ROW` and only caps the visible count as a last resort, so the column never overflows regardless of roster size. Right-side network graph unchanged.
+- `frontend/src/decks/spinout/deckData.js` — sample `team` extended: `_avatar()` data-URI SVG helper, `photo` on the founder, a `founders` array (Maya + co-founder Sofia Reyes) to exercise the multi-founder path, and an expanded 6-entry `ADVISORS & MENTORS` roster (mix of photos and initials fallback).
+
+### Worker
+- `cloudflare-worker/src/services/decks/spinoutDeckData.ts` — `SpinoutDeckData['team']` type extended: optional `photo` on `founder`, a `founders[]` array (`{initials,name,role,bio,photo?}`), and `advisors` widened to a 4-tuple (`[initials,name,role,photo?]`). Mapper now builds a `photoByName` map from network profiles, maps ALL `src.team.founders` via `toFounderCard` (best-effort name→photo match) instead of only the first, and bumps the advisors slice 4→8 with each entry's `photo_url`.
+- `cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts` — added `photo_url` to the upstream `mentor_network.profiles` type so profile photos already set at runtime survive the mapping.
+
+## Billing overview no longer 502s — resilient per-section reads + stale-customer self-heal (Task #25)
+
+### Worker
+- `cloudflare-worker/src/util/stripeError.ts` — **new file**: `StripeApiError` (carries HTTP `status` + parsed Stripe `error.code`/`error.type`, keeps the legacy `stripe_error:STATUS:body` message shape for back-compat), `classifyStripeError()` (→ `resource_missing` | `auth` | `other`, with a fallback parser for the legacy message string), and `resolveCoreOutcome()` (maps per-section failure kinds → `ok` | `customer_missing` | `unavailable`).
+- `cloudflare-worker/src/routes/billing.ts` — `stripeCall` now throws `StripeApiError` instead of a plain `Error` (additive: `.message` unchanged). `GET /api/billing/overview` rewritten: each of the 4 core Stripe calls (subscriptions, payment methods, customer, invoices) is fetched via a `section()` wrapper that captures failures by kind instead of throwing, so one failing call no longer 502s the whole tab. Outcomes: `resource_missing` on any core section → self-heal (NULL the scope's `stripe_customer_id`/`investor_stripe_customer_id` via allowlisted column name) + return the clean empty payload (`has_customer:false`); `auth` error or total core outage → explicit `{error:'billing_unavailable'}` 502 (no misleading empty page); otherwise degrade each individually-failed section to empty, add a `degraded: string[]` field naming the affected core sections, and render the rest. Charges remain additive enrichment and never affect the outcome. Replaces the old single `try/catch` that returned `overview_failed`.
+
+### Root cause
+- Post Task #17 live-key cutover, users still hold TEST-mode customer ids; the live key returns `resource_missing` "No such customer", which the old all-or-nothing overview surfaced as a 502 `overview_failed`. Self-heal nulls the stale id so the next purchase re-creates a live customer.
+
+### Frontend
+- `frontend/src/components/BillingDashboard.jsx` — added a `loadError` state; an overview load failure now renders a calm inline amber panel with a Retry button instead of flashing the raw error message. `billing_unavailable`/502 maps to a friendly "temporarily unavailable" message.
+
+### Tests
+- `cloudflare-worker/test/billing_overview.test.ts` — **new** (added to `test:drift`): 17 cases over `StripeApiError` parsing, `classifyStripeError` (incl. legacy-string fallback), and `resolveCoreOutcome` branch coverage.
+
+## Cookie banner persists on dismiss — no more re-prompt on every refresh (Task #23)
+
+### Frontend
+- `frontend/src/components/CookieConsent.jsx` — the ✕ button and Esc key now call a new `dismiss()` handler instead of the no-op `close()`. When the visitor has not yet decided, `dismiss()` records an explicit "essential only" choice via `rejectAll()` (decided=true, all non-essential off) before hiding the card, so the banner no longer reappears on every refresh/navigation. No consent is inferred for functional/analytics/advertising. When the banner is reopened from the footer "Cookie preferences" link (a choice already exists), dismissing leaves the saved choice untouched. Explicit *Accept all* / *Reject all* / *Confirm* behavior is unchanged.
+
+### Notes
+- Consent ↔ cookie wiring confirmed unchanged: no third-party analytics/advertising scripts are loaded. `frontend/index.html` loads only Cloudflare Turnstile (essential/security) and Google Fonts (functional) — no analytics or advertising trackers. `hasConsent()` in `frontend/src/lib/cookieConsent.js` remains the mandatory gate any future tracker must check; the Analytics/Advertising toggles record intent only. Only essential/functional first-party cookies (auth, `axal_ref` referral, Turnstile) are set pre-consent.
+- Choice persists per browser via `localStorage` (`axal_cookie_consent_v1`) on the apex origin; `app.axal.vc` traffic converges to `axal.vc` via the existing edge 301, so the stored choice carries for normal navigation.
+
+## Stripe live-mode cutover — ops runbook + credential prerequisites (Task #17)
+
+### Docs / ops
+- `GOTCHAS.md` — added "Stripe live-mode cutover runbook" section: complete operator sequence for switching the platform from Stripe test mode to live mode, covering credential secrets (`STRIPE_SECRET_KEY`, `STRIPE_CONNECT_CLIENT_ID`, `STRIPE_PUBLISHABLE_KEY` via Admin Console KV), full product catalog provisioning with exact metadata per kind, incorporation price ID secrets (`STRIPE_PRICE_INCORP_*` for all five jurisdictions), live webhook registration with all 8 required events and auto-push of `STRIPE_WEBHOOK_SECRET`, `STRIPE_TAX_ENABLED` guard and activation prerequisites, build + deploy command, end-to-end verification checklist (subscriptions, incorporation, à la carte, bookings + Connect payout, promo codes, tax line), and rollback procedure. Added ops item (m) to the "Ops items still owned by user" section cross-referencing the runbook.
+- No code changes in this task — all Stripe infrastructure was built in Task #16. Current state: no Stripe secrets configured; production runs with payment dev-fallback active. The cutover is a pure ops sequence requiring Stripe dashboard access and live API credentials from the account owner.
+
+## In-app Stripe catalog & webhook admin — Payments tab in Admin Console (Task #16)
+
+### Worker
+- `cloudflare-worker/src/services/catalog.ts` — added `stripeMode()`, `getPublishableKey()`, `setPublishableKey()` (KV key `config:stripe:pk`), `validateProductMetadata()`, `createProduct()`, `updateProduct()`, `archiveProduct()`, `createPrice()`, `archivePrice()`.
+- `cloudflare-worker/src/routes/catalog.ts` — expanded admin CRUD: `GET /api/admin/catalog/products`, `POST /api/admin/catalog/products`, `PATCH /api/admin/catalog/products/:id`, `POST /api/admin/catalog/products/:id/archive`, `POST /api/admin/catalog/products/:id/prices`, `POST /api/admin/catalog/prices/:priceId/archive`, `GET /api/admin/catalog/mode`. All `requireAdmin`-gated.
+- `cloudflare-worker/src/routes/admin_stripe.ts` — **new file**: `GET/POST /api/admin/stripe/webhook` (list + register/update endpoint), `GET/PUT /api/admin/stripe/config` (publishable key read/write). Webhook registration auto-pushes `STRIPE_WEBHOOK_SECRET` via `cloudflareSecrets.setSecret`. All routes audit-logged (`report_type='billing'`).
+- `cloudflare-worker/src/index.ts` — mounted `adminStripe` at `/api/admin/stripe` (before the catch-all), added public `GET /api/payments/config` (returns publishable key + mode; no auth required).
+- `cloudflare-worker/src/middleware/rateLimit.ts` — added `admin_catalog_writes` bucket (20/min/user) covering write methods on `/api/admin/catalog/*` and `/api/admin/stripe/*`.
+- `cloudflare-worker/src/types.ts` — added `STRIPE_PUBLISHABLE_KEY?: string` env var (KV value takes precedence).
+
+### Frontend
+- `frontend/src/lib/stripe.js` — added runtime key fetch from `GET /api/payments/config` with in-memory caching; `getStripe()` uses KV key first, then build-time `VITE_STRIPE_PUBLISHABLE_KEY`.
+- `frontend/src/components/AxalCheckout.jsx` — replaced `!STRIPE_PUBLISHABLE_KEY` hard-gate with async `stripeConfigured` state (null=loading, false=not configured, true=ready) resolved from `getStripe()` Promise; shows loading placeholder while resolving — no longer silently breaks when runtime KV key is set but build-time env var is absent.
+- `frontend/src/components/BillingDashboard.jsx` — same `stripeConfigured` async pattern in `CardSetupForm`; `useEffect` for SetupIntent creation now depends on `stripeConfigured` (not `stripePromise`) to avoid firing before key is resolved.
+- `frontend/src/lib/api.js` — added `adminCatalogMode`, `adminCatalogList`, `adminCatalogSync`, `adminCatalogCreateProduct`, `adminCatalogUpdateProduct`, `adminCatalogArchiveProduct`, `adminCatalogAddPrice`, `adminCatalogArchivePrice`, `adminStripeListWebhooks`, `adminStripeRegisterWebhook`, `adminStripeUpdateWebhookEvents`, `adminStripeGetConfig`, `adminStripeSetConfig`.
+- `frontend/src/pages/AdminPage.jsx` — added **Payments tab** with `PaymentsPanel` + `MetadataFields` helper: mode banner, publishable-key form (KV-backed), product catalog CRUD (expand/collapse rows, create/edit/archive products with kind-aware metadata fields, add/archive prices), webhook status & register/update-events UI. Product inline edit form wired to `adminCatalogUpdateProduct`.
+
+### Worker (reliability fix)
+- `routes/admin_stripe.ts` — webhook registration response now includes `webhook_secret` field when `STRIPE_WEBHOOK_SECRET` auto-push fails, so admin can copy and set it manually via `wrangler secret put`; Stripe only returns the secret at creation time.
+
+### Tests
+- `cloudflare-worker/test/catalog.test.ts` — **new**: 27 unit tests covering `validateProductMetadata` (all 4 kinds, valid/invalid taxonomy values, edge cases) and `stripeMode` (unconfigured/test/live/rk_live prefix).
+
+## Legal-document architecture refactor — clean renderer + 45 template bodies (Task #14)
+- **What:** integrated the legal-architecture branch (`claude/cool-volta-0mc9i5`, PR #90) into `main`. The branch delivers a shared formatting layer, a Markdown-leakage fix, 30 cleaned existing template bodies, and 15 new template bodies.
+- **Shared formatting layer:** `cloudflare-worker/src/services/legalDocFormat.ts` + `frontend/src/lib/legalDocFormat.js` (JS mirror). Both are now the single source of truth for: `normalizeLegalBody` (strips `#`, `##`, `**`, `>`, `---`, `- [ ]` from authored .md bodies without touching `{{merge_tokens}}`, `____` blanks, or `[BRACKET LABELS]`); `buildPreamble` (standardized opening paragraph with registered Delaware address `16192 Coastal Highway, Lewes, Delaware 19958`); `buildExecutionBlock` (dual Axal/Counterparty block with Joseph Gabriel Guillaume Lauzier / Managing Partner; document-kind-aware: agreements=dual, corporate=Company-only, unilateral/filings=counterparty-only, policies=none); `axalEntityKeyForDoc` (management/holdings/gp/fund routing per `LEGAL_ENTITIES.md`); `classifyDocument` (agreement/corporate/policy/unilateral/resolution).
+- **PDF renderer** (`cloudflare-worker/src/services/pdf.ts`): rewired to use the new four-component layout — CONFIDENTIAL top-right, centered UPPERCASE bold title, standardized preamble, normalized clause body, footer (title / version / `legal@axal.vc` / Page X of Y), and the document-kind-aware execution block. `suppressExecutionBlock` flag lets the e-sign pipeline inject its own DocuSign anchors without a duplicate block.
+- **Admin live preview** (`frontend/src/components/PaperPreview.jsx`): updated to use the same `buildPreamble` + `buildExecutionBlock` + `normalizeLegalBody` from the frontend mirror, so the admin preview matches the exported PDF exactly.
+- **E-sign page** (`frontend/src/pages/ESignPage.jsx`): updated to pass `suppressExecutionBlock` when the server indicates an anchor is present; DocuSign integration (`cloudflare-worker/src/integrations/providers/docusign.ts`) unchanged.
+- **Admin templates page** (`frontend/src/pages/admin/AdminTemplates.jsx`): updated to use the JS `buildFullDocument` helper so the live editor preview also uses the four-component layout.
+- **Routes:** `cloudflare-worker/src/routes/admin_contracts.ts` and `cloudflare-worker/src/routes/esign.ts` updated to pass `category`/`slugOrType` to the new entity-routing and execution-block logic.
+- **Migration 113** (`cloudflare-worker/sql/migrations/113_refresh_legal_template_bodies.sql`): unconditional force-upsert of all 42 `.md`-backed template bodies, aligned to clause-only convention (no embedded title/preamble/signature/Markdown noise). Generated by `scripts/gen-legal-templates-seed.py`; migration 085 and 105 are now frozen.
+- **Template bodies:** 30 existing template `.md` files cleaned to clause-only (no embedded title/preamble/signature/Markdown); 15 previously-empty stubs promoted to full authored v1 bodies: `Subscription Booklet & LPA`, `SPV Joinder Agreement`, `Co-Investment Side Letter`, `Strategic Side Letter / Focused SPV`, `investor_subscription_pro`, `investor_subscription_inst`, `Founder Collaboration Agreement`, `Spin-Out Subsidiary SPA + IP Transfer`, `Strategic Scale Partnership Agreement`, `Technology Integration / JV Agreement`, `Referral / Agency Agreement`, `M&A Advisory Mandate`, `Secondary Purchase Agreement`, `ip_background_schedule`, `data_access_acknowledgment_admin`.
+- **Test:** `cloudflare-worker/test/legalDocFormat.test.ts` (20 unit tests covering `normalizeLegalBody`, `stripTrailingSignatureBlock`, `buildPreamble`, `buildExecutionBlock`, `classifyDocument`, `axalEntityKeyForDoc`, `winAnsiSafe`) added to `test:drift`.
+- **Migration numbering:** branch's migration was already 113; no collision with latest main migration 112.
+- **Validation:** `npm run test:drift` — 178 + 9 tests, 0 failures (includes new legalDocFormat test suite and worker `tsc --noEmit`).
+- **Files:** `cloudflare-worker/src/services/legalDocFormat.ts` (new), `frontend/src/lib/legalDocFormat.js` (new), `cloudflare-worker/src/services/pdf.ts`, `frontend/src/components/PaperPreview.jsx`, `frontend/src/pages/ESignPage.jsx`, `frontend/src/pages/admin/AdminTemplates.jsx`, `cloudflare-worker/src/routes/admin_contracts.ts`, `cloudflare-worker/src/routes/esign.ts`, `cloudflare-worker/src/integrations/providers/docusign.ts`, `cloudflare-worker/test/legalDocFormat.test.ts` (new), `cloudflare-worker/sql/migrations/113_refresh_legal_template_bodies.sql` (new), all `cloudflare-worker/src/templates/legal/*.md` (30 modified, 15 new), `scripts/gen-legal-templates-seed.py`, `package.json`, `LEGAL_ENTITIES.md`. Takes effect on `npm run deploy`.
+
+## Discreet cookie consent banner (Task #13)
+- **What:** a small, bottom-anchored consent card (NOT a blocking overlay) appears on first visit with **Accept all / Reject all / More choices** and a link to `/privacy`. "More choices" expands an inline preferences step ("What can we use data for?") with per-category toggles — **Essential** (always on, disabled), **Functional**, **Analytics**, **Advertising** — a **Confirm** action, and a "Simpler choices" back link. Once a choice is recorded the banner does not reappear.
+- **Storage:** `frontend/src/lib/cookieConsent.js` persists the choice browser-side only via `safeReadJSON`/`safeWriteJSON`/`safeRemove` (key `axal_cookie_consent_v1`) as `{ version, decided, updatedAt, categories }`. A `CONSENT_VERSION` constant lets a future policy change re-prompt everyone (a stored choice with an older version reads as "not decided"). Exposes `hasConsent(category)` (essential always true; others require a recorded opt-in), `acceptAll`/`rejectAll`/`saveConsent`, and `subscribe(cb)` (in-tab CustomEvent + cross-tab `storage` event). No server-side consent storage.
+- **No real gating yet:** the app loads no third-party analytics/advertising scripts today, so Analytics/Advertising record the visitor's *intent* only. Any future tracker must gate on `hasConsent(category)`.
+- **UI:** `frontend/src/components/CookieConsent.jsx`, mounted globally in `frontend/src/App.jsx` inside `<SafeMount name="CookieConsent">` alongside the other always-on widgets. Public component (outside `[data-app-main]`), so it carries explicit `dark:` variants. Reopened from a new **"Cookie preferences"** link in `frontend/src/components/PublicFooter.jsx` (next to Privacy) which fires `openCookiePreferences()` → opens the banner straight to the preferences step, pre-filled with the saved choice.
+- **Privacy policy:** `frontend/src/pages/PrivacyPage.jsx` gains a "7. COOKIES & SIMILAR TECHNOLOGIES" section describing the four categories and how to change the choice; the former "Contact us" section is renumbered to 8.
+- **Out of scope:** gating real analytics/ad scripts (none exist), server-side consent logging, a separate Cookie Policy page, region-gating / GPC auto-respect.
+- **Files:** `frontend/src/lib/cookieConsent.js`, `frontend/src/components/CookieConsent.jsx`, `frontend/src/components/PublicFooter.jsx`, `frontend/src/pages/PrivacyPage.jsx`, `frontend/src/App.jsx`. Frontend-only; takes effect on `npm run deploy` (the Worker serves the SPA).
+
+## Clearer incorporation-wizard failures + up-front online-filing gate (Task #12)
+- **Bug:** the Incorporate wizard's "Continue to payment" (`POST /api/legal/incorporation/order`) collapsed every backend failure into one opaque banner ("Submission failed. Please retry in a moment…"). In production the order route fails closed when no Stripe catalog price is tagged with `metadata.jurisdiction_id` for the chosen jurisdiction, returning structured codes `stripe_not_configured` (503), `catalog_price_missing` (502), or `order_failed` (502) — but the UI showed the same generic text for all, so a setup gap looked like a transient glitch and retrying never helped.
+- **Fix (messaging):** `frontend/src/pages/IncorporatePage.jsx` `submit()` catch now branches on the structured error (read from `e.data.error` / `e.message`, with `e.status`): `stripe_not_configured` + `catalog_price_missing` → "Online incorporation filing isn't set up for {jurisdiction} yet — contact the studio team…" (a setup gap, not retryable); `order_failed` + other 5xx/network → transient "couldn't start the payment… try again"; existing 404 ("no longer available") and 401/403 ("session/access") branches preserved.
+- **Fix (graceful gate):** the wizard now best-effort reads the **full** catalog on load (`api.catalogProducts()` with no `kind` filter, added to the mount `Promise.allSettled`) and builds a Set of jurisdiction ids whose active product (matched by `metadata.jurisdiction_id`) carries an active one-time price (`type !== 'recurring'`, `unit_amount > 0`). It deliberately does **not** filter by `kind='incorporation'`: the Worker's `resolveIncorporationPrice` resolves via `priceForPlanMetadata(env,'jurisdiction_id',…)` across **all** active products, and a product tagged only with `jurisdiction_id` derives `kind='alacarte'` — so a kind filter would wrongly hide (and block) a jurisdiction the server would actually accept. When the catalog is reachable but the selected jurisdiction has no purchasable price (`incorpAvailability` is a non-null Set lacking the id), `ConfirmStep` renders an amber inline explanation (mailto support, Stripe-Atlas hand-off note for `atlas_supported`) and "Continue to payment" is disabled — no dead-end click. A failed/empty catalog fetch leaves availability `null` (unknown) so the wizard never blocks on a guess; the catch handler stays the safety net (notably in dev, where the FastAPI backend has no catalog route).
+- **Out of scope (operational — repo owner, in Stripe/Cloudflare):** to actually enable paid incorporation on axal.vc: (1) set `STRIPE_SECRET_KEY` on the prod Worker; (2) create an active Product + one-time Price per offered jurisdiction tagged with product metadata `jurisdiction_id` (`us_de_ccorp` $500, `us_de_llc` $300, `uk_ltd` $50, `sg_pte` $600, `ee_oy` $200 — at minimum `us_de_ccorp`); (3) `POST /api/admin/catalog/sync` to refresh the D1 `stripe_products` mirror, redeploy if env/routes changed; (4) confirm `resolveIncorporationPrice` resolves a price (wizard reaches payment). Code changes only make the failure legible until then.
+- **Files:** `frontend/src/pages/IncorporatePage.jsx`. Frontend-only; takes effect on `npm run deploy` (the Worker serves the SPA).
+
+## Articles page is public-only; authoring moves to a dedicated workspace (Task #11)
+- **Public surface:** `/articles` (`frontend/src/pages/ArticlesPage.jsx`) is now a clean public reading feed — removed the "Write an article" button, the Browse/My Articles tab nav, the `MyArticlesTab`/`TabButton` components, and the `/articles/mine` tab state. It renders `BrowseTab` directly for everyone (logged in or not). Dropped now-unused imports (`useAuth`, `useLocation`, `useNavigate`, the status-label/badge maps, and the editor-only icons).
+- **Sidebar:** the "Articles" entry for every role in `frontend/src/sidebarConfig.js` now points at `/articles/draft` (the writing workspace) instead of `/articles`.
+- **Workspace:** `/articles/draft` (existing `ArticleAuthorPage`) already lists the author's drafts/submissions/published items with a "New draft" action and opens items in the focused editor at `/articles/edit/:id` — no component change needed. Legacy `/articles/mine` now redirects to `/articles/draft` in `frontend/src/App.jsx` so old links and the previous tab destination still resolve.
+- **Ownership backfill:** verified in prod D1 (`studioos-db`, `--remote`) that the three seeded articles (`how-ai-is-changing-startup-investment-and-venture-support`, `why-i-avoid-consensus-and-invest-early`, `cybersecurity-and-zero-trust-systems`) already have `author_user_id = 1`, which resolves to `guillaumelauzier@gmail.com` (admin). Migration `088_backfill_article_authors.sql` was already applied and is correct/idempotent — no further D1 write required, so the articles already surface under his authored work.
+- **Files:** `frontend/src/pages/ArticlesPage.jsx`, `frontend/src/sidebarConfig.js`, `frontend/src/App.jsx`. Frontend-only; takes effect on `npm run deploy` (the Worker serves the SPA).
+
+## Only admins can add investors and issue capital calls (Task #9)
+- **RBAC gap:** Three capital write/issue routes in `cloudflare-worker/src/routes/capital.ts` were gated only by `canViewLpData` (admin **OR** investor), so any authenticated investor could add LP records and issue capital calls — fund/GP operations, not LP ones: `POST /api/capital/investors` (add an LP), `POST /api/capital/calls` (create a call against one LP), and `POST /api/capital/capitalCall` (issue a call to every active investor).
+- **Fix:** all three now require `__u.role === 'admin'` and return `403` for investors. The check is inlined (`if (__u.role !== 'admin') …`) to match the per-investor role checks already in this file (Task #12/#20); no new `auth.ts` helper. The read routes (`GET /investors`, `/investors/:id`, `/calls`, `/portfolio`) and the pay-own-call route (`POST /calls/:id/pay`) are unchanged — investors still see their own data and pay their own calls, and the Task #20 read-scoping is untouched.
+- **UI:** `frontend/src/pages/CapitalPage.jsx` hides the "Capital Call" create button + form for non-admins (via `useAuth().role`) so investors never trigger a 403. `PartnerPortal.jsx` exposes no create/issue control (pay/accept only) — no change needed there.
+- **Tests:** `cloudflare-worker/test/capital.test.ts` adds admin-allowed (201/200) vs investor-403 coverage on all three routes; existing tests still prove the pay route stays investor-accessible.
+- **Files:** `cloudflare-worker/src/routes/capital.ts`, `frontend/src/pages/CapitalPage.jsx`, `cloudflare-worker/test/capital.test.ts`. Backend takes effect on `npm run deploy`.
+
+## Logged-out visitors see the 404 page on unknown URLs (Task #8)
+- **Root cause (frontend):** The catch-all `path="*"` route renders `NotFoundPage` for everyone, but a signed-OUT visitor on an unknown URL was bounced to `/login` before they could see it. On first paint `SettingsProvider` probes `GET /api/settings/appearance`, which 401s for an anonymous visitor; the 401 interceptor in `frontend/src/lib/api.js` hard-redirects to `/login` for any path not on its public-path allowlist — and an unknown URL isn't allowlisted.
+- **Fix (option b — scoped to the 404 surface):** `api.js` now exposes `setSuppressAuthRedirect(bool)` backed by a module-level flag; `NotFoundPage` sets it true on mount and false on unmount, and the interceptor skips the `/login` redirect while it's set. Because the flag is false on every real page, a genuinely-expired session on a protected page (`/dashboard`, `/admin`, …) still bounces and existing public pages are unchanged. `NotFoundPage` is now imported eagerly (not `lazy`) so its mount effect runs on the initial commit — a lazy chunk could resolve *after* the background 401 returns and lose the race, still bouncing the visitor.
+- **Files:** `frontend/src/lib/api.js`, `frontend/src/pages/NotFoundPage.jsx`, `frontend/src/App.jsx`. Frontend-only; takes effect on `npm run deploy` (the Worker serves the SPA).
+
+## Admin Users role dropdown modernised — single chevron, custom popover (Task #4)
+- **Bug fixed:** The role pill in the Users table used a native `<select>` with `appearance-none` + an absolutely-positioned `<ChevronDown>` overlay. On some browsers/OS combos `appearance-none` doesn't fully suppress the native caret, causing two down-arrows to render simultaneously.
+- **Change:** Replaced the native `<select>` + overlay with a self-contained `RoleDropdown` component (inline in `AdminPage.jsx`). Renders a styled pill button (same `ROLE_BADGES` colours as before) with exactly one `<ChevronDown>` icon that rotates 180° when open. Clicking opens an absolutely-positioned options list (white card, rounded-xl, shadow-lg) with a checkmark on the current selection. Click-outside closes it via a `mousedown` listener. Selecting an option calls the existing `handleRoleChange` handler (confirm dialog + API call) unchanged. Admin users still see a read-only badge — no dropdown.
+- **Files:** `frontend/src/pages/AdminPage.jsx:50-110` (new `RoleDropdown`), `:434` (usage site). No other selects touched.
+
+## "Continue with Google" no longer bounces back to the sign-in page (Task #1)
+- **Root cause (frontend):** The Worker's `/api/auth/google/callback` sets the session cookie entirely server-side (`Domain=.axal.vc`, httpOnly) and 302's to `axal.vc/dashboard?google=ok`, so the SPA boots with empty `localStorage` (no cached `user`). `RequireAuth` (`frontend/src/App.jsx`) saw `user === null` and immediately `<Navigate to="/login">`. `useAuthSync`'s post-OAuth bootstrap then force-probed `/me` and populated `user` — but by then we were on `/login`, whose `AuthScreen` wrapper treats *any* authenticated user as an "account switch" and calls `clearSession()` (→ `POST /api/auth/logout`), revoking the freshly-minted cookie. Net effect: a successful Google round-trip dumped the user straight back onto the sign-in form. Prod-only — the dev FastAPI backend has no Google route, so the button is hidden in the Replit preview.
+- **Fix:** `useAuthSync` now exposes an `oauthBootstrapping` flag, seeded from the `?google`/`?google_signup` marker captured at first render and cleared when the forced `/me` settles (success *or* failure). `RequireAuth` renders a "Signing you in…" spinner instead of bouncing to `/login` while `oauthBootstrapping` is true, so the user never lands on `AuthScreen` and the session survives. A genuinely failed bootstrap still falls through to `/login`. Non-OAuth loads are unaffected (`oauthBootstrapping` stays false).
+- **Files:** `frontend/src/hooks/useAuthSync.jsx`, `frontend/src/App.jsx`. Frontend-only; takes effect on `npm run deploy` (the Worker serves the SPA).
+
 ## Investors only see their own LP records and capital calls (Task #20)
 - **Per-investor scoping (`cloudflare-worker/src/routes/capital.ts`):** Task #12 scoped `GET /api/capital/calls` + the pay route, but two sibling LP-record routes still leaked cross-tenant data to any caller passing the broad `canViewLpData` gate (admin OR investor). `GET /api/capital/investors` returned **every** `limited_partners` row (all funds' commitments / invested amounts); `GET /api/capital/investors/:id` returned **any** LP by id **plus** that LP's `capital_calls` (`SELECT … WHERE limited_partner_id = id`), reachable by guessing ids — the same capital-call data Task #12 was about.
 - **Fix:** admins keep the unscoped reads. A non-admin investor's `/investors` query now filters `WHERE lp.user_id = <caller>`, and `/investors/:id` scopes the LP lookup itself to `WHERE lp.id = <id> AND lp.user_id = <caller>`, returning `404` (deliberately not `403`, so a non-owner can't enumerate which LP ids exist) **before** the `capital_calls` query runs — so neither the LP record nor its calls leak. Mirrors the existing `GET /calls` admin-vs-scoped branch; `__u.role === 'admin'` is inlined (no new `auth.ts` helper) to stay consistent with the Task #12 sibling routes, and `canViewLpData` remains the coarse role gate.

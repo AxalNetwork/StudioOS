@@ -21,7 +21,7 @@ import {
   Globe, Brain, Activity, Shield, Code, ShieldCheck, Share2, Wallet,
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
-  BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2,
+  BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2, ShieldAlert,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -57,13 +57,13 @@ export function hasInvestorTier(user, required) {
 export const SIDEBAR_GROUPS = {
   admin: [
     { key: 'home', label: 'Home', items: [
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-      { to: '/play', icon: Gamepad2, label: 'Discover' },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
     ]},
     { key: 'admin', label: 'Admin', items: [
       { to: '/admin', icon: Shield, label: 'Admin Console' },
       { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/admin/assessment', icon: Gamepad2, label: 'Assessment Studio' },
+      { to: '/admin/best-fit', icon: Sparkles, label: 'Best-Fit Console' },
       { to: '/admin/events', icon: Ticket, label: 'Event Admin' },
       { to: '/portfolio/coverage', icon: Network, label: 'Portfolio Coverage' },
       { to: '/monitoring', icon: Activity, label: 'Monitoring' },
@@ -76,6 +76,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'intelligence', label: 'Intelligence', items: [
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
+      { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
       { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
@@ -128,9 +129,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/articles', icon: FileText, label: 'Content Queue' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles', icon: FileText, label: 'Articles' },
-      { to: '/skills', icon: Target, label: 'Skills Profile' },
-      { to: '/values', icon: Heart, label: 'Values Assessment' },
+      { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -140,9 +139,8 @@ export const SIDEBAR_GROUPS = {
 
   founder: [
     { key: 'home', label: 'Home', items: [
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/founder', icon: Rocket, label: 'Founder Portal', highlight: true },
-      { to: '/play', icon: Gamepad2, label: 'Discover' },
     ]},
     { key: 'build', label: 'Build', items: [
       { to: '/projects', icon: Zap, label: 'Projects' },
@@ -188,9 +186,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/my/events', icon: Ticket, label: 'Events' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles', icon: FileText, label: 'Articles' },
-      { to: '/skills', icon: Target, label: 'Skills Profile' },
-      { to: '/values', icon: Heart, label: 'Values Assessment' },
+      { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -200,9 +196,8 @@ export const SIDEBAR_GROUPS = {
 
   partner: [
     { key: 'home', label: 'Home', items: [
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/partner-portal', icon: UserCircle, label: 'Partner Portal', highlight: true },
-      { to: '/play', icon: Gamepad2, label: 'Discover' },
     ]},
     { key: 'sourcing', label: 'Sourcing', items: [
       { to: '/projects', icon: Zap, label: 'Projects' },
@@ -215,6 +210,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'insights', label: 'Insights', items: [
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
+      { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
       { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
     ]},
@@ -242,9 +238,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles', icon: FileText, label: 'Articles' },
-      { to: '/skills', icon: Target, label: 'Skills Profile' },
-      { to: '/values', icon: Heart, label: 'Values Assessment' },
+      { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -254,9 +248,8 @@ export const SIDEBAR_GROUPS = {
 
   investor: [
     { key: 'home', label: 'Home', items: [
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/partner-portal', icon: UserCircle, label: 'Investor Portal', highlight: true },
-      { to: '/play', icon: Gamepad2, label: 'Discover' },
     ]},
     { key: 'pipeline', label: 'Pipeline', items: [
       { to: '/projects', icon: Zap, label: 'Projects' },
@@ -268,6 +261,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'intelligence', label: 'Intelligence', items: [
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
+      { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
     ]},
     { key: 'portfolio', label: 'Portfolio', items: [
       { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
@@ -289,9 +283,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles', icon: FileText, label: 'Articles' },
-      { to: '/skills', icon: Target, label: 'Skills Profile' },
-      { to: '/values', icon: Heart, label: 'Values Assessment' },
+      { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -302,7 +294,6 @@ export const SIDEBAR_GROUPS = {
   mentor: [
     { key: 'home', label: 'Home', items: [
       { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
-      { to: '/play', icon: Gamepad2, label: 'Discover' },
     ]},
     { key: 'engagements', label: 'Engagements', items: [
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
@@ -312,9 +303,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/tickets', icon: Ticket, label: 'Support' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles', icon: FileText, label: 'Articles' },
-      { to: '/skills', icon: Target, label: 'Skills Profile' },
-      { to: '/values', icon: Heart, label: 'Values Assessment' },
+      { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
       { to: '/settings', icon: SettingsIcon, label: 'Settings' },

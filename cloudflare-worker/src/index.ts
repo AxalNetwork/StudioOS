@@ -136,7 +136,7 @@ import customerChat from './routes/customer_chat';
 // Task #8 (IH) — Data import + migration tools (Carta/AngelList CSV/Deck
 // PDF+PPTX/Investor portfolio/HubSpot pipeline/Universal CSV).
 import importsRoutes from './routes/imports';
-import brand, { renderLandingHtml, renderLandingPreview } from './routes/brand';
+import brand, { renderLandingHtml, renderLandingPreview, renderTemplatePreview } from './routes/brand';
 import decks from './routes/decks';
 // Task #6 — share-link viewer onboarding (signup/NDA/feedback/deal-pack)
 // + conversion tracking. MUST be mounted BEFORE the `/api/decks`
@@ -175,6 +175,8 @@ import companyRoutes from './routes/company';
 import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 import insightsRoutes from './routes/insights';
 import founderRiskRoutes from './routes/founder_risk';
+// Task #9 — Venture Risk (10-layer hybrid auto+analyst rating, internal only).
+import ventureRiskRoutes from './routes/venture_risk';
 import servicesRoutes from './routes/services';
 import publicRoutes from './routes/public';
 // Task #39 — Event engine (Worker on D1): authed §8.1, public §8.2, admin §8.3.
@@ -184,6 +186,9 @@ import adminEventsRoutes from './routes/admin_events';
 // Task #44 — Gamified Assessment engine (player + admin authoring).
 import assessmentRoutes from './routes/assessment';
 import adminAssessmentRoutes from './routes/admin_assessment';
+import consultations, { adminConsultations } from './routes/consultations';
+import adminBestFit from './routes/admin_bestfit';
+import bestFitSelf from './routes/best_fit';
 // T3 — Reserve allocation + waterfall simulator (Task #46 port).
 import fundSimulatorRoutes from './routes/fund_simulator';
 import { processQueueBatch } from './services/queueWorker';
@@ -194,6 +199,8 @@ import { requireTier } from './middleware/requireTier';
 import billing from './routes/billing';
 // Task — Stripe-backed product catalog (read + admin sync over the D1 mirror).
 import catalog, { adminCatalog } from './routes/catalog';
+// Task #16 — Admin Stripe management (webhook endpoints + publishable key).
+import adminStripe from './routes/admin_stripe';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 import payments from './routes/payments';
 import { Jobs } from './models/jobs';
@@ -414,6 +421,16 @@ app.route('/api/billing', billing);
 // sibling of /api/billing so SKUs come from one source, not STRIPE_PRICE_*.
 app.route('/api/catalog', catalog);
 
+// Task #16 — Public runtime Stripe config. Returns publishable key + mode
+// (Test/Live) so the frontend can load Stripe.js without a rebuild when the
+// key changes. No auth required — publishable keys are public. The secret key
+// and webhook secret are NEVER returned here.
+app.get('/api/payments/config', async (c) => {
+  const { getPublishableKey, stripeMode } = await import('./services/catalog');
+  const pk = await getPublishableKey(c.env);
+  return c.json({ publishable_key: pk || null, mode: stripeMode(c.env) });
+});
+
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 // Server-side only — hands back Stripe `client_secret`s so the SPA can confirm
 // cards via Stripe Elements without ever seeing the Stripe secret key. Sibling
@@ -562,12 +579,20 @@ app.route('/api/admin/billing', adminBilling);
 // Task — Stripe product catalog admin sync. Mounted BEFORE the catch-all
 // /api/admin so /api/admin/catalog/* resolves here. requireAdmin per-route.
 app.route('/api/admin/catalog', adminCatalog);
+// Task #16 — Admin Stripe management (webhook + publishable key). Mounted
+// BEFORE the catch-all /api/admin so /api/admin/stripe/* resolves here.
+app.route('/api/admin/stripe', adminStripe);
 // Task #9 — promo-code admin CRUD; mount before the `/api/admin` catch-all.
 app.route('/api/admin/promos', adminPromos);
 // Task #39 — Event engine admin (§8.3). Mount BEFORE the catch-all /api/admin
 // so /api/admin/events/* resolves here, not in the generic admin router.
 app.route('/api/admin/events', adminEventsRoutes);
 app.route('/api/admin/assessment', adminAssessmentRoutes);
+// Task #19 — Best-Fit admin surfaces. Mount BEFORE the catch-all /api/admin so
+// the specific prefixes resolve here, not in the generic admin router.
+app.route('/api/admin/consultations', adminConsultations);
+app.route('/api/admin/best-fit', adminBestFit);
+app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);
@@ -607,6 +632,9 @@ app.route('/api/decks', decks);
 // Public landing page HTML (no /api prefix). Founders publish via the
 // authenticated /api/brand/landing/by-project/:pid/publish endpoint;
 // this route renders the page for un-authenticated visitors.
+// Task #20 — public visual preview of a landing template (no auth, noindex).
+// Registered before /landing/:slug so the two-segment path matches first.
+app.get('/landing/template-preview/:style', (c) => renderTemplatePreview(c.env, c.req.param('style'), c.get('cspNonce' as never) as string | undefined));
 app.get('/landing/:slug', async (c) => renderLandingHtml(c.env, c.req.param('slug'), c.get('cspNonce' as never) as string | undefined));
 // Task #4 — private preview URL for unpublished drafts (noindex).
 app.get('/landing/preview/:token', async (c) => renderLandingPreview(c.env, c.req.param('token'), c.get('cspNonce' as never) as string | undefined));
@@ -646,6 +674,7 @@ app.route('/api/events', eventsRoutes);
 // Task #44 — Gamified Assessment player routes (§7.1).
 app.route('/api/assessment', assessmentRoutes);
 app.route('/api/matches', matches);
+app.route('/api/consultations', consultations);
 app.route('/api/settings', settings);
 app.route('/api/integrations', integrations);
 app.route('/api/crunchbase', crunchbaseRoutes);
@@ -657,6 +686,8 @@ app.route('/api/calendar', calendarRoutes);
 app.route('/api/financials', financialsRoutes);
 // Task #1 (AG) — kept alphabetically adjacent to /api/financials.
 app.route('/api/founder-risk', founderRiskRoutes);
+// Task #9 — Venture Risk (internal deal-team 10-layer rating).
+app.route('/api/venture-risk', ventureRiskRoutes);
 app.route('/api/progress', progressRoutes);
 // Task #3 (DF) — `/api/metrics/*` alias of /api/progress/metrics/* + /series.
 app.route('/api/metrics', metricsRoutes);

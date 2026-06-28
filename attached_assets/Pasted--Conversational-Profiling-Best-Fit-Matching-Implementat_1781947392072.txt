@@ -1,0 +1,184 @@
+# Conversational Profiling + Best-Fit Matching — Implementation Plan
+
+## Context
+
+Replit already built Skills Profile, Personal Values Assessment, Play & Discover,
+and Assessment Studio for Axal VC — but each is a separate page, and adding more
+surfaces is increasing UX complexity. We will **consolidate** assessment into a
+single human-feeling conversation inside the existing **Personal Advisor**, then
+surface the results on **every user's Dashboard** (skills spider, values graph,
+range of potential matches) and give **admin (Guillaume)** a full best-fit report
+when a user books a consultation. A small **paywall** gates the full user-facing
+report, but the backend always computes it so admin matching/spin-out assessment
+works regardless. Separately, the **onboarding chatbot's Cloudflare Worker AI
+connection is broken** and must be fixed.
+
+The platform already has nearly all the substrate, so this is an **integration +
+methodology + surfacing** build, not a rewrite.
+
+**Decisions (confirmed):** build the whole feature now; add the 5 Axal values
+(Integrity, Stewardship, Curiosity, Resilience, Collaboration) as a NEW behavioral
+layer feeding the admin scorecard while keeping the existing 15 value dimensions
+for the user-facing "where you lean" graph; consolidate the standalone `/skills`
+and `/values` pages into the Advisor + Dashboard (Play & Discover stays as the
+optional gamified deep-dive).
+
+## Reused infrastructure (do not rebuild)
+
+- **Personal Advisor**: `routes/advisor.ts` (deterministic Q&A) + `services/advisor/stateMachine.ts` + per-persona banks `services/advisor/banks/*.ts` registered in `services/advisor/questionBank.ts` (Question schema, `BANK_SIZE_TARGETS`) + `services/advisor/writeRouter.ts` (routes answers to D1 with auth + built-in `paywalled` status).
+- **Assessment scoring**: `services/assessmentScoring.ts` (`computeAssessment`), archetype nearest-centroid, `assessment_results` (value_vector/skill_vector/confidence/flags/archetype).
+- **Skills/Values stores**: `user_skills` (0–5, 8 axes), `user_values` (−2..+2, 15 dims), taxonomy migrations 089/090; `routes/skills.ts`, `routes/values.ts`.
+- **Matching**: `services/matchingVectors.ts` (`loadUserVectors`, `confidenceAdjustedAlignment`, `skillComplementarity`, `computeWatchOuts`) already powering `routes/cofounder.ts`, `routes/mentors.ts`, `routes/matches.ts`.
+- **Paywall**: `middleware/requireTier.ts` (`ensureTier` → 402), `frontend/src/components/PaywallModal.jsx` (listens to `studioos:tier_required`), `hasTier` in `sidebarConfig.js`. Bypass roles: admin/partner/investor/mentor.
+- **Display**: `components/play/SkillRadar.jsx` (8-axis radar), `SpectrumBar`, `ArchetypeBadge.jsx`, `lib/assessmentMeta.js` (`skillRadarData`, `topValues`, `spectrumLean`), `TrustScoreBadge.jsx` (gauge).
+- **AI**: `services/aiRouter.ts` (`run`, ROUTE table, `MID_LLAMA`/`SMALL_LLAMA`, gateway via `gatewayOptionFor`), `services/advisor/aiClient.ts`.
+
+---
+
+## Workstream 0 — Fix the onboarding chatbot (live bug)
+
+**Symptom**: `routes/profiling.ts` `/chat` routes through `aiRouterRun({task:'advisor_turn'})`; on failure it returns `degraded:true` and already logs `refusal/error/model` (profiling.ts:158-163).
+
+**Diagnose then fix** (read `aiRouter.ts` `run()` + `callWorkersAI` + the gateway-bypass path fully first). Prime suspects, in order:
+1. **AI Gateway `advisor-ongoing` doesn't exist** and the gateway-bypass-on-failure retry isn't firing for `advisor_turn`/`tool_call` → harden so a missing/erroring gateway always falls back to an un-gatewayed `env.AI.run` (broaden the bypass in `aiRouter.ts`; the wrangler comment claiming "silently un-gatewayed, no breakage" is wrong).
+2. **Stale Workers AI model id** — refresh `MID_LLAMA`/`SMALL_LLAMA` (`aiRouter.ts:137-138`) to current Workers AI models and confirm the fallback chain resolves.
+3. **Output-shape parse** (`aiRouter.ts:455`) — also accept `r.result?.response` / nested shapes so a valid reply isn't dropped to the empty-fallback.
+
+**Verify**: new `cloudflare-worker/test/aiRouter.bugfix.test.ts` — simulate (a) gateway call throwing → bypass retry succeeds, (b) the Workers AI response shapes parse to non-empty output. Also document a `npx wrangler tail` check for `[PROFILING] chat AI router failed`.
+
+---
+
+## Workstream 1 — Data model + Axal Fit scoring engine
+
+**Migration `cloudflare-worker/sql/migrations/115_axal_fit.sql`** (+ `schema.sql` mirror), idempotent:
+- `axal_values(user_id, value_key, score REAL, confidence REAL, updated_at, PRIMARY KEY(user_id,value_key))` — the 5 Axal values (integrity/stewardship/curiosity/resilience/collaboration), mirrors `user_values`.
+- `axal_fit_scores(id, user_id, persona, total_score REAL, band TEXT, rubric_json, red_flags_json, signal_quality REAL, narrative_fit TEXT, computed_at)` — weighted-rubric result; latest row per (user,persona) is current.
+- `admin_consultation_bookings(id, uid, user_id, admin_id, requested_at, slot_at, status, topic, notes, report_id, created_at)`.
+- `axal_fit_reports(id, uid, user_id, persona, report_json, computed_by, created_at)` — persisted admin best-fit snapshots.
+
+**Service `cloudflare-worker/src/services/axalFit.ts`** — encodes the methodology:
+- `RUBRICS`: per-persona weighted categories from the spec (Founder, Partner, Mentor/Coach, Investor), weights normalized to 100.
+- `AXAL_VALUES`: the 5 behavioral values.
+- `computeFit(env, userId, persona)` → loads scored answers (rubric category scores 1–5, value scores), computes `total_score` 0–100 (Σ weight×score/5), `band` via thresholds (85+ strong_yes / 70–84 yes_caution / 55–69 hold / <55 no), `red_flags` (overconfidence, blame-shifting, inconsistency, ego, weak ethics — from flagged answers), `signal_quality` (confidence/coverage), `narrative_fit`.
+- Reuse `assessmentScoring.ts` for the skill/value vectors + archetype; `axalFit` only adds the rubric + 5 values + decision rule.
+
+---
+
+## Workstream 2 — Conversational delivery in the Personal Advisor
+
+- **New `input_kind: 'scale'`** (0–5) in `services/advisor/questionBank.ts` Question schema + `validate` kind; render as a friendly 0–5 / Likert control in the advisor UI.
+- **New scored banks** `services/advisor/banks/fit_<persona>.ts` (founder, investor, partner, mentor, coach) — large behavioral question banks (per spec: human tone, one question per turn, 0–5), each question tagged with what it measures: `{ rubric_category?, skill_axis?, value_dim?, axal_value?, red_flag_probe? }` (extend Question with an optional `measures` field). Register in `questionBank.ts`; respect `BANK_SIZE_TARGETS` (add fit targets). Methodology/wording authored from the Perplexity-style rubric + axal.vc ideology (high throughput, rapid spin-out).
+- **Write-router** (`services/advisor/writeRouter.ts`): route `scale`/fit answers to `user_skills` (skill_axis), `user_values` (value_dim), `axal_values` (axal_value); after each batch, trigger `axalFit.computeFit` + the assessment vectors/archetype recompute. Keep the existing `paywalled` behavior.
+- **Consolidation**: redirect `/skills` and `/values` to the Advisor flow (frontend route redirects in `App.jsx`); keep `routes/skills.ts`/`values.ts` (still used as data stores + by the advisor). Remove the standalone pages from `sidebarConfig.js` (replace with a single "Your Profile" entry pointing at the dashboard/advisor).
+
+---
+
+## Workstream 3 — Dashboard surfacing (all roles)
+
+- **New API** `GET /api/advisor/fit` (in `routes/advisor.ts` or new `routes/profile.ts`): returns the assembled profile — `skill_vector` (8-axis), `value_lean` (15 dims top/bottom), `axal_values` (5), `archetype`, `fit_score`+`band`, `completion%`, and a `match_summary` (counts + top teaser per counterparty type). The full detail is `ensureTier`-gated for non-bypass roles; summary always returns.
+- **New components** `frontend/src/components/profile/`: `SkillsRadarCard` (reuse `play/SkillRadar.jsx`), `ValuesLeanCard` (reuse SpectrumBar + a small Axal-5 bar), `MatchesCard` (range of matches: co-founder/founder, investor, partner, coach, mentor — counts + gated detail), `ArchetypeCard` (reuse ArchetypeBadge). A `BookConsultationCard` CTA ("Book with Guillaume").
+- **Wire into `Dashboard.jsx`** after `<PersonalAdvisor />` (line 140): a "Your Profile & Fit" section visible to all roles; empty-state nudges the user into the advisor conversation.
+
+---
+
+## Workstream 4 — Matching ("range of potential matches")
+
+- **New `GET /api/matches/summary`** (extend `routes/matches.ts`): for the current user, compute top-N matches across counterparty types using `matchingVectors` (`loadUserVectors` + `confidenceAdjustedAlignment` + `skillComplementarity` + `computeWatchOuts`), generalizing the existing `cofounder.ts`/`mentors.ts` logic to all five counterparty types. Returns counts + top matches (names/contact gated).
+- **Paywall**: free → counts + one teaser; full list/detail → `ensureTier('studio')` (402 → PaywallModal). Bypass roles see all.
+
+---
+
+## Workstream 5 — Admin best-fit report + consultation booking
+
+- **New `routes/admin_bestfit.ts`**: `GET /api/admin/best-fit/:userId` (`requireAdmin`, NO tier check) → assembles the full report: skills/values/axal-values/archetype, `axal_fit_scores` per persona, top matches across all counterparty types with `reasons`/`watch_outs`/`gaps`, capital/market/partner/investor fit + gaps-to-fill, and a **spin-out strategic assessment** (reuse the venture-risk engine from PR #91 `services/ventureRisk.ts` if the user has a project, else score_snapshots). Persists to `axal_fit_reports`.
+- **New `routes/consultations.ts`**: `POST /api/consultations/book` (user requests a slot with Guillaume), `GET /api/admin/consultations` (admin list), `POST /api/admin/consultations/:id/status`. On booking → precompute + store the best-fit report so admin has it ready. Mirror the `mentor_bookings` pattern in `routes/mentors.ts`.
+- **Admin UI**: a dedicated `frontend/src/pages/AdminBestFitPage.jsx` (already scaffolded) — a consultation-request queue on the left, the full best-fit report on the right (skills radar, Axal values, fit scorecard+band, range of matches with reasons, gaps-to-fill, spin-out assessment), plus per-request status controls. Routed at `/admin/best-fit` (admin-guarded), reusing `play/SkillRadar.jsx`. Remaining wiring: lazy import + `<Route>` in `App.jsx`, a sidebar entry, and the `api.adminConsultations`/`adminBestFitReport`/`adminConsultationStatus` methods (each with its worker mount).
+
+---
+
+## Workstream 6 — Axal Fit methodology + Replit prompts doc  ← ONLY REMAINING WORKSTREAM
+
+> WS0–WS5 + the venture-risk engine are implemented, green, committed on
+> `claude/beautiful-dirac-xh904d`, and in draft **PR #92**. WS6 is the last piece.
+
+**New file `attached_assets/axal_fit_methodology.md`** — the canonical methodology,
+authored to mirror the as-built engine *exactly* (every weight/threshold/value/flag
+cross-checked against code so the doc can't drift). Pure documentation — no code
+touched. Sections:
+
+1. **Overview & philosophy** — hybrid model: structured self-rated scorecard →
+   human consultation review as the second pass; Axal ideology (30-day spin-out
+   engine, high-throughput, stewardship). Source: `banks/fit.ts` header, `CLAUDE.md`.
+2. **Conversational delivery** — one 0–5 `scale` question per turn inside the
+   Personal Advisor (human tone, "no wrong answers"), not a survey grid; each
+   tagged with a `measures` map; IDs `fit.<persona>.<key>`. Source: `banks/fit.ts`,
+   `questionBank.ts` (`FitMeasures`, `input_kind:'scale'`).
+3. **The four persona rubrics** (weighted categories) — reproduce exactly from
+   `axalFit.ts RUBRICS`, each with its `look_for` + the conversational prompt:
+   - Founder (8): vision_clarity 15, execution_ability 20, domain_insight 15,
+     coachability 15, resilience 15, communication 10, team_dynamics 10, values_fit 10.
+   - Investor (6): thesis_fit 20, capital_quality 15, governance_style 15,
+     reputation 20, decision_quality 15, values_fit 15.
+   - Partner (6): strategic_alignment 20, trustworthiness 20, network_quality 15,
+     execution_support 15, collaboration_style 15, reputation 15.
+   - Mentor/Coach (6, shared): domain_expertise 25, teaching_ability 20, listening 15,
+     founder_empathy 15, reliability 15, values_alignment 10.
+   Note weights are relative, normalized by Σweight at score time.
+4. **The 5 Axal behavioral values** (asked of every persona) — integrity,
+   stewardship, curiosity, resilience, collaboration; the probe + exact question
+   wording. Source: `AXAL_VALUES`, `VALUE_SPECS`.
+5. **Skills radar (8 axes) + values lean (5 founder spectrums)** — the SKILL_SPECS
+   + LEAN_SPECS that populate the dashboard radar + "where you lean" graph. Source:
+   `SKILL_SPECS`, `LEAN_SPECS`.
+6. **Red flags** (7: overconfidence, blame_shifting, inconsistent_stories,
+   poor_follow_through, ego_over_collaboration, transactional, weak_ethics) — how
+   they're probed via `red_flag:{key,at_or_below}` on specific questions
+   (integrity→blame_shifting, coachability→overconfidence, collaboration→ego).
+   Source: `RED_FLAGS`, `banks/fit.ts`.
+7. **Scoring & decision rule** — total = Σ(weight×score/5) over *answered*
+   categories ÷ Σ(answered weights) × 100; bands **≥85 Strong yes / 70–84 Yes,
+   with caution / 55–69 Hold–more diligence / <55 No**; signal_quality =
+   0.6×coverage + 0.4×mean value-confidence; final hybrid rule (score + signal
+   quality + red flags + human review). Source: `bandFromScore`, `BAND_LABEL`,
+   `scoreRubric`, `computeFit`.
+8. **From fit → matching & spin-out** — how the vectors feed the range of matches
+   (cofounder/investor/partner/mentor) and the admin report's 10-layer venture-risk
+   spin-out assessment. Source: `services/bestFit.ts`, `services/ventureRisk.ts`.
+9. **Replit Agent build prompts** (the original ask) — sequenced copy-paste prompts,
+   one per workstream (chatbot fix → data+scoring → advisor delivery → dashboard →
+   matching → admin report+booking → this doc), each prefixed with the `CLAUDE.md`
+   guardrails: worker route in `cloudflare-worker/src/routes/` first; add an
+   `api.js` method only with a matching worker mount (else `npm run test:drift`
+   fails); numbered idempotent migration in `sql/migrations/` + `schema.sql` mirror;
+   never touch `wrangler.toml` main; D1 canonical, FastAPI dev-only.
+
+**Verification**: pure doc — `npm run test:drift` stays green (no code touched);
+manually diff every rubric weight / band threshold / value / red-flag in the doc
+against `axalFit.ts` + `banks/fit.ts`. Commit on `claude/beautiful-dirac-xh904d`,
+push; draft PR #92 updates automatically.
+
+---
+
+## Critical files
+
+- New (worker): `sql/migrations/115_axal_fit.sql`, `src/services/axalFit.ts`, `src/routes/admin_bestfit.ts`, `src/routes/consultations.ts`, `src/services/advisor/banks/fit_*.ts`, tests `test/axalFit.test.ts`, `test/aiRouter.bugfix.test.ts`.
+- Edited (worker): `src/services/aiRouter.ts` (gateway-bypass + model/output robustness), `src/services/advisor/questionBank.ts` (+`scale`, +`measures`, register fit banks), `src/services/advisor/writeRouter.ts` (route scale answers + trigger compute), `src/routes/advisor.ts` (+`/fit`), `src/routes/matches.ts` (+`/summary`), `src/index.ts` (mount new routes), `sql/schema.sql`, `wrangler.toml` (gateway comment), `package.json` (test:drift list).
+- New (frontend): `src/components/profile/{SkillsRadarCard,ValuesLeanCard,MatchesCard,ArchetypeCard,BookConsultationCard}.jsx`, `src/pages/AdminBestFitPage.jsx` (admin queue + report — already created) / booking CTA.
+- Edited (frontend): `src/lib/api.js` (fit/matches/consultation methods — each with a worker mount), `src/pages/Dashboard.jsx` (Your Profile section), `src/App.jsx` (mount `/admin/best-fit`; redirect `/skills`,`/values`; new routes), `src/sidebarConfig.js` (consolidate nav + admin Best-Fit entry), advisor chat UI (`scale` input).
+- Reuse: `services/matchingVectors.ts`, `services/assessmentScoring.ts`, `services/ventureRisk.ts`, `play/SkillRadar.jsx`, `SpectrumBar`, `ArchetypeBadge.jsx`, `PaywallModal.jsx`, `requireTier.ts`.
+
+## Verification
+
+1. `cd cloudflare-worker && npx tsc --noEmit`.
+2. `npm run test:drift` — includes new `axalFit.test.ts` (rubric totals, bands, red flags, the 5 values) and `aiRouter.bugfix.test.ts` (gateway bypass + output parse), plus API-drift (every new `api.js` path mounted).
+3. Apply migration locally: `npx wrangler d1 execute studioos-db --local --file=cloudflare-worker/sql/migrations/115_axal_fit.sql`.
+4. `cd frontend && npm run build`.
+5. Manual: open the Personal Advisor → answer scored questions → Dashboard shows skills radar + values lean + Axal-5 + matches; `/skills` and `/values` redirect; hit a gated detail → PaywallModal; as admin, open a user's Best-Fit report; book a consultation → report precomputed. Re-test the onboarding chatbot returns `degraded:false`.
+
+## Sequencing (multiple commits on `claude/beautiful-dirac-xh904d`)
+
+Chatbot fix (independent, ship first) → data+scoring → advisor integration + consolidation → dashboard → matching → paywall → admin report + booking → methodology doc. Drift test + tsc + build green at each stage.
+
+## Out of scope (v1)
+
+Real-time re-matching on every answer (recompute on conversation milestones instead); external enrichment; automated consultation scheduling/calendaring beyond a request+status flow.

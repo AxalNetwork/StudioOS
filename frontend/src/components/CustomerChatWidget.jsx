@@ -6,7 +6,7 @@
  * so replies (Slack Events API → /api/customer-chat/slack-reply) land back
  * on the user's history. Polls /thread every 20s while open.
  *
- * The parent `<HelpWidget>` enforces tier eligibility and only mounts this
+ * The Support Hub help panel enforces tier eligibility and only mounts this
  * for Studio / Institutional / Partner / admin / mentor.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';

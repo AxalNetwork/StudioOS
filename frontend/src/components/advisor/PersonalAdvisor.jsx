@@ -37,7 +37,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   Sparkles, Send, X, Maximize2, Minimize2, LayoutDashboard, HelpCircle,
   Loader2, CheckCircle2, ArrowRight, MessageSquare, SkipForward, BookOpen,
-  Mic, MicOff,
+  Mic, MicOff, Ticket,
 } from 'lucide-react';
 import { api, spinoutLab as spinoutLabApi } from '../../lib/api';
 import { safeReadJSON, safeWriteJSON } from '../../lib/storage';
@@ -130,6 +130,11 @@ export default function PersonalAdvisor() {
   // the dashboard doesn't surface a scary "Not found" panel — the
   // Personal Advisor is genuinely unavailable in those environments.
   const [unavailable, setUnavailable] = useState(false);
+
+  // Task #9 — inline "Open a ticket" affordance. When open, a small
+  // ticket form renders under the advisor header; filing posts via the
+  // existing api.createTicket and the advisor confirms inline.
+  const [ticketOpen, setTicketOpen] = useState(false);
 
   // Task #2 (AR) — server-driven per-page / per-section progress
   // and Spin-Out week banner state. Refreshed after every answer
@@ -596,6 +601,24 @@ export default function PersonalAdvisor() {
     }
   }, [focusSection]);
 
+  // Task #9 — after a ticket is filed, confirm inline in the transcript
+  // with a link back to the Support Hub (and the GitHub issue if the
+  // POST /tickets response carried one) and close the form.
+  const handleTicketFiled = useCallback((t) => {
+    setTicketOpen(false);
+    const title = t?.title ? `"${t.title}"` : 'Your ticket';
+    setMessages((m) => [...m, {
+      role: 'assistant',
+      content: `${title} has been filed. You can track it and follow updates in the Support Hub.`,
+      cta: {
+        primary: { label: 'View in Support Hub', route: '/tickets' },
+        ...(t?.github_issue_url
+          ? { secondary: { label: 'View on GitHub', route: t.github_issue_url, external: true } }
+          : {}),
+      },
+    }]);
+  }, []);
+
   // ---------- Render ------------------------------------------------------
   if (!user) return null; // anonymous: nothing to advise on yet
   // Endpoint missing in this environment — render nothing so the
@@ -636,6 +659,10 @@ export default function PersonalAdvisor() {
         labState={labState}
         progressBumpToken={progressBumpToken}
         onPickQuestion={handlePickQuestion}
+        ticketOpen={ticketOpen}
+        onToggleTicket={() => setTicketOpen((v) => !v)}
+        onTicketFiled={handleTicketFiled}
+        onCloseTicket={() => setTicketOpen(false)}
       />
     );
   }
@@ -653,8 +680,13 @@ export default function PersonalAdvisor() {
         persona={persona}
         progress={progress}
         onMaximize={() => setViewMode('fullscreen')}
+        onOpenTicket={() => setTicketOpen((v) => !v)}
+        ticketOpen={ticketOpen}
       />
       {weekBanner && <WeekBanner week={weekBanner.week} />}
+      {ticketOpen && (
+        <AdvisorTicketPanel onFiled={handleTicketFiled} onClose={() => setTicketOpen(false)} />
+      )}
 
       <div className={isDesktop ? 'grid grid-cols-1 lg:grid-cols-3' : 'flex flex-col'}>
         {/* Chat column. On mobile we cap the height to ~60vh so the chat
@@ -720,7 +752,7 @@ export default function PersonalAdvisor() {
 
 // ---------- Subcomponents -----------------------------------------------
 
-function Header({ persona, progress, onMaximize }) {
+function Header({ persona, progress, onMaximize, onOpenTicket, ticketOpen }) {
   return (
     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/30 dark:to-indigo-950/30">
       <div className="flex items-center gap-3 min-w-0">
@@ -735,6 +767,20 @@ function Header({ persona, progress, onMaximize }) {
         </div>
       </div>
       <div className="flex items-center gap-1">
+        {onOpenTicket && (
+          <button
+            onClick={onOpenTicket}
+            aria-pressed={!!ticketOpen}
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
+              ticketOpen
+                ? 'bg-violet-600 text-white'
+                : 'text-violet-700 dark:text-violet-300 hover:bg-white/60 dark:hover:bg-gray-800/60'
+            }`}
+            title="Open a support ticket"
+          >
+            <Ticket size={14} /> Open a ticket
+          </button>
+        )}
         <button
           onClick={onMaximize}
           className="p-1.5 rounded text-gray-600 dark:text-gray-300 hover:bg-white/60 dark:hover:bg-gray-800/60"
@@ -760,6 +806,7 @@ function FullscreenView({
   input, setInput, onSend, onSkip, busy, onPickOption,
   sectionStats, focusSection, pickFocus,
   pendingEvidence, labState, progressBumpToken, onPickQuestion,
+  ticketOpen, onToggleTicket, onTicketFiled, onCloseTicket,
 }) {
   useEscapeClose(onExit);
   const vvStyle = useVisualViewportStyle();
@@ -771,7 +818,10 @@ function FullscreenView({
       style={vvStyle || undefined}
       className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-gray-900 h-[100dvh] max-h-[100dvh] overflow-hidden"
     >
-      <FullscreenHeader persona={persona} progress={progress} onExit={onExit} />
+      <FullscreenHeader persona={persona} progress={progress} onExit={onExit} onOpenTicket={onToggleTicket} ticketOpen={ticketOpen} />
+      {ticketOpen && (
+        <AdvisorTicketPanel onFiled={onTicketFiled} onClose={onCloseTicket} />
+      )}
       {/* Responsive: single column on small screens (chat over a capped,
           scrollable progress section), two panes on large screens. */}
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
@@ -823,7 +873,7 @@ function FullscreenView({
   );
 }
 
-function FullscreenHeader({ persona, progress, onExit }) {
+function FullscreenHeader({ persona, progress, onExit, onOpenTicket, ticketOpen }) {
   return (
     <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-b border-gray-100 dark:border-gray-800 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/30 dark:to-indigo-950/30">
       <div className="flex items-center gap-3 min-w-0">
@@ -838,6 +888,21 @@ function FullscreenHeader({ persona, progress, onExit }) {
         </div>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
+        {onOpenTicket && (
+          <button
+            type="button"
+            onClick={onOpenTicket}
+            aria-pressed={!!ticketOpen}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
+              ticketOpen
+                ? 'bg-violet-600 text-white'
+                : 'border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/40'
+            }`}
+            title="Open a support ticket"
+          >
+            <Ticket size={14} /> Open a ticket
+          </button>
+        )}
         <button
           type="button"
           onClick={onExit}
@@ -1016,14 +1081,140 @@ function CtaButtons({ cta, onCtaClick }) {
         {cta.primary.label} <ArrowRight size={12} />
       </Link>
       {cta.secondary && (
-        <Link
-          to={cta.secondary.route}
-          onClick={fire('secondary')}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 text-xs font-medium hover:bg-violet-50 dark:hover:bg-violet-950/40 transition"
-        >
-          {cta.secondary.label}
-        </Link>
+        cta.secondary.external ? (
+          <a
+            href={safeExternalUrl(cta.secondary.route)}
+            target="_blank"
+            rel="noreferrer noopener"
+            onClick={fire('secondary')}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 text-xs font-medium hover:bg-violet-50 dark:hover:bg-violet-950/40 transition"
+          >
+            {cta.secondary.label}
+          </a>
+        ) : (
+          <Link
+            to={cta.secondary.route}
+            onClick={fire('secondary')}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 text-xs font-medium hover:bg-violet-50 dark:hover:bg-violet-950/40 transition"
+          >
+            {cta.secondary.label}
+          </Link>
+        )
       )}
+    </div>
+  );
+}
+
+// Task #9 — inline support-ticket form. Reuses the existing
+// POST /api/tickets endpoint via api.createTicket (no backend changes).
+// On success it calls onFiled(ticket) so the advisor can confirm in the
+// transcript with a link back to the Support Hub.
+function AdvisorTicketPanel({ onFiled, onClose }) {
+  const [title, setTitle] = useState('');
+  const [priority, setPriority] = useState('medium');
+  const [description, setDescription] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const submit = async () => {
+    const trimmed = title.trim();
+    if (!trimmed) {
+      setError('Please enter a short summary for your ticket.');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const ticket = await api.createTicket({
+        title: trimmed,
+        priority,
+        description: description.trim() || undefined,
+      });
+      onFiled(ticket);
+    } catch (e) {
+      reportError(e, { where: 'AdvisorTicketPanel.submit' });
+      setError(e?.message || 'Could not file your ticket. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const inputClass =
+    'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-3 py-2 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500';
+
+  return (
+    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 bg-violet-50/40 dark:bg-violet-950/20">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-800 dark:text-violet-200">
+          <Ticket size={14} /> Open a support ticket
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={submitting}
+          className="p-1 rounded text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-50"
+          title="Close"
+        >
+          <X size={14} />
+        </button>
+      </div>
+      <div className="space-y-2">
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Brief summary of the issue"
+          disabled={submitting}
+          maxLength={200}
+          className={inputClass}
+        />
+        <div className="flex items-center gap-2">
+          <label className="text-[11px] text-gray-600 dark:text-gray-400">Priority</label>
+          <select
+            value={priority}
+            onChange={(e) => setPriority(e.target.value)}
+            disabled={submitting}
+            className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-2 py-1.5 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500"
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </div>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Optional — add any details that would help us help you"
+          rows={3}
+          disabled={submitting}
+          className={`${inputClass} resize-none`}
+        />
+        {error && (
+          <div className="text-xs text-red-700 bg-red-50 dark:bg-red-950/30 dark:text-red-300 border border-red-200 dark:border-red-900 rounded p-2">
+            {error}
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={submit}
+            disabled={submitting || !title.trim()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium disabled:opacity-50"
+          >
+            {submitting ? <Loader2 size={14} className="animate-spin" /> : <Ticket size={14} />}
+            {submitting ? 'Filing…' : 'File ticket'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="px-3 py-1.5 rounded-lg text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

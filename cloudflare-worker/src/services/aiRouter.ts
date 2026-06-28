@@ -32,6 +32,7 @@ export type TaskClass =
   | 'safety'
   | 'role_detect'
   | 'advisor_turn'
+  | 'onboarding_chat'
   | 'tool_call'
   | 'rerank'
   | 'explain'
@@ -141,6 +142,13 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   safety:       { provider: 'workers-ai', model: '@cf/meta/llama-guard-3-8b' },
   role_detect:  { provider: 'workers-ai', model: SMALL_LLAMA },
   advisor_turn: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  // Task #19 (WS0) — onboarding chatbot turn. Same model chain as advisor_turn
+  // but a DEDICATED task class so it is NOT routed through the advisor AI
+  // Gateway (see gatewayOptionFor): a broken/misconfigured `advisor-ongoing`
+  // gateway can never dead-end first-touch onboarding, and onboarding traffic
+  // stays out of the advisor analytics namespace. MID_LLAMA primary →
+  // SMALL_LLAMA fallback.
+  onboarding_chat: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   tool_call:    { provider: 'workers-ai', model: '@cf/qwen/qwen2.5-coder-32b-instruct', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
   // Personal Advisor next-question re-ranker (advisor/rerank.ts).
   // Structured JSON pick over a bounded candidate list — qwen-coder
@@ -378,6 +386,8 @@ interface WorkersAIBinding {
 // analytics, cache and rate limits are tracked separately from the
 // onboarding chatbot. Returns undefined when the env var is missing
 // (call falls through to the un-gatewayed Workers AI path).
+// Task #19 (WS0): `onboarding_chat` is deliberately NOT in this list — it
+// must never depend on the advisor gateway, so it always runs un-gatewayed.
 function gatewayOptionFor(env: Env, task: TaskClass): { gateway: { id: string } } | undefined {
   if (task !== 'advisor_turn' && task !== 'advisor_explain') return undefined;
   const slug = (env as unknown as Record<string, string | undefined>).CF_AI_GATEWAY_SLUG_ADVISOR;
@@ -446,15 +456,24 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       return { ok: true, stream: raw as ReadableStream, prompt_tokens: promptTok, completion_tokens: 0 };
     }
     // Workers AI chat models return { response: string } or
-    // { choices: [{ message: { content } }] } depending on model.
-    const r = raw as {
+    // { choices: [{ message: { content } }] } depending on model. Some
+    // gateway/binding combinations (and AI Gateway responses) nest the same
+    // payload one level deeper under `result` — Task #19 (WS0): parse those
+    // nested shapes too so a valid reply is never silently dropped as empty,
+    // which previously surfaced to the onboarding user as the degraded
+    // "had trouble processing that" fallback even though the model answered.
+    type ChatShape = {
       response?: string;
       choices?: Array<{ message?: { content?: string } }>;
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
-    const text = r.response ?? r.choices?.[0]?.message?.content ?? '';
-    const promptTok = r.usage?.prompt_tokens ?? estTokens(messages.map(m => m.content).join('\n'));
-    const completionTok = r.usage?.completion_tokens ?? estTokens(text);
+    const r = raw as ChatShape & { result?: ChatShape };
+    const pickText = (s?: ChatShape): string | undefined =>
+      s?.response ?? s?.choices?.[0]?.message?.content ?? undefined;
+    const text = pickText(r) ?? pickText(r.result) ?? '';
+    const usageObj = r.usage ?? r.result?.usage;
+    const promptTok = usageObj?.prompt_tokens ?? estTokens(messages.map(m => m.content).join('\n'));
+    const completionTok = usageObj?.completion_tokens ?? estTokens(text);
     return { ok: true, output: String(text || ''), prompt_tokens: promptTok, completion_tokens: completionTok };
   } catch (e) {
     return { ok: false, status: 500, error: (e as Error).message };

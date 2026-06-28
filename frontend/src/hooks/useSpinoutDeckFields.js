@@ -17,9 +17,11 @@ import { reportError } from '../lib/log';
  * @param {object}  opts
  * @param {number|null} opts.projectId  Project to source deck data from.
  * @param {boolean} [opts.enabled=true] Gate the fetch (e.g. spinout decks only).
+ * @param {number}  [opts.reloadKey=0]  Bump to force a re-fetch (e.g. after the
+ *   founder edits Use-of-Funds) so the live field map reflects the new data.
  * @returns {{ fields: Record<string,string>|null, loading: boolean, error: any }}
  */
-export function useSpinoutDeckFields({ projectId, enabled = true }) {
+export function useSpinoutDeckFields({ projectId, enabled = true, reloadKey = 0 }) {
   const [fields, setFields] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -47,7 +49,7 @@ export function useSpinoutDeckFields({ projectId, enabled = true }) {
       })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [projectId, enabled]);
+  }, [projectId, enabled, reloadKey]);
 
   return { fields, loading, error };
 }

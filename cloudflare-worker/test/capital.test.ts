@@ -75,6 +75,34 @@ function makeEnv(user: any): any {
         if (s.includes('from users where id')) {
           return { results: user ? [user] : [] };
         }
+        // --- Task #9: happy-path stubs for the admin-only write/issue routes.
+        // These only matter for the admin "allowed" cases; the investor cases
+        // 403 before any SQL runs.
+        // get-or-create fund (POST /investors).
+        if (s.includes('from vc_funds') && s.includes('where name')) {
+          return { results: [{ id: 1, name: bound[0] }] };
+        }
+        // INSERT INTO limited_partners ... RETURNING * (POST /investors).
+        if (s.includes('insert into limited_partners')) {
+          return { results: [{ id: 999, fund_id: bound[0], name: bound[1], email: bound[2], commitment_amount: bound[3], invested_amount: 0, status: 'active' }] };
+        }
+        // INSERT INTO capital_calls ... RETURNING * (POST /calls).
+        if (s.includes('insert into capital_calls') && s.includes('returning')) {
+          return { results: [{ id: 999, limited_partner_id: bound[0], project_id: bound[1] ?? null, amount: bound[2], status: 'pending', due_date: bound[3] ?? null, created_at: '2026-02-01' }] };
+        }
+        // Resolve a single LP by id (POST /calls lp lookup).
+        if (s.includes('select id from limited_partners where id')) {
+          const row = LPS.find((lp) => lp.id === bound[0]);
+          return { results: row ? [{ id: row.id }] : [] };
+        }
+        // Active-LP fan-out (POST /capitalCall issue-to-all).
+        if (s.includes('from limited_partners') && s.includes("status = 'active'")) {
+          return { results: LPS.map((lp) => ({ id: lp.id, name: `LP ${lp.id}`, status: 'active' })) };
+        }
+        // Project lookup (POST /capitalCall).
+        if (s.includes('from projects')) {
+          return { results: [{ id: bound[0] ?? 1, name: 'Test Project', sector: 'ai' }] };
+        }
         // Best-effort notify lookup -> null user disables notifications in tests.
         if (s.includes('select user_id from limited_partners')) {
           return { results: [{ user_id: null }] };
@@ -294,4 +322,86 @@ test('investor detail: an admin can read any LP record + its calls', async () =>
   const body = (await res.json()) as any;
   assert.equal(body.id, 200);
   assert.deepEqual(body.capital_calls.map((cc: any) => cc.id), [2]);
+});
+
+// --- Task #9: the three capital write/issue routes are admin-only -----------
+// Adding an LP record (POST /investors), creating a call against one LP
+// (POST /calls), and issuing a call to every active investor (POST /capitalCall)
+// are fund/GP operations. They were previously gated by canViewLpData (admin OR
+// investor), so any investor could add LPs and issue capital calls. They now
+// require role==='admin' and return 403 for investors. The read routes and the
+// pay-own-call route (covered above) stay investor-accessible.
+
+function addInvestor(env: any, token: string, body: any): Promise<Response> {
+  return capital.request('/investors', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }, env);
+}
+
+function createCall(env: any, token: string, body: any): Promise<Response> {
+  return capital.request('/calls', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }, env);
+}
+
+function issueToAllInvestors(env: any, token: string, body: any): Promise<Response> {
+  return capital.request('/capitalCall', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }, env);
+}
+
+test('add investor: a non-admin investor is forbidden (403)', async () => {
+  const token = await mintToken(OWNER_ID, 'investor');
+  const env = makeEnv({ id: OWNER_ID, role: 'investor', is_active: 1 });
+  const res = await addInvestor(env, token, { name: 'New LP', email: 'new@lp.com', committed_capital: 1000 });
+  assert.equal(res.status, 403);
+});
+
+test('add investor: an admin is allowed (201)', async () => {
+  const token = await mintToken(ADMIN_ID, 'admin');
+  const env = makeEnv({ id: ADMIN_ID, role: 'admin', is_active: 1 });
+  const res = await addInvestor(env, token, { name: 'New LP', email: 'new@lp.com', committed_capital: 1000 });
+  assert.equal(res.status, 201);
+  const body = (await res.json()) as any;
+  assert.equal(body.id, 999);
+});
+
+test('create call: a non-admin investor is forbidden (403)', async () => {
+  const token = await mintToken(OWNER_ID, 'investor');
+  const env = makeEnv({ id: OWNER_ID, role: 'investor', is_active: 1 });
+  const res = await createCall(env, token, { limited_partner_id: 100, amount: 500, due_date: '2026-03-01' });
+  assert.equal(res.status, 403);
+});
+
+test('create call: an admin is allowed (201)', async () => {
+  const token = await mintToken(ADMIN_ID, 'admin');
+  const env = makeEnv({ id: ADMIN_ID, role: 'admin', is_active: 1 });
+  const res = await createCall(env, token, { limited_partner_id: 100, amount: 500, due_date: '2026-03-01' });
+  assert.equal(res.status, 201);
+  const body = (await res.json()) as any;
+  assert.equal(body.amount, 500);
+  assert.equal(body.lp_investor_id, 100);
+});
+
+test('issue-to-all: a non-admin investor is forbidden (403)', async () => {
+  const token = await mintToken(OWNER_ID, 'investor');
+  const env = makeEnv({ id: OWNER_ID, role: 'investor', is_active: 1 });
+  const res = await issueToAllInvestors(env, token, { startup_id: 1, amount: 1000 });
+  assert.equal(res.status, 403);
+});
+
+test('issue-to-all: an admin is allowed and fans out to active investors (200)', async () => {
+  const token = await mintToken(ADMIN_ID, 'admin');
+  const env = makeEnv({ id: ADMIN_ID, role: 'admin', is_active: 1 });
+  const res = await issueToAllInvestors(env, token, { startup_id: 1, amount: 1000 });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as any;
+  assert.equal(body.calls_created.length, 2);
+  assert.equal(body.calls_created[0].amount, 500);
 });

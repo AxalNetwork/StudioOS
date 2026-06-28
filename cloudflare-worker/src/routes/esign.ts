@@ -905,6 +905,7 @@ esign.post('/sign/:token', async (c) => {
       envelopeUuid: rec.envelope_uuid,
       documentTitle: rec.document_title,
       documentBody: rec.document_body,
+      documentType: rec.document_type,
       signerName,
       signerEmail: rec.recipient_email,
       signerIp: ip,

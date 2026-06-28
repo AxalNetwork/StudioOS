@@ -1,13 +1,3 @@
-# Investor Mutual NDA — Axal StudioOS
-
-> **Subject to legal review.** This template is a working draft. Final
-> binding terms must be reviewed and approved by qualified counsel
-> before public release.
-
-**Version:** v1
-**Effective date:** {{effective_date}}
-**Investor:** {{investor_name}} ({{investor_email}})
-**Counterparty:** Axal VC Management LLC, a Delaware limited liability
 company ("Axal"), operating the Axal StudioOS platform on behalf of
 itself and its affiliates (including, where relevant, Axal VC GP LLC
 as general partner of Axal VC Fund I, LP)
@@ -50,8 +40,3 @@ secret under applicable law.
 Investor acknowledges that monetary damages may be inadequate for a
 breach of this NDA and that Axal is entitled to seek injunctive
 relief in addition to any other remedy.
-
----
-
-Signed electronically by {{investor_name}} and Axal VC Management LLC
-on the date(s) appearing below.

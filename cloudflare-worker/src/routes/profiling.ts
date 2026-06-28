@@ -136,15 +136,19 @@ profiling.post('/chat', async (c) => {
     content: String(m.content || '').slice(0, 2000),
   }));
 
-  // Route the turn through the shared resilient AI router (task
-  // 'advisor_turn' → MID_LLAMA primary, SMALL_LLAMA fallback) so a single
-  // transient model blip no longer hard-fails onboarding. On a router
-  // refusal / total-chain failure we degrade gracefully: the user gets a
-  // clear message and can still click "Save & continue".
+  // Route the turn through the shared resilient AI router on the DEDICATED
+  // 'onboarding_chat' task (Task #19 WS0) — MID_LLAMA primary, SMALL_LLAMA
+  // fallback, and crucially NOT routed through the advisor AI Gateway, so a
+  // broken/misconfigured `advisor-ongoing` gateway can never dead-end
+  // first-touch onboarding. A single transient model blip no longer
+  // hard-fails onboarding either; on a router refusal / total-chain failure
+  // we degrade gracefully: the user gets a clear message and can still click
+  // "Save & continue".
+  const CHAT_TASK = 'onboarding_chat' as const;
   let assistantReply = '';
   let degraded = false;
   const result = await aiRouterRun(c.env, {
-    task: 'advisor_turn',
+    task: CHAT_TASK,
     userId: authedUser.id,
     systemPrompt: SYSTEM_PROMPT,
     messages: chatMessages,
@@ -156,7 +160,7 @@ profiling.post('/chat', async (c) => {
   } else {
     degraded = true;
     console.error('[PROFILING] chat AI router failed', {
-      task: 'advisor_turn',
+      task: CHAT_TASK,
       model: result.usage?.model,
       refusal: result.refusal,
       error: result.error,
