@@ -35,6 +35,19 @@ derives its ownership donut (Slide 08) from that simulator data.
 - `cloudflare-worker/test/spinoutDeckData.test.ts`: added tests for the
   sim_segments precedence, filtering/cap, holders fallback, empty→FALLBACK gap,
   and checklist independence.
+- One-cap-table-per-project upsert is now regression-covered end-to-end on BOTH
+  API paths (Task #30):
+  - `cloudflare-worker/test/captable_project_upsert.test.ts`: drives the real
+    Hono captable app via a stateful in-memory D1 stub — bootstrap (null) →
+    POST save → bootstrap (finds uid) → POST edit+save → asserts exactly one
+    `cap_table_scenarios` row with a stable uid; plus the PUT-409
+    `project_has_cap_table` clash path. Appended to the `test:drift` worker file
+    list in `package.json`.
+  - `tests/test_captable_project_upsert.py`: same flow against the FastAPI dev
+    route with isolated in-memory SQLite + admin override.
+  - `cloudflare-worker/src/routes/captable.ts`: expanded the `HttpError`
+    parameter-property constructor to explicit field assignments so the route
+    module loads under the repo's strip-types test loader (behavior-preserving).
 
 <<<<<<< HEAD
 ## Removed "Review the deal" slide from the Spin-Out Demo Day deck editor

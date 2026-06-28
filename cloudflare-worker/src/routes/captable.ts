@@ -90,7 +90,15 @@ async function ensureProjectWriteAccess(env: Env, projectId: number | null | und
   if (!canWriteProject(user, proj)) throw new HttpError(403, "You don't have access to that project");
 }
 
-class HttpError extends Error { constructor(public status: number, public body: any) { super(typeof body === 'string' ? body : 'http_error'); } }
+class HttpError extends Error {
+  status: number;
+  body: any;
+  constructor(status: number, body: any) {
+    super(typeof body === 'string' ? body : 'http_error');
+    this.status = status;
+    this.body = body;
+  }
+}
 
 function asJsonError(c: any, err: unknown) {
   if (err instanceof HttpError) {
