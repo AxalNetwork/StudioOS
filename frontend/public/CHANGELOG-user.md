@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Compare cap-table scenarios side-by-side
+
+You can now explore "what if" cap tables for a project without touching its real
+one. In the Cap-Table Simulator, pick a project, model an alternative — a
+different SAFE cap, a bigger round, a larger option pool — and click **Save as
+variant** to keep it as a named draft. Hit **Compare** to see every variant next
+to your project's main cap table, with final ownership and combined founder
+ownership laid out column by column.
+
+Variants are drafts for exploration only: your project still has one official cap
+table, and the Demo Day deck always uses that one — never a draft.
+
 ## Cap-Table Simulator now works per project
 
 The Cap-Table Simulator now ties each cap table to a specific project. Instead of

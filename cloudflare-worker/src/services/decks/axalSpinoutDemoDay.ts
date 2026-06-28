@@ -49,6 +49,7 @@ import { RADAR_AXES, ensureSkillsTaxonomySchema } from '../skillsTaxonomySchema'
 import { ensureSkillProfileSchema } from '../skillProfileSchema';
 import { parseUseOfFundsValue } from '../../util/useOfFunds';
 import { simulate, type Inputs, type SimulateResult } from '../captable';
+import { ensureCapTableVariantColumn } from '../captableSchema';
 
 /**
  * Task #1 — Load admin-managed mentor/partner network profiles.
@@ -552,8 +553,10 @@ function segmentsFromSimResult(result: SimulateResult | null | undefined): Array
 async function loadSimSegments(env: Env, projectId: number): Promise<Array<[string, number]>> {
   try {
     const row = await env.DB.prepare(
+      // Task #29 — canonical-only: draft variants (is_variant=1) must NEVER be
+      // picked for Slide 08, even when a variant is newer than the canonical row.
       `SELECT inputs_json, result_json FROM cap_table_scenarios
-       WHERE project_id = ? ORDER BY updated_at DESC LIMIT 1`,
+       WHERE project_id = ? AND COALESCE(is_variant,0) = 0 ORDER BY updated_at DESC LIMIT 1`,
     ).bind(projectId).first<{ inputs_json: string | null; result_json: string | null }>();
     if (!row) return [];
     let result: SimulateResult | null = null;
@@ -587,6 +590,10 @@ export async function fillAxalSpinoutDemoDay(
   // Task #4 — brand-kit columns on landing_pages may be un-applied on prod;
   // self-heal so the brand_kit SELECT below doesn't throw.
   await ensureLandingPageBrandKitColumns(env);
+  // Task #29 — cap_table_scenarios.is_variant may be un-applied on prod; self-heal
+  // so loadSimSegments' canonical-only filter doesn't throw (and silently drop
+  // back to cap_table_holders).
+  await ensureCapTableVariantColumn(env);
   // Task #1 — load admin-managed mentor/partner roster in parallel with
   // the rest of the project reads; replaces the synthesised profiles
   // path that derived names from advisor_answers free-text.

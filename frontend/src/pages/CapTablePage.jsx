@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
 import {
   PieChart as PieIcon, Trash2, Plus, Save, Download, RefreshCw, FileText, AlertCircle,
-  PencilOff, ExternalLink, CheckCircle2,
+  PencilOff, ExternalLink, CheckCircle2, Copy, GitCompare,
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -98,6 +98,13 @@ export default function CapTablePage() {
   const [live, setLive] = useState(null);
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveError, setLiveError] = useState(null);
+
+  // Task #29 — multi-scenario compare. `compare` holds { canonical, variants }
+  // from the read-only compare endpoint; surfaced in a collapsible panel.
+  const [compare, setCompare] = useState(null);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareError, setCompareError] = useState(null);
 
   useEffect(() => { bootstrap(); /* eslint-disable-next-line */ }, []);
   useEffect(() => { loadLive(); }, []);
@@ -193,6 +200,8 @@ export default function CapTablePage() {
     const id = pid ? String(pid) : '';
     setSelectedProjectId(id);
     setApiError(null);
+    // Task #29 — compare is project-scoped; drop any stale comparison.
+    setCompare(null); setCompareOpen(false); setCompareError(null);
     setSearchParams(id ? { project: id } : {}, { replace: true });
     if (!id) {
       // Detached from any project — keep current inputs as a scratch sim.
@@ -291,6 +300,71 @@ export default function CapTablePage() {
     setScenarioName(proj ? proj.name : 'Untitled scenario');
   }
 
+  // Task #29 — save the CURRENT inputs as a named DRAFT variant for the selected
+  // project. Variants never touch the canonical cap table (the deck + project
+  // load only ever read canonical), so this is always an INSERT, never an upsert.
+  async function saveAsVariant() {
+    setApiError(null); setErrors([]);
+    if (!selectedProjectId) {
+      setApiError('Select a project first — variants belong to a project.');
+      return;
+    }
+    const projectId = Number(selectedProjectId);
+    const base = scenarioName?.trim() || 'Cap table';
+    const name = (window.prompt('Name this draft variant', `${base} — variant`) || '').trim();
+    if (!name) return;
+    try {
+      await api.createCapTableVariant(projectId, { name, inputs });
+      setSavedFlash('Variant saved');
+      loadScenarios();
+      await loadCompare(projectId, true);
+    } catch (e) {
+      const status = e?.status;
+      if (status === 401 || status === 403) {
+        setApiError('You do not have access to add a variant to this project.');
+      } else if ((status === 400 || status === 422) && Array.isArray(e?.data?.errors)) {
+        setErrors(e.data.errors);
+      } else {
+        setApiError('Could not save the variant. Please retry in a moment.');
+      }
+    }
+  }
+
+  // Task #29 — load the read-only ownership/dilution comparison for a project.
+  async function loadCompare(pid = selectedProjectId, open = false) {
+    const id = pid ? String(pid) : '';
+    if (!id) { setApiError('Select a project to compare scenarios.'); return; }
+    setCompareLoading(true); setCompareError(null);
+    if (open) setCompareOpen(true);
+    try {
+      const r = await api.getCapTableCompare(id);
+      setCompare(r);
+    } catch (e) {
+      setCompareError(
+        e?.status === 403
+          ? "You don't have access to that project's cap tables."
+          : "Couldn't load the comparison. Please retry.",
+      );
+    }
+    setCompareLoading(false);
+  }
+
+  function toggleCompare() {
+    if (compareOpen) { setCompareOpen(false); return; }
+    loadCompare(selectedProjectId, true);
+  }
+
+  async function deleteVariant(uid) {
+    if (!confirm('Delete this variant?')) return;
+    try {
+      await api.deleteCapTableScenario(uid);
+      loadScenarios();
+      await loadCompare(selectedProjectId, true);
+    } catch (e) {
+      setCompareError('Could not delete that variant. Please retry.');
+    }
+  }
+
   // ---------- Founder dilution chart data
   const dilutionChart = useMemo(() => {
     if (!result?.founder_dilution?.length) return [];
@@ -341,6 +415,19 @@ export default function CapTablePage() {
             className="px-3 py-1.5 text-sm bg-violet-600 text-white rounded hover:bg-violet-700 flex items-center gap-1">
             <Save size={14} /> {activeUid ? 'Update' : 'Save'}
           </button>
+          {selectedProjectId && (
+            <>
+              <button onClick={saveAsVariant}
+                title="Save the current inputs as a named draft variant to compare"
+                className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
+                <Copy size={14} /> Save as variant
+              </button>
+              <button onClick={toggleCompare}
+                className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
+                <GitCompare size={14} /> {compareOpen ? 'Hide compare' : 'Compare'}
+              </button>
+            </>
+          )}
           {activeUid && (
             <a
               href={api.exportCapTableCsvUrl(activeUid)}
@@ -370,6 +457,18 @@ export default function CapTablePage() {
           <div className="flex items-center gap-1 font-semibold mb-1"><AlertCircle size={14}/> Validation errors</div>
           <ul className="list-disc pl-5">{errors.map((e, i) => <li key={i}>{e}</li>)}</ul>
         </div>
+      )}
+
+      {compareOpen && (
+        <ScenarioComparePanel
+          data={compare}
+          loading={compareLoading}
+          error={compareError}
+          activeUid={activeUid}
+          onClose={() => setCompareOpen(false)}
+          onRefresh={() => loadCompare(selectedProjectId, true)}
+          onDeleteVariant={deleteVariant}
+        />
       )}
 
       <LiveCapTablePanel
@@ -452,10 +551,12 @@ export default function CapTablePage() {
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''}/> Run simulation
           </button>
 
-          {scenarios.length > 0 && (
+          {scenarios.filter(s => !s.is_variant).length > 0 && (
             <Section title="Saved scenarios">
+              {/* Task #29 — variants are managed in the Compare panel, not here,
+                  so editing the canonical cap table stays unambiguous. */}
               <ul className="text-sm divide-y divide-gray-100">
-                {scenarios.map(s => (
+                {scenarios.filter(s => !s.is_variant).map(s => (
                   <li key={s.uid} className="py-1.5 flex items-center justify-between">
                     <button onClick={() => loadScenario(s.uid)} className={`text-left flex-1 truncate ${activeUid === s.uid ? 'font-semibold text-violet-700' : 'text-gray-700 hover:text-violet-700'}`}>
                       {s.name}
@@ -588,6 +689,135 @@ function Stat({ label, value }) {
     <div className="border border-gray-200 rounded p-2 dark:border-gray-800">
       <div className="text-base font-semibold text-gray-900 dark:text-gray-100">{value}</div>
       <div className="text-[10px] text-gray-500 uppercase">{label}</div>
+    </div>
+  );
+}
+
+// Task #29 — final ownership for a scenario = the ledger of the last modeled
+// round (or the founding table when there are no rounds). Used by the read-only
+// compare panel to lay scenarios out side-by-side.
+function finalLedger(result) {
+  if (!result) return [];
+  const rounds = Array.isArray(result.rounds) ? result.rounds : [];
+  const ledger = rounds.length ? rounds[rounds.length - 1].ledger : result.founding;
+  return (ledger || []).filter(r => r && r.holder);
+}
+
+function ScenarioComparePanel({ data, loading, error, activeUid, onClose, onRefresh, onDeleteVariant }) {
+  const cols = useMemo(() => {
+    if (!data) return [];
+    const list = [];
+    if (data.canonical) list.push({ scen: data.canonical, canonical: true });
+    (data.variants || []).forEach(v => list.push({ scen: v, canonical: false }));
+    return list;
+  }, [data]);
+
+  const { holders, perCol } = useMemo(() => {
+    const order = new Map();
+    const perCol = cols.map(({ scen, canonical }) => {
+      const map = new Map();
+      let founderPct = 0;
+      finalLedger(scen.result).forEach(r => {
+        const pct = Number(r.pct) || 0;
+        const holder = String(r.holder);
+        map.set(holder, pct);
+        if (r.type === 'founder') founderPct += pct;
+        // Canonical holders sort to the top (pct + 1000 keeps relative order);
+        // variant-only holders fall below, ordered by their own ownership.
+        if (!order.has(holder)) order.set(holder, canonical ? pct + 1000 : pct);
+      });
+      return { scen, canonical, map, founderPct };
+    });
+    const holders = [...order.keys()].sort(
+      (a, b) => (order.get(b) - order.get(a)) || a.localeCompare(b),
+    );
+    return { holders, perCol };
+  }, [cols]);
+
+  return (
+    <div className="mb-4 bg-white border border-gray-200 rounded-lg overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+      <div className="px-4 py-3 flex items-center justify-between gap-3 bg-violet-50 border-b border-violet-100 dark:bg-gray-800 dark:border-gray-700">
+        <div className="flex items-center gap-2">
+          <GitCompare size={16} className="text-violet-600" />
+          <div>
+            <div className="font-semibold text-gray-900 dark:text-gray-100">Compare scenarios</div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">
+              Read-only — final ownership after all modeled rounds. The canonical cap table is the one the deck and reports use.
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={onRefresh} disabled={loading}
+            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 inline-flex items-center gap-1 disabled:opacity-50 dark:bg-gray-900 dark:border-gray-700">
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
+          </button>
+          <button onClick={onClose}
+            className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700">
+            Hide
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="px-4 py-2 text-xs text-rose-700 bg-rose-50 border-b border-rose-100 flex items-center gap-1">
+          <AlertCircle size={12} /> {error}
+        </div>
+      )}
+
+      {!error && loading && (
+        <div className="px-4 py-6 text-sm text-gray-500 text-center">Loading comparison…</div>
+      )}
+
+      {!error && !loading && cols.length === 0 && (
+        <div className="px-4 py-6 text-sm text-gray-500 text-center">
+          No cap table for this project yet. Save one, then use “Save as variant” to model alternatives.
+        </div>
+      )}
+
+      {!error && !loading && cols.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs text-gray-500 bg-gray-50 dark:bg-gray-800">
+                <th className="text-left px-4 py-2">Holder</th>
+                {perCol.map(({ scen, canonical }, i) => (
+                  <th key={scen.uid || i} className="text-right px-3 py-2 whitespace-nowrap">
+                    <span className={activeUid === scen.uid ? 'text-violet-700' : ''}>{scen.name}</span>
+                    <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] ${canonical ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {canonical ? 'Canonical' : 'Draft'}
+                    </span>
+                    {!canonical && onDeleteVariant && (
+                      <button onClick={() => onDeleteVariant(scen.uid)} title="Delete variant"
+                        className="ml-1 align-middle text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>
+                    )}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {holders.map(h => (
+                <tr key={h} className="border-t border-gray-100 dark:border-gray-800">
+                  <td className="px-4 py-1.5 text-gray-800 dark:text-gray-200">{h}</td>
+                  {perCol.map(({ map }, i) => {
+                    const pct = map.get(h);
+                    return (
+                      <td key={i} className="px-3 py-1.5 text-right tabular-nums">
+                        {pct === undefined ? <span className="text-gray-300">—</span> : `${pct.toFixed(2)}%`}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              <tr className="border-t border-gray-300 font-semibold bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
+                <td className="px-4 py-1.5">Founders combined</td>
+                {perCol.map(({ founderPct }, i) => (
+                  <td key={i} className="px-3 py-1.5 text-right tabular-nums">{founderPct.toFixed(2)}%</td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

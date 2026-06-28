@@ -21,13 +21,24 @@ import {
   canReadProject, canWriteProject, canReadScenario, canWriteScenario,
   type AccessUser,
 } from '../services/captableAccess';
+import { ensureCapTableVariantColumn } from '../services/captableSchema';
 
 const captable = new Hono<{ Bindings: Env }>();
+
+// Task #29 — guarantee cap_table_scenarios.is_variant exists before any handler
+// queries it (prod migrations can lag behind the deploy). Cached after the
+// first call per isolate, so this is a no-op on the warm path.
+captable.use('*', async (c, next) => {
+  await ensureCapTableVariantColumn(c.env);
+  return next();
+});
 
 type ScenarioRow = {
   id: number; uid: string; owner_user_id: number; project_id: number | null;
   name: string; inputs_json: string; result_json: string | null;
   computed_at: string | null; created_at: string; updated_at: string;
+  // Task #29 — 0 = canonical (project cap table), 1 = draft variant.
+  is_variant: number | null;
 };
 
 function isAdmin(role: string): boolean { return (role || '').toLowerCase() === 'admin'; }
@@ -43,6 +54,7 @@ function serialize(s: ScenarioRow, withResult = true): any {
     name: s.name,
     owner_user_id: s.owner_user_id,
     project_id: s.project_id,
+    is_variant: s.is_variant ? 1 : 0,
     inputs: safeJson<Inputs>(s.inputs_json, {} as Inputs),
     computed_at: s.computed_at || null,
     created_at: s.created_at,
@@ -151,7 +163,7 @@ captable.post('/scenarios', async (c) => {
   // project's scenario is already gated by ensureProjectAccess above.
   if (projectId != null) {
     const existing = await c.env.DB.prepare(
-      'SELECT * FROM cap_table_scenarios WHERE project_id = ? ORDER BY updated_at DESC LIMIT 1',
+      'SELECT * FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant,0) = 0 ORDER BY updated_at DESC LIMIT 1',
     ).bind(projectId).first<ScenarioRow>();
     if (existing) {
       await c.env.DB.prepare(
@@ -187,9 +199,62 @@ captable.get('/scenarios/by-project/:projectId', async (c) => {
   if (!proj) return c.json({ detail: 'Project not found' }, 404);
   if (!canReadProject(user, proj)) return c.json({ detail: "You don't have access to that project" }, 403);
   const row = await c.env.DB.prepare(
-    'SELECT * FROM cap_table_scenarios WHERE project_id = ? ORDER BY updated_at DESC LIMIT 1',
+    'SELECT * FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant,0) = 0 ORDER BY updated_at DESC LIMIT 1',
   ).bind(projectId).first<ScenarioRow>();
   return c.json({ scenario: row ? serialize(row) : null });
+});
+
+// Task #29 — create a named DRAFT variant for a project. Always INSERTs a fresh
+// row with is_variant=1 (never upserts), so it stays distinct from the project's
+// canonical cap table and is excluded from the one-per-project upsert/by-project
+// lookups AND the Demo Day deck. Gated by project WRITE access (Growth tier).
+captable.post('/scenarios/by-project/:projectId/variants', async (c) => {
+  ensureTier(await requireAuth(c), 'growth');
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  try { await ensureProjectWriteAccess(c.env, projectId, user); }
+  catch (e) { return asJsonError(c, e); }
+  const body = await c.req.json().catch(() => ({}));
+  const name = String(body?.name || '').trim();
+  if (!name || name.length > 200) return c.json({ detail: 'name must be 1..200 chars' }, 400);
+  const inputs: Inputs = body?.inputs || {};
+  const errs = validateInputs(inputs);
+  if (errs.length) return c.json({ detail: { code: 'invalid_inputs', errors: errs } }, 400);
+  const result = simulate(inputs);
+  const now = new Date().toISOString();
+  const uid = crypto.randomUUID();
+  await c.env.DB.prepare(
+    `INSERT INTO cap_table_scenarios
+       (uid, owner_user_id, project_id, name, inputs_json, result_json, computed_at, created_at, updated_at, is_variant)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+  ).bind(uid, user.id, projectId, name, JSON.stringify(inputs), JSON.stringify(result), now, now, now).run();
+  const row = await loadByUid(c.env, uid);
+  if (!row) return c.json({ detail: 'Insert failed' }, 500);
+  return c.json(serialize(row));
+});
+
+// Task #29 — read-only compare: the project's canonical cap table plus all its
+// draft variants, each with its computed result, so the UI can lay ownership /
+// dilution out side-by-side. Gated by project READ access (no tier gate; reads
+// stay free).
+captable.get('/scenarios/by-project/:projectId/compare', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const proj = await loadProject(c.env, projectId);
+  if (!proj) return c.json({ detail: 'Project not found' }, 404);
+  if (!canReadProject(user, proj)) return c.json({ detail: "You don't have access to that project" }, 403);
+  const res = await c.env.DB.prepare(
+    'SELECT * FROM cap_table_scenarios WHERE project_id = ? ORDER BY COALESCE(is_variant,0) ASC, updated_at DESC',
+  ).bind(projectId).all<ScenarioRow>();
+  const all = res.results || [];
+  const canonical = all.find((r) => !r.is_variant) || null;
+  const variants = all.filter((r) => !!r.is_variant);
+  return c.json({
+    canonical: canonical ? serialize(canonical) : null,
+    variants: variants.map((r) => serialize(r)),
+  });
 });
 
 captable.get('/scenarios/:uid', async (c) => {
@@ -217,11 +282,16 @@ captable.put('/scenarios/:uid', async (c) => {
     catch (e) { return asJsonError(c, e); }
     // Task #28 — one cap table per project: refuse to bind this scenario to a
     // project that a DIFFERENT scenario already owns (prevents PUT duplicates).
-    const clash = await c.env.DB.prepare(
-      'SELECT uid FROM cap_table_scenarios WHERE project_id = ? AND uid != ? LIMIT 1',
-    ).bind(body.project_id, row.uid).first<{ uid: string }>();
-    if (clash) {
-      return c.json({ detail: { code: 'project_has_cap_table', message: 'This project already has a cap table. Edit that one instead.' } }, 409);
+    // Task #29 — only CANONICAL scenarios are unique per project; draft variants
+    // (is_variant=1) coexist freely, so a variant edit never clashes and only an
+    // existing canonical row counts as the clash.
+    if (!row.is_variant) {
+      const clash = await c.env.DB.prepare(
+        'SELECT uid FROM cap_table_scenarios WHERE project_id = ? AND uid != ? AND COALESCE(is_variant,0) = 0 LIMIT 1',
+      ).bind(body.project_id, row.uid).first<{ uid: string }>();
+      if (clash) {
+        return c.json({ detail: { code: 'project_has_cap_table', message: 'This project already has a cap table. Edit that one instead.' } }, 409);
+      }
     }
   }
   const result = simulate(inputs);
