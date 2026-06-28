@@ -5,6 +5,23 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Three new landing page designs to choose from
+
+The Brand & Landing page builder now offers three brand-new, ready-to-use page
+designs — each with its own distinct look and colour scheme, and all still fully
+editable with your own words:
+
+- **Advisor Connect** — a warm, editorial invitation for bringing on advisors.
+- **Proof Builder** — a clean, evidence-first page for validating demand with
+  customers and collecting a waitlist.
+- **Capital Ready Kit** — a sleek, dark investor brief with your raise, traction
+  and round details.
+
+Pick one when you create or edit a page and it loads with a matching colour
+palette you can fine-tune any time. More designs are on the way.
+
+---
+
 ## File a support ticket right from your Personal Advisor
 
 You can now open a support ticket without leaving the chat. On the Studio page,

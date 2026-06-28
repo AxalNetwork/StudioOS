@@ -19,7 +19,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { ensureLandingPageBrandKitColumns } from '../services/landingPageSchema';
-import { renderLandingTemplate, TEMPLATE_REGISTRY, TEMPLATE_KEYS } from '../services/landingTemplates';
+import { renderLandingTemplate, TEMPLATE_REGISTRY, TEMPLATE_KEYS, TEMPLATE_SIGNATURE_PALETTES } from '../services/landingTemplates';
 import { requireAuth } from '../auth';
 import { run as aiRouterRun } from '../services/aiRouter';
 
@@ -907,12 +907,14 @@ export async function renderLandingPreview(env: Env, token: string, nonce?: stri
 }
 
 // Task #20 — public (no-auth) visual preview of a landing template. Renders one
-// of the five visual styles with generic placeholder copy + Axal brand colours
-// so the template picker can show a true-to-life preview before selection. No
-// DB read, no slug/token — pure render. Always noindex.
+// of the visual styles with generic placeholder copy + Axal brand colours so the
+// template picker can show a true-to-life preview before selection. No DB read,
+// no slug/token — pure render. Always noindex.
+// Task #24 — the ported designs ship a signature palette; merge it so their
+// previews are on-brand (the generic violet would otherwise flatten them).
 export function renderTemplatePreview(env: Env, style: string, nonce?: string): Response {
   const key = (TEMPLATE_KEYS as readonly string[]).includes(style) ? style : 'minimal';
-  const row = {
+  const row: Record<string, any> = {
     name: 'Northwind Labs',
     tagline: 'The operating system for ambitious founders.',
     headline: 'Build, launch, and grow — all in one place.',
@@ -926,6 +928,8 @@ export function renderTemplatePreview(env: Env, style: string, nonce?: string): 
     font_pairing: 'editorial',
     template: key,
   };
+  const sig = TEMPLATE_SIGNATURE_PALETTES[key];
+  if (sig) Object.assign(row, sig);
   const html = renderLandingTemplate(row, { noindex: true, nonce });
   return new Response(html, {
     headers: {

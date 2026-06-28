@@ -7,7 +7,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { FONT_PAIRING_OPTIONS } from '../decks/templates/axal_spinout_demoday_app';
-import { AUDIENCES, GOALS, AUDIENCE_LABELS as PAGE_AUDIENCE_LABELS } from '../lib/brand/templates.js';
+import { AUDIENCES, GOALS, AUDIENCE_LABELS as PAGE_AUDIENCE_LABELS, VISUAL_TEMPLATE_PALETTES } from '../lib/brand/templates.js';
 import { suggestAudienceAndGoal, getRecommendedTemplatesForAudience, generateInitialBrandKit } from '../lib/brand/flow.js';
 
 // Task #24 — Brand & landing page generator.
@@ -188,8 +188,21 @@ export default function BrandBuilderPage() {
         t,
         t.primaryGoal,
       );
+      // Task #24 — recreated designs ship a signature palette. Seed it when one
+      // of those templates is picked so the design renders on-brand out of the
+      // box; when leaving a signature template for a generic one, restore the
+      // default palette so a dark/warm theme doesn't linger. Generic→generic
+      // switches leave the palette untouched (existing behaviour).
+      const sig = VISUAL_TEMPLATE_PALETTES[t.visualTemplate];
+      const leavingSig = !!VISUAL_TEMPLATE_PALETTES[d.template] && !sig;
+      const palettePatch = sig
+        ? { theme_color: sig.theme_color, palette_bg: sig.palette_bg, palette_ink: sig.palette_ink, palette_secondary: sig.palette_secondary, palette_accent: sig.palette_accent }
+        : leavingSig
+          ? { theme_color: '#7c3aed', palette_bg: '#faf7ff', palette_ink: '#1b1430', palette_secondary: '#c4b5fd', palette_accent: '#f59e0b' }
+          : {};
       return {
         ...d,
+        ...palettePatch,
         template_kit: t.id,
         template: t.visualTemplate || d.template,
         goal: t.primaryGoal || d.goal,
