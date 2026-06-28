@@ -9,10 +9,10 @@
  * editor, picker thumbnail, preview modal, share view and PDF export all show
  * the same deck.
  *
- * Slide order (10): Cover · Problem · Validation · Market · Solution ·
- * Roadmap · Team & network · Cap table · Ask · Review the deal (deal
- * readiness). The standalone Axal Signal and Product Demo slides are dropped;
- * the two people slides are merged into Team & network.
+ * Slide order (9): Cover · Problem · Validation · Market · Solution ·
+ * Roadmap · Team & network · Cap table · Ask. The standalone Axal Signal and
+ * Product Demo slides are dropped; the two people slides are merged into Team
+ * & network.
  *
  * Geometry: the PPTX canvas is 13.33in × 7.5in (= 960pt × 540pt). It maps to
  * the shared 1920 × 1080 `<Slide16x9>` frame at exactly 144px / inch and
@@ -38,7 +38,6 @@
 import React from 'react';
 import type { DeckProps } from '../DeckBase';
 import { Slide16x9, Editable } from '../DeckBase';
-import { useReviewDealSlot } from './reviewDealSlot';
 import { THEME, SAMPLE_DATA as SPINOUT_SAMPLE_DATA } from '../spinout/deckData';
 
 /* ─────────────────────────── sample re-export ─────────────────────────── */
@@ -869,60 +868,6 @@ const SlideAsk: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   );
 };
 
-/* 10 — REVIEW THE DEAL / deal readiness (dark) */
-const SlideReviewTheDeal: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
-  const dl = d.deal;
-  const lx = ML, lw = 6.0;
-  const ready: Array<[string, string]> = Array.isArray(dl.ready) ? dl.ready : [];
-  const rx = 7.35, rw = 5.25;
-  const steps: Array<[string, string]> = Array.isArray(dl.steps) ? dl.steps : [];
-  // Share-mode interactive "Join & open the deal" card, injected from the
-  // viewer layer (PitchDeckPrintPage). Null in editor / thumbnail / export.
-  const dealSlot = useReviewDealSlot();
-  return (
-    <Slide16x9 bg={K.dbg} ink={K.white} font={FF}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <Eyebrow label={dl.eyebrow} idx={dl.idx} dark />
-        <Ed l={ML} t={1.05} w={11.5} h={0.95} size={30} bold valign="top" color={K.white} value={dl.title} path="deal.title" editable={editable} onEdit={onEdit} />
-
-        <Txt l={lx} t={2.15} w={lw} h={0.3} size={10} bold spacing={1} color={K.accentLt}>{dl.diligenceLabel}</Txt>
-        {ready.map((r, i) => {
-          const ry = 2.6 + i * 0.66;
-          return (
-            <React.Fragment key={i}>
-              <div style={{ position: 'absolute', left: inch(lx), top: inch(ry), width: inch(lw), height: inch(0.55), background: K.dpanel, border: `${pt(1)}px solid ${K.dline}`, borderRadius: inch(0.06) }} />
-              <Oval l={lx + 0.22} t={ry + 0.185} d={0.18} fill={K.accentLt} />
-              <Txt l={lx + 0.6} t={ry} w={lw - 2.3} h={0.55} size={13} bold valign="middle" color={K.white}>{r[0]}</Txt>
-              <Txt l={lx + lw - 1.85} t={ry} w={1.7} h={0.55} size={12} bold align="right" valign="middle" color={K.dmuted}>{r[1]}</Txt>
-            </React.Fragment>
-          );
-        })}
-
-        <Txt l={rx} t={2.15} w={rw} h={0.3} size={10} bold spacing={1} color={K.accentLt}>{dl.nextLabel}</Txt>
-        {steps.map((st, i) => {
-          const sy = 2.6 + i * 0.85;
-          return (
-            <React.Fragment key={i}>
-              <Oval l={rx} t={sy} d={0.5} fill={K.accent}>
-                <span style={{ fontFamily: FF, fontWeight: 700, fontSize: pt(16), color: K.white }}>{st[0]}</span>
-              </Oval>
-              <Txt l={rx + 0.7} t={sy} w={rw - 0.7} h={0.5} size={14} bold valign="middle" color={K.white}>{st[1]}</Txt>
-            </React.Fragment>
-          );
-        })}
-        <div style={{ position: 'absolute', left: inch(rx), top: inch(5.55), width: inch(rw), height: pt(1), background: K.dline }} />
-        <Ed l={rx} t={5.7} w={rw} h={0.5} size={15} bold valign="top" color={K.white} value={dl.closingLine} path="deal.closingLine" editable={editable} onEdit={onEdit} />
-        <Ed l={rx} t={6.2} w={rw} h={0.4} size={12} valign="top" color={K.accentLt} value={dl.contact} path="deal.contact" editable={editable} onEdit={onEdit} />
-
-        {dealSlot && (
-          <div style={{ position: 'absolute', left: inch(lx), top: inch(5.9), width: inch(lw), zIndex: 6 }}>{dealSlot}</div>
-        )}
-        <Txt l={ML} t={7.06} w={6} h={0.3} size={8} spacing={1} valign="middle" color={K.dfaint}>{d.brand.lab}</Txt>
-      </div>
-    </Slide16x9>
-  );
-};
-
 /* ─────────────────────────── slide registry ─────────────────────────── */
 type SlideEntry = { id: string; title: string; Component: React.FC<SlideProps> };
 export const SLIDES: SlideEntry[] = [
@@ -935,11 +880,10 @@ export const SLIDES: SlideEntry[] = [
   { id: 'team_network', title: 'Team & network', Component: SlideTeamNetwork },
   { id: 'cap_table', title: 'Cap table', Component: SlideCapTable },
   { id: 'ask', title: 'Ask', Component: SlideAsk },
-  { id: 'review_the_deal', title: 'Review the deal', Component: SlideReviewTheDeal },
 ];
 
 /* ─────────────────────────── root deck ─────────────────────────── */
-// Renders all 10 Slide16x9 frames stacked — matches the sibling *_app decks,
+// Renders all 9 Slide16x9 frames stacked — matches the sibling *_app decks,
 // so the picker thumbnail, modal preview, share view and PDF export all work
 // off a single scroll surface.
 export const Deck_axal_spinout_demoday: React.FC<DeckProps> = (props) => {

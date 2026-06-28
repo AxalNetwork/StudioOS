@@ -5,6 +5,14 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Spin-Out deck editor: "Review the deal" slide removed
+
+The "Review the deal" slide has been removed from the Spin-Out Demo Day deck
+editor. The slide was always blank in the editor (the deal-room CTA only works
+on the shared investor link, not in the editor itself), so it was causing
+confusion. The deck now shows 9 slides — Cover through Ask — without the
+placeholder at the end.
+
 ## Three new landing page designs to choose from
 
 The Brand & Landing page builder now offers three brand-new, ready-to-use page
