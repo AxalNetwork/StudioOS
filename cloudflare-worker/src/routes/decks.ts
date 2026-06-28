@@ -894,9 +894,38 @@ decks.put('/:id', async (c) => {
         vals.push(Number(row.project_id));
         await c.env.DB.prepare(`UPDATE projects SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
       }
+
+      // Task #31 — one source of truth: text fields edited inline on the
+      // Problem / Solution / Product demo slides write back to their project
+      // column so the deck and the project page always agree. Map slide field
+      // key → project column. Only the plain-text fields that map cleanly are
+      // mirrored here (structured/visual content stays owned by its module).
+      const SOURCE_FIELD_TO_COLUMN: Record<string, string> = {
+        problem_body: 'problem_statement',
+        solution_body: 'solution',
+        product_demo_loop_url: 'product_demo_video_url',
+        product_demo_live_url: 'product_demo_live_url',
+        product_demo_screenshot_url: 'product_demo_screenshot_url',
+        product_demo_caption: 'product_demo_caption',
+      };
+      const srcSets: string[] = [];
+      const srcVals: any[] = [];
+      for (const [fieldKey, column] of Object.entries(SOURCE_FIELD_TO_COLUMN)) {
+        const raw = fieldByKey[fieldKey];
+        if (typeof raw !== 'string') continue;
+        const trimmed = raw.trim();
+        srcSets.push(`${column} = ?`);
+        srcVals.push(trimmed || null);
+      }
+      if (srcSets.length) {
+        const { ensureProjectProductDemoColumns } = await import('./projects');
+        await ensureProjectProductDemoColumns(c.env);
+        srcVals.push(Number(row.project_id));
+        await c.env.DB.prepare(`UPDATE projects SET ${srcSets.join(', ')} WHERE id = ?`).bind(...srcVals).run();
+      }
     } catch (e) {
       // Best-effort: a writeback failure must not block the deck save.
-      console.error('[decks PUT] data_room writeback failed', (e as Error).message);
+      console.error('[decks PUT] project writeback failed', (e as Error).message);
     }
   }
 

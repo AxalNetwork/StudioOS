@@ -41,7 +41,7 @@ const shadow = () => ({ type: 'outer', color: '000000', blur: 7, offset: 2, angl
 function eyebrow(s, label, idx, dark) {
   s.addText(label.toUpperCase(), { x: ML, y: 0.5, w: 8, h: 0.3, margin: 0, valign: 'middle',
     fontFace: F.head, fontSize: 11, bold: true, charSpacing: 3, color: C.accent });
-  s.addText(`${idx} / 10`, { x: W - MR - 3, y: 0.5, w: 3, h: 0.3, margin: 0, align: 'right',
+  s.addText(`${idx} / 11`, { x: W - MR - 3, y: 0.5, w: 3, h: 0.3, margin: 0, align: 'right',
     valign: 'middle', fontFace: F.head, fontSize: 11, bold: true, charSpacing: 2,
     color: dark ? C.dfaint : C.faint });
 }
@@ -511,6 +511,55 @@ async function team(pres, data, notes) {
   s.addNotes(notes.team || '');
 }
 
+/* ---- SLIDE 6 — PRODUCT DEMO ---- */
+// Slot 6 in the canonical order. Rendered 1:1 with the React `SlideProductDemo`
+// design: a left media frame (screenshot when present, otherwise a play-glyph
+// "add a demo" placeholder) + caption, and a right column with walkthrough copy
+// plus the live-demo + demo-video links.
+function productDemo(pres, data, notes) {
+  const d = data.productDemo || {}, s = pres.addSlide();
+  s.background = { color: C.white };
+  eyebrow(s, d.eyebrow, d.idx);
+  title(s, d.title);
+
+  const mediaX = ML, mediaY = 2.15, mediaW = 7.05, mediaH = 4.0;
+  panel(pres, s, mediaX, mediaY, mediaW, mediaH, { r: 0.12, fill: C.panel, shadow: false });
+  const shot = typeof d.screenshot === 'string' ? d.screenshot.trim() : '';
+  if (shot) {
+    s.addImage({ data: shot, x: mediaX + 0.12, y: mediaY + 0.12, w: mediaW - 0.24, h: mediaH - 0.24 });
+  } else {
+    s.addShape(pres.shapes.OVAL, { x: mediaX + mediaW / 2 - 0.55, y: mediaY + mediaH / 2 - 0.9,
+      w: 1.1, h: 1.1, fill: { color: C.accentSoft }, line: { type: 'none' } });
+    s.addText('\u25B6', { x: mediaX + mediaW / 2 - 0.55, y: mediaY + mediaH / 2 - 0.9, w: 1.1, h: 1.1,
+      margin: 0, align: 'center', valign: 'middle', fontFace: F.head, fontSize: 26, color: C.accent });
+    s.addText('Add a demo video or screenshot on the project', { x: mediaX, y: mediaY + mediaH / 2 + 0.35,
+      w: mediaW, h: 0.4, margin: 0, align: 'center', fontFace: F.head, fontSize: 12, bold: true, color: C.muted });
+  }
+  s.addText(d.caption || '', { x: mediaX, y: mediaY + mediaH + 0.16, w: mediaW, h: 0.5, margin: 0,
+    valign: 'top', fontFace: F.body, fontSize: 10.5, italic: true, color: C.muted, lineSpacingMultiple: 1.1 });
+
+  const rx = 8.05, rw = W - MR - rx;
+  s.addText(d.walkthroughLabel || 'WALKTHROUGH', { x: rx, y: 2.15, w: rw, h: 0.3, margin: 0,
+    fontFace: F.head, fontSize: 10, bold: true, charSpacing: 1, color: C.accent });
+  s.addText(d.body || '', { x: rx, y: 2.5, w: rw, h: 2.0, margin: 0, valign: 'top',
+    fontFace: F.body, fontSize: 13.5, color: C.body, lineSpacingMultiple: 1.22 });
+
+  s.addText('LIVE DEMO', { x: rx, y: 4.75, w: rw, h: 0.3, margin: 0, fontFace: F.head,
+    fontSize: 9.5, bold: true, charSpacing: 1, color: C.muted });
+  panel(pres, s, rx, 5.05, rw, 0.58, { r: 0.08, fill: C.accentSoft, line: false, shadow: false });
+  s.addText(d.liveUrl || 'Add a live demo URL', { x: rx + 0.22, y: 5.05, w: rw - 0.44, h: 0.58, margin: 0,
+    valign: 'middle', fontFace: F.head, fontSize: 12, bold: true, color: C.accent });
+
+  s.addText('DEMO VIDEO', { x: rx, y: 5.85, w: rw, h: 0.3, margin: 0, fontFace: F.head,
+    fontSize: 9.5, bold: true, charSpacing: 1, color: C.muted });
+  panel(pres, s, rx, 6.15, rw, 0.58, { r: 0.08, fill: C.panel, shadow: false });
+  s.addText(d.videoUrl || 'Add a demo video URL', { x: rx + 0.22, y: 6.15, w: rw - 0.44, h: 0.58, margin: 0,
+    valign: 'middle', fontFace: F.head, fontSize: 12, bold: true, color: C.ink });
+
+  footer(s, data.brand);
+  s.addNotes(notes.productDemo || '');
+}
+
 /* ---- SLIDE 8 — CAP TABLE ---- */
 function captable(pres, data, notes, ICON) {
   const d = data.captable, s = pres.addSlide();
@@ -653,7 +702,7 @@ function deal(pres, data, notes) {
 
 /* ============================================================================
  *  buildDeck — pure entry point. Creates its own pptxgen instance, renders the
- *  10 slides in order, and returns the .pptx artifact.
+ *  11 slides in order, and returns the .pptx artifact.
  *
  *  @param {object} data  Full DATA object (same shape as SAMPLE_DATA).
  *  @param {object} opts
@@ -680,6 +729,7 @@ export async function buildDeck(data = SAMPLE_DATA, opts = {}) {
   validation(pres, data, notes);
   market(pres, data, notes);
   solution(pres, data, notes, ICON);
+  productDemo(pres, data, notes);
   roadmap(pres, data, notes, ICON);
   await team(pres, data, notes);
   captable(pres, data, notes, ICON);

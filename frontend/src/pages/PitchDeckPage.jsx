@@ -184,16 +184,13 @@ export default function PitchDeckPage() {
     }
   }, [deck]);
 
-  // For the Spin-Out deck, filter out any stored slide with spec_id
-  // 'review_the_deal' — that slide has been removed from the React component
-  // array (SLIDES) and should no longer appear in the editor rail or field
-  // editor. For all other deck types this is the same as slides.
-  const displaySlides = useMemo(() => {
-    const isSpinout = deck?.method_id === 'axal_spinout_demoday' ||
-      slides.some((s) => s?.method_id === 'axal_spinout_demoday');
-    if (!isSpinout) return slides;
-    return slides.filter((s) => s?.spec_id !== 'review_the_deal');
-  }, [slides, deck]);
+  // The editor rail, field editor and preview all index into the same slide
+  // array. The Spin-Out deck is the canonical 11-slide structure (Cover …
+  // Product demo … Review the deal) and every stored slide has a 1:1 React
+  // design in SLIDES, so no slides are hidden — `displaySlides` is just
+  // `slides` for every deck type. (Historically `review_the_deal` was filtered
+  // out here because its React design was missing; that off-by-one is fixed.)
+  const displaySlides = slides;
 
   const activeSlide = displaySlides[activeIdx] || null;
   const activeMethodId = activeSlide?.method_id || null;
@@ -566,7 +563,7 @@ export default function PitchDeckPage() {
           </button>
         </div>
 
-        {/* Task #8 — 14-cell coverage grid, axal_spinout_demoday only.
+        {/* Task #8 — 11-cell coverage grid, axal_spinout_demoday only.
             One card per slide: green/red dot · source table · count badge.
             Other templates keep their existing single-line UX (none). */}
         {activeMethodId === 'axal_spinout_demoday' && Array.isArray(templateCoverage) && templateCoverage.length > 0 && (

@@ -35,13 +35,13 @@ test('buildDeck() defaults to the bundled sample fixture', async () => {
   assertValidPptx(buf, 'default-deck');
 });
 
-test('buildDeck renders all 10 slides', async () => {
+test('buildDeck renders all 11 slides', async () => {
   const buf = await buildDeck(SAMPLE_DATA, { outputType: 'nodebuffer' });
   const text = Buffer.from(buf).toString('latin1');
   // One slideN.xml entry per slide in the package.
   const slideCount = (text.match(/ppt\/slides\/slide\d+\.xml/g) || [])
     .filter((v, i, a) => a.indexOf(v) === i).length;
-  assert.equal(slideCount, 10, `expected 10 slides, found ${slideCount}`);
+  assert.equal(slideCount, 11, `expected 11 slides, found ${slideCount}`);
 });
 
 test('speaker notes are embedded in the package', async () => {
@@ -49,7 +49,7 @@ test('speaker notes are embedded in the package', async () => {
   const text = Buffer.from(buf).toString('latin1');
   const noteParts = (text.match(/ppt\/notesSlides\/notesSlide\d+\.xml/g) || [])
     .filter((v, i, a) => a.indexOf(v) === i).length;
-  assert.equal(noteParts, 10, `expected 10 notesSlide parts, found ${noteParts}`);
+  assert.equal(noteParts, 11, `expected 11 notesSlide parts, found ${noteParts}`);
   // A stable, XML-safe slice of the cover speaker note must survive into the package.
   assert.ok(
     text.includes('Focal: thesis statement; area chart is the data hero'),

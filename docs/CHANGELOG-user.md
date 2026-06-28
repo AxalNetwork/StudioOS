@@ -5,6 +5,90 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Compare cap-table scenarios side-by-side
+
+You can now explore "what if" cap tables for a project without touching its real
+one. In the Cap-Table Simulator, pick a project, model an alternative — a
+different SAFE cap, a bigger round, a larger option pool — and click **Save as
+variant** to keep it as a named draft. Hit **Compare** to see every variant next
+to your project's main cap table, with final ownership and combined founder
+ownership laid out column by column.
+
+Variants are drafts for exploration only: your project still has one official cap
+table, and the Demo Day deck always uses that one — never a draft.
+
+## Spin-Out Demo Day deck now has a Product demo slide
+
+The Spin-Out Demo Day deck now shows all of its slides correctly — an earlier
+glitch left the slide list, the live preview, the editor, and the downloaded
+PowerPoint out of sync, and that's fixed. The deck has a clear 11-slide order:
+Cover, Problem, Validation, Market, Solution, Product demo, Roadmap, Team &
+network, Cap table, Ask, and Review the deal.
+
+There's a new **Product demo** slide so you can show the product, not just
+describe it. Add a demo video link, a live demo URL, a screenshot, and a short
+caption right on the project's page, and they flow straight into the deck — in
+both the live preview and the downloaded PowerPoint. Edits you make to the
+Problem, Solution, and Product demo text on a slide now save back to the project
+too, so the deck and the project always tell the same story. Each slide also shows
+whether it's ready or still needs your input.
+
+## Cap-Table Simulator now works per project
+
+The Cap-Table Simulator now ties each cap table to a specific project. Instead of
+typing a scenario name, you pick the project from a dropdown, and the simulator
+loads that project's saved cap table (or sensible defaults if it's new). Each
+project keeps a single cap table, so saving updates it rather than piling up
+duplicates. You can jump straight to a project's cap table from its detail page.
+
+On top of that, the Spin-Out Demo Day deck's ownership chart (the "Cap table"
+slide) now reflects whatever you've modeled in the simulator for that project,
+both in the live preview and the downloaded PowerPoint. If a project has no
+simulator data yet, the deck falls back to its recorded shareholders, and then to
+a neutral placeholder.
+
+## Spin-Out deck editor: "Review the deal" slide removed
+
+The "Review the deal" slide has been removed from the Spin-Out Demo Day deck
+editor. The slide was always blank in the editor (the deal-room CTA only works
+on the shared investor link, not in the editor itself), so it was causing
+confusion. The deck now shows 9 slides — Cover through Ask — without the
+placeholder at the end.
+
+## Thirteen more landing page designs to choose from
+
+The Brand & Landing page builder now has a full library of page designs. We've
+added thirteen more distinct looks — so there's a ready-made style for whoever
+you're talking to, all still fully editable with your own words:
+
+- **For investors** — Capital Storyteller, Seed Stage Spark and Distribution Deck.
+- **For partners** — Pilot Partner Page, Partner Hub and Partner Pipeline Pro.
+- **For co-founders** — Co-Founder Builder, Co-Founder Canvas, Co-founder Connect
+  and Co-Founder Quest.
+- **For mentors** — Mentor Connect and Mentor Connect Page.
+- **For early customers** — Builder's Launchpad.
+
+Each one loads with its own matching colour palette you can fine-tune any time.
+
+---
+
+## Three new landing page designs to choose from
+
+The Brand & Landing page builder now offers three brand-new, ready-to-use page
+designs — each with its own distinct look and colour scheme, and all still fully
+editable with your own words:
+
+- **Advisor Connect** — a warm, editorial invitation for bringing on advisors.
+- **Proof Builder** — a clean, evidence-first page for validating demand with
+  customers and collecting a waitlist.
+- **Capital Ready Kit** — a sleek, dark investor brief with your raise, traction
+  and round details.
+
+Pick one when you create or edit a page and it loads with a matching colour
+palette you can fine-tune any time. More designs are on the way.
+
+---
+
 ## File a support ticket right from your Personal Advisor
 
 You can now open a support ticket without leaving the chat. On the Studio page,

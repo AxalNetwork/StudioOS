@@ -81,7 +81,7 @@ type Status = 'done' | 'active' | 'pending';
 /* ─────────────────────────── hydrate ─────────────────────────── */
 const SECTIONS = new Set([
   'brand', 'cover', 'problem', 'validation', 'market', 'solution',
-  'roadmap', 'team', 'captable', 'ask', 'deal',
+  'productDemo', 'roadmap', 'team', 'captable', 'ask', 'deal',
 ]);
 
 const clone = (o: any) => JSON.parse(JSON.stringify(o));
@@ -296,7 +296,7 @@ const Eyebrow: React.FC<{ label: string; idx: string; dark?: boolean }> = ({ lab
       {String(label).toUpperCase()}
     </Txt>
     <Txt l={W - MARGIN - 3} t={0.5} w={3} h={0.3} size={11} bold align="right" valign="middle" spacing={1} color={dark ? K.dfaint : K.faint}>
-      {idx} / 10
+      {idx} / 11
     </Txt>
   </>
 );
@@ -868,6 +868,120 @@ const SlideAsk: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   );
 };
 
+/* 6 — PRODUCT DEMO */
+// Slot 6 in the canonical order. Mirrors `productDemo()` in buildDeck.js 1:1:
+// a left media frame (screenshot when present, otherwise a play-glyph "add a
+// demo" placeholder) with a caption, and a right column carrying the
+// walkthrough copy plus the live-demo + demo-video links. All copy fields are
+// inline-editable via the `productDemo.*` dotted-key contract.
+const SlideProductDemo: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
+  const pd = d.productDemo || {};
+  const mediaX = ML, mediaY = 2.15, mediaW = 7.05, mediaH = 4.0;
+  const shot = typeof pd.screenshot === 'string' ? pd.screenshot.trim() : '';
+  const rx = 8.05, rw = W - MARGIN - rx;
+  return (
+    <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
+      <div style={{ position: 'absolute', inset: 0 }}>
+        <Eyebrow label={pd.eyebrow} idx={pd.idx} />
+        <Title text={pd.title} path="productDemo.title" editable={editable} onEdit={onEdit} />
+
+        {/* media frame */}
+        <Rect l={mediaX} t={mediaY} w={mediaW} h={mediaH} r={0.12} fill={K.panel} line={K.line} shadow={false} />
+        {shot ? (
+          <div style={{
+            position: 'absolute', left: inch(mediaX + 0.12), top: inch(mediaY + 0.12),
+            width: inch(mediaW - 0.24), height: inch(mediaH - 0.24), borderRadius: inch(0.08),
+            overflow: 'hidden', background: K.panel2,
+          }}>
+            <img src={shot} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          </div>
+        ) : (
+          <>
+            <Oval l={mediaX + mediaW / 2 - 0.55} t={mediaY + mediaH / 2 - 0.9} d={1.1} fill={K.accentSoft} shadow={false}>
+              <svg width={inch(0.4)} height={inch(0.4)} viewBox="0 0 24 24" fill={K.accent}><path d="M8 5v14l11-7z" /></svg>
+            </Oval>
+            <Txt l={mediaX} t={mediaY + mediaH / 2 + 0.35} w={mediaW} h={0.4} size={12} bold align="center" color={K.muted}>
+              Add a demo video or screenshot on the project
+            </Txt>
+          </>
+        )}
+        <Ed l={mediaX} t={mediaY + mediaH + 0.16} w={mediaW} h={0.5} size={10.5} italic lh={1.1} valign="top"
+          color={K.muted} value={pd.caption} path="productDemo.caption" editable={editable} onEdit={onEdit} placeholder="Caption" />
+
+        {/* right column */}
+        <Txt l={rx} t={2.15} w={rw} h={0.3} size={10} bold spacing={1} color={K.accent}>{pd.walkthroughLabel || 'WALKTHROUGH'}</Txt>
+        <Ed l={rx} t={2.5} w={rw} h={2.0} size={13.5} lh={1.22} valign="top" color={K.body}
+          value={pd.body} path="productDemo.body" editable={editable} onEdit={onEdit} placeholder="Describe the demo flow" />
+
+        <Txt l={rx} t={4.75} w={rw} h={0.3} size={9.5} bold spacing={1} color={K.muted}>LIVE DEMO</Txt>
+        <Rect l={rx} t={5.05} w={rw} h={0.58} r={0.08} fill={K.accentSoft} line={false} shadow={false} />
+        <Ed l={rx + 0.22} t={5.05} w={rw - 0.44} h={0.58} size={12} bold valign="middle" color={K.accent}
+          value={pd.liveUrl} path="productDemo.liveUrl" editable={editable} onEdit={onEdit} placeholder="Add a live demo URL" />
+
+        <Txt l={rx} t={5.85} w={rw} h={0.3} size={9.5} bold spacing={1} color={K.muted}>DEMO VIDEO</Txt>
+        <Rect l={rx} t={6.15} w={rw} h={0.58} r={0.08} fill={K.panel} line={K.line} shadow={false} />
+        <Ed l={rx + 0.22} t={6.15} w={rw - 0.44} h={0.58} size={12} bold valign="middle" color={K.ink}
+          value={pd.videoUrl} path="productDemo.videoUrl" editable={editable} onEdit={onEdit} placeholder="Add a demo video URL" />
+
+        <Footer brand={d.brand} />
+      </div>
+    </Slide16x9>
+  );
+};
+
+/* 11 — REVIEW THE DEAL / DEAL READINESS (dark) */
+// Slot 11, the closing slide. Mirrors `deal()` in buildDeck.js 1:1: a dark
+// frame with the diligence checklist on the left, numbered next-steps on the
+// right, then the closing line + contact. Title / closing line / contact are
+// inline-editable via the `deal.*` dotted-key contract.
+const SlideDealReadiness: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
+  const dl = d.deal || {};
+  const ready: Array<[string, string]> = Array.isArray(dl.ready) ? dl.ready : [];
+  const steps: Array<[string, string]> = Array.isArray(dl.steps) ? dl.steps : [];
+  const lx = ML, lw = 6.0;
+  const rx = 7.35, rw = 5.25;
+  return (
+    <Slide16x9 bg={K.dbg} ink={K.white} font={FF}>
+      <div style={{ position: 'absolute', inset: 0 }}>
+        <Eyebrow label={dl.eyebrow} idx={dl.idx} dark />
+        <Ed l={ML} t={1.05} w={11.5} h={0.95} size={30} bold lh={1.04} valign="top" color={K.white}
+          value={dl.title} path="deal.title" editable={editable} onEdit={onEdit} />
+
+        <Txt l={lx} t={2.15} w={lw} h={0.3} size={10} bold spacing={1} color={K.accentLt}>{dl.diligenceLabel}</Txt>
+        {ready.map((r, i) => {
+          const ry = 2.6 + i * 0.66;
+          return (
+            <React.Fragment key={i}>
+              <Rect l={lx} t={ry} w={lw} h={0.55} r={0.06} fill={K.dpanel} line={K.dline} shadow={false} />
+              <Oval l={lx + 0.22} t={ry + 0.185} d={0.18} fill={K.accentLt} shadow={false} />
+              <Txt l={lx + 0.6} t={ry} w={lw - 2.3} h={0.55} size={13} bold valign="middle" color={K.white}>{r[0]}</Txt>
+              <Txt l={lx + lw - 1.85} t={ry} w={1.7} h={0.55} size={12} bold align="right" valign="middle" color={K.dmuted}>{r[1]}</Txt>
+            </React.Fragment>
+          );
+        })}
+
+        <Txt l={rx} t={2.15} w={rw} h={0.3} size={10} bold spacing={1} color={K.accentLt}>{dl.nextLabel}</Txt>
+        {steps.map((st, i) => {
+          const sy = 2.6 + i * 0.85;
+          return (
+            <React.Fragment key={i}>
+              <Oval l={rx} t={sy} d={0.5} fill={K.accent} shadow={false} />
+              <Txt l={rx} t={sy} w={0.5} h={0.5} size={16} bold align="center" valign="middle" color={K.white}>{st[0]}</Txt>
+              <Txt l={rx + 0.7} t={sy} w={rw - 0.7} h={0.5} size={14} bold valign="middle" color={K.white}>{st[1]}</Txt>
+            </React.Fragment>
+          );
+        })}
+        <div style={{ position: 'absolute', left: inch(rx), top: inch(5.55), width: inch(rw), height: pt(1), background: K.dline }} />
+        <Ed l={rx} t={5.7} w={rw} h={0.5} size={15} bold lh={1.1} valign="top" color={K.white}
+          value={dl.closingLine} path="deal.closingLine" editable={editable} onEdit={onEdit} />
+        <Ed l={rx} t={6.2} w={rw} h={0.4} size={12} valign="top" color={K.accentLt}
+          value={dl.contact} path="deal.contact" editable={editable} onEdit={onEdit} />
+        <Txt l={ML} t={7.06} w={6} h={0.3} size={8} spacing={1} valign="middle" color={K.dfaint}>{d.brand.lab}</Txt>
+      </div>
+    </Slide16x9>
+  );
+};
+
 /* ─────────────────────────── slide registry ─────────────────────────── */
 type SlideEntry = { id: string; title: string; Component: React.FC<SlideProps> };
 export const SLIDES: SlideEntry[] = [
@@ -876,10 +990,12 @@ export const SLIDES: SlideEntry[] = [
   { id: 'validation', title: 'Validation', Component: SlideValidation },
   { id: 'market', title: 'Market', Component: SlideMarket },
   { id: 'solution', title: 'Solution', Component: SlideSolution },
+  { id: 'product_demo', title: 'Product demo', Component: SlideProductDemo },
   { id: 'roadmap', title: 'Roadmap', Component: SlideRoadmap },
   { id: 'team_network', title: 'Team & network', Component: SlideTeamNetwork },
   { id: 'cap_table', title: 'Cap table', Component: SlideCapTable },
   { id: 'ask', title: 'Ask', Component: SlideAsk },
+  { id: 'review_the_deal', title: 'Review the deal', Component: SlideDealReadiness },
 ];
 
 /* ─────────────────────────── root deck ─────────────────────────── */

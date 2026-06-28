@@ -83,6 +83,7 @@ async def lifespan(app: FastAPI):
             ensure_brand_landing_columns,
             ensure_growth_track_columns,
             ensure_project_revenue_proof_columns,
+            ensure_project_product_demo_columns,
             ensure_document_file_columns,
             ensure_user_access_level_column,
             ensure_score_anti_cheat_columns,
@@ -116,6 +117,8 @@ async def lifespan(app: FastAPI):
         logger.info("StudioOS migrations: growth track columns ensured")
         ensure_project_revenue_proof_columns()
         logger.info("StudioOS migrations: project revenue-proof columns ensured")
+        ensure_project_product_demo_columns()
+        logger.info("StudioOS migrations: project product-demo columns ensured")
         ensure_document_file_columns()
         logger.info("StudioOS migrations: document file columns ensured")
         ensure_user_access_level_column()

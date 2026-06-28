@@ -52,6 +52,26 @@ export async function ensureProjectRevenueProofColumns(env: Env): Promise<void> 
   _revenueProofReady.set(db, true);
 }
 
+// Task #31 — lazy bootstrap for the Product demo source columns on
+// `projects` (demo video link, live demo URL, caption/description,
+// screenshot image). Migration 118 is the canonical apply path; this keeps
+// a cold D1 isolate (or dev SQLite) working before it runs. Additive +
+// idempotent; same WeakMap pattern as the helpers above.
+const _productDemoReady = new WeakMap<object, true>();
+export async function ensureProjectProductDemoColumns(env: Env): Promise<void> {
+  const db = env.DB as unknown as object;
+  if (_productDemoReady.has(db)) return;
+  for (const ddl of [
+    `ALTER TABLE projects ADD COLUMN product_demo_video_url TEXT`,
+    `ALTER TABLE projects ADD COLUMN product_demo_live_url TEXT`,
+    `ALTER TABLE projects ADD COLUMN product_demo_caption TEXT`,
+    `ALTER TABLE projects ADD COLUMN product_demo_screenshot_url TEXT`,
+  ]) {
+    try { await env.DB.exec(ddl); } catch (_e) { /* duplicate column on re-run is fine */ }
+  }
+  _productDemoReady.set(db, true);
+}
+
 // Task #1 — lazy bootstrap for the founder's editable company / affiliation,
 // surfaced on the Spin-Out Demo Day's merged Team & network slide. Additive
 // + idempotent; same WeakMap pattern as above. The `founders` table is not
@@ -115,6 +135,7 @@ projects.get('/:id', async (c) => {
   // don't omit them from the projection.
   await ensureProjectDataRoomColumns(c.env);
   await ensureProjectRevenueProofColumns(c.env);
+  await ensureProjectProductDemoColumns(c.env);
   await ensureFounderCompanyColumn(c.env);
   const sql = getSQL(c.env);
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
@@ -438,6 +459,7 @@ projects.put('/:id', async (c) => {
   // slide save-path so the project stays the single source of truth.
   await ensureProjectDataRoomColumns(c.env);
   await ensureProjectRevenueProofColumns(c.env);
+  await ensureProjectProductDemoColumns(c.env);
   await ensureFounderCompanyColumn(c.env);
   // Task #2 — coerce structured revenue-proof fields: numbers must be
   // finite (or null to clear); paid_pilot_status is a closed enum; the
@@ -478,7 +500,16 @@ projects.put('/:id', async (c) => {
     if (uof.error) { await sql.end(); return c.json({ error: uof.error, code: 'invalid_use_of_funds' }, 400); }
     data.use_of_funds = uof.value;
   }
-  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status'];
+  // Task #31 — Product demo source columns are owner-editable (founders
+  // manage their own demo media on the project detail page). Trim URLs/text;
+  // explicit '' / null clears the column.
+  for (const k of ['product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url']) {
+    if (data[k] !== undefined && data[k] !== null) {
+      const s = String(data[k]).trim();
+      data[k] = s || null;
+    }
+  }
+  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url'];
   // Normalise: coerce boolean → 0/1 for the NDA flag, trim URL, allow
   // explicit null to clear either field.
   if (data.data_room_nda_required !== undefined) {

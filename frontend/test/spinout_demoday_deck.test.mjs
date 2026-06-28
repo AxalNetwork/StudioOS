@@ -115,17 +115,20 @@ test('hydrate is prototype-pollution safe (dotted path + JSON.parse payload)', (
   assert.equal(render({ 'cover.__proto__.polluted': 'x' }), render(EMPTY), 'forbidden dotted key changed the render');
 });
 
-test('SLIDES registry — 9 slides; Axal-Signal / Product-Demo / people / brand / deal dropped', () => {
-  assert.equal(SLIDES.length, 9, 'expected exactly 9 slides');
+test('SLIDES registry — canonical 11 slides in order, incl Product demo + Review the deal', () => {
+  assert.equal(SLIDES.length, 11, 'expected exactly 11 slides');
   const ids = SLIDES.map((s) => s.id);
   assert.deepEqual(ids, [
     'cover', 'problem', 'validation', 'market', 'solution',
-    'roadmap', 'team_network', 'cap_table', 'ask',
+    'product_demo', 'roadmap', 'team_network', 'cap_table', 'ask',
+    'review_the_deal',
   ], 'slide ids / order changed');
-  for (const gone of ['axal_signal', 'product_demo', 'team_readiness', 'mentor_network', 'brand', 'review_the_deal']) {
+  // Product demo sits at slot 6 (index 5); Review the deal closes the deck.
+  assert.equal(ids[5], 'product_demo', 'Product demo must be slide 6');
+  assert.equal(SLIDES[SLIDES.length - 1].id, 'review_the_deal', 'Review the deal must be the last slide');
+  for (const gone of ['axal_signal', 'team_readiness', 'mentor_network', 'brand']) {
     assert.ok(!ids.includes(gone), `${gone} slide must be absent`);
   }
-  assert.equal(SLIDES[SLIDES.length - 1].id, 'ask', 'Ask must be the last slide');
   // The rendered deck emits exactly one frame per slide.
-  assert.equal(countFrames(render(EMPTY)), 9, 'rendered deck should emit 9 slide frames');
+  assert.equal(countFrames(render(EMPTY)), 11, 'rendered deck should emit 11 slide frames');
 });

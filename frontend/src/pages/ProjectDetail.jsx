@@ -258,6 +258,17 @@ export default function ProjectDetail() {
         onError={(msg) => showToast({ kind: 'error', msg })}
       />
 
+      {/* Task #31 — Product demo source. Feeds the Spin-Out Demo Day deck's
+          "Product demo" slide (slot 6). */}
+      <ProductDemoSection
+        project={project}
+        onSaved={(updated) => {
+          setProject((prev) => ({ ...prev, ...updated }));
+          showToast({ kind: 'success', msg: 'Product demo saved' });
+        }}
+        onError={(msg) => showToast({ kind: 'error', msg })}
+      />
+
       {canSeeVentureRisk && project.id != null && (
         <VentureRiskPanel projectId={project.id} canWrite={canWriteVentureRisk} />
       )}
@@ -702,6 +713,145 @@ function DataRoomSection({ project, onSaved, onError }) {
             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
           >
             Open <ExternalLink size={12} />
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Task #31 — Product demo source. Founders paste a demo video link, a live
+// demo URL, a caption/description, and a screenshot image; these feed the
+// Spin-Out Demo Day deck's "Product demo" slide (the project is the single
+// source of truth). Mirrors DataRoomSection's save/validate pattern.
+function ProductDemoSection({ project, onSaved, onError }) {
+  const [videoUrl, setVideoUrl] = useState(project.product_demo_video_url || '');
+  const [liveUrl, setLiveUrl] = useState(project.product_demo_live_url || '');
+  const [caption, setCaption] = useState(project.product_demo_caption || '');
+  const [screenshotUrl, setScreenshotUrl] = useState(project.product_demo_screenshot_url || '');
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setVideoUrl(project.product_demo_video_url || '');
+    setLiveUrl(project.product_demo_live_url || '');
+    setCaption(project.product_demo_caption || '');
+    setScreenshotUrl(project.product_demo_screenshot_url || '');
+    setDirty(false);
+  }, [
+    project.id,
+    project.product_demo_video_url,
+    project.product_demo_live_url,
+    project.product_demo_caption,
+    project.product_demo_screenshot_url,
+  ]);
+
+  const urlOk = (u) => {
+    const v = (u || '').trim();
+    if (!v) return true;
+    try { const x = new URL(v); return x.protocol === 'http:' || x.protocol === 'https:'; }
+    catch { return false; }
+  };
+  const videoValid = urlOk(videoUrl);
+  const liveValid = urlOk(liveUrl);
+  const shotValid = urlOk(screenshotUrl);
+  const valid = videoValid && liveValid && shotValid;
+
+  const save = async () => {
+    if (!valid || saving) return;
+    setSaving(true);
+    try {
+      const updated = await api.updateProject(project.id, {
+        product_demo_video_url: videoUrl.trim() || null,
+        product_demo_live_url: liveUrl.trim() || null,
+        product_demo_caption: caption.trim() || null,
+        product_demo_screenshot_url: screenshotUrl.trim() || null,
+      });
+      setDirty(false);
+      onSaved && onSaved(updated);
+    } catch (e) {
+      onError && onError(e?.message || 'Failed to save product demo');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputCls = 'w-full px-3 py-2 text-sm rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100';
+  const labelCls = 'block text-[11px] uppercase tracking-wider text-gray-600 dark:text-gray-400 mb-1';
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
+      <div className="flex items-center gap-2 mb-1">
+        <Rocket size={14} className="text-violet-600" />
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Product demo</h3>
+      </div>
+      <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+        Show the product, don&apos;t just describe it. This feeds the &quot;Product demo&quot; slide on the Spin-Out Demo Day deck.
+      </p>
+
+      <div className="space-y-3">
+        <div>
+          <label className={labelCls}>Demo video URL</label>
+          <input
+            type="url"
+            value={videoUrl}
+            onChange={(e) => { setVideoUrl(e.target.value); setDirty(true); }}
+            placeholder="https://youtube.com/… or a .mp4/.webm link"
+            className={inputCls}
+          />
+          {!videoValid && <div className="text-xs text-red-600 mt-1">Enter a valid http(s) URL or leave it blank.</div>}
+        </div>
+        <div>
+          <label className={labelCls}>Live demo URL</label>
+          <input
+            type="url"
+            value={liveUrl}
+            onChange={(e) => { setLiveUrl(e.target.value); setDirty(true); }}
+            placeholder="https://app.yourproduct.com"
+            className={inputCls}
+          />
+          {!liveValid && <div className="text-xs text-red-600 mt-1">Enter a valid http(s) URL or leave it blank.</div>}
+        </div>
+        <div>
+          <label className={labelCls}>Screenshot / image URL</label>
+          <input
+            type="url"
+            value={screenshotUrl}
+            onChange={(e) => { setScreenshotUrl(e.target.value); setDirty(true); }}
+            placeholder="https://…/screenshot.png"
+            className={inputCls}
+          />
+          {!shotValid && <div className="text-xs text-red-600 mt-1">Enter a valid http(s) URL or leave it blank.</div>}
+        </div>
+        <div>
+          <label className={labelCls}>Caption / description</label>
+          <textarea
+            value={caption}
+            onChange={(e) => { setCaption(e.target.value); setDirty(true); }}
+            rows={2}
+            placeholder="One line on what the demo shows."
+            className={inputCls}
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 mt-4">
+        <button
+          type="button"
+          onClick={save}
+          disabled={!dirty || saving || !valid}
+          className="px-3 py-1.5 text-sm rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        {liveUrl.trim() && liveValid && (
+          <a
+            href={liveUrl.trim()}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+          >
+            Open live demo <ExternalLink size={12} />
           </a>
         )}
       </div>
