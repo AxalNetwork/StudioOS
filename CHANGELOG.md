@@ -10,6 +10,43 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Template-Driven Brand Page Editor — Task #3
+
+Brand & Landing **step 3 is now template-aware**: the editable fields adapt to the
+visual template chosen in step 2, and every template renders from saved content.
+
+- New column `landing_pages.content_json TEXT` = `{ [templateKey]: { field: string | item[] } }`
+  (migration `sql/migrations/120_landing_content_json.sql`; ensured in worker
+  `ensureLandingPageBrandKitColumns` + FastAPI `_ensure_schema`). Worker GET/PUT and
+  FastAPI get/upsert read/write it (validated JSON, clamped); `api.js` passes it in the draft.
+- `LANDING_CONTENT_SCHEMA` + render helpers `landingContent(row, key).t(field)` (escaped,
+  falls back to schema default) / `.list(field)` in
+  `cloudflare-worker/src/services/landingTemplates.ts`; mirrored as `TEMPLATE_CONTENT_SCHEMA`
+  in `frontend/src/lib/brand/templates.js`. New lockstep parity test
+  `cloudflare-worker/test/landing_content_schema.test.ts` (added to the `test:drift` list in
+  `package.json`). Only the 16 signature templates carry editable fields; the 5 originals map to `[]`.
+- All 16 signature render fns now read editable copy via the helper with the **logo guaranteed**
+  in nav + hero/footer and palette pulled from the brand kit (no literal palette constants).
+  Spin-Out deck theming (`services/decks/branding.ts`) untouched.
+- `BrandBuilderPage.jsx`: dynamic step-3 form generated from the schema
+  (`text` / `textarea` / add-remove `groupList`), persisting per template in
+  `draft.content_json[draft.template]`. Content blocks are seeded with schema defaults on
+  template-select (an effect keyed on `draft.template`) and on landing load (covers switching
+  between two projects that share a template). Palette swatches relabeled by role
+  (Primary / Background / Text / Secondary / Accent). Heading renamed to "3. Brand & page content".
+- Replaced the "Generate 5 options" name-picker with **one-click AI auto-fill**:
+  `POST /api/brand/landing/autofill` (worker: `aiRouterRun` task `brand_autofill` →
+  `heuristicTemplateContent` fallback, clamped via `sanitizeLandingContent`; dev FastAPI:
+  deterministic hero copy via `_heuristic_hero_copy`, empty content). Auto-fill fills hero copy
+  + the chosen template's content from the project name + sector + 1-paragraph description,
+  **without mutating those three step-1 inputs**.
+- Removed the 6-tab "Audience-specific copy" UI block, the hardcoded fallback brand names,
+  and the unused `/brand/suggest` path (its dead `brand_suggest` TaskClass renamed to
+  `brand_autofill` in `services/aiRouter.ts`). The persisted `audience_*` columns and the
+  waitlist audience labels/colors are retained.
+- `npm run test:drift` green (incl. `check-dark-mode`, api drift, 43 landing tests incl. the
+  schema-parity test, and worker `tsc --noEmit`).
+
 ## Spin-Out pitch deck — source-driven slide editor — Task #2
 
 For the `axal_spinout_demoday` template ONLY, the Pitch Deck Builder's

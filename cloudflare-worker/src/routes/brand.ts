@@ -6,7 +6,7 @@
  * separately at the index.ts root, not inside this Hono router, so it
  * lives outside /api/*.
  *
- *   POST /api/brand/suggest                         AI brand suggestions
+ *   POST /api/brand/landing/autofill                AI page content auto-fill
  *   POST /api/brand/logo                            Workers AI or SVG fallback
  *   GET  /api/brand/landing/by-project/:pid         owner read
  *   PUT  /api/brand/landing/by-project/:pid         owner upsert
@@ -19,7 +19,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { ensureLandingPageBrandKitColumns } from '../services/landingPageSchema';
-import { renderLandingTemplate, TEMPLATE_REGISTRY, TEMPLATE_KEYS, TEMPLATE_SIGNATURE_PALETTES, sanitizeLandingContent } from '../services/landingTemplates';
+import { renderLandingTemplate, TEMPLATE_REGISTRY, TEMPLATE_KEYS, TEMPLATE_SIGNATURE_PALETTES, sanitizeLandingContent, LANDING_CONTENT_SCHEMA } from '../services/landingTemplates';
+import type { TemplateKey } from '../services/landingTemplates';
 import { requireAuth } from '../auth';
 import { run as aiRouterRun } from '../services/aiRouter';
 
@@ -140,30 +141,30 @@ function svgLogo(name: string, color = '#7c3aed'): string {
     + `</svg>`;
 }
 
-function heuristicBrand(description: string, sector: string | null): any[] {
-  const seeds = ['Lumen', 'Axon', 'Forge', 'Vela', 'Quanta', 'Helio', 'Nimbus', 'Stratus', 'Orbit', 'Beacon'];
-  const suffixes = ['AI', 'Labs', 'Works', 'Cloud', 'Stack', 'OS', 'Sense', 'Engine'];
-  // Tiny rolling hash — deterministic per description so re-runs return
-  // the same suggestions when the AI path is unavailable.
-  let h = 0;
-  for (const ch of description || 'x') h = (h * 31 + ch.charCodeAt(0)) | 0;
-  h = Math.abs(h);
-  const tags = [
-    `${(sector || 'AI').trim()} that just works.`,
-    `The fastest way to ship ${sector || 'your idea'}.`,
-    `${sector || 'Software'} for the next billion users.`,
-    `Built for founders who move fast.`,
-    `Less ops, more outcomes.`,
-  ];
-  return Array.from({ length: 5 }, (_, i) => {
-    const a = seeds[(h + i * 7) % seeds.length];
-    const b = suffixes[(h + i * 11) % suffixes.length];
-    return {
-      name: `${a}${b}`,
-      tagline: tags[i],
-      logo_prompt: `minimalist geometric logo, ${a.toLowerCase()} mark, violet and white, vector, flat`,
-    };
-  });
+// Derive shared hero copy (headline/subheadline/tagline) from the founder's
+// own inputs (project name + sector + description). Deterministic; the AI path
+// enriches this when a model is available.
+function heuristicHeroCopy(name: string, sector: string | null, description: string): { headline: string; subheadline: string; tagline: string } {
+  const desc = (description || '').trim();
+  const firstSentence = (desc.split(/(?<=[.!?])\s+/)[0] || desc).trim();
+  const headline = (firstSentence || name || 'Building something new').slice(0, 120);
+  const subheadline = desc.slice(0, 200);
+  const words = desc.split(/\s+/).filter(Boolean).slice(0, 8).join(' ');
+  const tagline = (words || sector || name || '').slice(0, 120);
+  return { headline, subheadline, tagline };
+}
+
+// Seed the chosen template's editable fields from the schema defaults. The
+// editor layers these under anything the AI returns, so every field lands
+// populated and on-brand even with no model available (dev backend path).
+function heuristicTemplateContent(key: TemplateKey): Record<string, any> {
+  const fields = LANDING_CONTENT_SCHEMA[key] || [];
+  const out: Record<string, any> = {};
+  for (const f of fields) {
+    if (f.kind === 'groupList') out[f.key] = Array.isArray(f.default) ? f.default : [];
+    else out[f.key] = typeof f.default === 'string' ? f.default : '';
+  }
+  return out;
 }
 
 // Pull the first balanced {...} JSON object out of a model response. Small
@@ -183,37 +184,49 @@ function extractJsonObject(text: string): any | null {
   }
 }
 
-// Brand name/tagline suggestions via Workers AI (routed through aiRouter so
-// per-user budget checks, model fallback, and usage logging all apply).
+// AI page-content auto-fill via Workers AI (routed through aiRouter so per-user
+// budget checks, model fallback, and usage logging all apply). Generates hero
+// copy + the chosen template's editable fields from the founder's own inputs.
 // Returns null on any failure/refusal so the caller falls back to the
 // deterministic heuristic.
-async function aiBrand(env: Env, userId: number, description: string, sector: string | null): Promise<any[] | null> {
+async function aiTemplateContent(
+  env: Env,
+  userId: number,
+  key: TemplateKey,
+  name: string,
+  sector: string | null,
+  description: string,
+): Promise<{ headline: string; subheadline: string; tagline: string; content: Record<string, any> } | null> {
   try {
-    const systemPrompt = 'You are a concise brand strategist. Always return ONLY valid minified JSON, no prose, no markdown fences.';
-    const userPrompt = `Help a startup founder pick a brand. Sector: ${sector || 'unspecified'}.\nIdea: ${description.trim()}\n\nReturn JSON of the exact form: {"suggestions":[{"name":"","tagline":"","logo_prompt":""}]}\nRules: exactly 5 suggestions; name 1-3 words; tagline <=8 words; logo_prompt is a short text-to-image prompt for a minimalist vector logo.`;
+    const fields = LANDING_CONTENT_SCHEMA[key] || [];
+    const fieldSpec = fields.map((f) => {
+      if (f.kind === 'groupList') {
+        const items = (f.itemFields || []).map((itf) => `"${itf.key}"`).join(', ');
+        return `"${f.key}": array (max ${f.max || 6}) of objects {${items}}`;
+      }
+      return `"${f.key}": string`;
+    }).join('; ');
+    const systemPrompt = 'You are a concise startup copywriter. Always return ONLY valid minified JSON, no prose, no markdown fences.';
+    const userPrompt = `Write landing-page copy for a startup.\nBrand: ${name || 'unspecified'}. Sector: ${sector || 'unspecified'}.\nWhat it does: ${description.trim()}\n\nReturn JSON of the exact form: {"headline":"","subheadline":"","tagline":""${fieldSpec ? `,"content":{${fieldSpec}}` : ''}}\nRules: headline <=12 words; subheadline <=30 words; tagline <=8 words; keep copy specific to the idea; plain text only (no HTML).`;
     const res = await aiRouterRun(env, {
-      task: 'brand_suggest',
+      task: 'brand_autofill',
       userId: userId || 0,
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
-      temperature: 0.8,
-      maxTokens: 500,
+      temperature: 0.7,
+      maxTokens: 900,
     });
     if (!res.ok || !res.output) return null;
     const parsed = extractJsonObject(res.output);
-    const sug = Array.isArray(parsed?.suggestions) ? parsed.suggestions : null;
-    if (!sug) return null;
-    // Normalise + guard each entry so a partial model response can't break
-    // the UI; drop anything missing a name.
-    const clean = sug
-      .map((s: any) => ({
-        name: String(s?.name || '').trim().slice(0, 60),
-        tagline: String(s?.tagline || '').trim().slice(0, 120),
-        logo_prompt: String(s?.logo_prompt || '').trim().slice(0, 200)
-          || `minimalist geometric logo, ${String(s?.name || 'brand').toLowerCase()} mark, violet and white, vector, flat`,
-      }))
-      .filter((s: any) => s.name.length > 0);
-    return clean.length ? clean.slice(0, 5) : null;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const headline = String(parsed.headline || '').trim().slice(0, 200);
+    const subheadline = String(parsed.subheadline || '').trim().slice(0, 400);
+    const tagline = String(parsed.tagline || '').trim().slice(0, 200);
+    // Clamp the per-template content through the shared sanitizer so the model
+    // can't inject unknown fields, oversized strings, or the wrong shape.
+    const content = sanitizeLandingContent({ [key]: parsed.content })[key] || {};
+    if (!headline && !subheadline && !tagline && !Object.keys(content).length) return null;
+    return { headline, subheadline, tagline, content };
   } catch {
     return null;
   }
@@ -511,15 +524,19 @@ Rules: each tagline <= 12 words; varied angles; no emojis.`;
   }
 }
 
-brand.post('/suggest', async (c) => {
+brand.post('/landing/autofill', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
   const description = String(body?.description || '').trim();
   if (description.length < 4) return c.json({ error: 'description too short' }, 400);
+  const name = String(body?.name || '').trim();
   const sector = body?.sector ? String(body.sector) : null;
-  const ai = await aiBrand(c.env, user.id, description, sector);
-  if (ai) return c.json({ suggestions: ai, ai_generated: true });
-  return c.json({ suggestions: heuristicBrand(description, sector), ai_generated: false });
+  const requested = String(body?.template || '').trim();
+  const key = (TEMPLATE_KEYS as readonly string[]).includes(requested) ? (requested as TemplateKey) : 'minimal';
+  const ai = await aiTemplateContent(c.env, user.id, key, name, sector, description);
+  if (ai) return c.json({ ...ai, ai_generated: true });
+  const hero = heuristicHeroCopy(name, sector, description);
+  return c.json({ ...hero, content: heuristicTemplateContent(key), ai_generated: false });
 });
 
 brand.post('/logo', async (c) => {

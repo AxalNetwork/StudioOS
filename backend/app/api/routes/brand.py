@@ -1,7 +1,7 @@
 """Task #24 — Brand & landing page generator (FastAPI dev mirror).
 
 Endpoints (all under /api/brand)
-    POST /suggest                       AI brand suggestions (5 names)
+    POST /landing/autofill              AI page content auto-fill
     POST /logo                          AI/SVG logo generation
     GET  /landing/by-project/{pid}      Authenticated read for the project owner
     PUT  /landing/by-project/{pid}      Authenticated upsert
@@ -254,33 +254,18 @@ def _project_owned(session: Session, project_id: int, user: User) -> Project:
     raise HTTPException(status_code=403, detail="not your project")
 
 
-def _heuristic_brand(description: str, sector: Optional[str]) -> List[Dict[str, Any]]:
-    """Deterministic brand options for the dev backend (prod generates these
-    via Workers AI on the Worker). Produces 5 plausible (name, tagline,
-    logo_prompt) triplets so the wizard is always usable in dev."""
-    seeds = ["Lumen", "Axon", "Forge", "Vela", "Quanta", "Helio", "Nimbus", "Stratus", "Orbit", "Beacon"]
-    suffixes = ["AI", "Labs", "Works", "Cloud", "Stack", "OS", "Sense", "Engine"]
-    h = int(hashlib.sha1((description or "x").encode()).hexdigest(), 16)
-    out = []
-    for i in range(5):
-        a = seeds[(h + i * 7) % len(seeds)]
-        b = suffixes[(h + i * 11) % len(suffixes)]
-        name = f"{a}{b}"
-        tag = f"{(sector or 'AI').strip().title()} that just works."
-        if i == 1:
-            tag = f"The fastest way to ship {sector or 'your idea'}."
-        if i == 2:
-            tag = f"{sector or 'Software'} for the next billion users."
-        if i == 3:
-            tag = "Built for founders who move fast."
-        if i == 4:
-            tag = "Less ops, more outcomes."
-        out.append({
-            "name": name,
-            "tagline": tag,
-            "logo_prompt": f"minimalist geometric logo, {a.lower()} mark, violet and white, vector, flat",
-        })
-    return out
+def _heuristic_hero_copy(name: str, sector: Optional[str], description: str) -> Dict[str, str]:
+    """Deterministic hero copy for the dev backend (prod enriches via Workers AI
+    on the Worker). Derives headline/subheadline/tagline from the founder's own
+    inputs. The dev backend has no per-template schema mirror, so the editor
+    layers its own TEMPLATE_CONTENT_SCHEMA defaults over the (empty) content."""
+    desc = (description or "").strip()
+    first = re.split(r"(?<=[.!?])\s+", desc)[0].strip() if desc else ""
+    headline = (first or name or "Building something new")[:120]
+    subheadline = desc[:200]
+    words = " ".join(desc.split()[:8])
+    tagline = (words or (sector or "") or name or "")[:120]
+    return {"headline": headline, "subheadline": subheadline, "tagline": tagline}
 
 
 # NOTE: The dev FastAPI backend is never deployed (prod is the Cloudflare
@@ -452,9 +437,11 @@ def _row_to_landing(row) -> Dict[str, Any]:
 # --- payloads --------------------------------------------------------------
 
 
-class SuggestPayload(BaseModel):
+class AutofillPayload(BaseModel):
     description: str = Field(..., min_length=4, max_length=2000)
+    name: Optional[str] = None
     sector: Optional[str] = None
+    template: Optional[str] = None
 
 
 class LogoPayload(BaseModel):
@@ -807,11 +794,14 @@ function switchTab(aud){{
 # --- routes ----------------------------------------------------------------
 
 
-@router.post("/suggest")
-def suggest(payload: SuggestPayload, user: User = Depends(get_current_user)):
-    # Dev backend has no Workers AI binding — serve the deterministic heuristic.
-    # Prod (the Worker) routes this through Workers AI.
-    return {"suggestions": _heuristic_brand(payload.description, payload.sector), "ai_generated": False}
+@router.post("/landing/autofill")
+def landing_autofill(payload: AutofillPayload, user: User = Depends(get_current_user)):
+    # Dev backend has no Workers AI binding and no per-template schema mirror —
+    # serve deterministic hero copy and let the editor layer its own template
+    # defaults over the (empty) content. Prod (the Worker) routes this through
+    # Workers AI and returns fully-populated per-template content.
+    hero = _heuristic_hero_copy(payload.name or "", payload.sector, payload.description)
+    return {**hero, "content": {}, "ai_generated": False}
 
 
 @router.post("/logo")
