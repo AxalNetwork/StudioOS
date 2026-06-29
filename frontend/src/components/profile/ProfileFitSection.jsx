@@ -16,7 +16,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   UserCircle, Target, Heart, Sparkles, Lock, Loader2, AlertCircle,
-  CheckCircle2, CalendarPlus, ArrowRight, Users,
+  CheckCircle2, CalendarPlus, Users,
 } from 'lucide-react';
 import { api, assessment } from '../../lib/api';
 import SkillRadar from '../play/SkillRadar';

@@ -21,7 +21,7 @@
  * IDs of questions to surface next; the chat client (AC-3) consumes
  * it to interleave context-sensitive nudges.
  */
-import { all, required, minChars, maxChars, oneOf, csvNonEmpty } from '../validators';
+import { all, required, minChars, maxChars, oneOf } from '../validators';
 
 const SECTORS = ['AI', 'B2B SaaS', 'Climate', 'Fintech', 'Healthcare', 'Consumer', 'Deep Tech', 'Other'];
 const STAGES = ['Idea', 'Prototype', 'Pre-seed', 'Seed', 'Series A', 'Later'];

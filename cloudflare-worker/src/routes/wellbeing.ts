@@ -59,7 +59,6 @@ const wellbeing = new Hono<{ Bindings: Env }>();
 const MIN_AGGREGATE_COHORT = 7;
 const ALLOWED_AGGREGATE_WINDOWS = [30, 90] as const;
 const COUNT_BUCKET = 5;
-const QUESTION_KEYS = ['stress', 'sleep', 'support', 'decisions', 'energy'] as const;
 
 const ALLOWED_RESOURCE_CATEGORIES = new Set(['therapy', 'peer_group', 'hotline', 'reading', 'coaching']);
 const FREE_TIER_PROFILE_VIEWS_PER_MONTH = 3;
@@ -271,13 +270,6 @@ async function ensureWellbeingSchema(env: Env): Promise<void> {
 // ---------------------------------------------------------------------------
 // Pulse check-ins (legacy weekly)
 // ---------------------------------------------------------------------------
-type CheckinRow = {
-  id: number; uid: string; user_id: number; week_anchor: string;
-  stress_enc: string; sleep_enc: string; support_enc: string;
-  decisions_enc: string; energy_enc: string; notes_enc: string | null;
-  created_at: string;
-};
-
 
 // ---------------------------------------------------------------------------
 // Task #33 — POST /checkins now uses the CANONICAL daily-pulse schema

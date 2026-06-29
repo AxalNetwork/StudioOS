@@ -118,7 +118,6 @@ profiling.post('/chat', async (c) => {
   if (!Array.isArray(messages)) {
     return c.json({ error: 'messages required' }, 400);
   }
-  const email = authedUser.email;
 
   await ensureProfileTable(c.env);
 

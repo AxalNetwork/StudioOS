@@ -140,10 +140,10 @@ sms.post('/sms/confirm-enrollment', async (c) => {
   if (!sessionInfo || !code) return c.json({ error: 'session_info and code required' }, 400);
   const stashed = await c.env.RATE_LIMITS.get(`sms-enroll:${user.id}:${sessionInfo}`);
   if (!stashed) return c.json({ error: 'session_expired', message: 'Verification session expired. Restart enrollment.' }, 410);
-  let phone: string, country: string;
+  let country: string;
   try {
     const obj = JSON.parse(stashed);
-    phone = String(obj.phone); country = String(obj.country);
+    country = String(obj.country);
   } catch {
     return c.json({ error: 'session_corrupted' }, 500);
   }

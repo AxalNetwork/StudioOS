@@ -15,7 +15,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Slide16x9, type DeckProps as RegistryDeckProps, BrandProvider, useBrandContext } from '../DeckBase';
+import { Slide16x9, type DeckProps as RegistryDeckProps, BrandProvider } from '../DeckBase';
 
 /* ───────────────────────────── types ────────────────────────────── */
 
@@ -2254,8 +2254,6 @@ export const Deck_sales_commercial_app: React.FC<RegistryDeckProps> = ({ data, e
 );
 
 const Deck_sales_commercial_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
-  const { accent: brandAccent } = useBrandContext();
-  const ac = brandAccent || C.accent;
   const merged = useMemo(
     () => mergeShape(SAMPLE_DATA, data || {}) as SalesData,
     [data],

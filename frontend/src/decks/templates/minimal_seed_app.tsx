@@ -863,9 +863,6 @@ const Slide3Solution: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) =>
   const before = data.before_state?.length
     ? data.before_state
     : ['Six tools', 'Manual sync', 'Reconciled by hand', 'Filed late'];
-  const after = data.after_state?.length
-    ? data.after_state
-    : ['One workflow', 'Auto-synced', 'Audited live', 'Done in seconds'];
   const diffs = data.differentiators?.length
     ? data.differentiators
     : [

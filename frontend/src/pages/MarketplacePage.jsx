@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Search, ShieldCheck, Star, Clock, MessageCircle, Send, X, Plus,
+  Search, ShieldCheck, Star, Clock, MessageCircle, Send, X,
   Briefcase, Filter, AlertCircle, Save, ExternalLink, Check, Inbox, Edit3,
 } from 'lucide-react';
 import { api } from '../lib/api';

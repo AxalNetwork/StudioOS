@@ -5,7 +5,6 @@ import {
   Users, ShieldAlert, RefreshCw, Sparkles, ListChecks, Circle, CircleDot,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { useAuth } from '../hooks/useAuthSync';
 import { useToast } from '../components/useToast';
 
 /**
@@ -13,7 +12,6 @@ import { useToast } from '../components/useToast';
  * deal terms, granted tiers, referral code, and redemption count.
  */
 export default function PartnerDealPortal() {
-  const { user } = useAuth();
   const { toast, showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({ deal: null, redemptions_count: 0, redemptions: [], next_milestones: [] });

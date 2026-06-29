@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { Link, useSearchParams } from 'react-router-dom';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
-import { Plus, Trash2, AlertCircle, Save, X, Download, RefreshCw, TrendingUp, FolderPlus } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { Plus, Trash2, AlertCircle, Save, X, Download, TrendingUp, FolderPlus } from 'lucide-react';
 import { api } from '../lib/api';
 
 const FIELDS = [
@@ -174,7 +174,6 @@ export default function MetricsPage() {
 
   const latest = snapshots[0];
   const hasProjects = projects.length > 0;
-  const projectMissing = !projectId && hasProjects === false;
 
   return (
     <div className="space-y-6">

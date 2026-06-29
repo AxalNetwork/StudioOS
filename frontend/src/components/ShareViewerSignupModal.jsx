@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, CheckCircle2, Loader2, ArrowRight, FileSignature, MessageSquare } from 'lucide-react';
 import { useEscapeClose } from './useEscapeClose';
@@ -19,7 +19,7 @@ export default function ShareViewerSignupModal({
     email: '', name: '', role: category === 'commercial' ? 'partner' : 'investor',
   });
   const [user, setUser] = useState(null);
-  const [ndaDoc, setNdaDoc] = useState(null);
+  const [, setNdaDoc] = useState(null);
   const [dealPack, setDealPack] = useState([]);
   const [feedback, setFeedback] = useState({
     overall_note: '', problem_fit: '', willingness_to_pay: '', contact: '',
@@ -39,7 +39,7 @@ export default function ShareViewerSignupModal({
     { key: 'confused', label: '❓ Confused' },
     { key: 'want_more', label: '💡 Want more' },
   ];
-  const [dealForm, setDealForm] = useState({
+  const [dealForm] = useState({
     check_size: '$25,000', valuation_cap: '$8M', discount: '20%',
   });
 

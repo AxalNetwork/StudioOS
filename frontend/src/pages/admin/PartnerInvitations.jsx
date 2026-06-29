@@ -1,8 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Mail, Plus, RefreshCw, Ban, Send, Copy, CheckCircle2, Clock, AlertTriangle,
-  X, Search, Handshake, ExternalLink, Loader2, ShieldAlert, TrendingUp, Users,
+  X, Search, Handshake, Loader2, ShieldAlert, TrendingUp, Users,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useToast } from '../../components/useToast';

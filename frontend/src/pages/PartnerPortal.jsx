@@ -19,7 +19,7 @@ export default function PartnerPortal() {
   const { user } = useAuth();
   const [deals, setDeals] = useState([]);
   const [calls, setCalls] = useState([]);
-  const [partners, setPartners] = useState([]);
+  const [, setPartners] = useState([]);
   const [investors, setInvestors] = useState([]);
   const [portfolio, setPortfolio] = useState(null);
   const [selectedLP, setSelectedLP] = useState(null);

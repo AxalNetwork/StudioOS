@@ -6,8 +6,6 @@ import {
   AlertTriangle, Sparkles, Scale, DollarSign, Clock,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { useAuth } from '../hooks/useAuthSync';
-import { markMilestone } from '../lib/spinoutLabHooks';
 import AxalCheckout from '../components/AxalCheckout';
 import { useIncorporationStatus } from '../hooks/useIncorporationStatus';
 import IncorporationStatusBadge from '../components/IncorporationStatusBadge';
@@ -658,7 +656,6 @@ function DoneStep({ jurisdiction, order, raOffer, complianceProducts, navigate }
 
 export default function IncorporatePage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [jurisdictions, setJurisdictions] = useState([]);
   const [projects, setProjects] = useState([]);

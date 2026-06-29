@@ -17,7 +17,7 @@ export default function VerifyEmailPage() {
   // response (NOT from the initial check), since T22.2 narrowed the GET
   // /verify-email endpoint to `{ valid: true }` to avoid leaking PII to
   // anyone replaying the link.
-  const [userData, setUserData] = useState(null);
+  const [, setUserData] = useState(null);
   const [totpData, setTotpData] = useState(null);
   const [copied, setCopied] = useState(false);
   // Which "I can't scan the QR" app card is expanded. null = all collapsed.

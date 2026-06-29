@@ -8,11 +8,10 @@ import SafeMount from './components/SafeMount';
 import CookieConsent from './components/CookieConsent';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import {
-  LayoutDashboard, Target, FileText, Users, DollarSign,
-  Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
-  Globe, Brain, Activity, LogOut, Shield,
-  ChevronDown, ChevronLeft, ChevronRight, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package, Lock, Calendar,
-  Settings as SettingsIcon, PieChart as PieIcon, Heart, Bookmark, Megaphone, BookOpen, Search
+  Menu, X,
+  LogOut, Shield,
+  ChevronDown, ChevronLeft, ChevronRight, Eye, ArrowLeft, Sparkles,
+  Search
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, defaultOpenGroups, filterItemsByTier, hasTier, hasInvestorTier } from './sidebarConfig';
 import PaywallModal, { openPaywall } from './components/PaywallModal';

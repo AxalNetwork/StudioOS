@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Scale, Banknote, Building2, ClipboardCheck, Plus, Loader2, X, FileText, Sparkles, ShieldCheck, Send, CheckCircle2, AlertTriangle, Rocket } from 'lucide-react';
+import { Scale, Banknote, ClipboardCheck, Plus, Loader2, X, FileText, Sparkles, ShieldCheck, Send, CheckCircle2, AlertTriangle, Rocket } from 'lucide-react';
 import { api } from '../lib/api';
 import SpinoutWizard from '../components/SpinoutWizard';
 
@@ -103,7 +103,7 @@ export default function LegalCapitalPage() {
 
 function LegalTab({ dealId, canEdit }) {
   const [docs, setDocs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [generating, setGenerating] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [err, setErr] = useState('');
@@ -163,7 +163,7 @@ function LegalTab({ dealId, canEdit }) {
 
 function CapitalTab({ dealId, canEdit }) {
   const [calls, setCalls] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [err, setErr] = useState('');
 

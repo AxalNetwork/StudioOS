@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Code, Copy, Check, Globe, Shield, Key, Server } from 'lucide-react';
 import InfoStrip from '../components/InfoStrip';
 

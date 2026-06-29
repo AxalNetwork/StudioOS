@@ -6,7 +6,7 @@
  * format is plain text (no MarkdownV2), the per-tweet ceiling is 280
  * chars and threading is supported.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Send, Plus, RefreshCw, Loader2, Trash2, Edit3, AlertTriangle, CheckCircle2,
   X as XIcon, Image as ImageIcon, Calendar, Sparkles, ExternalLink,

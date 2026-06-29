@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Loader2, Check } from 'lucide-react';
 import { api } from '../lib/api';
 
@@ -10,7 +9,6 @@ import { api } from '../lib/api';
 //
 // `steps` is: [{ key, title, description?, render: ({values, set, error}) => JSX, validate?: (values) => string|null }]
 export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 'Finish' }) {
-  const navigate = useNavigate();
   const [stepIdx, setStepIdx] = useState(0);
   const [values, setValues] = useState({});
   const [hydrated, setHydrated] = useState(false);

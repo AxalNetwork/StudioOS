@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Handshake, Users, Scale, Globe, Banknote, Zap,
+  Users, Scale, Globe, Banknote, Zap,
   ShieldCheck, TrendingUp, CheckCircle, ArrowRight,
   Code, Megaphone, Search,
 } from 'lucide-react';

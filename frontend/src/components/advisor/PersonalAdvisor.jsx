@@ -33,7 +33,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { safeExternalUrl } from '../../lib/url';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   Sparkles, Send, X, Maximize2, Minimize2, LayoutDashboard, HelpCircle,
   Loader2, CheckCircle2, ArrowRight, MessageSquare, SkipForward, BookOpen,

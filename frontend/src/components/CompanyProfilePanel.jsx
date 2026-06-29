@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { safeExternalUrl } from '../lib/url';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';

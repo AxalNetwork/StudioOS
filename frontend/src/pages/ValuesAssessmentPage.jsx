@@ -8,7 +8,7 @@
  */
 import { useEffect, useState, useMemo } from 'react';
 import {
-  Heart, ArrowLeft, ArrowRight, Send, Loader2, AlertCircle,
+  Heart, Send, Loader2, AlertCircle,
   RefreshCw, CheckCircle, ChevronRight,
 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -102,7 +102,7 @@ export default function ValuesAssessmentPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const [savedAt, setSavedAt] = useState(0);
+  const [, setSavedAt] = useState(0);
 
   async function load() {
     setLoading(true);

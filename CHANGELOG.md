@@ -10,6 +10,32 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Clear code-quality scanning alerts — Task #3
+
+Removed standing CodeQL Note/Warning quality alerts (unused
+imports/variables/functions, useless assignments, orphaned dead-code chains)
+across `frontend/`, `cloudflare-worker/`, and `backend/`. Behavior-preserving
+only: every removal verified unused (no JSX/dynamic/re-export reference);
+`npm run test:drift` green, frontend `npm run build` clean, and the dev
+FastAPI backend still imports.
+
+- Frontend: dead imports/vars/components pruned across ~70 pages, components,
+  and deck templates — e.g. orphaned `useNavigate`/`useAuth` imports, the
+  abandoned brand-accent chains in deck templates (computed an accent that was
+  never applied), and unused recharts series imports.
+- Worker: unused imports/vars cleared in routes/services (verified with
+  `tsc --noEmit` plus `--noUnusedLocals`).
+- Backend: unused imports/vars removed; empty-except blocks given explicit
+  handling; the duplicate dict key de-duplicated; implicit string-concat list
+  and the unused loop var fixed.
+
+**Intentional exception** — `frontend/src/pages/admin/AdminX.jsx`'s
+`AdminXFull` is left in place despite its unused-function Note. The file's
+docstring marks the X (Twitter) broadcaster as TEMPORARILY DISABLED and
+`AdminXFull` as "preserved verbatim — no logic loss" with a documented
+re-enable runbook; deleting it would destroy intentionally-kept feature code
+and invalidate that runbook.
+
 ## Fix real security findings in hand-written source — Task #23
 
 Closed the remaining High/Error code-scanning alerts that survive the

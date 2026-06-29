@@ -5,7 +5,7 @@
  * booking, and after a booking is completed file a 1-5 star review.
  */
 import { useEffect, useState } from 'react';
-import { Search, Star, Calendar, Clock, Video, X, Send, MessageCircle, Loader2 } from 'lucide-react';
+import { Search, Star, Calendar, Clock, Video, X, MessageCircle, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import UserTrustBadge from '../components/UserTrustBadge';

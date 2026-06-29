@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Slide16x9, Editable, DeckProps, DeckData, v, fmtUSD, fmtPct, fmtNum, BrandProvider, useBrandContext } from '../DeckBase';
+import { Slide16x9, Editable, DeckProps, v, fmtUSD, fmtPct, fmtNum, BrandProvider, useBrandContext } from '../DeckBase';
 
 // ─────────────────────────────────────────────────────────────────
 // Sequoia Classic — narrative-driven 12-slide investor deck.

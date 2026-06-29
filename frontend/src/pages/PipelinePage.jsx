@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Layers, Plus, Loader2, Sparkles, X, Zap, TrendingUp, CheckCircle2, RotateCcw, AlertTriangle, Activity, Target, ThumbsUp, MessageSquare, Users as UsersIcon, EyeOff } from 'lucide-react';
+import { Layers, Plus, Loader2, Sparkles, X, TrendingUp, CheckCircle2, RotateCcw, AlertTriangle, Activity, Target, MessageSquare, Users as UsersIcon, EyeOff } from 'lucide-react';
 import { api } from '../lib/api';
 import SpinoutWizard from '../components/SpinoutWizard';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -67,7 +67,7 @@ export default function PipelinePage() {
   // project_created event triggers a quick reload so cards reflect the
   // change without the user pressing refresh. Skipped while a local move
   // is in flight to avoid clobbering the optimistic UI.
-  const [liveTick, setLiveTick] = useState(0);
+  const [, setLiveTick] = useState(0);
   // Vote tallies pushed live via WebSocket — keyed by deal_id. Each entry
   // mirrors the GET /pipeline/votes/{id} payload. The DealCard widget uses
   // this as an override so it doesn't have to refetch on every vote event.

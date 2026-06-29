@@ -7,7 +7,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { FONT_PAIRING_OPTIONS } from '../decks/templates/axal_spinout_demoday_app';
-import { AUDIENCES, GOALS, AUDIENCE_LABELS as PAGE_AUDIENCE_LABELS, VISUAL_TEMPLATE_PALETTES, TEMPLATE_CONTENT_SCHEMA } from '../lib/brand/templates.js';
+import { AUDIENCES, AUDIENCE_LABELS as PAGE_AUDIENCE_LABELS, VISUAL_TEMPLATE_PALETTES, TEMPLATE_CONTENT_SCHEMA } from '../lib/brand/templates.js';
 import { suggestAudienceAndGoal, getRecommendedTemplatesForAudience, generateInitialBrandKit } from '../lib/brand/flow.js';
 
 // Task #24 — Brand & landing page generator.

@@ -3,7 +3,7 @@ import { reportError } from '../lib/log';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
-import { ArrowRight, ChevronDown, ChevronRight, Filter } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
 import ReferenceChecksPanel from '../components/ReferenceChecksPanel';
 import FounderRiskBadge from '../components/FounderRiskBadge';
 import LockedFounderCard from '../components/LockedFounderCard';

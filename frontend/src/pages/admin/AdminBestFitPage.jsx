@@ -9,7 +9,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   ShieldCheck, Loader2, AlertCircle, RefreshCw, Users, Target, Heart,
-  Sparkles, Gauge, Rocket, ChevronRight,
+  Gauge, Rocket, ChevronRight,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import SkillRadar from '../../components/play/SkillRadar';

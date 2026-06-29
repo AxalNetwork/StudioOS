@@ -4,7 +4,6 @@
  * private record of investment decisions and their post-hoc outcomes.
  */
 import { Hono } from 'hono';
-import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { isAdmin, isInvestor, isPartner, mapError, nowIso, newUid } from './_t13t14t15_helpers';

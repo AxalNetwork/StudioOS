@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import {
   Calendar, MapPin, Clock, CheckCircle2, XCircle, Loader2, AlertTriangle, Download,
   CreditCard, LogIn,
@@ -36,7 +36,7 @@ export default function InviteRsvpPage() {
   const { token } = useParams();
   const [invite, setInvite] = useState(null);
   const [event, setEvent] = useState(null);
-  const [agenda, setAgenda] = useState([]);
+  const [, setAgenda] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 

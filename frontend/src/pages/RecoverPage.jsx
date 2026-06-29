@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Shield, Mail, MessageSquare, KeyRound, Users, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Mail, MessageSquare, KeyRound, Users, ShieldAlert } from 'lucide-react';
 
 // Task #50 — Lost-TOTP recovery landing page. Lists available layers in
 // order of friction. Layers fan out into their own mini-flows below.
@@ -81,7 +81,7 @@ export default function RecoverPage() {
 
   // SMS
   const [smsSession, setSmsSession] = useState('');
-  const [smsLast4, setSmsLast4] = useState('');
+  const [, setSmsLast4] = useState('');
   const [smsCode, setSmsCode] = useState('');
 
   // Admin escalation reason
@@ -99,7 +99,6 @@ export default function RecoverPage() {
     (async () => {
       setBusy(true); setError(''); setInfo('');
       try {
-        const path = (isTrusted || isAdmin) ? '/claim' : '/email/verify';
         const r = (isTrusted || isAdmin)
           ? await post('/claim', { token: linkToken, ticket_id: Number(linkTicket) })
           : await fetch(`/api/auth/recover/email/verify?token=${encodeURIComponent(linkToken)}&ticket=${encodeURIComponent(linkTicket)}`, { credentials: 'include' })

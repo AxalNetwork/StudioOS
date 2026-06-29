@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Plus, Search, Filter, Briefcase, Clock, DollarSign, ShieldCheck, Edit3,
+  Plus, Search, Filter, Briefcase, Clock, ShieldCheck, Edit3,
   Trash2, AlertCircle, X, Check, ExternalLink, Package, ToggleLeft, ToggleRight,
 } from 'lucide-react';
 import { api } from '../lib/api';

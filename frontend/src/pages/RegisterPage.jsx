@@ -12,7 +12,7 @@ export default function RegisterPage() {
   useForcedLightTheme();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ email: '', name: '' });
-  const [totpData, setTotpData] = useState(null);
+  const [totpData] = useState(null);
   const [verifyCode, setVerifyCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

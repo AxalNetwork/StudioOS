@@ -17,7 +17,7 @@ import UseOfFundsEditor from '../components/UseOfFundsEditor';
 import SpinoutSlideEditor from '../components/SpinoutSlideEditor';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
-import { spinoutHasRealPains, spinoutPreviewMeta as computeSpinoutPreviewMeta } from './spinoutPreview';
+import { spinoutPreviewMeta as computeSpinoutPreviewMeta } from './spinoutPreview';
 
 /**
  * Task #16 (DE) — Pitch Deck Builder rewrite.

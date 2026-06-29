@@ -205,7 +205,6 @@ import adminStripe from './routes/admin_stripe';
 import payments from './routes/payments';
 import { Jobs } from './models/jobs';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
-import { CRON_TRIGGERS } from './routes/infra';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
 import { securityHeadersMiddleware } from './middleware/securityHeaders';

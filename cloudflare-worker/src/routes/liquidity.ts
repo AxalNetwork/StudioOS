@@ -13,7 +13,6 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin } from '../auth';
-import { Jobs } from '../models/jobs';
 import { enqueueJob } from '../services/queue';
 import { Listings, Matches, LiquidityEvents } from '../models/liquidity';
 import { logActivity } from './partnernet';

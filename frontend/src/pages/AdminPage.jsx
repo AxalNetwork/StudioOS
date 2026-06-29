@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { reportError } from '../lib/log';
 import { api } from '../lib/api';
-import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, Clock, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2, ShieldAlert, KeyRound, Trash2, AlertTriangle, Heart, Eye, EyeOff, BadgeCheck, Ticket, Plus, CreditCard, Package, Zap } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2, ShieldAlert, KeyRound, Trash2, AlertTriangle, Heart, Eye, EyeOff, BadgeCheck, Ticket, Plus, CreditCard, Package, Zap } from 'lucide-react';
 import { PERSONAS as PERSONA_TAXONOMY } from '../lib/personas';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
@@ -3515,7 +3514,7 @@ function PaymentsPanel() {
     if (webhookBusy) return;
     setWebhookBusy(true);
     try {
-      const r = await api.adminStripeRegisterWebhook();
+      await api.adminStripeRegisterWebhook();
       showToast({ kind: 'ok', msg: 'Webhook registered — signing secret stored automatically.' });
       loadWebhooks();
     } catch (e) { showToast({ kind: 'err', msg: e.message || 'Registration failed' }); }

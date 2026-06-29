@@ -4,18 +4,16 @@ import { api } from '../lib/api';
 import { EXPLAINERS } from '../lib/explainers';
 import { useToast } from '../components/useToast';
 import {
-  User, Globe, Mail, ShieldCheck, Bell, Lock, Briefcase, Users,
+  User, ShieldCheck, Bell, Lock,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
   Plus, X, KeyRound, Palette, Plug, CreditCard, UserCog,
-  Sun, Moon, ChevronDown, Check, Database, Ban, Scale, Loader2,
+  Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 // Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
 import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
-// Task #8 (IH) — Data Imports tab (Settings → Data Imports).
-import DataImportsTab from '../components/DataImportsTab';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
 import AxalCheckout from '../components/AxalCheckout';
 import BillingDashboard from '../components/BillingDashboard';
