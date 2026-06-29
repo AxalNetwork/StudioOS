@@ -95,11 +95,13 @@ jobs:
         with:
           node-version: '22'
       - name: Fetch base branch
-        run: git fetch origin ${{ github.base_ref }} --depth=1
-      - name: Run LFS size gate
-        run: node scripts/lfs-size-gate.mjs --against=origin/${{ github.base_ref }}
         env:
           GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: git fetch origin "$GITHUB_BASE_REF" --depth=1
+      - name: Run LFS size gate
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: node scripts/lfs-size-gate.mjs --against="origin/$GITHUB_BASE_REF"
 
   # -------------------------------------------------------------------------
   # FastAPI dev backend: import + smoke. Catches obvious Python breakage in

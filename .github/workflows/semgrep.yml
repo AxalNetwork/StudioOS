@@ -31,6 +31,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Run semgrep (public OSS rules)
+        # Path exclusions for generated/pasted trees live in the ROOT-ANCHORED
+        # .semgrepignore (/docs/, /attached_assets/) which semgrep reads from
+        # the working directory. We deliberately avoid `--exclude docs` here:
+        # bare `--exclude` matches by basename project-wide and would also
+        # strip real source dirs (frontend/src/pages/docs, .../lib/docs).
         run: |
           semgrep scan \
             --config p/default \
