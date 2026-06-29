@@ -10,6 +10,38 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Fix reversed tail-consumer loop flooding `studioos` observability — Task #25
+
+Cloudflare Observability showed a self-amplifying flood of `Handler does not
+export a tail() function.` errors on the production `studioos` worker (~1,900 in
+a short window). Root cause was a REVERSE tail-consumer binding in the live
+environment wiring `studioos-tail` → `studioos`. The main worker is the log
+*producer* — it only exports `fetch()`/`scheduled()`, no `tail()` — so every
+tail batch routed back to it threw, and each thrown error was itself logged and
+produced another tail event, making the loop self-sustaining.
+
+The correct one-directional topology (`studioos` producer → `studioos-tail`
+consumer → `studioos-logs` R2) is already declared correctly in the root
+`wrangler.toml` under both `[[tail_consumers]]` and
+`[[env.production.tail_consumers]]` (kept in lockstep). No code wiring change
+was needed; the bad reverse binding exists only in the live environment.
+
+- **Repo cleanup** (`cloudflare-worker-tail/wrangler.toml`): removed the two
+  references to a non-existent `docs/CLOUDFLARE_DASHBOARD_TASKS.md` and the
+  instruction to manually bind a tail consumer in the dashboard. The header now
+  states explicitly that producer→consumer wiring is owned entirely by the root
+  `wrangler.toml`, that there is NO dashboard step, and that a manual (esp.
+  reverse) dashboard binding is what triggers this incident. The existing NOTE
+  against adding `[[tail_consumers]]` to the consumer config is retained.
+- **Rejected**: adding a no-op `tail()` to `studioos` — it would silently
+  swallow the misrouted events and mask the misconfiguration rather than fix it.
+- **Operator action remaining (needs Cloudflare access)**: remove the reverse
+  binding on the live `studioos-tail` worker — either re-deploy `studioos-tail`
+  from the clean config (`cd cloudflare-worker-tail && npx wrangler deploy`) to
+  reconcile its tail-consumer list to empty, or delete `studioos` from its
+  tail/trace consumers in the dashboard. This is the step that actually stops
+  the errors; it cannot be done from the repo alone.
+
 ## Stripe import error states are now covered by route-level regression tests — Task #13
 
 `POST /api/progress/metrics/:projectId/import-stripe` returns four distinct
