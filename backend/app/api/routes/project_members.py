@@ -43,7 +43,7 @@ logger = logging.getLogger("studioos.project_members")
 router = APIRouter(prefix="/projects", tags=["Project Members"])
 
 _MEMBER_ROLES = {"cofounder", "advisor"}
-_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@.]+$")
 
 
 def _sanitize_role(raw) -> str:

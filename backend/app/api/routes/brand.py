@@ -506,7 +506,7 @@ class TaglinePayload(BaseModel):
     market_angle: str = Field(..., min_length=1)
 
 
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s.]+$")
 
 
 class WaitlistPayload(BaseModel):
@@ -524,7 +524,12 @@ class WaitlistPayload(BaseModel):
 # strip <script>/<foreignObject> blocks and on*= event handlers before
 # accepting the payload. Anything that doesn't start with <svg is dropped.
 _SVG_DANGER_TAG_BLOCK = re.compile(
-    r"<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*>.*?<\s*/\s*\1\s*>",
+    # Tempered greedy body ([^<] plus any `<` that is NOT the closing tag) is
+    # linear — it matches the same language as the old `.*?` between the open
+    # and close tags but cannot backtrack catastrophically (CodeQL py/redos).
+    r"<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*>"
+    r"[^<]*(?:<(?!\s*/\s*\1\s*>)[^<]*)*"
+    r"<\s*/\s*\1\s*>",
     re.IGNORECASE | re.DOTALL,
 )
 _SVG_DANGER_TAG_VOID = re.compile(

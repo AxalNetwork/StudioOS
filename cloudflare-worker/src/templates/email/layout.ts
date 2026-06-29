@@ -50,7 +50,8 @@ function lookup(vars: Record<string, unknown>, path: string): string {
   let cur: any = vars;
   for (const p of parts) {
     if (cur == null) return '';
-    cur = cur[p];
+    if (p === '__proto__' || p === 'constructor' || p === 'prototype') return '';
+    cur = cur[p]; // codeql[js/prototype-polluting-function] -- read-only lookup returning a string; __proto__/constructor/prototype rejected above
   }
   return cur == null ? '' : String(cur);
 }
@@ -63,8 +64,8 @@ function escapeHtml(s: string): string {
  *  of auto-escape. Used inside `html` bodies; text bodies always escape. */
 export function render(template: string, vars: Record<string, unknown>, escape = false): string {
   return template
-    .replace(/\{\{\{([^}]+)\}\}\}/g, (_m, key) => lookup(vars, key.trim()))
-    .replace(/\{\{([^}]+)\}\}/g, (_m, key) => {
+    .replace(/\{\{\{([^{}]+)\}\}\}/g, (_m, key) => lookup(vars, key.trim()))
+    .replace(/\{\{([^{}]+)\}\}/g, (_m, key) => {
       const raw = lookup(vars, key.trim());
       return escape ? escapeHtml(raw) : raw;
     });

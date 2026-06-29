@@ -133,8 +133,21 @@ function decodeHtmlEntities(s: string): string {
   return out.trim();
 }
 
+// Precompiled, literal per-tag matchers — avoids constructing a RegExp from a
+// (here trusted, fixed) tag name on every call (CodeQL js/non-literal-regexp).
+const TAG_RE: Record<string, RegExp> = {
+  title: /<title[^>]*>([\s\S]*?)<\/title>/i,
+  link: /<link[^>]*>([\s\S]*?)<\/link>/i,
+  pubDate: /<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i,
+  'dc:date': /<dc:date[^>]*>([\s\S]*?)<\/dc:date>/i,
+  description: /<description[^>]*>([\s\S]*?)<\/description>/i,
+  'content:encoded': /<content:encoded[^>]*>([\s\S]*?)<\/content:encoded>/i,
+};
+
 function extractTag(item: string, tag: string): string {
-  const m = item.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+  const re = TAG_RE[tag];
+  if (!re) return '';
+  const m = item.match(re);
   return m ? decodeHtmlEntities(m[1]) : '';
 }
 

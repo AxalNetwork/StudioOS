@@ -920,7 +920,7 @@ async function extractPdfText(bytes: Uint8Array): Promise<{ index: number; text:
       out.push(decodePdfLiteral(mm[1]));
     }
     // [(a)(b)(c)] TJ
-    const tjArrRe = /\[((?:[^\[\]]|\\.)+)\]\s*TJ/g;
+    const tjArrRe = /\[((?:[^\[\]\\]|\\.)+)\]\s*TJ/g;
     while ((mm = tjArrRe.exec(page)) !== null) {
       const litRe = /\(((?:\\.|[^\\)])*)\)/g;
       let lm: RegExpExecArray | null;

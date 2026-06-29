@@ -322,7 +322,7 @@ def _ensure_profile_table(session: Session) -> None:
         ("updated_at", "TIMESTAMP"),
     ):
         try:
-            session.exec(text(f"ALTER TABLE partner_profiles ADD COLUMN {col} {ddl}"))
+            session.exec(text(f"ALTER TABLE partner_profiles ADD COLUMN {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
             session.commit()
         except Exception:
             session.rollback()

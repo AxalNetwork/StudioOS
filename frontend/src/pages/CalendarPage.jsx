@@ -146,9 +146,9 @@ export default function CalendarPage() {
       error: { kind: 'error', text: `Outlook connection failed${reasonSuffix}.` },
       failed: { kind: 'error', text: `Outlook connection failed${reasonSuffix}.` },
     });
-    const gOutcome = Object.prototype.hasOwnProperty.call(GOOGLE_OUTCOMES, qs.get('google') || '')
+    const gOutcome = Object.prototype.hasOwnProperty.call(GOOGLE_OUTCOMES, qs.get('google') || '') // codeql[js/user-controlled-bypass] -- query value only selects a frozen UI-message map entry (hasOwnProperty-guarded); gates no sensitive action
       ? GOOGLE_OUTCOMES[qs.get('google')] : null;
-    const mOutcome = Object.prototype.hasOwnProperty.call(MS_OUTCOMES, qs.get('microsoft') || '')
+    const mOutcome = Object.prototype.hasOwnProperty.call(MS_OUTCOMES, qs.get('microsoft') || '') // codeql[js/user-controlled-bypass] -- query value only selects a frozen UI-message map entry (hasOwnProperty-guarded); gates no sensitive action
       ? MS_OUTCOMES[qs.get('microsoft')] : null;
     if (gOutcome) setGoogleResult(gOutcome);
     if (mOutcome) setMicrosoftResult(mOutcome);

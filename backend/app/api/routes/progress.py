@@ -281,7 +281,7 @@ def _serialize_signup(r: Any) -> dict:
 
 
 def _load_customer_signup(session: Session, project_id: int, signup_id: int):
-    return session.exec(text(
+    return session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- concatenates a module-constant SELECT with a static WHERE clause; all values are bound params, dev-only FastAPI not exposed to user input
         _WAITLIST_SELECT + " WHERE id = :sid AND project_id = :pid AND audience = 'customer'"
     ), params={"sid": signup_id, "pid": project_id}).mappings().first()
 
@@ -408,7 +408,7 @@ def list_waitlist_customers(
     p = _get_project_or_404(session, project_id)
     _ensure_can_view(p, user)
     _ensure_waitlist_crm_schema(session)
-    rows = session.exec(text(
+    rows = session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- concatenates a module-constant SELECT with a static WHERE clause; all values are bound params, dev-only FastAPI not exposed to user input
         _WAITLIST_SELECT + " WHERE project_id = :pid AND audience = 'customer' "
         "ORDER BY created_at DESC, id DESC LIMIT 500"
     ), params={"pid": project_id}).mappings().all()

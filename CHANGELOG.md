@@ -10,6 +10,65 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Fix real security findings in hand-written source — Task #23
+
+Closed the remaining High/Error code-scanning alerts that survive the
+generated/pasted-file exclusions, split into genuine fixes and justified inline
+suppressions of confirmed false positives. No sanitizer was weakened —
+uploaded-SVG/PDF/email handling still rejects everything it did before. Sole
+gate: `npm run test:drift` (green; note it does NOT run CodeQL/Semgrep).
+
+**Genuine fixes**
+- ReDoS / catastrophic-backtracking hardening on attacker-controlled input:
+  - `cloudflare-worker/src/routes/imports.ts` — PDF `TJ`-array regex bounded
+    `[^\[\]\\]` class (#356).
+  - `cloudflare-worker/src/templates/email/layout.ts` — polynomial template
+    regexes use `[^{}]` (#3450).
+  - `backend/app/api/routes/brand.py` — SVG danger-tag block is tempered-greedy;
+    `_EMAIL_RE` linear `[^@\s.]+` (#2324/#2325).
+  - `backend/app/api/routes/project_members.py` — invite `_EMAIL_RE` linear
+    `[^\s@.]+` (#3707).
+- `cloudflare-worker/src/services/market-data.ts` — precompiled per-tag regex map
+  instead of a non-literal RegExp per call (#340).
+- `backend/app/api/routes/email.py` — SHA1 id marked `usedforsecurity=False`
+  (#292).
+- Test-regex correctness: anchored expectations in `newsRender.test.ts`
+  (#2914/#2915); corrected `rel=stylesheet` filter in
+  `landing_templates_render.test.ts` (#3615).
+
+**Confirmed false positives — justified inline suppressions (behavior unchanged)**
+- `ProjectDetail.jsx` — `js/xss-through-dom`; `<a href>` is http/https
+  protocol-validated before render.
+- `CalendarPage.jsx` — `js/user-controlled-bypass`; query value only selects a
+  frozen, `hasOwnProperty`-guarded UI-message map entry.
+- `LoginPage.jsx` — `js/client-side-unvalidated-url-redirection`; `safeNextPath()`
+  returns only same-origin `/`-prefixed paths.
+- `nameCheck.ts` — `js/double-escaping`; intentional entity normalization.
+- `scripts/lfs-size-gate.mjs` — `js/indirect-command-line-injection`; CI-only,
+  args from trusted git output.
+- `settings.py` — Semgrep `unverified-jwt-decode`; token already verified
+  upstream, decode only reads `jti` for the sessions UI.
+- SQLAlchemy `text()` Semgrep errors across `migrations.py`, `profiling.py`,
+  `progress.py` — `# nosemgrep` + reason; static schema SQL and bound parameters,
+  no user data interpolated (dev-only FastAPI).
+
+**Prototype-pollution path walkers (`js/prototype-polluting-function`)**
+- Read-only/static walkers get a `__proto__/constructor/prototype` guard plus a
+  narrow suppression: `mergeFields.ts`, `legalMergeSchema.ts`,
+  `templates/email/layout.ts`, `frontend/src/decks/DeckBase.tsx`
+  (#341/#3300/#343/#392).
+- Deck-template dotted-path *writers* that assign caller-supplied paths now reject
+  `__proto__/constructor/prototype` segments — a real fix matching the existing
+  guard in the Shape-A templates and `axal_spinout_demoday_app.tsx`:
+  `demo_day_app.tsx`, `investor_appendix_app.tsx`, `narrative_brand_app.tsx`,
+  `partnership_bd_app.tsx`, `sales_commercial_app.tsx` (#3453/#941/#862).
+
+CodeQL inline suppressions use `// codeql[rule-id] -- reason` (block-comment form
+inside JSX attributes). There is no prior repo precedent for inline CodeQL
+suppression; if GitHub code scanning does not honor inline markers, these FPs
+must be dismissed in the SARIF/UI instead — the guards above remain real
+hardening regardless.
+
 ## Fix reversed tail-consumer loop flooding `studioos` observability — Task #25
 
 Cloudflare Observability showed a self-amplifying flood of `Handler does not

@@ -301,7 +301,7 @@ def _current_jti_from_request(request: Request) -> Optional[str]:
         token = auth.split(" ", 1)[1].strip()
         if not token:
             return None
-        payload = jwt.decode(token, options={"verify_signature": False})
+        payload = jwt.decode(token, options={"verify_signature": False})  # nosemgrep: python.jwt.security.unverified-jwt-decode.unverified-jwt-decode -- token already verified upstream by get_current_user; signature-free decode only reads jti for the active-sessions UI, never trusts claims
         jti = payload.get("jti")
         return jti if isinstance(jti, str) and jti else None
     except Exception:

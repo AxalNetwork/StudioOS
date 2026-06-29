@@ -713,7 +713,7 @@ function DataRoomSection({ project, onSaved, onError }) {
         </button>
         {url.trim() && valid && (
           <a
-            href={url.trim()}
+            href={url.trim() /* codeql[js/xss-through-dom] -- url is http/https protocol-validated via the `valid` flag before this <a> renders; not raw HTML injection */}
             target="_blank"
             rel="noreferrer noopener"
             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
@@ -852,7 +852,7 @@ function ProductDemoSection({ project, onSaved, onError }) {
         </button>
         {liveUrl.trim() && liveValid && (
           <a
-            href={liveUrl.trim()}
+            href={liveUrl.trim() /* codeql[js/xss-through-dom] -- liveUrl is http/https protocol-validated via the `liveValid` flag before this <a> renders; not raw HTML injection */}
             target="_blank"
             rel="noreferrer noopener"
             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"

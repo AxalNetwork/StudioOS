@@ -106,7 +106,7 @@ for (const key of TEMPLATE_KEYS) {
       'no external font URLs',
     );
     assert.ok(
-      !/<link\b[^>]*rel=["']?stylesheet/i.test(html),
+      !/\brel\s*=\s*["']?\s*stylesheet/i.test(html),
       'no external stylesheet <link>',
     );
 

@@ -179,6 +179,9 @@ const usd = (n: number) => {
 };
 
 const setIn = <T,>(obj: T, path: (string | number)[], v: unknown): T => {
+  // Prototype-pollution guard: reject __proto__/constructor/prototype path
+  // segments before any nested write (CodeQL js/prototype-polluting-function).
+  if (path.some((k) => k === '__proto__' || k === 'constructor' || k === 'prototype')) return obj;
   const next = structuredClone(obj) as Record<string, unknown>;
   let cur: Record<string, unknown> = next as Record<string, unknown>;
   for (let i = 0; i < path.length - 1; i++) cur = cur[path[i] as string] as Record<string, unknown>;

@@ -49,7 +49,7 @@ const LFS_TRACKED_EXTS = new Set([
 const args = new Set(process.argv.slice(2));
 
 function sh(cmd) {
-  return execSync(cmd, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+  return execSync(cmd, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim(); // codeql[js/indirect-command-line-injection] -- CI-only LFS gate; cmd is fixed git subcommands over trusted git output, no external/runtime input
 }
 
 function tryShOrEmpty(cmd) {
