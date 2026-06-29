@@ -213,6 +213,29 @@ function svgLogo(name: string, color = '#7c3aed'): string {
     + `</svg>`;
 }
 
+// Same monogram as svgLogo, but sized to fill its container (100% w/h) so it can
+// be dropped into a fixed-size nav/footer logo chip without its intrinsic 200px
+// leaking out. svgLogo is left untouched because the original hero layouts rely
+// on its intrinsic size.
+function svgLogoInline(name: string, color = '#7c3aed'): string {
+  const initial = (name || 'A').trim().slice(0, 1).toUpperCase();
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="width:100%;height:100%;display:block">`
+    + `<circle cx="50" cy="50" r="46" fill="${color}"/>`
+    + `<text x="50" y="62" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="44" font-weight="700" fill="#fff">${initial}</text>`
+    + `</svg>`;
+}
+
+// Self-contained brand-logo chip for nav/footer placement. Inline styles only:
+// CSP allows style attributes and there is no shared stylesheet across the
+// per-template documents. The fixed-size, overflow-hidden wrapper plus the
+// 100%-sized inner logo (img / svgLogoInline) guarantees a configured logo_url
+// renders at a sane size in ANY template without per-template CSS. A custom
+// logo_svg of unknown size is clipped to the chip rather than blowing out the
+// nav.
+function logoChip(bk: BrandKit, size = 28, radius = 7): string {
+  return `<span class="axl-logo" style="display:inline-flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:${radius}px;overflow:hidden;flex:0 0 auto;vertical-align:middle">${bk.logoInline}</span>`;
+}
+
 function hex6(v: string | null | undefined, fallback: string): string {
   return /^#[0-9a-fA-F]{6}$/.test(v || '') ? v! : fallback;
 }
@@ -237,6 +260,7 @@ interface BrandKit {
   accent: string;
   fontPairing: string;
   logoMarkup: string;
+  logoInline: string;
   name: string;
   slug: string;
   apiWaitlist: string;
@@ -257,10 +281,14 @@ function buildBrandKit(row: any, opts: { slug?: string; token?: string; noindex?
   const logoMarkup = row.logo_url
     ? `<img src="${escapeHtml(row.logo_url)}" alt="${name}" style="width:96px;height:96px;border-radius:24px;object-fit:cover" />`
     : (row.logo_svg || svgLogo(row.name, color));
+  // Container-filling variant for the nav/footer logo chip (see logoChip).
+  const logoInline = row.logo_url
+    ? `<img src="${escapeHtml(row.logo_url)}" alt="${name}" style="width:100%;height:100%;object-fit:cover;display:block" />`
+    : (row.logo_svg || svgLogoInline(row.name, color));
   const slug = opts.slug || '';
   const apiWaitlist = opts.slug ? `/api/brand/landing/${encodeURIComponent(opts.slug)}/waitlist` : '';
   return {
-    color, bgColor, inkColor, secondary, accent, fontPairing, logoMarkup, name, slug,
+    color, bgColor, inkColor, secondary, accent, fontPairing, logoMarkup, logoInline, name, slug,
     apiWaitlist, noindex: !!opts.noindex, nonce: opts.nonce,
     heroMediaUrl: validMediaUrl(row.hero_media_url),
     productScreenshotUrl: validMediaUrl(row.product_screenshot_url),
@@ -1974,7 +2002,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     </div>
 
     <footer>
-      <span>${name}</span>
+      <span>${logoChip(bk, 18, 5)} ${name}</span>
       <span>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></span>
     </footer>
   </div>
@@ -2133,7 +2161,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     </div>
 
     <footer>
-      <span>${name}</span>
+      <span>${logoChip(bk, 18, 5)} ${name}</span>
       <span>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></span>
     </footer>
   </div>
@@ -2293,7 +2321,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     </div>
 
     <footer>
-      <span>${name}</span>
+      <span>${logoChip(bk, 18, 5)} ${name}</span>
       <span>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></span>
     </footer>
   </div>
@@ -2419,7 +2447,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
         <button type="submit" class="btn">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
     </div>
-    <footer><span>${name} · Confidential</span><span>Built with Axal VC</span></footer>
+    <footer><span>${logoChip(bk, 18, 5)} ${name} · Confidential</span><span>Built with Axal VC</span></footer>
   </div>
 ${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
 </body></html>`;
@@ -2522,7 +2550,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
         <button type="submit" class="btn">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
     </div>
-    <footer><span>${name}</span><span>Built with Axal VC</span></footer>
+    <footer><span>${logoChip(bk, 18, 5)} ${name}</span><span>Built with Axal VC</span></footer>
   </div>
 ${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
 </body></html>`;
@@ -2596,7 +2624,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   @media(max-width:840px){.hero,.ctaSec .two{grid-template-columns:1fr;}.cards{grid-template-columns:1fr 1fr;}.opts{grid-template-columns:1fr;}}
 </style></head><body>
   <nav><div class="wrap row">
-    <div class="brand"><span class="mark">${(name||'A').slice(0,1).toUpperCase()}</span><b>${name}</b><span class="tag">Distribution brief</span></div>
+    <div class="brand">${logoChip(bk, 26, 6)}<b>${name}</b><span class="tag">Distribution brief</span></div>
     <a class="navcta" href="#next">${a.c}</a>
   </div></nav>
   <div class="strip"><div class="wrap row">Read-me · A partnership memo — edit the bracketed figures with your real numbers before sending.</div></div>
@@ -2643,7 +2671,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
         <div id="wl-msg" aria-live="polite"></div>
       </form>
     </div></section>
-    <footer><span>${name} · Distribution brief</span><span>Built with Axal VC</span></footer>
+    <footer><span>${logoChip(bk, 18, 5)} ${name} · Distribution brief</span><span>Built with Axal VC</span></footer>
   </div>
 ${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
 </body></html>`;
@@ -2708,7 +2736,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   @media(max-width:820px){.sec,.ctaSec .in{grid-template-columns:1fr;}.who{grid-template-columns:1fr;}.incl{grid-template-columns:1fr;}}
 </style></head><body>
   <nav><div class="wrap row">
-    <div class="brand"><b>${name}</b><span class="vc">/ pilot</span></div>
+    <div class="brand">${logoChip(bk, 26, 6)}<b>${name}</b><span class="vc">/ pilot</span></div>
     <a class="navcta" href="#apply">${a.c}</a>
   </div></nav>
   <div class="wrap">
@@ -2759,7 +2787,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <div id="wl-msg" aria-live="polite"></div>
     </div>
   </div></section>
-  <div class="wrap"><footer><span>${name} · Pilot</span><span>Built with Axal VC</span></footer></div>
+  <div class="wrap"><footer><span>${logoChip(bk, 18, 5)} ${name} · Pilot</span><span>Built with Axal VC</span></footer></div>
 ${singleWaitlistScript(bk.apiWaitlist, 'partner', bk.nonce)}
 </body></html>`;
 }
@@ -2828,7 +2856,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   @media(max-width:840px){.stats,.why,.models{grid-template-columns:1fr;}.split,.ctaSec .in{grid-template-columns:1fr;}}
 </style></head><body>
   <nav><div class="wrap row">
-    <div class="brand"><span class="mark">${(name||'A').slice(0,1).toUpperCase()}</span><b>${name}</b></div>
+    <div class="brand">${logoChip(bk, 26, 6)}<b>${name}</b></div>
     <a class="navcta" href="#partner">${a.c} →</a>
   </div></nav>
   <header class="hero"><div class="wrap">
@@ -2871,7 +2899,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <button type="submit" class="btn">${a.c}</button>
     </form><div id="wl-msg" aria-live="polite"></div></div>
   </div></section>
-  <div class="wrap"><footer><span>${name}</span><span>Built with Axal VC</span></footer></div>
+  <div class="wrap"><footer><span>${logoChip(bk, 18, 5)} ${name}</span><span>Built with Axal VC</span></footer></div>
 ${singleWaitlistScript(bk.apiWaitlist, 'partner', bk.nonce)}
 </body></html>`;
 }
@@ -2944,7 +2972,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   @media(max-width:840px){.hero{grid-template-columns:1fr;}.nums,.opts{grid-template-columns:1fr;}}
 </style></head><body>
   <nav><div class="wrap row">
-    <div class="brand"><span class="mark">${(name||'A').slice(0,1).toUpperCase()}</span><b>${name}</b><span class="tag">Distribution brief</span></div>
+    <div class="brand">${logoChip(bk, 26, 6)}<b>${name}</b><span class="tag">Distribution brief</span></div>
     <a class="navcta" href="#fit">${a.c} →</a>
   </div></nav>
   <div class="wrap">
@@ -2996,7 +3024,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
         <button type="submit" class="btn">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
     </div>
-    <footer><span>${name} · Distribution brief</span><span>Built with Axal VC</span></footer>
+    <footer><span>${logoChip(bk, 18, 5)} ${name} · Distribution brief</span><span>Built with Axal VC</span></footer>
   </div>
 ${singleWaitlistScript(bk.apiWaitlist, 'partner', bk.nonce)}
 </body></html>`;
@@ -3075,7 +3103,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   @media(max-width:820px){.data,.panes{grid-template-columns:1fr;}}
 </style></head><body>
   <nav><div class="wrap row">
-    <div class="brand"><span class="sq"></span><b>${name}</b><span class="m">/founding-eng</span></div>
+    <div class="brand">${logoChip(bk, 24, 5)}<b>${name}</b><span class="m">/founding-eng</span></div>
     <a class="navcta" href="#apply">${a.c}</a>
   </div></nav>
   <div class="wrap">
@@ -3128,7 +3156,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <button type="submit" class="btn">${a.c}</button></form>
     <div id="wl-msg" aria-live="polite"></div>
   </div></section>
-  <div class="wrap"><footer><span><span class="sq" style="display:inline-block;vertical-align:middle;margin-right:6px;"></span>${name} · founding eng</span><span>Built with Axal VC</span></footer></div>
+  <div class="wrap"><footer><span>${logoChip(bk, 18, 5)} ${name} · founding eng</span><span>Built with Axal VC</span></footer></div>
 ${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
 </body></html>`;
 }
@@ -3211,7 +3239,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   @media(max-width:820px){.facts,.three,.offer{grid-template-columns:1fr;}.split,.gap .two,.cmp{grid-template-columns:1fr;}}
 </style></head><body>
   <nav><div class="wrap row">
-    <div class="brand"><span class="dot"></span><b>${name}</b></div>
+    <div class="brand">${logoChip(bk, 22, 6)}<b>${name}</b></div>
     <a class="navcta" href="#talk">Talk to me</a>
   </div></nav>
   <div class="wrap">
@@ -3272,7 +3300,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <div id="wl-msg" aria-live="polite"></div>
       <div class="sig">— The founder<span class="ti">${name}</span></div>
     </div>
-    <footer><span>${name}</span><span>Built with Axal VC</span></footer>
+    <footer><span>${logoChip(bk, 18, 5)} ${name}</span><span>Built with Axal VC</span></footer>
   </div>
 ${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
 </body></html>`;
@@ -3357,7 +3385,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   @media(max-width:820px){.stats,.why,.cols3{grid-template-columns:1fr;}.split,.missing .grid{grid-template-columns:1fr;}.rows li{grid-template-columns:1fr;}}
 </style></head><body>
   <nav><div class="wrap row">
-    <div class="brand"><span class="dot"></span><b>${name}</b></div>
+    <div class="brand">${logoChip(bk, 22, 6)}<b>${name}</b></div>
     <a class="navcta" href="#talk">Talk about joining</a>
   </div></nav>
   <header class="hero"><div class="wrap in">
@@ -3415,7 +3443,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <div id="wl-msg" aria-live="polite"></div>
     <div class="sig">— The founder, ${name}</div>
   </div></section>
-  <div class="wrap"><footer><span>${name}</span><span>Built with Axal VC</span></footer></div>
+  <div class="wrap"><footer><span>${logoChip(bk, 18, 5)} ${name}</span><span>Built with Axal VC</span></footer></div>
 ${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
 </body></html>`;
 }
@@ -3487,7 +3515,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   @media(max-width:760px){.two,.boxes,.team{grid-template-columns:1fr;}.cards{grid-template-columns:1fr;}}
 </style></head><body>
   <div class="wrap">
-    <nav><div class="row"><div class="brand">${name}</div><a class="navlink" href="#join">The role →</a></div></nav>
+    <nav><div class="row"><div class="brand">${logoChip(bk, 24, 6)} ${name}</div><a class="navlink" href="#join">The role →</a></div></nav>
     <header class="hero">
       <div class="label">Co-founder search</div>
       <h1>${a.h}</h1>
@@ -3543,7 +3571,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <div id="wl-msg" aria-live="polite"></div>
       <div class="note">No résumé required. A one-line "not now" is a complete reply.</div>
     </div>
-    <footer>${name} · Built with Axal VC</footer>
+    <footer>${logoChip(bk, 18, 5)} ${name} · Built with Axal VC</footer>
   </div>
 ${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
 </body></html>`;
@@ -3610,7 +3638,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
 </style></head><body>
   <div class="wrap">
     <nav><div class="row">
-      <div class="brand"><span class="dot"></span><b>${name}</b><span>· a note for a mentor</span></div>
+      <div class="brand">${logoChip(bk, 22, 6)}<b>${name}</b><span>· a note for a mentor</span></div>
       <a class="navlink" href="#ask">Skip to the ask</a>
     </div></nav>
     <header class="hero">
@@ -3649,7 +3677,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
         <button type="submit" class="btn">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
     </div>
-    <footer><span>${name} · 2026</span><a class="navlink" href="#">Back to top ↑</a></footer>
+    <footer><span>${logoChip(bk, 18, 5)} ${name} · 2026</span><a class="navlink" href="#">Back to top ↑</a></footer>
   </div>
 ${singleWaitlistScript(bk.apiWaitlist, 'mentor', bk.nonce)}
 </body></html>`;
@@ -3710,7 +3738,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   @media(max-width:680px){section{grid-template-columns:1fr;}section .lbl{padding-top:0;}.timeline li{grid-template-columns:1fr;}}
 </style></head><body>
   <nav><div class="wrap row">
-    <div class="brand"><span class="sq">${(name||'A').slice(0,1).toUpperCase()}</span><b>${name}</b></div>
+    <div class="brand">${logoChip(bk, 24, 6)}<b>${name}</b></div>
     <span class="lm">A note for mentors</span>
   </div></nav>
   <div class="wrap">
@@ -3754,7 +3782,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
         <div class="signoff">Thank you, truly. — the ${name} team</div>
       </div>
     </section>
-    <footer><span>${name} · 2026</span><span>Private link · please don't share</span></footer>
+    <footer><span>${logoChip(bk, 18, 5)} ${name} · 2026</span><span>Private link · please don't share</span></footer>
   </div>
 ${singleWaitlistScript(bk.apiWaitlist, 'mentor', bk.nonce)}
 </body></html>`;
@@ -3825,7 +3853,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   @media(max-width:820px){.facts{grid-template-columns:1fr 1fr;}section{grid-template-columns:1fr;}}
 </style></head><body>
   <nav><div class="wrap row">
-    <div class="brand"><span class="sq"></span><b>${name}</b><span class="m">/ launch brief</span></div>
+    <div class="brand">${logoChip(bk, 24, 5)}<b>${name}</b><span class="m">/ launch brief</span></div>
     <a class="navcta" href="#apply">${a.c} →</a>
   </div></nav>
   <div class="wrap">
@@ -3874,7 +3902,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
         <div id="wl-msg" aria-live="polite"></div>
       </div>
     </section>
-    <footer><span>${name}</span><span>commit ${(name||'axal').toLowerCase().slice(0,4)}0x9f3a · Built with Axal VC</span></footer>
+    <footer><span>${logoChip(bk, 18, 5)} ${name}</span><span>commit ${(name||'axal').toLowerCase().slice(0,4)}0x9f3a · Built with Axal VC</span></footer>
   </div>
 ${singleWaitlistScript(bk.apiWaitlist, 'customer', bk.nonce)}
 </body></html>`;

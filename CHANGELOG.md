@@ -10,6 +10,42 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Configured brand logo now renders on every signature landing template — Task #10
+
+Every one of the 16 signature landing templates now shows the project's
+configured logo (`landing_pages.logo_url`, falling back to `logo_svg` / generated
+monogram) in **both** the nav and the footer. Previously 11 of them dropped the
+logo in the nav (showing a monogram/dot/square or just the name) and none
+rendered it in a secondary surface, so a missing or misconfigured logo could ship
+unnoticed. (The 5 original non-signature templates — minimal, bold-hero,
+video-first, editorial, product-mock — are out of scope for this change.)
+
+- **Shared infra** (`cloudflare-worker/src/services/landingTemplates.ts`):
+  - `svgLogoInline(name, color)` — container-filling (100% w/h) variant of
+    `svgLogo` for chip placement; `svgLogo` is left untouched because the original
+    hero layouts rely on its intrinsic 200px size.
+  - `BrandKit.logoInline` (built in `buildBrandKit`) — a 100%-sized
+    `<img src=logo_url …object-fit:cover>` when a logo is configured, else
+    `logo_svg` / `svgLogoInline`. `logoMarkup` (96px hero variant) is unchanged.
+  - `logoChip(bk, size, radius)` — self-contained, inline-styled
+    (`overflow:hidden`, fixed size) brand-logo chip. Inline styles only because
+    each template emits its own scoped `<style>` (no shared stylesheet) and the
+    CSP allows style attributes; a custom `logo_svg` of unknown size is clipped to
+    the chip rather than blowing out the nav.
+- **All 16 templates** now emit `logoChip(bk, …)` in the footer; the 11 that
+  dropped the nav logo (distribution-deck, pilot-partner-page, partner-hub,
+  partner-pipeline-pro, co-founder-builder, co-founder-canvas, cofounder-connect,
+  co-founder-quest, mentor-connect, mentor-connect-page, builders-launchpad) now
+  render the chip in the nav in place of the decorative monogram/dot/square. The 5
+  that already showed `logoMarkup` in the nav (advisor-connect, proof-builder,
+  capital-ready-kit, capital-storyteller, seed-stage-spark) keep it and gain the
+  footer chip.
+- **Regression guard** (`cloudflare-worker/test/landing_templates.test.ts`):
+  per-signature-key test renders each template with a sentinel `logo_url` and
+  asserts the `<img src=…>` appears at least twice — once inside the `<nav>` and
+  once after it — so a template that silently drops the configured logo fails
+  `npm run test:drift`.
+
 ## Waitlist customers in Customer Discovery — Task #5
 
 Customer-audience waitlist signups now surface inside **Customer Discovery**,

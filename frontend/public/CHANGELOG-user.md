@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your logo now shows in your landing page's nav and footer
+
+When you set a logo for a project, it now shows up in the top navigation bar and
+again down in the footer of your landing page, so your branding stays consistent
+from top to bottom. Before, several of our landing page designs showed a plain
+initial, dot, or square instead of your actual logo in those spots — which meant
+a missing or wrong logo could slip out unnoticed. Now your logo appears reliably
+in both places.
+
+---
+
 ## Your waitlist signups now live in Customer Discovery
 
 People who join your product waitlist now show up right inside Customer Discovery,
