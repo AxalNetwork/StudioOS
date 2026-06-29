@@ -1,0 +1,57 @@
+#23 - Fix Real Security Findings In Source
+What & Why
+After the generated/pasted noise is excluded, a smaller set of High/Error alerts remain inside hand-written source. Some are genuine and must be fixed; others are confirmed false positives that must be justified-suppressed inline (so they close without weakening anything). This task handles only real source files and is security-sensitive, so it is kept separate from the mechanical cleanup. Per project preference: explicit, security-first; never weaken a sanitizer to silence a scanner.
+Genuine issues to FIX
+* ReDoS / catastrophic-backtracking regexes on attacker-controlled input:
+    * PDF text extraction tjArrRe = /\[((?:[^\[\]]|\\.)+)\]\s*TJ/g in the imports parser (runs on uploaded PDFs) — #356.
+    * SVG sanitizer regexes in brand routes (run on uploaded SVG) — #2324, #2325. Harden WITHOUT loosening what gets stripped.
+    * Email-validation regex _EMAIL_RE in project members invite (#3707) and brand routes (#2325 is brand) — use a linear pattern and/or bound input length.
+    * Email-template layout polynomial regex (#3450).
+    * Confirm/triage market-data.ts non-literal regexp (#340).
+* Regex correctness Highs in tests: missing anchors in newsRender.test.ts (#2914, #2915) and bad HTML-filtering regexp in the landing-templates render test (#3615). Fix the regexes.
+* Insecure hash: SHA1 used for an id in the email route (#292) — set usedforsecurity=False or move to SHA-256.
+Confirmed false positives to JUSTIFY-SUPPRESS (inline comment + one-line reason; do NOT change behavior)
+* "DOM text reinterpreted as HTML" in project detail (#3618 line 855, #1717 line 716) — links use new URL(...).protocol http/https validation, not raw HTML injection.
+* "User-controlled bypass" in calendar page (#1563) — value drives a table-driven UI lookup only.
+* "Client-side URL redirect" in login page (#3616 line 122, #3617 line 247) — safeNextPath() already only returns same-origin paths (startsWith('/') && !startsWith('//')); it is defence-in-depth.
+* "Prototype-polluting function" in deck/merge utilities (#3300 legalMergeSchema, #341 mergeFields, #343 email layout, #392 DeckBase, and the template app bundles #3453/#941/#862 that live in real source) — guarded path-walkers; confirm __proto__/constructor/prototype keys are rejected, then suppress.
+* "Double escaping/unescaping" in name-check util (#2768) — intentional entity normalization.
+* "Indirect uncontrolled command line" in the LFS size-gate script (#2553) — CI-only, args from trusted git output.
+* "Unverified JWT decode" in settings route (#295/#304) — decodes only to read jti for session revocation; it never trusts claims. Verify the signature if feasible, otherwise suppress with that justification.
+* SQLAlchemy text() Semgrep errors across migrations and routes (#294, #296–#304, #1561, #2019, #2343/#2344, #3073/#3074, #3156, #3379, #3633, #3723/#3724, etc.) — static schema SQL and parameterized queries; confirm no user data is string-interpolated, then suppress with # nosemgrep + reason. If any DO interpolate user input, convert to bound parameters instead.
+Done looks like
+* Every genuine issue above is fixed; the corresponding alerts close on the next scan.
+* Every confirmed false positive carries an inline suppression with a short justification, and its alert stops recurring.
+* No sanitizer is weakened; uploaded-SVG/PDF/email handling still rejects everything it did before.
+* npm run test:drift is green.
+Out of scope
+* Generated/pasted-file exclusions and the CI workflow fix (separate task).
+* Pure code-quality alerts: unused imports/vars, empty except, useless conditionals (separate task).
+Steps
+1. Harden the attacker-facing regexes (PDF, SVG, email) against backtracking and/or add input-length bounds; add focused tests where a regex changes behavior risk is non-trivial.
+2. Fix the test-file regex anchor/filter Highs.
+3. Replace SHA1 with a non-security marker or SHA-256.
+4. Audit each SQLAlchemy text() site: bind-parameter any user input found; otherwise add a justified # nosemgrep.
+5. For each confirmed false positive, add an inline suppression with a one-line reason.
+6. Run npm run test:drift and confirm green.
+Constraints / notes
+* Security-first: prefer fixing over suppressing; only suppress when verified safe, always with a reason.
+* Keep suppressions narrow (specific rule id), not blanket file-level ignores.
+Relevant files
+* cloudflare-worker/src/routes/imports.ts:923
+* cloudflare-worker/src/templates/email/layout.ts:53,65
+* cloudflare-worker/src/services/market-data.ts:137
+* cloudflare-worker/src/services/nameCheck.ts:228
+* cloudflare-worker/src/services/mergeFields.ts:45
+* cloudflare-worker/src/services/legalMergeSchema.ts:334
+* frontend/src/decks/DeckBase.tsx:87
+* frontend/src/pages/ProjectDetail.jsx:716,855
+* frontend/src/pages/CalendarPage.jsx:138
+* frontend/src/pages/LoginPage.jsx:48-55,122,247
+* backend/app/api/routes/brand.py:550-560
+* backend/app/api/routes/project_members.py:308
+* backend/app/api/routes/settings.py:304
+* backend/app/api/routes/email.py:118-119
+* backend/app/models/migrations.py
+* backend/app/api/routes/profiling.py:325
+* backend/app/api/routes/progress.py:284,411
