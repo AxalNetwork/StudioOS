@@ -10,6 +10,23 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Slim down role sidebars — PR #101
+
+Each role's sidebar now collapses into fewer, broader groups plus a single
+"More" bucket for advanced/occasional destinations, shortening the learning
+curve without dropping any destinations. Pure regrouping: the post-merge set of
+`to:` paths per role is identical to `main` — no route added, removed, or
+duplicated (verified by a 3-way merge + per-role path diff before merging). The
+squash merge also preserved main's `/dashboard`→`/studio` rename and the My
+Profile removal that landed after this branch was cut.
+
+- `frontend/src/sidebarConfig.js`: `SIDEBAR_GROUPS` regrouped per role — admin
+  11→7 groups, founder 8→6, partner 7→6, investor 7→6; mentor unchanged. The
+  `hasTier` / `hasInvestorTier` / `defaultOpenGroups` / `filterItemsByTier`
+  helpers and the item `{ to, icon, label, requiredTier, requiredInvestorTier }`
+  shape are untouched, so App.jsx's accordion render + tier-gating path is
+  unaffected.
+
 ## Reply-To sender on network invites — Task #5
 
 Network/referral invite emails (Refer & Earn — both the bulk send and the

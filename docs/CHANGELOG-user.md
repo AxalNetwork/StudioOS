@@ -5,6 +5,117 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A simpler, tidier sidebar
+
+We've streamlined the left-hand menu so it's quicker to find your way around.
+Each role now has fewer, broader sections, with a single "More" group at the
+bottom for the advanced or occasional pages. Nothing was taken away — every page
+you could reach before is still there, just better organised — so there's less
+to scan and a shorter learning curve.
+
+---
+
+## Replies to your network invites now come straight to you
+
+When you invite people from your network (Refer & Earn), your invitation now
+sets your own email as the reply address — so if someone hits "Reply", their
+message lands in your inbox instead of an unmonitored mailbox. The invite still
+comes from Axal's verified address (shown as "{your name} via Axal StudioOS")
+so it keeps landing reliably. This applies to both your first invite and any
+reminders you send.
+
+---
+
+## The "Import from Stripe" button now always tells you exactly what happened
+
+We added behind-the-scenes safeguards so the Import-from-Stripe button keeps
+giving you a clear, specific message every time — whether Stripe isn't connected
+yet, has no billing data to import, hits a temporary Stripe error, or imports
+successfully. These checks make sure a future update can't accidentally turn one
+of those friendly messages into a confusing raw error or a false "success".
+
+---
+
+## No more misleading $0 when Stripe has nothing to import
+
+If you click "Import from Stripe" but your connected Stripe account doesn't have
+any active subscriptions yet, we'll let you know there's no billing data to
+import — and we no longer record a misleading $0 entry in your metrics history.
+Once you have real subscriptions, importing works exactly as before.
+
+---
+
+## Your logo now shows in your landing page's nav and footer
+
+When you set a logo for a project, it now shows up in the top navigation bar and
+again down in the footer of your landing page, so your branding stays consistent
+from top to bottom. Before, several of our landing page designs showed a plain
+initial, dot, or square instead of your actual logo in those spots — which meant
+a missing or wrong logo could slip out unnoticed. Now your logo appears reliably
+in both places.
+
+---
+
+## Your waitlist signups now live in Customer Discovery
+
+People who join your product waitlist now show up right inside Customer Discovery,
+grouped by project, so you can act on them without leaving the page. For each
+signup you can promote a promising person straight into a logged interview, send
+them a product-invitation email, or send a follow-up — and each signup keeps a
+clear status (New, Invited, Followed up, Promoted) so you always know where things
+stand. If email isn't set up yet, the action still records the step and tells you
+the message wasn't sent, so nothing happens silently.
+
+---
+
+## Import your live numbers from Stripe
+
+The "Import from Stripe" button on the Metrics page now works. If you've connected
+your Stripe account, one click pulls your live MRR, ARR, churn, and customer count
+into a new metrics snapshot, and your stat cards update right away. If Stripe isn't
+connected yet, you'll see a clear prompt to connect it (or enter your numbers by
+hand) instead of a button that quietly does nothing — and if your Stripe account
+has no billing data yet, we'll tell you that too.
+
+---
+
+## Your landing page editor now matches the template you picked
+
+When you build your Brand & Landing page, step 3 now adapts to the template you chose:
+the fields you edit are the actual sections of that design — things like "How it works",
+"Where you can help", or your closing quote — so what you type is what visitors see. You
+can add and remove items in list-style sections, and your wording is saved separately for
+each template, so trying a different look never loses the copy you wrote for another.
+
+There's a new one-click **Auto-fill with AI** button that drafts your whole page — brand name,
+headline, subheadline, tagline, the call-to-action button label, and the rest of the copy —
+from your project's name, sector, and description. It's a fast starting point you can then
+refine, and it leaves your original project details untouched.
+
+We also tidied up the editor: the color swatches are now clearly labelled by role (Primary,
+Background, Text, Secondary, Accent), the step is renamed "Brand & page content", and the old
+multi-tab "audience-specific copy" panel and placeholder name suggestions have been removed in
+favor of the simpler, template-driven flow. Your published page now shows the copy for the one
+audience you picked in step 1 — clean and focused, with no audience tabs for visitors to click
+through.
+
+## Your Spin-Out pitch deck now fills itself in from your venture data
+
+When you open the Spin-Out demo-day deck in the Pitch Deck Builder, the editor
+now mirrors how the deck is actually built: most of each slide fills in
+automatically from your venture's pages, so you can't accidentally overwrite it.
+Auto-filled fields are clearly marked and link straight to the page they come
+from — your Project, Customer Discovery, Roadmap, Cap Table, Incorporation, Team,
+and more — so you change them at the source and the deck refreshes.
+
+Only the few story-driven fields stay editable: your Problem statement, your
+Solution (with guidance to frame it the Axal way — turning raw inputs into a
+live, actionable result), and your Product demo links and caption. Saving any of
+these updates your deck preview and downloads right away.
+
+And the Cover no longer asks you to pick a project or type your name — your
+project is already selected, and your name comes from your account.
+
 ## Build your Spin-Out with a team
 
 Your Spin-Out project no longer has to be a solo effort. From **Edit Project**,

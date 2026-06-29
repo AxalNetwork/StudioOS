@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A simpler, tidier sidebar
+
+We've streamlined the left-hand menu so it's quicker to find your way around.
+Each role now has fewer, broader sections, with a single "More" group at the
+bottom for the advanced or occasional pages. Nothing was taken away — every page
+you could reach before is still there, just better organised — so there's less
+to scan and a shorter learning curve.
+
+---
+
 ## Replies to your network invites now come straight to you
 
 When you invite people from your network (Refer & Earn), your invitation now
