@@ -196,7 +196,7 @@ async function aiTemplateContent(
   name: string,
   sector: string | null,
   description: string,
-): Promise<{ headline: string; subheadline: string; tagline: string; content: Record<string, any> } | null> {
+): Promise<{ name: string; cta_text: string; headline: string; subheadline: string; tagline: string; content: Record<string, any> } | null> {
   try {
     const fields = LANDING_CONTENT_SCHEMA[key] || [];
     const fieldSpec = fields.map((f) => {
@@ -207,7 +207,7 @@ async function aiTemplateContent(
       return `"${f.key}": string`;
     }).join('; ');
     const systemPrompt = 'You are a concise startup copywriter. Always return ONLY valid minified JSON, no prose, no markdown fences.';
-    const userPrompt = `Write landing-page copy for a startup.\nBrand: ${name || 'unspecified'}. Sector: ${sector || 'unspecified'}.\nWhat it does: ${description.trim()}\n\nReturn JSON of the exact form: {"headline":"","subheadline":"","tagline":""${fieldSpec ? `,"content":{${fieldSpec}}` : ''}}\nRules: headline <=12 words; subheadline <=30 words; tagline <=8 words; keep copy specific to the idea; plain text only (no HTML).`;
+    const userPrompt = `Write landing-page copy for a startup.\nBrand: ${name || 'unspecified'}. Sector: ${sector || 'unspecified'}.\nWhat it does: ${description.trim()}\n\nReturn JSON of the exact form: {"name":"","headline":"","subheadline":"","tagline":"","cta":""${fieldSpec ? `,"content":{${fieldSpec}}` : ''}}\nRules: name = the brand/product name (<=4 words); headline <=12 words; subheadline <=30 words; tagline <=8 words; cta = a 2-4 word call-to-action button label; keep copy specific to the idea; plain text only (no HTML).`;
     const res = await aiRouterRun(env, {
       task: 'brand_autofill',
       userId: userId || 0,
@@ -219,14 +219,25 @@ async function aiTemplateContent(
     if (!res.ok || !res.output) return null;
     const parsed = extractJsonObject(res.output);
     if (!parsed || typeof parsed !== 'object') return null;
+    const aiName = String(parsed.name || '').trim().slice(0, 120);
     const headline = String(parsed.headline || '').trim().slice(0, 200);
     const subheadline = String(parsed.subheadline || '').trim().slice(0, 400);
     const tagline = String(parsed.tagline || '').trim().slice(0, 200);
+    const cta = String(parsed.cta || '').trim().slice(0, 60);
     // Clamp the per-template content through the shared sanitizer so the model
     // can't inject unknown fields, oversized strings, or the wrong shape.
     const content = sanitizeLandingContent({ [key]: parsed.content })[key] || {};
-    if (!headline && !subheadline && !tagline && !Object.keys(content).length) return null;
-    return { headline, subheadline, tagline, content };
+    if (!aiName && !headline && !subheadline && !tagline && !cta && !Object.keys(content).length) return null;
+    // Brand name + CTA fall back to the project name / sensible default so the
+    // editor always lands every shared hero field populated (task #3).
+    return {
+      name: aiName || name,
+      cta_text: cta || 'Join the waitlist',
+      headline,
+      subheadline,
+      tagline,
+      content,
+    };
   } catch {
     return null;
   }
@@ -536,7 +547,13 @@ brand.post('/landing/autofill', async (c) => {
   const ai = await aiTemplateContent(c.env, user.id, key, name, sector, description);
   if (ai) return c.json({ ...ai, ai_generated: true });
   const hero = heuristicHeroCopy(name, sector, description);
-  return c.json({ ...hero, content: heuristicTemplateContent(key), ai_generated: false });
+  return c.json({
+    ...hero,
+    name,
+    cta_text: 'Join the waitlist',
+    content: heuristicTemplateContent(key),
+    ai_generated: false,
+  });
 });
 
 brand.post('/logo', async (c) => {

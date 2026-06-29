@@ -311,9 +311,11 @@ export default function BrandBuilderPage() {
       const merged = { ...defaultsForKey(key), ...((r && r.content) || {}) };
       setDraft((d) => ({
         ...d,
+        name: r?.name || d.name,
         headline: r?.headline || d.headline,
         subheadline: r?.subheadline || d.subheadline,
         tagline: r?.tagline || d.tagline,
+        cta_text: r?.cta_text || d.cta_text,
         content_json: { ...(d.content_json || {}), [key]: merged },
       }));
     } catch (e) { setError(e?.message || 'Auto-fill failed'); }

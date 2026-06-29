@@ -37,13 +37,27 @@ visual template chosen in step 2, and every template renders from saved content.
 - Replaced the "Generate 5 options" name-picker with **one-click AI auto-fill**:
   `POST /api/brand/landing/autofill` (worker: `aiRouterRun` task `brand_autofill` →
   `heuristicTemplateContent` fallback, clamped via `sanitizeLandingContent`; dev FastAPI:
-  deterministic hero copy via `_heuristic_hero_copy`, empty content). Auto-fill fills hero copy
-  + the chosen template's content from the project name + sector + 1-paragraph description,
-  **without mutating those three step-1 inputs**.
+  deterministic hero copy via `_heuristic_hero_copy`, empty content). Auto-fill populates
+  **every editable hero field — brand `name`, `headline`, `subheadline`, `tagline`, `cta_text`** —
+  plus the chosen template's content, all from the project name + sector + 1-paragraph
+  description, **without mutating those three step-1 inputs** (`name`/`cta` added to the AI JSON
+  contract + heuristic fallback in worker `aiTemplateContent`/route and FastAPI; applied in
+  `BrandBuilderPage.autofill`).
 - Removed the 6-tab "Audience-specific copy" UI block, the hardcoded fallback brand names,
   and the unused `/brand/suggest` path (its dead `brand_suggest` TaskClass renamed to
   `brand_autofill` in `services/aiRouter.ts`). The persisted `audience_*` columns and the
   waitlist audience labels/colors are retained.
+- The **5 original rendered templates** (`minimal`/`bold_hero`/`video_first`/`editorial`/
+  `product_mock`) are now **single-audience too**: the in-page six-tab switcher and its
+  `switchTab` script/CSS were removed from the server-rendered HTML, so each published page
+  renders copy for the one audience selected in step 1 (`selectedAudience(row)`, falling back to
+  `customer`) and posts that audience through the shared `singleWaitlistScript` (`#wl-form`/
+  `#wl-msg`). `landing_templates_render.test.ts` updated to assert single-audience capture and
+  no six-tab markup for every template. The dev FastAPI parity renderer
+  `_render_landing_html` (served by `GET /landing/{slug}` + `/landing/preview/{token}` in
+  `backend/app/main.py`) was converted the same way — it now renders the single `row.audience`
+  (fallback `customer`) with one `#wl-form`/`#wl-msg`, dropping the six-tab markup, `switchTab`
+  script, and `.tabs/.tab/.panel/.badge` CSS.
 - `npm run test:drift` green (incl. `check-dark-mode`, api drift, 43 landing tests incl. the
   schema-parity test, and worker `tsc --noEmit`).
 

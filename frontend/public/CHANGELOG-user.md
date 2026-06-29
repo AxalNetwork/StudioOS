@@ -13,14 +13,17 @@ the fields you edit are the actual sections of that design — things like "How 
 can add and remove items in list-style sections, and your wording is saved separately for
 each template, so trying a different look never loses the copy you wrote for another.
 
-There's a new one-click **Auto-fill with AI** button that drafts your headline, subheadline,
-and the rest of the page from your project's name, sector, and description — a fast starting
-point you can then refine. It leaves your original project details untouched.
+There's a new one-click **Auto-fill with AI** button that drafts your whole page — brand name,
+headline, subheadline, tagline, the call-to-action button label, and the rest of the copy —
+from your project's name, sector, and description. It's a fast starting point you can then
+refine, and it leaves your original project details untouched.
 
 We also tidied up the editor: the color swatches are now clearly labelled by role (Primary,
 Background, Text, Secondary, Accent), the step is renamed "Brand & page content", and the old
 multi-tab "audience-specific copy" panel and placeholder name suggestions have been removed in
-favor of the simpler, template-driven flow.
+favor of the simpler, template-driven flow. Your published page now shows the copy for the one
+audience you picked in step 1 — clean and focused, with no audience tabs for visitors to click
+through.
 
 ## Your Spin-Out pitch deck now fills itself in from your venture data
 

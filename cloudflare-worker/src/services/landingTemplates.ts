@@ -1463,116 +1463,29 @@ function fontStack(pairing: string): string {
   return stacks[pairing] || stacks.editorial;
 }
 
-// Shared tab markup for audience switching.
-function tabMarkup(aud: Record<string, { h: string; b: string; c: string }>, color: string, secondary: string, accent: string): string {
-  return `
-    <div class="tabs" role="tablist" aria-label="Audience">
-      <button class="tab active" role="tab" aria-selected="true" aria-controls="p-customer" data-a="customer" onclick="switchTab('customer')">Customer<span class="badge badge-customer">Discovery</span></button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="p-partner" data-a="partner" onclick="switchTab('partner')">Partner</button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="p-investor" data-a="investor" onclick="switchTab('investor')">Investor</button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="p-advisor" data-a="advisor" onclick="switchTab('advisor')">Advisor</button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="p-mentor" data-a="mentor" onclick="switchTab('mentor')">Mentor</button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="p-cofounder" data-a="cofounder" onclick="switchTab('cofounder')">Co-founder</button>
-    </div>
-    <div class="panel active" id="p-customer" role="tabpanel" data-a="customer">
-      <h1>${aud.customer.h}</h1>
-      ${aud.customer.b ? `<p class="sub">${aud.customer.b}</p>` : ''}
-      <form id="wl-customer">
-        <label for="email-customer" class="sr">Email</label>
-        <input id="email-customer" type="email" name="email" placeholder="you@email.com" required />
-        <button type="submit">${aud.customer.c}</button>
-      </form>
-      <div id="msg-customer" aria-live="polite"></div>
-    </div>
-    <div class="panel" id="p-partner" role="tabpanel" data-a="partner">
-      <h1>${aud.partner.h}</h1>
-      ${aud.partner.b ? `<p class="sub">${aud.partner.b}</p>` : ''}
-      <form id="wl-partner">
-        <label for="email-partner" class="sr">Email</label>
-        <input id="email-partner" type="email" name="email" placeholder="you@email.com" required />
-        <button type="submit">${aud.partner.c}</button>
-      </form>
-      <div id="msg-partner" aria-live="polite"></div>
-    </div>
-    <div class="panel" id="p-investor" role="tabpanel" data-a="investor">
-      <h1>${aud.investor.h}</h1>
-      ${aud.investor.b ? `<p class="sub">${aud.investor.b}</p>` : ''}
-      <form id="wl-investor">
-        <label for="email-investor" class="sr">Email</label>
-        <input id="email-investor" type="email" name="email" placeholder="you@email.com" required />
-        <button type="submit">${aud.investor.c}</button>
-      </form>
-      <div id="msg-investor" aria-live="polite"></div>
-    </div>
-    <div class="panel" id="p-advisor" role="tabpanel" data-a="advisor">
-      <h1>${aud.advisor.h}</h1>
-      ${aud.advisor.b ? `<p class="sub">${aud.advisor.b}</p>` : ''}
-      <form id="wl-advisor">
-        <label for="email-advisor" class="sr">Email</label>
-        <input id="email-advisor" type="email" name="email" placeholder="you@email.com" required />
-        <button type="submit">${aud.advisor.c}</button>
-      </form>
-      <div id="msg-advisor" aria-live="polite"></div>
-    </div>
-    <div class="panel" id="p-mentor" role="tabpanel" data-a="mentor">
-      <h1>${aud.mentor.h}</h1>
-      ${aud.mentor.b ? `<p class="sub">${aud.mentor.b}</p>` : ''}
-      <form id="wl-mentor">
-        <label for="email-mentor" class="sr">Email</label>
-        <input id="email-mentor" type="email" name="email" placeholder="you@email.com" required />
-        <button type="submit">${aud.mentor.c}</button>
-      </form>
-      <div id="msg-mentor" aria-live="polite"></div>
-    </div>
-    <div class="panel" id="p-cofounder" role="tabpanel" data-a="cofounder">
-      <h1>${aud.cofounder.h}</h1>
-      ${aud.cofounder.b ? `<p class="sub">${aud.cofounder.b}</p>` : ''}
-      <form id="wl-cofounder">
-        <label for="email-cofounder" class="sr">Email</label>
-        <input id="email-cofounder" type="email" name="email" placeholder="you@email.com" required />
-        <button type="submit">${aud.cofounder.c}</button>
-      </form>
-      <div id="msg-cofounder" aria-live="polite"></div>
-    </div>
-    <style>
-      .badge { display:inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-left: 8px; }
-      .badge-customer { background: ${color}18; color: ${color}; }
-      .badge-partner { background: ${secondary}18; color: ${secondary}; }
-      .badge-investor { background: ${accent}18; color: ${accent}; }
-    </style>`;
+// ── Task #3: single-audience capture ───────────────────────────────────────
+// Audience is chosen in step 1, so every published page renders copy for ONE
+// audience — the old six-tab in-page switcher (and its switchTab script) was
+// removed. These helpers pick the selected audience and render a single
+// waitlist form (#wl-form / #wl-msg), consumed by singleWaitlistScript — the
+// same capture the ported designs already use.
+const AUDIENCE_KEYS = ['customer', 'partner', 'investor', 'advisor', 'mentor', 'cofounder'] as const;
+
+function selectedAudience(row: any): string {
+  const a = String(row?.audience || '').trim();
+  return (AUDIENCE_KEYS as readonly string[]).includes(a) ? a : 'customer';
 }
 
-function waitlistScript(apiWaitlist: string, nonce?: string): string {
-  return `<script${nonce ? ` nonce="${nonce}"` : ''}>
-function switchTab(aud){
-  document.querySelectorAll('.tab').forEach(function(t){
-    var on = t.dataset.a===aud;
-    t.classList.toggle('active', on);
-    t.setAttribute('aria-selected', String(on));
-  });
-  document.querySelectorAll('.panel').forEach(function(p){ p.classList.toggle('active', p.dataset.a===aud); });
-}
-(function(){
-  var api=${JSON.stringify(apiWaitlist)};
-  if(!api) return;
-  ['customer','partner','investor','advisor','mentor','cofounder'].forEach(function(aud){
-    var f=document.getElementById('wl-'+aud), m=document.getElementById('msg-'+aud);
-    f.addEventListener('submit',function(e){
-      e.preventDefault();
-      var email=f.email.value.trim(); if(!email) return;
-      var btn=f.querySelector('button'); btn.disabled=true;
-      fetch(api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,source:'landing',audience:aud})})
-        .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
-        .then(function(x){
-          if(x.ok){ m.className='ok'; m.textContent="You're on the list. We'll be in touch."; f.reset(); }
-          else { m.className='err'; m.textContent=(x.j&&x.j.error)||'Something went wrong.'; }
-        })
-        .catch(function(){ m.className='err'; m.textContent='Network error. Please try again.'; })
-        .finally(function(){ btn.disabled=false; });
-    });
-  });
-})();
-</script>`;
+// One waitlist form for the selected audience. `a.c` (the CTA) is already
+// HTML-escaped by buildAudienceData.
+function audienceForm(a: { h: string; b: string; c: string }): string {
+  return `
+      <form id="wl-form">
+        <label for="email" class="sr">Email</label>
+        <input id="email" type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit">${a.c}</button>
+      </form>
+      <div id="wl-msg" aria-live="polite"></div>`;
 }
 
 // ── Ported designs (Task #24) — shared helpers ───────────────────
@@ -1645,14 +1558,16 @@ export const TEMPLATE_SIGNATURE_PALETTES: Record<string, {
 
 // ── Template: Minimal (the original layout) ──────────────────────
 function renderMinimal(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, accent, fontPairing, logoMarkup, name } = bk;
+  const { color, bgColor, inkColor, accent, fontPairing, logoMarkup, name } = bk;
+  const audKey = selectedAudience(row);
+  const a = aud[audKey];
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
-<meta name="description" content="${aud.customer.b}" />
+<meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
 <style>
   :root { color-scheme: light; }
@@ -1661,48 +1576,46 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .logo { display:flex; justify-content:center; margin-bottom: 28px; }
   h1 { font-size: clamp(32px, 5vw, 52px); margin: 0 0 12px; line-height: 1.1; letter-spacing: -0.02em; }
   p.sub { font-size: 18px; color: ${inkColor}; opacity: .7; margin: 0 0 36px; }
-  .tabs { display:flex; gap: 6px; justify-content:center; margin-bottom: 28px; }
-  .tab { cursor:pointer; padding: 8px 16px; border-radius: 8px; border: 1px solid transparent; font-size: 14px; background: transparent; color: ${inkColor}; opacity: .6; }
-  .tab.active { opacity: 1; background: ${color}18; border-color: ${color}44; }
-  .panel { display:none; }
-  .panel.active { display:block; }
   form { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width: 480px; margin: 0 auto; }
   input { flex:1 1 240px; padding: 12px 14px; border: 1px solid ${inkColor}22; border-radius: 10px; font-size: 15px; outline:none; background: ${bgColor}; color: ${inkColor}; }
   input:focus { border-color: ${color}; box-shadow: 0 0 0 3px ${color}22; }
   button { padding: 12px 18px; background: ${color}; color: #fff; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }
   button[disabled] { opacity: .6; cursor: not-allowed; }
-  .ok, .err { margin-top: 16px; font-size: 14px; }
-  .ok { color: ${accent}; }
-  .err { color: ${color}; opacity: .85; }
+  .wl-ok, .wl-err { margin-top: 16px; font-size: 14px; }
+  .wl-ok { color: ${accent}; }
+  .wl-err { color: ${color}; opacity: .85; }
   footer { margin-top: 64px; font-size: 12px; color: ${inkColor}55; }
   footer a { color: inherit; }
   .sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-  @media (max-width: 480px) { .tabs { flex-wrap: wrap; } }
 </style>
 </head>
 <body>
   <div class="wrap">
     <div class="logo">${logoMarkup}</div>
-${tabMarkup(aud, color, secondary, accent)}
+    <h1>${a.h}</h1>
+    ${a.b ? `<p class="sub">${a.b}</p>` : ''}
+    ${audienceForm(a)}
     <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
   </div>
-${waitlistScript(bk.apiWaitlist, bk.nonce)}
+${singleWaitlistScript(bk.apiWaitlist, audKey, bk.nonce)}
 </body>
 </html>`;
 }
 
 // ── Template: Bold Hero ──────────────────────────────────────────
 function renderBoldHero(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, accent, fontPairing, logoMarkup, name, heroMediaUrl } = bk;
+  const { color, bgColor, inkColor, accent, fontPairing, logoMarkup, name, heroMediaUrl } = bk;
   const heroBg = heroMediaUrl ? `url(${escapeHtml(heroMediaUrl)})` : bgColor;
   const heroText = heroMediaUrl ? '#fff' : inkColor;
+  const audKey = selectedAudience(row);
+  const a = aud[audKey];
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
-<meta name="description" content="${aud.customer.b}" />
+<meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
 <style>
   :root { color-scheme: light; }
@@ -1713,58 +1626,54 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .logo { margin-bottom: 24px; }
   h1 { font-size: clamp(36px, 6vw, 64px); margin: 0 0 12px; line-height: 1.05; letter-spacing: -0.02em; font-weight: 800; }
   p.sub { font-size: 20px; opacity: .85; margin: 0 0 36px; max-width: 560px; }
-  .tabs { display:flex; gap: 6px; justify-content:center; margin-bottom: 28px; }
-  .tab { cursor:pointer; padding: 8px 16px; border-radius: 8px; border: 1px solid transparent; font-size: 14px; background: transparent; color: ${heroText}; opacity: .6; }
-  .tab.active { opacity: 1; background: ${color}18; border-color: ${color}44; }
-  .panel { display:none; }
-  .panel.active { display:block; }
   .body { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; text-align: center; }
   form { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width: 480px; margin: 0 auto; }
   input { flex:1 1 240px; padding: 12px 14px; border: 1px solid ${inkColor}22; border-radius: 10px; font-size: 15px; outline:none; background: ${bgColor}; color: ${inkColor}; }
   input:focus { border-color: ${color}; box-shadow: 0 0 0 3px ${color}22; }
   button { padding: 12px 18px; background: ${color}; color: #fff; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }
   button[disabled] { opacity: .6; cursor: not-allowed; }
-  .ok, .err { margin-top: 16px; font-size: 14px; }
-  .ok { color: ${accent}; }
-  .err { color: ${color}; opacity: .85; }
+  .wl-ok, .wl-err { margin-top: 16px; font-size: 14px; }
+  .wl-ok { color: ${accent}; }
+  .wl-err { color: ${color}; opacity: .85; }
   footer { font-size: 12px; color: ${inkColor}55; padding: 24px; text-align: center; }
   footer a { color: inherit; }
   .sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-  @media (max-width: 480px) { .tabs { flex-wrap: wrap; } }
 </style>
 </head>
 <body>
   <div class="hero">
     ${heroMediaUrl ? '<div class="hero-overlay"></div>' : ''}
     <div class="logo">${logoMarkup}</div>
-    <h1>${aud.customer.h}</h1>
-    <p class="sub">${aud.customer.b}</p>
+    <h1>${a.h}</h1>
+    <p class="sub">${a.b}</p>
   </div>
   <div class="body">
-    ${tabMarkup(aud, color, secondary, accent).replace(/h1>/g, 'h2>').replace(/h2>/, 'h1>')}
+    ${audienceForm(a)}
     <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
   </div>
-${waitlistScript(bk.apiWaitlist, bk.nonce)}
+${singleWaitlistScript(bk.apiWaitlist, audKey, bk.nonce)}
 </body>
 </html>`;
 }
 
 // ── Template: Video First ───────────────────────────────────────
 function renderVideoFirst(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, accent, fontPairing, logoMarkup, name, heroMediaUrl } = bk;
+  const { color, bgColor, inkColor, accent, fontPairing, logoMarkup, name, heroMediaUrl } = bk;
   const isVideo = heroMediaUrl && /\.(mp4|webm|mov)(\?|$)/i.test(heroMediaUrl);
   const heroEl = isVideo
     ? `<video autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0;"><source src="${escapeHtml(heroMediaUrl)}" /></video>`
     : heroMediaUrl
       ? `<img src="${escapeHtml(heroMediaUrl)}" alt="${name}" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0;" />`
       : '';
+  const audKey = selectedAudience(row);
+  const a = aud[audKey];
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
-<meta name="description" content="${aud.customer.b}" />
+<meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
 <style>
   :root { color-scheme: light; }
@@ -1776,23 +1685,17 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   h1 { font-size: clamp(32px, 5vw, 52px); margin: 0 0 12px; line-height: 1.1; letter-spacing: -0.02em; }
   p.sub { font-size: 18px; opacity: .85; margin: 0 0 24px; max-width: 540px; }
   .body { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; text-align: center; }
-  .tabs { display:flex; gap: 6px; justify-content:center; margin-bottom: 28px; }
-  .tab { cursor:pointer; padding: 8px 16px; border-radius: 8px; border: 1px solid transparent; font-size: 14px; background: transparent; color: ${inkColor}; opacity: .6; }
-  .tab.active { opacity: 1; background: ${color}18; border-color: ${color}44; }
-  .panel { display:none; }
-  .panel.active { display:block; }
   form { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width: 480px; margin: 0 auto; }
   input { flex:1 1 240px; padding: 12px 14px; border: 1px solid ${inkColor}22; border-radius: 10px; font-size: 15px; outline:none; background: ${bgColor}; color: ${inkColor}; }
   input:focus { border-color: ${color}; box-shadow: 0 0 0 3px ${color}22; }
   button { padding: 12px 18px; background: ${color}; color: #fff; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }
   button[disabled] { opacity: .6; cursor: not-allowed; }
-  .ok, .err { margin-top: 16px; font-size: 14px; }
-  .ok { color: ${accent}; }
-  .err { color: ${color}; opacity: .85; }
+  .wl-ok, .wl-err { margin-top: 16px; font-size: 14px; }
+  .wl-ok { color: ${accent}; }
+  .wl-err { color: ${color}; opacity: .85; }
   footer { font-size: 12px; color: ${inkColor}55; padding: 24px; text-align: center; }
   footer a { color: inherit; }
   .sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-  @media (max-width: 480px) { .tabs { flex-wrap: wrap; } }
 </style>
 </head>
 <body>
@@ -1801,15 +1704,15 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     ${heroMediaUrl ? '<div class="hero-overlay"></div>' : ''}
     <div class="hero-content">
       <div class="logo">${logoMarkup}</div>
-      <h1>${aud.customer.h}</h1>
-      <p class="sub">${aud.customer.b}</p>
+      <h1>${a.h}</h1>
+      <p class="sub">${a.b}</p>
     </div>
   </div>
   <div class="body">
-    ${tabMarkup(aud, color, secondary, accent)}
+    ${audienceForm(a)}
     <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
   </div>
-${waitlistScript(bk.apiWaitlist, bk.nonce)}
+${singleWaitlistScript(bk.apiWaitlist, audKey, bk.nonce)}
 </body>
 </html>`;
 }
@@ -1817,13 +1720,15 @@ ${waitlistScript(bk.apiWaitlist, bk.nonce)}
 // ── Template: Editorial ──────────────────────────────────────────
 function renderEditorial(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, fontPairing, logoMarkup, name } = bk;
+  const audKey = selectedAudience(row);
+  const a = aud[audKey];
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
-<meta name="description" content="${aud.customer.b}" />
+<meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
 <style>
   :root { color-scheme: light; }
@@ -1832,39 +1737,31 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .logo { display:flex; margin-bottom: 48px; }
   h1 { font-size: clamp(36px, 5vw, 56px); margin: 0 0 16px; line-height: 1.1; letter-spacing: -0.02em; font-weight: 700; }
   .lede { font-size: 20px; color: ${inkColor}; opacity: .75; margin: 0 0 48px; }
-  .tabs { display:flex; gap: 6px; margin-bottom: 28px; }
-  .tab { cursor:pointer; padding: 8px 16px; border-radius: 8px; border: 1px solid transparent; font-size: 14px; background: transparent; color: ${inkColor}; opacity: .6; }
-  .tab.active { opacity: 1; background: ${color}18; border-color: ${color}44; }
-  .panel { display:none; }
-  .panel.active { display:block; }
-  .panel h2 { font-size: 28px; margin: 0 0 8px; }
-  .panel p { font-size: 17px; margin: 0 0 24px; }
   form { display:flex; gap:8px; flex-wrap:wrap; max-width: 480px; margin: 24px 0 0; }
   input { flex:1 1 240px; padding: 12px 14px; border: 1px solid ${inkColor}22; border-radius: 10px; font-size: 15px; outline:none; background: ${bgColor}; color: ${inkColor}; }
   input:focus { border-color: ${color}; box-shadow: 0 0 0 3px ${color}22; }
   button { padding: 12px 18px; background: ${color}; color: #fff; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }
   button[disabled] { opacity: .6; cursor: not-allowed; }
-  .ok, .err { margin-top: 12px; font-size: 14px; }
-  .ok { color: ${accent}; }
-  .err { color: ${color}; opacity: .85; }
+  .wl-ok, .wl-err { margin-top: 12px; font-size: 14px; }
+  .wl-ok { color: ${accent}; }
+  .wl-err { color: ${color}; opacity: .85; }
   .rule { border:0; border-top:1px solid ${secondary}; margin: 40px 0; }
   footer { margin-top: 64px; font-size: 12px; color: ${inkColor}55; }
   footer a { color: inherit; }
   .sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-  @media (max-width: 480px) { .tabs { flex-wrap: wrap; } }
 </style>
 </head>
 <body>
   <div class="wrap">
     <div class="logo">${logoMarkup}</div>
-    <h1>${aud.customer.h}</h1>
-    <p class="lede">${aud.customer.b}</p>
+    <h1>${a.h}</h1>
+    <p class="lede">${a.b}</p>
     <hr class="rule" />
-    ${tabMarkup(aud, color, secondary, accent)}
+    ${audienceForm(a)}
     <hr class="rule" />
     <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
   </div>
-${waitlistScript(bk.apiWaitlist, bk.nonce)}
+${singleWaitlistScript(bk.apiWaitlist, audKey, bk.nonce)}
 </body>
 </html>`;
 }
@@ -1872,13 +1769,15 @@ ${waitlistScript(bk.apiWaitlist, bk.nonce)}
 // ── Template: Product Mock ───────────────────────────────────────
 function renderProductMock(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, fontPairing, logoMarkup, name, productScreenshotUrl } = bk;
+  const audKey = selectedAudience(row);
+  const a = aud[audKey];
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
-<meta name="description" content="${aud.customer.b}" />
+<meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
 <style>
   :root { color-scheme: light; }
@@ -1890,24 +1789,19 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   h1 { font-size: clamp(28px, 4vw, 42px); margin: 0 0 8px; line-height: 1.15; }
   p.lede { font-size: 18px; opacity: .75; margin: 0; }
   .screenshot { width: 100%; max-height: 420px; object-fit: cover; border-radius: 12px; border: 1px solid ${secondary}; margin-bottom: 40px; }
-  .tabs { display:flex; gap: 6px; justify-content:center; margin-bottom: 28px; }
-  .tab { cursor:pointer; padding: 8px 16px; border-radius: 8px; border: 1px solid transparent; font-size: 14px; background: transparent; color: ${inkColor}; opacity: .6; }
-  .tab.active { opacity: 1; background: ${color}18; border-color: ${color}44; }
-  .panel { display:none; }
-  .panel.active { display:block; }
   .panel-content { text-align: center; }
   form { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width: 480px; margin: 0 auto; }
   input { flex:1 1 240px; padding: 12px 14px; border: 1px solid ${inkColor}22; border-radius: 10px; font-size: 15px; outline:none; background: ${bgColor}; color: ${inkColor}; }
   input:focus { border-color: ${color}; box-shadow: 0 0 0 3px ${color}22; }
   button { padding: 12px 18px; background: ${color}; color: #fff; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }
   button[disabled] { opacity: .6; cursor: not-allowed; }
-  .ok, .err { margin-top: 16px; font-size: 14px; }
-  .ok { color: ${accent}; }
-  .err { color: ${color}; opacity: .85; }
+  .wl-ok, .wl-err { margin-top: 16px; font-size: 14px; }
+  .wl-ok { color: ${accent}; }
+  .wl-err { color: ${color}; opacity: .85; }
   footer { margin-top: 64px; font-size: 12px; color: ${inkColor}55; text-align: center; }
   footer a { color: inherit; }
   .sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-  @media (max-width: 480px) { .header { flex-direction: column; text-align: center; } .tabs { flex-wrap: wrap; } }
+  @media (max-width: 480px) { .header { flex-direction: column; text-align: center; } }
 </style>
 </head>
 <body>
@@ -1915,17 +1809,17 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <div class="header">
       <div class="logo">${logoMarkup}</div>
       <div class="headline">
-        <h1>${aud.customer.h}</h1>
-        <p class="lede">${aud.customer.b}</p>
+        <h1>${a.h}</h1>
+        <p class="lede">${a.b}</p>
       </div>
     </div>
     ${productScreenshotUrl ? `<img src="${escapeHtml(productScreenshotUrl)}" alt="${name} product" class="screenshot" />` : ''}
     <div class="panel-content">
-      ${tabMarkup(aud, color, secondary, accent)}
+      ${audienceForm(a)}
     </div>
     <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
   </div>
-${waitlistScript(bk.apiWaitlist, bk.nonce)}
+${singleWaitlistScript(bk.apiWaitlist, audKey, bk.nonce)}
 </body>
 </html>`;
 }
