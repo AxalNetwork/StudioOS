@@ -10,6 +10,34 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Blank Stripe import no longer saves a misleading $0 metric — Task #12
+
+A manual "Import from Stripe" against a connected account with no active/
+trialing subscriptions correctly shows the "connected but no synced billing data
+yet" message — but the shared sync had *already* written a `source='stripe'`
+snapshot with MRR/customers = 0 before the route could classify the result as
+no-data, so a misleading $0 Stripe row appeared in the metrics history on the
+next Metrics-page load.
+
+- `cloudflare-worker/src/integrations/providers/stripe.ts` (`syncStripeForUser`,
+  the manual-button-only entry point called from `routes/progress.ts`'s
+  `POST /metrics/:projectId/import-stripe`): when the computed metrics have no
+  usable data (`mrr === 0 && paying_customers === 0`), it now skips
+  `projectMetricsToProject` entirely — no `metrics_snapshots` row and no
+  `financial_models` write — while still updating `last_synced_at` / clearing
+  `last_error` and returning `imported: 0`. The route's no-data classification
+  (`!result.mrr && !result.customers`) and message are unchanged. A $0-MRR
+  account that still has a paying customer counts as real data and is persisted.
+- The shared cron reconcile (`syncAllStripeIntegrations`) and webhook
+  (`handleStripeConnectEvent`) paths run through `sync()`, which is untouched and
+  still writes/refreshes the zero snapshot as before.
+- **Regression guard** (`cloudflare-worker/test/stripe_import_empty.test.ts`,
+  added to `npm run test:drift`): drives the real `syncStripeForUser` against an
+  in-memory SQLite D1 (DQS enabled to match the engine) with a stubbed Stripe
+  REST API — asserts an empty account writes no snapshot row (and no
+  `financial_models` row), one active sub writes exactly one row with the right
+  MRR, and a $0-MRR-but-one-customer account still persists.
+
 ## Configured brand logo now renders on every signature landing template — Task #10
 
 Every one of the 16 signature landing templates now shows the project's

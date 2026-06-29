@@ -581,11 +581,23 @@ export async function syncStripeForUser(env: Env, userId: number, projectId: num
   if (!creds?.access_token) return { ok: false, imported: 0, detail: 'credentials_missing' };
   try {
     const metrics = await computeStripeMetrics(String(creds.access_token));
-    await projectMetricsToProject(env, projectId, metrics);
+    // Manual "Import from Stripe" only: when the connected account has no usable
+    // billing data (no active/trialing subscriptions → MRR *and* paying customers
+    // are both 0), do NOT persist anything. The route classifies this exact
+    // condition (`!result.mrr && !result.customers`) as `stripe_no_data` and
+    // tells the founder there is nothing to import; writing a zero
+    // `source='stripe'` snapshot here would contradict that message and leave a
+    // misleading $0 row in the metrics history. The shared cron/webhook path
+    // (`sync()`) intentionally still writes the zero snapshot — that reconcile
+    // behavior is unchanged.
+    const hasData = metrics.mrr !== 0 || metrics.paying_customers !== 0;
+    if (hasData) {
+      await projectMetricsToProject(env, projectId, metrics);
+    }
     await env.DB.prepare(
       'UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = ?',
     ).bind(row.id).run();
-    return { ok: true, imported: 1, mrr: metrics.mrr, customers: metrics.paying_customers };
+    return { ok: true, imported: hasData ? 1 : 0, mrr: metrics.mrr, customers: metrics.paying_customers };
   } catch (e) {
     const msg = (e as Error).message?.slice(0, 500) || 'sync failed';
     try { await env.DB.prepare('UPDATE integrations SET last_error = ? WHERE id = ?').bind(msg, row.id).run(); } catch { /* non-fatal */ }

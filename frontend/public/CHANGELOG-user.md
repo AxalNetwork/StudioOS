@@ -5,6 +5,15 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## No more misleading $0 when Stripe has nothing to import
+
+If you click "Import from Stripe" but your connected Stripe account doesn't have
+any active subscriptions yet, we'll let you know there's no billing data to
+import — and we no longer record a misleading $0 entry in your metrics history.
+Once you have real subscriptions, importing works exactly as before.
+
+---
+
 ## Your logo now shows in your landing page's nav and footer
 
 When you set a logo for a project, it now shows up in the top navigation bar and
