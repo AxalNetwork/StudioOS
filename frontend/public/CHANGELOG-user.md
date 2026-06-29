@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Replies to your network invites now come straight to you
+
+When you invite people from your network (Refer & Earn), your invitation now
+sets your own email as the reply address — so if someone hits "Reply", their
+message lands in your inbox instead of an unmonitored mailbox. The invite still
+comes from Axal's verified address (shown as "{your name} via Axal StudioOS")
+so it keeps landing reliably. This applies to both your first invite and any
+reminders you send.
+
+---
+
 ## The "Import from Stripe" button now always tells you exactly what happened
 
 We added behind-the-scenes safeguards so the Import-from-Stripe button keeps

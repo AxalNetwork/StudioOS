@@ -10,6 +10,26 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Reply-To sender on network invites — Task #5
+
+Network/referral invite emails (Refer & Earn — both the bulk send and the
+per-invite reminder) now carry a `Reply-To` set to the inviting user, so a
+recipient who hits "Reply" reaches the sender directly instead of the
+unmonitored `noreply@axal.vc` mailbox. The From address stays
+`noreply@axal.vc` (Axal's DKIM/SPF/DMARC-aligned domain) with the display name
+`{sender} via Axal StudioOS`.
+
+- `services/email.ts`: `buildRawEmail` gained an optional `replyTo` (emitted as
+  a sanitized `Reply-To:` header). New exported `buildReferralInviteRaw`
+  composes the invite From/Reply-To via a new `formatAddress` helper that
+  CR/LF-strips and quotes display names so a sender name can't smuggle headers
+  or spoof a second From address. `sendReferralInviteEmail` now takes the
+  sender's email.
+- `routes/email.ts`: both invite entry points pass `sender.email`; dedupe,
+  quota, cooldown, and tracking writes unchanged.
+- Test: `test/referral_invite_replyto.test.ts` (Reply-To present, From on
+  `noreply@axal.vc`, CR/LF + angle-bracket injection neutralised).
+
 ## Clear code-quality scanning alerts — Task #3
 
 Removed standing CodeQL Note/Warning quality alerts (unused

@@ -211,7 +211,7 @@ email.post('/send-referral-invites', async (c) => {
     let ok = false;
     let reason = '';
     try {
-      ok = await sendReferralInviteEmail(c.env, contact.email, contact.name, sender.name, personalizedLink, sender.referral_code, customMessage);
+      ok = await sendReferralInviteEmail(c.env, contact.email, contact.name, sender.name, sender.email, personalizedLink, sender.referral_code, customMessage);
       if (!ok) reason = 'Email provider rejected the message';
     } catch (e: any) {
       reason = e?.message || 'Unknown error';
@@ -341,6 +341,7 @@ email.post('/invites/:id/remind', async (c) => {
       invite.recipient_email,
       invite.recipient_name || '',
       sender.name,
+      sender.email,
       personalizedLink,
       sender.referral_code,
       invite.personal_message || '',

@@ -41,15 +41,19 @@ function stripHeaderInjection(s: string): string {
   return (s || '').replace(/[\r\n]+/g, ' ').trim();
 }
 
-function buildRawEmail(to: string, subject: string, html: string, text: string, from?: string): string {
+function buildRawEmail(to: string, subject: string, html: string, text: string, from?: string, replyTo?: string): string {
   const boundary = `boundary_${crypto.randomUUID().replace(/-/g, '')}`;
   const safeTo = stripHeaderInjection(to);
   const safeSubject = stripHeaderInjection(subject);
   const safeFrom = stripHeaderInjection(from || 'Axal VC <noreply@axal.vc>');
+  // Task #5 — optional Reply-To. Sanitized (CR/LF-stripped) like every other
+  // header value so a caller-supplied value can't smuggle extra headers.
+  const safeReplyTo = stripHeaderInjection(replyTo || '');
   const subjectEncoded = `=?UTF-8?B?${btoa(unescape(encodeURIComponent(safeSubject)))}?=`;
   const lines = [
     `To: ${safeTo}`,
     `From: ${safeFrom}`,
+    ...(safeReplyTo ? [`Reply-To: ${safeReplyTo}`] : []),
     `Subject: ${subjectEncoded}`,
     `MIME-Version: 1.0`,
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
@@ -69,6 +73,21 @@ function buildRawEmail(to: string, subject: string, html: string, text: string, 
     `--${boundary}--`,
   ];
   return lines.join('\r\n');
+}
+
+// Task #5 — compose an RFC-5322 address (`Display Name <addr>`) safely.
+// CR/LF is stripped (header-injection) and a display name containing any
+// "specials" is wrapped in a quoted-string so a name like `Jane <evil@x.com>`
+// or `Doe, Jane` can't break the address or inject a second addr-spec into
+// From/Reply-To. Returns the bare addr-spec when there's no display name.
+function formatAddress(displayName: string, addrSpec: string): string {
+  const name = stripHeaderInjection(displayName);
+  const addr = stripHeaderInjection(addrSpec);
+  if (!name) return addr;
+  const quoted = /[()<>[\]:;@\\,."]/.test(name)
+    ? `"${name.replace(/([\\"])/g, '\\$1')}"`
+    : name;
+  return `${quoted} <${addr}>`;
 }
 
 // Task #14 — multipart email with a single PDF attachment.
@@ -403,11 +422,50 @@ ${noteBlock}
   }
 }
 
+/**
+ * Task #5 — build the raw MIME for a network/referral invite.
+ *
+ * The From address stays on Axal's authenticated domain (noreply@axal.vc) so
+ * DKIM/SPF/DMARC alignment holds; the inviting user's identity rides in the
+ * From *display name* (`{sender} via Axal StudioOS`) and — crucially — in a
+ * Reply-To header so a recipient who hits "Reply" reaches the sender directly
+ * instead of the unmonitored noreply mailbox. All sender-controlled values are
+ * CR/LF-stripped (and display names quoted) via formatAddress so they can't
+ * smuggle extra headers or spoof a second From address.
+ *
+ * Exported for unit testing (see test/referral_invite_replyto.test.ts).
+ */
+export function buildReferralInviteRaw(
+  to: string,
+  recipientName: string,
+  senderName: string,
+  senderEmail: string,
+  link: string,
+  code: string,
+  personalMessage: string,
+): string {
+  const html = buildReferralInviteHTML(recipientName, senderName, link, code, personalMessage);
+  const noteText = personalMessage ? `\n\n${personalMessage}\n\n` : '\n\n';
+  const text = `${recipientName ? `Hi ${recipientName.split(' ')[0]},` : 'Hi,'}\n\n${senderName} invited you to Axal StudioOS — a venture studio that ships funded startups in 30 days.${noteText}Join here: ${link}\nReferral code: ${code}\n`;
+  const subject = `${senderName} invited you to Axal StudioOS`;
+  const safeSenderName = stripHeaderInjection(senderName);
+  const from = formatAddress(
+    safeSenderName ? `${safeSenderName} via Axal StudioOS` : 'Axal VC',
+    'noreply@axal.vc',
+  );
+  const safeSenderEmail = stripHeaderInjection(senderEmail);
+  // Reply-To carries the sender's registered email so replies route to them.
+  // Omitted entirely when no sender email is available.
+  const replyTo = safeSenderEmail ? formatAddress(senderName, safeSenderEmail) : undefined;
+  return buildRawEmail(to, subject, html, text, from, replyTo);
+}
+
 export async function sendReferralInviteEmail(
   env: Env,
   to: string,
   recipientName: string,
   senderName: string,
+  senderEmail: string,
   link: string,
   code: string,
   personalMessage: string,
@@ -418,11 +476,7 @@ export async function sendReferralInviteEmail(
   }
   try {
     const accessToken = await getGmailAccessToken(env);
-    const html = buildReferralInviteHTML(recipientName, senderName, link, code, personalMessage);
-    const noteText = personalMessage ? `\n\n${personalMessage}\n\n` : '\n\n';
-    const text = `${recipientName ? `Hi ${recipientName.split(' ')[0]},` : 'Hi,'}\n\n${senderName} invited you to Axal StudioOS — a venture studio that ships funded startups in 30 days.${noteText}Join here: ${link}\nReferral code: ${code}\n`;
-    const subject = `${senderName} invited you to Axal StudioOS`;
-    const rawEmail = buildRawEmail(to, subject, html, text);
+    const rawEmail = buildReferralInviteRaw(to, recipientName, senderName, senderEmail, link, code, personalMessage);
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       method: 'POST',
