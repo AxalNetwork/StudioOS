@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Import your live numbers from Stripe
+
+The "Import from Stripe" button on the Metrics page now works. If you've connected
+your Stripe account, one click pulls your live MRR, ARR, churn, and customer count
+into a new metrics snapshot, and your stat cards update right away. If Stripe isn't
+connected yet, you'll see a clear prompt to connect it (or enter your numbers by
+hand) instead of a button that quietly does nothing — and if your Stripe account
+has no billing data yet, we'll tell you that too.
+
+---
+
 ## Your landing page editor now matches the template you picked
 
 When you build your Brand & Landing page, step 3 now adapts to the template you chose:

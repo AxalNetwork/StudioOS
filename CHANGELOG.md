@@ -10,6 +10,30 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Import from Stripe (Metrics) — Task #4
+
+The Metrics page **"Import from Stripe"** button now pulls live billing data
+instead of returning a fake empty success.
+
+- `POST /api/progress/metrics/:projectId/import-stripe`
+  (`cloudflare-worker/src/routes/progress.ts`) now calls the existing
+  `syncStripeForUser(env, userId, projectId)`
+  (`cloudflare-worker/src/integrations/providers/stripe.ts`) — `requireAuth`,
+  `loadProject`, and `ensureCanEdit` checks unchanged. The previous body was a
+  placeholder returning a fake `{ ok: true, imported: 0, detail: 'not_configured' }`.
+- Result → response mapping (frontend reads `error.data.code` only on non-2xx,
+  via `frontend/src/lib/api.js`'s `detail` object path, matching the FastAPI shape):
+  - `not_connected` / `credentials_missing` → `400 { detail: { code: 'stripe_not_connected', message } }`
+  - connected but no active/trialing subscriptions (`mrr` and `customers` both 0)
+    → `400 { detail: { code: 'stripe_no_data', message } }`
+  - any other sync failure → `502 { detail: { code: 'stripe_sync_failed', message } }`
+  - success → `200 { ok, imported, source: 'stripe', mrr, customers }`; the
+    `source='stripe'` snapshot is written by the shared sync and the stat cards
+    update on the page's refresh.
+- `syncStripeForUser` is shared with the Stripe cron/webhook resync paths and was
+  left unchanged; `cloudflare-worker/src/routes/metrics.ts` relay unchanged. No
+  FastAPI change (dev-only, never deployed).
+
 ## Template-Driven Brand Page Editor — Task #3
 
 Brand & Landing **step 3 is now template-aware**: the editable fields adapt to the

@@ -47,6 +47,7 @@ import {
   normPhrase,
   type PainGroupRow,
 } from '../services/painGroups';
+import { syncStripeForUser } from '../integrations/providers/stripe';
 
 const progress = new Hono<{ Bindings: Env }>();
 
@@ -1182,9 +1183,44 @@ progress.post('/metrics/:projectId/import-stripe', async (c) => {
   const project = await loadProject(c.env, projectId);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
-  // Stripe ingestion is not yet wired in the worker — return a typed
-  // empty success so the SPA's import button doesn't crash.
-  return c.json({ ok: true, imported: 0, source: 'stripe', detail: 'not_configured' });
+
+  // Wire the button to the real Stripe sync: read the founder's active Stripe
+  // integration, compute live MRR/ARR/churn/customers, and write a
+  // `source='stripe'` metrics snapshot for this project. No fake success — each
+  // failure mode surfaces a typed code the Metrics page already handles.
+  const result = await syncStripeForUser(c.env, user.id, projectId);
+
+  if (!result.ok) {
+    // Not connected / credentials missing → prompt to connect or use manual entry.
+    if (result.detail === 'not_connected' || result.detail === 'credentials_missing') {
+      return c.json({
+        detail: {
+          code: 'stripe_not_connected',
+          message: 'No Stripe billing integration connected. Use manual entry instead.',
+        },
+      }, 400);
+    }
+    // Any other failure (e.g. Stripe API error) → readable generic error.
+    return c.json({
+      detail: { code: 'stripe_sync_failed', message: result.detail || 'Stripe import failed.' },
+    }, 502);
+  }
+
+  // Connected, but the account has no usable billing data (no active/trialing
+  // subscriptions) → existing "connected but no synced data yet" guidance.
+  if (!result.mrr && !result.customers) {
+    return c.json({
+      detail: { code: 'stripe_no_data', message: 'Stripe is connected but has no synced billing data yet.' },
+    }, 400);
+  }
+
+  return c.json({
+    ok: true,
+    imported: result.imported,
+    source: 'stripe',
+    mrr: result.mrr ?? 0,
+    customers: result.customers ?? 0,
+  });
 });
 
 export default progress;
