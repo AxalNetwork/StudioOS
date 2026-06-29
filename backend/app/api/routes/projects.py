@@ -13,10 +13,8 @@ from backend.app.services.scoring import run_full_score
 from backend.app.services.use_of_funds import parse_use_of_funds_value, normalize_use_of_funds
 from backend.app.services.score_integrity import assert_no_reserved_fields
 from backend.app.api.routes.auth import get_current_user
-from backend.app.api.deps import require_admin, is_privileged, ensure_founder_access
-from backend.app.models.entities import UserRole
+from backend.app.api.deps import require_admin, is_privileged
 from backend.app.services.project_access import (
-    can_access_project,
     ensure_project_access,
     member_project_ids,
 )

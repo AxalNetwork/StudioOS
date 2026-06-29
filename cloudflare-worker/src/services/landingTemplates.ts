@@ -2558,7 +2558,7 @@ ${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
 
 // ── Template: Distribution Deck (Task #25) — light blueprint partnership memo ──
 function renderDistributionDeck(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const { color, bgColor, inkColor, secondary, accent, name } = bk;
   const a = aud.investor; const brand = name || 'our company'; const btnInk = contrastText(color);
   const ctaInk = contrastText(inkColor);
   const c = landingContent(row, 'distribution-deck');
@@ -2679,7 +2679,7 @@ ${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
 
 // ── Template: Pilot Partner Page (Task #25) — Swiss 12-col pilot recruiter ──
 function renderPilotPartnerPage(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const { color, bgColor, inkColor, secondary, accent, name } = bk;
   const a = aud.partner; const btnInk = contrastText(color);
   const ctaInk = contrastText(inkColor);
   const c = landingContent(row, 'pilot-partner-page');
@@ -2794,7 +2794,7 @@ ${singleWaitlistScript(bk.apiWaitlist, 'partner', bk.nonce)}
 
 // ── Template: Partner Hub (Task #25) — calm teal BD landing ──
 function renderPartnerHub(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const { color, bgColor, inkColor, secondary, accent, name } = bk;
   const a = aud.partner; const btnInk = contrastText(color);
   const ctaInk = contrastText(inkColor);
   const c = landingContent(row, 'partner-hub');
@@ -2906,7 +2906,7 @@ ${singleWaitlistScript(bk.apiWaitlist, 'partner', bk.nonce)}
 
 // ── Template: Partner Pipeline Pro (Task #25) — financial-tech distribution pitch ──
 function renderPartnerPipelinePro(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const { color, bgColor, inkColor, secondary, accent, name } = bk;
   const a = aud.partner; const brand = name || 'our company'; const btnInk = contrastText(color);
   const ctaInk = contrastText(inkColor);
   const c = landingContent(row, 'partner-pipeline-pro');
@@ -3032,7 +3032,7 @@ ${singleWaitlistScript(bk.apiWaitlist, 'partner', bk.nonce)}
 
 // ── Template: Co-Founder Builder (Task #25) — engineering-doc co-founder brief ──
 function renderCoFounderBuilder(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const { color, bgColor, inkColor, secondary, accent, name } = bk;
   const a = aud.cofounder; const brand = name || 'our company'; const btnInk = contrastText(color);
   const c = landingContent(row, 'co-founder-builder');
   const danger = '#c2452f';
@@ -3163,7 +3163,7 @@ ${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
 
 // ── Template: Co-Founder Canvas (Task #25) — editorial serif founder letter ──
 function renderCoFounderCanvas(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const { color, bgColor, inkColor, secondary, accent, name } = bk;
   const a = aud.cofounder; const btnInk = contrastText(color);
   const c = landingContent(row, 'co-founder-canvas');
   const gapInk = contrastText(inkColor);
@@ -3308,7 +3308,7 @@ ${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
 
 // ── Template: Co-founder Connect (Task #25) — warm grain founder letter ──
 function renderCofounderConnect(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const { color, bgColor, inkColor, secondary, accent, name } = bk;
   const a = aud.cofounder; const btnInk = contrastText(color);
   const c = landingContent(row, 'cofounder-connect');
   const ctaInk = contrastText(inkColor);
@@ -3450,7 +3450,7 @@ ${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
 
 // ── Template: Co-Founder Quest (Task #25) — mission-framed co-founder call ──
 function renderCoFounderQuest(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const { color, bgColor, inkColor, secondary, accent, name } = bk;
   const a = aud.cofounder; const btnInk = contrastText(color);
   const c = landingContent(row, 'co-founder-quest');
   return `<!doctype html>
@@ -3579,7 +3579,7 @@ ${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
 
 // ── Template: Mentor Connect (Task #25) — minimal single-column mentor note ──
 function renderMentorConnect(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const { color, bgColor, inkColor, secondary, accent, name } = bk;
   const a = aud.mentor; const btnInk = contrastText(color);
   const c = landingContent(row, 'mentor-connect');
   return `<!doctype html>
@@ -3685,7 +3685,7 @@ ${singleWaitlistScript(bk.apiWaitlist, 'mentor', bk.nonce)}
 
 // ── Template: Mentor Connect Page (Task #25) — narrative serif mentor letter ──
 function renderMentorConnectPage(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const { color, bgColor, inkColor, secondary, accent, name } = bk;
   const a = aud.mentor; const btnInk = contrastText(color);
   const c = landingContent(row, 'mentor-connect-page');
   return `<!doctype html>
@@ -3790,7 +3790,7 @@ ${singleWaitlistScript(bk.apiWaitlist, 'mentor', bk.nonce)}
 
 // ── Template: Builder's Launchpad (Task #25) — dark terminal launch teaser ──
 function renderBuildersLaunchpad(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
-  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const { color, bgColor, inkColor, secondary, accent, name } = bk;
   const a = aud.customer; const brand = name || 'our company'; const btnInk = contrastText(color);
   const c = landingContent(row, 'builders-launchpad');
   const ok = '#7bbf5a', warn = accent, danger = '#d9544e';

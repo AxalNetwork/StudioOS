@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth, requireRole, requireApprovedKyc, canAccessFounderResource } from '../auth';
+import { requireAuth, requireApprovedKyc, canAccessFounderResource } from '../auth';
 import { seedStandardEventsForJurisdiction } from './compliance';
 import { CONTRACT_DOC_TYPES } from './admin_contracts';
 import { getActiveTemplateBody } from '../services/legalTemplateStore';

@@ -119,12 +119,6 @@ const fmtMoney = (n: unknown): string => {
   return `$${Math.round(v).toLocaleString()}`;
 };
 
-const fmtPct = (n: unknown): string => {
-  const v = Number(n);
-  if (!isFinite(v)) return DASH;
-  return `${Math.round(v * 10) / 10}%`;
-};
-
 const fmtMonths = (n: unknown): string => {
   const v = Number(n);
   if (!isFinite(v) || v <= 0) return DASH;

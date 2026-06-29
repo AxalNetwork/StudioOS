@@ -68,8 +68,6 @@ export interface SendResult {
   reason?: string;
 }
 
-const MARKETING_CATEGORIES = new Set<string>(['marketing']);
-
 async function ensureSendLog(env: Env): Promise<boolean> {
   try {
     await env.DB.prepare(

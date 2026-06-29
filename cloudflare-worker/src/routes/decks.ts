@@ -22,7 +22,7 @@ import { fillAxalSpinoutDemoDay, buildAxalSpinoutDemoDaySlides, buildAxalSpinout
 import { assembleSpinoutDeckData } from '../services/decks/spinoutDeckData';
 import { recommendMethod, listOverrides, setOverride, deleteOverride } from '../services/decks/recommend';
 import { getDeckBrand, setStudioWatermark, ensureMethodAllowed, fetchLandingPageForProject, applyBrandKitToSlides } from '../services/decks/branding';
-import { renderDeckHTML, type RenderableDeck } from '../services/decks/render';
+import { type RenderableDeck } from '../services/decks/render';
 import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx';
 import { stripTrailingSlashes } from '../util/url';
 

@@ -1,4 +1,4 @@
-import { Context, MiddlewareHandler } from 'hono';
+import { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { getCurrentUser } from '../auth';
 

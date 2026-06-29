@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Query
 from sqlmodel import Session
 
 from backend.app.api.routes.auth import get_current_user

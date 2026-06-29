@@ -7,7 +7,6 @@
    * deterministic seed so the aggregator produces stable composites in
    * dev. Set MI_FLAG_GOOGLE_PLAY=live in production env to engage fetchLive.
    */
-  import type { Env } from '../../../types';
   import { registerSource, type CommonRow } from '../registry';
   import { row, seededAround, doy } from './_helpers';
 

@@ -170,7 +170,7 @@ networkfx.get('/referrals/compounding', async (c) => {
 // ============================================================
 
 networkfx.get('/syndicates', async (c) => {
-  const user = await requireAuth(c);
+  await requireAuth(c);
   await ensureSchema(c.env);
   const status = c.req.query('status');
   const sql = getSQL(c.env);

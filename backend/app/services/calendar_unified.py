@@ -43,7 +43,6 @@ from backend.app.models.entities import (
     IcMeetingAttendee,
     Mentor,
     MentorBooking,
-    OfficeHourSlot,
     Partner,
     PartnerBooking,
     User,

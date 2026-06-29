@@ -21,7 +21,6 @@ from backend.app.database import get_session
 from backend.app.models.entities import (
     ActivityLog,
     Engagement,
-    Founder,
     Partner,
     Project,
     ServiceOffering,

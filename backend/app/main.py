@@ -652,7 +652,7 @@ def dashboard(request: Request, user=Depends(get_current_user)):
     from sqlmodel import Session, select
 
     from backend.app.database import engine
-    from backend.app.models.entities import Project, User
+    from backend.app.models.entities import Project
 
     # ?days window (default 30, clamp 1..365) — sizes the zero-filled series.
     try:

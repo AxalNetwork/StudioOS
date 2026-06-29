@@ -1,5 +1,4 @@
 import os
-import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from pydantic import BaseModel, Field
@@ -100,8 +99,6 @@ Keep responses concise but thorough (3-5 key points with brief explanations)."""
             }
 
         except Exception as e:
-            fallback_reason = f"AI unavailable: {type(e).__name__}"
-
             log = ActivityLog(
                 project_id=req.project_id,
                 action="ai_advisory_query",

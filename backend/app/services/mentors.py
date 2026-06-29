@@ -24,7 +24,6 @@ from datetime import datetime, timedelta
 from typing import Iterable, Optional
 
 import httpx
-from sqlalchemy import text
 from sqlmodel import Session, select
 
 from backend.app.models.entities import (

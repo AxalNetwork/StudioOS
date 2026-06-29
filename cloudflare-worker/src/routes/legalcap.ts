@@ -8,13 +8,9 @@ const legalcap = new Hono<{ Bindings: Env }>();
 
 const DOC_TYPES = new Set(['SAFE', 'IP_license', 'equity_allocation', 'bylaws', '83b_election']);
 const CHECKLIST_TYPES = new Set(['legal', 'financial', 'tech', 'compliance']);
-const COMPLIANCE_TYPES = new Set(['kyc', 'aml', 'delaware_filing', 'global_subsidiary']);
 // Phase 0.1: investors (migrated partners) keep advance privileges.
 const ADVANCE_ROLES = new Set(['admin', 'partner', 'investor']);
 const AI_RATE_LIMIT = 60; // shared
-
-const SPINOUT_STATUSES = ['pending', 'ip_transferred', 'equity_allocated', 'incorporated', 'independent'];
-const SPINOUT_EVENT_TYPES = new Set(['ip_transfer', 'equity_allocation', 'stripe_atlas_start', 'stripe_atlas_complete', 'independent_scale']);
 
 let migrated = false;
 async function ensureSchema(env: Env) {

@@ -12,7 +12,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { ensureTier } from '../middleware/requireTier';
 import {
-  role, isAdmin, isFounder, mapError, nowIso, newUid, jload,
+  isAdmin, isFounder, mapError, nowIso, newUid, jload,
 } from './_t13t14t15_helpers';
 import {
   loadUserVectors,

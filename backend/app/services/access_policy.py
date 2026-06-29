@@ -81,7 +81,6 @@ from sqlmodel import Session, select
 
 from backend.app.api.deps import (
     can_access_founder_resource,
-    is_privileged,
 )
 from backend.app.api.routes.auth import get_current_user
 from backend.app.database import get_session

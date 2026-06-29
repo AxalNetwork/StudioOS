@@ -14,7 +14,7 @@ const TEMPLATES: Record<string, string> = {
 };
 
 advisory.post('/ask', async (c) => {
-  const user = await requireAuth(c);
+  await requireAuth(c);
   const data = await c.req.json();
   const sql = getSQL(c.env);
 
@@ -36,7 +36,7 @@ advisory.post('/ask', async (c) => {
 });
 
 advisory.post('/financial-plan', async (c) => {
-  const user = await requireAuth(c);
+  await requireAuth(c);
   const req = await c.req.json();
   const sql = getSQL(c.env);
 

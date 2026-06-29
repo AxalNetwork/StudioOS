@@ -117,7 +117,7 @@ import './integrations/providers/slack';
 import { crunchbaseFetch as _registerCrunchbase } from './integrations/providers/crunchbase';
 void _registerCrunchbase;
 // Task #6 (DG) — Stripe provider. Side-effect import so registerProvider() runs at boot.
-import { syncAllStripeIntegrations, handleStripeConnectEvent } from './integrations/providers/stripe';
+import './integrations/providers/stripe';
 import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
 import referEarn from './routes/refer_earn';
@@ -934,9 +934,7 @@ export default {
       let cronSummary: string[] = [];
       let cronError: string | null = null;
 
-      // Map the actual event cron expression to a named trigger.
       const eventCron = (event as any).cron || '* * * * *';
-      const triggerName = CRON_TRIGGERS.find(t => t.expr === eventCron)?.name || eventCron;
       // We store the raw cron expression as trigger_name so the DB last-run
       // map can be keyed by expr (consistent across the cron-history endpoint
       // and the CRON_TRIGGERS array). The display name is resolved at read time.

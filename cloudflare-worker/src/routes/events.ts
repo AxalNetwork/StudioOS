@@ -28,7 +28,6 @@ import {
   type EventSeatRow,
 } from '../services/eventCapacity';
 import {
-  evaluateCompEligibility,
   isPrincipalCompEligible,
   mintCompInvitations,
   parseAudienceRules,

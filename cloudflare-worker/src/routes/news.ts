@@ -27,7 +27,6 @@ import { requireAuth } from '../auth';
 import { clampLimit, parseOffset } from '../util/pagination';
 import {
   ensureNewsSchema,
-  NEWS_STATUSES,
   SUBMISSIONS_PER_WEEK,
   TRUST_AUTHOR_MIN,
 } from '../services/newsSchema';

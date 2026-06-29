@@ -2690,7 +2690,6 @@ async def upload_83b_receipt(
     """Upload a certified-mail receipt (PS Form 3800 scan) for a 83(b)
     tracker. Stored as a Document on the same project; receipt_doc_id is
     linked back on the tracker."""
-    from fastapi import UploadFile
     from starlette.datastructures import UploadFile as _UF
 
     t = session.get(Section83bTracker, tracker_id)

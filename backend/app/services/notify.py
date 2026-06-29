@@ -20,7 +20,7 @@ import os
 from typing import Iterable, Optional
 from urllib.request import Request as _UrlRequest, urlopen
 
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from backend.app.database import engine
 from backend.app.models.entities import Notification, User

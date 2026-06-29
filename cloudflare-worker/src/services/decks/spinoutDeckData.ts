@@ -661,11 +661,6 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
  * ========================================================================== */
 export function flattenSpinoutDeckData(data: SpinoutDeckData): Record<string, string> {
   const out: Record<string, string> = {};
-  const shouldEmit = (v: unknown): boolean => {
-    if (typeof v === 'string') return has(v);
-    return v !== undefined && v !== null;
-  };
-
   const walk = (prefix: string, value: unknown): void => {
     if (value === undefined || value === null) return;
     if (typeof value === 'string') {

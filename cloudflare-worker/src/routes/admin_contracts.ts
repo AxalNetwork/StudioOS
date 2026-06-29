@@ -1008,16 +1008,12 @@ adminContracts.post('/:uid/void', async (c) => {
     }
 
     let envelopeUuid: string | null = null;
-    let envelopeTitle: string | null = null;
-    let projectId: number | null = null;
 
     if (ref.source === 'documents') {
       const d = ref.row;
       if (String(d.status).toLowerCase() === 'signed') {
         return c.json({ error: 'Cannot void a signed contract' }, 400);
       }
-      envelopeTitle = d.title || null;
-      projectId = d.project_id ?? null;
       await sql`UPDATE documents SET status = 'void', updated_at = CURRENT_TIMESTAMP WHERE uid = ${d.uid}`;
       const detail = JSON.stringify({ uid: d.uid, title: d.title, reason });
       await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_voided', ${detail}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
@@ -1030,7 +1026,6 @@ adminContracts.post('/:uid/void', async (c) => {
         return c.json({ error: 'Cannot void a signed contract' }, 400);
       }
       envelopeUuid = env.envelope_uuid;
-      envelopeTitle = env.document_title;
       await sql`UPDATE esign_envelopes SET status = 'void' WHERE id = ${env.id}`;
       await sql`UPDATE esign_recipients SET status = 'rejected' WHERE envelope_id = ${env.id} AND status = 'pending'`;
       const detail = JSON.stringify({

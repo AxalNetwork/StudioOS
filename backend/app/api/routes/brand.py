@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlmodel import Session
 
@@ -394,7 +394,7 @@ def _row_to_landing(row) -> Dict[str, Any]:
         "headline": row["headline"],
         "subheadline": row["subheadline"],
         "cta_text": row["cta_text"] or "Join the waitlist",
-        "logo_url": row["logo_url"],
+        "logo_url": row.get("logo_url") or None,
         "logo_svg": row["logo_svg"],
         "logo_asset_id": row.get("logo_asset_id") or None,
         "theme_color": row["theme_color"] or "#7c3aed",
@@ -430,7 +430,6 @@ def _row_to_landing(row) -> Dict[str, Any]:
         "goal": row.get("goal") or None,
         "template_kit": row.get("template_kit") or None,
         "content_json": _parse_content_json(row.get("content_json")),
-        "logo_url": row.get("logo_url") or None,
     }
 
 

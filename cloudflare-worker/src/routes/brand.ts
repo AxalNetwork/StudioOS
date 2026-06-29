@@ -907,13 +907,6 @@ brand.post('/landing/:slug/view', async (c) => {
 
 // --- Public HTML renderer (mounted from index.ts at /landing/:slug) ------
 
-function escapeHtml(s: string | null | undefined): string {
-  if (!s) return '';
-  return s.replace(/[&<>"']/g, (c) => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
-  ));
-}
-
 function buildLandingPageHtml(
   row: any,
   opts: { slug?: string; token?: string; noindex?: boolean; nonce?: string } = {},

@@ -24,7 +24,7 @@ import { decodeJwt } from 'jose';
 import { getSQL } from '../db';
 import { requireAuth, hashToken, generateToken } from '../auth';
 import { hasTotpConfigured, loadTotp, persistNewTotpEnrolment } from '../services/authTotp';
-import { hasSmsConfigured, loadSms, getUserFactors, setUserFactor } from '../services/authSms';
+import { loadSms, getUserFactors, setUserFactor } from '../services/authSms';
 import { putHeadshotFromDataUri, getHeadshot } from '../services/r2';
 import { sendVerificationEmail } from '../services/email';
 import {

@@ -18,7 +18,7 @@ import json
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select
+from sqlmodel import Session
 from pydantic import BaseModel, Field
 
 from backend.app.database import get_session

@@ -95,8 +95,6 @@ function buildHeatmap(rows: EnrichedRow[]): any {
   for (const c of catList) totalsByCat[c] = STAGE_BUCKETS.reduce((a, s) => a + (byCS.get(`${c}|${s}`) || 0), 0);
   const totalsByStage: Record<string, number> = {};
   for (const s of STAGE_BUCKETS) totalsByStage[s] = catList.reduce((a, c) => a + (byCS.get(`${c}|${s}`) || 0), 0);
-  const top = (m: Map<string, number>, n = 12) =>
-    [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => ({ count: v, [k]: undefined }));
   return {
     categories: catList, stages: STAGE_BUCKETS, matrix,
     totals_by_category: totalsByCat, totals_by_stage: totalsByStage,

@@ -23,7 +23,6 @@ Conventions
 """
 from __future__ import annotations
 
-from typing import Any
 
 
 def _round_shares(x: float) -> int:

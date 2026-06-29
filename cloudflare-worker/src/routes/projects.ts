@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
 import { getSQL } from '../db';
-import { requireAuth, requireRole, canAccessFounderResource, generateToken } from '../auth';
+import { requireAuth, requireRole, generateToken } from '../auth';
 import {
   canAccessProject,
   getProjectMembershipRole,

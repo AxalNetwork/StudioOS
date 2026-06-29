@@ -14,7 +14,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, requireAuth, requireFactor, requireStepUp } from '../auth';
+import { requireAuth, requireFactor, requireStepUp } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken, verifyAndConsumeToken } from '../services/signedDownload';
 import { notify } from '../services/notify';

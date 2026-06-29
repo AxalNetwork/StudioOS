@@ -876,10 +876,6 @@ export function toCsv(data: CsvRow[], columns?: string[]): string {
   return `${head}\n${body}\n`;
 }
 
-type ReportData = OverviewReport | FinancialReport | TechnicalReport
-  | { users: ReturnType<typeof loadUsers> extends Promise<infer U> ? (U extends { users: infer X } ? X : never) : never }
-  | { overview: OverviewReport; financial: FinancialReport; technical: TechnicalReport };
-
 export function reportToCsv(report: string, data: unknown): string {
   const d = data as Record<string, unknown>;
   if (report === 'overview') {

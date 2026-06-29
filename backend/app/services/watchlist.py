@@ -24,7 +24,6 @@ from backend.app.models.entities import (
     ProjectStatus,
     ScoreSnapshot,
     User,
-    UserRole,
     WatchlistItem,
 )
 

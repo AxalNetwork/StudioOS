@@ -32,7 +32,6 @@ from backend.app.api.routes.auth import get_current_user
 from backend.app.database import get_session
 from backend.app.models.entities import Project, User
 from backend.app.services.project_access import (
-    TEAM_BUILDING_MIN_LAB_WEEK,
     can_access_project,
     evaluate_team_gate,
     is_project_manager,
