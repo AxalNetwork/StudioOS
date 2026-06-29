@@ -10,6 +10,61 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Waitlist customers in Customer Discovery — Task #5
+
+Customer-audience waitlist signups now surface inside **Customer Discovery**,
+grouped by project, with a lightweight CRM layer: promote-to-interview, send a
+product-invitation email, and send a follow-up email — each tracking per-signup
+status and writing an activity-log entry.
+
+- **Schema (additive)** — `cloudflare-worker/sql/migrations/121_waitlist_crm.sql`
+  adds `crm_status TEXT DEFAULT 'new'`, `invited_at`, `followed_up_at`,
+  `promoted_at`, `promoted_interview_id INTEGER`, and an index on
+  `(project_id, crm_status)` to `waitlist_signups`. Applied lazily/replay-safely
+  in the Worker by `ensureWaitlistCrmColumns(env)`
+  (`cloudflare-worker/src/services/waitlistCrmSchema.ts`, WeakMap-cached,
+  try/catch per `ALTER` since D1 has no `ADD COLUMN IF NOT EXISTS`), mirroring
+  the `discoveryInterviewSchema.ts` precedent.
+- **Worker endpoints** (`cloudflare-worker/src/routes/progress.ts`, mounted under
+  `/api/progress`, all `loadProject` + `ensureCanView`/`ensureCanEdit`,
+  customer-audience only via `WHERE audience = 'customer'`):
+  - `GET /discovery/:projectId/waitlist` — lists serialized signups + CRM fields.
+  - `POST /discovery/:projectId/waitlist/:signupId/promote` — creates an interview
+    reusing the existing INSERT shape (and the `FREE_TIER_LIMITS.discoveryInterviews`
+    free-tier cap via `userMeetsTier`/`ensureTier`), writes a `waitlist_promoted`
+    activity log, stamps `promoted_*`. **Idempotent**: a repeat promote returns the
+    existing interview with `already_promoted: true` (200, not 409); a concurrency
+    guard (`UPDATE … WHERE promoted_interview_id IS NULL` + `meta.changes`) ensures
+    a single winner, and the loser deletes its orphan interview.
+  - `POST …/invite` + `POST …/follow-up` — send via the existing
+    `send(env, key, …)` pipeline with the new templates, then advance CRM state
+    monotonically (`new < invited < followed_up < promoted`) and log activity.
+- **Email-send semantics** (both backends): success → advance CRM + log,
+  `email_sent: true`. Not-configured (Worker `gmail_creds_missing` with no
+  `GMAIL_CLIENT_ID/SECRET/REFRESH_TOKEN`; dev Gmail not configured) → SOFT path:
+  still advance + log, `email_sent: false`, `email_reason: 'not_configured'`.
+  Any other hard failure → `502 { detail: { code: 'email_send_failed' } }`, CRM
+  NOT advanced.
+- **Templates** (`cloudflare-worker/src/templates/email/registry.ts`):
+  `waitlist_product_invitation` + `waitlist_follow_up`, category `'marketing'`
+  with NO marketing-unsubscribe flag (recipients are waitlist signups, not
+  platform users — opt-out copy lives in the body; `replyTo: support@axal.vc`).
+  Vars: `name`, `product_name`, `founder_name`, `cta_url` (landing-page URL when a
+  `landing_pages` row exists for the project, else the app base).
+- **Dev parity** (`backend/app/api/routes/progress.py`, FastAPI/Postgres, never
+  deployed): `_ensure_waitlist_crm_schema` (`ADD COLUMN IF NOT EXISTS`), the same
+  4 endpoints (raw `text()` SQL for `waitlist_signups`, `Interview` entity for
+  promote, `ActivityLog` writes), and the same response shapes + email semantics
+  gated on `email_service._is_gmail_configured()`.
+- **Frontend**: `frontend/src/lib/api.js` adds `listWaitlistCustomers`,
+  `promoteWaitlistCustomer`, `inviteWaitlistCustomer`, `followUpWaitlistCustomer`.
+  `frontend/src/pages/CustomerDiscoveryPage.jsx` now loads ALL projects (interview
+  form still targets the first project), and renders a **Waitlist customers**
+  section grouped by project — rows show name/email/source/date + a status badge,
+  with per-button loading and inline success/error (including the
+  not-configured case), dark-mode variants, and empty states. No new top-level
+  app routes.
+
 ## Import from Stripe (Metrics) — Task #4
 
 The Metrics page **"Import from Stripe"** button now pulls live billing data

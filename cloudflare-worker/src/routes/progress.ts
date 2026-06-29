@@ -40,6 +40,9 @@ import {
   ensureDiscoveryInterviewFeaturedColumn,
   ensureDiscoveryValidationRatingColumns,
 } from '../services/discoveryInterviewSchema';
+import { ensureWaitlistCrmColumns } from '../services/waitlistCrmSchema';
+import { send, type SendResult } from '../services/email/send';
+import { stripTrailingSlashes } from '../util/url';
 import {
   ensurePainGroupsSchema,
   getPainGroupsView,
@@ -391,6 +394,313 @@ progress.delete('/discovery/interview/:id', async (c) => {
   await c.env.DB.prepare('DELETE FROM discovery_interviews WHERE id = ?').bind(id).run();
   return c.json({ deleted: id });
 });
+
+// ---------------------------------------------------------------------------
+// Waitlist customers (Task #5) — surface customer-audience waitlist signups
+// inside Customer Discovery with a lightweight CRM layer: promote-to-interview,
+// product-invitation email, follow-up email, and per-signup status/activity.
+//
+// Customer-audience ONLY (investor / partner signups are out of scope here),
+// matching brand.ts's strict `audience = 'customer'` equality. Every signup
+// read/update is scoped by `id + project_id + audience = 'customer'` after the
+// project authorization check, so a founder can never touch another project's
+// (or another audience's) rows by guessing a signup id.
+// ---------------------------------------------------------------------------
+type WaitlistSignupRow = {
+  id: number;
+  project_id: number;
+  email: string;
+  name: string | null;
+  source: string | null;
+  audience: string | null;
+  created_at: string | null;
+  crm_status: string | null;
+  invited_at: string | null;
+  followed_up_at: string | null;
+  promoted_at: string | null;
+  promoted_interview_id: number | null;
+};
+
+const WAITLIST_SELECT =
+  `SELECT id, project_id, email, name, source, audience, created_at,
+          crm_status, invited_at, followed_up_at, promoted_at, promoted_interview_id
+     FROM waitlist_signups`;
+
+// Monotonic CRM precedence — an invite never demotes a 'promoted' signup, etc.
+// The *_at timestamps are independent activity marks (a founder can invite a
+// promoted customer; that stamps invited_at but leaves crm_status='promoted').
+const CRM_STATUS_RANK: Record<string, number> = { new: 0, invited: 1, followed_up: 2, promoted: 3 };
+
+function normalizeCrmStatus(raw: string | null | undefined): string {
+  const s = (raw || 'new').toLowerCase();
+  return s in CRM_STATUS_RANK ? s : 'new';
+}
+
+function bumpCrmStatus(current: string | null | undefined, next: 'invited' | 'followed_up' | 'promoted'): string {
+  const cur = normalizeCrmStatus(current);
+  return CRM_STATUS_RANK[next] >= CRM_STATUS_RANK[cur] ? next : cur;
+}
+
+function serializeWaitlistSignup(r: WaitlistSignupRow) {
+  return {
+    id: r.id,
+    project_id: r.project_id,
+    email: r.email,
+    name: r.name,
+    source: r.source,
+    audience: r.audience,
+    created_at: r.created_at,
+    crm_status: normalizeCrmStatus(r.crm_status),
+    invited_at: r.invited_at,
+    followed_up_at: r.followed_up_at,
+    promoted_at: r.promoted_at,
+    promoted_interview_id: r.promoted_interview_id == null ? null : Number(r.promoted_interview_id),
+  };
+}
+
+async function loadCustomerSignup(
+  env: Env, projectId: number, signupId: number,
+): Promise<WaitlistSignupRow | null> {
+  const row = await env.DB.prepare(
+    `${WAITLIST_SELECT} WHERE id = ? AND project_id = ? AND audience = 'customer'`,
+  ).bind(signupId, projectId).first<WaitlistSignupRow>();
+  return row || null;
+}
+
+// CTA link for outreach emails — the project's published landing page when we
+// have a slug, else the app root. Best-effort; never throws.
+async function landingCtaUrl(env: Env, projectId: number): Promise<string> {
+  const appUrl = stripTrailingSlashes(String((env as any).APP_URL || 'https://axal.vc'));
+  try {
+    const row = await env.DB.prepare(
+      'SELECT slug FROM landing_pages WHERE project_id = ?',
+    ).bind(projectId).first<{ slug: string }>();
+    if (row?.slug) return `${appUrl}/landing/${row.slug}`;
+  } catch { /* fall through to app root */ }
+  return appUrl;
+}
+
+type WaitlistEmailOutcome =
+  | { kind: 'sent' }
+  | { kind: 'not_configured'; reason: string }
+  | { kind: 'failed'; reason: string };
+
+// Classify a send() result into the three CRM-relevant buckets. NOTE: the
+// no-queue direct path in send() returns ok:false WITHOUT a reason, so we
+// cannot rely on `res.reason` alone — we inspect the Gmail env vars directly.
+// A missing-creds environment (dev / preview worker without queues or Gmail)
+// is a SOFT 'not_configured': the CRM action still records and the response
+// flags email_sent:false. A creds-present send that still fails is a HARD error.
+function classifyEmailResult(env: Env, res: SendResult): WaitlistEmailOutcome {
+  if (res.ok) return { kind: 'sent' };
+  if (res.reason === 'unknown_template' || res.reason === 'suppressed_unsubscribed') {
+    return { kind: 'failed', reason: res.reason };
+  }
+  const hasCreds = !!(env as any).GMAIL_CLIENT_ID
+    && !!(env as any).GMAIL_CLIENT_SECRET
+    && !!(env as any).GMAIL_REFRESH_TOKEN;
+  if (!hasCreds) return { kind: 'not_configured', reason: res.reason || 'gmail_creds_missing' };
+  return { kind: 'failed', reason: res.reason || 'email_send_failed' };
+}
+
+progress.get('/discovery/:projectId/waitlist', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+
+  const project = await loadProject(c.env, projectId);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanView(project, user);
+
+  await ensureWaitlistCrmColumns(c.env);
+  const { results } = await c.env.DB.prepare(
+    `${WAITLIST_SELECT}
+      WHERE project_id = ? AND audience = 'customer'
+      ORDER BY created_at DESC, id DESC
+      LIMIT 500`,
+  ).bind(projectId).all<WaitlistSignupRow>();
+
+  return c.json({
+    project_id: projectId,
+    signups: (results || []).map(serializeWaitlistSignup),
+  });
+});
+
+progress.post('/discovery/:projectId/waitlist/:signupId/promote', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  const signupId = Number(c.req.param('signupId'));
+  if (!Number.isFinite(projectId) || !Number.isFinite(signupId)) {
+    return c.json({ detail: 'Invalid id' }, 400);
+  }
+
+  const project = await loadProject(c.env, projectId);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+
+  await ensureWaitlistCrmColumns(c.env);
+  await ensureDiscoveryInterviewFeaturedColumn(c.env);
+  await ensureDiscoveryValidationRatingColumns(c.env);
+
+  const signup = await loadCustomerSignup(c.env, projectId, signupId);
+  if (!signup) return c.json({ detail: 'Signup not found' }, 404);
+
+  // Idempotent — a double-click / retry returns the existing interview rather
+  // than creating a duplicate or 409ing. Only re-create if the linked
+  // interview was since deleted (promoted_interview_id dangles).
+  if (signup.promoted_interview_id) {
+    const existingInterview = await c.env.DB.prepare(`${INTERVIEW_SELECT} WHERE id = ?`)
+      .bind(signup.promoted_interview_id).first<InterviewRow>();
+    if (existingInterview) {
+      return c.json({
+        signup: serializeWaitlistSignup(signup),
+        interview: serializeInterview(existingInterview),
+        already_promoted: true,
+      });
+    }
+  }
+
+  // Task #6 free-tier discovery-interview cap (mirrors create_interview).
+  if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+    await ensureTierSchema(c.env);
+    const existing = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?',
+    ).bind(projectId).first<{ n: number }>();
+    if (Number(existing?.n ?? 0) >= FREE_TIER_LIMITS.discoveryInterviews) {
+      ensureTier(user, 'growth');
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  const intervieweeName = (signup.name && signup.name.trim()) ? signup.name.trim() : signup.email;
+  const notes = `Promoted from waitlist signup (${signup.source || 'landing'}). Contact: ${signup.email}`;
+  const res = await c.env.DB.prepare(
+    `INSERT INTO discovery_interviews
+       (project_id, interviewee_name, interviewee_role, interview_date,
+        notes, hypotheses_json, pains_json, featured,
+        validation_rating, validation_comment, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    projectId, intervieweeName, null, todayIso(),
+    notes, '[]', '[]', 0, null, null, nowIso, nowIso,
+  ).run();
+  const newId = lastInsertId(res);
+
+  // Concurrency guard — only the request that flips promoted_interview_id from
+  // NULL wins. A loser deletes its just-created interview and returns the
+  // winner's, so two simultaneous promotes never leave a duplicate interview.
+  const upd = await c.env.DB.prepare(
+    `UPDATE waitlist_signups
+        SET crm_status = 'promoted', promoted_at = ?, promoted_interview_id = ?
+      WHERE id = ? AND project_id = ? AND promoted_interview_id IS NULL`,
+  ).bind(nowIso, newId, signupId, projectId).run();
+  const changed = Number((upd.meta as { changes?: number } | undefined)?.changes ?? 0);
+  if (changed === 0) {
+    await c.env.DB.prepare('DELETE FROM discovery_interviews WHERE id = ?').bind(newId).run();
+    const winner = await loadCustomerSignup(c.env, projectId, signupId);
+    const winnerInterview = winner?.promoted_interview_id
+      ? await c.env.DB.prepare(`${INTERVIEW_SELECT} WHERE id = ?`)
+          .bind(winner.promoted_interview_id).first<InterviewRow>()
+      : null;
+    return c.json({
+      signup: serializeWaitlistSignup(winner as WaitlistSignupRow),
+      interview: winnerInterview ? serializeInterview(winnerInterview) : null,
+      already_promoted: true,
+    });
+  }
+
+  try {
+    const actorHash = await hashEmail(user.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id, project_id)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).bind(
+      'waitlist_promoted',
+      `Project ${project.name}: promoted ${signup.email} to interview`,
+      actorHash, user.id, projectId,
+    ).run();
+  } catch { /* activity logging must never block the write */ }
+
+  const updatedSignup = await loadCustomerSignup(c.env, projectId, signupId);
+  const interviewRow = await c.env.DB.prepare(`${INTERVIEW_SELECT} WHERE id = ?`)
+    .bind(newId).first<InterviewRow>();
+  return c.json({
+    signup: serializeWaitlistSignup(updatedSignup as WaitlistSignupRow),
+    interview: interviewRow ? serializeInterview(interviewRow) : null,
+  });
+});
+
+async function handleWaitlistOutreach(c: any, kind: 'invite' | 'follow_up') {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  const signupId = Number(c.req.param('signupId'));
+  if (!Number.isFinite(projectId) || !Number.isFinite(signupId)) {
+    return c.json({ detail: 'Invalid id' }, 400);
+  }
+
+  const project = await loadProject(c.env, projectId);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+
+  await ensureWaitlistCrmColumns(c.env);
+  const signup = await loadCustomerSignup(c.env, projectId, signupId);
+  if (!signup) return c.json({ detail: 'Signup not found' }, 404);
+
+  const templateKey = kind === 'invite' ? 'waitlist_product_invitation' : 'waitlist_follow_up';
+  const ctaUrl = await landingCtaUrl(c.env, projectId);
+  const recipientName = (signup.name && signup.name.trim()) ? signup.name.trim() : 'there';
+  const founderName = asStringOrNull((user as any).name) || 'The team';
+
+  const sendRes = await send(c.env, templateKey, signup.email, {
+    name: recipientName,
+    product_name: project.name,
+    founder_name: founderName,
+    cta_url: ctaUrl,
+  });
+  const outcome = classifyEmailResult(c.env, sendRes);
+  // Hard failure (creds present but delivery failed, unknown template, etc.) —
+  // surface explicitly and do NOT advance CRM state.
+  if (outcome.kind === 'failed') {
+    return c.json({ detail: { code: 'email_send_failed', reason: outcome.reason } }, 502);
+  }
+
+  const nowIso = new Date().toISOString();
+  const nextStatus = bumpCrmStatus(signup.crm_status, kind === 'invite' ? 'invited' : 'followed_up');
+  if (kind === 'invite') {
+    await c.env.DB.prepare(
+      `UPDATE waitlist_signups SET invited_at = ?, crm_status = ? WHERE id = ? AND project_id = ?`,
+    ).bind(nowIso, nextStatus, signupId, projectId).run();
+  } else {
+    await c.env.DB.prepare(
+      `UPDATE waitlist_signups SET followed_up_at = ?, crm_status = ? WHERE id = ? AND project_id = ?`,
+    ).bind(nowIso, nextStatus, signupId, projectId).run();
+  }
+
+  try {
+    const actorHash = await hashEmail(user.email);
+    const action = kind === 'invite' ? 'waitlist_invited' : 'waitlist_followed_up';
+    const verb = kind === 'invite' ? 'sent product invitation to' : 'sent follow-up to';
+    const suffix = outcome.kind === 'not_configured' ? ' (email not delivered: not configured)' : '';
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id, project_id)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).bind(
+      action,
+      `Project ${project.name}: ${verb} ${signup.email}${suffix}`,
+      actorHash, user.id, projectId,
+    ).run();
+  } catch { /* activity logging must never block the write */ }
+
+  const updated = await loadCustomerSignup(c.env, projectId, signupId);
+  return c.json({
+    signup: serializeWaitlistSignup(updated as WaitlistSignupRow),
+    email_sent: outcome.kind === 'sent',
+    ...(outcome.kind === 'not_configured' ? { email_reason: 'not_configured' } : {}),
+  });
+}
+
+progress.post('/discovery/:projectId/waitlist/:signupId/invite', (c) => handleWaitlistOutreach(c, 'invite'));
+progress.post('/discovery/:projectId/waitlist/:signupId/follow-up', (c) => handleWaitlistOutreach(c, 'follow_up'));
 
 // ---------------------------------------------------------------------------
 // Pain groups (Task #29) — founder-curated grouping of logged discovery

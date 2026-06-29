@@ -15,6 +15,7 @@ signals factors).
 from __future__ import annotations
 
 import json
+import os
 from datetime import date, datetime
 from typing import Any, Optional
 
@@ -22,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field as PydField, field_validator
 
 VALID_HYPOTHESIS_STATUSES = {"validated", "invalidated", "inconclusive"}
+from sqlalchemy import text
 from sqlmodel import Session, select
 
 from backend.app.api.deps import can_access_founder_resource, is_privileged
@@ -44,6 +46,7 @@ from backend.app.services.pain_groups import (
     materialize_title_norm_aliases,
     norm_phrase,
 )
+from backend.app.services import email_service
 
 router = APIRouter(prefix="/progress", tags=["Discovery / Roadmap / Metrics"])
 
@@ -196,6 +199,298 @@ def delete_interview(
     session.delete(i)
     session.commit()
     return {"deleted": interview_id}
+
+
+# ---------------------------------------------------------------------------
+# Waitlist customers (Task #5) — dev mirror of the Worker's
+# /progress/discovery/{pid}/waitlist[/{sid}/{action}] routes. Surfaces
+# customer-audience waitlist signups inside Customer Discovery with a
+# lightweight CRM layer (promote-to-interview, product-invitation email,
+# follow-up email, per-signup status + activity).
+#
+# Customer-audience ONLY (strict audience = 'customer'), matching brand.py.
+# waitlist_signups has no SQLModel entity, so reads/writes use raw text() SQL
+# scoped by id + project_id + audience after the project auth check (IDOR-safe).
+# ---------------------------------------------------------------------------
+_WAITLIST_CRM_READY = False
+
+# Monotonic CRM precedence — an invite never demotes a 'promoted' signup. The
+# *_at timestamps are independent activity marks.
+_CRM_STATUS_RANK = {"new": 0, "invited": 1, "followed_up": 2, "promoted": 3}
+
+_WAITLIST_SELECT = (
+    "SELECT id, project_id, email, name, source, audience, created_at, "
+    "crm_status, invited_at, followed_up_at, promoted_at, promoted_interview_id "
+    "FROM waitlist_signups"
+)
+
+
+def _ensure_waitlist_crm_schema(session: Session) -> None:
+    global _WAITLIST_CRM_READY
+    if _WAITLIST_CRM_READY:
+        return
+    for s in [
+        "ALTER TABLE waitlist_signups ADD COLUMN IF NOT EXISTS crm_status TEXT DEFAULT 'new'",
+        "ALTER TABLE waitlist_signups ADD COLUMN IF NOT EXISTS invited_at TEXT",
+        "ALTER TABLE waitlist_signups ADD COLUMN IF NOT EXISTS followed_up_at TEXT",
+        "ALTER TABLE waitlist_signups ADD COLUMN IF NOT EXISTS promoted_at TEXT",
+        "ALTER TABLE waitlist_signups ADD COLUMN IF NOT EXISTS promoted_interview_id INTEGER",
+        "CREATE INDEX IF NOT EXISTS idx_waitlist_crm ON waitlist_signups(project_id, crm_status)",
+    ]:
+        try:
+            session.exec(text(s))
+            session.commit()
+        except Exception:
+            session.rollback()
+    _WAITLIST_CRM_READY = True
+
+
+def _normalize_crm_status(raw: Optional[str]) -> str:
+    s = (raw or "new").lower()
+    return s if s in _CRM_STATUS_RANK else "new"
+
+
+def _bump_crm_status(current: Optional[str], nxt: str) -> str:
+    cur = _normalize_crm_status(current)
+    return nxt if _CRM_STATUS_RANK[nxt] >= _CRM_STATUS_RANK[cur] else cur
+
+
+def _iso_or_str(v: Any) -> Optional[str]:
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        return v.isoformat()
+    return str(v)
+
+
+def _serialize_signup(r: Any) -> dict:
+    return {
+        "id": r["id"],
+        "project_id": r["project_id"],
+        "email": r["email"],
+        "name": r["name"],
+        "source": r["source"],
+        "audience": r.get("audience") or None,
+        "created_at": _iso_or_str(r["created_at"]),
+        "crm_status": _normalize_crm_status(r.get("crm_status")),
+        "invited_at": _iso_or_str(r.get("invited_at")),
+        "followed_up_at": _iso_or_str(r.get("followed_up_at")),
+        "promoted_at": _iso_or_str(r.get("promoted_at")),
+        "promoted_interview_id": r.get("promoted_interview_id"),
+    }
+
+
+def _load_customer_signup(session: Session, project_id: int, signup_id: int):
+    return session.exec(text(
+        _WAITLIST_SELECT + " WHERE id = :sid AND project_id = :pid AND audience = 'customer'"
+    ), params={"sid": signup_id, "pid": project_id}).mappings().first()
+
+
+def _app_base_url() -> str:
+    domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
+    base = f"https://{domain}" if domain else os.environ.get("APP_URL", "https://axal.vc")
+    return base.rstrip("/")
+
+
+def _landing_cta_url(session: Session, project_id: int) -> str:
+    base = _app_base_url()
+    try:
+        row = session.exec(text(
+            "SELECT slug FROM landing_pages WHERE project_id = :pid"
+        ), params={"pid": project_id}).mappings().first()
+        if row and row.get("slug"):
+            return f"{base}/landing/{row['slug']}"
+    except Exception:
+        pass
+    return base
+
+
+def _waitlist_email_content(kind: str, name: str, product_name: str, founder_name: str, cta_url: str):
+    if kind == "invite":
+        subject = f"You're invited to try {product_name}"
+        intro = f"Thanks for joining the {product_name} waitlist — we'd love for you to be one of the first to try it."
+        cta_label = "Get started"
+        closing = "If you have any questions, just reply to this email."
+    else:
+        subject = f"Following up from {product_name}"
+        intro = (
+            f"Just circling back from the {product_name} team — we wanted to check in and see "
+            "if you're still interested in getting early access."
+        )
+        cta_label = "Take a look"
+        closing = "Happy to answer anything — just reply to this email."
+    optout = (
+        f"You're receiving this because you joined the {product_name} waitlist. "
+        "Reply to this email if you'd prefer not to hear from us."
+    )
+    plain = f"Hi {name},\n\n{intro}\n\n{cta_label} here:\n{cta_url}\n\n{closing}\n\n— {founder_name}\n\n{optout}"
+    html = (
+        f'<p style="margin:0 0 16px;">Hi {name},</p>'
+        f'<p style="margin:0 0 16px;">{intro}</p>'
+        '<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:8px 0 24px;">'
+        f'<a href="{cta_url}" style="display:inline-block;background:#7c3aed;color:#ffffff;'
+        f'text-decoration:none;font-size:16px;font-weight:600;padding:16px 28px;border-radius:14px;">{cta_label}</a>'
+        '</td></tr></table>'
+        f'<p style="margin:0 0 16px;">{closing}</p>'
+        f'<p style="margin:0 0 4px;">— {founder_name}</p>'
+        f'<p style="font-size:12px;color:#9ca3af;margin:24px 0 0;line-height:1.6;">{optout}</p>'
+    )
+    return subject, html, plain
+
+
+def _waitlist_outreach(kind: str, project_id: int, signup_id: int, session: Session, user: User) -> dict:
+    p = _get_project_or_404(session, project_id)
+    _ensure_can_edit(p, user)
+    _ensure_waitlist_crm_schema(session)
+    signup = _load_customer_signup(session, project_id, signup_id)
+    if not signup:
+        raise HTTPException(status_code=404, detail="Signup not found")
+
+    recipient_name = (signup["name"] or "").strip() or "there"
+    founder_name = user.name or "The team"
+    product_name = p.name
+    cta_url = _landing_cta_url(session, project_id)
+    subject, html, plain = _waitlist_email_content(kind, recipient_name, product_name, founder_name, cta_url)
+
+    # Email-send semantics mirror the worker: a configured-but-failed send is a
+    # hard 502 (no CRM advance); a not-configured environment (dev without
+    # Gmail) is a SOFT path that still records the CRM action.
+    email_sent = False
+    email_reason: Optional[str] = None
+    if email_service._is_gmail_configured():
+        ok = email_service._send_html_email(
+            to_email=signup["email"], subject=subject, html_body=html,
+            plain_text=plain, sender_label=product_name, reply_to="support@axal.vc",
+        )
+        if not ok:
+            raise HTTPException(status_code=502, detail={"code": "email_send_failed"})
+        email_sent = True
+    else:
+        email_reason = "not_configured"
+
+    now_iso = datetime.utcnow().isoformat()
+    if kind == "invite":
+        next_status = _bump_crm_status(signup.get("crm_status"), "invited")
+        session.exec(text(
+            "UPDATE waitlist_signups SET invited_at = :ts, crm_status = :st "
+            "WHERE id = :sid AND project_id = :pid"
+        ), params={"ts": now_iso, "st": next_status, "sid": signup_id, "pid": project_id})
+        action, verb = "waitlist_invited", "sent product invitation to"
+    else:
+        next_status = _bump_crm_status(signup.get("crm_status"), "followed_up")
+        session.exec(text(
+            "UPDATE waitlist_signups SET followed_up_at = :ts, crm_status = :st "
+            "WHERE id = :sid AND project_id = :pid"
+        ), params={"ts": now_iso, "st": next_status, "sid": signup_id, "pid": project_id})
+        action, verb = "waitlist_followed_up", "sent follow-up to"
+
+    suffix = "" if email_sent else " (email not delivered: not configured)"
+    session.add(ActivityLog(
+        action=action,
+        details=f"Project {p.name}: {verb} {signup['email']}{suffix}",
+        actor=user.email, user_id=user.id, project_id=project_id,
+    ))
+    session.commit()
+
+    updated = _load_customer_signup(session, project_id, signup_id)
+    out: dict = {"signup": _serialize_signup(updated), "email_sent": email_sent}
+    if email_reason:
+        out["email_reason"] = email_reason
+    return out
+
+
+@router.get("/discovery/{project_id}/waitlist")
+def list_waitlist_customers(
+    project_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    p = _get_project_or_404(session, project_id)
+    _ensure_can_view(p, user)
+    _ensure_waitlist_crm_schema(session)
+    rows = session.exec(text(
+        _WAITLIST_SELECT + " WHERE project_id = :pid AND audience = 'customer' "
+        "ORDER BY created_at DESC, id DESC LIMIT 500"
+    ), params={"pid": project_id}).mappings().all()
+    return {"project_id": project_id, "signups": [_serialize_signup(r) for r in rows]}
+
+
+@router.post("/discovery/{project_id}/waitlist/{signup_id}/promote")
+def promote_waitlist_customer(
+    project_id: int,
+    signup_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    p = _get_project_or_404(session, project_id)
+    _ensure_can_edit(p, user)
+    _ensure_waitlist_crm_schema(session)
+    signup = _load_customer_signup(session, project_id, signup_id)
+    if not signup:
+        raise HTTPException(status_code=404, detail="Signup not found")
+
+    # Idempotent — return the existing interview on a repeat promote unless its
+    # row was since deleted (dangling promoted_interview_id).
+    existing_iid = signup.get("promoted_interview_id")
+    if existing_iid:
+        existing = session.get(Interview, existing_iid)
+        if existing:
+            return {
+                "signup": _serialize_signup(signup),
+                "interview": _serialize_interview(existing),
+                "already_promoted": True,
+            }
+
+    name = (signup["name"] or "").strip() or signup["email"]
+    notes = f"Promoted from waitlist signup ({signup['source'] or 'landing'}). Contact: {signup['email']}"
+    i = Interview(
+        project_id=project_id,
+        interviewee_name=name,
+        interviewee_role=None,
+        interview_date=date.today(),
+        notes=notes,
+        hypotheses_json="[]",
+        pains_json="[]",
+        created_by=user.id,
+    )
+    session.add(i)
+    session.commit()
+    session.refresh(i)
+
+    now_iso = datetime.utcnow().isoformat()
+    session.exec(text(
+        "UPDATE waitlist_signups SET crm_status = 'promoted', promoted_at = :ts, "
+        "promoted_interview_id = :iid WHERE id = :sid AND project_id = :pid"
+    ), params={"ts": now_iso, "iid": i.id, "sid": signup_id, "pid": project_id})
+    session.add(ActivityLog(
+        action="waitlist_promoted",
+        details=f"Project {p.name}: promoted {signup['email']} to interview",
+        actor=user.email, user_id=user.id, project_id=project_id,
+    ))
+    session.commit()
+
+    updated = _load_customer_signup(session, project_id, signup_id)
+    return {"signup": _serialize_signup(updated), "interview": _serialize_interview(i)}
+
+
+@router.post("/discovery/{project_id}/waitlist/{signup_id}/invite")
+def invite_waitlist_customer(
+    project_id: int,
+    signup_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    return _waitlist_outreach("invite", project_id, signup_id, session, user)
+
+
+@router.post("/discovery/{project_id}/waitlist/{signup_id}/follow-up")
+def follow_up_waitlist_customer(
+    project_id: int,
+    signup_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    return _waitlist_outreach("follow_up", project_id, signup_id, session, user)
 
 
 # ---------------------------------------------------------------------------

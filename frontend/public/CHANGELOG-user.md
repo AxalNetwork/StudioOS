@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your waitlist signups now live in Customer Discovery
+
+People who join your product waitlist now show up right inside Customer Discovery,
+grouped by project, so you can act on them without leaving the page. For each
+signup you can promote a promising person straight into a logged interview, send
+them a product-invitation email, or send a follow-up — and each signup keeps a
+clear status (New, Invited, Followed up, Promoted) so you always know where things
+stand. If email isn't set up yet, the action still records the step and tells you
+the message wasn't sent, so nothing happens silently.
+
+---
+
 ## Import your live numbers from Stripe
 
 The "Import from Stripe" button on the Metrics page now works. If you've connected

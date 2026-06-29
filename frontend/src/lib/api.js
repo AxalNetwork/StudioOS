@@ -787,6 +787,16 @@ export const api = {
   createInterview: (projectId, data) => request(`/progress/discovery/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   updateInterview: (id, data) => request(`/progress/discovery/interview/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteInterview: (id) => request(`/progress/discovery/interview/${id}`, { method: 'DELETE' }),
+  // Task #5 — customer-audience waitlist signups + lightweight CRM layer inside
+  // Customer Discovery (promote-to-interview, product-invitation email,
+  // follow-up email). Customer-audience only; project-scoped server-side.
+  listWaitlistCustomers: (projectId) => request(`/progress/discovery/${projectId}/waitlist`),
+  promoteWaitlistCustomer: (projectId, signupId) =>
+    request(`/progress/discovery/${projectId}/waitlist/${signupId}/promote`, { method: 'POST' }),
+  inviteWaitlistCustomer: (projectId, signupId) =>
+    request(`/progress/discovery/${projectId}/waitlist/${signupId}/invite`, { method: 'POST' }),
+  followUpWaitlistCustomer: (projectId, signupId) =>
+    request(`/progress/discovery/${projectId}/waitlist/${signupId}/follow-up`, { method: 'POST' }),
   // Task #29 — pain-group curation for the Spin-Out deck Slide 2.
   painGroups: (projectId) => request(`/progress/pain-groups/${projectId}`),
   assignPain: (projectId, body) => request(`/progress/pain-groups/${projectId}/assign`, { method: 'POST', body: JSON.stringify(body) }),

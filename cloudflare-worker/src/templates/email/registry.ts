@@ -396,6 +396,43 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
     text: `Hi {{name}},\n\nHere's the week in your Axal:\n\n{{items}}`,
     html: `<p>Hi {{name}},</p><p>Here's the week in your Axal:</p>{{{items}}}`,
   }),
+  // Task #5 — Waitlist CRM outreach. Recipients are waitlist signups, NOT
+  // platform users, so there is no users.id to build the HMAC one-click
+  // unsubscribe URL from. We therefore set category 'marketing' (inbox
+  // routing / Reply-To) but deliberately leave `marketing` UNSET — the
+  // List-Unsubscribe header would carry a null URL otherwise. Opt-out is
+  // offered in-body via a plain reply-to line (these are solicited: the
+  // recipient explicitly joined the product waitlist).
+  // vars: name, product_name, founder_name, cta_url
+  waitlist_product_invitation: t({
+    key: 'waitlist_product_invitation', category: 'marketing', severity: 'info',
+    replyTo: 'support@axal.vc',
+    subject: "You're invited to try {{product_name}}",
+    text: `Hi {{name}},\n\nThanks for joining the {{product_name}} waitlist — we'd love for you to be one of the first to try it.\n\nGet started here:\n{{cta_url}}\n\nIf you have any questions, just reply to this email.\n\n— {{founder_name}}\n\nYou're receiving this because you joined the {{product_name}} waitlist. Reply to this email if you'd prefer not to hear from us.`,
+    html: `<p style="margin:0 0 16px;">Hi {{name}},</p>
+<p style="margin:0 0 16px;">Thanks for joining the <strong>{{product_name}}</strong> waitlist — we'd love for you to be one of the first to try it.</p>
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:8px 0 24px;">
+  <a href="{{{cta_url}}}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;padding:16px 28px;border-radius:14px;">Get started</a>
+</td></tr></table>
+<p style="margin:0 0 16px;">If you have any questions, just reply to this email.</p>
+<p style="margin:0 0 4px;">— {{founder_name}}</p>
+<p style="font-size:12px;color:#9ca3af;margin:24px 0 0;line-height:1.6;">You're receiving this because you joined the {{product_name}} waitlist. Reply to this email if you'd prefer not to hear from us.</p>`,
+  }),
+  // vars: name, product_name, founder_name, cta_url
+  waitlist_follow_up: t({
+    key: 'waitlist_follow_up', category: 'marketing', severity: 'info',
+    replyTo: 'support@axal.vc',
+    subject: 'Following up from {{product_name}}',
+    text: `Hi {{name}},\n\nJust circling back from the {{product_name}} team — we wanted to check in and see if you're still interested in getting early access.\n\nTake a look here:\n{{cta_url}}\n\nHappy to answer anything — just reply to this email.\n\n— {{founder_name}}\n\nYou're receiving this because you joined the {{product_name}} waitlist. Reply to this email if you'd prefer not to hear from us.`,
+    html: `<p style="margin:0 0 16px;">Hi {{name}},</p>
+<p style="margin:0 0 16px;">Just circling back from the <strong>{{product_name}}</strong> team — we wanted to check in and see if you're still interested in getting early access.</p>
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:8px 0 24px;">
+  <a href="{{{cta_url}}}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;padding:16px 28px;border-radius:14px;">Take a look</a>
+</td></tr></table>
+<p style="margin:0 0 16px;">Happy to answer anything — just reply to this email.</p>
+<p style="margin:0 0 4px;">— {{founder_name}}</p>
+<p style="font-size:12px;color:#9ca3af;margin:24px 0 0;line-height:1.6;">You're receiving this because you joined the {{product_name}} waitlist. Reply to this email if you'd prefer not to hear from us.</p>`,
+  }),
   // vars: name, message_preview, ticket_id
   contact_form_acknowledgement: t({
     key: 'contact_form_acknowledgement', category: 'system', severity: 'info',
