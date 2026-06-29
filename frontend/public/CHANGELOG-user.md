@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## The "Import from Stripe" button now always tells you exactly what happened
+
+We added behind-the-scenes safeguards so the Import-from-Stripe button keeps
+giving you a clear, specific message every time — whether Stripe isn't connected
+yet, has no billing data to import, hits a temporary Stripe error, or imports
+successfully. These checks make sure a future update can't accidentally turn one
+of those friendly messages into a confusing raw error or a false "success".
+
+---
+
 ## No more misleading $0 when Stripe has nothing to import
 
 If you click "Import from Stripe" but your connected Stripe account doesn't have

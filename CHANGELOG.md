@@ -10,6 +10,37 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Stripe import error states are now covered by route-level regression tests — Task #13
+
+`POST /api/progress/metrics/:projectId/import-stripe` returns four distinct
+outcomes the Metrics page depends on, but nothing locked in the contract. The
+frontend reads BOTH the HTTP status and `error.data.code` (the
+`{ detail: { code, message } }` shape) on a failure, so a refactor of
+`syncStripeForUser`'s return shape or the route's status codes could silently
+swap a typed, user-friendly message for a raw error — or return a 2xx the page
+treats as success when there is nothing to import.
+
+- **Regression guard** (`cloudflare-worker/test/stripe_import_route.test.ts`,
+  added to `npm run test:drift`): drives the REAL mounted `progress` Hono router
+  with a forged founder JWT against an in-memory SQLite D1 and a stubbed Stripe
+  REST API, so the whole chain runs unmocked: `requireAuth` → `loadProject` →
+  `ensureCanEdit` → `syncStripeForUser` → the route's outcome classification.
+  Each case asserts the HTTP status AND the `detail` object so the `e.data.code`
+  contract stays intact:
+  - not connected (no integration row) → 400 `stripe_not_connected`;
+  - connected but credentials missing (decrypted blob has no `access_token`) →
+    400 `stripe_not_connected`;
+  - upstream Stripe failure (non-ok REST response) → 502 `stripe_sync_failed`,
+    with the upstream reason surfaced in `detail.message` (not swallowed);
+  - connected but no active/trialing subs → 400 `stripe_no_data`, and NO
+    `source='stripe'` snapshot row written (ties to Task #12);
+  - success (mrr or customers > 0) → 200 `source:'stripe'` with the computed
+    `mrr`/`customers` and exactly one snapshot persisted.
+- Harness mirrors `stripe_import_empty.test.ts` (node:sqlite D1 adapter +
+  `encryptCredentials` + global-fetch Stripe stub) and `capital.test.ts` (jose
+  `SignJWT` minted token, `router.request(path, init, env)`). No production code
+  changed — this task only adds the missing route-level coverage.
+
 ## Blank Stripe import no longer saves a misleading $0 metric — Task #12
 
 A manual "Import from Stripe" against a connected account with no active/
