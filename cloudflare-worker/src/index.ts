@@ -204,7 +204,7 @@ import adminStripe from './routes/admin_stripe';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 import payments from './routes/payments';
 import { Jobs } from './models/jobs';
-import { withD1Retry } from './util/d1Retry';
+import { writeCronRunHistory } from './util/cronHistory';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { rebuildUsersRoleCheckForInvestor } from './util/usersRoleRebuild';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
@@ -1463,26 +1463,16 @@ export default {
         cronError = e?.message || 'cron batch error';
         console.error('[cron] unhandled batch error', e);
       } finally {
-        // Task #7 (IE) — persist cron run summary to D1.
+        // Task #7 (IE) — persist cron run summary to D1. The retry-on-overload
+        // INSERT lives in util/cronHistory so the scheduled handler's final
+        // write is exercised end-to-end by cron_history_write.test.ts.
         try {
-          const cronFinishedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
-          // Retry-with-backoff: the run-history write is the last thing the
-          // tick does, so it's the most likely to hit a transient
-          // "D1 DB is overloaded" right after a heavy burst. A short bounded
-          // retry lets the summary land instead of logging a write failure.
-          await withD1Retry(() =>
-            env.DB.prepare(
-              `INSERT INTO cron_run_history (trigger_name, started_at, finished_at, status, summary, error)
-               VALUES (?, ?, ?, ?, ?, ?)`
-            ).bind(
-              triggerKey,
-              cronStartedAt,
-              cronFinishedAt,
-              cronError ? 'failed' : 'completed',
-              cronSummary.join(' | ') || null,
-              cronError,
-            ).run()
-          );
+          await writeCronRunHistory(env, {
+            triggerName: triggerKey,
+            startedAt: cronStartedAt,
+            cronError,
+            summary: cronSummary,
+          });
         } catch (dbErr) {
           console.error('[cron] cron history write failed', dbErr);
         }
