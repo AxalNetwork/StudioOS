@@ -4,6 +4,7 @@ version: 2
 #  - npm (root) — wrangler + a few legacy deps
 #  - npm (frontend) — React/Vite/Tailwind SPA
 #  - npm (cloudflare-worker) — Hono + Workers types (PRODUCTION dep tree)
+#  - npm (cloudflare-worker-tail) — wrangler tail consumer (dev/deploy tooling)
 #  - pip (root) — FastAPI dev backend
 #  - github-actions — keep CI actions current
 #
@@ -68,6 +69,17 @@ updates:
         exclude-patterns: ['hono', '@hono/*', '@cloudflare/*', 'wrangler']
         update-types: ['minor', 'patch']
     labels: ['deps', 'worker', 'production']
+
+  - package-ecosystem: npm
+    directory: /cloudflare-worker-tail
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      tail-worker:
+        patterns: ['*']
+    labels: ['deps', 'worker']
 
   - package-ecosystem: pip
     directory: /
