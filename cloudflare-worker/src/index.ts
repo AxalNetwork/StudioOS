@@ -1191,6 +1191,21 @@ export default {
             // per type instead of up to 200 sequential single-row writes.
             const PER_TYPE_LIMIT = 100;
             const ENQUEUE_CHUNK = 50;
+            // Persist per-type sweep counts to system_metrics so the admin Cron
+            // tab can show whether the hourly re-index is keeping up, instead of
+            // having to grep Worker tail logs. Best-effort — never throws, never
+            // blocks the sweep. Idle types (nothing enqueued/failed/skipped) are
+            // not recorded, to avoid bloating system_metrics with zero rows.
+            const recordReembed = async (type: string, enqueued: number, failed: number, skipped: number) => {
+              if (enqueued === 0 && failed === 0 && skipped === 0) return;
+              try {
+                await env.DB.prepare(
+                  `INSERT INTO system_metrics (metric_name, value, labels) VALUES ('reembed', ?, ?)`,
+                ).bind(enqueued, JSON.stringify({ type, enqueued, failed, skipped })).run();
+              } catch (e) {
+                console.error('[cron] reembed metric write failed', (e as Error).message);
+              }
+            };
             for (const type of ALL_ENTITY_TYPES) {
               const table = TABLE_BY_TYPE[type];
               if (!table) continue;
@@ -1222,6 +1237,7 @@ export default {
                   // surface as a cron error rather than be silently swallowed.
                   if (type === 'academy_lesson' && /no such table/i.test((e as Error).message)) {
                     console.info(`[cron] axal-search re-embed type=${type} skipped — table ${table} absent`);
+                    await recordReembed(type, 0, 0, 1);
                     continue;
                   }
                   throw e;
@@ -1251,6 +1267,7 @@ export default {
                   try { await env.RATE_LIMITS.put(wmKey, String(lastOk), { expirationTtl: 90 * 86400 }); } catch {}
                 }
                 console.info(`[cron] axal-search re-embed type=${type} ok=${okCount} failed=${failed} watermark=${lastOk}`);
+                await recordReembed(type, okCount, failed, 0);
               } catch (e) {
                 console.error(`[cron] axal-search re-embed ${type} failed`, e);
               }

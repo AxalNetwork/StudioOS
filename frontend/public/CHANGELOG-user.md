@@ -5,6 +5,15 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Admins can see search index health at a glance
+
+The admin Cron view now has a "Search re-index" panel showing, for each kind of
+content, how many items were refreshed into search in the last 24 hours — and
+flags anything that failed or was skipped. It's an easy way to confirm new
+content is showing up in search and to spot a backlog early.
+
+---
+
 ## A simpler, tidier sidebar
 
 We've streamlined the left-hand menu so it's quicker to find your way around.

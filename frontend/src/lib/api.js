@@ -1638,6 +1638,7 @@ export const api = {
     return request(`/infra/cron-history${q ? `?${q}` : ''}`);
   },
   infraWSCheck: () => request('/infra/ws-check'),
+  infraReembedMetrics: (hours = 24) => request(`/infra/reembed-metrics?hours=${hours}`),
 
   // ---------- Funds & LPs ----------
   fundsList: (status) => request(`/funds${status ? `?status=${status}` : ''}`),

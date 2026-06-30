@@ -10,6 +10,26 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Surface hourly search re-index health in the admin Cron tab — Task #5
+
+The hourly axal-search re-embed sweep now persists per-type counts to
+`system_metrics` (metric_name `reembed`, labels `{type, enqueued, failed,
+skipped}`) so its health is visible without grepping Worker tail logs.
+
+- `cloudflare-worker/src/index.ts` — the re-embed loop writes a best-effort
+  `reembed` metric row per type per tick (only when enqueued/failed/skipped > 0,
+  to avoid zero-row bloat). The academy_lesson table-absent skip path records
+  `skipped=1`.
+- `cloudflare-worker/src/routes/infra.ts` — new `GET /api/infra/reembed-metrics?hours=N`
+  (admin) aggregates summed enqueued/failed/skipped, tick count and last-run per
+  type over the window (clamped 1–168h, default 24h).
+- `frontend/src/lib/api.js` — `infraReembedMetrics(hours)`.
+- `frontend/src/pages/CronTab.jsx` — new "Search re-index (last 24h)" card with a
+  per-type table (failed counts highlighted red, skipped amber).
+
+Verification: `cloudflare-worker` `tsc --noEmit`, `check-dark-mode`,
+`check-sql-unsafe`, `check-api-drift` all pass.
+
 ## Merge auto-fix PRs #106, #107, #109; leave #108 open — Task #20
 
 Merged three single-file auto-fix PRs opened by the "AI findings" code-quality bot
