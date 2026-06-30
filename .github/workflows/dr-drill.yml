@@ -45,7 +45,11 @@ jobs:
 
       - name: Notify on failure
         if: failure() && env.PAGER_WEBHOOK_URL != ''
+        env:
+          # Pass GitHub-context values via env (never interpolate them
+          # directly into the run: shell — that's a command-injection footgun).
+          RUN_ID: ${{ github.run_id }}
         run: |
           curl -fsS -X POST -H 'Content-Type: application/json' \
-            -d "{\"text\":\"🚨 DR DRILL FAILED — investigate immediately. See run #${{ github.run_id }}.\"}" \
+            -d "{\"text\":\"🚨 DR DRILL FAILED — investigate immediately. See run #${RUN_ID}.\"}" \
             "${PAGER_WEBHOOK_URL}" || true

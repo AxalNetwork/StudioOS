@@ -55,17 +55,24 @@ jobs:
           echo "key=d1/backup-${DATE}.sql"   >> "$GITHUB_OUTPUT"
 
       - name: Export D1 → SQL
+        env:
+          # Pass step outputs via env (never interpolate ${{ … }} straight into
+          # the run: shell — keeps these blocks injection-safe and consistent).
+          BACKUP_FILENAME: ${{ steps.name.outputs.filename }}
         run: |
           wrangler d1 export "${TARGET_DB}" \
             --remote \
-            --output "${{ steps.name.outputs.filename }}"
-          ls -lh "${{ steps.name.outputs.filename }}"
+            --output "${BACKUP_FILENAME}"
+          ls -lh "${BACKUP_FILENAME}"
 
       - name: Upload to R2 (studioos-backups)
+        env:
+          BACKUP_KEY: ${{ steps.name.outputs.key }}
+          BACKUP_FILENAME: ${{ steps.name.outputs.filename }}
         run: |
           wrangler r2 object put \
-            "${BACKUP_BUCKET}/${{ steps.name.outputs.key }}" \
-            --file "${{ steps.name.outputs.filename }}" \
+            "${BACKUP_BUCKET}/${BACKUP_KEY}" \
+            --file "${BACKUP_FILENAME}" \
             --content-type 'application/sql' \
             --remote
 
@@ -73,14 +80,17 @@ jobs:
         # Distinct key (`heartbeat-d1.json`) so the worker's KV
         # heartbeat at `heartbeat-kv.json` can't mask a stale D1 backup
         # and vice-versa. Only written AFTER the R2 put succeeds.
+        env:
+          BACKUP_KEY: ${{ steps.name.outputs.key }}
+          BACKUP_FILENAME: ${{ steps.name.outputs.filename }}
         run: |
           cat > heartbeat-d1.json <<EOF
           {
             "at": "$(date -u +%FT%TZ)",
             "source": "gha",
             "kind": "d1",
-            "key": "${{ steps.name.outputs.key }}",
-            "size_bytes": $(stat -c%s "${{ steps.name.outputs.filename }}")
+            "key": "${BACKUP_KEY}",
+            "size_bytes": $(stat -c%s "${BACKUP_FILENAME}")
           }
           EOF
           wrangler r2 object put \

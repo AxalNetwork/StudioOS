@@ -10,6 +10,23 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Harden backup & DR-drill workflows against shell injection — Task #6
+
+Followed up Task #1 (which hardened the three scanner/CI workflows) by closing the
+same untrusted-input-into-`run:` footgun in the two remaining workflows that still
+interpolated GitHub-context values directly inside shell blocks. Every such value
+now flows through a step-level `env:` and is referenced as a quoted shell variable.
+
+- `.github/workflows/dr-drill.yml` — `${{ github.run_id }}` in the failure-pager
+  curl payload now passes through `env: RUN_ID` and is referenced as `${RUN_ID}`.
+- `.github/workflows/backup-d1.yml` — `${{ steps.name.outputs.filename }}` and
+  `${{ steps.name.outputs.key }}` across the Export / Upload / heartbeat steps now
+  pass through `env: BACKUP_FILENAME` / `BACKUP_KEY` and are referenced as
+  `${BACKUP_FILENAME}` / `${BACKUP_KEY}`. (The Notify step already routed
+  `PAGER_WEBHOOK_URL` and `TARGET_DB` via env — left as-is.)
+- Behavior is identical; both files parse (validated with PyYAML: 5 and 8 steps).
+  No GitHub-context `${{ … }}` remains inside any `run:` block in either file.
+
 ## Harden tail-consumer guard against multiple consumers — Task #15
 
 `scripts/check-tail-consumer.mjs` located the `[[tail_consumers]]` and
