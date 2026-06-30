@@ -10,6 +10,52 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Auto-apply D1 migrations on deploy — Task #9
+
+`npm run deploy` now applies pending D1 migrations automatically via a
+forward-only runner + ledger, replacing the per-file manual
+`wrangler d1 execute …` workflow.
+
+- `scripts/lib/migrationPlan.mjs` — pure, I/O-free planning core: ledger DDL
+  (`schema_migrations`: `filename` PK, `checksum`, `applied_at`), deterministic
+  ordering (`compareMigrations` sorts by numeric prefix then full filename, so
+  the duplicate prefixes `011_`/`068_`/`118_` are stable), `classifyIdempotency`
+  / `auditMigrations` (flags `ALTER`, un-`IF NOT EXISTS` CREATE/DROP, bare
+  `INSERT`), `planActions` (apply vs baseline), and `applyPlan` (the apply loop;
+  `exec`/`record` are injected, first failure aborts and is returned in
+  `failure` — never swallowed).
+- `scripts/migrate-d1.mjs` — CLI that binds wrangler to the core. Targets:
+  `--local` (`studioos-db --local`), `--remote` (`studioos-db`), `--preview`
+  (`studioos-db-preview --env preview --remote`). Modes: default apply,
+  `--baseline`, `--audit`, `--dry-run`. Reads the ledger via
+  `wrangler d1 execute … --command … --json`; records each applied file with
+  `INSERT OR REPLACE`. Warns (does not re-run) on checksum drift for an
+  already-applied file. A migration failure exits non-zero naming the file.
+- **Safety guard**: a plain `--remote`/`--local` run against a DB that has app
+  tables but no ledger aborts and points at `--baseline`. This prevents the
+  catastrophic first-deploy replay — the migration set is NOT self-contained
+  (base tables live in `sql/schema.sql`; ~57 of 124 files carry non-idempotent
+  `ALTER ADD COLUMN` / bare `INSERT` that would fail `duplicate column` on
+  replay against the canonical schema).
+- **One-time baseline**: `--baseline` applies the pending *idempotent* files
+  (real apply for the genuinely-pending `IF NOT EXISTS`/`INSERT OR IGNORE` ones,
+  no-op for the rest) and **records the non-idempotent files without executing
+  them**, printing each for manual verification.
+- Wiring: `package.json` gains `predeploy` (`migrate-d1.mjs --remote`, runs
+  before `deploy`; failure blocks the deploy) plus `d1:migrate:remote|local|
+  preview`, `d1:baseline`, `d1:audit` aliases. Existing `postdeploy`
+  (`check-spa-live`) and the schema-bootstrap `d1:migrate` are unchanged.
+- Tests: `cloudflare-worker/test/migrate_d1_plan.test.ts` drives the shipped
+  apply loop against `node:sqlite` — apply-once, no-op replay, abort-loud on a
+  broken migration (later files neither applied nor recorded), baseline records
+  non-idempotent files without executing, duplicate-prefix ordering, and the
+  audit classification of the real migration set. Registered in
+  `npm run test:drift`.
+- Deviation from brief: the planned "replay the full ordered set once" baseline
+  is unsafe because the set is not self-contained, so baseline is
+  idempotency-aware (apply idempotent, record-without-running non-idempotent);
+  the audit surfaces exactly which files need a manual verify.
+
 ## Guard the users-table rebuild against silent data loss — Task #7
 
 The boot-time `users` table rebuild (relaxing the legacy role CHECK to accept
