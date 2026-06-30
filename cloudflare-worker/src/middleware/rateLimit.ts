@@ -96,6 +96,17 @@ const BUCKETS: Bucket[] = [
     scope: 'ip',
     failClosed: true,
   },
+  // Task #10 — unauthenticated client-error telemetry sink. Bounded per-IP so a
+  // runaway error loop in one browser tab can't flood the Worker logs. 60/min/IP
+  // is far above any legitimate client (the frontend self-throttles + dedupes).
+  // Fail-open: telemetry must never be the reason a request is rejected.
+  {
+    name: 'client_error',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && p === '/api/client-error',
+    scope: 'ip',
+  },
   // 1000 req/min global burst protection
   {
     name: 'global',

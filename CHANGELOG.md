@@ -10,6 +10,45 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Production client-error telemetry + post-login blank hardening — Task #10
+
+Fixes the "passkey sign-in → /studio shows an error flash, then a permanent
+white blank" report. Root cause was NOT passkey-specific (server-side passkey
+auth + sessions verified healthy against prod D1): it was shared post-login
+client fragility combined with `reportError` being a **prod no-op**, so the real
+failure left no trace anywhere. Three layers:
+
+- **Observability** — `frontend/src/lib/log.js` rewritten. `reportError`/`reportWarn`
+  now ALWAYS `console.*` and push a sanitized, capped ring buffer to
+  `localStorage` (`axal:client-errors`, last 50; readable via
+  `window.__axalErrors()` / clearable via `window.__axalClearErrors()`). Errors
+  (prod only) also fire a sanitized, fire-and-forget `fetch` beacon
+  (`keepalive`, `credentials:'omit'` → no cookie, no CSRF, no token/PII) to
+  `POST /api/client-error`. Self-throttled: ≤25 beacons/page-session, identical
+  scope+message deduped within 5s.
+- **Worker sink** — new `app.post('/api/client-error')` in
+  `cloudflare-worker/src/index.ts` (right after `/api/health`). Size-caps the
+  body (8 KB) before `JSON.parse`, clips each field, keeps a bounded UA only (no
+  IP — the client already redacts secrets/PII; Cloudflare's edge logs retain the
+  source IP if ever needed for abuse), and emits one greppable
+  `console.error('[client-error]', …)` line so the
+  failure shows in `wrangler tail` / deployment logs. Never throws; always 204.
+  New `client_error` rate-limit bucket (60/min/IP, fail-open) in
+  `cloudflare-worker/src/middleware/rateLimit.ts`.
+- **Stop the blank** — `frontend/src/pages/Dashboard.jsx`: `load()` failures now
+  `reportError('Dashboard:load', …)` and render a persistent, actionable
+  fallback (`DashboardFallback`, Try-again + Reload) instead of a bare error
+  `<div>`; the old `if (!data) return null` (a silent white page) is replaced by
+  the same fallback guarded on `!data || !data.user`; a malformed 200 (missing
+  `user`) is reported via effect; `user.email.split` → `user.email?.split('@')[0]
+  || 'there'`. `frontend/src/components/RouteErrorBoundary.jsx`: a freshly-caught
+  error (`caughtAt` stamp) is now held across a redirect-induced pathname change
+  for up to 3 s (deferred reset via timer, cleared on unmount/retry) so an
+  error+`<Navigate>` race can't erase the card before the user sees it — chunk
+  auto-reload path untouched. `frontend/src/lib/api.js`: the 401 → `/login`
+  bounce now `reportError`s (keepalive beacon survives the hard navigation)
+  before redirecting.
+
 ## Auto-apply D1 migrations on deploy — Task #9
 
 `npm run deploy` now applies pending D1 migrations automatically via a

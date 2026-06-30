@@ -10,6 +10,158 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Production client-error telemetry + post-login blank hardening — Task #10
+
+Fixes the "passkey sign-in → /studio shows an error flash, then a permanent
+white blank" report. Root cause was NOT passkey-specific (server-side passkey
+auth + sessions verified healthy against prod D1): it was shared post-login
+client fragility combined with `reportError` being a **prod no-op**, so the real
+failure left no trace anywhere. Three layers:
+
+- **Observability** — `frontend/src/lib/log.js` rewritten. `reportError`/`reportWarn`
+  now ALWAYS `console.*` and push a sanitized, capped ring buffer to
+  `localStorage` (`axal:client-errors`, last 50; readable via
+  `window.__axalErrors()` / clearable via `window.__axalClearErrors()`). Errors
+  (prod only) also fire a sanitized, fire-and-forget `fetch` beacon
+  (`keepalive`, `credentials:'omit'` → no cookie, no CSRF, no token/PII) to
+  `POST /api/client-error`. Self-throttled: ≤25 beacons/page-session, identical
+  scope+message deduped within 5s.
+- **Worker sink** — new `app.post('/api/client-error')` in
+  `cloudflare-worker/src/index.ts` (right after `/api/health`). Size-caps the
+  body (8 KB) before `JSON.parse`, clips each field, keeps a bounded UA only (no
+  IP — the client already redacts secrets/PII; Cloudflare's edge logs retain the
+  source IP if ever needed for abuse), and emits one greppable
+  `console.error('[client-error]', …)` line so the
+  failure shows in `wrangler tail` / deployment logs. Never throws; always 204.
+  New `client_error` rate-limit bucket (60/min/IP, fail-open) in
+  `cloudflare-worker/src/middleware/rateLimit.ts`.
+- **Stop the blank** — `frontend/src/pages/Dashboard.jsx`: `load()` failures now
+  `reportError('Dashboard:load', …)` and render a persistent, actionable
+  fallback (`DashboardFallback`, Try-again + Reload) instead of a bare error
+  `<div>`; the old `if (!data) return null` (a silent white page) is replaced by
+  the same fallback guarded on `!data || !data.user`; a malformed 200 (missing
+  `user`) is reported via effect; `user.email.split` → `user.email?.split('@')[0]
+  || 'there'`. `frontend/src/components/RouteErrorBoundary.jsx`: a freshly-caught
+  error (`caughtAt` stamp) is now held across a redirect-induced pathname change
+  for up to 3 s (deferred reset via timer, cleared on unmount/retry) so an
+  error+`<Navigate>` race can't erase the card before the user sees it — chunk
+  auto-reload path untouched. `frontend/src/lib/api.js`: the 401 → `/login`
+  bounce now `reportError`s (keepalive beacon survives the hard navigation)
+  before redirecting.
+
+## Auto-apply D1 migrations on deploy — Task #9
+
+`npm run deploy` now applies pending D1 migrations automatically via a
+forward-only runner + ledger, replacing the per-file manual
+`wrangler d1 execute …` workflow.
+
+- `scripts/lib/migrationPlan.mjs` — pure, I/O-free planning core: ledger DDL
+  (`schema_migrations`: `filename` PK, `checksum`, `applied_at`), deterministic
+  ordering (`compareMigrations` sorts by numeric prefix then full filename, so
+  the duplicate prefixes `011_`/`068_`/`118_` are stable), `classifyIdempotency`
+  / `auditMigrations` (flags `ALTER`, un-`IF NOT EXISTS` CREATE/DROP, bare
+  `INSERT`), `planActions` (apply vs baseline), and `applyPlan` (the apply loop;
+  `exec`/`record` are injected, first failure aborts and is returned in
+  `failure` — never swallowed).
+- `scripts/migrate-d1.mjs` — CLI that binds wrangler to the core. Targets:
+  `--local` (`studioos-db --local`), `--remote` (`studioos-db`), `--preview`
+  (`studioos-db-preview --env preview --remote`). Modes: default apply,
+  `--baseline`, `--audit`, `--dry-run`. Reads the ledger via
+  `wrangler d1 execute … --command … --json`; records each applied file with
+  `INSERT OR REPLACE`. Warns (does not re-run) on checksum drift for an
+  already-applied file. A migration failure exits non-zero naming the file.
+- **Safety guard**: a plain `--remote`/`--local` run against a DB that has app
+  tables but no ledger aborts and points at `--baseline`. This prevents the
+  catastrophic first-deploy replay — the migration set is NOT self-contained
+  (base tables live in `sql/schema.sql`; ~57 of 124 files carry non-idempotent
+  `ALTER ADD COLUMN` / bare `INSERT` that would fail `duplicate column` on
+  replay against the canonical schema).
+- **One-time baseline**: `--baseline` applies the pending *idempotent* files
+  (real apply for the genuinely-pending `IF NOT EXISTS`/`INSERT OR IGNORE` ones,
+  no-op for the rest) and **records the non-idempotent files without executing
+  them**, printing each for manual verification.
+- Wiring: `package.json` gains `predeploy` (`migrate-d1.mjs --remote`, runs
+  before `deploy`; failure blocks the deploy) plus `d1:migrate:remote|local|
+  preview`, `d1:baseline`, `d1:audit` aliases. Existing `postdeploy`
+  (`check-spa-live`) and the schema-bootstrap `d1:migrate` are unchanged.
+- Tests: `cloudflare-worker/test/migrate_d1_plan.test.ts` drives the shipped
+  apply loop against `node:sqlite` — apply-once, no-op replay, abort-loud on a
+  broken migration (later files neither applied nor recorded), baseline records
+  non-idempotent files without executing, duplicate-prefix ordering, and the
+  audit classification of the real migration set. Registered in
+  `npm run test:drift`.
+- Deviation from brief: the planned "replay the full ordered set once" baseline
+  is unsafe because the set is not self-contained, so baseline is
+  idempotency-aware (apply idempotent, record-without-running non-idempotent);
+  the audit surfaces exactly which files need a manual verify.
+
+## Guard the users-table rebuild against silent data loss — Task #7
+
+The boot-time `users` table rebuild (relaxing the legacy role CHECK to accept
+'investor') had no test. A future edit could reintroduce the original
+data-destroying behaviour. Added a test that pins the loss-free contract.
+
+- `cloudflare-worker/src/util/usersRoleRebuild.ts` (new) — extracted the inline
+  role-CHECK rebuild block out of `ensureInvestorSchema` in index.ts into a pure,
+  testable `rebuildUsersRoleCheckForInvestor(env): { rebuilt }`. Behaviour
+  identical (DDL derived from sqlite_master, full column copy, index replay,
+  deferred-FK batch). Needed because the inline version sat behind a once-only
+  module guard + the whole worker bootstrap and couldn't be driven from a test.
+- `cloudflare-worker/src/index.ts` — `ensureInvestorSchema` now calls the helper
+  (same try/catch + warn).
+- `cloudflare-worker/test/users_role_rebuild.test.ts` (new) — runs the rebuild
+  against a real in-memory SQLite (node:sqlite) seeded with the legacy role CHECK,
+  extra PII/billing/linkedin columns, child-FK rows and several user indexes;
+  asserts every column, index, row, value and id survives, child rows still join,
+  'investor' is now accepted while invalid roles are still rejected, and a second
+  run is a no-op (needsRebuild=false). FK enforcement off to mirror D1.
+- `package.json` — registered the test in `test:drift`.
+
+Not user-facing; no `CHANGELOG-user.md` entry.
+
+## Cover the cron overload-hardening with automated tests — Task #4
+
+Task #1's transient-overload hardening (retry-with-backoff, batched enqueue,
+no-drop watermark) had no automated coverage. Added unit tests that pin all
+three invariants so a future change can't silently regress them.
+
+- `cloudflare-worker/src/util/reembedSweep.ts` (new) — extracted the inline
+  chunk-enqueue + watermark loop from the scheduled handler's minute-7 re-embed
+  sweep into a pure, testable `enqueueReembedChunks(env, type, ids, since,
+  chunkSize)` returning `{ lastOk, okCount, failed }`. Behaviour unchanged.
+- `cloudflare-worker/src/index.ts` — the re-embed loop now calls
+  `enqueueReembedChunks` instead of the inline loop (KV watermark put +
+  `recordReembed` + console.info unchanged).
+- `cloudflare-worker/test/cron_reembed_reliability.test.ts` (new) — 9 tests:
+  `withD1Retry`/`isTransientD1Error` retry only on transient signatures and
+  rethrow other errors immediately; `Jobs.enqueueMany` issues one batched write
+  and is a no-op on `[]`; `enqueueReembedChunks` advances the watermark only to
+  the last successfully enqueued chunk (full-success, mid-failure, first-chunk
+  failure cases).
+- `package.json` — registered the new test in `test:drift`.
+
+Not user-facing; no `CHANGELOG-user.md` entry.
+
+## Surface hourly search re-index health in the admin Cron tab — Task #5
+
+The hourly axal-search re-embed sweep now persists per-type counts to
+`system_metrics` (metric_name `reembed`, labels `{type, enqueued, failed,
+skipped}`) so its health is visible without grepping Worker tail logs.
+
+- `cloudflare-worker/src/index.ts` — the re-embed loop writes a best-effort
+  `reembed` metric row per type per tick (only when enqueued/failed/skipped > 0,
+  to avoid zero-row bloat). The academy_lesson table-absent skip path records
+  `skipped=1`.
+- `cloudflare-worker/src/routes/infra.ts` — new `GET /api/infra/reembed-metrics?hours=N`
+  (admin) aggregates summed enqueued/failed/skipped, tick count and last-run per
+  type over the window (clamped 1–168h, default 24h).
+- `frontend/src/lib/api.js` — `infraReembedMetrics(hours)`.
+- `frontend/src/pages/CronTab.jsx` — new "Search re-index (last 24h)" card with a
+  per-type table (failed counts highlighted red, skipped amber).
+
+Verification: `cloudflare-worker` `tsc --noEmit`, `check-dark-mode`,
+`check-sql-unsafe`, `check-api-drift` all pass.
+
 ## Merge auto-fix PRs #106, #107, #109; leave #108 open — Task #20
 
 Merged three single-file auto-fix PRs opened by the "AI findings" code-quality bot

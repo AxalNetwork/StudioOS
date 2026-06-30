@@ -50,7 +50,8 @@ const RELOAD_GUARD_KEY = 'axal:chunk-reload-boundary';
 class RouteErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { error: null, reloading: false };
+    this.state = { error: null, reloading: false, caughtAt: 0 };
+    this._resetTimer = null;
   }
 
   static getDerivedStateFromError(error) {
@@ -68,7 +69,10 @@ class RouteErrorBoundary extends React.Component {
         reloading = false; // sessionStorage blocked → can't auto-reload; show the card
       }
     }
-    return { error, reloading };
+    // `caughtAt` stamps when the error surfaced so componentDidUpdate can keep
+    // a freshly-caught card visible across a redirect-induced pathname change
+    // (the "flash then blank" race) instead of erasing it instantly.
+    return { error, reloading, caughtAt: Date.now() };
   }
 
   componentDidCatch(error, info) {
@@ -103,15 +107,38 @@ class RouteErrorBoundary extends React.Component {
   }
 
   componentDidUpdate(prevProps) {
-    // Reset on route change so a user navigating away from the broken
-    // page recovers cleanly without needing a hard reload.
+    // Reset on route change so a user navigating away from the broken page
+    // recovers cleanly without a hard reload. BUT — Task #10 — when an error
+    // and a programmatic redirect (e.g. a RequireAuth gate's <Navigate>) fire
+    // in the same tick, an instant reset would erase the card before the user
+    // ever sees it (the reported "error flash, then blank"). So if the error
+    // was caught very recently, DEFER the reset by the remaining freshness
+    // window: the card stays visible briefly, then we clear it and let the
+    // already-changed route render. Chunk-load failures are unaffected — they
+    // reload the whole document, so this client-side path never applies.
     if (this.state.error && prevProps.pathname !== this.props.pathname) {
-      this.setState({ error: null, reloading: false });
+      const FRESH_MS = 3000;
+      const age = Date.now() - (this.state.caughtAt || 0);
+      if (age >= FRESH_MS) {
+        this.clearError();
+      } else {
+        clearTimeout(this._resetTimer);
+        this._resetTimer = setTimeout(() => this.clearError(), FRESH_MS - age);
+      }
     }
   }
 
+  componentWillUnmount() {
+    clearTimeout(this._resetTimer);
+  }
+
+  clearError = () => {
+    clearTimeout(this._resetTimer);
+    this.setState({ error: null, reloading: false, caughtAt: 0 });
+  };
+
   handleRetry = () => {
-    this.setState({ error: null, reloading: false });
+    this.clearError();
   };
 
   handleChunkReload = () => {

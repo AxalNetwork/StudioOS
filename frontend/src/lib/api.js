@@ -1,3 +1,5 @@
+import { reportError } from './log';
+
 const BASE = '/api';
 
 function getAuthHeaders() {
@@ -142,6 +144,11 @@ export async function request(path, options = {}) {
         // mounted (an unknown URL), so a logged-out visitor there sees the 404
         // instead of being bounced to /login by this background 401.
         if (!isPublicPath && !_suppressAuthRedirect) {
+          // Task #10 — capture the bounce BEFORE the hard navigation tears the
+          // tab down. The reportError beacon uses keepalive so it still lands
+          // even though we're about to leave the page; this is what makes a
+          // silent "session expired → /login" redirect debuggable in prod.
+          reportError('api:session-expired-redirect', new Error(`401 on ${path}; redirecting ${currentPath} → /login`));
           window.location.href = '/login';
         }
         throw new Error('Session expired');

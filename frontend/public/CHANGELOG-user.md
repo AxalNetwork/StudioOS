@@ -5,6 +5,15 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## No more blank screens after signing in
+
+If something went wrong right after you signed in, you could land on a blank
+white page with nothing to do but refresh. Now, if a page can't load, you'll
+always see a clear message with a "Try again" button instead of an empty screen
+— and behind the scenes we capture what went wrong so we can fix it quickly.
+
+---
+
 ## Admins can see search index health at a glance
 
 The admin Cron view now has a "Search re-index" panel showing, for each kind of
