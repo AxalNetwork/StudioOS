@@ -29,7 +29,7 @@ const VALID_TYPES = ALL_ENTITY_TYPES;
  * Safe to call repeatedly; CREATE TABLE IF NOT EXISTS is a no-op when
  * the table already exists.
  */
-async function ensureAcademySchema(env: Env): Promise<void> {
+export async function ensureAcademySchema(env: Env): Promise<void> {
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS academy_lessons (

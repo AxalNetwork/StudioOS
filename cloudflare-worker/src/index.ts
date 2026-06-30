@@ -89,7 +89,7 @@ import funds from './routes/funds';
 import liquidity from './routes/liquidity';
 import email from './routes/email';
 import pipeline from './routes/pipeline';
-import search from './routes/search';
+import search, { ensureAcademySchema } from './routes/search';
 import kyc from './routes/kyc';
 import esign from './routes/esign';
 import trust from './routes/trust';
@@ -204,6 +204,7 @@ import adminStripe from './routes/admin_stripe';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 import payments from './routes/payments';
 import { Jobs } from './models/jobs';
+import { withD1Retry } from './util/d1Retry';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
@@ -1161,8 +1162,17 @@ export default {
         // search index within ~1h. Watermark stored in RATE_LIMITS KV
         // (axal-search:watermark:<type>). Best-effort — failures here
         // never raise; the next tick retries.
-        if (now.getUTCMinutes() === 0) {
+        //
+        // Staggered to minute 7 (not minute 0) so this heavy sweep doesn't
+        // collide with the top-of-hour burst of other minute-0 / hour-boundary
+        // cron work, which together saturated D1 ("D1 DB is overloaded").
+        if (now.getUTCMinutes() === 7) {
           try {
+            // Defense-in-depth: guarantee academy_lessons exists before the
+            // per-type SELECT below (a migration also creates it, but a warm
+            // isolate that booted on a pre-migration D1 would still 404). The
+            // per-type loop also skips a genuinely-missing table gracefully.
+            await ensureAcademySchema(env);
             const { ALL_ENTITY_TYPES } = await import('./services/vectorize');
             const TABLE_BY_TYPE: Record<string, string> = {
               project: 'projects', deal: 'deals', founder: 'founders',
@@ -1170,7 +1180,10 @@ export default {
               academy_lesson: 'academy_lessons', mentor: 'mentors',
               investor: 'users',
             };
-            const PER_TYPE_LIMIT = 200;
+            // Lowered from 200 → 100 and batched: at most 2 batched INSERTs
+            // per type instead of up to 200 sequential single-row writes.
+            const PER_TYPE_LIMIT = 100;
+            const ENQUEUE_CHUNK = 50;
             for (const type of ALL_ENTITY_TYPES) {
               const table = TABLE_BY_TYPE[type];
               if (!table) continue;
@@ -1190,31 +1203,47 @@ export default {
                   : type === 'partner'
                   ? `id > ? AND role = 'partner' ORDER BY id ASC LIMIT ?`
                   : `id > ? ORDER BY id ASC LIMIT ?`;
-                const rows = await env.DB.prepare(
-                  `SELECT id FROM ${table} WHERE ${where}`,
-                ).bind(since, PER_TYPE_LIMIT).all<{ id: number }>();
+                let rows;
+                try {
+                  rows = await env.DB.prepare(
+                    `SELECT id FROM ${table} WHERE ${where}`,
+                  ).bind(since, PER_TYPE_LIMIT).all<{ id: number }>();
+                } catch (e) {
+                  // Only `academy_lessons` is an optional/lazily-created table:
+                  // skip it quietly if genuinely absent. A `no such table` on
+                  // any CORE table is a real schema problem and must still
+                  // surface as a cron error rather than be silently swallowed.
+                  if (type === 'academy_lesson' && /no such table/i.test((e as Error).message)) {
+                    console.info(`[cron] axal-search re-embed type=${type} skipped — table ${table} absent`);
+                    continue;
+                  }
+                  throw e;
+                }
                 const ids = (rows.results || []).map((r) => Number(r.id));
                 if (!ids.length) continue;
-                // Only advance the watermark to the highest *successfully*
-                // enqueued ID. If an enqueue fails partway through, we
-                // stop advancing so the next tick retries the missed
-                // tail rather than silently dropping rows.
-                let lastOk = 0;
+                // Enqueue in batched chunks (one D1 round-trip per chunk).
+                // Advance the watermark only to the highest *successfully*
+                // enqueued ID: if a chunk fails, stop so the next tick
+                // retries the missed tail rather than silently dropping rows.
+                let lastOk = since;
+                let okCount = 0;
                 let failed = 0;
-                for (const id of ids) {
+                for (let i = 0; i < ids.length; i += ENQUEUE_CHUNK) {
+                  const chunk = ids.slice(i, i + ENQUEUE_CHUNK);
                   try {
-                    await Jobs.enqueue(env, 'embed_entity', { type, id });
-                    lastOk = id;
+                    await Jobs.enqueueMany(env, 'embed_entity', chunk.map((id) => ({ type, id })));
+                    lastOk = chunk[chunk.length - 1];
+                    okCount += chunk.length;
                   } catch (e) {
-                    failed += 1;
-                    console.error(`[cron] axal-search enqueue failed type=${type} id=${id}`, (e as Error).message);
+                    failed += chunk.length;
+                    console.error(`[cron] axal-search enqueue failed type=${type} chunk@${i}`, (e as Error).message);
                     break;
                   }
                 }
                 if (lastOk > since) {
                   try { await env.RATE_LIMITS.put(wmKey, String(lastOk), { expirationTtl: 90 * 86400 }); } catch {}
                 }
-                console.info(`[cron] axal-search re-embed type=${type} ok=${ids.indexOf(lastOk) + 1} failed=${failed} watermark=${lastOk || since}`);
+                console.info(`[cron] axal-search re-embed type=${type} ok=${okCount} failed=${failed} watermark=${lastOk}`);
               } catch (e) {
                 console.error(`[cron] axal-search re-embed ${type} failed`, e);
               }
@@ -1419,17 +1448,23 @@ export default {
         // Task #7 (IE) — persist cron run summary to D1.
         try {
           const cronFinishedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
-          await env.DB.prepare(
-            `INSERT INTO cron_run_history (trigger_name, started_at, finished_at, status, summary, error)
-             VALUES (?, ?, ?, ?, ?, ?)`
-          ).bind(
-            triggerKey,
-            cronStartedAt,
-            cronFinishedAt,
-            cronError ? 'failed' : 'completed',
-            cronSummary.join(' | ') || null,
-            cronError,
-          ).run();
+          // Retry-with-backoff: the run-history write is the last thing the
+          // tick does, so it's the most likely to hit a transient
+          // "D1 DB is overloaded" right after a heavy burst. A short bounded
+          // retry lets the summary land instead of logging a write failure.
+          await withD1Retry(() =>
+            env.DB.prepare(
+              `INSERT INTO cron_run_history (trigger_name, started_at, finished_at, status, summary, error)
+               VALUES (?, ?, ?, ?, ?, ?)`
+            ).bind(
+              triggerKey,
+              cronStartedAt,
+              cronFinishedAt,
+              cronError ? 'failed' : 'completed',
+              cronSummary.join(' | ') || null,
+              cronError,
+            ).run()
+          );
         } catch (dbErr) {
           console.error('[cron] cron history write failed', dbErr);
         }

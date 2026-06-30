@@ -60,6 +60,24 @@ export const Jobs = {
     return r;
   },
 
+  /**
+   * Batch-enqueue many jobs of the same type in a single D1 round-trip.
+   * Used by high-volume producers (e.g. the hourly axal-search re-embed
+   * sweep) to avoid hundreds of sequential single-row INSERTs hammering
+   * D1 at the top of the hour. No-op on an empty list.
+   */
+  async enqueueMany(env: Env, jobType: JobType, payloads: any[], opts?: { max_retries?: number }) {
+    if (!payloads.length) return;
+    const maxRetries = opts?.max_retries ?? 3;
+    const stmts = payloads.map((p) =>
+      env.DB.prepare(
+        `INSERT INTO queue_jobs (job_type, payload, status, attempts, max_retries)
+         VALUES (?, ?, 'pending', 0, ?)`
+      ).bind(jobType, JSON.stringify(p ?? {}), maxRetries)
+    );
+    await env.DB.batch(stmts);
+  },
+
   /** Atomically claim up to `n` pending jobs. Uses UPDATE...RETURNING (D1 supports it). */
   async claimBatch(env: Env, n = 10): Promise<QueueJob[]> {
     // SQLite/D1 lacks SKIP LOCKED, so we do a guarded UPDATE on rowids we just read.
