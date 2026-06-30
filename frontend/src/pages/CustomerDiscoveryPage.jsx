@@ -175,7 +175,11 @@ export default function CustomerDiscoveryPage() {
         msg = res?.already_promoted ? 'Already promoted' : 'Promoted to interview';
         // If this signup belongs to the project whose interviews are shown,
         // reflect the new interview immediately.
-        if (pid === projectId && res?.interview && !res?.already_promoted) {
+        if (
+          res?.interview &&
+          !res?.already_promoted &&
+          String(res.interview.project_id) === String(projectId)
+        ) {
           setInterviews((cur) => [res.interview, ...cur]);
         }
       } else if (kind === 'invite') {
