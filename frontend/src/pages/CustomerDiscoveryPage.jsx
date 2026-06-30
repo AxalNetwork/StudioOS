@@ -80,17 +80,19 @@ export default function CustomerDiscoveryPage() {
         // Kick off a per-project waitlist load. Each project is independent so
         // one failing load never blocks the others.
         setWaitlist(Object.fromEntries(list.map((p) => [p.id, { signups: [], loading: true, error: null }])));
-        list.forEach(async (p) => {
-          try {
-            const w = await api.listWaitlistCustomers(p.id);
-            if (cancelled) return;
-            setWaitlist((prev) => ({ ...prev, [p.id]: { signups: w?.signups || [], loading: false, error: null } }));
-          } catch (e) {
-            if (cancelled) return;
-            reportError('CustomerDiscoveryPage:waitlist', e);
-            setWaitlist((prev) => ({ ...prev, [p.id]: { signups: [], loading: false, error: e?.message || 'Failed to load signups.' } }));
-          }
-        });
+        await Promise.all(
+          list.map(async (p) => {
+            try {
+              const w = await api.listWaitlistCustomers(p.id);
+              if (cancelled) return;
+              setWaitlist((prev) => ({ ...prev, [p.id]: { signups: w?.signups || [], loading: false, error: null } }));
+            } catch (e) {
+              if (cancelled) return;
+              reportError('CustomerDiscoveryPage:waitlist', e);
+              setWaitlist((prev) => ({ ...prev, [p.id]: { signups: [], loading: false, error: e?.message || 'Failed to load signups.' } }));
+            }
+          })
+        );
       } catch (e) {
         if (cancelled) return;
         const msg = (e?.message || '').toLowerCase();
