@@ -106,12 +106,12 @@ class RouteErrorBoundary extends React.Component {
     // Reset on route change so a user navigating away from the broken
     // page recovers cleanly without needing a hard reload.
     if (this.state.error && prevProps.pathname !== this.props.pathname) {
-      this.setState({ error: null, info: null, reloading: false });
+      this.setState({ error: null, reloading: false });
     }
   }
 
   handleRetry = () => {
-    this.setState({ error: null, info: null, reloading: false });
+    this.setState({ error: null, reloading: false });
   };
 
   handleChunkReload = () => {

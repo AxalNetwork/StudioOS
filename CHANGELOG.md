@@ -10,6 +10,26 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Clear residual code-scanning alerts: SVG-sanitizer ReDoS + dead React state — Task #17
+
+Pushed the already-merged security fixes to GitHub (the workflow-scoped Task #6
+commit needed the `GITHUB_TOKEN` path because Replit's OAuth lacks `workflow`
+scope) and closed the last three open CodeQL alerts at the root cause rather than
+dismissing them:
+
+- `backend/app/api/routes/brand.py` — `_SVG_EVENT_ATTR` and `_SVG_ANY_HREF` began
+  with `\s+`, making `re.sub` O(n²) on a long run of spaces in attacker-controlled
+  SVG (CodeQL `py/polynomial-redos`, ×2, high severity). Changed the leading
+  quantifier to a single `\s`: with `.sub` scanning every start position one
+  separator still locates the attribute, and matching is now linear (8000-space
+  payload measured ~795 ms → ~0.3 ms). Stripping behaviour is unchanged — verified
+  against `onload`/`onerror`/`onmouseover`/`href`/`xlink:href` vectors with benign
+  attributes preserved.
+- `frontend/src/components/RouteErrorBoundary.jsx` — `state.info` was written
+  (`info: null`) in two `setState` calls but never read (CodeQL
+  `js/react/unused-or-undefined-state-property`). Removed the dead writes; the
+  `info` parameter of `componentDidCatch` (the React errorInfo) is unaffected.
+
 ## Harden backup & DR-drill workflows against shell injection — Task #6
 
 Followed up Task #1 (which hardened the three scanner/CI workflows) by closing the

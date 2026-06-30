@@ -539,12 +539,18 @@ _SVG_DANGER_TAG_VOID = re.compile(
     r"<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*/?>",
     re.IGNORECASE,
 )
-_SVG_EVENT_ATTR = re.compile(r"\s+on[a-z]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s\"'>]+)", re.IGNORECASE)
+# Leading whitespace is a single `\s` (not `\s+`): with `.sub` scanning every
+# start position, one separator is enough to locate the attribute, and a
+# non-quantified prefix keeps matching linear instead of O(n^2) on a long run
+# of spaces in attacker-controlled SVG (CodeQL py/polynomial-redos).
+_SVG_EVENT_ATTR = re.compile(r"\son[a-z]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s\"'>]+)", re.IGNORECASE)
 # Strict href stripper — kills href/xlink:href regardless of scheme, quoted
 # OR unquoted. The fallback logo we ship has no href, so dropping all of
 # them is safe and forecloses javascript:/data: bypasses the regex sanitizer
 # would otherwise miss.
-_SVG_ANY_HREF = re.compile(r"\s+(href|xlink:href)\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s\"'>]+)", re.IGNORECASE)
+# Single `\s` prefix (not `\s+`) for the same linear-scan reason as
+# _SVG_EVENT_ATTR above (CodeQL py/polynomial-redos).
+_SVG_ANY_HREF = re.compile(r"\s(href|xlink:href)\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s\"'>]+)", re.IGNORECASE)
 
 
 def _sanitize_svg(svg: Optional[str]) -> Optional[str]:
