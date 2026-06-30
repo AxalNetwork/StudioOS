@@ -70,6 +70,7 @@ def _parse_list(raw: Any) -> list[str]:
         if isinstance(parsed, list):
             return [str(x) for x in parsed]
     except (ValueError, TypeError):
+        # not a JSON list — fall through to comma-split parsing below
         pass
     return [part.strip() for part in s.split(",") if part.strip()]
 

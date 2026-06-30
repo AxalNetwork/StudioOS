@@ -50,7 +50,7 @@ const RELOAD_GUARD_KEY = 'axal:chunk-reload-boundary';
 class RouteErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { error: null, info: null, reloading: false };
+    this.state = { error: null, reloading: false };
   }
 
   static getDerivedStateFromError(error) {
@@ -78,7 +78,6 @@ class RouteErrorBoundary extends React.Component {
         // eslint-disable-next-line no-console
         console.error('[RouteErrorBoundary]', error, info.componentStack);
       }
-      this.setState({ info });
     } catch { /* never let the boundary itself throw */ }
 
     // Auto-recover from chunk-load failures exactly once per session.

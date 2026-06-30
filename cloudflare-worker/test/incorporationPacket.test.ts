@@ -15,7 +15,6 @@ import {
   type PacketInputs,
   type AuditEvent,
 } from '../src/services/incorporationPacket.ts';
-import { sha256Hex, sha256HexBytes } from '../src/services/pdf.ts';
 
 const FIXTURE: PacketInputs = {
   jurisdictionId: 'us_de_ccorp',

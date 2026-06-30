@@ -301,6 +301,7 @@ def _landing_cta_url(session: Session, project_id: int) -> str:
         if row and row.get("slug"):
             return f"{base}/landing/{row['slug']}"
     except Exception:
+        # landing_pages table/row absent — fall back to the base URL
         pass
     return base
 

@@ -160,6 +160,7 @@ def _sanitize_url(url: Optional[str]) -> Optional[str]:
         if parsed.scheme == "https":
             return u
     except Exception:
+        # malformed URL — treat as absent so the caller falls back to None
         pass
     return None
 
@@ -535,12 +536,12 @@ _SVG_DANGER_TAG_VOID = re.compile(
     r"<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*/?>",
     re.IGNORECASE,
 )
-_SVG_EVENT_ATTR = re.compile(r"\s+on[a-z]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", re.IGNORECASE)
+_SVG_EVENT_ATTR = re.compile(r"\s+on[a-z]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s\"'>]+)", re.IGNORECASE)
 # Strict href stripper — kills href/xlink:href regardless of scheme, quoted
 # OR unquoted. The fallback logo we ship has no href, so dropping all of
 # them is safe and forecloses javascript:/data: bypasses the regex sanitizer
 # would otherwise miss.
-_SVG_ANY_HREF = re.compile(r"\s+(href|xlink:href)\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", re.IGNORECASE)
+_SVG_ANY_HREF = re.compile(r"\s+(href|xlink:href)\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s\"'>]+)", re.IGNORECASE)
 
 
 def _sanitize_svg(svg: Optional[str]) -> Optional[str]:
@@ -833,7 +834,6 @@ def upsert_landing(
             "audience=:audience, goal=:goal, template_kit=:template_kit, content_json=:content_json, "
             "preview_token=:preview_token, updated_at=CURRENT_TIMESTAMP WHERE project_id=:pid"
         ), params=params)
-        slug = existing["slug"]
     else:
         slug = _slugify(payload.name)
         preview_token = secrets.token_hex(16)

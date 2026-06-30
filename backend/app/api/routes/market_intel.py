@@ -486,6 +486,7 @@ def mi_citations(sector: str = Query(default=""), limit: int = Query(default=50)
         try:
             cutoff = datetime.fromisoformat(since.replace("Z", "+00:00")).replace(tzinfo=None)
         except Exception:
+            # unparseable `since` query param — keep the default 30-day cutoff
             pass
     secs = ([sector] if sector in MI_SECTORS else []) if sector else MI_SECTORS
     now = datetime.utcnow()

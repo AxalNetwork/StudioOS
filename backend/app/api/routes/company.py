@@ -11,7 +11,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from backend.app.database import get_session
 from backend.app.models.entities import (
@@ -137,9 +137,9 @@ def _viewer_is_company_member(session: Session, company: CompanyProfile, viewer:
 
 
 def _member_count(session: Session, company_id: int) -> int:
-    return len(session.exec(
-        select(UserCompanyLink).where(UserCompanyLink.company_id == company_id)
-    ).all())
+    return session.exec(
+        select(func.count()).select_from(UserCompanyLink).where(UserCompanyLink.company_id == company_id)
+    ).first() or 0
 
 
 def _company_summary_dto(session: Session, company: CompanyProfile) -> dict:
@@ -429,12 +429,12 @@ def remove_member(
 
     # Refuse to remove the last primary admin
     if link.is_primary_admin:
-        primary_count = len(session.exec(
-            select(UserCompanyLink).where(
+        primary_count = session.exec(
+            select(func.count()).select_from(UserCompanyLink).where(
                 UserCompanyLink.company_id == company.id,
                 UserCompanyLink.is_primary_admin == True,  # noqa: E712
             )
-        ).all())
+        ).first() or 0
         if primary_count <= 1:
             raise HTTPException(status_code=400, detail="Cannot remove the only primary admin — assign another first")
 

@@ -25,7 +25,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, statSync, writeFileSync, chmodSync, mkdirSync } from "node:fs";
+import { existsSync, statSync, writeFileSync, chmodSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 

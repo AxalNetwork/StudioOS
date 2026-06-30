@@ -10,6 +10,55 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Drive GitHub Code Scanning to zero — Task #14
+
+Resolved all 123 open GitHub code-scanning alerts (CodeQL + Semgrep) via a hybrid
+disposition: 30 deterministic code fixes (auto-close on the next scan) + 93
+documented API dismissals (true false positives / test-only / accepted noise).
+`npm run test:drift` does NOT run CodeQL/Semgrep, so closure to zero is confirmed
+only by the fresh scan on `main` after push. The 93 dismissals were verified by
+re-querying `state=open` (123 → 30, the 30 remaining being exactly the fix set
+awaiting rescan).
+
+### 30 code fixes (auto-close on rescan)
+- empty-except ×5 — explanatory comment added: `backend/app/api/routes/brand.py`,
+  `market_intel.py`, `matches.py`, `progress.py`, `backend/app/services/use_of_funds.py`.
+- implicit-string-concat ×11 — explicit `+` between adjacent string literals:
+  `backend/app/api/routes/profiling.py`.
+- polynomial-redos ×2 — unquoted-attribute branch tightened to `[^\s"'>]+`:
+  `brand.py`.
+- `len(... .all())` → COUNT ×4 — `select(func.count()).select_from(X)... .first() or 0`
+  (added `func` to the `sqlmodel` import): `company.py` (×2), `needs.py`,
+  `backend/app/services/score_integrity.py`.
+- unused symbols removed — `brand.py` slug; `RouteErrorBoundary.jsx` info state;
+  `scripts/lfs-size-gate.mjs` `mkdirSync`; test imports in
+  `cloudflare-worker/test/admin.user-conversations.test.mjs` (`mkdir`) and
+  `incorporationPacket.test.ts` (the whole `pdf.ts` import line — both names unused;
+  CodeQL collapses to one alert per import line).
+- incomplete-sanitization — global `replaceAll`: `frontend/src/components/DataImportsTab.jsx`.
+- missing-integrity — SRI hash + `crossorigin` on the qrcode jsDelivr script:
+  `frontend/public/verify-email.html`.
+- hardening — `backend/app/services/calendar_unified.py` drops `r.text` from a log
+  line (reworded); `backend/app/services/notify.py` restricts the Slack webhook to
+  `https://hooks.slack.com/`.
+
+### 93 dismissals (code-scanning REST API, structured `dismissed_reason` + comment)
+- false positive ×84 — parameterized SQLAlchemy `text()`, trusted format strings,
+  guarded prototype-pollution loops, build-script `RegExp`s, server-rendered email
+  hrefs, defensive conditionals, `global` memo sentinels, protocol-validated `<a>`
+  hrefs (xss-through-dom), same-origin `safeNextPath()` redirects, intentional HTML
+  entity normalization, Map-key OAuth-reason lookup, signature-free `jwt.decode`
+  reading only `jti`, `sha1(usedforsecurity=False)`, public RFC-6238 demo TOTP,
+  fixed Sumsub `urlopen`, CI-only LFS git commands, non-SRI `<link>` element.
+- used in tests ×4 — test-fixture regexps / tag matcher.
+- won't fix ×5 — Cloudflare Turnstile (provider serves `api.js` with no stable
+  hash), intentional token wipe, intentionally preserved component, configurable
+  Slack webhook `urlopen`.
+
+Each HIGH-severity dismissal (xss-through-dom, client-side url-redirect,
+double-escaping, user-controlled-bypass) was re-verified safe at the sink and
+already carries an inline `codeql[...]` / `nosemgrep` justification.
+
 ## Slim down role sidebars — PR #101
 
 Each role's sidebar now collapses into fewer, broader groups plus a single

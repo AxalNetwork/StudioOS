@@ -113,7 +113,7 @@ def exchange_code_for_tokens(code: str) -> dict:
     with httpx.Client(timeout=15.0) as cli:
         r = cli.post(GOOGLE_TOKEN_URL, data=payload)
         if r.status_code >= 400:
-            logger.warning("google token exchange failed %s: %s", r.status_code, r.text[:200])
+            logger.warning("google oauth code exchange returned status %s", r.status_code)
             raise RuntimeError(f"token_exchange_failed: {r.status_code}")
         return r.json()
 

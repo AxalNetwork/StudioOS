@@ -61,6 +61,12 @@ def _resolve_channels(prefs: dict, ntype: str, requested: Iterable[str]) -> list
 
 
 def _post_slack(webhook: str, text_msg: str) -> None:
+    # Defense-in-depth: only ever POST to Slack's incoming-webhook host over
+    # https, so a tampered/misconfigured webhook value can't be used to reach
+    # internal services (SSRF) or downgrade to http.
+    if not webhook.lower().startswith("https://hooks.slack.com/"):
+        logger.warning("notify: refusing webhook URL that is not https://hooks.slack.com/")
+        return
     try:
         req = _UrlRequest(
             webhook,

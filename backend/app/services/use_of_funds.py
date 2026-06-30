@@ -64,6 +64,7 @@ def parse_use_of_funds_value(raw: Optional[str]) -> List[Dict]:
                 if cleaned:
                     return cleaned
         except (ValueError, TypeError):
+            # not a JSON allocation list — fall back to free-text parsing
             pass
     return _parse_free_text(s)
 
