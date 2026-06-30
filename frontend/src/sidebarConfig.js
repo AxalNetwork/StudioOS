@@ -254,7 +254,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'portfolio', label: 'Portfolio', items: [
       { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
-      { to: '/funds', icon: TrendingUp, label: 'Funds' },
+      { to: '/funds', icon: TrendingUp, label: 'Funds', requiredInvestorTier: 'professional' },
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
       { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
       { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
