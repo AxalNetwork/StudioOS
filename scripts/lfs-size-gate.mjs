@@ -80,7 +80,7 @@ function extOf(p) {
 
 function isLfsTracked(path) {
   try {
-    const out = sh(`git check-attr filter -- ${JSON.stringify(path)}`);
+    const out = git(["check-attr", "filter", "--", path]);
     return /:\s*filter:\s*lfs\b/.test(out);
   } catch {
     return false;

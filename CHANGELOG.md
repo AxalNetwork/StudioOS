@@ -10,6 +10,27 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Merge auto-fix PRs #106, #107, #109; leave #108 open — Task #20
+
+Merged three single-file auto-fix PRs opened by the "AI findings" code-quality bot
+(all green on CodeQL / Semgrep / scan / analyze), and left PR #108
+(`frontend/src/sidebarConfig.js` investor-tier gating) open for separate review.
+
+- `scripts/lfs-size-gate.mjs` (#109) — `execSync(string)` → `execFileSync("git", [...])`,
+  removing the shell-injection vector and the obsolete CodeQL suppression. The autofix
+  renamed `sh` → `git` but left one callsite behind: `isLfsTracked()` still called the
+  now-undefined `sh(...)`, an undefined-reference its `try/catch` silently swallowed —
+  so the gate treated every file as un-tracked and would wrongly reject LFS-tracked
+  types (`.docx`, `.pptx`, `.woff2`, large `.png/.pdf`, …). CI missed it (`node --check`
+  is syntax-only; CodeQL/Semgrep check injection, not undefined refs). Completed the
+  migration in the same change: `isLfsTracked()` now uses the array-args
+  `git(["check-attr", "filter", "--", path])` helper.
+- `backend/app/api/routes/progress.py` (#107) — adds the missing `import logging`
+  (module already calls `logging.getLogger(...)` / `logger.debug(...)`). Dev-only backend.
+- `frontend/src/pages/CustomerDiscoveryPage.jsx` (#106) — awaits per-project waitlist
+  loads via `Promise.all(list.map(...))` instead of `forEach(async …)`, and tightens the
+  "reflect new interview" guard to compare the returned interview's `project_id`.
+
 ## Clear residual code-scanning alerts: SVG-sanitizer ReDoS + dead React state — Task #17
 
 Pushed the already-merged security fixes to GitHub (the workflow-scoped Task #6
