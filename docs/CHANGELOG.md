@@ -10,6 +10,137 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Merge auto-fix PRs #106, #107, #109; leave #108 open — Task #20
+
+Merged three single-file auto-fix PRs opened by the "AI findings" code-quality bot
+(all green on CodeQL / Semgrep / scan / analyze), and left PR #108
+(`frontend/src/sidebarConfig.js` investor-tier gating) open for separate review.
+
+- `scripts/lfs-size-gate.mjs` (#109) — `execSync(string)` → `execFileSync("git", [...])`,
+  removing the shell-injection vector and the obsolete CodeQL suppression. The autofix
+  renamed `sh` → `git` but left one callsite behind: `isLfsTracked()` still called the
+  now-undefined `sh(...)`, an undefined-reference its `try/catch` silently swallowed —
+  so the gate treated every file as un-tracked and would wrongly reject LFS-tracked
+  types (`.docx`, `.pptx`, `.woff2`, large `.png/.pdf`, …). CI missed it (`node --check`
+  is syntax-only; CodeQL/Semgrep check injection, not undefined refs). Completed the
+  migration in the same change: `isLfsTracked()` now uses the array-args
+  `git(["check-attr", "filter", "--", path])` helper.
+- `backend/app/api/routes/progress.py` (#107) — adds the missing `import logging`
+  (module already calls `logging.getLogger(...)` / `logger.debug(...)`). Dev-only backend.
+- `frontend/src/pages/CustomerDiscoveryPage.jsx` (#106) — awaits per-project waitlist
+  loads via `Promise.all(list.map(...))` instead of `forEach(async …)`, and tightens the
+  "reflect new interview" guard to compare the returned interview's `project_id`.
+
+## Clear residual code-scanning alerts: SVG-sanitizer ReDoS + dead React state — Task #17
+
+Pushed the already-merged security fixes to GitHub (the workflow-scoped Task #6
+commit needed the `GITHUB_TOKEN` path because Replit's OAuth lacks `workflow`
+scope) and closed the last three open CodeQL alerts at the root cause rather than
+dismissing them:
+
+- `backend/app/api/routes/brand.py` — `_SVG_EVENT_ATTR` and `_SVG_ANY_HREF` began
+  with `\s+`, making `re.sub` O(n²) on a long run of spaces in attacker-controlled
+  SVG (CodeQL `py/polynomial-redos`, ×2, high severity). Changed the leading
+  quantifier to a single `\s`: with `.sub` scanning every start position one
+  separator still locates the attribute, and matching is now linear (8000-space
+  payload measured ~795 ms → ~0.3 ms). Stripping behaviour is unchanged — verified
+  against `onload`/`onerror`/`onmouseover`/`href`/`xlink:href` vectors with benign
+  attributes preserved.
+- `frontend/src/components/RouteErrorBoundary.jsx` — `state.info` was written
+  (`info: null`) in two `setState` calls but never read (CodeQL
+  `js/react/unused-or-undefined-state-property`). Removed the dead writes; the
+  `info` parameter of `componentDidCatch` (the React errorInfo) is unaffected.
+
+## Harden backup & DR-drill workflows against shell injection — Task #6
+
+Followed up Task #1 (which hardened the three scanner/CI workflows) by closing the
+same untrusted-input-into-`run:` footgun in the two remaining workflows that still
+interpolated GitHub-context values directly inside shell blocks. Every such value
+now flows through a step-level `env:` and is referenced as a quoted shell variable.
+
+- `.github/workflows/dr-drill.yml` — `${{ github.run_id }}` in the failure-pager
+  curl payload now passes through `env: RUN_ID` and is referenced as `${RUN_ID}`.
+- `.github/workflows/backup-d1.yml` — `${{ steps.name.outputs.filename }}` and
+  `${{ steps.name.outputs.key }}` across the Export / Upload / heartbeat steps now
+  pass through `env: BACKUP_FILENAME` / `BACKUP_KEY` and are referenced as
+  `${BACKUP_FILENAME}` / `${BACKUP_KEY}`. (The Notify step already routed
+  `PAGER_WEBHOOK_URL` and `TARGET_DB` via env — left as-is.)
+- Behavior is identical; both files parse (validated with PyYAML: 5 and 8 steps).
+  No GitHub-context `${{ … }}` remains inside any `run:` block in either file.
+
+## Harden tail-consumer guard against multiple consumers — Task #15
+
+`scripts/check-tail-consumer.mjs` located the `[[tail_consumers]]` and
+`[[env.production.tail_consumers]]` tables with `Array.prototype.find()`, which
+only inspects the FIRST matching array-of-tables entry. If a second tail consumer
+were ever added before `studioos-tail`, the guard would false-positive and block
+`npm run test:drift`. Replaced the first-match lookup with an all-tables scan so
+`studioos-tail` is detected regardless of position or sibling consumers.
+
+- Extracted the validation into a pure, side-effect-free
+  `collectTailConsumerErrors(rootText, tailText)` (exported); the CLI body is now
+  guarded so importing the module for tests no longer reads files or calls
+  `process.exit`.
+- Top-level/production lookups use `sections.some(name === … && declaresService)`
+  instead of `find()`; empty-set still fails (missing-table case preserved).
+- Added `cloudflare-worker/test/check-tail-consumer.test.mjs` (5 cases: canonical
+  pass; second consumer ordered BEFORE `studioos-tail` regression; missing top
+  table; missing production table; reverse binding on the consumer worker) and
+  wired it into `test:drift` alongside `api_drift.test.mjs`.
+- Behavior unchanged on current config: standalone guard and the drift
+  check-script chain + new `node --test` group pass. Full `npm run test:drift`
+  was not run end-to-end in-agent (exceeds the tool time limit); the touched
+  segment was verified directly.
+
+## Drive GitHub Code Scanning to zero — Task #14
+
+Resolved all 123 open GitHub code-scanning alerts (CodeQL + Semgrep) via a hybrid
+disposition: 30 deterministic code fixes (auto-close on the next scan) + 93
+documented API dismissals (true false positives / test-only / accepted noise).
+`npm run test:drift` does NOT run CodeQL/Semgrep, so closure to zero is confirmed
+only by the fresh scan on `main` after push. The 93 dismissals were verified by
+re-querying `state=open` (123 → 30, the 30 remaining being exactly the fix set
+awaiting rescan).
+
+### 30 code fixes (auto-close on rescan)
+- empty-except ×5 — explanatory comment added: `backend/app/api/routes/brand.py`,
+  `market_intel.py`, `matches.py`, `progress.py`, `backend/app/services/use_of_funds.py`.
+- implicit-string-concat ×11 — explicit `+` between adjacent string literals:
+  `backend/app/api/routes/profiling.py`.
+- polynomial-redos ×2 — unquoted-attribute branch tightened to `[^\s"'>]+`:
+  `brand.py`.
+- `len(... .all())` → COUNT ×4 — `select(func.count()).select_from(X)... .first() or 0`
+  (added `func` to the `sqlmodel` import): `company.py` (×2), `needs.py`,
+  `backend/app/services/score_integrity.py`.
+- unused symbols removed — `brand.py` slug; `RouteErrorBoundary.jsx` info state;
+  `scripts/lfs-size-gate.mjs` `mkdirSync`; test imports in
+  `cloudflare-worker/test/admin.user-conversations.test.mjs` (`mkdir`) and
+  `incorporationPacket.test.ts` (the whole `pdf.ts` import line — both names unused;
+  CodeQL collapses to one alert per import line).
+- incomplete-sanitization — global `replaceAll`: `frontend/src/components/DataImportsTab.jsx`.
+- missing-integrity — SRI hash + `crossorigin` on the qrcode jsDelivr script:
+  `frontend/public/verify-email.html`.
+- hardening — `backend/app/services/calendar_unified.py` drops `r.text` from a log
+  line (reworded); `backend/app/services/notify.py` restricts the Slack webhook to
+  `https://hooks.slack.com/`.
+
+### 93 dismissals (code-scanning REST API, structured `dismissed_reason` + comment)
+- false positive ×84 — parameterized SQLAlchemy `text()`, trusted format strings,
+  guarded prototype-pollution loops, build-script `RegExp`s, server-rendered email
+  hrefs, defensive conditionals, `global` memo sentinels, protocol-validated `<a>`
+  hrefs (xss-through-dom), same-origin `safeNextPath()` redirects, intentional HTML
+  entity normalization, Map-key OAuth-reason lookup, signature-free `jwt.decode`
+  reading only `jti`, `sha1(usedforsecurity=False)`, public RFC-6238 demo TOTP,
+  fixed Sumsub `urlopen`, CI-only LFS git commands, non-SRI `<link>` element.
+- used in tests ×4 — test-fixture regexps / tag matcher.
+- won't fix ×5 — Cloudflare Turnstile (provider serves `api.js` with no stable
+  hash), intentional token wipe, intentionally preserved component, configurable
+  Slack webhook `urlopen`.
+
+Each HIGH-severity dismissal (xss-through-dom, client-side url-redirect,
+double-escaping, user-controlled-bypass) was re-verified safe at the sink and
+already carries an inline `codeql[...]` / `nosemgrep` justification.
+
 ## Slim down role sidebars — PR #101
 
 Each role's sidebar now collapses into fewer, broader groups plus a single
