@@ -122,6 +122,10 @@ for (const key of TEMPLATE_KEYS) {
       html.includes(`/api/brand/landing/${SLUG}/waitlist`),
       'posts to the slug-scoped waitlist endpoint',
     );
+    assert.ok(
+      html.includes("credentials:'omit'"),
+      'waitlist POST omits credentials so CSRF is never triggered for logged-in visitors',
+    );
 
     // The six-tab audience switcher is fully gone — no switchTab script and no
     // per-audience capture forms/panels in any rendered page.

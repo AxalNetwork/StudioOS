@@ -1544,7 +1544,7 @@ function singleWaitlistScript(apiWaitlist: string, audience: string, nonce?: str
     e.preventDefault();
     var email=f.email.value.trim(); if(!email) return;
     var btn=f.querySelector('button'); btn.disabled=true;
-    fetch(api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,source:'landing',audience:${JSON.stringify(audience)}})})
+    fetch(api,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'omit',body:JSON.stringify({email:email,source:'landing',audience:${JSON.stringify(audience)}})})
       .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
       .then(function(x){
         if(x.ok){ m.className='wl-ok'; m.textContent="You're on the list. We'll be in touch."; f.reset(); }

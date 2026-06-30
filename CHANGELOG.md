@@ -10,6 +10,28 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Fix public waitlist form for logged-in visitors (CSRF)
+
+`cloudflare-worker/src/services/landingTemplates.ts` (Task #20): the server-rendered
+waitlist form used a bare `fetch` with no `credentials` option, which on a same-origin
+request sends the browser's default (include). When a logged-in owner tested the form,
+their `studioos_auth` cookie was attached, so the Worker's CSRF middleware (mounted
+at `/api/*`) enforced the double-submit `X-CSRF-Token` check. The form didn't send
+that header, so every POST returned 403 "CSRF token missing or invalid". Anonymous
+visitors were unaffected because the middleware skips when the auth cookie is absent.
+
+Fix: added `credentials:'omit'` to the inline `fetch` call. The waitlist route is
+public (no `requireAuth`) so omitting credentials loses nothing, and it completely
+removes the CSRF cookie-tripwire for everyone.
+
+## Template library: fix Axal VC Spin-Out slide count label
+
+`frontend/src/decks/templates/index.ts`: the `axal_spinout_demoday` template card
+read "9 slides · editorial · binds to Lab data" and `slide_count: 9`. The actual
+spin-out deck has been 11 slides since the `Product demo` and `Review the deal`
+slides were added (tests: `frontend/test/spinout_demoday_deck.test.mjs`).
+Changed `slide_count` to `11` and description to "11 slides ...".
+
 ## Production client-error telemetry + post-login blank hardening — Task #10
 
 Fixes the "passkey sign-in → /studio shows an error flash, then a permanent
