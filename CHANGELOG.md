@@ -10,6 +10,30 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Harden tail-consumer guard against multiple consumers — Task #15
+
+`scripts/check-tail-consumer.mjs` located the `[[tail_consumers]]` and
+`[[env.production.tail_consumers]]` tables with `Array.prototype.find()`, which
+only inspects the FIRST matching array-of-tables entry. If a second tail consumer
+were ever added before `studioos-tail`, the guard would false-positive and block
+`npm run test:drift`. Replaced the first-match lookup with an all-tables scan so
+`studioos-tail` is detected regardless of position or sibling consumers.
+
+- Extracted the validation into a pure, side-effect-free
+  `collectTailConsumerErrors(rootText, tailText)` (exported); the CLI body is now
+  guarded so importing the module for tests no longer reads files or calls
+  `process.exit`.
+- Top-level/production lookups use `sections.some(name === … && declaresService)`
+  instead of `find()`; empty-set still fails (missing-table case preserved).
+- Added `cloudflare-worker/test/check-tail-consumer.test.mjs` (5 cases: canonical
+  pass; second consumer ordered BEFORE `studioos-tail` regression; missing top
+  table; missing production table; reverse binding on the consumer worker) and
+  wired it into `test:drift` alongside `api_drift.test.mjs`.
+- Behavior unchanged on current config: standalone guard and the drift
+  check-script chain + new `node --test` group pass. Full `npm run test:drift`
+  was not run end-to-end in-agent (exceeds the tool time limit); the touched
+  segment was verified directly.
+
 ## Drive GitHub Code Scanning to zero — Task #14
 
 Resolved all 123 open GitHub code-scanning alerts (CodeQL + Semgrep) via a hybrid

@@ -92,50 +92,71 @@ function readFileOrExit(file) {
   return fs.readFileSync(file, 'utf8');
 }
 
-const errors = [];
+// Pure, side-effect-free evaluation: given the two wrangler.toml file contents,
+// return the list of tail-consumer topology errors (empty array = safe). Kept
+// free of file I/O and process.exit so it can be unit-tested directly.
+export function collectTailConsumerErrors(rootText, tailText) {
+  const errors = [];
 
-// (1) The consumer worker must declare NO tail-consumer table at all.
-{
-  const sections = parseSections(readFileOrExit(TAIL_WRANGLER));
-  const offending = sections.filter((s) => s.name && isTailConsumerTable(s.name));
-  if (offending.length) {
-    errors.push(
-      `cloudflare-worker-tail/wrangler.toml declares a tail-consumer table ` +
-        `([[${offending[0].name}]]). The consumer worker must NEVER be a tail ` +
-        `producer — a reverse binding makes Cloudflare invoke studioos.tail() ` +
-        `(which doesn't exist), flooding observability with errors. Remove it.`,
-    );
+  // (1) The consumer worker must declare NO tail-consumer table at all.
+  {
+    const sections = parseSections(tailText);
+    const offending = sections.filter((s) => s.name && isTailConsumerTable(s.name));
+    if (offending.length) {
+      errors.push(
+        `cloudflare-worker-tail/wrangler.toml declares a tail-consumer table ` +
+          `([[${offending[0].name}]]). The consumer worker must NEVER be a tail ` +
+          `producer — a reverse binding makes Cloudflare invoke studioos.tail() ` +
+          `(which doesn't exist), flooding observability with errors. Remove it.`,
+      );
+    }
   }
+
+  // (2) The root (producer) config must declare studioos-tail under BOTH the
+  //     top-level and the production tail-consumer tables, in lockstep. Scan ALL
+  //     matching tables (not just the first): array-of-tables can repeat, so an
+  //     extra tail consumer ordered before studioos-tail must not mask the
+  //     required binding (a `.find()` on the first table would false-positive).
+  {
+    const sections = parseSections(rootText);
+    const declaredIn = (name) =>
+      sections.some((s) => s.name === name && sectionDeclaresService(s, CONSUMER_SERVICE));
+
+    if (!declaredIn('tail_consumers')) {
+      errors.push(
+        `wrangler.toml is missing the top-level [[tail_consumers]] block with ` +
+          `service = "${CONSUMER_SERVICE}". The live (plain \`wrangler deploy\`) ` +
+          `producer binding depends on it.`,
+      );
+    }
+    if (!declaredIn('env.production.tail_consumers')) {
+      errors.push(
+        `wrangler.toml is missing [[env.production.tail_consumers]] with ` +
+          `service = "${CONSUMER_SERVICE}". Wrangler envs do NOT inherit binding ` +
+          `tables, so the \`--env production\` deploy needs its own copy in lockstep.`,
+      );
+    }
+  }
+
+  return errors;
 }
 
-// (2) The root (producer) config must declare studioos-tail under BOTH the
-//     top-level and the production tail-consumer tables, in lockstep.
-{
-  const sections = parseSections(readFileOrExit(ROOT_WRANGLER));
-  const top = sections.find((s) => s.name === 'tail_consumers');
-  const prod = sections.find((s) => s.name === 'env.production.tail_consumers');
-
-  if (!top || !sectionDeclaresService(top, CONSUMER_SERVICE)) {
-    errors.push(
-      `wrangler.toml is missing the top-level [[tail_consumers]] block with ` +
-        `service = "${CONSUMER_SERVICE}". The live (plain \`wrangler deploy\`) ` +
-        `producer binding depends on it.`,
-    );
+function main() {
+  const errors = collectTailConsumerErrors(
+    readFileOrExit(ROOT_WRANGLER),
+    readFileOrExit(TAIL_WRANGLER),
+  );
+  if (errors.length) {
+    console.error('\u2716 check-tail-consumer: tail-consumer topology is unsafe:');
+    for (const e of errors) console.error(`  - ${e}`);
+    process.exit(1);
   }
-  if (!prod || !sectionDeclaresService(prod, CONSUMER_SERVICE)) {
-    errors.push(
-      `wrangler.toml is missing [[env.production.tail_consumers]] with ` +
-        `service = "${CONSUMER_SERVICE}". Wrangler envs do NOT inherit binding ` +
-        `tables, so the \`--env production\` deploy needs its own copy in lockstep.`,
-    );
-  }
+  console.log(
+    '\u2713 check-tail-consumer: producer wiring in lockstep; consumer declares no tail consumers.',
+  );
 }
 
-if (errors.length) {
-  console.error('\u2716 check-tail-consumer: tail-consumer topology is unsafe:');
-  for (const e of errors) console.error(`  - ${e}`);
-  process.exit(1);
+// Run as a CLI guard only when invoked directly (not when imported by a test).
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
 }
-console.log(
-  '\u2713 check-tail-consumer: producer wiring in lockstep; consumer declares no tail consumers.',
-);
