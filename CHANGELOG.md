@@ -10,6 +10,30 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Guard the users-table rebuild against silent data loss — Task #7
+
+The boot-time `users` table rebuild (relaxing the legacy role CHECK to accept
+'investor') had no test. A future edit could reintroduce the original
+data-destroying behaviour. Added a test that pins the loss-free contract.
+
+- `cloudflare-worker/src/util/usersRoleRebuild.ts` (new) — extracted the inline
+  role-CHECK rebuild block out of `ensureInvestorSchema` in index.ts into a pure,
+  testable `rebuildUsersRoleCheckForInvestor(env): { rebuilt }`. Behaviour
+  identical (DDL derived from sqlite_master, full column copy, index replay,
+  deferred-FK batch). Needed because the inline version sat behind a once-only
+  module guard + the whole worker bootstrap and couldn't be driven from a test.
+- `cloudflare-worker/src/index.ts` — `ensureInvestorSchema` now calls the helper
+  (same try/catch + warn).
+- `cloudflare-worker/test/users_role_rebuild.test.ts` (new) — runs the rebuild
+  against a real in-memory SQLite (node:sqlite) seeded with the legacy role CHECK,
+  extra PII/billing/linkedin columns, child-FK rows and several user indexes;
+  asserts every column, index, row, value and id survives, child rows still join,
+  'investor' is now accepted while invalid roles are still rejected, and a second
+  run is a no-op (needsRebuild=false). FK enforcement off to mirror D1.
+- `package.json` — registered the test in `test:drift`.
+
+Not user-facing; no `CHANGELOG-user.md` entry.
+
 ## Cover the cron overload-hardening with automated tests — Task #4
 
 Task #1's transient-overload hardening (retry-with-backoff, batched enqueue,
