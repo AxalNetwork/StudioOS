@@ -10,6 +10,29 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Cover the cron overload-hardening with automated tests — Task #4
+
+Task #1's transient-overload hardening (retry-with-backoff, batched enqueue,
+no-drop watermark) had no automated coverage. Added unit tests that pin all
+three invariants so a future change can't silently regress them.
+
+- `cloudflare-worker/src/util/reembedSweep.ts` (new) — extracted the inline
+  chunk-enqueue + watermark loop from the scheduled handler's minute-7 re-embed
+  sweep into a pure, testable `enqueueReembedChunks(env, type, ids, since,
+  chunkSize)` returning `{ lastOk, okCount, failed }`. Behaviour unchanged.
+- `cloudflare-worker/src/index.ts` — the re-embed loop now calls
+  `enqueueReembedChunks` instead of the inline loop (KV watermark put +
+  `recordReembed` + console.info unchanged).
+- `cloudflare-worker/test/cron_reembed_reliability.test.ts` (new) — 9 tests:
+  `withD1Retry`/`isTransientD1Error` retry only on transient signatures and
+  rethrow other errors immediately; `Jobs.enqueueMany` issues one batched write
+  and is a no-op on `[]`; `enqueueReembedChunks` advances the watermark only to
+  the last successfully enqueued chunk (full-success, mid-failure, first-chunk
+  failure cases).
+- `package.json` — registered the new test in `test:drift`.
+
+Not user-facing; no `CHANGELOG-user.md` entry.
+
 ## Surface hourly search re-index health in the admin Cron tab — Task #5
 
 The hourly axal-search re-embed sweep now persists per-type counts to

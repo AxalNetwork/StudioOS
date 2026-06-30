@@ -205,6 +205,7 @@ import adminStripe from './routes/admin_stripe';
 import payments from './routes/payments';
 import { Jobs } from './models/jobs';
 import { withD1Retry } from './util/d1Retry';
+import { enqueueReembedChunks } from './util/reembedSweep';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
@@ -1248,21 +1249,9 @@ export default {
                 // Advance the watermark only to the highest *successfully*
                 // enqueued ID: if a chunk fails, stop so the next tick
                 // retries the missed tail rather than silently dropping rows.
-                let lastOk = since;
-                let okCount = 0;
-                let failed = 0;
-                for (let i = 0; i < ids.length; i += ENQUEUE_CHUNK) {
-                  const chunk = ids.slice(i, i + ENQUEUE_CHUNK);
-                  try {
-                    await Jobs.enqueueMany(env, 'embed_entity', chunk.map((id) => ({ type, id })));
-                    lastOk = chunk[chunk.length - 1];
-                    okCount += chunk.length;
-                  } catch (e) {
-                    failed += chunk.length;
-                    console.error(`[cron] axal-search enqueue failed type=${type} chunk@${i}`, (e as Error).message);
-                    break;
-                  }
-                }
+                const { lastOk, okCount, failed } = await enqueueReembedChunks(
+                  env, type, ids, since, ENQUEUE_CHUNK,
+                );
                 if (lastOk > since) {
                   try { await env.RATE_LIMITS.put(wmKey, String(lastOk), { expirationTtl: 90 * 86400 }); } catch {}
                 }
