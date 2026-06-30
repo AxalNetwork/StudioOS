@@ -819,10 +819,13 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
     }
     // Phase 0.1 — relax the legacy users.role CHECK constraint that excluded
     // 'investor'. SQLite/D1 has no ALTER TABLE DROP/MODIFY CONSTRAINT, so on
-    // existing prod DBs we must rebuild the table. We use the canonical DDL
-    // from sql/schema.sql (PK/UNIQUE/CHECK/FK/defaults preserved) plus an
-    // explicit recreate of the indexes — no CTAS/constraint-stripping shortcut
-    // (architect blocking-fix: preserve all integrity constraints).
+    // existing prod DBs we must rebuild the table. To avoid drifting from
+    // schema.sql + every migration that has touched `users`, we derive the new
+    // table DDL from the LIVE definition (sqlite_master) and rewrite ONLY the
+    // table name (to a temp) and the role CHECK (to also accept 'investor').
+    // Every column, default, FK, UNIQUE/CHECK and (replayed) index is preserved
+    // — nothing is hardcoded, so no founder/investor/subscription/PII/linkedin/
+    // public-id data or index is lost the first time the rebuild commits.
     try {
       const tbl = await env.DB.prepare(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
@@ -830,38 +833,42 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
       const ddl = (tbl?.sql || '');
       const needsRebuild = ddl.includes("CHECK") && ddl.includes("'partner'") && !ddl.includes("'investor'");
       if (needsRebuild) {
-        const NEW_USERS_DDL = `CREATE TABLE users_new (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
-          email TEXT UNIQUE NOT NULL,
-          name TEXT NOT NULL,
-          role TEXT NOT NULL DEFAULT 'founder' CHECK (role IN ('admin', 'founder', 'partner', 'investor')),
-          investor_id INTEGER REFERENCES investors(id),
-          password_hash TEXT,
-          founder_id INTEGER REFERENCES founders(id),
-          partner_id INTEGER REFERENCES partners(id),
-          is_active INTEGER NOT NULL DEFAULT 1,
-          email_verified INTEGER NOT NULL DEFAULT 0,
-          verification_token TEXT,
-          verification_token_expires TEXT,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        )`;
-        // Build the column list dynamically from the OLD table so we copy
-        // only columns that exist on both sides (handles partial-migration
-        // states). investor_id may or may not yet exist on the source.
-        const oldCols = (cols.results || []).map(r => r.name);
-        const newCols = ['id','uid','email','name','role','investor_id','password_hash','founder_id','partner_id','is_active','email_verified','verification_token','verification_token_expires','created_at'];
-        const sharedCols = newCols.filter(c => oldCols.includes(c));
-        const colList = sharedCols.join(', ');
+        // Rewrite only (a) the table name → users_new and (b) the role CHECK to
+        // include 'investor'. The quoted token 'partner' appears solely in the
+        // role CHECK, so the single replace is targeted and safe.
+        const newTableDdl = ddl
+          .replace(/^(\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?)("?)users\2/i, '$1$2users_new$2')
+          .replace("'partner'", "'partner', 'investor'");
+        // Copy the FULL current column set (read fresh — investor_id may have
+        // just been added by the ALTER above). New and old share every column,
+        // so the copy is loss-free.
+        const freshCols = await env.DB.prepare("PRAGMA table_info(users)").all<{ name: string }>();
+        const colList = (freshCols.results || []).map(r => r.name).join(', ');
+        // Replay EVERY explicit index that existed on users. DROP TABLE removes
+        // the table and all its indexes; auto-indexes (UNIQUE/PK) have sql=NULL
+        // and are recreated by the CREATE TABLE itself, so we only replay the
+        // user-defined ones (sql IS NOT NULL). Their stored SQL targets `users`,
+        // which is valid again after the RENAME.
+        const idxRows = await env.DB.prepare(
+          "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='users' AND sql IS NOT NULL"
+        ).all<{ sql: string }>();
+        const idxStmts = (idxRows.results || [])
+          .map(r => r.sql)
+          .filter((s): s is string => typeof s === 'string' && s.length > 0)
+          .map(s => env.DB.prepare(s));
+        // defer_foreign_keys=TRUE works inside a transaction; the old
+        // foreign_keys=OFF/ON pair was a no-op inside batch()'s implicit txn, so
+        // DROP TABLE users (an implicit DELETE of every row) tripped the child
+        // tables' FKs and rolled the whole batch back. Deferring FK checks to
+        // commit lets DROP→RENAME finish with users_new holding identical ids,
+        // so every child reference still resolves at commit time.
         await env.DB.batch([
-          env.DB.prepare("PRAGMA foreign_keys=OFF"),
-          env.DB.prepare(NEW_USERS_DDL),
+          env.DB.prepare("PRAGMA defer_foreign_keys = TRUE"),
+          env.DB.prepare(newTableDdl),
           env.DB.prepare(`INSERT INTO users_new (${colList}) SELECT ${colList} FROM users`),
           env.DB.prepare("DROP TABLE users"),
           env.DB.prepare("ALTER TABLE users_new RENAME TO users"),
-          env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)"),
-          env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_users_uid ON users(uid)"),
-          env.DB.prepare("PRAGMA foreign_keys=ON"),
+          ...idxStmts,
         ]);
       }
     } catch (e) {
