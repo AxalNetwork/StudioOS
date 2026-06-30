@@ -18,6 +18,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import re
 import secrets
 from datetime import datetime
@@ -34,6 +35,8 @@ from backend.app.database import get_session
 from backend.app.models.entities import Project, User
 
 router = APIRouter(prefix="/brand", tags=["Brand & Landing"])
+
+logger = logging.getLogger("studioos.brand")
 
 
 _migrated = False
@@ -161,7 +164,7 @@ def _sanitize_url(url: Optional[str]) -> Optional[str]:
             return u
     except Exception:
         # malformed URL — treat as absent so the caller falls back to None
-        pass
+        logger.debug("brand: discarding unparseable URL", exc_info=True)
     return None
 
 

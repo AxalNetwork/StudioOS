@@ -11,8 +11,11 @@ Legacy projects still carry free-text, so every reader falls back to the old
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import List, Dict, Optional, Tuple
+
+logger = logging.getLogger("studioos.use_of_funds")
 
 _FREE_RE = re.compile(r"^(.+?)[:\s]+(\d{1,3})\s*%?$")
 
@@ -65,7 +68,7 @@ def parse_use_of_funds_value(raw: Optional[str]) -> List[Dict]:
                     return cleaned
         except (ValueError, TypeError):
             # not a JSON allocation list — fall back to free-text parsing
-            pass
+            logger.debug("use_of_funds: value is not JSON, using free-text parse", exc_info=True)
     return _parse_free_text(s)
 
 

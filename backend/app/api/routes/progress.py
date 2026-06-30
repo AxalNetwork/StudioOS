@@ -50,6 +50,8 @@ from backend.app.services import email_service
 
 router = APIRouter(prefix="/progress", tags=["Discovery / Roadmap / Metrics"])
 
+logger = logging.getLogger("studioos.progress")
+
 
 # ---------------------------------------------------------------------------
 # Authorization (mirrors financials.py)
@@ -302,7 +304,7 @@ def _landing_cta_url(session: Session, project_id: int) -> str:
             return f"{base}/landing/{row['slug']}"
     except Exception:
         # landing_pages table/row absent — fall back to the base URL
-        pass
+        logger.debug("progress: landing CTA lookup failed, using base URL", exc_info=True)
     return base
 
 
