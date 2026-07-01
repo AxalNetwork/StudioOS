@@ -10,6 +10,36 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Fix recurring blank page after login on the apex — Task #15
+
+The apex `axal.vc` served Worker-rendered app routes (`/studio`, `/login`,
+`/dashboard`, `/api/*`) whose `index.html` references build-specific hashed
+`/assets/*` files, but `/assets/*` itself was NOT route-carved to the Worker, so
+those requests fell through to GitHub Pages (a DIFFERENT `docs/` build). The
+hashes 404'd, React never booted, and the page rendered blank. The custom domain
+`app.axal.vc` was unaffected (the Worker serves every path there).
+
+- `wrangler.toml` — add `axal.vc/assets/*` to BOTH the top-level `[[routes]]`
+  block AND `[[env.production.routes]]`, kept in lockstep (per the Task #37 note
+  that the live deploy binds the top-level block). Only `/assets/*` is carved;
+  the static roots (favicons, manifest, logos) have stable names that resolve
+  identically on either host and stay on Pages to keep the skew surface minimal.
+- `scripts/lib/assetRetention.mjs` + `scripts/build-frontend.mjs` — new build
+  wrapper (`npm run build` → `node scripts/build-frontend.mjs`) that runs the
+  Vite build and then restores the last `ASSET_RETAIN_BUILDS` (default 3) builds'
+  hashed assets into `docs/assets`, recording them in `docs/.asset-retention.json`.
+  This keeps the Pages-served apex root — which briefly references the previous
+  build's hashes right after a deploy — working during the deploy→Pages-catch-up
+  window now that `/assets/*` routes to the Worker. The pure planning logic is
+  unit-tested in `scripts/lib/assetRetention.test.mjs` (`npm run test:retention`,
+  appended to `npm run test:drift`).
+- `package.json` — `deploy` now runs `npm run build` first so a deploy can never
+  ship a stale `docs/` bundle.
+- `scripts/check-spa-live.mjs` — the post-deploy smoke check now probes `/studio`
+  and `/login`, and on the apex asserts each hashed `/assets/*` is Worker-served
+  (no `server: GitHub.com` / `x-github-request-id`) so a deploy where the carve
+  silently isn't in effect fails loudly instead of shipping a blank site.
+
 ## Merge founder Projects, Pipeline & Roadmap into one Execution area — Task #12
 
 The founder-only "Build" sidebar group's three separate destinations — Projects
