@@ -106,6 +106,11 @@ const PortfolioHealthPage = lazy(() => import('./pages/PortfolioHealthPage'));
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
 const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
 const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
+const ICDecisionsPage = lazy(() => import('./pages/ICDecisionsPage'));
+const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
+const LPReportingPage = lazy(() => import('./pages/LPReportingPage'));
+const PortfolioUpdatesPage = lazy(() => import('./pages/PortfolioUpdatesPage'));
+const PortfolioPositionsPage = lazy(() => import('./pages/PortfolioPositionsPage'));
 const ReferEarnPage = lazy(() => import('./pages/ReferEarnPage'));
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
 const PayoutsPage = lazy(() => import('./pages/PayoutsPage'));
@@ -1274,6 +1279,12 @@ function AppInner() {
       {/* Task #10 — portfolio Venture Risk matrix (internal deal team). */}
       <Route path="/portfolio/risk-matrix" element={guard(['admin', 'partner', 'investor'], <RiskMatrixPage />)} />
       <Route path="/watchlist" element={guard(['admin', 'partner', 'investor'], <WatchlistJournalPage />)} />
+      {/* Investor lifecycle features (Commit + Support). */}
+      <Route path="/ic" element={guard(['admin', 'partner', 'investor'], <ICDecisionsPage />)} />
+      <Route path="/ic/:uid" element={guard(['admin', 'partner', 'investor'], <ICDecisionPage />)} />
+      <Route path="/lp-reports" element={guard(['admin', 'investor'], <LPReportingPage />)} />
+      <Route path="/portfolio/updates" element={guard(['admin', 'partner', 'investor', 'founder'], <PortfolioUpdatesPage />)} />
+      <Route path="/portfolio/positions" element={guard(['admin', 'investor'], <PortfolioPositionsPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor'], <TrustCenterPage />)} />

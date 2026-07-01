@@ -2197,6 +2197,50 @@ export const api = {
   journalDelete: (uid) => request(`/journal/${uid}`, { method: 'DELETE' }),
   antiportfolio: (owner = 'me') => request(`/antiportfolio?owner=${encodeURIComponent(owner)}`),
 
+  // ---------- IC Decisions (Commit) ----------
+  icList: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.status) qs.set('status', opts.status);
+    if (opts.project_id) qs.set('project_id', opts.project_id);
+    const s = qs.toString();
+    return request(`/ic${s ? `?${s}` : ''}`);
+  },
+  icGet: (uid) => request(`/ic/${uid}`),
+  icCreate: (data) => request('/ic', { method: 'POST', body: JSON.stringify(data) }),
+  icUpdate: (uid, data) => request(`/ic/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
+  icVote: (uid, data) => request(`/ic/${uid}/vote`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // ---------- LP Reporting (Support) ----------
+  lpReportsList: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.fund_id) qs.set('fund_id', opts.fund_id);
+    const s = qs.toString();
+    return request(`/lp-reports${s ? `?${s}` : ''}`);
+  },
+  lpReportGet: (uid) => request(`/lp-reports/${uid}`),
+  lpReportCreate: (data) => request('/lp-reports', { method: 'POST', body: JSON.stringify(data) }),
+  lpReportUpdate: (uid, data) => request(`/lp-reports/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
+  lpReportPublish: (uid) => request(`/lp-reports/${uid}/publish`, { method: 'POST' }),
+
+  // ---------- Portfolio-company update inbox (Support) ----------
+  portfolioUpdatesList: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.project_id) qs.set('project_id', opts.project_id);
+    if (opts.period) qs.set('period', opts.period);
+    const s = qs.toString();
+    return request(`/portfolio-updates${s ? `?${s}` : ''}`);
+  },
+  portfolioUpdateGet: (uid) => request(`/portfolio-updates/${uid}`),
+  portfolioUpdateCreate: (data) => request('/portfolio-updates', { method: 'POST', body: JSON.stringify(data) }),
+  portfolioUpdateUpdate: (uid, data) => request(`/portfolio-updates/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
+  portfolioUpdateSubmit: (uid) => request(`/portfolio-updates/${uid}/submit`, { method: 'POST' }),
+
+  // ---------- Portfolio cap-table / ownership (Support) ----------
+  positionsList: () => request('/positions'),
+  positionsByProject: (projectUid) => request(`/positions/${projectUid}`),
+  positionCreate: (data) => request('/positions', { method: 'POST', body: JSON.stringify(data) }),
+  positionUpdate: (uid, data) => request(`/positions/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
+
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {
     const qs = new URLSearchParams();

@@ -22,6 +22,7 @@ import {
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2, ShieldAlert,
+  Gavel, FileBarChart, Inbox,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -275,12 +276,16 @@ export const SIDEBAR_GROUPS = {
       { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
     ]},
     { key: 'commit', label: 'Commit', items: [
+      { to: '/ic', icon: Gavel, label: 'IC Decisions' },
       { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
       { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
     ]},
     { key: 'support', label: 'Support', items: [
       { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
+      { to: '/portfolio/updates', icon: Inbox, label: 'Company Updates' },
+      { to: '/portfolio/positions', icon: PieIcon, label: 'Cap Table' },
       { to: '/funds', icon: TrendingUp, label: 'Funds' },
+      { to: '/lp-reports', icon: FileBarChart, label: 'LP Reporting' },
       { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
       { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
