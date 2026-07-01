@@ -11,8 +11,8 @@
 // Conventions:
 //   - First group of every role is the "Home" group (always default-open).
 //   - Second content group is also default-open on first load.
-//   - The trailing "Account" group always carries Activity / Settings /
-//     Documentation so users can find them in a predictable place.
+//   - The trailing group (e.g. "Account" or "More") always carries Activity /
+//     Settings / Documentation so users can find them in a predictable place.
 //   - Items must not appear in more than one group within a role.
 
 import {
@@ -252,49 +252,52 @@ export const SIDEBAR_GROUPS = {
     ]},
   ],
 
+  // Investor nav follows the investment lifecycle: Sourcing -> Diligence ->
+  // Commit -> Support, with Home on top and a collapsed More drawer carrying
+  // account / education / self-compliance. Each feature has exactly one home;
+  // cross-stage needs are met by read-only badges/deep-links inside pages, not
+  // by repeating items here. Deal Flow + Pipeline Board (Sourcing) and the
+  // fund-finance items (Support) are earmarked for page-level merges later.
   investor: [
     { key: 'home', label: 'Home', items: [
       { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-      { to: '/partner-portal', icon: UserCircle, label: 'Investor Portal', highlight: true },
-      { to: '/play', icon: Gamepad2, label: 'Discover' },
     ]},
-    { key: 'pipeline', label: 'Pipeline', items: [
-      { to: '/projects', icon: Zap, label: 'Projects' },
-      { to: '/pipeline', icon: Layers, label: 'Pipeline Board', requiredInvestorTier: 'professional' },
+    { key: 'sourcing', label: 'Sourcing', items: [
       { to: '/deals', icon: Handshake, label: 'Deal Flow', requiredInvestorTier: 'professional' },
+      { to: '/pipeline', icon: Layers, label: 'Pipeline Board', requiredInvestorTier: 'professional' },
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
       { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
     ]},
-    { key: 'intelligence', label: 'Intelligence', items: [
+    { key: 'diligence', label: 'Diligence', items: [
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
+      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
       { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
     ]},
-    { key: 'portfolio', label: 'Portfolio', items: [
+    { key: 'commit', label: 'Commit', items: [
+      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
       { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
-      { to: '/funds', icon: TrendingUp, label: 'Funds' },
-      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
+    ]},
+    { key: 'support', label: 'Support', items: [
       { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
+      { to: '/funds', icon: TrendingUp, label: 'Funds' },
       { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
       { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
+      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
     ]},
-    { key: 'network', label: 'Network', items: [
+    { key: 'more', label: 'More', items: [
+      { to: '/trust', icon: Lock, label: 'Trust & Identity' },
       { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
+      { to: '/partners', icon: Users, label: 'Partners' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
-    ]},
-    { key: 'legal', label: 'Legal & Compliance', items: [
-      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
-      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
-      { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
-      { to: '/trust', icon: Lock, label: 'Trust Center' },
-    ]},
-    { key: 'account', label: 'Account', items: [
+      { to: '/integrations', icon: Plug, label: 'Integrations' },
+      { to: '/play', icon: Gamepad2, label: 'Discover' },
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
-      { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
+      { to: '/tickets', icon: Ticket, label: 'Support' },
+      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
