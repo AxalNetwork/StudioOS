@@ -10,6 +10,34 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+> ## Investor lifecycle access-control test suite (Task #21)
+>
+> Added `cloudflare-worker/test/investorLifecycle.authz.test.ts` (44 tests)
+> locking the role/tier access rules for the four new investor-lifecycle
+> features so a future refactor cannot silently leak data across roles:
+>
+> - **Static assertions** — verify index.ts mounts
+>   `requireInvestorTier('professional')` on `/api/ic`,
+>   `requireTier('studio')` on `/api/lp-reports` and `/api/positions`,
+>   and leaves `/api/portfolio-updates` ungated (dual-audience, in-route
+>   enforcement).
+> - **Predicate tests** — `userMeetsInvestorTier`, `userMeetsTier`,
+>   `canViewLpData` boundary checks (free → blocked, professional/institutional
+>   → pass, admin/partner/mentor → bypass).
+> - **IC decisions** (`ic.ts`) — founder blocked by `canUseIc` (403);
+>   professional investor passes (200); PUT owner-or-admin guard verified.
+> - **LP reports** (`lp_reports.ts`) — `canViewLpData` blocks founder/partner
+>   (403); investor reads only own authored + published LP-fund reports;
+>   non-author non-LP gets 404 on unpublished; LP gets 200 on published.
+> - **Portfolio updates** (`portfolio_updates.ts`) — founder list scoped to
+>   own-project updates; investor list filtered to `status='submitted'`;
+>   detail cross-tenant guard (founder A cannot read founder B's update);
+>   POST non-owning founder blocked (403).
+> - **Positions** (`positions.ts`) — `canViewLpData` blocks founder/partner;
+>   writes are `requireAdmin`-only (POST/PUT → 403 for investor).
+>
+> Wired into `test:drift` (`package.json`).
+>
 > ## Sidebar persona cross-contamination fix
 >
 > `frontend/src/App.jsx::mergePersonaExtrasIntoGroups` now checks

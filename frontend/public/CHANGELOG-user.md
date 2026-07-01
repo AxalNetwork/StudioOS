@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Tighter access controls on investor and founder data
+
+The four new investor-lifecycle areas — IC Decisions, LP Reporting, Company
+Updates, and Cap Table — now have automated tests that continuously verify
+every access rule. That means a founder's portfolio update stays visible only
+to that founder (and the investor side once it's submitted), an investor's
+LP report stays scoped to the funds they belong to, and only admins can add
+new cap-table positions. These checks run on every build so a future change
+can't accidentally open the wrong door.
+
+---
+
 ## Cleaner sidebar for investors and partners
 
 If your profile listed a founder persona, the left-hand menu used to
