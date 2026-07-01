@@ -133,6 +133,11 @@ const FundsPage = lazy(() => import('./pages/FundsPage'));
 const InvestorPricingPage = lazy(() => import('./pages/InvestorPricingPage'));
 const ReservesPage = lazy(() => import('./pages/ReservesPage'));
 const WaterfallPage = lazy(() => import('./pages/WaterfallPage'));
+const ICDecisionsPage = lazy(() => import('./pages/ICDecisionsPage'));
+const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
+const LPReportingPage = lazy(() => import('./pages/LPReportingPage'));
+const PortfolioUpdatesPage = lazy(() => import('./pages/PortfolioUpdatesPage'));
+const PortfolioPositionsPage = lazy(() => import('./pages/PortfolioPositionsPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const DocsPage = lazy(() => import('./pages/DocsPage'));
 const OnboardingPersonaPage = lazy(() => import('./pages/OnboardingPersonaPage'));
@@ -1309,6 +1314,12 @@ function AppInner() {
           (folded into Studio/Home). Founders hitting the old link are
           redirected to /studio; admins keep the Founder Portal surface. */}
       <Route path="/founder" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/studio" replace /> : <FounderPortal />)} />
+      {/* Task #18 — investor-lifecycle features ported from PR #119. */}
+      <Route path="/ic" element={guard(['admin', 'partner', 'investor'], <ICDecisionsPage />)} />
+      <Route path="/ic/:uid" element={guard(['admin', 'partner', 'investor'], <ICDecisionPage />)} />
+      <Route path="/lp-reports" element={guard(['admin', 'investor'], <LPReportingPage />)} />
+      <Route path="/portfolio/updates" element={guard(['admin', 'partner', 'investor', 'founder'], <PortfolioUpdatesPage />)} />
+      <Route path="/portfolio/positions" element={guard(['admin', 'investor'], <PortfolioPositionsPage />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferEarnPage />)} />
       <Route path="/integrations" element={guard(['admin', 'partner', 'investor'], <IntegrationsPage />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <PayoutsPage />)} />

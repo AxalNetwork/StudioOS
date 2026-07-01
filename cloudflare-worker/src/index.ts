@@ -216,6 +216,10 @@ import { lastActiveMiddleware } from './middleware/lastActive';
 import { requireCfAccess } from './middleware/cfAccess';
 import filesRoutes from './routes/files';
 import ddRoutes from './routes/dd';
+import ic from './routes/ic';
+import lpReports from './routes/lp_reports';
+import portfolioUpdates from './routes/portfolio_updates';
+import positions from './routes/positions';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -506,6 +510,8 @@ const STUDIO_PREFIXES = [
   '/api/watchlist',
   '/api/antiportfolio',
   '/api/partner-office-hours',
+  '/api/lp-reports',
+  '/api/positions',
 ];
 for (const p of STUDIO_PREFIXES) {
   app.use(p, requireTier('studio'));
@@ -520,6 +526,7 @@ const INVESTOR_PRO_PREFIXES = [
   '/api/pipeline',
   '/api/deals',
   '/api/calendar',
+  '/api/ic',
 ];
 for (const p of INVESTOR_PRO_PREFIXES) {
   app.use(p, requireInvestorTier('professional'));
@@ -651,6 +658,15 @@ app.route('/api/infra', infra);
 // itself is the authorisation. See services/signedDownload.ts.
 app.route('/api/files', filesRoutes);
 app.route('/api/dd', ddRoutes);
+// Investor lifecycle features (IC decisions, LP reporting, portfolio-company
+// update inbox, cap-table/ownership). Gating: /api/ic is professional-tier
+// (INVESTOR_PRO_PREFIXES); /api/lp-reports + /api/positions sit in
+// STUDIO_PREFIXES to keep founders out (admin/investor bypass); the dual-
+// audience /api/portfolio-updates enforces access per-role in-route.
+app.route('/api/ic', ic);
+app.route('/api/lp-reports', lpReports);
+app.route('/api/portfolio-updates', portfolioUpdates);
+app.route('/api/positions', positions);
 app.route('/api/funds', funds);
 app.route('/api/liquidity', liquidity);
 app.route('/api/email', email);

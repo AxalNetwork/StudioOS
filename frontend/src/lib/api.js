@@ -2218,6 +2218,44 @@ export const api = {
   journalDelete: (uid) => request(`/journal/${uid}`, { method: 'DELETE' }),
   antiportfolio: (owner = 'me') => request(`/antiportfolio?owner=${encodeURIComponent(owner)}`),
 
+  // ---------- IC Decisions (Commit) ----------
+  icList: (opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.status) q.set('status', opts.status);
+    if (opts.project_id != null && opts.project_id !== '') q.set('project_id', opts.project_id);
+    const qs = q.toString();
+    return request(`/ic${qs ? `?${qs}` : ''}`);
+  },
+  icCreate: (data) => request('/ic', { method: 'POST', body: JSON.stringify(data) }),
+  icGet: (uid) => request(`/ic/${uid}`),
+  icUpdate: (uid, data) => request(`/ic/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
+  icVote: (uid, data) => request(`/ic/${uid}/vote`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // ---------- LP Reporting (Support) ----------
+  lpReportsList: (opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.fund_id != null && opts.fund_id !== '') q.set('fund_id', opts.fund_id);
+    const qs = q.toString();
+    return request(`/lp-reports${qs ? `?${qs}` : ''}`);
+  },
+  lpReportCreate: (data) => request('/lp-reports', { method: 'POST', body: JSON.stringify(data) }),
+  lpReportPublish: (uid) => request(`/lp-reports/${uid}/publish`, { method: 'POST' }),
+
+  // ---------- Company Updates (Support) ----------
+  portfolioUpdatesList: (opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.project_id != null && opts.project_id !== '') q.set('project_id', opts.project_id);
+    if (opts.period) q.set('period', opts.period);
+    const qs = q.toString();
+    return request(`/portfolio-updates${qs ? `?${qs}` : ''}`);
+  },
+  portfolioUpdateCreate: (data) => request('/portfolio-updates', { method: 'POST', body: JSON.stringify(data) }),
+
+  // ---------- Cap Table / Ownership (Support) ----------
+  positionsList: () => request('/positions'),
+  positionsByProject: (projectUid) => request(`/positions/${projectUid}`),
+  positionCreate: (data) => request('/positions', { method: 'POST', body: JSON.stringify(data) }),
+
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {
     const qs = new URLSearchParams();
