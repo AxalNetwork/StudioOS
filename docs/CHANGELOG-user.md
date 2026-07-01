@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Waitlist form works for anyone, even when you're signed in
+
+If you previewed your landing page while logged into the dashboard and tried to
+join the waitlist, you'd see a "CSRF token missing" error instead of the success
+message. The form now works for both visitors and signed-in users.
+
+## Template library shows the right slide count
+
+The "Axal VC Spin-Out" template card used to say 9 slides, but the actual deck
+has 11. The label is now correct.
+
 ## No more blank screens after signing in
 
 If something went wrong right after you signed in, you could land on a blank

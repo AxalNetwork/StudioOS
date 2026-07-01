@@ -10,6 +10,58 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Email security: consolidate DMARC + serve /.well-known/security.txt
+
+Cloudflare Email Security flagged `axal.vc`. Verified live DNS (not just the
+dashboard screenshots) and addressed the findings:
+
+- **DMARC (RFC 7489) — the real error, now fixed.** `_dmarc.axal.vc` had TWO
+  `v=DMARC1; p=none` TXT records (rua → `…@dmarc-reports.cloudflare.net` and
+  `dmarc@axal.vc`). With more than one DMARC record, receivers ignore ALL of
+  them, so DMARC was effectively off. Consolidated to a SINGLE record that
+  preserves both aggregate-report destinations, applied to live DNS via the
+  Cloudflare API (kept the existing record ID, replaced its content, deleted the
+  duplicate):
+  `v=DMARC1; p=none; rua=mailto:41b1c9616822463cb5eb67a841281ae9@dmarc-reports.cloudflare.net,mailto:dmarc@axal.vc`.
+  This was a Cloudflare DNS change, not code. Policy stays `p=none` (monitor-only);
+  raising to `quarantine`/`reject` is a deliberate follow-up.
+- **security.txt (RFC 9116).** Added `frontend/public/.well-known/security.txt`
+  (mirrored into the committed `docs/` artifact) with Contact + Expires +
+  Canonical. It is served by the Worker assets binding, but the apex only routes
+  an explicit allow-list of paths, so `axal.vc/.well-known/security.txt` was
+  added to BOTH the top-level `[[routes]]` and `[[env.production.routes]]`
+  blocks in `wrangler.toml` (the live apex deploy binds the top-level block;
+  env-only routes silently 404 on the apex). Takes effect on `npm run deploy`.
+- **SPF — no change (false positive).** The "multiple SPF records" flag conflates
+  two records on DIFFERENT hostnames: apex `axal.vc`
+  (`v=spf1 include:_spf.mx.cloudflare.net ~all`) and subdomain `send.axal.vc`
+  (`v=spf1 include:amazonses.com ~all`). Each hostname is allowed exactly one and
+  has exactly one. DKIM passes. The `~all` "soft fail" is standard.
+
+Not user-facing; no `CHANGELOG-user.md` entry.
+
+## Fix public waitlist form for logged-in visitors (CSRF)
+
+`cloudflare-worker/src/services/landingTemplates.ts` (Task #20): the server-rendered
+waitlist form used a bare `fetch` with no `credentials` option, which on a same-origin
+request sends the browser's default (include). When a logged-in owner tested the form,
+their `studioos_auth` cookie was attached, so the Worker's CSRF middleware (mounted
+at `/api/*`) enforced the double-submit `X-CSRF-Token` check. The form didn't send
+that header, so every POST returned 403 "CSRF token missing or invalid". Anonymous
+visitors were unaffected because the middleware skips when the auth cookie is absent.
+
+Fix: added `credentials:'omit'` to the inline `fetch` call. The waitlist route is
+public (no `requireAuth`) so omitting credentials loses nothing, and it completely
+removes the CSRF cookie-tripwire for everyone.
+
+## Template library: fix Axal VC Spin-Out slide count label
+
+`frontend/src/decks/templates/index.ts`: the `axal_spinout_demoday` template card
+read "9 slides · editorial · binds to Lab data" and `slide_count: 9`. The actual
+spin-out deck has been 11 slides since the `Product demo` and `Review the deal`
+slides were added (tests: `frontend/test/spinout_demoday_deck.test.mjs`).
+Changed `slide_count` to `11` and description to "11 slides ...".
+
 ## Production client-error telemetry + post-login blank hardening — Task #10
 
 Fixes the "passkey sign-in → /studio shows an error flash, then a permanent

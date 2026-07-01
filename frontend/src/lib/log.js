@@ -118,14 +118,14 @@ function beacon(entry) {
 
 export function reportError(scope, err) {
   const entry = toEntry(scope, err, 'error');
-  try { console.error(`[${entry.scope}]`, err); } catch { /* console missing */ }
+  try { console.error('[%s]', entry.scope, err); } catch { /* console missing */ }
   pushRing(entry);
   if (!isDev) beacon(entry);
 }
 
 export function reportWarn(scope, msg) {
   const entry = toEntry(scope, msg, 'warn');
-  try { console.warn(`[${entry.scope}]`, msg); } catch { /* console missing */ }
+  try { console.warn('[%s]', entry.scope, msg); } catch { /* console missing */ }
   pushRing(entry);
   // Warnings are kept in the local ring buffer but NOT beaconed, to keep the
   // Worker log volume focused on real errors.

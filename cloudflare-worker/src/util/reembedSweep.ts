@@ -44,7 +44,7 @@ export async function enqueueReembedChunks(
       okCount += chunk.length;
     } catch (e) {
       failed += chunk.length;
-      console.error(`[cron] axal-search enqueue failed type=${type} chunk@${i}`, (e as Error).message);
+      console.error('[cron] axal-search enqueue failed type=%s chunk@%d', type, i, (e as Error).message);
       break;
     }
   }

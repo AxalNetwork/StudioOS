@@ -11,6 +11,10 @@ version: 2
 # Strategy: weekly cadence (low PR noise), grouped by ecosystem so security
 # patches don't get drowned out by minor bumps. Production deps (frontend +
 # worker) get higher PR limits than dev-only.
+#
+# Cooldown: every ecosystem waits 7 days after a release is published before
+# opening a bump PR, so freshly-cut (and occasionally yanked/broken) releases
+# have time to settle before they hit CI.
 
 updates:
   - package-ecosystem: github-actions
@@ -18,6 +22,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       actions:
@@ -29,6 +35,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       root-npm:
@@ -41,6 +49,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     groups:
       react:
@@ -60,6 +70,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     groups:
       worker:
@@ -75,6 +87,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       tail-worker:
@@ -86,6 +100,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       python:
