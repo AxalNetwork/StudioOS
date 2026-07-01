@@ -2256,6 +2256,24 @@ export const api = {
   positionsByProject: (projectUid) => request(`/positions/${projectUid}`),
   positionCreate: (data) => request('/positions', { method: 'POST', body: JSON.stringify(data) }),
 
+  // ---------- Contacts (inbound relationship hub) ----------
+  contactsList: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.audience) qs.set('audience', opts.audience);
+    if (opts.status) qs.set('status', opts.status);
+    if (opts.routed_to) qs.set('routed_to', opts.routed_to);
+    const s = qs.toString();
+    return request(`/contacts${s ? `?${s}` : ''}`);
+  },
+  contactGet: (uid) => request(`/contacts/${uid}`),
+  contactCreate: (data) => request('/contacts', { method: 'POST', body: JSON.stringify(data) }),
+  contactInvite: (data) => request('/contacts/invite', { method: 'POST', body: JSON.stringify(data) }),
+  contactUpdate: (uid, data) => request(`/contacts/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
+  contactReply: (uid, data) => request(`/contacts/${uid}/reply`, { method: 'POST', body: JSON.stringify(data) }),
+  contactAddTask: (uid, data) => request(`/contacts/${uid}/tasks`, { method: 'POST', body: JSON.stringify(data) }),
+  contactToggleTask: (uid, taskId) => request(`/contacts/${uid}/tasks/${taskId}/toggle`, { method: 'POST' }),
+  contactPromote: (uid) => request(`/contacts/${uid}/promote`, { method: 'POST' }),
+
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {
     const qs = new URLSearchParams();

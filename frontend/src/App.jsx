@@ -138,6 +138,7 @@ const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
 const LPReportingPage = lazy(() => import('./pages/LPReportingPage'));
 const PortfolioUpdatesPage = lazy(() => import('./pages/PortfolioUpdatesPage'));
 const PortfolioPositionsPage = lazy(() => import('./pages/PortfolioPositionsPage'));
+const ContactsPage = lazy(() => import('./pages/ContactsPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const DocsPage = lazy(() => import('./pages/DocsPage'));
 const OnboardingPersonaPage = lazy(() => import('./pages/OnboardingPersonaPage'));
@@ -1325,6 +1326,8 @@ function AppInner() {
       <Route path="/lp-reports" element={guard(['admin', 'investor'], <LPReportingPage />)} />
       <Route path="/portfolio/updates" element={guard(['admin', 'partner', 'investor', 'founder'], <PortfolioUpdatesPage />)} />
       <Route path="/portfolio/positions" element={guard(['admin', 'investor'], <PortfolioPositionsPage />)} />
+      {/* Contacts — founder inbound relationship hub (PR #120). */}
+      <Route path="/contacts" element={guard(['admin', 'founder'], <ContactsPage />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferEarnPage />)} />
       <Route path="/integrations" element={guard(['admin', 'partner', 'investor'], <IntegrationsPage />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <PayoutsPage />)} />

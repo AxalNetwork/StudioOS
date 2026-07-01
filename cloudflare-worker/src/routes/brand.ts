@@ -23,6 +23,7 @@ import { renderLandingTemplate, TEMPLATE_REGISTRY, TEMPLATE_KEYS, TEMPLATE_SIGNA
 import type { TemplateKey } from '../services/landingTemplates';
 import { requireAuth } from '../auth';
 import { run as aiRouterRun } from '../services/aiRouter';
+import { ingestContact } from './contacts';
 
 const brand = new Hono<{ Bindings: Env }>();
 
@@ -884,6 +885,9 @@ brand.post('/landing/:slug/waitlist', async (c) => {
   ).bind(slug).first<any>();
   if (!lp) return c.json({ error: 'landing page not found' }, 404);
   const audience = VALID_AUDIENCE(body?.audience);
+  // The Contacts hub accepts the full 6-value audience taxonomy; the legacy
+  // waitlist_signups insert stays CHECK-safe (customer/partner/investor only).
+  const contactAudience = VALID_PAGE_AUDIENCE(body?.audience) || 'customer';
   const ip = c.req.header('CF-Connecting-IP') || c.req.header('x-forwarded-for') || '';
   let ipHash: string | null = null;
   if (ip) {
@@ -894,6 +898,19 @@ brand.post('/landing/:slug/waitlist', async (c) => {
     `INSERT INTO waitlist_signups (project_id, landing_page_id, email, name, source, audience, ip_hash)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).bind(lp.project_id, lp.id, email, body?.name || null, body?.source || 'landing', audience, ipHash).run();
+  // Route the lead into the Contacts hub (best-effort — never fail the capture).
+  try {
+    await ingestContact(c.env, {
+      projectId: lp.project_id, landingPageId: lp.id, email,
+      name: body?.name || null, audience: contactAudience,
+      cta: body?.cta || null, message: body?.message || null,
+      source: body?.source || 'landing',
+    });
+  } catch (e: any) {
+    // Capture must still succeed even if the Contacts write fails — but log it
+    // (explicit error handling over silent fallbacks).
+    console.error('contacts ingest:', e?.message);
+  }
   return c.json({ ok: true });
 });
 

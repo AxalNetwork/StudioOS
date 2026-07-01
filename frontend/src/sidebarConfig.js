@@ -172,6 +172,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
     ]},
     { key: 'validate', label: 'Validate', items: [
+      { to: '/contacts', icon: Inbox, label: 'Contacts' },
       { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
       { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
       { to: '/services', icon: Package, label: 'Service Catalogue' },

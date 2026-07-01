@@ -10,6 +10,32 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+> ## Contacts backbone — inbound relationship hub (Task #30, PR #120)
+>
+> Integrated the capture→Contacts backbone from PR #120 (the PR itself was
+> `dirty`/unmergeable so it was applied manually and closed). Only the
+> Contacts slice was taken; the PR's investor-lifecycle files were already in
+> main and were skipped.
+>
+> - **New route** `cloudflare-worker/src/routes/contacts.ts` mounted at
+>   `/api/contacts` in `index.ts` (role-gated founder/admin in-route, no
+>   paywall prefix). Lazy `ensureSchema`; exposes list/get/create/invite/
+>   update/reply/tasks(+toggle)/promote.
+> - **Migration** `sql/migrations/127_contacts.sql` (renumbered from the PR's
+>   `120_*` to clear main's 126 high-water mark) — canonical, idempotent
+>   record of `contacts` / `contact_replies` / `contact_tasks`.
+> - **Dual-write on capture** — `routes/brand.ts` waitlist POST now best-effort
+>   calls `ingestContact(...)` after the `waitlist_signups` INSERT, tagging the
+>   contact with the full 6-value audience taxonomy (`VALID_PAGE_AUDIENCE`)
+>   while the legacy insert stays CHECK-safe. Failures are swallowed so lead
+>   capture never breaks.
+> - **Frontend** — `pages/ContactsPage.jsx`, lazy route `/contacts`
+>   (`guard(['admin','founder'])`) in `App.jsx`, Contacts API block in
+>   `lib/api.js`, and a "Contacts" item (Inbox icon) at the top of the founder
+>   Validate sidebar group.
+> - **Deferred as follow-ups**: invite emails, deep promote wiring, and a
+>   landing form for advisor/mentor/cofounder audiences.
+>
 > ## Investor lifecycle access-control test suite (Task #21)
 >
 > Added `cloudflare-worker/test/investorLifecycle.authz.test.ts` (44 tests)

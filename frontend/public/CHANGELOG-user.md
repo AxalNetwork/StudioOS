@@ -5,6 +5,19 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New Contacts hub for founders
+
+Every lead who fills out one of your landing-page forms now flows into a
+single Contacts space in the sidebar. Each contact is tagged by who they are
+(customer, investor, partner, advisor, mentor, or co-founder) and lands in the
+right lane automatically — customers head toward discovery, investors toward
+your raise, and everyone else into your network. From a contact you can log
+replies, add follow-up tasks and check them off, and update their status as
+the relationship moves along. Existing lead capture keeps working exactly as
+before; this just gives you one place to manage everyone who reaches out.
+
+---
+
 ## Tighter access controls on investor and founder data
 
 The four new investor-lifecycle areas — IC Decisions, LP Reporting, Company
