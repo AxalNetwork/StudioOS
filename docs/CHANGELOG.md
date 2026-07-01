@@ -10,6 +10,39 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Regroup the founder sidebar around the venture lifecycle — Task #19
+
+The founder left rail (`SIDEBAR_GROUPS.founder` in `frontend/src/sidebarConfig.js`)
+is regrouped from 8 groups / ~33 items into **Home → Build → Validate → Raise →
+Launch → More → Account**, the same sidebar-level treatment Task #17 gave the
+investor side. Every surviving route, icon and `requiredTier` gate is preserved;
+no pages are merged.
+
+- **Build** is now execution/construction only: Execution (`/execution`, keeps the
+  Task #12/#14 `match` array), Studio Ops, Metrics (`/build/metrics`), Brand &
+  Landing, Spin-Outs. Customer Discovery moves to Validate; Pitch Deck, Financial
+  Model and Cap Table move to Raise.
+- **Validate** — Customer Discovery, Needs Board, Service Catalogue, AI Advisory
+  Suite, Find a Mentor (growth), Find a Co-founder (studio), Network
+  (`/relationships`).
+- **Raise** — Pitch Deck (growth), Financial Model, Cap Table, Legal & Capital
+  (studio), Incorporate, Co-Founder Agreement (studio), Compliance Calendar,
+  83(b) Tracker (studio).
+- **Launch** — Events, Co-Marketing (`/comarketing`, newly surfaced), Articles.
+- **More** — Refer & Earn, Founder Wellbeing, Network Effects, Liquidity & Exits
+  (studio), Payouts, Calendar, Discover (`/play`).
+- **Account** — Trust Center, Identity / KYC (`/kyc`, newly surfaced), My Profile
+  (`/profile`, newly surfaced), Support, Activity Log, Documentation, Settings.
+- **Intentional removals** (documented in a header comment so a future nav-drop
+  guard treats them as deliberate; routes stay registered): "Founder Portal"
+  (`/founder`) folded into Home — founders hitting `/founder` are now redirected
+  to `/studio` in `frontend/src/App.jsx` (admins keep the FounderPortal surface,
+  mirroring the `/partner-portal` investor redirect); "Portfolio Health"
+  (`/portfolio/health`) folded into Metrics; "Network Effects"
+  (`/network-effects`) demoted to More behind the single "Network" entry.
+- Founder persona only — admin/partner/investor/mentor sidebars are untouched.
+  No backend, data-model or page changes.
+
 ## Remove leftover "Play & Discover" (/play) code — finish Task #8
 
 The user-facing "Play & Discover" surface was already removed (routes, sidebar,

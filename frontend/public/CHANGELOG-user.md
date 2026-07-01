@@ -5,6 +5,28 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A founder menu that follows your journey
+
+The founder left-hand menu is now organised around the stages of building a
+venture, so it's quicker to find what you need at each step:
+
+- **Build** — your Execution hub, Studio Ops, Metrics, Brand & Landing, and Spin-Outs
+- **Validate** — Customer Discovery, Needs Board, Service Catalogue, AI Advisory,
+  finding a mentor or co-founder, and your Network
+- **Raise** — Pitch Deck, Financial Model, Cap Table, Legal & Capital, Incorporate,
+  Co-Founder Agreement, Compliance, and the 83(b) Tracker
+- **Launch** — Events, Co-Marketing, and Articles
+- **More** and **Account** hold everything else — Wellbeing, Refer & Earn,
+  Payouts, your Trust Center, identity verification, profile, support and settings
+
+A few things are now easier to reach that weren't in the menu before — **Co-Marketing**,
+**identity verification**, and your **profile**. Your company-health view now lives inside
+**Metrics**, and the old separate "Founder Portal" link has been folded into your home
+page (**Studio**). Nothing was taken away — every page still opens where it did before,
+just better grouped. (Founders only; other roles are unchanged.)
+
+---
+
 ## Fixed: a blank page after signing in
 
 Some people occasionally saw a blank screen right after logging in. That's now

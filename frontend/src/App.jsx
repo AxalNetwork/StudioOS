@@ -194,7 +194,10 @@ const ROLE_COLORS = {
 
 const ROLE_DEFAULT_PATH = {
   admin: '/studio',
-  founder: '/founder',
+  // Task #19 — "Founder Portal" folded into Home (Studio). Founders land on
+  // /studio directly; /founder now redirects founders there anyway, so pointing
+  // the default here avoids an extra redirect hop on login/root navigation.
+  founder: '/studio',
   partner: '/partner-portal',
   investor: '/studio',
   mentor: '/office-hours',
@@ -1302,7 +1305,10 @@ function AppInner() {
       <Route path="/funds" element={guard(['admin', 'investor'], <FundsPage currentUser={user} />)} />
       <Route path="/portfolio/reserves" element={guard(['admin', 'investor'], <ReservesPage />)} />
       <Route path="/portfolio/waterfall" element={guard(['admin', 'investor'], <WaterfallPage />)} />
-      <Route path="/founder" element={guard(['admin', 'founder'], <FounderPortal />)} />
+      {/* Task #19 — the founder sidebar no longer surfaces "Founder Portal"
+          (folded into Studio/Home). Founders hitting the old link are
+          redirected to /studio; admins keep the Founder Portal surface. */}
+      <Route path="/founder" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/studio" replace /> : <FounderPortal />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferEarnPage />)} />
       <Route path="/integrations" element={guard(['admin', 'partner', 'investor'], <IntegrationsPage />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <PayoutsPage />)} />

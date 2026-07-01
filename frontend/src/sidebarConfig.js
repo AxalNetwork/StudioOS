@@ -134,55 +134,81 @@ export const SIDEBAR_GROUPS = {
     ]},
   ],
 
+  // Task #19 — regroup the founder sidebar around the venture lifecycle:
+  // Home → Build → Validate → Raise → Launch → More → Account. This replaces the
+  // former 8-group layout (which crammed execution + validation + fundraising
+  // into one "Build" bucket and duplicated Home via a parallel "Founder Portal")
+  // so every feature has exactly one home and founders face far fewer top-level
+  // choices. Sidebar-level only: every surviving route/icon/tier-gate is
+  // preserved; no pages are merged. Mirrors the Task #17 investor reorg.
+  //
+  // Intentional removals (documented so a nav-integrity guard treats them as
+  // deliberate, not silent drops):
+  //   • "Founder Portal" (/founder) — redundant with Studio/Home; founders
+  //     hitting /founder are redirected to /studio in App.jsx. The route stays
+  //     registered for admin.
+  //   • "Portfolio Health" (/portfolio/health) — folded into Metrics
+  //     (/build/metrics) as the founder's own company-health view; the
+  //     /portfolio/health route stays registered and reachable for other roles.
+  //   • "Network Effects" (/network-effects) is demoted to More while a single
+  //     "Network" entry (/relationships) leads Validate; both routes stay live.
+  //
+  // Newly surfaced (routes already existed and are founder-accessible, they just
+  // weren't in the founder nav): Co-Marketing (/comarketing, Launch), Identity /
+  // KYC (/kyc, Account), My Profile (/profile, Account), Discover (/play, More).
   founder: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/founder', icon: Rocket, label: 'Founder Portal', highlight: true },
     ]},
     { key: 'build', label: 'Build', items: [
-      // Task #12 — Projects, Pipeline Board and Roadmap are merged into one
+      // Task #12/#14 — Projects, Pipeline Board and Roadmap are merged into one
       // Execution area (founder persona only). `match` keeps the item active
       // across every Execution view and its legacy deep-linked routes.
       { to: '/execution', icon: Zap, label: 'Execution', match: ['/execution', '/projects', '/pipeline', '/build/roadmap'] },
       { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
-      { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
-      { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
-      { to: '/build/deck', icon: Sparkles, label: 'Pitch Deck', requiredTier: 'growth' },
-      { to: '/build/financials', icon: DollarSign, label: 'Financial Model' },
-      { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
       { to: '/build/metrics', icon: TrendingUp, label: 'Metrics' },
-      { to: '/build/captable', icon: PieIcon, label: 'Cap Table' },
+      { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
+      { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
     ]},
-    { key: 'grow', label: 'Grow', items: [
+    { key: 'validate', label: 'Validate', items: [
+      { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
+      { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
+      { to: '/services', icon: Package, label: 'Service Catalogue' },
       { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
       { to: '/mentors', icon: UserCircle, label: 'Find a Mentor', requiredTier: 'growth' },
       { to: '/cofounder', icon: Users, label: 'Find a Co-founder', requiredTier: 'studio' },
-      { to: '/services', icon: Package, label: 'Service Catalogue' },
-      { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
-      { to: '/calendar', icon: Calendar, label: 'Calendar' },
-      { to: '/my/events', icon: Ticket, label: 'Events' },
+      { to: '/relationships', icon: Handshake, label: 'Network' },
     ]},
-    { key: 'capital', label: 'Capital & Legal', items: [
-      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits', requiredTier: 'studio' },
-      { to: '/payouts', icon: Wallet, label: 'Payouts' },
-      { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health', requiredTier: 'studio' },
+    { key: 'raise', label: 'Raise', items: [
+      { to: '/build/deck', icon: Sparkles, label: 'Pitch Deck', requiredTier: 'growth' },
+      { to: '/build/financials', icon: DollarSign, label: 'Financial Model' },
+      { to: '/build/captable', icon: PieIcon, label: 'Cap Table' },
       { to: '/legal-capital', icon: Scale, label: 'Legal & Capital', requiredTier: 'studio' },
       { to: '/incorporate', icon: Scale, label: 'Incorporate' },
+      { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement', requiredTier: 'studio' },
       { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
+      { to: '/incorporate/83b', icon: Calendar, label: '83(b) Tracker', requiredTier: 'studio' },
+    ]},
+    { key: 'launch', label: 'Launch', items: [
+      { to: '/my/events', icon: Ticket, label: 'Events' },
+      { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
+      { to: '/articles/draft', icon: FileText, label: 'Articles' },
     ]},
     { key: 'more', label: 'More', items: [
-      { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement', requiredTier: 'studio' },
-      { to: '/incorporate/83b', icon: Calendar, label: '83(b) Tracker', requiredTier: 'studio' },
-      { to: '/trust', icon: Lock, label: 'Trust Center' },
-      { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
       { to: '/refer', icon: Share2, label: 'Refer & Earn' },
-      { to: '/relationships', icon: Handshake, label: 'Relationships' },
+      { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
+      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits', requiredTier: 'studio' },
+      { to: '/payouts', icon: Wallet, label: 'Payouts' },
+      { to: '/calendar', icon: Calendar, label: 'Calendar' },
+      { to: '/play', icon: Gamepad2, label: 'Discover' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/activity', icon: Activity, label: 'Activity Log' },
+      { to: '/trust', icon: Lock, label: 'Trust Center' },
+      { to: '/kyc', icon: ShieldCheck, label: 'Identity / KYC' },
+      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
+      { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
       { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
