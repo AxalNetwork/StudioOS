@@ -223,6 +223,13 @@ zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/landing/*"
 zone_name  = "axal.vc"
+# Email security — serve /.well-known/security.txt (RFC 9116) from the Worker
+# assets binding on the apex. Without this exact route the path falls through to
+# Jekyll/GitHub Pages (no such file → 404) and Cloudflare Email Security flags
+# "Security.txt not configured". Mirrored in [[env.production.routes]] below.
+[[routes]]
+pattern    = "axal.vc/.well-known/security.txt"
+zone_name  = "axal.vc"
 
 # ---------- Static Assets (SPA) ----------
 # Task #36 — Worker Static Assets binding. The worker serves the
@@ -754,6 +761,10 @@ pattern    = "axal.vc/landing"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/landing/*"
+zone_name  = "axal.vc"
+# Email security — mirror of the top-level /.well-known/security.txt route.
+[[env.production.routes]]
+pattern    = "axal.vc/.well-known/security.txt"
 zone_name  = "axal.vc"
 
 [env.production.vars]

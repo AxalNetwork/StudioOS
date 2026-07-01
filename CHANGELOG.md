@@ -10,6 +10,37 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Email security: consolidate DMARC + serve /.well-known/security.txt
+
+Cloudflare Email Security flagged `axal.vc`. Verified live DNS (not just the
+dashboard screenshots) and addressed the findings:
+
+- **DMARC (RFC 7489) — the real error.** `_dmarc.axal.vc` had TWO
+  `v=DMARC1; p=none` TXT records (rua → `…@dmarc-reports.cloudflare.net` and
+  `dmarc@axal.vc`). With more than one DMARC record, receivers ignore ALL of
+  them, so DMARC was effectively off. Fix is to collapse to a single record that
+  preserves both aggregate-report destinations:
+  `v=DMARC1; p=none; rua=mailto:41b1c9616822463cb5eb67a841281ae9@dmarc-reports.cloudflare.net,mailto:dmarc@axal.vc`.
+  This is a Cloudflare DNS change, not code. The stored `CLOUDFLARE_API_TOKEN`
+  has DNS **read** but not **edit** scope (GET records succeeds; PUT returns
+  Cloudflare error 10000), so the write must be applied out-of-band — in the DNS
+  dashboard, or by supplying an edit-scoped token. Policy stays `p=none`
+  (monitor-only); raising to `quarantine`/`reject` is a deliberate follow-up.
+- **security.txt (RFC 9116).** Added `frontend/public/.well-known/security.txt`
+  (mirrored into the committed `docs/` artifact) with Contact + Expires +
+  Canonical. It is served by the Worker assets binding, but the apex only routes
+  an explicit allow-list of paths, so `axal.vc/.well-known/security.txt` was
+  added to BOTH the top-level `[[routes]]` and `[[env.production.routes]]`
+  blocks in `wrangler.toml` (the live apex deploy binds the top-level block;
+  env-only routes silently 404 on the apex). Takes effect on `npm run deploy`.
+- **SPF — no change (false positive).** The "multiple SPF records" flag conflates
+  two records on DIFFERENT hostnames: apex `axal.vc`
+  (`v=spf1 include:_spf.mx.cloudflare.net ~all`) and subdomain `send.axal.vc`
+  (`v=spf1 include:amazonses.com ~all`). Each hostname is allowed exactly one and
+  has exactly one. DKIM passes. The `~all` "soft fail" is standard.
+
+Not user-facing; no `CHANGELOG-user.md` entry.
+
 ## Fix public waitlist form for logged-in visitors (CSRF)
 
 `cloudflare-worker/src/services/landingTemplates.ts` (Task #20): the server-rendered
