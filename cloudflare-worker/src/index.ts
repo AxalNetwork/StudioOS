@@ -218,6 +218,7 @@ import ic from './routes/ic';
 import lpReports from './routes/lp_reports';
 import portfolioUpdates from './routes/portfolio_updates';
 import positions from './routes/positions';
+import contacts from './routes/contacts';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -618,6 +619,9 @@ app.route('/api/ic', ic);
 app.route('/api/lp-reports', lpReports);
 app.route('/api/portfolio-updates', portfolioUpdates);
 app.route('/api/positions', positions);
+// Contacts — unified inbound relationship hub (founder CRM). Role-gated
+// in-route (founder/admin); no paywall prefix so it's core-available.
+app.route('/api/contacts', contacts);
 app.route('/api/funds', funds);
 app.route('/api/liquidity', liquidity);
 app.route('/api/email', email);

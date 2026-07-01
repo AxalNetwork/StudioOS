@@ -160,6 +160,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/build/captable', icon: PieIcon, label: 'Cap Table' },
     ]},
     { key: 'validate', label: 'Validate', items: [
+      { to: '/contacts', icon: Users, label: 'Contacts' },
       { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
       { to: '/mentors', icon: UserCircle, label: 'Find a Mentor', requiredTier: 'growth' },
       { to: '/cofounder', icon: Users, label: 'Find a Co-founder', requiredTier: 'studio' },

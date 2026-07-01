@@ -111,6 +111,7 @@ const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
 const LPReportingPage = lazy(() => import('./pages/LPReportingPage'));
 const PortfolioUpdatesPage = lazy(() => import('./pages/PortfolioUpdatesPage'));
 const PortfolioPositionsPage = lazy(() => import('./pages/PortfolioPositionsPage'));
+const ContactsPage = lazy(() => import('./pages/ContactsPage'));
 const ReferEarnPage = lazy(() => import('./pages/ReferEarnPage'));
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
 const PayoutsPage = lazy(() => import('./pages/PayoutsPage'));
@@ -1285,6 +1286,7 @@ function AppInner() {
       <Route path="/lp-reports" element={guard(['admin', 'investor'], <LPReportingPage />)} />
       <Route path="/portfolio/updates" element={guard(['admin', 'partner', 'investor', 'founder'], <PortfolioUpdatesPage />)} />
       <Route path="/portfolio/positions" element={guard(['admin', 'investor'], <PortfolioPositionsPage />)} />
+      <Route path="/contacts" element={guard(['admin', 'founder'], <ContactsPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor'], <TrustCenterPage />)} />

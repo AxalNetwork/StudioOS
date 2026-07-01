@@ -22,6 +22,7 @@ import { ensureLandingPageBrandKitColumns } from '../services/landingPageSchema'
 import { renderLandingTemplate, TEMPLATE_REGISTRY } from '../services/landingTemplates';
 import { requireAuth } from '../auth';
 import { run as aiRouterRun } from '../services/aiRouter';
+import { ingestContact, CONTACT_AUDIENCES } from './contacts';
 
 const brand = new Hono<{ Bindings: Env }>();
 
@@ -251,8 +252,13 @@ async function projectOwned(env: Env, user: any, projectId: number): Promise<any
   throw new Error('Forbidden');
 }
 
+// Legacy waitlist_signups.audience CHECK only allows these three — used for the
+// legacy analytics insert so we don't violate the constraint.
 const AUDIENCE_SET = new Set(['customer', 'partner', 'investor']);
 const VALID_AUDIENCE = (v: unknown): string | null => (typeof v === 'string' && AUDIENCE_SET.has(v.trim())) ? v.trim() : null;
+// The Contacts hub accepts the full audience set (adds advisor/mentor/cofounder).
+const CONTACT_AUDIENCE_SET = new Set(CONTACT_AUDIENCES);
+const VALID_CONTACT_AUDIENCE = (v: unknown): string | null => (typeof v === 'string' && CONTACT_AUDIENCE_SET.has(v.trim())) ? v.trim() : null;
 
 function rowToLanding(row: any) {
   return {
@@ -771,7 +777,10 @@ brand.post('/landing/:slug/waitlist', async (c) => {
     `SELECT id, project_id FROM landing_pages WHERE slug = ? AND published = 1`
   ).bind(slug).first<any>();
   if (!lp) return c.json({ error: 'landing page not found' }, 404);
-  const audience = VALID_AUDIENCE(body?.audience);
+  // Legacy audience (CHECK-safe: null for the newer audiences) for waitlist_signups;
+  // the Contacts hub keeps the full audience.
+  const legacyAudience = VALID_AUDIENCE(body?.audience);
+  const contactAudience = VALID_CONTACT_AUDIENCE(body?.audience) || 'customer';
   const ip = c.req.header('CF-Connecting-IP') || c.req.header('x-forwarded-for') || '';
   let ipHash: string | null = null;
   if (ip) {
@@ -781,7 +790,16 @@ brand.post('/landing/:slug/waitlist', async (c) => {
   await c.env.DB.prepare(
     `INSERT INTO waitlist_signups (project_id, landing_page_id, email, name, source, audience, ip_hash)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).bind(lp.project_id, lp.id, email, body?.name || null, body?.source || 'landing', audience, ipHash).run();
+  ).bind(lp.project_id, lp.id, email, body?.name || null, body?.source || 'landing', legacyAudience, ipHash).run();
+  // Route the lead into the Contacts hub (best-effort — never fail the capture).
+  try {
+    await ingestContact(c.env, {
+      projectId: lp.project_id, landingPageId: lp.id, email,
+      name: body?.name || null, audience: contactAudience,
+      cta: body?.cta || null, message: body?.message || null,
+      source: body?.source || 'landing',
+    });
+  } catch { /* capture must still succeed even if Contacts write fails */ }
   return c.json({ ok: true });
 });
 
