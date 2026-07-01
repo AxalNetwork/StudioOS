@@ -1,0 +1,102 @@
+I have the current founder sidebar in front of me from `frontend/src/sidebarConfig.js` (the `founder` block, 8 groups). No code changes were requested here — this is the audit. It's grounded in the actual config.
+
+## 1. Current problems
+
+- **Build is a dumping ground and mixes three lifecycle stages.** Today's Build holds Projects, Pipeline Board, Studio Ops, Spin-Outs, Brand & Landing, **Pitch Deck**, Financial Model, **Customer Discovery**, Roadmap, Metrics, **Cap Table** — that's execution + validation (Discovery) + fundraising (Deck/Model/Cap Table) jammed together.
+- **Three execution surfaces for one flow.** Projects (`/projects`), Pipeline Board (`/pipeline`), and Roadmap (`/build/roadmap`) are three views of the same execution pipeline with no single home.
+- **A parallel portal.** "Founder Portal" (`/founder`) re-exposes the whole nav — same duplication problem the investor "Investor Portal" had.
+- **Legal is sprawling and US-forced.** Legal & Capital, Incorporate, Co-Founder Agreement, **83(b) Tracker**, Compliance Calendar, and Trust Center are six separate items; 83(b) (US-only) is shown to every founder, and Co-Founder Agreement is a standalone top-level item.
+- **A "Capital" group that isn't founder-core.** Liquidity & Exits, Payouts, Portfolio Health are late-stage/investor-flavored; Portfolio Health duplicates what Metrics should own.
+- **"Network" is a grab-bag.** Service Catalogue, Needs Board, Refer & Earn, Relationships, Network Effects, Calendar, Events span Validate, Launch, More, and utility — no coherent stage.
+- **Trust Center is filed under Legal**, Wellbeing is its own one-item group, Discover (games) sits in Home, and Articles is buried in Account.
+- **Missing raise workflows** (see §3): no investor-updates home, no data room, no fundraising CRM.
+
+## 2. Recommended sidebar structure
+
+**Home:** Dashboard only *(fold Founder Portal in; move Discover to More).*
+
+### Build — execution & venture construction
+- **Execution** — merge **Projects + Pipeline Board + Roadmap** into one execution hub (list/board/timeline views).
+- **Studio Ops** (`/studio-ops`)
+- **Metrics** (`/build/metrics`) — **absorb Portfolio Health** (`/portfolio/health`) as the founder's own company-health view.
+- **Brand & Landing** (`/build/brand`) — construction of brand assets (the public *release* lives in Launch).
+- **Spin-Outs** (`/spinouts`)
+- *Moved out:* Customer Discovery → Validate; Pitch Deck / Financial Model / Cap Table → Raise.
+
+### Validate — discovery, team, signal
+- **Customer Discovery** (`/build/discovery`) — moved here from Build (it's validation, not construction).
+- **Needs Board** (`/needs`) + **Service Catalogue** (`/services`) — the marketplace pair.
+- **AI Advisory Suite** (`/advisory`)
+- **Find a Mentor** (`/mentors`) · **Find a Co-founder** (`/cofounder`)
+- **Network** — merge **Relationships + Network Effects** into one module (they're the same relationship graph).
+
+### Raise — fundraising readiness, legal, equity
+- **Pitch Deck** (`/build/deck`) · **Financial Model** (`/build/financials`) · **Cap Table** (`/build/captable`) — moved from Build; these *are* the raise toolkit.
+- **Legal & Capital** (`/legal-capital`) — the legal hub; **absorb Co-Founder Agreement** and **Compliance Calendar**.
+- **Incorporate** (`/incorporate`) — keep, but nest **83(b) Tracker conditionally** (US founders only) rather than as a peer item.
+- **Investor Updates** — home for the founder side of Company Updates (`/portfolio/updates`, the feature just shipped). Keeping investors warm is a raise activity. *(relocate + surface)*
+- **Data Room** *(add, see §3)* · **Investor CRM** *(add, see §3)*
+
+### Launch — go-to-market activation
+- **Events** (`/my/events`)
+- **Co-Marketing** (`/comarketing`) — GTM activation, currently not surfaced in the founder nav.
+- **Articles** (`/articles/draft`) — moved from Account; treated as launch/publishing activation, not a general blog.
+
+### More — secondary / low-frequency
+- **Refer & Earn** (`/refer`) · **Founder Wellbeing** (`/wellbeing`) · **Documentation** (`/docs`) · **Discover** (`/play`)
+- **Liquidity & Exits** (`/liquidity`) · **Payouts** (`/payouts`) — real but late-stage for most founders.
+- **Calendar** (`/calendar`) — utility.
+
+### Account — trust, support, settings, utility
+- **Trust Center** (`/trust`) — moved from Legal (it's account/security, not raise-critical).
+- **Identity / KYC** (`/kyc`) · **Support** (`/tickets`) · **Settings** (`/settings`) · **Activity Log** (`/activity`) · **My Profile** (`/profile`).
+
+This takes the founder nav from **8 groups / ~35 items** to **Home + 6 stages / ~15 primary items**, with each feature owning exactly one home.
+
+## 3. Features to add
+| Add | Home | Why |
+|---|---|---|
+| **Data Room** | Raise | `projects` has a `data_room_url` field but there's no managed, access-controlled investor data room — a raise essential. |
+| **Investor CRM / raise pipeline** | Raise | No way to track target investors, outreach status, or commitments. The mirror of the investor's Deal Flow. |
+| **Investor Updates (founder side)** | Raise | The Company Updates feature exists (`/portfolio/updates`) but has no founder sidebar home — surface it here. |
+| **Hiring / Roles** (optional) | Validate | Co-founder matching exists, but no lightweight roles/recruiting board for early hires. |
+
+## 4. Features to remove / demote
+- **Founder Portal** (`/founder`) → fold into Dashboard (duplicate portal).
+- **Portfolio Health** (`/portfolio/health`) → merge into Metrics.
+- **Co-Founder Agreement** (`/incorporate/cofounder-agreement`) → into Legal & Capital.
+- **Compliance Calendar** (`/compliance`) → into Legal & Capital.
+- **83(b) Tracker** (`/incorporate/83b`) → conditional (US only), nested under Incorporate.
+- **Discover** (`/play`), **Wellbeing** (standalone group), **Liquidity/Payouts**, **Calendar** → demote to More/Account.
+- **Trust Center** → move to Account.
+
+## 5. Merge map
+| Current feature (route) | Destination | Action | Reason |
+|---|---|---|---|
+| Projects `/projects` | Build → Execution | Merge | Same execution flow |
+| Pipeline Board `/pipeline` | Build → Execution | Merge | Board view of same work |
+| Roadmap `/build/roadmap` | Build → Execution | Merge | Timeline view of same work |
+| Portfolio Health `/portfolio/health` | Build → Metrics | Merge | Founder's own company health |
+| Customer Discovery `/build/discovery` | Validate | Move | It's validation, not construction |
+| Relationships `/relationships` | Validate → Network | Merge | Same relationship graph |
+| Network Effects `/network-effects` | Validate → Network | Merge | Same relationship graph |
+| Pitch Deck `/build/deck` | Raise | Move | Raise toolkit |
+| Financial Model `/build/financials` | Raise | Move | Raise toolkit |
+| Cap Table `/build/captable` | Raise | Move | Equity structure |
+| Co-Founder Agreement `/incorporate/cofounder-agreement` | Raise → Legal & Capital | Merge | One legal hub |
+| Compliance Calendar `/compliance` | Raise → Legal & Capital | Merge | Legal readiness |
+| 83(b) Tracker `/incorporate/83b` | Raise → Incorporate (conditional) | Merge | US-specific; don't force on all |
+| Company Updates `/portfolio/updates` | Raise → Investor Updates | Keep (surface) | Founder home for investor updates |
+| Articles `/articles/draft` | Launch | Move | Launch/publishing activation |
+| Co-Marketing `/comarketing` | Launch | Surface | GTM activation |
+| Founder Portal `/founder` | Home/Dashboard | Remove | Duplicate portal |
+| Trust Center `/trust` | Account | Move | Account/security, not raise-critical |
+| Discover `/play` · Wellbeing `/wellbeing` · Liquidity `/liquidity` · Payouts `/payouts` · Calendar `/calendar` | More/Account | Move | Secondary/utility |
+
+## 6. Final recommendation
+
+Adopt the **Build → Validate → Raise → Launch → More → Account** sidebar. The single biggest fix is making **Build execution-only** — pulling Customer Discovery into Validate and Pitch Deck / Financial Model / Cap Table into Raise — and collapsing **Projects + Pipeline + Roadmap into one Execution hub**. Consolidate all legal into **Legal & Capital** (Co-Founder Agreement + Compliance folded in, 83(b) conditional) so non-US founders aren't dragged through US-specific steps, and move **Trust Center to Account**. That yields a nav that reads exactly like a founder's journey from building to launching, with each feature living in one place.
+
+---
+
+Want me to implement this the same way I did the investor side — rewrite `SIDEBAR_GROUPS.founder` into these six groups (existing pages, tier gates preserved) and push to the branch? The three "add" items (Data Room, Investor CRM, Investor Updates home) would be a follow-up build like the investor lifecycle features.
