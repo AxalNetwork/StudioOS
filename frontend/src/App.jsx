@@ -27,6 +27,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
+const ExecutionPage = lazy(() => import('./pages/ExecutionPage'));
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
 const IncorporatePage = lazy(() => import('./pages/IncorporatePage'));
@@ -275,6 +276,7 @@ function abbreviateLabel(label) {
 }
 
 function SidebarNav({ groups, role, onNavigate, user, collapsed }) {
+  const navLocation = useLocation();
   const [query, setQuery] = useState('');
   // Persisted open-state per group key. We seed once from
   // localStorage merged with `defaultOpenGroups()` so first-time users
@@ -370,8 +372,14 @@ function SidebarNav({ groups, role, onNavigate, user, collapsed }) {
               </button>
             )}
             {isOpen && visibleItems.map((item) => {
-              const { to, icon: Icon, label, highlight, requiredTier, requiredInvestorTier } = item;
+              const { to, icon: Icon, label, highlight, requiredTier, requiredInvestorTier, match } = item;
               const abbr = abbreviateLabel(label);
+              // Task #12 — items may declare `match` (path prefixes) so a
+              // consolidated destination (e.g. Execution) highlights across
+              // all of its sub-views instead of only its exact `to` path.
+              const manualActive = Array.isArray(match)
+                ? match.some((p) => navLocation.pathname === p || navLocation.pathname.startsWith(`${p}/`))
+                : null;
               // Task #6 / #7 — items the user can't afford render as a
               // "locked" button that opens PaywallModal. Bypass roles + users
               // on the right tier render as normal NavLinks. Investor tier
@@ -411,26 +419,27 @@ function SidebarNav({ groups, role, onNavigate, user, collapsed }) {
                 <NavLink
                   key={to}
                   to={to}
-                  end
+                  end={manualActive === null}
                   onClick={onNavigate}
                   title={collapsed ? label : undefined}
-                  className={({ isActive }) =>
-                    collapsed
+                  className={({ isActive }) => {
+                    const active = manualActive === null ? isActive : manualActive;
+                    return collapsed
                       ? `flex flex-col items-center gap-0.5 px-1 py-2 text-[10px] transition-colors ${
-                          isActive
+                          active
                             ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border-r-2 border-violet-600'
                             : highlight
                               ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50/60 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40'
                               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
                         }`
                       : `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
-                          isActive
+                          active
                             ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border-r-2 border-violet-600'
                             : highlight
                               ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50/60 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40'
                               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
-                        }`
-                  }
+                        }`;
+                  }}
                 >
                   {Icon && <Icon size={collapsed ? 18 : 16} />}
                   {collapsed ? (
@@ -1236,6 +1245,12 @@ function AppInner() {
       <Route path="/scoring" element={guard(['admin', 'partner', 'investor'], <ScoringPage />)} />
       <Route path="/projects" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectsPage />)} />
       <Route path="/projects/:id" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectDetail />)} />
+      {/* Task #12 — Founder Execution area: one deep-linkable shell wrapping the
+          Projects / Board / Roadmap views. Standalone routes above stay intact
+          for other personas. */}
+      <Route path="/execution" element={guard(['admin', 'founder'], <ExecutionPage />)} />
+      <Route path="/execution/board" element={guard(['admin', 'founder'], <ExecutionPage />)} />
+      <Route path="/execution/roadmap" element={guard(['admin', 'founder'], <ExecutionPage />)} />
       <Route path="/legal" element={guard(['admin', 'founder'], <LegalPage />)} />
       <Route path="/incorporate" element={guard(['admin', 'founder', 'partner', 'investor'], <IncorporatePage />)} />
       <Route path="/incorporate/success" element={guard(['admin', 'founder', 'partner', 'investor'], <IncorporateSuccessPage />)} />

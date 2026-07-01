@@ -10,6 +10,44 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Merge founder Projects, Pipeline & Roadmap into one Execution area — Task #12
+
+The founder-only "Build" sidebar group's three separate destinations — Projects
+(`/projects`), Pipeline Board (`/pipeline`) and Roadmap (`/build/roadmap`) — are
+collapsed into a single **Execution** item (`SIDEBAR_GROUPS.founder` in
+`frontend/src/sidebarConfig.js`) that opens one deep-linkable page with a view
+switcher.
+
+- New `frontend/src/pages/ExecutionPage.jsx` — a shell that renders a header +
+  segmented Projects / Board / Roadmap switcher and mounts the existing
+  `ProjectsPage`, `PipelinePage` and `RoadmapPage` components unchanged as the
+  three view bodies (Projects is the default). The active view derives from the
+  path, so each view is deep-linkable and the browser back button steps between
+  them.
+- Routes (`frontend/src/App.jsx`) — `/execution` (Projects), `/execution/board`
+  and `/execution/roadmap`, all guarded `['admin','founder']`. The standalone
+  `/projects`, `/projects/:id`, `/pipeline` and `/build/roadmap` routes are left
+  intact for the other personas and for in-app deep links (project detail,
+  spin-out flows). Opening a project from the Projects view still routes to
+  `/projects/:id`.
+- Sidebar active state — `SidebarNav` items may now declare a `match` array of
+  path prefixes; the Execution item highlights across all its views (and the
+  legacy `/projects`, `/pipeline`, `/build/roadmap` paths) via `manualActive`
+  instead of only its exact `to`.
+- Founder persona only — admin/partner/investor/mentor sidebars and routes are
+  untouched. No data models or backend endpoints merged.
+
+## Reorder the investor Legal & Compliance nav — Task #11
+
+The investor left rail's **Legal & Compliance** group (`SIDEBAR_GROUPS.investor`
+in `frontend/src/sidebarConfig.js`) is reordered top-to-bottom to match the trust
+mental model: **Trust Center** (`/trust`, overview + score) → **Identity
+Verification** (`/kyc`, account-level KYC/AML) → **Due Diligence**
+(`/admin/due-diligence`, case-level risk) → **Legal & Capital Engine**
+(`/legal-capital`, execution layer). The last item is renamed from "Legal &
+Capital" to **Legal & Capital Engine** (investor persona only). All destinations
+and icons are unchanged; no other persona or investor group is affected.
+
 ## Regroup the investor Portfolio section into four groups — Task #9
 
 The investor left rail's single flat "Portfolio" group (6 items) is now four

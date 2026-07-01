@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## One "Execution" home for your Projects, Board and Roadmap
+
+Founders now have a single **Execution** item in the sidebar in place of the
+separate Projects, Pipeline Board and Roadmap links. Open it and switch between
+three views — **Projects**, **Board** and **Roadmap** — right at the top of the
+page. Each view has its own shareable link, and the back button moves between
+them, so nothing is lost — it's just quicker to get to. Opening a project still
+takes you to its full project page. (Founders only; other roles are unchanged.)
+
+---
+
 ## A clearer order for the investor Legal & Compliance menu
 
 The investor **Legal & Compliance** menu now reads top-to-bottom in the order

@@ -140,15 +140,16 @@ export const SIDEBAR_GROUPS = {
       { to: '/founder', icon: Rocket, label: 'Founder Portal', highlight: true },
     ]},
     { key: 'build', label: 'Build', items: [
-      { to: '/projects', icon: Zap, label: 'Projects' },
-      { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
+      // Task #12 — Projects, Pipeline Board and Roadmap are merged into one
+      // Execution area (founder persona only). `match` keeps the item active
+      // across every Execution view and its legacy deep-linked routes.
+      { to: '/execution', icon: Zap, label: 'Execution', match: ['/execution', '/projects', '/pipeline', '/build/roadmap'] },
       { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
       { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
       { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
       { to: '/build/deck', icon: Sparkles, label: 'Pitch Deck', requiredTier: 'growth' },
       { to: '/build/financials', icon: DollarSign, label: 'Financial Model' },
       { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
-      { to: '/build/roadmap', icon: Layers, label: 'Roadmap' },
       { to: '/build/metrics', icon: TrendingUp, label: 'Metrics' },
       { to: '/build/captable', icon: PieIcon, label: 'Cap Table' },
     ]},
