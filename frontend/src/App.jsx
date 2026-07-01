@@ -1307,13 +1307,20 @@ function AppInner() {
       <Route path="/integrations" element={guard(['admin', 'partner', 'investor'], <IntegrationsPage />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <PayoutsPage />)} />
       <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkPage />)} />
+      {/* Task #17 — investor "Discover" nav lands on the network/archetype
+          discovery surface. Distinct path from /network so the sidebar item
+          highlights correctly. */}
+      <Route path="/play" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkPage />)} />
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
       <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />
       <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], <PipelinePage />)} />
       <Route path="/relationships" element={guard(['admin', 'founder', 'partner', 'investor'], <RelationshipsPage />)} />
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
-      <Route path="/partner-portal" element={guard(['admin', 'partner', 'investor'], <PartnerPortal />)} />
+      {/* Task #17 — the investor sidebar no longer surfaces "Investor Portal"
+          (redundant with Studio). Investors hitting the old bookmark are
+          redirected to /studio; admin/partner keep the LP/capital-call surface. */}
+      <Route path="/partner-portal" element={guard(['admin', 'partner', 'investor'], user?.role === 'investor' ? <Navigate to="/studio" replace /> : <PartnerPortal />)} />
       {/* Task #9 (X-2) — Deal-specific Partner Portal (referral code,
           granted tiers, redemption count). Distinct from the legacy
           /partner-portal which keeps the LP/capital-call surface. */}
@@ -1324,6 +1331,10 @@ function AppInner() {
           redirected into the hash-anchored docs surface. */}
       <Route path="/docs/admin/*" element={<AdminDocsPathGuard />} />
       <Route path="/docs" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <DocsPage />)} />
+      {/* Task #17 — investor "Profile" nav lands on the self-profile surface
+          (the Settings profile section rendered at its own path so the sidebar
+          item highlights independently of Settings). */}
+      <Route path="/profile" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SettingsPage />)} />
       <Route path="/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SettingsPage />)} />
 
       {/* Task #53 — Public partner directory + profiles (no auth). The

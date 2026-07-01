@@ -238,66 +238,67 @@ export const SIDEBAR_GROUPS = {
     ]},
   ],
 
+  // Task #17 — regroup the investor sidebar around the investment lifecycle:
+  // Home → Sourcing → Diligence → Commit → Support → Account. This replaces the
+  // former ~12-group layout (which had a parallel "Investor Portal" and
+  // duplicate deal surfaces) so every feature has exactly one home and
+  // investors face far fewer top-level choices. Sidebar-level only: every
+  // surviving route/icon/tier-gate is preserved; no pages are merged.
+  //
+  // Deliberate deviations from the PR #119 reference: Home stays at /studio
+  // (labeled "Studio", NOT renamed to /dashboard), and the overflow group is
+  // named "Account" (NOT "More").
+  //
+  // Intentional removals (documented so a nav-integrity guard treats them as
+  // deliberate, not silent drops):
+  //   • "Investor Portal" (/partner-portal) — redundant with Studio; investors
+  //     hitting /partner-portal are redirected to /studio in App.jsx. The route
+  //     stays registered for admin/partner.
+  //   • "Projects" (/projects) — moved off the investor surface; route stays
+  //     registered for other roles / deep links.
+  //   • standalone "Identity Verification" (/kyc) — folded into "Trust &
+  //     Identity" (/trust) as a single nav entry; the /kyc route stays
+  //     registered and reachable.
   investor: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/partner-portal', icon: UserCircle, label: 'Investor Portal', highlight: true },
     ]},
-    // Task #8 — consolidate the former flat "Deal Flow" group (8 items) into
-    // 4 clearer concept groups so investors face fewer top-level choices.
-    // Sidebar-only: every route/icon/tier-gate is preserved; no pages merged.
-    { key: 'pipeline', label: 'Pipeline', items: [
-      { to: '/projects', icon: Zap, label: 'Projects' },
-      { to: '/pipeline', icon: Layers, label: 'Pipeline Board', requiredInvestorTier: 'professional' },
+    { key: 'sourcing', label: 'Sourcing', items: [
       { to: '/deals', icon: Handshake, label: 'Deal Flow', requiredInvestorTier: 'professional' },
-    ]},
-    { key: 'scoring', label: 'Scoring', items: [
-      { to: '/scoring', icon: Target, label: 'Scoring Engine' },
-    ]},
-    { key: 'signals', label: 'Signals', items: [
+      { to: '/pipeline', icon: Layers, label: 'Pipeline Board', requiredInvestorTier: 'professional' },
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
+      { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
+    ]},
+    { key: 'diligence', label: 'Diligence', items: [
+      { to: '/scoring', icon: Target, label: 'Scoring Engine' },
+      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
-    ]},
-    { key: 'journal', label: 'Journal', items: [
-      { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Decision Journal' },
-    ]},
-    // Task #9 — split the former flat "Portfolio" group (6 items) into four
-    // clearer groups (Fund Overview / Portfolio Health / Fund Modeling /
-    // Liquidity) so investors can tell operational dashboards, modeling and
-    // liquidity apart at a glance. Risk Matrix moves in from the former
-    // "Scoring & Risk" group (now "Scoring"). Sidebar-only: every route/icon is
-    // preserved; no pages merged.
-    { key: 'fund-overview', label: 'Fund Overview', items: [
-      { to: '/capital', icon: DollarSign, label: 'Capital & Investment Ops' },
-      { to: '/funds', icon: TrendingUp, label: 'VC Funds' },
-    ]},
-    { key: 'portfolio-health', label: 'Portfolio Health', items: [
-      { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
       { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
     ]},
-    { key: 'fund-modeling', label: 'Fund Modeling', items: [
+    { key: 'commit', label: 'Commit', items: [
+      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+      { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
+    ]},
+    { key: 'support', label: 'Support', items: [
+      { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
+      { to: '/funds', icon: TrendingUp, label: 'Funds' },
       { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
       { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
-    ]},
-    { key: 'liquidity', label: 'Liquidity', items: [
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
     ]},
-    { key: 'legal', label: 'Legal & Compliance', items: [
-      { to: '/trust', icon: Lock, label: 'Trust Center' },
-      { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
-      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
-      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital Engine' },
-    ]},
-    { key: 'more', label: 'More', items: [
-      { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
+    { key: 'account', label: 'Account', items: [
+      { to: '/trust', icon: Lock, label: 'Trust & Identity' },
+      { to: '/mentors', icon: Users, label: 'Mentors' },
+      { to: '/partners', icon: Network, label: 'Partners' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
-    ]},
-    { key: 'account', label: 'Account', items: [
+      { to: '/integrations', icon: Plug, label: 'Integrations' },
+      { to: '/play', icon: Gamepad2, label: 'Discover' },
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/activity', icon: Activity, label: 'Activity Log' },
-      { to: '/tickets', icon: Ticket, label: 'Support' },
-      { to: '/docs', icon: BookOpen, label: 'Documentation' },
+      { to: '/activity', icon: Activity, label: 'Activity' },
+      { to: '/docs', icon: BookOpen, label: 'Docs' },
+      { to: '/tickets', icon: MessageSquare, label: 'Support' },
+      { to: '/profile', icon: UserCircle, label: 'Profile' },
       { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
