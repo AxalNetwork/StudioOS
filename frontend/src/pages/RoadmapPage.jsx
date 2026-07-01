@@ -23,7 +23,7 @@ function emptyOkr() {
   };
 }
 
-export default function RoadmapPage() {
+export default function RoadmapPage({ embedded = false }) {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState([]);
@@ -129,9 +129,13 @@ export default function RoadmapPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Roadmap</h1>
-        <PageExplainer pageKey="roadmap" />
-          <p className="text-sm text-gray-500 mt-1">Now / Next / Later kanban with OKR-style key results.</p>
+          {!embedded && (
+            <>
+              <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Roadmap</h1>
+              <PageExplainer pageKey="roadmap" />
+              <p className="text-sm text-gray-500 mt-1">Now / Next / Later kanban with OKR-style key results.</p>
+            </>
+          )}
         </div>
         <div className="flex gap-2">
           <select

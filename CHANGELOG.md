@@ -40,6 +40,33 @@ hashes 404'd, React never booted, and the page rendered blank. The custom domain
   (no `server: GitHub.com` / `x-github-request-id`) so a deploy where the carve
   silently isn't in effect fails loudly instead of shipping a blank site.
 
+## True-merge the founder Execution page — Task #14
+
+The founder Execution page (`/execution`) was built as a tab switcher (Projects /
+Board / Roadmap behind tabs), so only one area showed at a time. Rebuilt it as a
+single combined page that renders all three areas stacked together — every
+element and interaction from all three original pages at once, nothing hidden.
+
+- `frontend/src/pages/ExecutionPage.jsx` — replaced the tab chrome with one
+  page: a single "Execution" title, then three clearly-labelled sections
+  (Projects, Pipeline Board, Roadmap), each with its own subordinate `<h2>`
+  section header + icon and separated by dividers. The three underlying pages
+  are mounted stacked and keep all behavior (Add Project form + list, drag-drop
+  Kanban, live vote widget, deal drawer, OKR board + modal, etc.).
+- `frontend/src/pages/{ProjectsPage,PipelinePage,RoadmapPage}.jsx` — each now
+  accepts an `embedded` prop (default `false`) that suppresses only its own
+  duplicate top-level page title/explainer (and, for Pipeline, its outer
+  `p-6 max-w-[1600px]` padding) so a single "Execution" title governs the merged
+  page. All action controls (New Project / New Pipeline Project / project select
+  + Add OKR) stay visible. Standalone `/projects`, `/pipeline`, `/build/roadmap`
+  routes pass no prop → rendered exactly as before for the other personas.
+- Routing — `/execution` stays the single combined page. The now-redundant
+  `/execution/board` and `/execution/roadmap` sub-routes still resolve to
+  `ExecutionPage` but now scroll to the matching section (via `id` anchors), so
+  no dead route remains and old deep links keep working. The sidebar `match`
+  prefix keeps the Execution item highlighted across all three.
+- Founder persona only; no backend, data-model or data-merge changes.
+
 ## Merge founder Projects, Pipeline & Roadmap into one Execution area — Task #12
 
 The founder-only "Build" sidebar group's three separate destinations — Projects

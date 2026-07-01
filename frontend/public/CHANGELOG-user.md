@@ -11,6 +11,15 @@ Some people occasionally saw a blank screen right after logging in. That's now
 fixed — the app and the files it needs to load are served together, so the page
 renders reliably every time you sign in or open a link directly.
 
+## Your whole Execution page, all on one screen
+
+The founder **Execution** page now shows your **Projects**, **Pipeline Board**
+and **Roadmap** together on a single page — no more switching tabs to see one at
+a time. Scroll down and each area is clearly labelled, with everything working
+just as before: add and open projects, drag deals between stages and vote on
+them, and create, move or edit your OKRs. Opening a project still takes you to
+its full project page. (Founders only; other roles are unchanged.)
+
 ---
 
 ## One "Execution" home for your Projects, Board and Roadmap
