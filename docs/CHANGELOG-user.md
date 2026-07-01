@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New investor tools: IC decisions, LP reporting, company updates and cap tables
+
+Investors have four new areas in the sidebar. Under **Commit**, **IC Decisions**
+lets you record an investment decision — memo, terms, committee votes and the
+final call — in one place. Under **Support**, **Company Updates** collects the
+progress reports your portfolio founders submit, **Cap Table** shows each
+company's rounds and your ownership over time, and **LP Reporting** lets you
+draft and publish quarterly fund reports for your LPs. Founders can submit their
+own company updates from the same area.
+
+---
+
 ## A founder menu that follows your journey
 
 The founder left-hand menu is now organised around the stages of building a

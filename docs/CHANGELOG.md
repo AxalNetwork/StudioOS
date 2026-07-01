@@ -10,6 +10,40 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Investor lifecycle: IC Decisions, LP Reporting, Company Updates, Cap Table (Task #18)
+
+Ported four investor-lifecycle features from the superseded PR #119 into `main`,
+re-applied against current schema (Worker-first; no FastAPI dev-API port).
+
+- **D1 migrations**: `cloudflare-worker/sql/migrations/123_ic_decisions.sql`
+  (`ic_decisions` + `ic_votes`), `124_lp_reports.sql`, `125_portfolio_updates.sql`,
+  `126_portfolio_positions.sql`. All `CREATE TABLE IF NOT EXISTS` (idempotent);
+  renumbered from the branch's 116–119 to avoid colliding with main's 116–122.
+- **Worker routes**: new `routes/ic.ts`, `routes/lp_reports.ts`,
+  `routes/portfolio_updates.ts`, `routes/positions.ts`, mounted in `src/index.ts`
+  at `/api/ic`, `/api/lp-reports`, `/api/portfolio-updates`, `/api/positions`.
+  Gating: `/api/ic` added to `INVESTOR_PRO_PREFIXES` (professional tier);
+  `/api/lp-reports` + `/api/positions` added to `STUDIO_PREFIXES`;
+  `/api/portfolio-updates` enforces per-role access in-route (founders own their
+  project's updates; investor side reads submitted only).
+- **`ic.ts` adaptation**: the branch seeded IC memos from a non-existent
+  `scoring_snapshots` table; re-pointed the optional `from_scoring` seed at main's
+  structured `deal_memos` columns (problem/solution/why_now/key_insight/risks),
+  composed into a readable memo. Degrades to null when absent.
+- **`lp_reports.ts` access**: create/edit/publish require a GP (admin **or**
+  investor) via `requireGp`, not admin-only; list/detail also surface a report to
+  its author regardless of status so investor GPs manage their own drafts, while
+  LPs stay scoped to published reports for funds they belong to.
+- **Frontend**: new pages `ICDecisionsPage`, `ICDecisionPage`, `LPReportingPage`,
+  `PortfolioUpdatesPage`, `PortfolioPositionsPage`; lazy-imported and routed in
+  `App.jsx` (`/ic`, `/ic/:uid`, `/lp-reports`, `/portfolio/updates`,
+  `/portfolio/positions`) with role guards. Added `api.js` client methods
+  (`icList/icCreate/icGet/icUpdate/icVote`, `lpReports*`, `portfolioUpdate*`,
+  `positions*`). Sidebar (`sidebarConfig.js`, investor role): IC Decisions →
+  Commit; Company Updates, Cap Table, LP Reporting → Support.
+- PR #119 (branch `claude/laughing-hamilton-oyg9lp`) closed and deleted; superseded
+  by this re-application. `npm run test:drift` passes.
+
 ## Regroup the founder sidebar around the venture lifecycle — Task #19
 
 The founder left rail (`SIDEBAR_GROUPS.founder` in `frontend/src/sidebarConfig.js`)
