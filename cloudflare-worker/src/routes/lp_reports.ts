@@ -120,7 +120,6 @@ r.put('/:uid', async (c) => {
     const x = await c.env.DB.prepare('SELECT * FROM lp_reports WHERE uid = ?').bind(c.req.param('uid')).first<ReportRow>();
     if (!x) return c.json({ detail: 'Not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
-    const pick = (key: keyof ReportRow, v: any) => (v !== undefined ? v : (x as any)[key]);
     await c.env.DB.prepare(
       `UPDATE lp_reports SET nav=?, called=?, distributed=?, dpi=?, tvpi=?, irr=?, narrative=?, updated_at=? WHERE id=?`
     ).bind(
