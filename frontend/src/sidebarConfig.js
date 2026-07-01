@@ -282,10 +282,10 @@ export const SIDEBAR_GROUPS = {
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
     ]},
     { key: 'legal', label: 'Legal & Compliance', items: [
-      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
-      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
-      { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
       { to: '/trust', icon: Lock, label: 'Trust Center' },
+      { to: '/kyc', icon: ShieldCheck, label: 'Identity Verification' },
+      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
+      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital Engine' },
     ]},
     { key: 'more', label: 'More', items: [
       { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },

@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A clearer order for the investor Legal & Compliance menu
+
+The investor **Legal & Compliance** menu now reads top-to-bottom in the order
+that matches how you actually work: **Trust Center** first (your overview and
+score), then **Identity Verification**, then **Due Diligence**, and finally
+**Legal & Capital Engine** (renamed from "Legal & Capital"). Every page still
+opens exactly where it did before.
+
+---
+
 ## Your Portfolio menu, now in four clear sections
 
 The investor menu's Portfolio pages are now split into four tidy sections so it's

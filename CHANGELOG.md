@@ -10,6 +10,17 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Reorder the investor Legal & Compliance nav — Task #11
+
+The investor left rail's **Legal & Compliance** group (`SIDEBAR_GROUPS.investor`
+in `frontend/src/sidebarConfig.js`) is reordered top-to-bottom to match the trust
+mental model: **Trust Center** (`/trust`, overview + score) → **Identity
+Verification** (`/kyc`, account-level KYC/AML) → **Due Diligence**
+(`/admin/due-diligence`, case-level risk) → **Legal & Capital Engine**
+(`/legal-capital`, execution layer). The last item is renamed from "Legal &
+Capital" to **Legal & Capital Engine** (investor persona only). All destinations
+and icons are unchanged; no other persona or investor group is affected.
+
 ## Regroup the investor Portfolio section into four groups — Task #9
 
 The investor left rail's single flat "Portfolio" group (6 items) is now four
