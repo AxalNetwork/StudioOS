@@ -5,6 +5,22 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your Portfolio menu, now in four clear sections
+
+The investor menu's Portfolio pages are now split into four tidy sections so it's
+obvious where each kind of work lives:
+
+- **Fund Overview** — Capital & Investment Ops and VC Funds
+- **Portfolio Health** — Portfolio Health and Risk Matrix
+- **Fund Modeling** — Reserve Allocation and Exit Waterfall
+- **Liquidity** — Liquidity & Exits
+
+Risk Matrix now sits under Portfolio Health, and the "Scoring & Risk" section is
+simply called **Scoring**. Nothing was removed — every page opens exactly where
+it did before, just easier to find.
+
+---
+
 ## A clearer investor menu
 
 The investor left-hand menu is now easier to scan. The long "Deal Flow" list has

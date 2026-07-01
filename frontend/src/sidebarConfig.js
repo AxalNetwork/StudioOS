@@ -250,9 +250,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/pipeline', icon: Layers, label: 'Pipeline Board', requiredInvestorTier: 'professional' },
       { to: '/deals', icon: Handshake, label: 'Deal Flow', requiredInvestorTier: 'professional' },
     ]},
-    { key: 'scoring-risk', label: 'Scoring & Risk', items: [
+    { key: 'scoring', label: 'Scoring', items: [
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
-      { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
     ]},
     { key: 'signals', label: 'Signals', items: [
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
@@ -261,13 +260,26 @@ export const SIDEBAR_GROUPS = {
     { key: 'journal', label: 'Journal', items: [
       { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Decision Journal' },
     ]},
-    { key: 'portfolio', label: 'Portfolio', items: [
-      { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
-      { to: '/funds', icon: TrendingUp, label: 'Funds' },
-      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
+    // Task #9 — split the former flat "Portfolio" group (6 items) into four
+    // clearer groups (Fund Overview / Portfolio Health / Fund Modeling /
+    // Liquidity) so investors can tell operational dashboards, modeling and
+    // liquidity apart at a glance. Risk Matrix moves in from the former
+    // "Scoring & Risk" group (now "Scoring"). Sidebar-only: every route/icon is
+    // preserved; no pages merged.
+    { key: 'fund-overview', label: 'Fund Overview', items: [
+      { to: '/capital', icon: DollarSign, label: 'Capital & Investment Ops' },
+      { to: '/funds', icon: TrendingUp, label: 'VC Funds' },
+    ]},
+    { key: 'portfolio-health', label: 'Portfolio Health', items: [
       { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
+      { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
+    ]},
+    { key: 'fund-modeling', label: 'Fund Modeling', items: [
       { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
       { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
+    ]},
+    { key: 'liquidity', label: 'Liquidity', items: [
+      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
     ]},
     { key: 'legal', label: 'Legal & Compliance', items: [
       { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },

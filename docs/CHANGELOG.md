@@ -10,6 +10,33 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Regroup the investor Portfolio section into four groups — Task #9
+
+The investor left rail's single flat "Portfolio" group (6 items) is now four
+purpose-named groups in `frontend/src/sidebarConfig.js`
+(`SIDEBAR_GROUPS.investor`), so operational dashboards, modeling and liquidity
+are distinguishable at a glance:
+
+- **Fund Overview** — Capital & Investment Ops (`/capital`), VC Funds (`/funds`)
+- **Portfolio Health** — Portfolio Health (`/portfolio/health`), Risk Matrix
+  (`/portfolio/risk-matrix`)
+- **Fund Modeling** — Reserve Allocation (`/portfolio/reserves`), Exit Waterfall
+  (`/portfolio/waterfall`)
+- **Liquidity** — Liquidity & Exits (`/liquidity`)
+
+**Risk Matrix** moves out of the former **Scoring & Risk** group (Task #8) into
+the new **Portfolio Health** group — it now appears in exactly one place. The
+now single-item Scoring & Risk group is renamed to **Scoring** (holds only
+Scoring Engine). Two labels are updated to the requested naming: "Capital &
+Investment" → **Capital & Investment Ops**, "Funds" → **VC Funds**.
+
+Sidebar-only regrouping: no routes added/removed, no pages merged. Every `to:`
+path and icon is preserved (DollarSign, TrendingUp, Heart, ShieldAlert, Layers).
+The `home`/`pipeline`/`signals`/`journal`/`legal`/`more`/`account` groups and all
+other roles are untouched. App.jsx's accordion render + tier-gating path is
+unaffected; `defaultOpenGroups('investor')` still opens Home + the first content
+group (Pipeline).
+
 ## Consolidate the investor sidebar into four concept groups — Task #8
 
 The investor left rail's single flat "Deal Flow" group (8 items) is now four
