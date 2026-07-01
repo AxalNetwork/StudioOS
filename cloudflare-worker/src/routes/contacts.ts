@@ -13,8 +13,8 @@
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth, requireRole } from '../auth';
-import { isAdmin, isFounder, mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { requireRole } from '../auth';
+import { isAdmin, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 
 const r = new Hono<{ Bindings: Env }>();
 
