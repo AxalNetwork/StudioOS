@@ -5,6 +5,15 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A clearer investor menu
+
+The investor left-hand menu is now easier to scan. The long "Deal Flow" list has
+been split into four tidy, collapsible sections — Pipeline, Scoring & Risk,
+Signals, and Journal — so related pages sit together. Nothing was removed: every
+page you had before is still there, just better grouped.
+
+---
+
 ## Pitch deck template counts are now accurate
 
 The "Axal VC Spin-Out" template card was still showing an incorrect slide

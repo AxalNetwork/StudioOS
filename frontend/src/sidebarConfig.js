@@ -242,15 +242,24 @@ export const SIDEBAR_GROUPS = {
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/partner-portal', icon: UserCircle, label: 'Investor Portal', highlight: true },
     ]},
-    { key: 'pipeline', label: 'Deal Flow', items: [
+    // Task #8 — consolidate the former flat "Deal Flow" group (8 items) into
+    // 4 clearer concept groups so investors face fewer top-level choices.
+    // Sidebar-only: every route/icon/tier-gate is preserved; no pages merged.
+    { key: 'pipeline', label: 'Pipeline', items: [
       { to: '/projects', icon: Zap, label: 'Projects' },
       { to: '/pipeline', icon: Layers, label: 'Pipeline Board', requiredInvestorTier: 'professional' },
       { to: '/deals', icon: Handshake, label: 'Deal Flow', requiredInvestorTier: 'professional' },
-      { to: '/matches', icon: Sparkles, label: 'AI Matches' },
-      { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
+    ]},
+    { key: 'scoring-risk', label: 'Scoring & Risk', items: [
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
-      { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
       { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
+    ]},
+    { key: 'signals', label: 'Signals', items: [
+      { to: '/matches', icon: Sparkles, label: 'AI Matches' },
+      { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
+    ]},
+    { key: 'journal', label: 'Journal', items: [
+      { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Decision Journal' },
     ]},
     { key: 'portfolio', label: 'Portfolio', items: [
       { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },

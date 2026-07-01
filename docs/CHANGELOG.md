@@ -10,6 +10,25 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Consolidate the investor sidebar into four concept groups — Task #8
+
+The investor left rail's single flat "Deal Flow" group (8 items) is now four
+collapsible concept groups in `frontend/src/sidebarConfig.js`
+(`SIDEBAR_GROUPS.investor`):
+
+- **Pipeline** — Projects, Pipeline Board, Deal Flow
+- **Scoring & Risk** — Scoring Engine, Risk Matrix
+- **Signals** — AI Matches, Market Intelligence
+- **Journal** — Watchlist & Decision Journal (relabelled from "Watchlist &
+  Journal")
+
+Sidebar-only regrouping: no routes added/removed, no pages merged. Every `to:`
+path, icon, and `requiredInvestorTier` gate (`professional` on `/pipeline` and
+`/deals`) is preserved. The `home` group, the `portfolio`/`legal`/`more`/
+`account` groups, and all other roles are untouched. App.jsx's accordion render
++ tier-gating path is unaffected; `defaultOpenGroups('investor')` still opens
+Home + the first content group (now "Pipeline").
+
 ## Pitch Deck — Axal VC Spin-Out slide count now consistent everywhere
 
 The Axal VC Spin-Out template card was still showing the wrong slide count
