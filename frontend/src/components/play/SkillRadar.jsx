@@ -1,8 +1,7 @@
-// Task #2 — On-screen skills radar (recharts) used on the hub + Scout Report
-// reveal. Theme-agnostic mid-tone strokes (no Tailwind gray utilities) so it
-// reads in both light + dark without dark-mode pairings. The exportable trading
-// card uses CardRadar (inline SVG) instead — html2canvas can't parse Tailwind's
-// oklch colors, so the capture node must stay hex-only.
+// Task #2 — On-screen skills radar (recharts) used by the Profile & Fit section,
+// Network/Events archetype surfaces, and the admin Assessment Studio preview.
+// Theme-agnostic mid-tone strokes (no Tailwind gray utilities) so it reads in
+// both light + dark without dark-mode pairings.
 import React from 'react';
 import {
   ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,

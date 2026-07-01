@@ -10,6 +10,34 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Remove leftover "Play & Discover" (/play) code — finish Task #8
+
+The user-facing "Play & Discover" surface was already removed (routes, sidebar,
+onboarding/landing CTAs, and the `pages/play/` files). This finishes the job by
+deleting the now-orphaned code that only the retired player used, leaving the
+shared archetype/skill surfaces (Profile & Fit, archetype badges, admin
+Assessment Studio) fully intact.
+
+- **Frontend (`frontend/src/lib/api.js`)**: trimmed the `assessment` client to the
+  two still-used read methods (`myResults`, `results`); removed the orphaned player
+  methods (`games`, `start`, `session`, `next`, `respond`, `complete`, `publish`,
+  `myBadges`).
+- **Frontend (`frontend/src/components/play/`)**: deleted `CardRadar.jsx` and
+  `SpectrumBar.jsx` (zero importers — only the deleted player / trading-card pages
+  used them). Kept `SkillRadar.jsx`, `ArchetypeBadge.jsx`, `mechanics.jsx` (still
+  used by Profile & Fit, Network, Events, and the admin Assessment Studio preview).
+- **Worker (`cloudflare-worker/src/routes/assessment.ts`)**: removed the player
+  runtime endpoints (`/games`, `/sessions*`, `/results/publish`, `/badges/me`) and
+  their now-unused helpers/imports; kept the consent-gated read endpoints
+  `GET /results/me` and `GET /results/:userId`. The `/api/assessment` mount +
+  prefix are unchanged, so `check-api-drift` still passes.
+- **Docs (`design/GAMIFIED_ASSESSMENT_SYSTEM.md`)**: added a "player surface
+  removed" status banner.
+- **Kept intact**: `services/assessmentScoring.ts`, migrations `107/108`, the admin
+  Assessment Studio + Best-Fit console, and all archetype/skill displays.
+- Not user-facing (the surface was already gone), so no `CHANGELOG-user.md` line.
+- Drift guard: `check-api-drift.mjs` ✅.
+
 ## Fix recurring blank page after login on the apex — Task #15
 
 The apex `axal.vc` served Worker-rendered app routes (`/studio`, `/login`,

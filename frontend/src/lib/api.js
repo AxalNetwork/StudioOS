@@ -2797,24 +2797,13 @@ export const adminEvents = {
   analytics: () => request('/admin/events/analytics'),
 };
 
-// Task #44 — Gamified Assessment player surface (§7.1). Each method maps 1:1 to
-// a /api/assessment route on the worker (api-drift guard checks this prefix).
+// Assessment results — read-only client for archetype/skill display (Profile &
+// Fit section, archetype badges). The gamified "Play & Discover" player surface
+// was removed; only the results endpoints remain. Maps to /api/assessment on the
+// worker (api-drift guard checks this prefix).
 export const assessment = {
-  games: () => request('/assessment/games'),
-  start: (gameSlug) => request('/assessment/sessions', { method: 'POST', body: JSON.stringify({ gameSlug }) }),
-  session: (id) => request(`/assessment/sessions/${id}`),
-  next: (id) => request(`/assessment/sessions/${id}/next`),
-  respond: (id, { itemId, response, latencyMs, confidenceWager } = {}) =>
-    request(`/assessment/sessions/${id}/respond`, {
-      method: 'POST',
-      body: JSON.stringify({ itemId, response, latencyMs, confidenceWager }),
-    }),
-  complete: (id) => request(`/assessment/sessions/${id}/complete`, { method: 'POST', body: '{}' }),
   myResults: () => request('/assessment/results/me'),
   results: (userId) => request(`/assessment/results/${userId}`),
-  publish: ({ track, published = true } = {}) =>
-    request('/assessment/results/publish', { method: 'POST', body: JSON.stringify({ track, published }) }),
-  myBadges: () => request('/assessment/badges/me'),
 };
 
 // Task #3 — Assessment admin authoring + analytics (§3/§5/§7.2). Each method
