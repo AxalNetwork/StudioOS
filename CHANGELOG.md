@@ -15,17 +15,16 @@
 Cloudflare Email Security flagged `axal.vc`. Verified live DNS (not just the
 dashboard screenshots) and addressed the findings:
 
-- **DMARC (RFC 7489) — the real error.** `_dmarc.axal.vc` had TWO
+- **DMARC (RFC 7489) — the real error, now fixed.** `_dmarc.axal.vc` had TWO
   `v=DMARC1; p=none` TXT records (rua → `…@dmarc-reports.cloudflare.net` and
   `dmarc@axal.vc`). With more than one DMARC record, receivers ignore ALL of
-  them, so DMARC was effectively off. Fix is to collapse to a single record that
-  preserves both aggregate-report destinations:
+  them, so DMARC was effectively off. Consolidated to a SINGLE record that
+  preserves both aggregate-report destinations, applied to live DNS via the
+  Cloudflare API (kept the existing record ID, replaced its content, deleted the
+  duplicate):
   `v=DMARC1; p=none; rua=mailto:41b1c9616822463cb5eb67a841281ae9@dmarc-reports.cloudflare.net,mailto:dmarc@axal.vc`.
-  This is a Cloudflare DNS change, not code. The stored `CLOUDFLARE_API_TOKEN`
-  has DNS **read** but not **edit** scope (GET records succeeds; PUT returns
-  Cloudflare error 10000), so the write must be applied out-of-band — in the DNS
-  dashboard, or by supplying an edit-scoped token. Policy stays `p=none`
-  (monitor-only); raising to `quarantine`/`reject` is a deliberate follow-up.
+  This was a Cloudflare DNS change, not code. Policy stays `p=none` (monitor-only);
+  raising to `quarantine`/`reject` is a deliberate follow-up.
 - **security.txt (RFC 9116).** Added `frontend/public/.well-known/security.txt`
   (mirrored into the committed `docs/` artifact) with Contact + Expires +
   Canonical. It is served by the Worker assets binding, but the apex only routes
