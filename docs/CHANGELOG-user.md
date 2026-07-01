@@ -5,6 +5,13 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Pitch deck template counts are now accurate
+
+The "Axal VC Spin-Out" template card was still showing an incorrect slide
+count even after a previous fix. The number is now fully correct — both in
+the template library list and in the preview — because the backend was
+updated to match the actual 11-slide deck.
+
 ## Waitlist form works for anyone, even when you're signed in
 
 If you previewed your landing page while logged into the dashboard and tried to

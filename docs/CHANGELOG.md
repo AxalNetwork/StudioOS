@@ -10,6 +10,18 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Pitch Deck — Axal VC Spin-Out slide count now consistent everywhere
+
+The Axal VC Spin-Out template card was still showing the wrong slide count
+in production because the Worker API (`DECK_METHODS` in
+`cloudflare-worker/src/services/decks/methods.ts`) had `slide_count: 10`
+while the frontend registry (`frontend/src/decks/templates/index.ts`) was
+already correct at `11`. The API value wins at runtime, so the card
+rendered the old count. Updated the Worker spec to `slide_count: 11` and
+adjusted the inline comment listing the canonical slide sequence. Also
+updated the backend dev fallback (`backend/app/api/routes/decks.py`) from
+`14` → `11` so dev/staging stay in sync.
+
 ## Email security: consolidate DMARC + serve /.well-known/security.txt
 
 Cloudflare Email Security flagged `axal.vc`. Verified live DNS (not just the

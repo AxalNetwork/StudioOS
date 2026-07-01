@@ -456,9 +456,9 @@ _DECK_METHODS_DEV: List[Dict[str, Any]] = [
      "slide_count": 15, "premium": True, "category": "narrative"},
     {"id": "axal_spinout_demoday", "key": "axal_spinout_demoday",
      "label": "Axal VC Spin-Out",
-     "prompt_hint": "14 slides · 4 variants (editorial / product-first / data-dense / manifesto) · binds to Lab data.",
+     "prompt_hint": "11 slides · editorial · binds to Lab data.",
      "best_for": "Axal Spin-Out Lab founders presenting on Demo Day.",
-     "slide_count": 14, "premium": True, "category": "event"},
+     "slide_count": 11, "premium": True, "category": "event"},
 ]
 _PREMIUM_METHOD_IDS_DEV = [m["id"] for m in _DECK_METHODS_DEV if m["premium"]]
 
