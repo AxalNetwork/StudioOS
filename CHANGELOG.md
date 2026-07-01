@@ -9,6 +9,16 @@
 > "What's new" page reads). Keep that one short, jargon-free, and
 > written for the people using the platform, not the engineers
 > building it.
+>
+> ## Sidebar persona cross-contamination fix
+>
+> `frontend/src/App.jsx::mergePersonaExtrasIntoGroups` now checks
+> `persona.role_alignment` before injecting a persona-specific nav group.
+> Previously, any user whose primary persona was `founder_new` (Founder —
+> New Venture) saw the "For Founder — New Venture" group regardless of
+> current role, so investors, mentors, and partners could end up with a
+> Founder Portal + Spin-Outs section in their sidebar. Only personas whose
+> `role_alignment` matches the user's `role` are now injected.
 
 ## Investor lifecycle: IC Decisions, LP Reporting, Company Updates, Cap Table (Task #18)
 

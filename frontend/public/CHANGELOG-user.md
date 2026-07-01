@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Cleaner sidebar for investors and partners
+
+If your profile listed a founder persona, the left-hand menu used to
+inject a "For Founder — New Venture" section with Founder Portal and
+Spin-Outs links even when you were logged in as an investor or partner.
+That section no longer appears in the wrong role — your sidebar stays
+relevant to the role you're actually using.
+
+---
+
 ## New investor tools: IC decisions, LP reporting, company updates and cap tables
 
 Investors have four new areas in the sidebar. Under **Commit**, **IC Decisions**

@@ -239,6 +239,11 @@ function getSidebarGroups(role, primaryPersonaId, user) {
   if (!persona || !Array.isArray(persona.nav_extras) || persona.nav_extras.length === 0) {
     return groups;
   }
+  // Never inject a persona group whose role_alignment differs from the
+  // current user — a Founder nav extra has no place in an Investor sidebar.
+  if (persona.role_alignment && String(persona.role_alignment) !== String(role)) {
+    return groups;
+  }
   const existingPaths = new Set();
   groups.forEach((g) => g.items.forEach((it) => existingPaths.add(it.to)));
   const extras = persona.nav_extras.filter((e) => !existingPaths.has(e.to));
