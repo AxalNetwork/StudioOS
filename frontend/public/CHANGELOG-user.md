@@ -5,6 +5,14 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Fixed: a blank page after signing in
+
+Some people occasionally saw a blank screen right after logging in. That's now
+fixed — the app and the files it needs to load are served together, so the page
+renders reliably every time you sign in or open a link directly.
+
+---
+
 ## One "Execution" home for your Projects, Board and Roadmap
 
 Founders now have a single **Execution** item in the sidebar in place of the
