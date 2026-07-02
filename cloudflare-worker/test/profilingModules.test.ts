@@ -14,10 +14,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { profilingBankFor, type Persona } from '../src/services/advisor/questionBank.ts';
+import { profilingBankFor, type Persona, type Question } from '../src/services/advisor/questionBank.ts';
 import {
   computeProfilingCompletion,
   selectAdaptiveProfiling,
+  applyAdaptiveProfiling,
   moduleForQuestion,
   PROFILING_MODULES,
 } from '../src/services/advisor/profilingModules.ts';
@@ -114,4 +115,67 @@ test('admin / unknown personas → not applicable', () => {
     assert.equal(c.applicable, false);
     assert.equal(c.modules.length, 0);
   }
+});
+
+// ---------------------------------------------------------------------------
+// applyAdaptiveProfiling — the route-layer trim now wired into the live
+// candidate pipeline (/start, /answer, /skip, /next-question, /turn). Proves
+// the reviewer's requirement: once a module is confident, subsequent candidates
+// no longer come from that module, while non-fit questions survive untouched.
+// ---------------------------------------------------------------------------
+const nonFit = (id: string): Question =>
+  ({ id, persona: 'founder' as Persona, prompt: id, input_kind: 'short' }) as Question;
+
+test('applyAdaptiveProfiling drops confident-module fit questions, keeps non-fit', () => {
+  const fit = profilingBankFor('founder' as Persona);
+  const skills = fit.filter((q) => moduleForQuestion(q) === 'skills');
+  const floor = PROFILING_MODULES.skills.floor;
+  assert.ok(skills.length > floor, 'founder skills bank exceeds the floor (extras remain)');
+  const answered = new Set(skills.slice(0, floor).map((q) => q.id)); // skills now confident
+
+  // Persona / non-fit questions bracket the fit bank (ids must NOT match fit.*).
+  const head = nonFit('role_detect.primary');
+  const tail = nonFit('persona.summary');
+  const bank: Question[] = [head, ...fit, tail];
+
+  const out = applyAdaptiveProfiling(bank, answered);
+  const outIds = new Set(out.map((q) => q.id));
+
+  // Every UNANSWERED skills question is gone (module is confident).
+  const unansweredSkills = skills.filter((q) => !answered.has(q.id));
+  assert.ok(unansweredSkills.length > 0, 'there were extras to drop');
+  for (const q of unansweredSkills) assert.ok(!outIds.has(q.id), `dropped ${q.id}`);
+  // Non-fit questions preserved in their original relative order.
+  assert.ok(outIds.has(head.id) && outIds.has(tail.id), 'non-fit questions kept');
+  assert.ok(out.indexOf(head) < out.indexOf(tail), 'non-fit order preserved');
+  // Other (non-confident) modules still contribute candidates.
+  assert.ok(out.some((q) => moduleForQuestion(q) === 'archetype'), 'other modules survive');
+});
+
+test('applyAdaptiveProfiling keepIds shields a pinned question from the trim', () => {
+  const fit = profilingBankFor('founder' as Persona);
+  const skills = fit.filter((q) => moduleForQuestion(q) === 'skills');
+  const floor = PROFILING_MODULES.skills.floor;
+  const answered = new Set(skills.slice(0, floor).map((q) => q.id)); // skills confident
+  const pinned = skills[floor]; // an unanswered confident-module question that WOULD drop
+
+  const trimmed = applyAdaptiveProfiling(fit, answered);
+  assert.ok(!trimmed.some((q) => q.id === pinned.id), 'without keepIds the pin is dropped');
+
+  const kept = applyAdaptiveProfiling(fit, answered, { keepIds: new Set([pinned.id]) });
+  assert.ok(kept.some((q) => q.id === pinned.id), 'keepIds retains the pinned question');
+});
+
+test('applyAdaptiveProfiling front-loads gap-filling fit questions', () => {
+  const fit = profilingBankFor('founder' as Persona);
+  const skills = fit.filter((q) => moduleForQuestion(q) === 'skills');
+  const answered = new Set([skills[0].id]);
+  const out = applyAdaptiveProfiling(fit, answered);
+  const firstSkill = out.find((q) => moduleForQuestion(q) === 'skills' && !answered.has(q.id));
+  assert.ok(firstSkill, 'still has an unanswered skills candidate');
+  assert.notEqual(
+    firstSkill!.measures?.skill_axis,
+    skills[0].measures?.skill_axis,
+    'first remaining skills candidate fills a new axis',
+  );
 });

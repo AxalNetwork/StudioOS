@@ -276,3 +276,52 @@ export function selectAdaptiveProfiling(
 
   return scored.map((s) => s.q);
 }
+
+// ---------------------------------------------------------------------------
+// Route-layer application of the adaptive selector.
+//
+// `selectAdaptiveProfiling` returns ONLY the fit questions still worth asking.
+// The live selection paths (rerank.ts `pickNextQuestion`, stateMachine.ts
+// `nextTurn`) rank a FULL working bank (fit + persona / non-fit questions), so
+// we can't hand them the fit-only list. `applyAdaptiveProfiling` trims + reorders
+// a full bank IN PLACE for the ranker's candidate pool:
+//   - unanswered fit questions from already-confident modules are DROPPED
+//     (the "skip confident modules" behaviour the redesign promises);
+//   - the remaining unanswered fit questions take adaptive (gap-fill-first)
+//     order, occupying their original fit slots;
+//   - every non-fit question and every already-answered question keeps its
+//     original position (the ranker drops answered ids itself).
+// `keepIds` shields specific ids (e.g. a pinned `current_question_id`) from the
+// trim so the reranker's poll/refresh idempotence survives.
+// The completion math (/progress) MUST keep using the UNTRIMMED bank — only the
+// candidate pool handed to the ranker is trimmed here.
+// ---------------------------------------------------------------------------
+export function applyAdaptiveProfiling(
+  bank: Question[],
+  answered: Set<string>,
+  opts: AdaptiveOptions & { keepIds?: Set<string> } = {},
+): Question[] {
+  const isFit = (q: Question) => FIT_ID_RE.test(q.id);
+  const ordered = selectAdaptiveProfiling(bank, answered, opts);
+  let orderedFit = ordered;
+  const keep = opts.keepIds;
+  if (keep && keep.size > 0) {
+    const have = new Set(ordered.map((q) => q.id));
+    const extras = bank.filter(
+      (q) => isFit(q) && !answered.has(q.id) && keep.has(q.id) && !have.has(q.id),
+    );
+    if (extras.length > 0) orderedFit = [...ordered, ...extras];
+  }
+  const out: Question[] = [];
+  let i = 0;
+  for (const q of bank) {
+    if (isFit(q) && !answered.has(q.id)) {
+      // Unanswered fit slot: fill from the adaptive order; once that list is
+      // exhausted the remaining slots are confident-module extras — dropped.
+      if (i < orderedFit.length) out.push(orderedFit[i++]);
+    } else {
+      out.push(q); // non-fit OR already-answered — keep in place.
+    }
+  }
+  return out;
+}
