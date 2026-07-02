@@ -82,7 +82,8 @@ function slugify(name: string): string {
 // Stored-XSS guard for the user-supplied logo_svg. We render it with
 // dangerouslySetInnerHTML on the public landing page, so strip script
 // tags, on*= event handlers, and javascript: hrefs before saving.
-function sanitizeSvg(svg: string | null | undefined): string | null {
+// Exported so the sanitizer contract is locked by brand_svg_sanitize.test.ts.
+export function sanitizeSvg(svg: string | null | undefined): string | null {
   if (!svg) return null;
   let s = String(svg).trim();
   if (!s.toLowerCase().startsWith('<svg')) return null;
