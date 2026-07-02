@@ -56,6 +56,8 @@ import {
   filterByContext,
   groupByPage,
   groupBySection,
+  profilingBankFor,
+  profilingSectionsForBank,
   sortByImportance,
   type BankName,
   type Persona,
@@ -1472,6 +1474,38 @@ advisor.get('/progress', async (c) => {
     percent: g.total > 0 ? Math.round((g.answered / g.total) * 100) : 0,
   }));
 
+  // Task #40 — Profiling completion. Scoped to the conversational fit.* bank
+  // ONLY (Skills / Work values / Axal Fit & values), NOT the full working bank,
+  // so the Profile & Fit "Profiling completion" card shows an honest
+  // denominator instead of the whole persona dashboard bank. Admin / unknown
+  // personas have no fit bank → applicable:false ("not applicable").
+  const profilingVisible = filterByContext(profilingBankFor(persona), {
+    persona,
+    week: gate.week,
+    tiers: gate.tiers,
+    completedMilestones: gate.completedMilestones,
+  }).visible;
+  const profilingSections = profilingSectionsForBank(profilingVisible).map((g) => {
+    const answered = g.ids.filter((id) => capturedSet.has(id)).length;
+    return {
+      key: g.key,
+      label: g.label,
+      total: g.ids.length,
+      answered,
+      percent: g.ids.length > 0 ? Math.round((answered / g.ids.length) * 100) : 0,
+    };
+  });
+  const profilingTotal = profilingVisible.length;
+  const profilingAnswered = profilingVisible.filter((q) => capturedSet.has(q.id)).length;
+  const profiling = {
+    applicable: profilingTotal > 0,
+    total: profilingTotal,
+    answered: profilingAnswered,
+    percent: profilingTotal > 0 ? Math.round((profilingAnswered / profilingTotal) * 100) : 0,
+    complete: profilingTotal > 0 && profilingAnswered >= profilingTotal,
+    sections: profilingSections,
+  };
+
   // Overall — counts include skipped to preserve the AC-1 contract
   // (skipped questions count toward "done" for the dashboard ring).
   // Total tracks the VISIBLE bank so locked questions don't pull
@@ -1488,6 +1522,7 @@ advisor.get('/progress', async (c) => {
     conversation_uid: conv?.uid || null,
     by_page: byPage,
     by_section: bySection,
+    profiling,
     overall: {
       total, answered: ans, skipped: skp, percent: overallPct,
       deferred: deferredCount,

@@ -272,6 +272,75 @@ export function fitMeasuresIndex(): FitMeasureEntry[] {
 }
 
 // ---------------------------------------------------------------------------
+// Task #40 — "Profiling completion" scope.
+//
+// The Profile & Fit page's "Profiling completion" card measures ONLY the
+// conversational `fit.*` questions (the Best-Fit profiling bank), NOT the full
+// persona dashboard bank that `bankFor` returns. Counting the whole working
+// bank made the card show absurd denominators (partner ~217, founder ~145,
+// investor ~78, mentor ~64). These helpers give the card an honest denominator
+// and a per-section breakdown, while the advisor's own progress rails keep
+// using the full working bank.
+// ---------------------------------------------------------------------------
+
+// The three surfaces the Profile & Fit page renders profiling signal into.
+export type ProfilingSectionKey = 'skills' | 'work_values' | 'axal_fit';
+
+export const PROFILING_SECTION_LABELS: Record<ProfilingSectionKey, string> = {
+  skills: 'Skills',
+  work_values: 'Work values',
+  axal_fit: 'Axal Fit & values',
+};
+
+/**
+ * The profiling (Best-Fit) bank for a persona: the `fit.*` questions only.
+ * Mentor carries both mentor + coach fit banks (coach has no advisor role).
+ * Admin / unknown have no fit bank, so profiling is "not applicable".
+ */
+export function profilingBankFor(persona: Persona): Question[] {
+  switch (persona) {
+    case 'founder':  return [...BANKS.fitFounder];
+    case 'investor': return [...BANKS.fitInvestor];
+    case 'partner':  return [...BANKS.fitPartner];
+    case 'mentor':   return [...BANKS.fitMentor, ...BANKS.fitCoach];
+    default:         return [];
+  }
+}
+
+/**
+ * Which profiling section a fit question belongs to. Single-bucket, priority
+ * ordered so the section totals partition the bank exactly:
+ *   skill_axis  → Skills (feeds the 8-axis radar)
+ *   value_dim   → Work values (feeds the 15-dimension values vector)
+ *   otherwise   → Axal Fit & values (rubric_category + the 5 Axal values)
+ */
+export function profilingSectionForQuestion(q: Question): ProfilingSectionKey {
+  const m = q.measures;
+  if (m?.skill_axis) return 'skills';
+  if (m?.value_dim) return 'work_values';
+  return 'axal_fit';
+}
+
+/**
+ * Bucket a profiling bank into its three sections, preserving section order and
+ * dropping empty sections. Non-`fit.*` questions are ignored defensively.
+ */
+export function profilingSectionsForBank(
+  bank: Question[],
+): Array<{ key: ProfilingSectionKey; label: string; ids: string[] }> {
+  const order: ProfilingSectionKey[] = ['skills', 'work_values', 'axal_fit'];
+  const groups = new Map<ProfilingSectionKey, string[]>();
+  for (const k of order) groups.set(k, []);
+  for (const q of bank) {
+    if (!FIT_ID_RE.test(q.id)) continue;
+    groups.get(profilingSectionForQuestion(q))!.push(q.id);
+  }
+  return order
+    .map((key) => ({ key, label: PROFILING_SECTION_LABELS[key], ids: groups.get(key)! }))
+    .filter((g) => g.ids.length > 0);
+}
+
+// ---------------------------------------------------------------------------
 // Task #12 (BLOCK-ADV-07) — dynamic reflection questions.
 //
 // When a persona bank is exhausted the state machine generates an

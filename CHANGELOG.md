@@ -10,6 +10,40 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+> ## Profile & Fit: "Profiling completion" scoped to the fit bank + a values wheel (Task #40)
+>
+> Integrates PR #121 (`claude/ecstatic-hawking-tcrmqh`). GitHub auth was
+> unavailable in this environment (the branch could not be fetched / merged /
+> cherry-picked), so the PR's two changes were re-applied to `main` as direct
+> edits to spec; the PR should be closed on GitHub once a valid token is
+> available (superseded by these commits).
+>
+> - **Profiling denominator fix** — `GET /api/advisor/progress`
+>   (`cloudflare-worker/src/routes/advisor.ts`) now returns a `profiling` block
+>   scoped to the conversational `fit.*` bank ONLY, split into three sections
+>   (Skills / Work values / Axal Fit & values). New pure helpers
+>   `profilingBankFor`, `profilingSectionForQuestion`, `profilingSectionsForBank`
+>   in `services/advisor/questionBank.ts` (mentor carries mentor + coach; admin /
+>   unknown → empty → `applicable:false`). Per-persona fit sizes: founder 25,
+>   investor 18, partner 17, mentor 34. The advisor's own progress rails
+>   (`overall` / `by_page` / `by_section`) are untouched and still track the full
+>   working bank.
+> - **Completion card** — `frontend/src/components/profile/ProfileFitSection.jsx`
+>   reads `profiling` (overall bar + per-section bars) and shows "not applicable"
+>   for admin, instead of counting the whole persona dashboard bank as the
+>   denominator. Legacy flat fields are kept for one rollout cycle; the card
+>   falls back to them when `profiling` is absent (e.g. the dev FastAPI API,
+>   which is not updated).
+> - **Values wheel** — new `frontend/src/components/play/ValuesRadial.jsx`
+>   (Recharts) plots the 15-dimension values vector as a radar (stored score
+>   −2..+2 mapped to a 0..4 domain, 2 = balanced centre). The Profile & Fit
+>   "Values" card renders the wheel once ≥3 dimensions are measured and falls
+>   back to the compact lean list below that. No new dependency (Recharts already
+>   backs `SkillRadar`).
+> - **Test** `cloudflare-worker/test/advisor.profiling.test.ts` pins the
+>   per-persona profiling bank sizes and asserts the sections partition each bank
+>   exactly (wired into `test:drift`).
+>
 > ## Fix recurring Safari blank page on axal.vc (Task #37)
 >
 > The apex root HTML (`axal.vc/`) is served by GitHub Pages from committed
