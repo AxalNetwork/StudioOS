@@ -10,6 +10,45 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+> ## Profiling: four-module confidence-based question bank (Skills · Work values · Archetype · Axal Fit)
+>
+> The Profile & Fit profiling is redesigned so Skills / Work values / Archetype /
+> Axal Fit each become a first-class module with a confidence floor and coverage
+> target, instead of one flat fit-bank count. Previously the completion card read a
+> fake `0 / 17`, the Skills radar and Values wheel were under-populated (1–4 skill
+> and 0–5 value questions per role), and Archetype depended entirely on the separate
+> gamified track — so conversational-only users saw "Archetype missing…". PR #123.
+>
+> - **Module registry** — new
+>   `cloudflare-worker/src/services/advisor/profilingModules.ts` defines the four
+>   modules (`skills · work_values · archetype · axal_fit`), each with a `floor`
+>   (answers required) and `targetCoverage` (distinct axes/dims/traits/categories).
+>   Completion is `answered/required` per module, required-weighted overall, and
+>   capped so over-answering one module can't mask a neglected one. Admin/unknown
+>   personas → not applicable.
+> - **Archetype from the conversation** — new `archetype_trait` measure on
+>   `FitMeasures` plus a nearest-centroid classifier
+>   `cloudflare-worker/src/services/archetypeScoring.ts` (4 trait axes
+>   `builder · visionary · connector · operator`, per-role sets). Results persist in
+>   new table `profile_archetypes` (migration
+>   `cloudflare-worker/sql/migrations/130_profile_archetypes.sql`, self-healed by
+>   `ensureArchetypeSchema`). No new write-router branch — the raw 0–5 score already
+>   lands in `field_sources`. `GET /api/best-fit/me` now also returns the
+>   conversational archetype so the card renders without the gamified track.
+> - **Adaptive follow-up** — `selectAdaptiveProfiling` drops questions from
+>   already-confident modules and prefers gap-filling ones (uncovered
+>   axis/dim/trait first), so full confidence is ~20 answers for every persona. Fit
+>   banks (`cloudflare-worker/src/services/advisor/banks/fit_*.ts`) expanded to ≥5
+>   skill axes / ≥4 value dims / 4 archetype traits per role; they stay out of the
+>   manifest/drift guard so new questions don't trip CI.
+> - **Frontend** — `frontend/src/components/profile/ProfileFitSection.jsx` renders
+>   per-module completion and the conversational archetype;
+>   `frontend/src/lib/assessmentMeta.js` adds the per-role archetype copy.
+> - **Tests** — new `cloudflare-worker/test/profilingModules.test.ts` and
+>   `cloudflare-worker/test/archetypeScoring.test.ts`, both wired into the
+>   `test:drift` strip-types list in root `package.json`; `advisor.profiling.test.ts`
+>   updated for the module model. Full drift gate green.
+>
 > ## Profiling: mentors no longer answer double to reach "Profiling complete"
 >
 > The Profile & Fit "Profiling completion" card counts only the conversational

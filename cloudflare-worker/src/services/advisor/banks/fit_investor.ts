@@ -6,7 +6,7 @@
  * prompts are authored so 5 = the dimension's `pole_high`.
  */
 import type { Question } from '../questionBank.ts';
-import { buildFitBank, axalValueRows } from './fitShared.ts';
+import { buildFitBank, axalValueRows, archetypeTraitRows } from './fitShared.ts';
 
 export const FIT_INVESTOR_BANK: Question[] = buildFitBank('investor', [
   // ---- thesis_fit -----------------------------------------------------
@@ -29,6 +29,18 @@ export const FIT_INVESTOR_BANK: Question[] = buildFitBank('investor', [
   { key: 'values_patience', prompt: 'How patient are you with durable, sustainable building versus pushing for aggressive growth?', hint: '0 = patient / sustainable, 5 = pushes hyper-growth.', measures: { rubric_category: 'values_fit', value_dim: 'founder_growth_vs_sustain' } },
   // ---- risk spectrum (5 = pole_high) ----------------------------------
   { key: 'lean_risk', prompt: 'How comfortable are you backing earlier, riskier bets versus waiting for more proof?', hint: '0 = risk-averse, 5 = risk-seeking.', measures: { value_dim: 'founder_risk_appetite' } },
+  // ---- skills breadth (evaluation surface beyond capital/finance) -----
+  // Task #45 — investors read companies across GTM, product, and governance;
+  // these broaden the radar past capital_network / finance_ops so it has shape.
+  { key: 'skill_gtm', prompt: 'How sharp is your read on a company’s go-to-market and sales motion?', hint: '0 = not my strength, 5 = a real strength.', measures: { skill_axis: 'gtm_sales' } },
+  { key: 'skill_product', prompt: 'How well can you judge whether a product is genuinely good and defensible?', hint: '0 = not my strength, 5 = a real strength.', measures: { skill_axis: 'product' } },
+  { key: 'skill_legal', prompt: 'How comfortable are you with term sheets, governance, and the legal mechanics of a deal?', hint: '0 = not my strength, 5 = a real strength.', measures: { skill_axis: 'legal_compliance' } },
+  // ---- work values (Schwartz dims for a rounded values wheel) ---------
+  { key: 'val_achievement', prompt: 'How much does demonstrable success and being measurably right drive you?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_achievement' } },
+  { key: 'val_benevolence', prompt: 'How much do you weigh the welfare of the founders and teams you back, not just returns?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_benevolence' } },
+  { key: 'val_universalism', prompt: 'How much do broader impact and fairness factor into what you choose to fund?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_universalism' } },
+  // ---- archetype traits ----------------------------------------------
+  ...archetypeTraitRows(),
   // ---- Axal values ----------------------------------------------------
   ...axalValueRows(),
 ]);

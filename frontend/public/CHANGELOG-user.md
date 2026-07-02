@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your profile now builds four clear parts — including your archetype — just by chatting
+
+Your "Profile & Fit" page now measures four things separately — your Skills, your
+Work values, your Archetype, and your Axal Fit — and shows how far along each one
+is, instead of one confusing overall number. Your archetype now appears from your
+advisor conversation alone, so you no longer need to finish the separate gamified
+assessment to see it. The advisor also asks smarter follow-up questions: it skips
+the areas you've already answered enough on and focuses on the gaps, so you reach
+a complete, trustworthy profile in about twenty answers.
+
+---
+
 ## Mentors no longer have to answer double to complete their profile
 
 If you're a mentor, your "Profiling completion" used to ask for roughly twice as
