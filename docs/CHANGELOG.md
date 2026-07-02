@@ -9,6 +9,284 @@
 > "What's new" page reads). Keep that one short, jargon-free, and
 > written for the people using the platform, not the engineers
 > building it.
+>
+> ## Profiling: mentors no longer answer double to reach "Profiling complete"
+>
+> The Profile & Fit "Profiling completion" card counts only the conversational
+> `fit.*` bank per persona (Task #40). But the mentor persona carries BOTH the
+> mentor and coach fit banks — the coach bank has no advisor role of its own, so
+> it rides inside the mentor conversation to feed axalFit/bestFit — and the two
+> banks measure the SAME six rubric categories + the IDENTICAL five Axal values.
+> So a mentor had to answer ~34 questions to hit 100%, roughly double every other
+> persona (founder 25, investor 18, partner 17).
+>
+> - **Card scoped to the primary bank** — `profilingBankFor('mentor')`
+>   (`cloudflare-worker/src/services/advisor/questionBank.ts`) now returns just
+>   `fitMentor` (17, == partner). The coach bank is STILL delivered in the mentor
+>   conversation (`bankFor` unchanged) and still feeds axalFit/bestFit
+>   (`fitMeasuresIndex` unchanged) — only the completion-card denominator changed,
+>   so no conversational coverage or matching signal is lost.
+> - **Tests** — `cloudflare-worker/test/advisor.profiling.test.ts` updated to the
+>   new mentor size (34 → 17) and now pins the split invariant: no `fit.coach.*`
+>   in the mentor card, but `fit.coach.*` still present in `bankFor('mentor')`
+>   (guards against "fixing" the card by dropping coach from the conversation).
+>
+> ## Logo SVGs: locked the stored-XSS sanitizer on both stores
+>
+> Founder-supplied `logo_svg` is rendered raw into the public landing page (a
+> stored-XSS sink) and scrubbed at the write boundary by `sanitizeSvg`
+> (`cloudflare-worker/src/routes/brand.ts`) / `_sanitize_svg`
+> (`backend/app/api/routes/brand.py`) — but neither had a committed test, so a
+> future edit could silently weaken the guard and only surface once a founder's
+> page was exploited. This adds regressions on both stores.
+>
+> - **Worker** — `sanitizeSvg` is now exported (no logic change) and locked by
+>   `cloudflare-worker/test/brand_svg_sanitize.test.ts`, wired into the
+>   `test:drift` strip-types file list in root `package.json`. Asserts it strips
+>   `<script>`, `on*=` handlers, `javascript:` URLs, `<foreignObject>`, and
+>   external `href`/`xlink:href`; returns null for non-SVG/empty; neutralizes an
+>   obfuscated nested payload (fixed-point loop); and preserves a benign SVG.
+> - **FastAPI** — `tests/test_brand_svg_sanitize.py` mirrors the same cases for
+>   `_sanitize_svg` so the two implementations don't drift.
+> - Both suites treat "token stripped OR whole SVG dropped (null)" as
+>   neutralized, matching the sanitizers' strip-then-drop belt-and-suspenders.
+>
+> ## Cap tables: DB-level guard against duplicates from simultaneous saves
+>
+> Task #28 made "one cap table per project" an application-code rule (POST
+> upserts by `project_id`; PUT refuses to bind a second) and Task #30 proved it
+> for SEQUENTIAL saves — but two simultaneous saves (double-click / two tabs / a
+> retry) could still race between the SELECT and the INSERT and create two
+> canonical rows. This adds the guarantee at the DATABASE level, on both stores.
+>
+> - **Partial unique index (canonical-only)** — a new migration
+>   `cloudflare-worker/sql/migrations/129_captable_one_canonical_per_project.sql`
+>   and a matching `__table_args__` `Index` on `CapTableScenario`
+>   (`backend/app/models/entities.py`) enforce uniqueness of
+>   `cap_table_scenarios(project_id)` WHERE `project_id IS NOT NULL AND
+>   COALESCE(is_variant,0)=0`. The index MUST stay partial: draft variants
+>   (`is_variant=1`, Task #29) legitimately share a `project_id`. The migration
+>   first demotes any pre-existing duplicate canonicals to variants (keep newest
+>   by `updated_at,id` — non-destructive) so the index can build; it is
+>   idempotent (window-fn dedup + `CREATE UNIQUE INDEX IF NOT EXISTS`).
+> - **Graceful upsert recovery** — `routes/captable.ts` (new `isUniqueViolation`
+>   helper) and `backend/app/api/routes/captable.py` (new
+>   `_find_canonical_for_project` helper) catch the unique violation on the create
+>   path and re-resolve to the winning row + UPDATE it (edit-existing, not a 500)
+>   — the same last-writer-wins semantics as the Task #28 upsert. The PUT path
+>   surfaces the existing `409 project_has_cap_table` instead of a 500. FastAPI
+>   `_ensure_schema` self-heals the index (dedup + partial index) on existing dev
+>   DBs (`create_all` only builds it on fresh DBs).
+> - **Tests** — concurrency regressions in
+>   `cloudflare-worker/test/captable_project_upsert.test.ts` (a save that loses
+>   the INSERT race resolves to the one existing row, no 500) and
+>   `tests/test_captable_project_upsert.py` (the real partial index rejects a
+>   second canonical while allowing variants; a stale-read race through the
+>   endpoint resolves to a single row).
+>
+> ## Profile & Fit: "Profiling completion" scoped to the fit bank + a values wheel (Task #40)
+>
+> Integrates PR #121 (`claude/ecstatic-hawking-tcrmqh`). GitHub auth was
+> unavailable in this environment (the branch could not be fetched / merged /
+> cherry-picked), so the PR's two changes were re-applied to `main` as direct
+> edits to spec; the PR should be closed on GitHub once a valid token is
+> available (superseded by these commits).
+>
+> - **Profiling denominator fix** — `GET /api/advisor/progress`
+>   (`cloudflare-worker/src/routes/advisor.ts`) now returns a `profiling` block
+>   scoped to the conversational `fit.*` bank ONLY, split into three sections
+>   (Skills / Work values / Axal Fit & values). New pure helpers
+>   `profilingBankFor`, `profilingSectionForQuestion`, `profilingSectionsForBank`
+>   in `services/advisor/questionBank.ts` (mentor carries mentor + coach; admin /
+>   unknown → empty → `applicable:false`). Per-persona fit sizes: founder 25,
+>   investor 18, partner 17, mentor 34. The advisor's own progress rails
+>   (`overall` / `by_page` / `by_section`) are untouched and still track the full
+>   working bank.
+> - **Completion card** — `frontend/src/components/profile/ProfileFitSection.jsx`
+>   reads `profiling` (overall bar + per-section bars) and shows "not applicable"
+>   for admin, instead of counting the whole persona dashboard bank as the
+>   denominator. Legacy flat fields are kept for one rollout cycle; the card
+>   falls back to them when `profiling` is absent (e.g. the dev FastAPI API,
+>   which is not updated).
+> - **Values wheel** — new `frontend/src/components/play/ValuesRadial.jsx`
+>   (Recharts) plots the 15-dimension values vector as a radar (stored score
+>   −2..+2 mapped to a 0..4 domain, 2 = balanced centre). The Profile & Fit
+>   "Values" card renders the wheel once ≥3 dimensions are measured and falls
+>   back to the compact lean list below that. No new dependency (Recharts already
+>   backs `SkillRadar`).
+> - **Test** `cloudflare-worker/test/advisor.profiling.test.ts` pins the
+>   per-persona profiling bank sizes and asserts the sections partition each bank
+>   exactly (wired into `test:drift`).
+>
+> ## Fix recurring Safari blank page on axal.vc (Task #37)
+>
+> The apex root HTML (`axal.vc/`) is served by GitHub Pages from committed
+> `docs/index.html`, while hashed `/assets/*` are served by the Worker from the
+> freshly deployed `docs/`. When Pages lags the Worker by more than
+> `ASSET_RETAIN_BUILDS` builds, the root HTML references an entry-chunk hash the
+> Worker no longer has. Cloudflare Static Assets `not_found_handling =
+> "single-page-application"` then returned `index.html` (200 `text/html`) for the
+> missing `/assets/*.js`, so the browser executed HTML as a JS module → React
+> never booted → blank page. Safari-specific because its service-worker cache
+> masked it in Chrome until ITP evicted the SW cache. Because the failure is the
+> ENTRY chunk, `main.jsx`'s in-app stale-chunk recovery never ran (it lives
+> inside the chunk that failed to load), so nothing self-healed. Layered fix:
+>
+> - **Worker fails loud instead of blank** (`cloudflare-worker/src/index.ts`,
+>   `types.ts`, `wrangler.toml`) — `/assets/*` added to `run_worker_first` in BOTH
+>   route/assets blocks; the fetch handler now serves the real file from the
+>   `ASSETS` binding but converts an SPA-fallback `text/html` response for a
+>   hashed asset into a real `404` (`no-store`). The browser never executes HTML
+>   as a module again.
+> - **Un-bundled boot watchdog** (`frontend/index.html`) — an inline `<head>`
+>   script (runs even when the entry chunk 404s) catches capture-phase `error`
+>   events on `/assets/*.js` and, as a 15s fallback, checks `window.__axalBooted`.
+>   On failure it unregisters the SW, clears caches ONCE (sessionStorage guard
+>   `axal:boot-reboot`, no reload loop), and reloads with a `?__reboot=<ts>`
+>   cache-buster so Safari re-fetches fresh HTML instead of its cached stale copy.
+>   `main.jsx` sets `window.__axalBooted`, strips `?__reboot`, and clears the
+>   guard on successful boot. Gated to production (dev is inert).
+> - **Service worker stops poisoning/masking** (`frontend/public/sw.js`) — the
+>   cache-first path never serves or stores a `text/html` response for a hashed
+>   asset; `VERSION` bumped so the improved SW replaces the old one.
+> - **Latent Safari <16.4 parse error** — the single-asterisk italic strip in
+>   `frontend/src/lib/legalDocFormat.js` + `cloudflare-worker/src/services/legalDocFormat.ts`
+>   used a `(?<!\s)` lookbehind (a hard parse error on Safari <16.4, breaking any
+>   chunk that imports it). Rewritten lookbehind-free, behavior-equivalent
+>   (`legalDocFormat.test.ts` still green).
+>
+> `check-spa-live.mjs` (postdeploy) already fails the deploy if any apex hashed
+> asset resolves as `text/html` — it detects the skew but cannot prevent it, so
+> the durable prevention is deploy discipline: a deploy is `npm run deploy`
+> (rebuilds `docs/` + Worker) **plus** an immediate GitHub push so Pages never
+> lags beyond `ASSET_RETAIN_BUILDS`. The client-side parts (watchdog, SW, bundle)
+> only reach the apex root once `docs/` is rebuilt by the deploy and pushed.
+>
+> ## Contacts promotion creates real downstream records (Task #32)
+>
+> `POST /api/contacts/:uid/promote` (`routes/contacts.ts`) previously only
+> stamped `promoted_to` + `status='qualified'`. It now creates and links a real
+> downstream record per audience, idempotently, and the contact links back via
+> the new `contacts.promoted_ref_id`.
+>
+> - **Customer → discovery interview** — inserts a `discovery_interviews` row
+>   (seeded from the contact) and links it via `promoted_ref_id`. Respects the
+>   free-tier interview cap with an explicit `402` (mirrors create-interview /
+>   waitlist-promote — no silent tier bypass).
+> - **Investor → raise prospect** — inserts a row in the new `raise_prospects`
+>   table (`uid`, `project_id`, `contact_id`, `name`/`email`/`firm`, `stage`,
+>   `notes`) at stage `to_contact`; the contact's message seeds the notes.
+> - **Idempotent** — a re-promote returns the existing linked record
+>   (`already_promoted: true`), never a duplicate; a dangling `promoted_ref_id`
+>   (target row deleted) or a legacy stamp (old promote left `promoted_ref_id`
+>   NULL) heals into a real record. Concurrency is guarded by only letting the
+>   request that flips `promoted_ref_id` from the value it observed at read
+>   (`NULL` or the stale/dangling ref) win — the loser deletes its just-created
+>   row and returns the winner's (mirrors the waitlist→interview promote).
+> - **Other audiences** (partner/advisor/mentor/cofounder) return an explicit
+>   `400` — no promotion target.
+> - **New raise-pipeline endpoints** `GET /api/contacts/raise-prospects` and
+>   `PUT /api/contacts/raise-prospects/:id` (stage/notes/firm/name), scoped to
+>   the caller's own projects; registered before `/:uid`. `RAISE_STAGES` =
+>   `to_contact → contacted → meeting → diligence → committed / passed`.
+> - **Migration** `sql/migrations/128_contact_promotion.sql` —
+>   `ALTER TABLE contacts ADD COLUMN promoted_ref_id` + `CREATE TABLE
+>   raise_prospects` (+2 indexes). `ensureSchema` self-heals both on prod's
+>   lazy-init path (PRAGMA-guarded ALTER). Best-effort `contact_promoted`
+>   activity log never blocks the write.
+> - **Frontend** — new `pages/RaisePipelinePage.jsx` (lazy `/raise` route,
+>   `guard(['admin','founder'])`, "Raise Pipeline" sidebar item), `raiseProspects`/
+>   `raiseProspectUpdate` in `lib/api.js`, and `pages/ContactsPage.jsx` now shows
+>   a "View in …" link (discovery / raise) once a contact is promoted instead of
+>   the Promote button.
+>
+> ## Contacts invites now send a real email (Task #31)
+>
+> `POST /api/contacts/invite` (`routes/contacts.ts`) previously only created an
+> 'invited' contact row (delivery was a TODO). It now sends a real invitation
+> via Gmail and surfaces the outcome explicitly instead of swallowing it.
+>
+> - **New sender** `sendContactInviteEmail` + pure, exported `buildContactInviteRaw`
+>   in `services/email.ts` (mirrors `buildReferralInviteRaw`): From stays on
+>   `noreply@axal.vc`; the founder's identity rides in the From display name and a
+>   `Reply-To`, both built via `formatAddress` (CR/LF-stripped + quoted, so a
+>   crafted name/email can't inject headers). Missing Gmail creds → logged +
+>   returns false.
+> - **Route** loads the founder (sender name/email) and project name, calls the
+>   sender wrapped in try/catch, and returns `email_sent` (plus `email_error` on
+>   failure) on the 201 — never swallowed. On success it writes an outbound
+>   `contact_replies` row and bumps `last_activity_at` so the contact history
+>   reflects the delivered invite; on failure the contact row is still created so
+>   the founder can retry. Optional `message` (≤2000 chars) is threaded through.
+> - **Frontend** `pages/ContactsPage.jsx`: invite form gains an optional personal
+>   message textarea; a green banner confirms delivery, a rose banner surfaces
+>   `email_sent:false`.
+> - **Test** `test/contact_invite_replyto.test.ts` (Reply-To/From + header-
+>   injection safety), registered in `test:drift`.
+>
+> ## Contacts backbone — inbound relationship hub (Task #30, PR #120)
+>
+> Integrated the capture→Contacts backbone from PR #120 (the PR itself was
+> `dirty`/unmergeable so it was applied manually and closed). Only the
+> Contacts slice was taken; the PR's investor-lifecycle files were already in
+> main and were skipped.
+>
+> - **New route** `cloudflare-worker/src/routes/contacts.ts` mounted at
+>   `/api/contacts` in `index.ts` (role-gated founder/admin in-route, no
+>   paywall prefix). Lazy `ensureSchema`; exposes list/get/create/invite/
+>   update/reply/tasks(+toggle)/promote.
+> - **Migration** `sql/migrations/127_contacts.sql` (renumbered from the PR's
+>   `120_*` to clear main's 126 high-water mark) — canonical, idempotent
+>   record of `contacts` / `contact_replies` / `contact_tasks`.
+> - **Dual-write on capture** — `routes/brand.ts` waitlist POST now best-effort
+>   calls `ingestContact(...)` after the `waitlist_signups` INSERT, tagging the
+>   contact with the full 6-value audience taxonomy (`VALID_PAGE_AUDIENCE`)
+>   while the legacy insert stays CHECK-safe. Failures are swallowed so lead
+>   capture never breaks.
+> - **Frontend** — `pages/ContactsPage.jsx`, lazy route `/contacts`
+>   (`guard(['admin','founder'])`) in `App.jsx`, Contacts API block in
+>   `lib/api.js`, and a "Contacts" item (Inbox icon) at the top of the founder
+>   Validate sidebar group.
+> - **Deferred as follow-ups**: invite emails, deep promote wiring, and a
+>   landing form for advisor/mentor/cofounder audiences.
+>
+> ## Investor lifecycle access-control test suite (Task #21)
+>
+> Added `cloudflare-worker/test/investorLifecycle.authz.test.ts` (44 tests)
+> locking the role/tier access rules for the four new investor-lifecycle
+> features so a future refactor cannot silently leak data across roles:
+>
+> - **Static assertions** — verify index.ts mounts
+>   `requireInvestorTier('professional')` on `/api/ic`,
+>   `requireTier('studio')` on `/api/lp-reports` and `/api/positions`,
+>   and leaves `/api/portfolio-updates` ungated (dual-audience, in-route
+>   enforcement).
+> - **Predicate tests** — `userMeetsInvestorTier`, `userMeetsTier`,
+>   `canViewLpData` boundary checks (free → blocked, professional/institutional
+>   → pass, admin/partner/mentor → bypass).
+> - **IC decisions** (`ic.ts`) — founder blocked by `canUseIc` (403);
+>   professional investor passes (200); PUT owner-or-admin guard verified.
+> - **LP reports** (`lp_reports.ts`) — `canViewLpData` blocks founder/partner
+>   (403); investor reads only own authored + published LP-fund reports;
+>   non-author non-LP gets 404 on unpublished; LP gets 200 on published.
+> - **Portfolio updates** (`portfolio_updates.ts`) — founder list scoped to
+>   own-project updates; investor list filtered to `status='submitted'`;
+>   detail cross-tenant guard (founder A cannot read founder B's update);
+>   POST non-owning founder blocked (403).
+> - **Positions** (`positions.ts`) — `canViewLpData` blocks founder/partner;
+>   writes are `requireAdmin`-only (POST/PUT → 403 for investor).
+>
+> Wired into `test:drift` (`package.json`).
+>
+> ## Sidebar persona cross-contamination fix
+>
+> `frontend/src/App.jsx::mergePersonaExtrasIntoGroups` now checks
+> `persona.role_alignment` before injecting a persona-specific nav group.
+> Previously, any user whose primary persona was `founder_new` (Founder —
+> New Venture) saw the "For Founder — New Venture" group regardless of
+> current role, so investors, mentors, and partners could end up with a
+> Founder Portal + Spin-Outs section in their sidebar. Only personas whose
+> `role_alignment` matches the user's `role` are now injected.
 
 ## Investor lifecycle: IC Decisions, LP Reporting, Company Updates, Cap Table (Task #18)
 
