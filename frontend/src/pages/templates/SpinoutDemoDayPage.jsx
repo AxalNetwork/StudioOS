@@ -13,7 +13,6 @@ import OutcomeCards from '../../templates/components/OutcomeCards';
 import Timeline from '../../templates/components/Timeline';
 import TestimonialBlock from '../../templates/components/TestimonialBlock';
 import FAQ from '../../templates/components/FAQ';
-import CTABlock from '../../templates/components/CTABlock';
 import ValidationBlock from '../../templates/components/ValidationBlock';
 import SectionHeader from '../../templates/components/SectionHeader';
 import { DISPLAY_FONT, BTN } from '../../templates/brandKit';

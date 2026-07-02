@@ -3,7 +3,7 @@ import PageExplainer from '../components/PageExplainer';
 import StripeConnectPayoutsPanel from '../components/StripeConnectPayoutsPanel';
 import { Link } from 'react-router-dom';
 import {
-  Copy, Check, Users, DollarSign, Share2, ExternalLink, Network as NetworkIcon,
+  Copy, Check, Users, DollarSign, Share2, Network as NetworkIcon,
   MessageCircle, Mail, Upload, Edit3, X, AlertCircle, Save,
   Send, Loader2, ShieldCheck, Info, FileDown, Bell, UserCheck, Clock,
 } from 'lucide-react';
@@ -75,7 +75,7 @@ export default function ReferEarnPage() {
   const [error, setError] = useState('');
   const [templates, setTemplates] = useState(loadTemplates);
   const [editingTemplates, setEditingTemplates] = useState(false);
-  const [showImport, setShowImport] = useState(false);
+  const [, setShowImport] = useState(false);
   const [imported, setImported] = useState([]);
   const [selected, setSelected] = useState(() => new Set());
   const [importError, setImportError] = useState('');

@@ -14,7 +14,7 @@ import { aiRecommendEquity } from '../../ai-workers/equity';
 import { aiValueAsset, aiMatchBuyers, BuyerCandidate } from '../../ai-workers/valuation';
 import { aiGenerateLPA } from '../../ai-workers/lpa';
 import { Listings, Matches } from '../models/liquidity';
-import { Funds, LPs } from '../models/funds';
+import { Funds } from '../models/funds';
 import { Distributions } from '../models/distributions';
 
 async function meter(env: Env, jobType: string, status: 'completed' | 'failed', latency: number) {

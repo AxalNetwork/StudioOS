@@ -16,9 +16,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field as PydField, field_validator
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from backend.app.api.routes.auth import get_current_user
 from backend.app.database import get_session
@@ -148,7 +148,7 @@ class QuoteIn(BaseModel):
 def _need_dto(session: Session, n: FounderNeed) -> dict:
     proj = session.get(Project, n.project_id)
     rfp = session.exec(select(RFP).where(RFP.need_id == n.id)).first()
-    quote_count = len(session.exec(select(Quote).where(Quote.need_id == n.id)).all())
+    quote_count = session.exec(select(func.count()).select_from(Quote).where(Quote.need_id == n.id)).first() or 0
     return {
         "id": n.id,
         "uid": n.uid,

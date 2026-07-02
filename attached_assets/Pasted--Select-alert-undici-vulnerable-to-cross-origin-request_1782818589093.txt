@@ -1,0 +1,35 @@
+
+Select alert: undici vulnerable to cross-origin request routing via SOCKS5 proxy pool reuse
+
+undici vulnerable to cross-origin request routing via SOCKS5 proxy pool reuse High  Development
+#105 opened 2 weeks ago • Detected in undici (npm) • cloudflare-worker-tail/package-lock.json
+
+Select alert: undici vulnerable to TLS certificate validation bypass via dropped requestTls in SOCKS5 ProxyAgent
+
+undici vulnerable to TLS certificate validation bypass via dropped requestTls in SOCKS5 ProxyAgent High  Development
+#98 opened 2 weeks ago • Detected in undici (npm) • cloudflare-worker-tail/package-lock.json
+
+Select alert: undici vulnerable to cross-user information disclosure via shared cache whitespace bypass
+
+undici vulnerable to cross-user information disclosure via shared cache whitespace bypass Moderate  Development
+#97 opened 2 weeks ago • Detected in undici (npm) • cloudflare-worker-tail/package-lock.json
+
+Select alert: undici vulnerable to HTTP header injection via Set-Cookie percent-decoding
+
+undici vulnerable to HTTP header injection via Set-Cookie percent-decoding Moderate  Development
+#107 opened 2 weeks ago • Detected in undici (npm) • cloudflare-worker-tail/package-lock.json
+
+Select alert: undici vulnerable to Set-Cookie SameSite attribute downgrade via permissive substring matching
+
+undici vulnerable to Set-Cookie SameSite attribute downgrade via permissive substring matching Low  Development
+#108 opened 2 weeks ago • Detected in undici (npm) • cloudflare-worker-tail/package-lock.json
+
+Select alert: undici vulnerable to HTTP response queue poisoning via keep-alive socket reuse
+
+undici vulnerable to HTTP response queue poisoning via keep-alive socket reuse Low  Development
+#104 opened 2 weeks ago • Detected in undici (npm) • cloudflare-worker-tail/package-lock.json
+
+Select alert: esbuild allows arbitrary file read when running the development server on Windows
+
+esbuild allows arbitrary file read when running the development server on Windows Low  Development
+#31 opened 3 weeks ago • Detected in esbuild (npm) • cloudflare-worker-tail/package-lock.json

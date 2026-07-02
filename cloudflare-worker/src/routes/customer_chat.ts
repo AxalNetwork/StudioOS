@@ -23,7 +23,6 @@ import { requireAuth } from '../auth';
 
 const customerChat = new Hono<{ Bindings: Env }>();
 
-const PAID_FOUNDER_TIERS = new Set(['growth', 'studio']);
 // Spec excludes Growth; Studio / Institutional / Partner only.
 const ALLOWED_FOUNDER_TIERS = new Set(['studio']);
 const ALLOWED_INVESTOR_TIERS = new Set(['institutional']);

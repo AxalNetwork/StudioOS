@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import SectorSelect from '../components/SectorSelect';
 import { Link } from 'react-router-dom';
-import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe, Upload, Palette, PenLine, Eye, Users, LayoutTemplate, Share2, X } from 'lucide-react';
+import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe, Upload, Palette, PenLine, Eye, Users, LayoutTemplate, Share2, X, Plus, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { FONT_PAIRING_OPTIONS } from '../decks/templates/axal_spinout_demoday_app';
-import { AUDIENCES, GOALS, AUDIENCE_LABELS as PAGE_AUDIENCE_LABELS, VISUAL_TEMPLATE_PALETTES } from '../lib/brand/templates.js';
+import { AUDIENCES, AUDIENCE_LABELS as PAGE_AUDIENCE_LABELS, VISUAL_TEMPLATE_PALETTES, TEMPLATE_CONTENT_SCHEMA } from '../lib/brand/templates.js';
 import { suggestAudienceAndGoal, getRecommendedTemplatesForAudience, generateInitialBrandKit } from '../lib/brand/flow.js';
 
 // Task #24 — Brand & landing page generator.
@@ -29,6 +29,20 @@ const GOAL_LABELS = {
   offer_guidance: 'Offer guidance',
 };
 
+// Task #3 — schema defaults for a template's editable content block. Used to
+// seed the dynamic step-3 form and to layer under AI auto-fill so every field
+// lands populated with on-brand starting copy.
+function defaultsForKey(key) {
+  const fields = TEMPLATE_CONTENT_SCHEMA[key] || [];
+  const o = {};
+  for (const f of fields) {
+    o[f.key] = f.kind === 'groupList'
+      ? (Array.isArray(f.default) ? f.default : [])
+      : (typeof f.default === 'string' ? f.default : '');
+  }
+  return o;
+}
+
 export default function BrandBuilderPage() {
   const { user } = useAuth();
   const [projects, setProjects] = useState([]);
@@ -36,8 +50,7 @@ export default function BrandBuilderPage() {
   const [project, setProject] = useState(null);
   const [description, setDescription] = useState('');
   const [sector, setSector] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [aiUsed, setAiUsed] = useState(false);
+  const [autofillBusy, setAutofillBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
   const [error, setError] = useState('');
@@ -56,6 +69,8 @@ export default function BrandBuilderPage() {
     template: 'minimal', hero_media_url: '', product_screenshot_url: '',
     // Task #2 — audience-first selections (persisted via Task #1 API)
     audience: '', goal: '', template_kit: '',
+    // Task #3 — per-template editable content { [templateKey]: { field: string | item[] } }
+    content_json: {},
   });
   const [signups, setSignups] = useState([]);
   const [waitlistAudienceFilter, setWaitlistAudienceFilter] = useState('');
@@ -69,8 +84,7 @@ export default function BrandBuilderPage() {
   const [taglineCandidates, setTaglineCandidates] = useState([]);
   const [taglineInputs, setTaglineInputs] = useState({ audience: '', tone: 'bold', marketAngle: 'innovation' });
   const [uploadBusy, setUploadBusy] = useState(false);
-  // Task #4 — per-audience copy (customer/partner/investor variants on the page)
-  const [activeAudienceTab, setActiveAudienceTab] = useState('customer');
+  // Audience labels/colors for the waitlist-signup badges.
   const AUDIENCE_LABELS = { customer: 'Customer discovery', partner: 'Partner', investor: 'Investor', advisor: 'Advisor', mentor: 'Mentor', cofounder: 'Co-founder' };
   const AUDIENCE_COLORS = { customer: 'bg-violet-100 text-violet-700', partner: 'bg-indigo-100 text-indigo-700', investor: 'bg-emerald-100 text-emerald-700', advisor: 'bg-amber-100 text-amber-700', mentor: 'bg-sky-100 text-sky-700', cofounder: 'bg-rose-100 text-rose-700' };
   // Task #5 — visual template registry (maps a catalog template's visualTemplate → label / media needs)
@@ -100,6 +114,17 @@ export default function BrandBuilderPage() {
         const lp = await api.brandGetLanding(projectId);
         if (lp) {
           setLanding(lp);
+          // Task #3 — seed the active template's content block on load so the
+          // dynamic step-3 fields are populated even when switching between two
+          // projects that share the same template (where the [draft.template]
+          // effect would not re-fire).
+          const tk = lp.template || 'minimal';
+          const loadedContent = lp.content_json || {};
+          const needsSeed = !(loadedContent[tk] && Object.keys(loadedContent[tk]).length)
+            && (TEMPLATE_CONTENT_SCHEMA[tk] || []).length > 0;
+          const seededContent = needsSeed
+            ? { ...loadedContent, [tk]: defaultsForKey(tk) }
+            : loadedContent;
           setDraft({
             name: lp.name || '',
             tagline: lp.tagline || '',
@@ -140,6 +165,8 @@ export default function BrandBuilderPage() {
             audience: lp.audience || '',
             goal: lp.goal || '',
             template_kit: lp.template_kit || '',
+            // Task #3 — restore per-template editable content (seeded above)
+            content_json: seededContent,
           });
         } else {
           setLanding(null);
@@ -170,6 +197,22 @@ export default function BrandBuilderPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [previewTemplate]);
+
+  // Task #3 — seed the selected template's content block with its schema
+  // defaults so the dynamic step-3 fields render real starting copy that
+  // matches what the page shows (and round-trips through save). Existing saved
+  // content is never overwritten.
+  useEffect(() => {
+    const tk = draft.template;
+    if (!tk) return;
+    if (!(TEMPLATE_CONTENT_SCHEMA[tk] || []).length) return;
+    setDraft((d) => {
+      const existing = (d.content_json || {})[tk];
+      if (existing && Object.keys(existing).length) return d;
+      return { ...d, content_json: { ...(d.content_json || {}), [tk]: defaultsForKey(tk) } };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.template]);
 
   // Step 1 — pick an audience; prefill the goal default for that audience.
   const selectAudience = (audience) => {
@@ -214,32 +257,69 @@ export default function BrandBuilderPage() {
     });
   };
 
-  const generate = async () => {
-    if (description.trim().length < 4) { setError('Add a short description in step 1 first.'); return; }
-    setBusy(true); setError('');
-    try {
-      const r = await api.brandSuggest({ description: description.trim(), sector: sector || null });
-      setSuggestions(r?.suggestions || []);
-      setAiUsed(!!r?.ai_generated);
-    } catch (e) { setError(e?.message || 'Failed to generate'); }
-    finally { setBusy(false); }
+  // Task #3 — per-template content editing helpers. Edits write into
+  // draft.content_json[draft.template] so save round-trips the right block.
+  const contentFor = (d) => (d.content_json && d.content_json[d.template]) || {};
+
+  const setContentField = (fieldKey, value) => setDraft((d) => {
+    const tk = d.template;
+    const tc = { ...((d.content_json || {})[tk] || {}), [fieldKey]: value };
+    return { ...d, content_json: { ...(d.content_json || {}), [tk]: tc } };
+  });
+
+  const currentList = (fieldKey) => {
+    const cur = contentFor(draft)[fieldKey];
+    return Array.isArray(cur) ? cur : [];
   };
 
-  const pickSuggestion = async (s) => {
-    setDraft((d) => ({
-      ...d,
-      name: s.name,
-      tagline: s.tagline,
-      headline: s.tagline,
-      subheadline: d.subheadline || description.slice(0, 140),
-    }));
-    // Auto-generate a logo for this pick — falls back to local SVG if no key.
-    setLogoBusy(true);
+  const addContentItem = (f) => {
+    const cur = currentList(f.key);
+    if (cur.length >= (f.max || 12)) return;
+    const blank = {};
+    (f.itemFields || []).forEach((itf) => { blank[itf.key] = ''; });
+    setContentField(f.key, [...cur, blank]);
+  };
+
+  const updateContentItem = (fieldKey, idx, itemKey, value) => {
+    const cur = currentList(fieldKey).slice();
+    cur[idx] = { ...cur[idx], [itemKey]: value };
+    setContentField(fieldKey, cur);
+  };
+
+  const removeContentItem = (fieldKey, idx) => {
+    const cur = currentList(fieldKey).slice();
+    cur.splice(idx, 1);
+    setContentField(fieldKey, cur);
+  };
+
+  // Task #3 — one-click AI auto-fill. Reads the project name + sector +
+  // description (the step-1 inputs) and fills the page's hero copy + the chosen
+  // template's content fields. Does NOT mutate the project, sector, or
+  // description inputs themselves.
+  const autofill = async () => {
+    if (!projectId) return;
+    if (description.trim().length < 4) { setError('Add a short description in step 1 first.'); return; }
+    setAutofillBusy(true); setError('');
     try {
-      const r = await api.brandLogo({ prompt: s.logo_prompt, name: s.name, color: draft.theme_color });
-      setDraft((d) => ({ ...d, logo_url: r?.url || null, logo_svg: r?.svg || null }));
-    } catch {}
-    finally { setLogoBusy(false); }
+      const key = draft.template;
+      const r = await api.brandAutofillLanding({
+        name: (project?.name || draft.name || '').trim(),
+        sector: sector || null,
+        description: description.trim(),
+        template: key,
+      });
+      const merged = { ...defaultsForKey(key), ...((r && r.content) || {}) };
+      setDraft((d) => ({
+        ...d,
+        name: r?.name || d.name,
+        headline: r?.headline || d.headline,
+        subheadline: r?.subheadline || d.subheadline,
+        tagline: r?.tagline || d.tagline,
+        cta_text: r?.cta_text || d.cta_text,
+        content_json: { ...(d.content_json || {}), [key]: merged },
+      }));
+    } catch (e) { setError(e?.message || 'Auto-fill failed'); }
+    finally { setAutofillBusy(false); }
   };
 
   const regenerateLogo = async () => {
@@ -419,18 +499,6 @@ export default function BrandBuilderPage() {
           </div>
         </div>
 
-        {draft.audience && (
-          <label className="block max-w-xs">
-            <span className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Primary goal for visitors</span>
-            <select
-              value={draft.goal || ''}
-              onChange={(e) => setDraft({ ...draft, goal: e.target.value })}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100"
-            >
-              {GOALS.map((g) => <option key={g} value={g}>{GOAL_LABELS[g] || g}</option>)}
-            </select>
-          </label>
-        )}
       </section>
 
       {/* Step 2 — pick a recommended template */}
@@ -555,51 +623,24 @@ export default function BrandBuilderPage() {
       {(draft.template_kit || landing) && (
         <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
           <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 dark:text-gray-100">
-            <PenLine size={15} className="text-violet-600" /> 3. Tune your brand & copy
+            <PenLine size={15} className="text-violet-600" /> 3. Brand & page content
           </h2>
 
-          {/* Brand-direction generation (relocated from step 1) */}
+          {/* Task #3 — one-click AI auto-fill: writes hero copy + the selected
+              template's content fields from the project name, sector & step-1
+              description. Leaves those three inputs untouched. */}
           <div className="border border-gray-200 rounded-lg p-3 mb-4 dark:border-gray-800">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Need name ideas? Generate AI brand directions.</span>
+              <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Auto-fill page copy from your project name, sector & description.</span>
               <button
-                onClick={generate}
-                disabled={busy || !projectId}
+                onClick={autofill}
+                disabled={autofillBusy || !projectId}
                 className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-50"
               >
-                {busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                Generate 5 options
+                {autofillBusy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                Auto-fill with AI
               </button>
             </div>
-            {!aiUsed && suggestions.length > 0 && (
-              <div className="text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded-md px-2 py-1 mt-2 inline-block dark:text-gray-300 dark:bg-gray-800 dark:border-gray-700">
-                Showing starter options — try regenerating for AI-crafted ideas.
-              </div>
-            )}
-            {suggestions.length > 0 && (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-3">
-                {suggestions.map((s, i) => {
-                  const active = draft.name === s.name;
-                  return (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => pickSuggestion(s)}
-                      className={`text-left border rounded-lg p-3 hover:border-violet-300 transition ${
-                        active ? 'border-violet-400 ring-2 ring-violet-100 bg-violet-50/30 dark:border-violet-700 dark:bg-violet-950/30 dark:ring-violet-900' : 'border-gray-200 dark:border-gray-800'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="font-semibold text-gray-900 dark:text-gray-100">{s.name}</div>
-                        {active && <Check size={14} className="text-violet-600" />}
-                      </div>
-                      <div className="text-sm text-gray-600 mt-1 dark:text-gray-400">{s.tagline}</div>
-                      <div className="text-[11px] text-gray-400 mt-2 italic dark:text-gray-500">Logo: {s.logo_prompt}</div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
           </div>
 
           <div className="grid sm:grid-cols-3 gap-4">
@@ -655,7 +696,7 @@ export default function BrandBuilderPage() {
                   />
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] text-gray-600 dark:text-gray-400">Bg</span>
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400">Background</span>
                   <input
                     type="color" value={draft.palette_bg}
                     onChange={(e) => setDraft({ ...draft, palette_bg: e.target.value })}
@@ -663,7 +704,7 @@ export default function BrandBuilderPage() {
                   />
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] text-gray-600 dark:text-gray-400">Ink</span>
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400">Text</span>
                   <input
                     type="color" value={draft.palette_ink}
                     onChange={(e) => setDraft({ ...draft, palette_ink: e.target.value })}
@@ -671,7 +712,7 @@ export default function BrandBuilderPage() {
                   />
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] text-gray-600 dark:text-gray-400">2nd</span>
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400">Secondary</span>
                   <input
                     type="color" value={draft.palette_secondary}
                     onChange={(e) => setDraft({ ...draft, palette_secondary: e.target.value })}
@@ -801,54 +842,91 @@ export default function BrandBuilderPage() {
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
               />
 
-              {/* Per-audience copy variants (all six audiences) */}
-              <div className="border border-gray-200 rounded-lg p-3 dark:border-gray-800">
-                <span className="block text-[11px] font-medium text-gray-600 mb-2 dark:text-gray-400">Audience-specific copy (optional)</span>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {AUDIENCES.map((a) => (
-                    <button
-                      key={a}
-                      type="button"
-                      onClick={() => setActiveAudienceTab(a)}
-                      className={`px-3 py-1.5 text-xs rounded-lg border transition ${
-                        activeAudienceTab === a
-                          ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300'
-                          : 'border-gray-200 text-gray-600 hover:border-gray-300 dark:border-gray-800 dark:text-gray-400'
-                      }`}
-                    >
-                      {AUDIENCE_LABELS[a]}
-                    </button>
-                  ))}
+              {/* Task #3 — template-aware page content. Fields adapt to the
+                  visual template chosen in step 2; edits persist per template
+                  in draft.content_json[draft.template]. */}
+              {(TEMPLATE_CONTENT_SCHEMA[draft.template] || []).length > 0 && (
+                <div className="border border-gray-200 rounded-lg p-3 space-y-3 dark:border-gray-800">
+                  <span className="block text-[11px] font-medium text-gray-600 dark:text-gray-400">
+                    Page content — these fields fill the sections of your chosen template.
+                  </span>
+                  {(TEMPLATE_CONTENT_SCHEMA[draft.template] || []).map((f) => {
+                    const tc = contentFor(draft);
+                    if (f.kind === 'groupList') {
+                      const items = Array.isArray(tc[f.key]) ? tc[f.key] : [];
+                      return (
+                        <div key={f.key} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">{f.label}</span>
+                            {items.length < (f.max || 12) && (
+                              <button
+                                type="button"
+                                onClick={() => addContentItem(f)}
+                                className="inline-flex items-center gap-1 text-xs text-violet-700 hover:text-violet-800"
+                              >
+                                <Plus size={12} /> Add
+                              </button>
+                            )}
+                          </div>
+                          {items.map((item, idx) => (
+                            <div key={idx} className="border border-gray-200 rounded-lg p-2 space-y-2 dark:border-gray-800">
+                              {(f.itemFields || []).map((itf) => (
+                                itf.kind === 'textarea' ? (
+                                  <textarea
+                                    key={itf.key}
+                                    rows={2}
+                                    value={item[itf.key] || ''}
+                                    onChange={(e) => updateContentItem(f.key, idx, itf.key, e.target.value)}
+                                    placeholder={itf.label}
+                                    className="w-full border border-gray-200 rounded px-2 py-1 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
+                                  />
+                                ) : (
+                                  <input
+                                    key={itf.key}
+                                    value={item[itf.key] || ''}
+                                    onChange={(e) => updateContentItem(f.key, idx, itf.key, e.target.value)}
+                                    placeholder={itf.label}
+                                    className="w-full border border-gray-200 rounded px-2 py-1 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
+                                  />
+                                )
+                              ))}
+                              <button
+                                type="button"
+                                onClick={() => removeContentItem(f.key, idx)}
+                                className="inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-red-600"
+                              >
+                                <Trash2 size={12} /> Remove
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }
+                    const val = typeof tc[f.key] === 'string' ? tc[f.key] : '';
+                    return (
+                      <label key={f.key} className="flex flex-col gap-1">
+                        <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">{f.label}</span>
+                        {f.kind === 'textarea' ? (
+                          <textarea
+                            rows={2}
+                            value={val}
+                            onChange={(e) => setContentField(f.key, e.target.value)}
+                            placeholder={typeof f.default === 'string' ? f.default : ''}
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
+                          />
+                        ) : (
+                          <input
+                            value={val}
+                            onChange={(e) => setContentField(f.key, e.target.value)}
+                            placeholder={typeof f.default === 'string' ? f.default : ''}
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
+                          />
+                        )}
+                      </label>
+                    );
+                  })}
                 </div>
-                {AUDIENCES.map((a) => (
-                  <div key={a} className={activeAudienceTab === a ? 'block' : 'hidden'}>
-                    <div className="space-y-2">
-                      <input
-                        value={draft[`audience_${a}_headline`] || ''}
-                        onChange={(e) => setDraft({ ...draft, [`audience_${a}_headline`]: e.target.value })}
-                        placeholder={`${AUDIENCE_LABELS[a]} headline`}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
-                      />
-                      <textarea
-                        value={draft[`audience_${a}_body`] || ''}
-                        onChange={(e) => setDraft({ ...draft, [`audience_${a}_body`]: e.target.value })}
-                        rows={2}
-                        placeholder={`${AUDIENCE_LABELS[a]} body`}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
-                      />
-                      <input
-                        value={draft[`audience_${a}_cta`] || ''}
-                        onChange={(e) => setDraft({ ...draft, [`audience_${a}_cta`]: e.target.value })}
-                        placeholder={`${AUDIENCE_LABELS[a]} CTA`}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
-                      />
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                        Defaults to your main headline / subheadline / CTA if left blank.
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              )}
 
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <button

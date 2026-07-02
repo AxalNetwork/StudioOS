@@ -4,6 +4,7 @@ import InfoStrip from '../components/InfoStrip';
 import { Link } from 'react-router-dom';
 import { Bell, RefreshCw, Loader2, Briefcase, ChevronRight } from 'lucide-react';
 import { api } from '../lib/api';
+import { reportError } from '../lib/log';
 import SemanticSearch from '../components/SemanticSearch';
 import InvestorTrialBanner from '../components/InvestorTrialBanner';
 import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
@@ -48,11 +49,23 @@ export default function Dashboard() {
       setError('');
       const d = await api.getDashboard(fresh);
       setData(d);
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      // Task #10 — capture the failure (prod-visible) instead of letting it
+      // vanish, then surface a persistent, actionable error state below.
+      reportError('Dashboard:load', e);
+      setError(e.message || 'Something went wrong loading your dashboard.');
+    }
     finally { setLoading(false); setRefreshing(false); }
   };
 
   useEffect(() => { load(); }, []);
+
+  // Task #10 — a 200 response with no `user` is a malformed payload. Capture it
+  // so it's debuggable; the render below shows a recoverable state rather than
+  // throwing on the destructure / blanking.
+  useEffect(() => {
+    if (data && !data.user) reportError('Dashboard:malformed', new Error('dashboard payload missing user'));
+  }, [data]);
 
   // Task #6 (IF) — decide whether to fire the 5-step product tour. We
   // wait until after the main content has mounted so the
@@ -79,8 +92,22 @@ export default function Dashboard() {
       <Loader2 className="animate-spin" size={16} /> Loading your studio…
     </div>
   );
-  if (error) return <div className="bg-red-50 border border-red-200 text-red-700 rounded p-4 text-sm">{error}</div>;
-  if (!data) return null;
+  if (error) return (
+    <DashboardFallback
+      title="We couldn't load your dashboard"
+      message={error}
+      onRetry={() => { setLoading(true); load(); }}
+    />
+  );
+  // Task #10 — never render a bare `null` (a silent white page). A falsy or
+  // malformed payload now shows a persistent, actionable recovery state.
+  if (!data || !data.user) return (
+    <DashboardFallback
+      title="Your dashboard isn't available right now"
+      message="We received an unexpected response from the server. Please try again."
+      onRetry={() => { setLoading(true); load(); }}
+    />
+  );
 
   const { user, operator_workspace, notifications, role_view } = data;
 
@@ -101,7 +128,7 @@ export default function Dashboard() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Welcome back, {user.name?.split(' ')[0] || user.email.split('@')[0]}</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Welcome back, {user.name?.split(' ')[0] || user.email?.split('@')[0] || 'there'}</h1>
         <PageExplainer pageKey="dashboard" />
             <RoleBadge role={user.role} />
           </div>
@@ -193,6 +220,34 @@ function IndependentSubsidiariesWidget() {
 }
 
 // ---------- Subcomponents ----------
+
+// Task #10 — persistent, recoverable fallback shown when the dashboard payload
+// fails to load or comes back malformed. Replaces the old `return null` (a
+// silent white blank) and the bare error <div>. Always actionable: retry the
+// fetch in-place, or hard-reload /studio.
+function DashboardFallback({ title, message, onRetry }) {
+  return (
+    <div className="max-w-lg mx-auto mt-10 border border-red-200 dark:border-red-900/50 bg-red-50/70 dark:bg-red-950/30 rounded-xl p-6">
+      <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">{title}</h1>
+      <p className="text-sm text-gray-700 dark:text-gray-300 mb-4 leading-relaxed">{message}</p>
+      <div className="flex flex-col sm:flex-row gap-2.5">
+        <button
+          type="button"
+          onClick={onRetry}
+          className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium transition-colors"
+        >
+          <RefreshCw size={15} /> Try again
+        </button>
+        <a
+          href="/studio"
+          className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+        >
+          Reload
+        </a>
+      </div>
+    </div>
+  );
+}
 
 function Card({ title, icon: Icon, link, linkLabel, children }) {
   return (

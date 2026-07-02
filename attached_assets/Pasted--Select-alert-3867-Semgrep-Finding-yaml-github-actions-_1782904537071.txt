@@ -1,0 +1,150 @@
+
+Select alert #3867
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3867 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/semgrep.yml :48
+main
+
+Select alert #3866
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3866 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/semgrep.yml :32
+main
+
+Select alert #3865
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3865 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/post-deploy-smoke.yml :39
+main
+
+Select alert #3864
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3864 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/post-deploy-smoke.yml :38
+main
+
+Select alert #3863
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3863 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/gitleaks.yml :25
+main
+
+Select alert #3862
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3862 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/dr-drill.yml :34
+main
+
+Select alert #3861
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3861 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/dr-drill.yml :32
+main
+
+Select alert #3860
+Semgrep Finding: yaml.github-actions.security.gha-workflow-env-secret.gha-workflow-env-secret
+Warning
+#3860 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/dr-drill.yml :22
+main
+
+Select alert #3859
+Semgrep Finding: yaml.github-actions.security.gha-workflow-env-secret.gha-workflow-env-secret
+Warning
+#3859 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/dr-drill.yml :20
+main
+
+Select alert #3858
+Semgrep Finding: yaml.github-actions.security.gha-workflow-env-secret.gha-workflow-env-secret
+Warning
+#3858 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/dr-drill.yml :19
+main
+
+Select alert #3857
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3857 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/codeql.yml :45
+main
+
+Select alert #3856
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3856 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/codeql.yml :38
+main
+
+Select alert #3855
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3855 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/codeql.yml :36
+main
+
+Select alert #3854
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3854 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/claude-code.yml :72
+main
+
+Select alert #3853
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3853 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/claude-code.yml :60
+main
+
+Select alert #3852
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3852 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :188
+main
+
+Select alert #3851
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3851 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :187
+main
+
+Select alert #3850
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3850 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :173
+main
+
+Select alert #3849
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3849 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :172
+main
+
+Select alert #3848
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3848 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :150
+main
+
+Select alert #3847
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3847 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :149
+main
+
+Select alert #3846
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3846 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :118
+main
+
+Select alert #3845
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3845 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :117
+main
+
+Select alert #3844
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3844 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :94
+main
+
+Select alert #3843
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3843 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :91
+main

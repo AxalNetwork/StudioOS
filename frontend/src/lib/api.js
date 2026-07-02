@@ -1,3 +1,5 @@
+import { reportError } from './log';
+
 const BASE = '/api';
 
 function getAuthHeaders() {
@@ -142,6 +144,11 @@ export async function request(path, options = {}) {
         // mounted (an unknown URL), so a logged-out visitor there sees the 404
         // instead of being bounced to /login by this background 401.
         if (!isPublicPath && !_suppressAuthRedirect) {
+          // Task #10 — capture the bounce BEFORE the hard navigation tears the
+          // tab down. The reportError beacon uses keepalive so it still lands
+          // even though we're about to leave the page; this is what makes a
+          // silent "session expired → /login" redirect debuggable in prod.
+          reportError('api:session-expired-redirect', new Error(`401 on ${path}; redirecting ${currentPath} → /login`));
           window.location.href = '/login';
         }
         throw new Error('Session expired');
@@ -352,6 +359,21 @@ export const api = {
   adminRestoreProject: (id) => request(`/admin/projects/${id}/restore`, { method: 'POST' }),
   adminHardDeleteProject: (id) => request(`/admin/projects/${id}/hard-delete`, { method: 'DELETE' }),
   advanceWeek: (id) => request(`/projects/${id}/advance-week`, { method: 'POST' }),
+
+  // Task #1 — Spin-Out teams collaboration: project membership (co-founders +
+  // advisors). Management (add/invite/remove/revoke) is owner + admin/partner
+  // only and stage-gated server-side; the UI mirrors `can_manage` + `locked`.
+  listProjectMembers: (id) => request(`/projects/${id}/members`),
+  addProjectMember: (id, data) =>
+    request(`/projects/${id}/members`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  createProjectInvitation: (id, data) =>
+    request(`/projects/${id}/invitations`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  revokeProjectInvitation: (id, invId) =>
+    request(`/projects/${id}/invitations/${invId}/revoke`, { method: 'POST' }),
+  removeProjectMember: (id, userId) =>
+    request(`/projects/${id}/members/${userId}`, { method: 'DELETE' }),
+  acceptProjectInvitation: (token) =>
+    request('/projects/invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
 
   // Epic 5: scoreStartup honours `is_sandbox` (founder practice mode). The
   // server rejects any client-supplied `score`/`tier`/`score_breakdown`.
@@ -772,6 +794,16 @@ export const api = {
   createInterview: (projectId, data) => request(`/progress/discovery/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   updateInterview: (id, data) => request(`/progress/discovery/interview/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteInterview: (id) => request(`/progress/discovery/interview/${id}`, { method: 'DELETE' }),
+  // Task #5 — customer-audience waitlist signups + lightweight CRM layer inside
+  // Customer Discovery (promote-to-interview, product-invitation email,
+  // follow-up email). Customer-audience only; project-scoped server-side.
+  listWaitlistCustomers: (projectId) => request(`/progress/discovery/${projectId}/waitlist`),
+  promoteWaitlistCustomer: (projectId, signupId) =>
+    request(`/progress/discovery/${projectId}/waitlist/${signupId}/promote`, { method: 'POST' }),
+  inviteWaitlistCustomer: (projectId, signupId) =>
+    request(`/progress/discovery/${projectId}/waitlist/${signupId}/invite`, { method: 'POST' }),
+  followUpWaitlistCustomer: (projectId, signupId) =>
+    request(`/progress/discovery/${projectId}/waitlist/${signupId}/follow-up`, { method: 'POST' }),
   // Task #29 — pain-group curation for the Spin-Out deck Slide 2.
   painGroups: (projectId) => request(`/progress/pain-groups/${projectId}`),
   assignPain: (projectId, body) => request(`/progress/pain-groups/${projectId}/assign`, { method: 'POST', body: JSON.stringify(body) }),
@@ -1321,11 +1353,11 @@ export const api = {
   onboardingComplete: (flow) => request('/onboarding/complete', { method: 'POST', body: JSON.stringify({ flow }) }),
 
   // Task #24 — Brand & landing page generator.
-  brandSuggest: (payload) => request('/brand/suggest', { method: 'POST', body: JSON.stringify(payload) }),
   brandLogo: (payload) => request('/brand/logo', { method: 'POST', body: JSON.stringify(payload) }),
   brandUploadLogo: (formData) => request('/brand/logo/upload', { method: 'POST', body: formData }),
   brandSuggestPalette: (payload) => request('/brand/palette/suggest', { method: 'POST', body: JSON.stringify(payload) }),
   brandSuggestTaglines: (payload) => request('/brand/tagline/suggest', { method: 'POST', body: JSON.stringify(payload) }),
+  brandAutofillLanding: (payload) => request('/brand/landing/autofill', { method: 'POST', body: JSON.stringify(payload) }),
   brandGetLanding: (projectId) => request(`/brand/landing/by-project/${projectId}`),
   brandSaveLanding: (projectId, payload) => request(`/brand/landing/by-project/${projectId}`, { method: 'PUT', body: JSON.stringify(payload) }),
   brandPublishLanding: (projectId, published) => request(`/brand/landing/by-project/${projectId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
@@ -1613,6 +1645,7 @@ export const api = {
     return request(`/infra/cron-history${q ? `?${q}` : ''}`);
   },
   infraWSCheck: () => request('/infra/ws-check'),
+  infraReembedMetrics: (hours = 24) => request(`/infra/reembed-metrics?hours=${hours}`),
 
   // ---------- Funds & LPs ----------
   fundsList: (status) => request(`/funds${status ? `?status=${status}` : ''}`),
@@ -2184,6 +2217,64 @@ export const api = {
     request(`/journal/${uid}/outcome`, { method: 'POST', body: JSON.stringify(data) }),
   journalDelete: (uid) => request(`/journal/${uid}`, { method: 'DELETE' }),
   antiportfolio: (owner = 'me') => request(`/antiportfolio?owner=${encodeURIComponent(owner)}`),
+
+  // ---------- IC Decisions (Commit) ----------
+  icList: (opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.status) q.set('status', opts.status);
+    if (opts.project_id != null && opts.project_id !== '') q.set('project_id', opts.project_id);
+    const qs = q.toString();
+    return request(`/ic${qs ? `?${qs}` : ''}`);
+  },
+  icCreate: (data) => request('/ic', { method: 'POST', body: JSON.stringify(data) }),
+  icGet: (uid) => request(`/ic/${uid}`),
+  icUpdate: (uid, data) => request(`/ic/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
+  icVote: (uid, data) => request(`/ic/${uid}/vote`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // ---------- LP Reporting (Support) ----------
+  lpReportsList: (opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.fund_id != null && opts.fund_id !== '') q.set('fund_id', opts.fund_id);
+    const qs = q.toString();
+    return request(`/lp-reports${qs ? `?${qs}` : ''}`);
+  },
+  lpReportCreate: (data) => request('/lp-reports', { method: 'POST', body: JSON.stringify(data) }),
+  lpReportPublish: (uid) => request(`/lp-reports/${uid}/publish`, { method: 'POST' }),
+
+  // ---------- Company Updates (Support) ----------
+  portfolioUpdatesList: (opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.project_id != null && opts.project_id !== '') q.set('project_id', opts.project_id);
+    if (opts.period) q.set('period', opts.period);
+    const qs = q.toString();
+    return request(`/portfolio-updates${qs ? `?${qs}` : ''}`);
+  },
+  portfolioUpdateCreate: (data) => request('/portfolio-updates', { method: 'POST', body: JSON.stringify(data) }),
+
+  // ---------- Cap Table / Ownership (Support) ----------
+  positionsList: () => request('/positions'),
+  positionsByProject: (projectUid) => request(`/positions/${projectUid}`),
+  positionCreate: (data) => request('/positions', { method: 'POST', body: JSON.stringify(data) }),
+
+  // ---------- Contacts (inbound relationship hub) ----------
+  contactsList: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.audience) qs.set('audience', opts.audience);
+    if (opts.status) qs.set('status', opts.status);
+    if (opts.routed_to) qs.set('routed_to', opts.routed_to);
+    const s = qs.toString();
+    return request(`/contacts${s ? `?${s}` : ''}`);
+  },
+  contactGet: (uid) => request(`/contacts/${uid}`),
+  contactCreate: (data) => request('/contacts', { method: 'POST', body: JSON.stringify(data) }),
+  contactInvite: (data) => request('/contacts/invite', { method: 'POST', body: JSON.stringify(data) }),
+  contactUpdate: (uid, data) => request(`/contacts/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
+  contactReply: (uid, data) => request(`/contacts/${uid}/reply`, { method: 'POST', body: JSON.stringify(data) }),
+  contactAddTask: (uid, data) => request(`/contacts/${uid}/tasks`, { method: 'POST', body: JSON.stringify(data) }),
+  contactToggleTask: (uid, taskId) => request(`/contacts/${uid}/tasks/${taskId}/toggle`, { method: 'POST' }),
+  contactPromote: (uid) => request(`/contacts/${uid}/promote`, { method: 'POST' }),
+  raiseProspects: (projectId) => request(projectId ? `/contacts/raise-prospects?project_id=${projectId}` : '/contacts/raise-prospects'),
+  raiseProspectUpdate: (id, data) => request(`/contacts/raise-prospects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {
@@ -2764,24 +2855,13 @@ export const adminEvents = {
   analytics: () => request('/admin/events/analytics'),
 };
 
-// Task #44 — Gamified Assessment player surface (§7.1). Each method maps 1:1 to
-// a /api/assessment route on the worker (api-drift guard checks this prefix).
+// Assessment results — read-only client for archetype/skill display (Profile &
+// Fit section, archetype badges). The gamified "Play & Discover" player surface
+// was removed; only the results endpoints remain. Maps to /api/assessment on the
+// worker (api-drift guard checks this prefix).
 export const assessment = {
-  games: () => request('/assessment/games'),
-  start: (gameSlug) => request('/assessment/sessions', { method: 'POST', body: JSON.stringify({ gameSlug }) }),
-  session: (id) => request(`/assessment/sessions/${id}`),
-  next: (id) => request(`/assessment/sessions/${id}/next`),
-  respond: (id, { itemId, response, latencyMs, confidenceWager } = {}) =>
-    request(`/assessment/sessions/${id}/respond`, {
-      method: 'POST',
-      body: JSON.stringify({ itemId, response, latencyMs, confidenceWager }),
-    }),
-  complete: (id) => request(`/assessment/sessions/${id}/complete`, { method: 'POST', body: '{}' }),
   myResults: () => request('/assessment/results/me'),
   results: (userId) => request(`/assessment/results/${userId}`),
-  publish: ({ track, published = true } = {}) =>
-    request('/assessment/results/publish', { method: 'POST', body: JSON.stringify({ track, published }) }),
-  myBadges: () => request('/assessment/badges/me'),
 };
 
 // Task #3 — Assessment admin authoring + analytics (§3/§5/§7.2). Each method

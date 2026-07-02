@@ -25,7 +25,6 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field as PField, validator
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from backend.app.database import get_session

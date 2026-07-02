@@ -800,7 +800,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     label: 'Axal VC Spin-Out',
     prompt_hint: 'Demo Day deck for pre-incorporation founders graduating the 30-day Spin-Out Lab.',
     best_for: 'Founders in or graduating the Axal Spin-Out Lab. Audience: Axal-network investors and partners.',
-    slide_count: 10,
+    slide_count: 11,
     premium: true,
     category: 'event',
     brandTheme: 'accent_only',
@@ -808,8 +808,8 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     fields_from_financials: ['runway_months', 'use_of_funds'],
     fields_from_captable: ['founders', 'all_holders'],
     ai_fill_hint: 'Honesty over polish. If a number is missing, leave the em-dash placeholder so the founder sees what to fill in.',
-    // Canonical 10-slide rendered sequence: Cover · Problem · Validation ·
-    // Market · Solution · Roadmap · Team & network · Cap table · Ask ·
+    // Canonical 11-slide rendered sequence: Cover · Problem · Validation ·
+    // Market · Solution · Product demo · Roadmap · Team & network · Cap table · Ask ·
     // Review the deal. The product-demo media renders on the Solution slide
     // (no standalone Product Demo slide), but its fields stay an editable
     // editor group below. The former Brand, Venture readiness, Team,

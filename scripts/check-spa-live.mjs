@@ -18,21 +18,24 @@
  *     src="/assets/*.js">` (proof the built bundle is wired in, not a stub)
  *   - Every hashed `/assets/*.{js,css}` the shell references actually
  *     RESOLVES on the same host (HTTP 200 + a JS/CSS content-type, never
- *     text/html). This is the check that catches the recurring blank page:
- *     the Worker serves the newest `index.html`, but if GitHub Pages (which
- *     serves the apex `/assets/*`) is a stale build, those hashed files 404
- *     and the page renders blank even though the shell HTML looks fine. A
- *     deploy that isn't followed by a `git push` (so Pages stays behind the
- *     Worker) now fails here instead of silently shipping a blank site.
+ *     text/html). This is the check that catches the recurring blank page.
+ *     Task #15 routes `axal.vc/assets/*` to the Worker so app routes serve
+ *     their OWN build's hashes; on the apex this check ALSO asserts each asset
+ *     is Worker-served (no `server: GitHub.com` / `x-github-request-id`) so a
+ *     deploy where the route carve silently isn't in effect — the request
+ *     falls through to a stale GitHub Pages build and the hashes 404 — fails
+ *     here instead of shipping a blank site.
  *
  * Host model (see wrangler.toml + replit.md "Apex routing"):
  *   - app.axal.vc is a Workers Custom Domain: the Worker serves the SPA on
  *     EVERY path via `not_found_handling = "single-page-application"`, so `/`
  *     and all deep links return the shell.
- *   - axal.vc is the proxied apex: ONLY the path-scoped zone routes in
- *     `[[env.production.routes]]` go through the Worker; the apex root `/`
- *     still serves the Jekyll marketing site. So on axal.vc we assert the SPA
- *     shell on the routed app paths and only assert "200 + HTML" on `/`.
+ *   - axal.vc is the proxied apex: the path-scoped zone routes in wrangler.toml
+ *     (incl. `/assets/*` as of Task #15) go through the Worker; the apex root
+ *     `/` still serves the GitHub Pages SPA build. So on axal.vc we assert the
+ *     SPA shell on the routed app paths and only assert "200 + HTML" on `/` —
+ *     but every hashed asset the root references is now Worker-served, so the
+ *     asset checks below still apply to it.
  *
  * Apex `/api/*` routing assertion (the regression that took prod down):
  *   The shell-HTML checks above can ALL pass while every `/api/*` fetch falls
@@ -107,6 +110,8 @@ function routesForHost(base) {
   const appRoutes = [
     { path: '/about', shell: true },
     { path: '/dashboard', shell: true },
+    { path: '/studio', shell: true },
+    { path: '/login', shell: true },
     { path: '/articles', shell: true },
     { path: `/articles/${encodeURIComponent(SLUG)}`, shell: true },
   ];
@@ -169,24 +174,30 @@ async function fetchAssetMeta(url) {
     } catch {
       /* body already consumed/empty */
     }
-    return { status: res.status, ctype: res.headers.get('content-type') || '' };
+    return {
+      status: res.status,
+      ctype: res.headers.get('content-type') || '',
+      server: res.headers.get('server') || '',
+      githubReqId: res.headers.get('x-github-request-id') || '',
+    };
   } finally {
     clearTimeout(timer);
   }
 }
 
 // Returns null on success, or a human-readable failure reason. A hashed asset
-// is healthy when it returns 200 with a JS/CSS content-type. A 404 means the
-// host serving `/assets/*` (GitHub Pages on the apex) is a stale build behind
-// the Worker; a 200 `text/html` means the SPA fallback served index.html in
-// place of the real file — both render a blank page.
-async function checkAsset(base, assetPath) {
+// is healthy when it returns 200 with a JS/CSS content-type. A 404 (or a 200
+// `text/html` from the SPA fallback serving index.html in place of the real
+// file) means this host is missing the hash: on the apex that's the `/assets/*`
+// Worker route (Task #15) either not carved, or lacking the hash during a
+// deploy/Pages skew. Both render a blank page.
+async function checkAsset(base, assetPath, expectWorker = false) {
   const url = base.replace(/\/$/, '') + assetPath;
   const isCss = /\.css(?:$|\?)/i.test(assetPath);
   let lastErr = '';
   for (let attempt = 1; attempt <= RETRIES; attempt++) {
     try {
-      const { status, ctype } = await fetchAssetMeta(url);
+      const { status, ctype, server, githubReqId } = await fetchAssetMeta(url);
       const problems = [];
       if (status !== 200) {
         problems.push(
@@ -211,6 +222,17 @@ async function checkAsset(base, assetPath) {
             `unexpected Content-Type "${ctype}" (expected ${isCss ? 'text/css' : 'a JS type'})`,
           );
         }
+      }
+      // On the apex, /assets/* must be Worker-served (Task #15 route carve). A
+      // GitHub Pages signature here means the carve isn't in effect and the
+      // request fell through to a (possibly stale) Pages build.
+      if (expectWorker && (/github/i.test(server) || githubReqId)) {
+        problems.push(
+          'served by GitHub Pages, not the Worker (the `axal.vc/assets/*` ' +
+            'route carve is not in effect — the apex asset request fell ' +
+            'through to Pages; redeploy so BOTH route blocks in wrangler.toml ' +
+            'include `axal.vc/assets/*`)',
+        );
       }
       if (problems.length === 0) return null;
       lastErr = problems.join('; ');
@@ -375,9 +397,10 @@ async function main() {
     // 404s — the exact signature of the recurring blank page (Worker serves a
     // newer build than the stale GitHub Pages that backs `/assets/*`). Verify
     // every referenced asset actually resolves on this host.
+    const assetsExpectWorker = /\/\/axal\.vc/i.test(base);
     for (const assetPath of assetSink) {
       const url = base.replace(/\/$/, '') + assetPath;
-      const reason = await checkAsset(base, assetPath);
+      const reason = await checkAsset(base, assetPath, assetsExpectWorker);
       if (reason) {
         console.error(`[spa-live] FAIL  ${url} — ${reason}`);
         failures.push(`${url} — ${reason}`);

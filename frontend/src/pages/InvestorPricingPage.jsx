@@ -9,7 +9,7 @@
 // and redirect to Stripe's hosted page (or in dev, the dev-upgrade redirect).
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ChevronLeft, Lock } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { api } from '../lib/api';
 
 const PLANS = {

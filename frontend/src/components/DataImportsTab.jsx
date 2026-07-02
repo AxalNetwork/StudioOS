@@ -269,7 +269,7 @@ function UniversalCsvWizard({ flash, onDone }) {
           </div>
           <div className="space-y-2 mb-4">
             {UNIVERSAL_TARGETS.find(t => t.id === target).fields.map(f => {
-              const key = f.replace('*', '');
+              const key = f.replaceAll('*', '');
               return (
                 <div key={key} className="flex items-center gap-3">
                   <div className="w-40 text-sm text-gray-700 dark:text-gray-300">

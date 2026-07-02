@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  ShieldCheck, BarChart2, Users, Layers, Scale, Brain,
+  ShieldCheck, Users, Layers, Scale, Brain,
   TrendingUp, FileText, Globe, Database, PieChart,
 } from 'lucide-react';
 import PublicNav from '../../components/PublicNav';

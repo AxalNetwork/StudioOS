@@ -139,7 +139,7 @@ function computeVector(
   }
 
   // Fill missing dimensions with zero score + 0 confidence
-  for (const [slug, maxQ] of maxByDim) {
+  for (const [slug] of maxByDim) {
     if (!byDim.has(slug)) {
       out.push({ dimension_slug: slug, score: 0, confidence: 0 });
     }

@@ -24,7 +24,7 @@
  *     the OAuth tab in that case.
  */
 import { Hono } from 'hono';
-import { stripTrailingSlashes, callbackBase } from '../util/url';
+import { callbackBase } from '../util/url';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';

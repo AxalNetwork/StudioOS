@@ -42,7 +42,7 @@ export type TaskClass =
   | 'paraphrase'
   | 'publication'
   | 'dd_synthesis'
-  | 'brand_suggest'
+  | 'brand_autofill'
   | 'brand_palette'
   | 'brand_taglines';
 
@@ -173,11 +173,11 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // the existing admin AI usage dashboard.
   publication:  { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   dd_synthesis: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
-  // Founder Brand & Landing Page name/tagline generator (routes/brand.ts).
-  // Creative short-form JSON; MID_LLAMA primary → SMALL_LLAMA fallback.
-  // A total chain failure falls back to the deterministic heuristic in
-  // the route, so the wizard is always usable.
-  brand_suggest: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  // Founder Brand & Landing Page content auto-fill (routes/brand.ts).
+  // Creative short-form JSON (per-template page content); MID_LLAMA primary →
+  // SMALL_LLAMA fallback. A total chain failure falls back to the deterministic
+  // heuristic in the route, so the editor is always usable.
+  brand_autofill: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   // Task #3 (Brand Kit Expansion) — AI palette suggester. Creative short-form
   // JSON; MID_LLAMA primary → SMALL_LLAMA fallback. Fallback chain failure
   // returns null to the route, which lands on the deterministic heuristic bank.

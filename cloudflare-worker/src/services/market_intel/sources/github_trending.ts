@@ -7,7 +7,6 @@
    * deterministic seed so the aggregator produces stable composites in
    * dev. Set MI_FLAG_GITHUB_TRENDING=live in production env to engage fetchLive.
    */
-  import type { Env } from '../../../types';
   import { registerSource, type CommonRow } from '../registry';
   import { row, seededAround, doy } from './_helpers';
   import { buildLiveRows, daysAgoISO, fetchJson, optEnv, saturate, UA } from './_live';

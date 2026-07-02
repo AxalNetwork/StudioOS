@@ -4,7 +4,7 @@ from datetime import datetime
 from backend.app.database import get_session
 from backend.app.models.entities import (
     User, UserRole, Project, ScoreSnapshot, Founder, Partner,
-    LimitedPartner, CapitalCall, Deal, ActivityLog
+    LimitedPartner, CapitalCall, Deal
 )
 from backend.app.api.routes.auth import get_current_user
 from backend.app.api.routes.market_intel import MARKET_PULSE, STUDIO_BENCHMARKS

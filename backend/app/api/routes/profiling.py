@@ -149,19 +149,19 @@ def _next_reply(answers: List[str]) -> str:
             )
         if track == "new":
             qs = [
-                "Have you already established a legal entity? If yes, share the entity "
-                "name, type and jurisdiction; if not, which jurisdiction do you want to "
+                "Have you already established a legal entity? If yes, share the entity " +
+                "name, type and jurisdiction; if not, which jurisdiction do you want to " +
                 "incorporate in — Delaware, UK, or Singapore?",
                 "What sector or industry is your venture in?",
                 "In one line, describe your idea or MVP.",
             ]
         else:
             qs = [
-                "What stage are you at — Pre-seed, Seed, Series A, Series B+, or "
+                "What stage are you at — Pre-seed, Seed, Series A, Series B+, or " +
                 "Bootstrapped/Profitable?",
-                "What is your primary goal — (i) Capital, (ii) AI integration via "
+                "What is your primary goal — (i) Capital, (ii) AI integration via " +
                 "StudioOS, (iii) Distribution / GTM, or (iv) M&A / Liquidity?",
-                "Share your legal entity name, type and jurisdiction, plus your name and "
+                "Share your legal entity name, type and jurisdiction, plus your name and " +
                 "title as the signatory.",
             ]
         idx = n - 1 - track_idx
@@ -169,10 +169,10 @@ def _next_reply(answers: List[str]) -> str:
 
     if persona == "investor":
         qs = [
-            "Which best fits — (i) LP committing to the main fund, (ii) Syndicate "
+            "Which best fits — (i) LP committing to the main fund, (ii) Syndicate " +
             "investing deal-by-deal, or (iii) Co-Investor / VC firm joining rounds?",
             "What's your typical check size and which sectors interest you?",
-            "Share your legal entity name, type and jurisdiction (and EIN if US), plus "
+            "Share your legal entity name, type and jurisdiction (and EIN if US), plus " +
             "your name and title as the signatory.",
         ]
         idx = n - 1
@@ -180,9 +180,9 @@ def _next_reply(answers: List[str]) -> str:
 
     if persona == "operator":
         qs = [
-            "What's your area of expertise — GTM, product / MVP, growth, operations, or "
+            "What's your area of expertise — GTM, product / MVP, growth, operations, or " +
             "something else?",
-            "Are you offering sweat equity, advisory-for-equity, or an MSA "
+            "Are you offering sweat equity, advisory-for-equity, or an MSA " +
             "(equity-for-services)?",
             "Share your name, title, and legal entity (if any) for the agreement.",
         ]
@@ -191,10 +191,10 @@ def _next_reply(answers: List[str]) -> str:
 
     if persona == "service":
         qs = [
-            "Which service partner type fits best — Legal Counsel, Technical Partner, "
+            "Which service partner type fits best — Legal Counsel, Technical Partner, " +
             "Liquidity Provider, or Mentor?",
             "Briefly describe your offering and typical engagement model.",
-            "Share your legal entity name, type and jurisdiction, plus your signatory "
+            "Share your legal entity name, type and jurisdiction, plus your signatory " +
             "name and title.",
         ]
         idx = n - 1
@@ -203,7 +203,7 @@ def _next_reply(answers: List[str]) -> str:
     if persona in ("legal", "technical", "liquidity", "mentor"):
         qs = [
             "Briefly describe your offering and typical engagement model.",
-            "Share your legal entity name, type and jurisdiction, plus your signatory "
+            "Share your legal entity name, type and jurisdiction, plus your signatory " +
             "name and title.",
         ]
         idx = n - 1
@@ -322,7 +322,7 @@ def _ensure_profile_table(session: Session) -> None:
         ("updated_at", "TIMESTAMP"),
     ):
         try:
-            session.exec(text(f"ALTER TABLE partner_profiles ADD COLUMN {col} {ddl}"))
+            session.exec(text(f"ALTER TABLE partner_profiles ADD COLUMN {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
             session.commit()
         except Exception:
             session.rollback()

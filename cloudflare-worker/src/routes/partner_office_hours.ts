@@ -5,7 +5,7 @@
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import type { Env, User } from '../types';
+import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import {
   isAdmin, isFounder, mapError, nowIso, newUid, requirePartnerProfile,
@@ -47,9 +47,6 @@ async function takenForSlot(env: Env, slotId: number): Promise<number> {
   return Number(row?.c || 0);
 }
 
-async function partnerById(env: Env, id: number) {
-  return env.DB.prepare('SELECT * FROM partners WHERE id = ?').bind(id).first<any>();
-}
 async function partnerByUid(env: Env, uid: string) {
   return env.DB.prepare('SELECT * FROM partners WHERE uid = ?').bind(uid).first<any>();
 }

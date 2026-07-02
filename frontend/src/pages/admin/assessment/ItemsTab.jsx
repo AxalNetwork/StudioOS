@@ -211,8 +211,6 @@ export default function ItemsTab({ slug, detail, reloadDetail, toast }) {
   const items = detail?.items || [];
   const [modal, setModal] = useState(null);
 
-  const chapterTitle = (id) => chapters.find((c) => c.id === id)?.title || '—';
-
   const onDelete = async (it) => {
     if (!window.confirm(`Delete item "${it.slug}"? If it has been answered it will be deactivated instead.`)) return;
     try {

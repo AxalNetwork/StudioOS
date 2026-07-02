@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
 import {
   Bookmark, BookOpen, Compass, Plus, Trash2, RefreshCw, X, Award, AlertTriangle,
-  ArrowUpRight, CheckCircle2,
+  CheckCircle2,
 } from 'lucide-react';
 import { api } from '../lib/api';
 

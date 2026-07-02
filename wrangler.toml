@@ -223,6 +223,29 @@ zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/landing/*"
 zone_name  = "axal.vc"
+# Email security — serve /.well-known/security.txt (RFC 9116) from the Worker
+# assets binding on the apex. Without this exact route the path falls through to
+# Jekyll/GitHub Pages (no such file → 404) and Cloudflare Email Security flags
+# "Security.txt not configured". Mirrored in [[env.production.routes]] below.
+[[routes]]
+pattern    = "axal.vc/.well-known/security.txt"
+zone_name  = "axal.vc"
+# Task #15 — hashed SPA assets served by the Worker on the apex. This is the
+# load-bearing fix for the recurring post-login blank page. Worker-served app
+# routes (/studio, /login, …) return an index.html that references
+# build-specific hashed files under /assets/*. Those hashes change every build,
+# so when /assets/* fell through to GitHub Pages (a DIFFERENT docs/ build) they
+# 404'd and React never booted → blank page. Routing /assets/* to the Worker
+# makes it serve the SAME build's HTML and assets. Only /assets/* needs carving:
+# the static root files (favicons, manifest, logos) have STABLE names that
+# resolve identically on either host, so they intentionally stay on Pages to
+# keep the skew surface minimal. Old hashes are retained across builds
+# (scripts/build-frontend.mjs) so the apex root — whose index.html is served by
+# Pages and may briefly reference the PREVIOUS build's hashes — keeps working
+# during the deploy→Pages-catch-up window. Mirrored in [[env.production.routes]].
+[[routes]]
+pattern    = "axal.vc/assets/*"
+zone_name  = "axal.vc"
 
 # ---------- Static Assets (SPA) ----------
 # Task #36 — Worker Static Assets binding. The worker serves the
@@ -717,6 +740,14 @@ zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/share/deck/*"
 zone_name  = "axal.vc"
+# Task #15 — hashed SPA assets on the apex (see the top-level [[routes]] block
+# for the full rationale). Load-bearing fix for the post-login blank page: the
+# Worker's app-route index.html references build-specific /assets/* hashes that
+# 404'd when they fell through to a stale GitHub Pages build. Keep in lockstep
+# with the top-level block.
+[[env.production.routes]]
+pattern    = "axal.vc/assets/*"
+zone_name  = "axal.vc"
 # Task #37 — Refer & Earn. Mirrored into the top-level [[routes]] block too
 # (the block the live deploy actually binds). `/refer` was missing entirely;
 # `/admin/refer-earn` is also covered by axal.vc/admin/* above but listed for
@@ -754,6 +785,10 @@ pattern    = "axal.vc/landing"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/landing/*"
+zone_name  = "axal.vc"
+# Email security — mirror of the top-level /.well-known/security.txt route.
+[[env.production.routes]]
+pattern    = "axal.vc/.well-known/security.txt"
 zone_name  = "axal.vc"
 
 [env.production.vars]

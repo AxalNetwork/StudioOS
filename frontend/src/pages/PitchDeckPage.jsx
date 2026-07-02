@@ -14,9 +14,10 @@ import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 import { useAuth } from '../hooks/useAuthSync';
 import { useSpinoutDeckFields } from '../hooks/useSpinoutDeckFields';
 import UseOfFundsEditor from '../components/UseOfFundsEditor';
+import SpinoutSlideEditor from '../components/SpinoutSlideEditor';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
-import { spinoutHasRealPains, spinoutPreviewMeta as computeSpinoutPreviewMeta } from './spinoutPreview';
+import { spinoutPreviewMeta as computeSpinoutPreviewMeta } from './spinoutPreview';
 
 /**
  * Task #16 (DE) — Pitch Deck Builder rewrite.
@@ -769,11 +770,23 @@ export default function PitchDeckPage() {
                   </div>
                 </div>
                 {activeSlide && (
-                  <SlideEditor
-                    slide={activeSlide}
-                    onTitle={updateTitle}
-                    onField={updateField}
-                  />
+                  isSpinoutDeck ? (
+                    <SpinoutSlideEditor
+                      slide={activeSlide}
+                      fields={spinoutFields}
+                      projectId={projectId}
+                      onSaved={() => {
+                        setDeckDataReload((k) => k + 1);
+                        addToast('Saved — deck refreshed from your project', 'success');
+                      }}
+                    />
+                  ) : (
+                    <SlideEditor
+                      slide={activeSlide}
+                      onTitle={updateTitle}
+                      onField={updateField}
+                    />
+                  )
                 )}
               </div>
             </div>

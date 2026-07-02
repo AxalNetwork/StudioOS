@@ -14,14 +14,13 @@ from sqlmodel import Session, select
 
 from backend.app.database import get_session
 from backend.app.models.entities import (
-    User, ActivityLog, Document, DocumentStatus, Project, Founder, Partner,
+    User, Document, DocumentStatus, Project, Founder,
 )
 from backend.app.api.routes.admin import require_admin
 from backend.app.services.file_storage import (
     get_storage,
     store_contract_bytes,
     mint_signed_token,
-    verify_signed_token,
 )
 from backend.app.services.audit import log_audit, AuditAction
 

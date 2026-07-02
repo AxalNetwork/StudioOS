@@ -19,13 +19,15 @@ export default function CronTab() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [wsCheck, setWsCheck] = useState(null);
+  const [reembed, setReembed] = useState([]);
 
   const load = async () => {
     setBusy(true); setErr('');
     try {
-      const [cr, ws] = await Promise.allSettled([
+      const [cr, ws, re] = await Promise.allSettled([
         api.infraCronHistory({ trigger, limit: PAGE_SIZE, offset }),
         api.infraWSCheck(),
+        api.infraReembedMetrics(24),
       ]);
       if (cr.status === 'fulfilled') {
         setItems(cr.value.items || []);
@@ -33,6 +35,7 @@ export default function CronTab() {
         setTriggers(cr.value.triggers || []);
       }
       if (ws.status === 'fulfilled') setWsCheck(ws.value);
+      if (re.status === 'fulfilled') setReembed(re.value.items || []);
     } catch (e) {
       setErr(e?.message || 'Failed to load cron history');
     } finally { setBusy(false); }
@@ -59,6 +62,43 @@ export default function CronTab() {
           </div>
         ) : (
           <div className="text-xs text-gray-500">Loading WS health…</div>
+        )}
+      </div>
+
+      {/* Search re-index health (hourly axal-search sweep) */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+        <div className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Search re-index (last 24h)</div>
+        {reembed.length === 0 ? (
+          <div className="text-xs text-gray-500">No re-index activity recorded in the last 24h.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-gray-500 border-b border-gray-200 dark:border-gray-800">
+                <tr>
+                  <th className="text-left py-2 font-medium">Type</th>
+                  <th className="text-right font-medium">Enqueued</th>
+                  <th className="text-right font-medium">Failed</th>
+                  <th className="text-right font-medium">Skipped</th>
+                  <th className="text-right font-medium">Ticks</th>
+                  <th className="text-left font-medium pl-4">Last run</th>
+                </tr>
+              </thead>
+              <tbody className="text-gray-800 dark:text-gray-200">
+                {reembed.map(r => (
+                  <tr key={r.type} className="border-b border-gray-100 dark:border-gray-800">
+                    <td className="py-2 font-mono">{r.type}</td>
+                    <td className="text-right tabular-nums">{r.enqueued ?? 0}</td>
+                    <td className={`text-right tabular-nums ${Number(r.failed) > 0 ? 'text-red-700 font-semibold' : ''}`}>{r.failed ?? 0}</td>
+                    <td className={`text-right tabular-nums ${Number(r.skipped) > 0 ? 'text-amber-700' : ''}`}>{r.skipped ?? 0}</td>
+                    <td className="text-right tabular-nums text-gray-500">{r.ticks ?? 0}</td>
+                    <td className="text-gray-500 pl-4">
+                      {r.last_run_at ? new Date(r.last_run_at + (r.last_run_at.endsWith('Z') ? '' : 'Z')).toLocaleString() : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

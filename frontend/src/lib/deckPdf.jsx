@@ -20,7 +20,7 @@ function stripMarkdown(s) {
 export async function downloadDeckPdf(deck) {
   // Lazy import keeps @react-pdf/renderer out of the main bundle.
   const pdf = await import('@react-pdf/renderer');
-  const { Document, Page, Text, View, StyleSheet, Image, pdf: pdfFn, Font } = pdf;
+  const { Document, Page, Text, View, StyleSheet, Image, pdf: pdfFn } = pdf;
 
   const styles = StyleSheet.create({
     page: {

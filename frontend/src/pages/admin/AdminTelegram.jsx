@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Send, Plus, RefreshCw, Loader2, Trash2, Edit3, AlertTriangle, CheckCircle2,
   X, Eye, EyeOff, Wifi, Image as ImageIcon, Paperclip, Calendar, Sparkles,

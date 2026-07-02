@@ -1,5 +1,5 @@
 import React from 'react';
-import { Slide16x9, Editable, DeckProps, DeckData, v, BrandProvider, useBrandContext } from '../DeckBase';
+import { Slide16x9, Editable, DeckProps, v, BrandProvider, useBrandContext } from '../DeckBase';
 
 // ─────────────────────────────────────────────────────────────────
 // Kawasaki 10/20/30 — exactly 10 slides, one question per slide,

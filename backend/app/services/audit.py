@@ -73,7 +73,6 @@ def log_audit(
     for read-only events that aren't part of a write transaction (e.g.
     `contract.viewed`)."""
     actor_email = (actor.email if actor else None) or "system"
-    actor_name = (actor.name if actor else None) or actor_email
 
     payload: dict[str, Any] = {}
     if target_uid:

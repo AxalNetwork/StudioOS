@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Plus, Send, Check, X, AlertCircle, Search, Filter, Briefcase, Clock, DollarSign,
   ShieldCheck, FileText, Trash2, Edit3, ChevronRight, Inbox, Handshake,

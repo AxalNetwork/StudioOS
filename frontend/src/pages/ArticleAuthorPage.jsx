@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   FileText, Plus, RefreshCw, Loader2, Save, Send, ArrowLeft, ImageIcon,
-  CheckCircle2, Trash2, Eye, MessageSquare, ChevronDown, ChevronRight,
+  CheckCircle2, Eye, MessageSquare, ChevronDown, ChevronRight,
   Copy, ExternalLink, ShieldAlert, Clock, Upload, X,
 } from 'lucide-react';
 import { articles as api } from '../lib/api';

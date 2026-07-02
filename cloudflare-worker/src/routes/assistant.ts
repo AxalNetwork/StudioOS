@@ -350,13 +350,6 @@ interface AnthropicContentBlock {
   content?: string | Array<{ type: 'text'; text: string }>;
 }
 interface AnthropicMessage { role: 'user' | 'assistant'; content: string | AnthropicContentBlock[] }
-interface AnthropicResponse {
-  id: string;
-  model: string;
-  stop_reason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | string;
-  content: AnthropicContentBlock[];
-  usage: { input_tokens: number; output_tokens: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number };
-}
 
 async function anthropicCall(env: Env, opts: {
   model: string;

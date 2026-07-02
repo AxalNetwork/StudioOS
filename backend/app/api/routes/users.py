@@ -7,7 +7,6 @@ from backend.app.api.routes.auth import get_current_user
 from backend.app.services.pii import (
     serialize_user_safe,
     mask_email,
-    is_privileged_viewer,
 )
 from backend.app.services.access_policy import can_view_personal_contact
 

@@ -330,8 +330,9 @@ function buildPlaceholderContext(): Record<string, unknown> {
     let cur = root;
     for (let i = 0; i < parts.length - 1; i++) {
       const key = parts[i];
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
       if (typeof cur[key] !== 'object' || cur[key] == null) cur[key] = {};
-      cur = cur[key] as Record<string, unknown>;
+      cur = cur[key] as Record<string, unknown>; // codeql[js/prototype-polluting-function] -- keys come from the static LEGAL_MERGE_SCHEMA; __proto__/constructor/prototype skipped above
     }
     cur[parts[parts.length - 1]] = def.example;
   }

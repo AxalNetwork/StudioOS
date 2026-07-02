@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CheckCircle2, Loader2, Mail, FileText, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, Loader2, FileText, AlertTriangle } from 'lucide-react';
 import { api } from '../lib/api';
 
 const POLL_MS = 3000;

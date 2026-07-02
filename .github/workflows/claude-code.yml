@@ -57,7 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 1
 
@@ -69,7 +69,7 @@ jobs:
         run: bash scripts/check-anthropic-key.sh
 
       - name: Run Claude Code
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@ec7c223ff45a0763d3d5e530c74403d14f8ddd10 # v1
         with:
           # API-key auth path. The action reads the env var below.
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}

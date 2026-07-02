@@ -13,15 +13,20 @@ from backend.app.services.scoring import run_full_score
 from backend.app.services.use_of_funds import parse_use_of_funds_value, normalize_use_of_funds
 from backend.app.services.score_integrity import assert_no_reserved_fields
 from backend.app.api.routes.auth import get_current_user
-from backend.app.api.deps import require_admin, is_privileged, ensure_founder_access
-from backend.app.models.entities import UserRole
+from backend.app.api.deps import require_admin, is_privileged
+from backend.app.services.project_access import (
+    ensure_project_access,
+    member_project_ids,
+)
 from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
 
-def _ensure_can_edit(user: User, project: Project) -> None:
-    ensure_founder_access(user, project.founder_id)
+def _ensure_can_edit(user: User, project: Project, session: Session) -> None:
+    # Task #1 — owner OR accepted co-founder may edit project DATA; advisors
+    # are read-only; investors are never editors; admin/partner bypass.
+    ensure_project_access(user, project, session, write=True)
 
 
 def _spinout_deck_payload(project: Project, session: Session) -> dict:
@@ -296,7 +301,8 @@ def spinout_deck(
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    ensure_founder_access(user, project.founder_id)
+    # Task #1 — owner or co-founder may generate; advisors are read-only.
+    ensure_project_access(user, project, session, write=True)
     payload = _spinout_deck_payload(project, session)
     if preview == 1:
         return {
@@ -310,11 +316,19 @@ def spinout_deck(
 @router.get("/")
 def list_projects(status: str = None, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     stmt = select(Project).order_by(Project.created_at.desc())
-    # IDOR guard: founders may only see their own projects.
+    # IDOR guard: founders see their OWN projects + any they're an accepted
+    # member of (Task #1 — co-founder / advisor team membership).
     if not is_privileged(user):
-        if not user.founder_id:
+        member_ids = member_project_ids(session, user.id)
+        if not user.founder_id and not member_ids:
             return []
-        stmt = stmt.where(Project.founder_id == user.founder_id)
+        from sqlalchemy import or_
+        conds = []
+        if user.founder_id:
+            conds.append(Project.founder_id == user.founder_id)
+        if member_ids:
+            conds.append(Project.id.in_(member_ids))
+        stmt = stmt.where(or_(*conds))
     if status:
         stmt = stmt.where(Project.status == status)
     return session.exec(stmt).all()
@@ -325,8 +339,8 @@ def get_project(project_id: int, session: Session = Depends(get_session), user: 
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    # IDOR guard: founders may only read their own project.
-    ensure_founder_access(user, project.founder_id)
+    # Task #1 — owner, accepted member (co-founder/advisor), or privileged role.
+    ensure_project_access(user, project, session, write=False)
     founder = session.get(Founder, project.founder_id) if project.founder_id else None
     # Task #41 — surface the founder's *user* id so the LockedFounderCard
     # on the investor-side /deals view can resolve the NDA pair. Mirrors
@@ -605,7 +619,7 @@ def update_project(project_id: int, data: ProjectUpdate, session: Session = Depe
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    _ensure_can_edit(user, project)
+    _ensure_can_edit(user, project, session)
 
     update_data = data.model_dump(exclude_unset=True)
     # Founders may not change status, stage, or playbook week — only privileged roles.

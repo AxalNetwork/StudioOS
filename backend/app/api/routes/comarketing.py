@@ -24,8 +24,8 @@ import secrets
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field as PField, HttpUrl
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field as PField
 from sqlalchemy import func
 from sqlmodel import Session, select
 

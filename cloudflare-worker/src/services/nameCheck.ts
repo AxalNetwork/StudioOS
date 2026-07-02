@@ -227,7 +227,7 @@ function extractAnchors(html: string, hrefRe: RegExp): string[] {
     if (!hrefRe.test(m[1])) continue;
     const text = m[2]
       .replace(/<[^>]*>/g, ' ')
-      .replace(/&amp;/g, '&')
+      .replace(/&amp;/g, '&') // codeql[js/double-escaping] -- intentional entity normalization of scraped register HTML, not a security-sensitive escape
       .replace(/&#0?39;|&apos;/g, "'")
       .replace(/\s+/g, ' ')
       .trim();

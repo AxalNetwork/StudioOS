@@ -11,14 +11,14 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { BrandProvider, useBrandContext } from '../DeckBase';
+import { BrandProvider } from '../DeckBase';
 import {
   ResponsiveContainer,
   AreaChart, Area,
   LineChart, Line,
   BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip,
-  ReferenceLine, Legend,
+  ReferenceLine,
   ComposedChart,
 } from 'recharts';
 
@@ -708,18 +708,6 @@ const FunnelBars: React.FC<{ stages: { stage: string; v: number; conversion_pct?
     </div>
   );
 };
-
-const HiringPlanChart: React.FC<{ data: { role: string; count: number }[] }> = ({ data }) => (
-  <ResponsiveContainer width="100%" height={220}>
-    <BarChart data={data} layout="vertical" margin={{ left: 10, right: 24, top: 4, bottom: 4 }}>
-      <CartesianGrid horizontal={false} stroke={HAIRLINE} />
-      <XAxis type="number" tick={{ fontSize: 11, fill: SUBTLE, fontFamily: FONT_MONO }} stroke={HAIRLINE} />
-      <YAxis type="category" dataKey="role" tick={{ fontSize: 12, fill: INK, fontFamily: FONT }} stroke={HAIRLINE} width={120} />
-      <Tooltip content={<ChartTooltip />} cursor={{ fill: SURFACE_2 }} />
-      <Bar dataKey="count" fill={ACCENT} radius={[0, 6, 6, 0]} />
-    </BarChart>
-  </ResponsiveContainer>
-);
 
 // ─────────────────────────────────────────────────────────────────
 // Slides — 15 total
@@ -2076,7 +2064,6 @@ export const Deck_series_a_growth_app: React.FC<RegistryDeckProps> = ({ data, ed
 );
 
 const Deck_series_a_growth_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
-  const { accent: brandAccent } = useBrandContext();
   const seed: SeriesAData = (data && Object.keys(data).length > 0)
     ? mergeShape(SAMPLE_DATA, data as Record<string, any>)
     : SAMPLE_DATA;

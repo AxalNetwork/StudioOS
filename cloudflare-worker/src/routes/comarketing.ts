@@ -4,7 +4,7 @@
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import type { Env, User } from '../types';
+import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { ensureTier } from '../middleware/requireTier';
 import { isAdmin, isPartner, mapError, nowIso, newUid, requirePartnerProfile } from './_t13t14t15_helpers';
@@ -267,7 +267,7 @@ r.post('/track', async (c) => {
     }
     const referrer = c.req.header('referer') || c.req.header('referrer') || null;
     const uid = newUid();
-    const ins = await c.env.DB.prepare(
+    await c.env.DB.prepare(
       `INSERT INTO comarketing_attributions
          (uid, pitch_id, partner_id, event_kind, user_id, project_id, lead_email, referrer, landing_path, notes, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`

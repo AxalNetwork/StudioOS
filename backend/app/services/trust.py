@@ -30,7 +30,7 @@ import logging
 import os
 import time
 from datetime import datetime
-from typing import Any, Optional
+from typing import Optional
 
 from sqlmodel import Session, select
 
@@ -42,7 +42,6 @@ from backend.app.models.entities import (
     NDAAcceptance,
     Partner,
     User,
-    UserRole,
 )
 from backend.app.services.file_storage import get_storage
 

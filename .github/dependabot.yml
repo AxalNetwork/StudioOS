@@ -4,12 +4,17 @@ version: 2
 #  - npm (root) — wrangler + a few legacy deps
 #  - npm (frontend) — React/Vite/Tailwind SPA
 #  - npm (cloudflare-worker) — Hono + Workers types (PRODUCTION dep tree)
+#  - npm (cloudflare-worker-tail) — wrangler tail consumer (dev/deploy tooling)
 #  - pip (root) — FastAPI dev backend
 #  - github-actions — keep CI actions current
 #
 # Strategy: weekly cadence (low PR noise), grouped by ecosystem so security
 # patches don't get drowned out by minor bumps. Production deps (frontend +
 # worker) get higher PR limits than dev-only.
+#
+# Cooldown: every ecosystem waits 7 days after a release is published before
+# opening a bump PR, so freshly-cut (and occasionally yanked/broken) releases
+# have time to settle before they hit CI.
 
 updates:
   - package-ecosystem: github-actions
@@ -17,6 +22,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       actions:
@@ -28,6 +35,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       root-npm:
@@ -40,6 +49,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     groups:
       react:
@@ -59,6 +70,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     groups:
       worker:
@@ -69,11 +82,26 @@ updates:
         update-types: ['minor', 'patch']
     labels: ['deps', 'worker', 'production']
 
+  - package-ecosystem: npm
+    directory: /cloudflare-worker-tail
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      tail-worker:
+        patterns: ['*']
+    labels: ['deps', 'worker']
+
   - package-ecosystem: pip
     directory: /
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       python:

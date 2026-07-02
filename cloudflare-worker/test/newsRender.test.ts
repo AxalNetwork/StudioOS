@@ -46,7 +46,7 @@ test('an indented heading still breaks the preceding paragraph', () => {
 // Task #4 — image URL policy: root-relative accepted, protocol-relative rejected
 test('root-relative image URL is accepted in renderMarkdown', () => {
   const html = renderMarkdown('![alt](/api/articles/1/image/img-abc.png)');
-  assert.match(html, /<img alt="alt" src="\/api\/articles\/1\/image\/img-abc\.png" loading="lazy" \/>/);
+  assert.match(html, /^<p><img alt="alt" src="\/api\/articles\/1\/image\/img-abc\.png" loading="lazy" \/><\/p>$/);
 });
 
 test('protocol-relative image URL is rejected in renderMarkdown', () => {
@@ -59,7 +59,7 @@ test('protocol-relative image URL is rejected in renderMarkdown', () => {
 
 test('root-relative link is accepted, protocol-relative link is rejected', () => {
   const html = renderMarkdown('[text](/about) [bad](//evil.com)');
-  assert.match(html, /<a href="\/about" rel="noopener nofollow" target="_blank">text<\/a>/);
+  assert.match(html, /^<p><a href="\/about" rel="noopener nofollow" target="_blank">text<\/a> bad<\/p>$/);
   assert.match(html, /bad/);
   assert.doesNotMatch(html, /evil\.com/);
 });

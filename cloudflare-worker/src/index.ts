@@ -89,7 +89,7 @@ import funds from './routes/funds';
 import liquidity from './routes/liquidity';
 import email from './routes/email';
 import pipeline from './routes/pipeline';
-import search from './routes/search';
+import search, { ensureAcademySchema } from './routes/search';
 import kyc from './routes/kyc';
 import esign from './routes/esign';
 import trust from './routes/trust';
@@ -117,7 +117,7 @@ import './integrations/providers/slack';
 import { crunchbaseFetch as _registerCrunchbase } from './integrations/providers/crunchbase';
 void _registerCrunchbase;
 // Task #6 (DG) — Stripe provider. Side-effect import so registerProvider() runs at boot.
-import { syncAllStripeIntegrations, handleStripeConnectEvent } from './integrations/providers/stripe';
+import './integrations/providers/stripe';
 import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
 import referEarn from './routes/refer_earn';
@@ -204,8 +204,10 @@ import adminStripe from './routes/admin_stripe';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 import payments from './routes/payments';
 import { Jobs } from './models/jobs';
+import { writeCronRunHistory } from './util/cronHistory';
+import { enqueueReembedChunks } from './util/reembedSweep';
+import { rebuildUsersRoleCheckForInvestor } from './util/usersRoleRebuild';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
-import { CRON_TRIGGERS } from './routes/infra';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
 import { securityHeadersMiddleware } from './middleware/securityHeaders';
@@ -214,6 +216,11 @@ import { lastActiveMiddleware } from './middleware/lastActive';
 import { requireCfAccess } from './middleware/cfAccess';
 import filesRoutes from './routes/files';
 import ddRoutes from './routes/dd';
+import ic from './routes/ic';
+import lpReports from './routes/lp_reports';
+import portfolioUpdates from './routes/portfolio_updates';
+import positions from './routes/positions';
+import contacts from './routes/contacts';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -360,6 +367,53 @@ app.get('/api/health', (c) =>
   }),
 );
 
+// Task #10 — Client error sink. Captures sanitized browser-side errors (render
+// throws, failed loads, 401-redirects) into the Worker logs so a production-only
+// failure like the passkey → /studio blank leaves a trace that's retrievable
+// via `wrangler tail` / deployment logs (grep for `[client-error]`). The
+// frontend's reportError() beacons here WITHOUT credentials, so the request
+// carries no auth cookie (hence no CSRF requirement), no token, and no PII.
+// Best-effort: it never blocks, always returns 204, and the body is size-capped
+// before parsing. Abuse is bounded by the per-IP rate-limit buckets.
+app.post('/api/client-error', async (c) => {
+  try {
+    const raw = await c.req.text();
+    // Hard size cap — drop anything implausibly large before parsing.
+    if (raw && raw.length <= 8192) {
+      let body: Record<string, unknown> | null = null;
+      try {
+        const parsed = JSON.parse(raw);
+        body = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+      } catch {
+        body = null;
+      }
+      if (body) {
+        const clip = (v: unknown, n: number) => (v == null ? undefined : String(v).slice(0, n));
+        const entry = {
+          scope: clip(body.scope, 200) || 'unknown',
+          level: body.level === 'warn' ? 'warn' : 'error',
+          name: clip(body.name, 100),
+          message: clip(body.message, 500),
+          path: clip(body.path, 200),
+          ts: typeof body.ts === 'number' ? body.ts : Date.now(),
+          stack: clip(body.stack, 2000),
+          // Deliberately NO IP. The client already redacts secrets/PII from the
+          // free-form fields above; we keep only the user-agent as operational
+          // telemetry (it's what lets us tell "this blank only happens on Safari
+          // 17" from "this is universal"). Cloudflare's edge logs still retain
+          // the source IP if it's ever needed for an abuse investigation.
+          ua: clip(c.req.header('user-agent'), 200),
+        };
+        // One structured line so it's greppable in deployment logs.
+        console.error('[client-error]', JSON.stringify(entry));
+      }
+    }
+  } catch {
+    /* the telemetry sink must never throw */
+  }
+  return c.body(null, 204);
+});
+
 // Real-time WebSocket fan-out (Durable Objects). Must stay at the edge.
 app.route('/api', realtime);
 
@@ -457,6 +511,8 @@ const STUDIO_PREFIXES = [
   '/api/watchlist',
   '/api/antiportfolio',
   '/api/partner-office-hours',
+  '/api/lp-reports',
+  '/api/positions',
 ];
 for (const p of STUDIO_PREFIXES) {
   app.use(p, requireTier('studio'));
@@ -471,6 +527,7 @@ const INVESTOR_PRO_PREFIXES = [
   '/api/pipeline',
   '/api/deals',
   '/api/calendar',
+  '/api/ic',
 ];
 for (const p of INVESTOR_PRO_PREFIXES) {
   app.use(p, requireInvestorTier('professional'));
@@ -602,6 +659,18 @@ app.route('/api/infra', infra);
 // itself is the authorisation. See services/signedDownload.ts.
 app.route('/api/files', filesRoutes);
 app.route('/api/dd', ddRoutes);
+// Investor lifecycle features (IC decisions, LP reporting, portfolio-company
+// update inbox, cap-table/ownership). Gating: /api/ic is professional-tier
+// (INVESTOR_PRO_PREFIXES); /api/lp-reports + /api/positions sit in
+// STUDIO_PREFIXES to keep founders out (admin/investor bypass); the dual-
+// audience /api/portfolio-updates enforces access per-role in-route.
+app.route('/api/ic', ic);
+app.route('/api/lp-reports', lpReports);
+app.route('/api/portfolio-updates', portfolioUpdates);
+app.route('/api/positions', positions);
+// Contacts — unified inbound relationship hub (founder CRM). Role-gated
+// in-route (founder/admin); no paywall prefix so it's core-available.
+app.route('/api/contacts', contacts);
 app.route('/api/funds', funds);
 app.route('/api/liquidity', liquidity);
 app.route('/api/email', email);
@@ -819,51 +888,15 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
     }
     // Phase 0.1 — relax the legacy users.role CHECK constraint that excluded
     // 'investor'. SQLite/D1 has no ALTER TABLE DROP/MODIFY CONSTRAINT, so on
-    // existing prod DBs we must rebuild the table. We use the canonical DDL
-    // from sql/schema.sql (PK/UNIQUE/CHECK/FK/defaults preserved) plus an
-    // explicit recreate of the indexes — no CTAS/constraint-stripping shortcut
-    // (architect blocking-fix: preserve all integrity constraints).
+    // existing prod DBs we must rebuild the table. To avoid drifting from
+    // schema.sql + every migration that has touched `users`, we derive the new
+    // table DDL from the LIVE definition (sqlite_master) and rewrite ONLY the
+    // table name (to a temp) and the role CHECK (to also accept 'investor').
+    // Every column, default, FK, UNIQUE/CHECK and (replayed) index is preserved
+    // — nothing is hardcoded, so no founder/investor/subscription/PII/linkedin/
+    // public-id data or index is lost the first time the rebuild commits.
     try {
-      const tbl = await env.DB.prepare(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
-      ).first<{ sql: string }>();
-      const ddl = (tbl?.sql || '');
-      const needsRebuild = ddl.includes("CHECK") && ddl.includes("'partner'") && !ddl.includes("'investor'");
-      if (needsRebuild) {
-        const NEW_USERS_DDL = `CREATE TABLE users_new (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
-          email TEXT UNIQUE NOT NULL,
-          name TEXT NOT NULL,
-          role TEXT NOT NULL DEFAULT 'founder' CHECK (role IN ('admin', 'founder', 'partner', 'investor')),
-          investor_id INTEGER REFERENCES investors(id),
-          password_hash TEXT,
-          founder_id INTEGER REFERENCES founders(id),
-          partner_id INTEGER REFERENCES partners(id),
-          is_active INTEGER NOT NULL DEFAULT 1,
-          email_verified INTEGER NOT NULL DEFAULT 0,
-          verification_token TEXT,
-          verification_token_expires TEXT,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        )`;
-        // Build the column list dynamically from the OLD table so we copy
-        // only columns that exist on both sides (handles partial-migration
-        // states). investor_id may or may not yet exist on the source.
-        const oldCols = (cols.results || []).map(r => r.name);
-        const newCols = ['id','uid','email','name','role','investor_id','password_hash','founder_id','partner_id','is_active','email_verified','verification_token','verification_token_expires','created_at'];
-        const sharedCols = newCols.filter(c => oldCols.includes(c));
-        const colList = sharedCols.join(', ');
-        await env.DB.batch([
-          env.DB.prepare("PRAGMA foreign_keys=OFF"),
-          env.DB.prepare(NEW_USERS_DDL),
-          env.DB.prepare(`INSERT INTO users_new (${colList}) SELECT ${colList} FROM users`),
-          env.DB.prepare("DROP TABLE users"),
-          env.DB.prepare("ALTER TABLE users_new RENAME TO users"),
-          env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)"),
-          env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_users_uid ON users(uid)"),
-          env.DB.prepare("PRAGMA foreign_keys=ON"),
-        ]);
-      }
+      await rebuildUsersRoleCheckForInvestor(env);
     } catch (e) {
       console.warn('[boot] users role-CHECK rebuild skipped:', (e as Error).message);
     }
@@ -934,9 +967,7 @@ export default {
       let cronSummary: string[] = [];
       let cronError: string | null = null;
 
-      // Map the actual event cron expression to a named trigger.
       const eventCron = (event as any).cron || '* * * * *';
-      const triggerName = CRON_TRIGGERS.find(t => t.expr === eventCron)?.name || eventCron;
       // We store the raw cron expression as trigger_name so the DB last-run
       // map can be keyed by expr (consistent across the cron-history endpoint
       // and the CRON_TRIGGERS array). The display name is resolved at read time.
@@ -1164,8 +1195,17 @@ export default {
         // search index within ~1h. Watermark stored in RATE_LIMITS KV
         // (axal-search:watermark:<type>). Best-effort — failures here
         // never raise; the next tick retries.
-        if (now.getUTCMinutes() === 0) {
+        //
+        // Staggered to minute 7 (not minute 0) so this heavy sweep doesn't
+        // collide with the top-of-hour burst of other minute-0 / hour-boundary
+        // cron work, which together saturated D1 ("D1 DB is overloaded").
+        if (now.getUTCMinutes() === 7) {
           try {
+            // Defense-in-depth: guarantee academy_lessons exists before the
+            // per-type SELECT below (a migration also creates it, but a warm
+            // isolate that booted on a pre-migration D1 would still 404). The
+            // per-type loop also skips a genuinely-missing table gracefully.
+            await ensureAcademySchema(env);
             const { ALL_ENTITY_TYPES } = await import('./services/vectorize');
             const TABLE_BY_TYPE: Record<string, string> = {
               project: 'projects', deal: 'deals', founder: 'founders',
@@ -1173,7 +1213,25 @@ export default {
               academy_lesson: 'academy_lessons', mentor: 'mentors',
               investor: 'users',
             };
-            const PER_TYPE_LIMIT = 200;
+            // Lowered from 200 → 100 and batched: at most 2 batched INSERTs
+            // per type instead of up to 200 sequential single-row writes.
+            const PER_TYPE_LIMIT = 100;
+            const ENQUEUE_CHUNK = 50;
+            // Persist per-type sweep counts to system_metrics so the admin Cron
+            // tab can show whether the hourly re-index is keeping up, instead of
+            // having to grep Worker tail logs. Best-effort — never throws, never
+            // blocks the sweep. Idle types (nothing enqueued/failed/skipped) are
+            // not recorded, to avoid bloating system_metrics with zero rows.
+            const recordReembed = async (type: string, enqueued: number, failed: number, skipped: number) => {
+              if (enqueued === 0 && failed === 0 && skipped === 0) return;
+              try {
+                await env.DB.prepare(
+                  `INSERT INTO system_metrics (metric_name, value, labels) VALUES ('reembed', ?, ?)`,
+                ).bind(enqueued, JSON.stringify({ type, enqueued, failed, skipped })).run();
+              } catch (e) {
+                console.error('[cron] reembed metric write failed', (e as Error).message);
+              }
+            };
             for (const type of ALL_ENTITY_TYPES) {
               const table = TABLE_BY_TYPE[type];
               if (!table) continue;
@@ -1193,31 +1251,37 @@ export default {
                   : type === 'partner'
                   ? `id > ? AND role = 'partner' ORDER BY id ASC LIMIT ?`
                   : `id > ? ORDER BY id ASC LIMIT ?`;
-                const rows = await env.DB.prepare(
-                  `SELECT id FROM ${table} WHERE ${where}`,
-                ).bind(since, PER_TYPE_LIMIT).all<{ id: number }>();
+                let rows;
+                try {
+                  rows = await env.DB.prepare(
+                    `SELECT id FROM ${table} WHERE ${where}`,
+                  ).bind(since, PER_TYPE_LIMIT).all<{ id: number }>();
+                } catch (e) {
+                  // Only `academy_lessons` is an optional/lazily-created table:
+                  // skip it quietly if genuinely absent. A `no such table` on
+                  // any CORE table is a real schema problem and must still
+                  // surface as a cron error rather than be silently swallowed.
+                  if (type === 'academy_lesson' && /no such table/i.test((e as Error).message)) {
+                    console.info(`[cron] axal-search re-embed type=${type} skipped — table ${table} absent`);
+                    await recordReembed(type, 0, 0, 1);
+                    continue;
+                  }
+                  throw e;
+                }
                 const ids = (rows.results || []).map((r) => Number(r.id));
                 if (!ids.length) continue;
-                // Only advance the watermark to the highest *successfully*
-                // enqueued ID. If an enqueue fails partway through, we
-                // stop advancing so the next tick retries the missed
-                // tail rather than silently dropping rows.
-                let lastOk = 0;
-                let failed = 0;
-                for (const id of ids) {
-                  try {
-                    await Jobs.enqueue(env, 'embed_entity', { type, id });
-                    lastOk = id;
-                  } catch (e) {
-                    failed += 1;
-                    console.error(`[cron] axal-search enqueue failed type=${type} id=${id}`, (e as Error).message);
-                    break;
-                  }
-                }
+                // Enqueue in batched chunks (one D1 round-trip per chunk).
+                // Advance the watermark only to the highest *successfully*
+                // enqueued ID: if a chunk fails, stop so the next tick
+                // retries the missed tail rather than silently dropping rows.
+                const { lastOk, okCount, failed } = await enqueueReembedChunks(
+                  env, type, ids, since, ENQUEUE_CHUNK,
+                );
                 if (lastOk > since) {
                   try { await env.RATE_LIMITS.put(wmKey, String(lastOk), { expirationTtl: 90 * 86400 }); } catch {}
                 }
-                console.info(`[cron] axal-search re-embed type=${type} ok=${ids.indexOf(lastOk) + 1} failed=${failed} watermark=${lastOk || since}`);
+                console.info(`[cron] axal-search re-embed type=${type} ok=${okCount} failed=${failed} watermark=${lastOk}`);
+                await recordReembed(type, okCount, failed, 0);
               } catch (e) {
                 console.error(`[cron] axal-search re-embed ${type} failed`, e);
               }
@@ -1419,20 +1483,16 @@ export default {
         cronError = e?.message || 'cron batch error';
         console.error('[cron] unhandled batch error', e);
       } finally {
-        // Task #7 (IE) — persist cron run summary to D1.
+        // Task #7 (IE) — persist cron run summary to D1. The retry-on-overload
+        // INSERT lives in util/cronHistory so the scheduled handler's final
+        // write is exercised end-to-end by cron_history_write.test.ts.
         try {
-          const cronFinishedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
-          await env.DB.prepare(
-            `INSERT INTO cron_run_history (trigger_name, started_at, finished_at, status, summary, error)
-             VALUES (?, ?, ?, ?, ?, ?)`
-          ).bind(
-            triggerKey,
-            cronStartedAt,
-            cronFinishedAt,
-            cronError ? 'failed' : 'completed',
-            cronSummary.join(' | ') || null,
+          await writeCronRunHistory(env, {
+            triggerName: triggerKey,
+            startedAt: cronStartedAt,
             cronError,
-          ).run();
+            summary: cronSummary,
+          });
         } catch (dbErr) {
           console.error('[cron] cron history write failed', dbErr);
         }

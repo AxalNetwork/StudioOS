@@ -46,7 +46,6 @@ interface SyncRow {
  * connected calendar (each user has their own google_oauth_tokens row).
  */
 async function attendeeUserIds(env: Env, ev: CalendarEvent): Promise<number[]> {
-  const sql = getSQL(env);
   const emails = new Set<string>();
   if (ev.organizer_email) emails.add(ev.organizer_email.toLowerCase());
   for (const a of ev.attendees) if (a.email) emails.add(a.email.toLowerCase());

@@ -28,9 +28,10 @@ on:
 permissions:
   contents: read
 
+# Non-secret config only. Cloudflare creds are scoped to the individual
+# wrangler steps that consume them (Export / Upload / heartbeat) so they
+# aren't exposed to every step in the job.
 env:
-  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
   TARGET_DB: ${{ github.event.inputs.target_db || 'studioos-db' }}
   BACKUP_BUCKET: studioos-backups
 
@@ -38,9 +39,39 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      - uses: actions/setup-node@v6
+      - name: Preflight — assert required secrets are set
+        # Runs BEFORE wrangler install so failures are instant and actionable.
+        # Secrets are scoped to this step's env: (not hoisted to job level).
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          MISSING=()
+          if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then
+            MISSING+=("CLOUDFLARE_API_TOKEN")
+          fi
+          if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
+            MISSING+=("CLOUDFLARE_ACCOUNT_ID")
+          fi
+          if [[ ${#MISSING[@]} -gt 0 ]]; then
+            echo "::error::Required repo secret(s) are missing or empty: ${MISSING[*]}"
+            echo ""
+            echo "These must be set as REPOSITORY secrets (not environment-scoped):"
+            echo "  Settings → Secrets and variables → Actions → New repository secret"
+            echo ""
+            echo "Required token scopes: D1 export/read + R2 object write."
+            echo "See .github/workflows/README.md for the full triage guide."
+            exit 1
+          fi
+          # Non-blocking sanity check: account ID should be 32 lowercase hex chars.
+          if ! [[ "${CLOUDFLARE_ACCOUNT_ID}" =~ ^[0-9a-f]{32}$ ]]; then
+            echo "::warning::CLOUDFLARE_ACCOUNT_ID does not look like a 32-char hex string ('${CLOUDFLARE_ACCOUNT_ID:0:6}…'). Wrangler may reject it. Verify the value in repo Settings → Secrets."
+          fi
+          echo "Preflight OK — both secrets are present."
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: '22'
 
@@ -55,17 +86,28 @@ jobs:
           echo "key=d1/backup-${DATE}.sql"   >> "$GITHUB_OUTPUT"
 
       - name: Export D1 → SQL
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Pass step outputs via env (never interpolate ${{ … }} straight into
+          # the run: shell — keeps these blocks injection-safe and consistent).
+          BACKUP_FILENAME: ${{ steps.name.outputs.filename }}
         run: |
           wrangler d1 export "${TARGET_DB}" \
             --remote \
-            --output "${{ steps.name.outputs.filename }}"
-          ls -lh "${{ steps.name.outputs.filename }}"
+            --output "${BACKUP_FILENAME}"
+          ls -lh "${BACKUP_FILENAME}"
 
       - name: Upload to R2 (studioos-backups)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BACKUP_KEY: ${{ steps.name.outputs.key }}
+          BACKUP_FILENAME: ${{ steps.name.outputs.filename }}
         run: |
           wrangler r2 object put \
-            "${BACKUP_BUCKET}/${{ steps.name.outputs.key }}" \
-            --file "${{ steps.name.outputs.filename }}" \
+            "${BACKUP_BUCKET}/${BACKUP_KEY}" \
+            --file "${BACKUP_FILENAME}" \
             --content-type 'application/sql' \
             --remote
 
@@ -73,14 +115,19 @@ jobs:
         # Distinct key (`heartbeat-d1.json`) so the worker's KV
         # heartbeat at `heartbeat-kv.json` can't mask a stale D1 backup
         # and vice-versa. Only written AFTER the R2 put succeeds.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BACKUP_KEY: ${{ steps.name.outputs.key }}
+          BACKUP_FILENAME: ${{ steps.name.outputs.filename }}
         run: |
           cat > heartbeat-d1.json <<EOF
           {
             "at": "$(date -u +%FT%TZ)",
             "source": "gha",
             "kind": "d1",
-            "key": "${{ steps.name.outputs.key }}",
-            "size_bytes": $(stat -c%s "${{ steps.name.outputs.filename }}")
+            "key": "${BACKUP_KEY}",
+            "size_bytes": $(stat -c%s "${BACKUP_FILENAME}")
           }
           EOF
           wrangler r2 object put \

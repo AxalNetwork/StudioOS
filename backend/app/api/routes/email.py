@@ -18,7 +18,7 @@ import json
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select
+from sqlmodel import Session
 from pydantic import BaseModel, Field
 
 from backend.app.database import get_session
@@ -116,7 +116,7 @@ def _resolve_referral_for(user: User, session: Session) -> tuple[str, str]:
     if not code:
         # Fallback deterministic code so non-partner users can still invite.
         import hashlib
-        h = hashlib.sha1(f"user:{user.id}:{user.email}".encode()).hexdigest().upper()
+        h = hashlib.sha1(f"user:{user.id}:{user.email}".encode(), usedforsecurity=False).hexdigest().upper()
         code = f"AXAL-{h[:8]}"
     import os
     base = os.environ.get("APP_URL", "https://axal.vc").rstrip("/")

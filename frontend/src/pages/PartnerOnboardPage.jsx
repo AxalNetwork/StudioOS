@@ -70,8 +70,8 @@ export default function PartnerOnboardPage() {
   const [errorState, setErrorState] = useState(null);
   const [invitation, setInvitation] = useState(null);
   const [adminName, setAdminName] = useState('Axal VC');
-  const [existingProfile, setExistingProfile] = useState(null);
-  const [existingDeal, setExistingDeal] = useState(null);
+  const [, setExistingProfile] = useState(null);
+  const [, setExistingDeal] = useState(null);
 
   // chat state
   const [chatTurns, setChatTurns] = useState([]); // [{role:'bot'|'user', text}]
@@ -170,26 +170,6 @@ export default function PartnerOnboardPage() {
   }, [chatTurns.length]);
 
   // -------- Chat send handler --------
-  const profileFromTurns = useCallback(() => {
-    const out = {};
-    let qIdx = 0;
-    for (const t of chatTurns) {
-      if (t.role !== 'user') continue;
-      if (qIdx >= chatQuestions.length) break;
-      const def = chatQuestions[qIdx];
-      if (t.text && t.text.toLowerCase() !== 'skip') {
-        if (def.numeric) {
-          const n = Number(String(t.text).replace(/[^\d.]/g, ''));
-          if (Number.isFinite(n) && n > 0) out[def.key] = Math.floor(n);
-        } else {
-          out[def.key] = t.text.trim();
-        }
-      }
-      qIdx += 1;
-    }
-    return out;
-  }, [chatTurns]);
-
   const sendMessage = async (override) => {
     // Accept an explicit override so callers like skipQuestion can pass
     // 'skip' synchronously instead of relying on setState+setTimeout

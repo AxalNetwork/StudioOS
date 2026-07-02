@@ -339,7 +339,7 @@ matches.post('/score', async (c) => {
   let body: any;
   try { body = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
   if (!body || typeof body !== 'object') return c.json({ error: 'Body must be an object' }, 400);
-  const { score_type, project_id, target_user_id } = body;
+  const { score_type, project_id } = body;
   if (!['deal_flow', 'co_invest', 'referral'].includes(score_type)) return c.json({ error: 'Invalid score_type' }, 400);
 
   const sql = getSQL(c.env);
@@ -374,22 +374,6 @@ function safeJsonObject(s: any): Record<string, unknown> {
 function safeJsonNumber(s: any, def: number): number {
   const n = typeof s === 'number' ? s : parseFloat(String(s));
   return Number.isNaN(n) ? def : n;
-}
-
-// Cosine similarity of two dimension-score maps.
-function cosineSimilarityVectors(a: Record<number, number>, b: Record<number, number>): number {
-  let dot = 0, na = 0, nb = 0;
-  const ids = new Set<number>([...Object.keys(a).map(Number), ...Object.keys(b).map(Number)]);
-  for (const id of ids) {
-    const av = a[id] || 0;
-    const bv = b[id] || 0;
-    dot += av * bv;
-    na += av * av;
-    nb += bv * bv;
-  }
-  const denom = Math.sqrt(na) * Math.sqrt(nb);
-  if (denom === 0) return 0;
-  return dot / denom;
 }
 
 // Normalize a ticket band to a midpoint dollar value.

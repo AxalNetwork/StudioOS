@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Briefcase, DollarSign, Users, Scale, ShieldCheck, Plus, Loader2, Brain, X, ChevronRight, Sparkles, RefreshCw, Zap, ChevronDown } from 'lucide-react';
+import { Briefcase, DollarSign, Users, Scale, ShieldCheck, Plus, Loader2, Brain, X, Sparkles, RefreshCw, Zap, ChevronDown } from 'lucide-react';
 import { api } from '../lib/api';
 
 const TYPE_META = {
@@ -28,7 +28,6 @@ export default function StudioOpsPage() {
   };
   useEffect(() => { reload(); }, []);
 
-  const grouped = TASK_STATUSES.reduce((acc, s) => (acc[s] = 0, acc), {});
   Object.values(TYPE_META).forEach(() => {});
 
   const byType = {};

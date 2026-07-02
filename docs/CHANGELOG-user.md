@@ -5,6 +5,265 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New investor tools: IC decisions, LP reporting, company updates and cap tables
+
+Investors have four new areas in the sidebar. Under **Commit**, **IC Decisions**
+lets you record an investment decision — memo, terms, committee votes and the
+final call — in one place. Under **Support**, **Company Updates** collects the
+progress reports your portfolio founders submit, **Cap Table** shows each
+company's rounds and your ownership over time, and **LP Reporting** lets you
+draft and publish quarterly fund reports for your LPs. Founders can submit their
+own company updates from the same area.
+
+---
+
+## A founder menu that follows your journey
+
+The founder left-hand menu is now organised around the stages of building a
+venture, so it's quicker to find what you need at each step:
+
+- **Build** — your Execution hub, Studio Ops, Metrics, Brand & Landing, and Spin-Outs
+- **Validate** — Customer Discovery, Needs Board, Service Catalogue, AI Advisory,
+  finding a mentor or co-founder, and your Network
+- **Raise** — Pitch Deck, Financial Model, Cap Table, Legal & Capital, Incorporate,
+  Co-Founder Agreement, Compliance, and the 83(b) Tracker
+- **Launch** — Events, Co-Marketing, and Articles
+- **More** and **Account** hold everything else — Wellbeing, Refer & Earn,
+  Payouts, your Trust Center, identity verification, profile, support and settings
+
+A few things are now easier to reach that weren't in the menu before — **Co-Marketing**,
+**identity verification**, and your **profile**. Your company-health view now lives inside
+**Metrics**, and the old separate "Founder Portal" link has been folded into your home
+page (**Studio**). Nothing was taken away — every page still opens where it did before,
+just better grouped. (Founders only; other roles are unchanged.)
+
+---
+
+## Fixed: a blank page after signing in
+
+Some people occasionally saw a blank screen right after logging in. That's now
+fixed — the app and the files it needs to load are served together, so the page
+renders reliably every time you sign in or open a link directly.
+
+## Your whole Execution page, all on one screen
+
+The founder **Execution** page now shows your **Projects**, **Pipeline Board**
+and **Roadmap** together on a single page — no more switching tabs to see one at
+a time. Scroll down and each area is clearly labelled, with everything working
+just as before: add and open projects, drag deals between stages and vote on
+them, and create, move or edit your OKRs. Opening a project still takes you to
+its full project page. (Founders only; other roles are unchanged.)
+
+---
+
+## One "Execution" home for your Projects, Board and Roadmap
+
+Founders now have a single **Execution** item in the sidebar in place of the
+separate Projects, Pipeline Board and Roadmap links. Open it and switch between
+three views — **Projects**, **Board** and **Roadmap** — right at the top of the
+page. Each view has its own shareable link, and the back button moves between
+them, so nothing is lost — it's just quicker to get to. Opening a project still
+takes you to its full project page. (Founders only; other roles are unchanged.)
+
+---
+
+## A clearer order for the investor Legal & Compliance menu
+
+The investor **Legal & Compliance** menu now reads top-to-bottom in the order
+that matches how you actually work: **Trust Center** first (your overview and
+score), then **Identity Verification**, then **Due Diligence**, and finally
+**Legal & Capital Engine** (renamed from "Legal & Capital"). Every page still
+opens exactly where it did before.
+
+---
+
+## Your Portfolio menu, now in four clear sections
+
+The investor menu's Portfolio pages are now split into four tidy sections so it's
+obvious where each kind of work lives:
+
+- **Fund Overview** — Capital & Investment Ops and VC Funds
+- **Portfolio Health** — Portfolio Health and Risk Matrix
+- **Fund Modeling** — Reserve Allocation and Exit Waterfall
+- **Liquidity** — Liquidity & Exits
+
+Risk Matrix now sits under Portfolio Health, and the "Scoring & Risk" section is
+simply called **Scoring**. Nothing was removed — every page opens exactly where
+it did before, just easier to find.
+
+---
+
+## A clearer investor menu
+
+The investor left-hand menu is now easier to scan. The long "Deal Flow" list has
+been split into four tidy, collapsible sections — Pipeline, Scoring & Risk,
+Signals, and Journal — so related pages sit together. Nothing was removed: every
+page you had before is still there, just better grouped.
+
+---
+
+## Pitch deck template counts are now accurate
+
+The "Axal VC Spin-Out" template card was still showing an incorrect slide
+count even after a previous fix. The number is now fully correct — both in
+the template library list and in the preview — because the backend was
+updated to match the actual 11-slide deck.
+
+## Waitlist form works for anyone, even when you're signed in
+
+If you previewed your landing page while logged into the dashboard and tried to
+join the waitlist, you'd see a "CSRF token missing" error instead of the success
+message. The form now works for both visitors and signed-in users.
+
+## Template library shows the right slide count
+
+The "Axal VC Spin-Out" template card used to say 9 slides, but the actual deck
+has 11. The label is now correct.
+
+## No more blank screens after signing in
+
+If something went wrong right after you signed in, you could land on a blank
+white page with nothing to do but refresh. Now, if a page can't load, you'll
+always see a clear message with a "Try again" button instead of an empty screen
+— and behind the scenes we capture what went wrong so we can fix it quickly.
+
+---
+
+## Admins can see search index health at a glance
+
+The admin Cron view now has a "Search re-index" panel showing, for each kind of
+content, how many items were refreshed into search in the last 24 hours — and
+flags anything that failed or was skipped. It's an easy way to confirm new
+content is showing up in search and to spot a backlog early.
+
+---
+
+## A simpler, tidier sidebar
+
+We've streamlined the left-hand menu so it's quicker to find your way around.
+Each role now has fewer, broader sections, with a single "More" group at the
+bottom for the advanced or occasional pages. Nothing was taken away — every page
+you could reach before is still there, just better organised — so there's less
+to scan and a shorter learning curve.
+
+---
+
+## Replies to your network invites now come straight to you
+
+When you invite people from your network (Refer & Earn), your invitation now
+sets your own email as the reply address — so if someone hits "Reply", their
+message lands in your inbox instead of an unmonitored mailbox. The invite still
+comes from Axal's verified address (shown as "{your name} via Axal StudioOS")
+so it keeps landing reliably. This applies to both your first invite and any
+reminders you send.
+
+---
+
+## The "Import from Stripe" button now always tells you exactly what happened
+
+We added behind-the-scenes safeguards so the Import-from-Stripe button keeps
+giving you a clear, specific message every time — whether Stripe isn't connected
+yet, has no billing data to import, hits a temporary Stripe error, or imports
+successfully. These checks make sure a future update can't accidentally turn one
+of those friendly messages into a confusing raw error or a false "success".
+
+---
+
+## No more misleading $0 when Stripe has nothing to import
+
+If you click "Import from Stripe" but your connected Stripe account doesn't have
+any active subscriptions yet, we'll let you know there's no billing data to
+import — and we no longer record a misleading $0 entry in your metrics history.
+Once you have real subscriptions, importing works exactly as before.
+
+---
+
+## Your logo now shows in your landing page's nav and footer
+
+When you set a logo for a project, it now shows up in the top navigation bar and
+again down in the footer of your landing page, so your branding stays consistent
+from top to bottom. Before, several of our landing page designs showed a plain
+initial, dot, or square instead of your actual logo in those spots — which meant
+a missing or wrong logo could slip out unnoticed. Now your logo appears reliably
+in both places.
+
+---
+
+## Your waitlist signups now live in Customer Discovery
+
+People who join your product waitlist now show up right inside Customer Discovery,
+grouped by project, so you can act on them without leaving the page. For each
+signup you can promote a promising person straight into a logged interview, send
+them a product-invitation email, or send a follow-up — and each signup keeps a
+clear status (New, Invited, Followed up, Promoted) so you always know where things
+stand. If email isn't set up yet, the action still records the step and tells you
+the message wasn't sent, so nothing happens silently.
+
+---
+
+## Import your live numbers from Stripe
+
+The "Import from Stripe" button on the Metrics page now works. If you've connected
+your Stripe account, one click pulls your live MRR, ARR, churn, and customer count
+into a new metrics snapshot, and your stat cards update right away. If Stripe isn't
+connected yet, you'll see a clear prompt to connect it (or enter your numbers by
+hand) instead of a button that quietly does nothing — and if your Stripe account
+has no billing data yet, we'll tell you that too.
+
+---
+
+## Your landing page editor now matches the template you picked
+
+When you build your Brand & Landing page, step 3 now adapts to the template you chose:
+the fields you edit are the actual sections of that design — things like "How it works",
+"Where you can help", or your closing quote — so what you type is what visitors see. You
+can add and remove items in list-style sections, and your wording is saved separately for
+each template, so trying a different look never loses the copy you wrote for another.
+
+There's a new one-click **Auto-fill with AI** button that drafts your whole page — brand name,
+headline, subheadline, tagline, the call-to-action button label, and the rest of the copy —
+from your project's name, sector, and description. It's a fast starting point you can then
+refine, and it leaves your original project details untouched.
+
+We also tidied up the editor: the color swatches are now clearly labelled by role (Primary,
+Background, Text, Secondary, Accent), the step is renamed "Brand & page content", and the old
+multi-tab "audience-specific copy" panel and placeholder name suggestions have been removed in
+favor of the simpler, template-driven flow. Your published page now shows the copy for the one
+audience you picked in step 1 — clean and focused, with no audience tabs for visitors to click
+through.
+
+## Your Spin-Out pitch deck now fills itself in from your venture data
+
+When you open the Spin-Out demo-day deck in the Pitch Deck Builder, the editor
+now mirrors how the deck is actually built: most of each slide fills in
+automatically from your venture's pages, so you can't accidentally overwrite it.
+Auto-filled fields are clearly marked and link straight to the page they come
+from — your Project, Customer Discovery, Roadmap, Cap Table, Incorporation, Team,
+and more — so you change them at the source and the deck refreshes.
+
+Only the few story-driven fields stay editable: your Problem statement, your
+Solution (with guidance to frame it the Axal way — turning raw inputs into a
+live, actionable result), and your Product demo links and caption. Saving any of
+these updates your deck preview and downloads right away.
+
+And the Cover no longer asks you to pick a project or type your name — your
+project is already selected, and your name comes from your account.
+
+## Build your Spin-Out with a team
+
+Your Spin-Out project no longer has to be a solo effort. From **Edit Project**,
+the project owner can invite co-founders and advisors — by matching with a
+suggested co-founder, entering someone's email, or sharing a private invite link
+over WhatsApp, Telegram, or email.
+
+- **Co-founders** can view and edit the project's data, just like the owner.
+- **Advisors** get read-only access, so they can follow along without making changes.
+- Only the owner (and the Axal team) can manage who's on the team.
+
+If you're a new founder in the Spin-Out Lab, team invites unlock in Week 2 —
+you'll see a friendly note until then. Founders who've already incorporated can
+invite their team right away.
+
 ## Compare cap-table scenarios side-by-side
 
 You can now explore "what if" cap tables for a project without touching its real

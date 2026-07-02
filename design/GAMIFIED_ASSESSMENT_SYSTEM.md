@@ -8,6 +8,14 @@
 > value_dimensions); per-user write targets: `user_values` (094), `user_skills`
 > (091), `investor_profiles` (009/096).
 
+> **STATUS — player surface removed.** The gamified "Play & Discover" player
+> (games / sessions / respond / complete / publish / badges, the `/play` pages,
+> and the matching `assessment.*` client + worker routes) has been removed. Only
+> the consent-gated read endpoints (`GET /api/assessment/results/me` and
+> `/results/:userId`), the pure scoring in `services/assessmentScoring.ts`, and
+> the admin Assessment Studio remain. The sections below describe the original
+> full design and are retained for historical / authoring reference.
+
 ---
 
 ## §1 Overview & goals

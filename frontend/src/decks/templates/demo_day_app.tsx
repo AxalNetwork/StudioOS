@@ -15,7 +15,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Slide16x9, type DeckProps as RegistryDeckProps, BrandProvider, useBrandContext } from '../DeckBase';
+import { Slide16x9, type DeckProps as RegistryDeckProps, BrandProvider } from '../DeckBase';
 
 /* ───────────────────────────── types ────────────────────────────── */
 
@@ -154,6 +154,9 @@ const intShort = (n: number): string => {
 };
 
 const setIn = <T,>(obj: T, path: (string | number)[], value: unknown): T => {
+  // Prototype-pollution guard: reject __proto__/constructor/prototype path
+  // segments before any nested write (CodeQL js/prototype-polluting-function).
+  if (path.some((k) => k === '__proto__' || k === 'constructor' || k === 'prototype')) return obj;
   const next = structuredClone(obj) as Record<string, unknown>;
   let cur: Record<string, unknown> = next as Record<string, unknown>;
   for (let i = 0; i < path.length - 1; i++) {
@@ -1819,7 +1822,6 @@ export const Deck_demo_day_app: React.FC<RegistryDeckProps> = ({ data, editable,
 );
 
 const Deck_demo_day_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
-  const { accent: brandAccent } = useBrandContext();
   const merged = useMemo(
     () => mergeShape(SAMPLE_DATA, data || {}) as DemoDayData,
     [data],
@@ -1834,8 +1836,6 @@ const Deck_demo_day_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, 
     [editable, onEdit],
   );
   // Task #6 — brand accent override for accent_only templates
-  const brandAccentOrDefault = brandAccent || C.accent;
-  const ac = brandAccentOrDefault;
 
   const total = 12;
   const slides: React.ReactNode[] = [

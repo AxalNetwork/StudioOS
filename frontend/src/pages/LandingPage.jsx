@@ -4,7 +4,7 @@ import {
   Zap, Users, Banknote, GitBranch, Scale, Globe,
   Handshake, Rocket, ArrowRight, ChevronRight,
   Hammer, Sparkles, GraduationCap, HeartHandshake,
-  ShieldCheck, BadgeCheck, LockKeyhole, Cloud, Cpu, Archive,
+  ShieldCheck, BadgeCheck, LockKeyhole,
   UserPlus, Calendar,
 } from 'lucide-react';
 import PublicNav from '../components/PublicNav';

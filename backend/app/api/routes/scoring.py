@@ -2,7 +2,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlmodel import Session, select
 from backend.app.database import get_session
-from backend.app.models.entities import Project, ScoreSnapshot, DealMemo, Founder, Deal, ActivityLog, User, UserRole
+from backend.app.models.entities import Project, ScoreSnapshot, DealMemo, Founder, ActivityLog, User
 from backend.app.schemas.scoring import ScoreRequest, GenerateMemoRequest, ScoreRunRequest
 from backend.app.services.scoring import run_full_score, run_brain_score, tier_label
 from backend.app.services.ai_memo import generate_memo_with_ai

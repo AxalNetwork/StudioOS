@@ -3,7 +3,7 @@ import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
 import {
   FileText, Plus, Building, Eye, ChevronDown, Shield, Users,
-  Briefcase, Scale, AlertTriangle, BookOpen, Download, Building2,
+  Briefcase, Scale, AlertTriangle, BookOpen, Building2,
 } from 'lucide-react';
 import IncorporationStatusBadge from '../components/IncorporationStatusBadge';
 import DocumentBody from '../components/DocumentBody';
@@ -79,10 +79,6 @@ export default function LegalPage() {
     { key: 'portfolio', label: 'Portfolio', fullLabel: 'Investment Execution (Portfolio)' },
     { key: 'compliance', label: 'Compliance', fullLabel: 'Compliance & Regulatory' },
   ];
-
-  const filteredTemplates = activeLayer === 'all'
-    ? templates
-    : templates.filter(t => t.layer === activeLayer);
 
   if (loading) return <div className="text-gray-600 text-center py-20">Loading...</div>;
 
@@ -200,7 +196,6 @@ export default function LegalPage() {
                 All ({templates.length})
               </button>
               {layers.map(layer => {
-                const config = LAYER_CONFIG[layer.key];
                 const count = (groupedTemplates[layer.key] || []).length;
                 return (
                   <button

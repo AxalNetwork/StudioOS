@@ -19,9 +19,9 @@ import logging
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Request, Response
-from sqlmodel import Session, select
+from sqlmodel import Session
 
-from backend.app.database import get_session, engine
+from backend.app.database import engine
 from backend.app.models.entities import ActivityLog
 
 logger = logging.getLogger(__name__)

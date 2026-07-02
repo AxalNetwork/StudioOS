@@ -19,6 +19,7 @@ divergences from prod (all explicit, dev-only):
 """
 
 import json
+import logging
 from typing import Any, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException
@@ -43,6 +44,8 @@ router = APIRouter(
     tags=["AI Matching Engine"],
     dependencies=[Depends(get_current_user)],
 )
+
+logger = logging.getLogger("studioos.matches")
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +73,8 @@ def _parse_list(raw: Any) -> list[str]:
         if isinstance(parsed, list):
             return [str(x) for x in parsed]
     except (ValueError, TypeError):
-        pass
+        # not a JSON list — fall through to comma-split parsing below
+        logger.debug("matches: value is not JSON, using comma-split parse", exc_info=True)
     return [part.strip() for part in s.split(",") if part.strip()]
 
 

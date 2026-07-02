@@ -34,7 +34,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { decryptInt, decryptString } from '../services/cryptoBox';
 import {
-  validateCheckinBody, validateDailyBody, encryptOrFallback,
+  validateDailyBody, encryptOrFallback,
 } from './wellbeing.helpers';
 import { notify } from '../services/notify';
 import {
@@ -59,8 +59,6 @@ const wellbeing = new Hono<{ Bindings: Env }>();
 const MIN_AGGREGATE_COHORT = 7;
 const ALLOWED_AGGREGATE_WINDOWS = [30, 90] as const;
 const COUNT_BUCKET = 5;
-const QUESTION_KEYS = ['stress', 'sleep', 'support', 'decisions', 'energy'] as const;
-type QKey = typeof QUESTION_KEYS[number];
 
 const ALLOWED_RESOURCE_CATEGORIES = new Set(['therapy', 'peer_group', 'hotline', 'reading', 'coaching']);
 const FREE_TIER_PROFILE_VIEWS_PER_MONTH = 3;
@@ -71,12 +69,6 @@ function bucket(n: number, step = COUNT_BUCKET): number {
 }
 function role(user: { role: string }): string {
   return String(user.role || '').toLowerCase();
-}
-function weekAnchor(d: Date = new Date()): string {
-  const day = d.getUTCDay();
-  const offset = day === 0 ? 6 : day - 1;
-  const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - offset));
-  return monday.toISOString().slice(0, 10);
 }
 function todayUTC(): string {
   return new Date().toISOString().slice(0, 10);
@@ -278,42 +270,6 @@ async function ensureWellbeingSchema(env: Env): Promise<void> {
 // ---------------------------------------------------------------------------
 // Pulse check-ins (legacy weekly)
 // ---------------------------------------------------------------------------
-type CheckinRow = {
-  id: number; uid: string; user_id: number; week_anchor: string;
-  stress_enc: string; sleep_enc: string; support_enc: string;
-  decisions_enc: string; energy_enc: string; notes_enc: string | null;
-  created_at: string;
-};
-
-async function serializeOwn(env: Env, row: CheckinRow & {
-  stress_plain?: number | null; sleep_plain?: number | null;
-  support_plain?: number | null; decisions_plain?: number | null;
-  energy_plain?: number | null; notes_plain?: string | null;
-}) {
-  // Task #33 — plaintext fallback columns win when ciphertext is missing.
-  const pick = async (enc: string | null, plain: number | null | undefined) => {
-    if (enc) {
-      const v = await decryptInt(env, enc);
-      if (v != null) return v;
-    }
-    return plain ?? null;
-  };
-  const [stress, sleep, support, decisions, energy] = await Promise.all([
-    pick(row.stress_enc, row.stress_plain),
-    pick(row.sleep_enc, row.sleep_plain),
-    pick(row.support_enc, row.support_plain),
-    pick(row.decisions_enc, row.decisions_plain),
-    pick(row.energy_enc, row.energy_plain),
-  ]);
-  let notes: string | null = null;
-  if (row.notes_enc) notes = await decryptString(env, row.notes_enc);
-  if (notes == null) notes = row.notes_plain ?? null;
-  return {
-    id: row.id, uid: row.uid, week_anchor: row.week_anchor,
-    created_at: row.created_at,
-    stress, sleep, support, decisions, energy, notes,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Task #33 — POST /checkins now uses the CANONICAL daily-pulse schema

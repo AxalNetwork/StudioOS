@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Sparkles, Send } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
@@ -15,8 +14,7 @@ import { useAuth } from '../hooks/useAuthSync';
  * App.jsx and landing them on the dashboard.
  */
 export default function OnboardingChatPage() {
-  const navigate = useNavigate();
-  const { user, refresh } = useAuth();
+  const { user } = useAuth();
   const email = user?.email || '';
 
   const [messages, setMessages] = useState([

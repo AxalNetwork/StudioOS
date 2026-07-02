@@ -24,7 +24,6 @@ import {
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
   fetchUserEvents, eventsToIcs,
   syncUserToGoogle, syncUserToMicrosoft,
-  googleRedirectUri, microsoftRedirectUri,
   preflightOAuthSecrets,
 } from '../services/calendar';
 export { preflightOAuthSecrets };

@@ -34,7 +34,7 @@ export { THEME, fmt, SAMPLE_DATA, SAMPLE_NOTES };
  *  RENDER ENGINE  (content-agnostic below this line — geometry kept verbatim)
  * ========================================================================== */
 const C = THEME.color, F = THEME.fonts;
-const W = 13.33, H = 7.5, ML = 0.7, MR = 0.7, CW = W - ML - MR;
+const W = 13.33, ML = 0.7, MR = 0.7, CW = W - ML - MR;
 const shadow = () => ({ type: 'outer', color: '000000', blur: 7, offset: 2, angle: 90, opacity: 0.10 });
 
 // shared primitives (take `pres`/slide explicitly — no module-level singleton)

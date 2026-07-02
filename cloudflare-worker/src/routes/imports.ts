@@ -43,11 +43,6 @@ const TIER_MONTHLY_CAP: Record<string, number> = {
 // three canonical values default to Free (1/mo).
 const BYPASS_ROLES = new Set(['admin']);
 
-function startOfMonthISO(): string {
-  const d = new Date();
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString();
-}
-
 async function getMonthlyUsage(env: Env, userId: number): Promise<number> {
   // Count ALL import attempts created in the current month (including
   // 'failed' rows) so users can't drive up their cap by triggering failures.
@@ -315,7 +310,7 @@ imports.get('/:id', async (c) => {
 // ────────────────────────────── Universal CSV importer
 
 imports.post('/universal/preview', async (c) => {
-  const user = await requireAuth(c);
+  await requireAuth(c);
   const body = await c.req.json<{ csv?: string; target?: string }>().catch(() => ({} as { csv?: string; target?: string }));
   const csv = String(body.csv || '');
   const target = String(body.target || 'contacts');
@@ -920,7 +915,7 @@ async function extractPdfText(bytes: Uint8Array): Promise<{ index: number; text:
       out.push(decodePdfLiteral(mm[1]));
     }
     // [(a)(b)(c)] TJ
-    const tjArrRe = /\[((?:[^\[\]]|\\.)+)\]\s*TJ/g;
+    const tjArrRe = /\[((?:[^\[\]\\]|\\.)+)\]\s*TJ/g;
     while ((mm = tjArrRe.exec(page)) !== null) {
       const litRe = /\(((?:\\.|[^\\)])*)\)/g;
       let lm: RegExpExecArray | null;

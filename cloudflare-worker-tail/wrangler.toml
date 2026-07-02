@@ -12,8 +12,16 @@
 # Deploy:
 #   cd cloudflare-worker-tail && npx wrangler deploy
 #
-# After deploy, the dashboard task in docs/CLOUDFLARE_DASHBOARD_TASKS.md
-# binds this worker as a tail consumer of `studioos`.
+# Producer->consumer wiring is owned ENTIRELY by the root `wrangler.toml`:
+# the `studioos` worker declares `studioos-tail` under BOTH
+# `[[tail_consumers]]` and `[[env.production.tail_consumers]]`. There is NO
+# dashboard step and NO doc to follow after deploy — deploying this worker
+# only publishes the consumer; the root config does the wiring on the next
+# `studioos` deploy. Do NOT bind a tail consumer by hand in the Cloudflare
+# dashboard. A manual binding — especially a REVERSE `studioos-tail` ->
+# `studioos` one — makes Cloudflare invoke `studioos.tail()`, which doesn't
+# exist (the main worker only exports `fetch()`/`scheduled()`), flooding
+# observability with "Handler does not export a tail() function." errors.
 # ---------------------------------------------------------------------------
 
 name = "studioos-tail"
@@ -28,7 +36,9 @@ workers_dev = false
 # exist; the main worker only exports `fetch()`), generating an
 # "Handler does not export a tail() function." error for every tail
 # batch. The correct producer→consumer wiring lives in the root
-# `wrangler.toml` under `[[env.production.tail_consumers]]`.
+# `wrangler.toml` under BOTH `[[tail_consumers]]` (top-level / plain
+# `wrangler deploy`) and `[[env.production.tail_consumers]]` (the
+# `--env production` deploy path) — kept in lockstep.
 
 [[r2_buckets]]
 binding     = "LOGS"
@@ -36,7 +46,7 @@ bucket_name = "studioos-logs"
 
 [vars]
 # Retention metadata stamped into each log object's R2 metadata. The R2
-# lifecycle rule (configured via dashboard — see CLOUDFLARE_DASHBOARD_TASKS)
+# lifecycle rule (configured one-time in the Cloudflare dashboard)
 # transitions to Standard-IA after 90 days and expires after 7 years.
 RETENTION_DAYS = "2555"
 ENVIRONMENT    = "production"

@@ -19,7 +19,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from backend.app.models.entities import ScoreSnapshot
 
@@ -215,11 +215,11 @@ def detect_anomalies(
 
     # 3) Rapid iteration: >10 runs in the past hour.
     one_hour_ago = datetime.utcnow() - timedelta(hours=1)
-    recent_count = len(session.exec(
-        select(ScoreSnapshot)
+    recent_count = session.exec(
+        select(func.count()).select_from(ScoreSnapshot)
         .where(ScoreSnapshot.project_id == project_id)
         .where(ScoreSnapshot.created_at >= one_hour_ago)
-    ).all())
+    ).first() or 0
     if recent_count > 10:
         flags.append({
             "type": "rapid_iteration",

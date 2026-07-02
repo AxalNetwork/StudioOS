@@ -20,7 +20,7 @@ import { Rocket } from 'lucide-react';
 const PROJECT_ROW_HEIGHT = 52;
 const PROJECT_GRID = 'minmax(0, 2fr) minmax(0, 1fr) 110px 120px minmax(0, 1fr) 96px';
 
-export default function ProjectsPage() {
+export default function ProjectsPage({ embedded = false }) {
   const { user, refresh } = useAuth();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -118,9 +118,13 @@ export default function ProjectsPage() {
     <div data-testid="projects-page">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Projects</h1>
-        <PageExplainer pageKey="projects" />
-          <p className="text-sm text-gray-600">Venture pipeline & 4-week playbook tracking</p>
+          {!embedded && (
+            <>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Projects</h1>
+              <PageExplainer pageKey="projects" />
+              <p className="text-sm text-gray-600">Venture pipeline & 4-week playbook tracking</p>
+            </>
+          )}
         </div>
         <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-medium text-white transition-colors">
           <Plus size={14} /> New Project

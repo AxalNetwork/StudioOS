@@ -8,7 +8,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, ChevronUp, Loader2 } from 'lucide-react';
+import { ArrowLeft, ChevronUp } from 'lucide-react';
 import { request } from '../lib/api';
 import { usePageMeta } from '../lib/seo';
 import { ROADMAP_ITEMS, COLUMN_LABELS, AUDIENCE_LABELS } from '../data/roadmap';

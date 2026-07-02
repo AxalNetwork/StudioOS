@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, Users, Store, Layers, Plus, Loader2, Sparkles, X, Save, Search, Send, Brain, Star, Briefcase, ChevronDown, Building2 } from 'lucide-react';
+import { TrendingUp, Users, Store, Layers, Plus, Loader2, Sparkles, X, Save, Search, Send, Brain, Star, ChevronDown, Building2 } from 'lucide-react';
 import { api } from '../lib/api';
 import CompanyProfilePanel from '../components/CompanyProfilePanel';
 

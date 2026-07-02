@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { safeReadJSON } from '../lib/storage';
 import { api } from '../lib/api';
 import {
-  Ticket, Plus, ChevronDown, RefreshCw, MessageSquare, Clock, ArrowLeft,
+  Plus, ChevronDown, RefreshCw, MessageSquare, Clock, ArrowLeft,
 } from 'lucide-react';
 import VirtualList from '../components/VirtualList';
 
@@ -152,7 +152,7 @@ function TicketDetail({ ticketId, onBack }) {
 export default function TicketsPage() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
+  const [, setSyncing] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState(null);
   const [form, setForm] = useState({ title: '', description: '', priority: 'medium' });

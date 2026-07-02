@@ -1,4 +1,3 @@
-from typing import Optional
 
 
 def score_market(tam: float, urgency: float, trend: float) -> dict:
@@ -243,7 +242,7 @@ def run_brain_score(payload: dict) -> dict:
     """
     categories = {}
     raw_total = 0.0
-    for key, spec in SCORING_V2_WEIGHTS.items():
+    for key in SCORING_V2_WEIGHTS:
         cat_values = payload.get(key, {}) or {}
         cat = _score_category(cat_values, key)
         categories[key] = cat

@@ -1,4 +1,5 @@
 import hashlib
+import logging
 from fastapi import APIRouter, Depends, Body, HTTPException, Query
 from datetime import datetime, timedelta
 from sqlalchemy import text
@@ -17,6 +18,8 @@ router = APIRouter(
     tags=["Market Intelligence"],
     dependencies=[Depends(get_current_user)],
 )
+
+logger = logging.getLogger("studioos.market_intel")
 
 MARKET_PULSE = [
     {
@@ -486,7 +489,8 @@ def mi_citations(sector: str = Query(default=""), limit: int = Query(default=50)
         try:
             cutoff = datetime.fromisoformat(since.replace("Z", "+00:00")).replace(tzinfo=None)
         except Exception:
-            pass
+            # unparseable `since` query param — keep the default 30-day cutoff
+            logger.debug("market_intel: ignoring unparseable 'since' param", exc_info=True)
     secs = ([sector] if sector in MI_SECTORS else []) if sector else MI_SECTORS
     now = datetime.utcnow()
     rows = []

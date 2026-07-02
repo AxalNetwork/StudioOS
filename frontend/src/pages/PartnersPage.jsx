@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
-import { Users, Plus, Search, Copy, ChevronRight } from 'lucide-react';
+import { Plus, Search, Copy, ChevronRight } from 'lucide-react';
 import { UserDetailModal } from './AdminPage';
 import VirtualList from '../components/VirtualList';
 import UserTrustBadge from '../components/UserTrustBadge';

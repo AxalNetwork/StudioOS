@@ -37,11 +37,6 @@ function redirectUri(env: Env): string {
   return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 
-interface SlackEnvVars {
-  SLACK_CLIENT_ID?: string;
-  SLACK_CLIENT_SECRET?: string;
-  APP_URL?: string;
-}
 // Task #7 — env-var FIRST, admin-managed DB row as fallback. Same
 // `<provider>_oauth_unconfigured` error string preserved so the route
 // layer's 503 mapping (routes/integrations.ts /oauth/start) keeps working.

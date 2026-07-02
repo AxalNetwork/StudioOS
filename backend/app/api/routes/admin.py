@@ -1,4 +1,3 @@
-import os
 import jwt
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException

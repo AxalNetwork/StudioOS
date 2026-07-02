@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Users, Plus, Loader2, X, Award, TrendingUp, Activity, Network, Sparkles, Trophy } from 'lucide-react';
+import { Users, Plus, Loader2, X, Award, Activity, Network, Trophy } from 'lucide-react';
 import { api } from '../lib/api';
 import { useEscapeClose } from '../components/useEscapeClose';
 

@@ -1,7 +1,7 @@
 """Task #24 — Brand & landing page generator (FastAPI dev mirror).
 
 Endpoints (all under /api/brand)
-    POST /suggest                       AI brand suggestions (5 names)
+    POST /landing/autofill              AI page content auto-fill
     POST /logo                          AI/SVG logo generation
     GET  /landing/by-project/{pid}      Authenticated read for the project owner
     PUT  /landing/by-project/{pid}      Authenticated upsert
@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
+import logging
 import re
 import secrets
 from datetime import datetime
@@ -24,7 +26,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlmodel import Session
 
@@ -33,6 +35,8 @@ from backend.app.database import get_session
 from backend.app.models.entities import Project, User
 
 router = APIRouter(prefix="/brand", tags=["Brand & Landing"])
+
+logger = logging.getLogger("studioos.brand")
 
 
 _migrated = False
@@ -127,6 +131,8 @@ def _ensure_schema(session: Session) -> None:
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS audience TEXT",
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS goal TEXT",
         "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS template_kit TEXT",
+        # Task #3 — per-template editable content blocks (JSON).
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS content_json TEXT",
         "CREATE INDEX IF NOT EXISTS idx_landing_preview_token ON landing_pages(preview_token)",
         "CREATE INDEX IF NOT EXISTS idx_waitlist_audience ON waitlist_signups(project_id, audience)",
     ]:
@@ -157,7 +163,8 @@ def _sanitize_url(url: Optional[str]) -> Optional[str]:
         if parsed.scheme == "https":
             return u
     except Exception:
-        pass
+        # malformed URL — treat as absent so the caller falls back to None
+        logger.debug("brand: discarding unparseable URL", exc_info=True)
     return None
 
 
@@ -198,6 +205,35 @@ def _valid_goal(v: Optional[str]) -> Optional[str]:
     return None
 
 
+def _content_json_str(v: Any) -> str:
+    """Serialize per-template content blocks for storage. The dev backend has no
+    schema mirror (it lives in the Worker/frontend), so this just enforces a
+    dict-of-dict shape and caps the size — the Worker is the validating path."""
+    if not isinstance(v, dict):
+        return "{}"
+    try:
+        out: Dict[str, Any] = {}
+        for tkey, fields in v.items():
+            if isinstance(tkey, str) and isinstance(fields, dict):
+                out[tkey] = fields
+        s = json.dumps(out, separators=(",", ":"))
+        return s if len(s) <= 20000 else "{}"
+    except Exception:
+        return "{}"
+
+
+def _parse_content_json(raw: Any) -> Dict[str, Any]:
+    if not raw:
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    try:
+        o = json.loads(raw)
+        return o if isinstance(o, dict) else {}
+    except Exception:
+        return {}
+
+
 def _clean_template_kit(v: Optional[str]) -> Optional[str]:
     # Catalog id (kebab-case); not validated against the catalog (frontend-side).
     if isinstance(v, str):
@@ -222,33 +258,18 @@ def _project_owned(session: Session, project_id: int, user: User) -> Project:
     raise HTTPException(status_code=403, detail="not your project")
 
 
-def _heuristic_brand(description: str, sector: Optional[str]) -> List[Dict[str, Any]]:
-    """Deterministic brand options for the dev backend (prod generates these
-    via Workers AI on the Worker). Produces 5 plausible (name, tagline,
-    logo_prompt) triplets so the wizard is always usable in dev."""
-    seeds = ["Lumen", "Axon", "Forge", "Vela", "Quanta", "Helio", "Nimbus", "Stratus", "Orbit", "Beacon"]
-    suffixes = ["AI", "Labs", "Works", "Cloud", "Stack", "OS", "Sense", "Engine"]
-    h = int(hashlib.sha1((description or "x").encode()).hexdigest(), 16)
-    out = []
-    for i in range(5):
-        a = seeds[(h + i * 7) % len(seeds)]
-        b = suffixes[(h + i * 11) % len(suffixes)]
-        name = f"{a}{b}"
-        tag = f"{(sector or 'AI').strip().title()} that just works."
-        if i == 1:
-            tag = f"The fastest way to ship {sector or 'your idea'}."
-        if i == 2:
-            tag = f"{sector or 'Software'} for the next billion users."
-        if i == 3:
-            tag = "Built for founders who move fast."
-        if i == 4:
-            tag = "Less ops, more outcomes."
-        out.append({
-            "name": name,
-            "tagline": tag,
-            "logo_prompt": f"minimalist geometric logo, {a.lower()} mark, violet and white, vector, flat",
-        })
-    return out
+def _heuristic_hero_copy(name: str, sector: Optional[str], description: str) -> Dict[str, str]:
+    """Deterministic hero copy for the dev backend (prod enriches via Workers AI
+    on the Worker). Derives headline/subheadline/tagline from the founder's own
+    inputs. The dev backend has no per-template schema mirror, so the editor
+    layers its own TEMPLATE_CONTENT_SCHEMA defaults over the (empty) content."""
+    desc = (description or "").strip()
+    first = re.split(r"(?<=[.!?])\s+", desc)[0].strip() if desc else ""
+    headline = (first or name or "Building something new")[:120]
+    subheadline = desc[:200]
+    words = " ".join(desc.split()[:8])
+    tagline = (words or (sector or "") or name or "")[:120]
+    return {"headline": headline, "subheadline": subheadline, "tagline": tagline}
 
 
 # NOTE: The dev FastAPI backend is never deployed (prod is the Cloudflare
@@ -377,7 +398,7 @@ def _row_to_landing(row) -> Dict[str, Any]:
         "headline": row["headline"],
         "subheadline": row["subheadline"],
         "cta_text": row["cta_text"] or "Join the waitlist",
-        "logo_url": row["logo_url"],
+        "logo_url": row.get("logo_url") or None,
         "logo_svg": row["logo_svg"],
         "logo_asset_id": row.get("logo_asset_id") or None,
         "theme_color": row["theme_color"] or "#7c3aed",
@@ -412,16 +433,18 @@ def _row_to_landing(row) -> Dict[str, Any]:
         "audience": row.get("audience") or None,
         "goal": row.get("goal") or None,
         "template_kit": row.get("template_kit") or None,
-        "logo_url": row.get("logo_url") or None,
+        "content_json": _parse_content_json(row.get("content_json")),
     }
 
 
 # --- payloads --------------------------------------------------------------
 
 
-class SuggestPayload(BaseModel):
+class AutofillPayload(BaseModel):
     description: str = Field(..., min_length=4, max_length=2000)
+    name: Optional[str] = None
     sector: Optional[str] = None
+    template: Optional[str] = None
 
 
 class LogoPayload(BaseModel):
@@ -469,6 +492,7 @@ class LandingUpsert(BaseModel):
     audience: Optional[str] = None
     goal: Optional[str] = None
     template_kit: Optional[str] = None
+    content_json: Optional[Dict[str, Any]] = None
 
 
 class PalettePayload(BaseModel):
@@ -485,7 +509,7 @@ class TaglinePayload(BaseModel):
     market_angle: str = Field(..., min_length=1)
 
 
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s.]+$")
 
 
 class WaitlistPayload(BaseModel):
@@ -503,19 +527,30 @@ class WaitlistPayload(BaseModel):
 # strip <script>/<foreignObject> blocks and on*= event handlers before
 # accepting the payload. Anything that doesn't start with <svg is dropped.
 _SVG_DANGER_TAG_BLOCK = re.compile(
-    r"<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*>.*?<\s*/\s*\1\s*>",
+    # Tempered greedy body ([^<] plus any `<` that is NOT the closing tag) is
+    # linear — it matches the same language as the old `.*?` between the open
+    # and close tags but cannot backtrack catastrophically (CodeQL py/redos).
+    r"<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*>"
+    r"[^<]*(?:<(?!\s*/\s*\1\s*>)[^<]*)*"
+    r"<\s*/\s*\1\s*>",
     re.IGNORECASE | re.DOTALL,
 )
 _SVG_DANGER_TAG_VOID = re.compile(
     r"<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*/?>",
     re.IGNORECASE,
 )
-_SVG_EVENT_ATTR = re.compile(r"\s+on[a-z]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", re.IGNORECASE)
+# Leading whitespace is a single `\s` (not `\s+`): with `.sub` scanning every
+# start position, one separator is enough to locate the attribute, and a
+# non-quantified prefix keeps matching linear instead of O(n^2) on a long run
+# of spaces in attacker-controlled SVG (CodeQL py/polynomial-redos).
+_SVG_EVENT_ATTR = re.compile(r"\son[a-z]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s\"'>]+)", re.IGNORECASE)
 # Strict href stripper — kills href/xlink:href regardless of scheme, quoted
 # OR unquoted. The fallback logo we ship has no href, so dropping all of
 # them is safe and forecloses javascript:/data: bypasses the regex sanitizer
 # would otherwise miss.
-_SVG_ANY_HREF = re.compile(r"\s+(href|xlink:href)\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", re.IGNORECASE)
+# Single `\s` prefix (not `\s+`) for the same linear-scan reason as
+# _SVG_EVENT_ATTR above (CodeQL py/polynomial-redos).
+_SVG_ANY_HREF = re.compile(r"\s(href|xlink:href)\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s\"'>]+)", re.IGNORECASE)
 
 
 def _sanitize_svg(svg: Optional[str]) -> Optional[str]:
@@ -545,8 +580,10 @@ def _sanitize_svg(svg: Optional[str]) -> Optional[str]:
 def _render_landing_html(row, noindex: bool = False, csp_nonce: Optional[str] = None) -> str:
     """Render a public landing page HTML string (dev-backend parity).
 
-    Mirrors the worker's buildLandingPageHtml with the same audience-tab
-    layout, accessibility markup, and XSS-safe escaping.
+    Single-audience: renders copy for the one audience chosen in step 1
+    (`row['audience']`, falling back to customer), matching the worker's
+    selectedAudience(). The old six-tab switcher was removed. XSS-safe
+    escaping throughout.
     """
     import html
 
@@ -622,7 +659,12 @@ def _render_landing_html(row, noindex: bool = False, csp_nonce: Optional[str] = 
     api_waitlist = f"/api/brand/landing/{slug}/waitlist"
     noindex_meta = '<meta name="robots" content="noindex, nofollow" />' if noindex else ""
     title_suffix = " (Preview)" if noindex else ""
-    tab_badge = '<span class="badge badge-customer">Discovery</span>'
+    # Audience is chosen in step 1 — render copy for that ONE audience (parity
+    # with the worker's selectedAudience(); the six-tab switcher was removed).
+    _aud_keys = ("customer", "partner", "investor", "advisor", "mentor", "cofounder")
+    _sel = (row.get("audience") or "").strip()
+    aud_key = _sel if _sel in _aud_keys else "customer"
+    a = aud[aud_key]
 
     html_str = f"""<!doctype html>
 <html lang="en">
@@ -630,7 +672,7 @@ def _render_landing_html(row, noindex: bool = False, csp_nonce: Optional[str] = 
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>{name}{title_suffix}</title>
-<meta name="description" content="{aud['customer']['b']}" />
+<meta name="description" content="{a['b']}" />
 {noindex_meta}
 <style>
   :root {{ color-scheme: light; }}
@@ -639,129 +681,49 @@ def _render_landing_html(row, noindex: bool = False, csp_nonce: Optional[str] = 
   .logo {{ display:flex; justify-content:center; margin-bottom: 28px; }}
   h1 {{ font-size: clamp(32px, 5vw, 52px); margin: 0 0 12px; line-height: 1.1; letter-spacing: -0.02em; }}
   p.sub {{ font-size: 18px; color: {ink_color}; opacity: .7; margin: 0 0 36px; }}
-  .tabs {{ display:flex; gap: 6px; justify-content:center; margin-bottom: 28px; }}
-  .tab {{ cursor:pointer; padding: 8px 16px; border-radius: 8px; border: 1px solid transparent; font-size: 14px; background: transparent; color: {ink_color}; opacity: .6; }}
-  .tab.active {{ opacity: 1; background: {color}18; border-color: {color}44; }}
-  .panel {{ display:none; }}
-  .panel.active {{ display:block; }}
   form {{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width: 480px; margin: 0 auto; }}
   input {{ flex:1 1 240px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 15px; outline:none; }}
   input:focus {{ border-color: {color}; box-shadow: 0 0 0 3px {color}22; }}
   button {{ padding: 12px 18px; background: {color}; color: #fff; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }}
   button[disabled] {{ opacity: .6; cursor: not-allowed; }}
-  .ok, .err {{ margin-top: 16px; font-size: 14px; }}
-  .ok {{ color: #059669; }}
-  .err {{ color: #dc2626; }}
-  .badge {{ display:inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-left: 8px; }}
-  .badge-customer {{ background: {color}18; color: {color}; }}
-  .badge-partner {{ background: #6366f118; color: #6366f1; }}
-  .badge-investor {{ background: #10b98118; color: #10b981; }}
+  .wl-ok, .wl-err {{ margin-top: 16px; font-size: 14px; }}
+  .wl-ok {{ color: #059669; }}
+  .wl-err {{ color: #dc2626; }}
   footer {{ margin-top: 64px; font-size: 12px; color: #94a3b8; }}
   footer a {{ color: inherit; }}
   .sr {{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }}
-  @media (max-width: 480px) {{ .tabs {{ flex-wrap: wrap; }} }}
 </style>
 </head>
 <body>
   <div class="wrap">
     <div class="logo">{logo_markup}</div>
-    <div class="tabs" role="tablist" aria-label="Audience">
-      <button class="tab active" role="tab" aria-selected="true" aria-controls="p-customer" data-a="customer" onclick="switchTab('customer')">Customer{tab_badge}</button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="p-partner" data-a="partner" onclick="switchTab('partner')">Partner</button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="p-investor" data-a="investor" onclick="switchTab('investor')">Investor</button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="p-advisor" data-a="advisor" onclick="switchTab('advisor')">Advisor</button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="p-mentor" data-a="mentor" onclick="switchTab('mentor')">Mentor</button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="p-cofounder" data-a="cofounder" onclick="switchTab('cofounder')">Co-founder</button>
-    </div>
-    <div class="panel active" id="p-customer" role="tabpanel" data-a="customer">
-      <h1>{aud['customer']['h']}</h1>
-      {f'<p class="sub">{aud["customer"]["b"]}</p>' if aud['customer']['b'] else ''}
-      <form id="wl-customer">
-        <label for="email-customer" class="sr">Email</label>
-        <input id="email-customer" type="email" name="email" placeholder="you@email.com" required />
-        <button type="submit">{aud['customer']['c']}</button>
-      </form>
-      <div id="msg-customer" aria-live="polite"></div>
-    </div>
-    <div class="panel" id="p-partner" role="tabpanel" data-a="partner">
-      <h1>{aud['partner']['h']}</h1>
-      {f'<p class="sub">{aud["partner"]["b"]}</p>' if aud['partner']['b'] else ''}
-      <form id="wl-partner">
-        <label for="email-partner" class="sr">Email</label>
-        <input id="email-partner" type="email" name="email" placeholder="you@email.com" required />
-        <button type="submit">{aud['partner']['c']}</button>
-      </form>
-      <div id="msg-partner" aria-live="polite"></div>
-    </div>
-    <div class="panel" id="p-investor" role="tabpanel" data-a="investor">
-      <h1>{aud['investor']['h']}</h1>
-      {f'<p class="sub">{aud["investor"]["b"]}</p>' if aud['investor']['b'] else ''}
-      <form id="wl-investor">
-        <label for="email-investor" class="sr">Email</label>
-        <input id="email-investor" type="email" name="email" placeholder="you@email.com" required />
-        <button type="submit">{aud['investor']['c']}</button>
-      </form>
-      <div id="msg-investor" aria-live="polite"></div>
-    </div>
-    <div class="panel" id="p-advisor" role="tabpanel" data-a="advisor">
-      <h1>{aud['advisor']['h']}</h1>
-      {f'<p class="sub">{aud["advisor"]["b"]}</p>' if aud['advisor']['b'] else ''}
-      <form id="wl-advisor">
-        <label for="email-advisor" class="sr">Email</label>
-        <input id="email-advisor" type="email" name="email" placeholder="you@email.com" required />
-        <button type="submit">{aud['advisor']['c']}</button>
-      </form>
-      <div id="msg-advisor" aria-live="polite"></div>
-    </div>
-    <div class="panel" id="p-mentor" role="tabpanel" data-a="mentor">
-      <h1>{aud['mentor']['h']}</h1>
-      {f'<p class="sub">{aud["mentor"]["b"]}</p>' if aud['mentor']['b'] else ''}
-      <form id="wl-mentor">
-        <label for="email-mentor" class="sr">Email</label>
-        <input id="email-mentor" type="email" name="email" placeholder="you@email.com" required />
-        <button type="submit">{aud['mentor']['c']}</button>
-      </form>
-      <div id="msg-mentor" aria-live="polite"></div>
-    </div>
-    <div class="panel" id="p-cofounder" role="tabpanel" data-a="cofounder">
-      <h1>{aud['cofounder']['h']}</h1>
-      {f'<p class="sub">{aud["cofounder"]["b"]}</p>' if aud['cofounder']['b'] else ''}
-      <form id="wl-cofounder">
-        <label for="email-cofounder" class="sr">Email</label>
-        <input id="email-cofounder" type="email" name="email" placeholder="you@email.com" required />
-        <button type="submit">{aud['cofounder']['c']}</button>
-      </form>
-      <div id="msg-cofounder" aria-live="polite"></div>
-    </div>
+    <h1>{a['h']}</h1>
+    {f'<p class="sub">{a["b"]}</p>' if a['b'] else ''}
+    <form id="wl-form">
+      <label for="email" class="sr">Email</label>
+      <input id="email" type="email" name="email" placeholder="you@email.com" required />
+      <button type="submit">{a['c']}</button>
+    </form>
+    <div id="wl-msg" aria-live="polite"></div>
     <footer>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></footer>
   </div>
 <script{csp_nonce and f' nonce="{html.escape(csp_nonce)}"' or ''}>
-function switchTab(aud){{
-  document.querySelectorAll('.tab').forEach(function(t){{
-    var on = t.dataset.a===aud;
-    t.classList.toggle('active', on);
-    t.setAttribute('aria-selected', String(on));
-  }});
-  document.querySelectorAll('.panel').forEach(function(p){{ p.classList.toggle('active', p.dataset.a===aud); }});
-}}
 (function(){{
   var api="{api_waitlist}";
   if(!api) return;
-  ['customer','partner','investor','advisor','mentor','cofounder'].forEach(function(aud){{
-    var f=document.getElementById('wl-'+aud), m=document.getElementById('msg-'+aud);
-    f.addEventListener('submit',function(e){{
-      e.preventDefault();
-      var email=f.email.value.trim(); if(!email) return;
-      var btn=f.querySelector('button'); btn.disabled=true;
-      fetch(api,{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{email:email,source:'landing',audience:aud}})}})
-        .then(function(r){{return r.json().then(function(j){{return {{ok:r.ok,j:j}}}})}})
-        .then(function(x){{
-          if(x.ok){{ m.className='ok'; m.textContent="You're on the list. We'll be in touch."; f.reset(); }}
-          else {{ m.className='err'; m.textContent=(x.j&&x.j.error)||'Something went wrong.'; }}
-        }})
-        .catch(function(){{ m.className='err'; m.textContent='Network error. Please try again.'; }})
-        .finally(function(){{ btn.disabled=false; }});
-    }});
+  var f=document.getElementById('wl-form'), m=document.getElementById('wl-msg');
+  f.addEventListener('submit',function(e){{
+    e.preventDefault();
+    var email=f.email.value.trim(); if(!email) return;
+    var btn=f.querySelector('button'); btn.disabled=true;
+    fetch(api,{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{email:email,source:'landing',audience:"{aud_key}"}})}})
+      .then(function(r){{return r.json().then(function(j){{return {{ok:r.ok,j:j}}}})}})
+      .then(function(x){{
+        if(x.ok){{ m.className='wl-ok'; m.textContent="You're on the list. We'll be in touch."; f.reset(); }}
+        else {{ m.className='wl-err'; m.textContent=(x.j&&x.j.error)||'Something went wrong.'; }}
+      }})
+      .catch(function(){{ m.className='wl-err'; m.textContent='Network error. Please try again.'; }})
+      .finally(function(){{ btn.disabled=false; }});
   }});
 }})();
 </script>
@@ -773,11 +735,20 @@ function switchTab(aud){{
 # --- routes ----------------------------------------------------------------
 
 
-@router.post("/suggest")
-def suggest(payload: SuggestPayload, user: User = Depends(get_current_user)):
-    # Dev backend has no Workers AI binding — serve the deterministic heuristic.
-    # Prod (the Worker) routes this through Workers AI.
-    return {"suggestions": _heuristic_brand(payload.description, payload.sector), "ai_generated": False}
+@router.post("/landing/autofill")
+def landing_autofill(payload: AutofillPayload, user: User = Depends(get_current_user)):
+    # Dev backend has no Workers AI binding and no per-template schema mirror —
+    # serve deterministic hero copy and let the editor layer its own template
+    # defaults over the (empty) content. Prod (the Worker) routes this through
+    # Workers AI and returns fully-populated per-template content.
+    hero = _heuristic_hero_copy(payload.name or "", payload.sector, payload.description)
+    return {
+        **hero,
+        "name": payload.name or "",
+        "cta_text": "Join the waitlist",
+        "content": {},
+        "ai_generated": False,
+    }
 
 
 @router.post("/logo")
@@ -848,6 +819,7 @@ def upsert_landing(
         "audience": _valid_page_audience(payload.audience),
         "goal": _valid_goal(payload.goal),
         "template_kit": _clean_template_kit(payload.template_kit),
+        "content_json": _content_json_str(payload.content_json),
     }
     if existing:
         preview_token = existing.get("preview_token") or secrets.token_hex(16)
@@ -868,10 +840,9 @@ def upsert_landing(
             "audience_mentor_headline=:men_h, audience_mentor_body=:men_b, audience_mentor_cta=:men_c, "
             "audience_cofounder_headline=:cof_h, audience_cofounder_body=:cof_b, audience_cofounder_cta=:cof_c, "
             "template=:template, hero_media_url=:hero_media_url, product_screenshot_url=:product_screenshot_url, "
-            "audience=:audience, goal=:goal, template_kit=:template_kit, "
+            "audience=:audience, goal=:goal, template_kit=:template_kit, content_json=:content_json, "
             "preview_token=:preview_token, updated_at=CURRENT_TIMESTAMP WHERE project_id=:pid"
         ), params=params)
-        slug = existing["slug"]
     else:
         slug = _slugify(payload.name)
         preview_token = secrets.token_hex(16)
@@ -890,13 +861,13 @@ def upsert_landing(
             "audience_advisor_headline, audience_advisor_body, audience_advisor_cta, "
             "audience_mentor_headline, audience_mentor_body, audience_mentor_cta, "
             "audience_cofounder_headline, audience_cofounder_body, audience_cofounder_cta, "
-            "template, hero_media_url, product_screenshot_url, audience, goal, template_kit) "
+            "template, hero_media_url, product_screenshot_url, audience, goal, template_kit, content_json) "
             "VALUES (:pid, :slug, :preview_token, :name, :tagline, :headline, :subheadline, :cta, :logo_url, "
             ":logo_svg, :logo_asset_id, :color, :palette_bg, :palette_ink, "
             ":palette_secondary, :palette_accent, :font_pairing, "
             ":ac_h, :ac_b, :ac_c, :ap_h, :ap_b, :ap_c, :ai_h, :ai_b, :ai_c, "
             ":adv_h, :adv_b, :adv_c, :men_h, :men_b, :men_c, :cof_h, :cof_b, :cof_c, "
-            ":template, :hero_media_url, :product_screenshot_url, :audience, :goal, :template_kit)"
+            ":template, :hero_media_url, :product_screenshot_url, :audience, :goal, :template_kit, :content_json)"
         ), params=params)
     session.commit()
     row = session.exec(text(

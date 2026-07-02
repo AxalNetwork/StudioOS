@@ -29,7 +29,7 @@ from sqlmodel import Session, select
 from backend.app.api.routes.auth import get_current_user
 from backend.app.database import get_session
 from backend.app.models.entities import (
-    CofounderConnection, CofounderProfile, User,
+    CofounderConnection, User,
 )
 from backend.app.services import cofounder as svc
 

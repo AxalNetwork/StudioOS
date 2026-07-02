@@ -15,11 +15,11 @@ on:
 permissions:
   contents: read
 
+# Non-secret config only. Secrets are scoped to the specific steps that
+# consume them (see the drill + notify steps below) so they aren't exposed
+# to every step in the job.
 env:
-  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
   BACKUP_BUCKET: studioos-backups
-  PAGER_WEBHOOK_URL: ${{ secrets.PAGER_WEBHOOK_URL }}
   # Enables 4d in scripts/dr-drill.sh: deploy a fresh preview worker
   # bound to the restored throwaway D1 and HTTP-smoke /api/health.
   DR_DRILL_PREVIEW: '1'
@@ -29,9 +29,39 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      - uses: actions/setup-node@v6
+      - name: Preflight — assert required secrets are set
+        # Runs BEFORE wrangler install so failures are instant and actionable.
+        # Secrets are scoped to this step's env: (not hoisted to job level).
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          MISSING=()
+          if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then
+            MISSING+=("CLOUDFLARE_API_TOKEN")
+          fi
+          if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
+            MISSING+=("CLOUDFLARE_ACCOUNT_ID")
+          fi
+          if [[ ${#MISSING[@]} -gt 0 ]]; then
+            echo "::error::Required repo secret(s) are missing or empty: ${MISSING[*]}"
+            echo ""
+            echo "These must be set as REPOSITORY secrets (not environment-scoped):"
+            echo "  Settings → Secrets and variables → Actions → New repository secret"
+            echo ""
+            echo "Required token scopes: D1 export/read + R2 object write."
+            echo "See .github/workflows/README.md for the full triage guide."
+            exit 1
+          fi
+          # Non-blocking sanity check: account ID should be 32 lowercase hex chars.
+          if ! [[ "${CLOUDFLARE_ACCOUNT_ID}" =~ ^[0-9a-f]{32}$ ]]; then
+            echo "::warning::CLOUDFLARE_ACCOUNT_ID does not look like a 32-char hex string ('${CLOUDFLARE_ACCOUNT_ID:0:6}…'). Wrangler may reject it. Verify the value in repo Settings → Secrets."
+          fi
+          echo "Preflight OK — both secrets are present."
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: '22'
 
@@ -41,11 +71,22 @@ jobs:
           sudo apt-get update && sudo apt-get install -y jq
 
       - name: Run DR drill
+        # Cloudflare creds + optional pager are consumed by scripts/dr-drill.sh
+        # (it runs wrangler and posts its own failure page), so scope them here.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGER_WEBHOOK_URL: ${{ secrets.PAGER_WEBHOOK_URL }}
         run: bash scripts/dr-drill.sh
 
       - name: Notify on failure
         if: failure() && env.PAGER_WEBHOOK_URL != ''
+        env:
+          PAGER_WEBHOOK_URL: ${{ secrets.PAGER_WEBHOOK_URL }}
+          # Pass GitHub-context values via env (never interpolate them
+          # directly into the run: shell — that's a command-injection footgun).
+          RUN_ID: ${{ github.run_id }}
         run: |
           curl -fsS -X POST -H 'Content-Type: application/json' \
-            -d "{\"text\":\"🚨 DR DRILL FAILED — investigate immediately. See run #${{ github.run_id }}.\"}" \
+            -d "{\"text\":\"🚨 DR DRILL FAILED — investigate immediately. See run #${RUN_ID}.\"}" \
             "${PAGER_WEBHOOK_URL}" || true

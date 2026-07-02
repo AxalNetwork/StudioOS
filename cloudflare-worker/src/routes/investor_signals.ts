@@ -20,7 +20,6 @@ import { hashEmail } from '../util/hashEmail';
 import { callerHasFullLens } from '../util/marketIntelTier';
 import {
   confidenceAdjustedAlignment,
-  type ValueEntry,
 } from '../services/matchingVectors';
 import { isAdmin, isFounder, mapError } from './_t13t14t15_helpers';
 import { filterOptedInUserIds } from '../services/matchingConsent';

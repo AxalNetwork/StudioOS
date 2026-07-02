@@ -17,14 +17,13 @@ from fastapi import (APIRouter, Depends, File, Form, Header, HTTPException,
                      Request, UploadFile)
 from pydantic import BaseModel, Field as PField
 from sqlalchemy import text
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from backend.app.api.routes.auth import get_current_user
 from backend.app.database import get_session
 from backend.app.models.entities import (
-    Document, Investor, NDAAcceptance, Partner, User, UserRole,
+    Document, Investor, Partner, User,
 )
-from backend.app.services import trust as trust_svc
 from backend.app.services.trust import (
     NDA_TEMPLATES, apply_sumsub_webhook, ensure_nda_acceptance,
     list_nda_status, required_nda_roles_for, review_accreditation,

@@ -3,7 +3,6 @@ import { FileText, X, Plus, Save, Trash2, History, Loader2, AlertTriangle, Refre
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { useEscapeClose } from '../../components/useEscapeClose';
-import DocumentBody from '../../components/DocumentBody';
 import PaperPreview from '../../components/PaperPreview';
 
 // Task #8 — Markdown template editor + full template catalog.

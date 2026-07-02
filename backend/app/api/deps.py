@@ -1,5 +1,4 @@
 """Shared FastAPI dependencies for authentication and RBAC."""
-from typing import Iterable
 
 from fastapi import Depends, HTTPException
 

@@ -24,8 +24,8 @@
  *   2  — environment problem (git not found, etc.)
  */
 
-import { execSync } from "node:child_process";
-import { existsSync, statSync, writeFileSync, chmodSync, mkdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, statSync, writeFileSync, chmodSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -48,26 +48,26 @@ const LFS_TRACKED_EXTS = new Set([
 
 const args = new Set(process.argv.slice(2));
 
-function sh(cmd) {
-  return execSync(cmd, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+function git(args) {
+  return execFileSync("git", args, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();
 }
 
-function tryShOrEmpty(cmd) {
-  try { return sh(cmd); } catch { return ""; }
+function tryGitOrEmpty(args) {
+  try { return git(args); } catch { return ""; }
 }
 
 function listStagedAdditions() {
-  const out = tryShOrEmpty("git diff --cached --name-only --diff-filter=AM");
+  const out = tryGitOrEmpty(["diff", "--cached", "--name-only", "--diff-filter=AM"]);
   return out ? out.split("\n").filter(Boolean) : [];
 }
 
 function listAll() {
-  const out = tryShOrEmpty("git ls-files");
+  const out = tryGitOrEmpty(["ls-files"]);
   return out ? out.split("\n").filter(Boolean) : [];
 }
 
 function listAgainst(ref) {
-  const out = tryShOrEmpty(`git diff ${ref}...HEAD --name-only --diff-filter=AM`);
+  const out = tryGitOrEmpty(["diff", `${ref}...HEAD`, "--name-only", "--diff-filter=AM"]);
   return out ? out.split("\n").filter(Boolean) : [];
 }
 
@@ -80,7 +80,7 @@ function extOf(p) {
 
 function isLfsTracked(path) {
   try {
-    const out = sh(`git check-attr filter -- ${JSON.stringify(path)}`);
+    const out = git(["check-attr", "filter", "--", path]);
     return /:\s*filter:\s*lfs\b/.test(out);
   } catch {
     return false;

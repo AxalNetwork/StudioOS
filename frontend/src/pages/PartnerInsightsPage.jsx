@@ -4,7 +4,7 @@ import {
   BarChart, Bar,
 } from 'recharts';
 import {
-  TrendingUp, Map, Sparkles, Mail, Loader2, AlertCircle, Eye, Check, X,
+  TrendingUp, Map, Sparkles, Mail, Loader2, AlertCircle, Eye, X,
   Globe, Layers,
 } from 'lucide-react';
 import { api } from '../lib/api';

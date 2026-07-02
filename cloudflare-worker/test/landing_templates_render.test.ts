@@ -1,18 +1,19 @@
 // Task #27 — publish-time guard for EVERY landing visual template.
 //
 // The 21 server-rendered templates in
-// `cloudflare-worker/src/services/landingTemplates.ts` (5 original six-tab
-// layouts + 16 ported single-audience designs from Task #24/#25) are emitted
-// as raw HTML strings via the RENDERERS dispatcher. A typo in any template —
-// broken HTML, a missing/duplicated waitlist form, the wrong fixed audience,
-// unescaped founder copy (XSS), or an accidental `@import` / external font that
-// violates the strict CSP — would only surface once a founder publishes a page.
+// `cloudflare-worker/src/services/landingTemplates.ts` (5 original layouts + 16
+// ported designs from Task #24/#25) are emitted as raw HTML strings via the
+// RENDERERS dispatcher. A typo in any template — broken HTML, a
+// missing/duplicated waitlist form, the wrong fixed audience, unescaped founder
+// copy (XSS), or an accidental `@import` / external font that violates the
+// strict CSP — would only surface once a founder publishes a page.
 //
 // This iterates every key in TEMPLATE_KEYS and asserts each rendered page is
-// structurally sound, CSP-safe, and escapes hostile copy. The waitlist-capture
-// shape is checked per architecture: the ported designs expose a single
-// `#wl-form`/`#wl-msg` posting one fixed audience that must match the catalog
-// entry; the original designs expose the six-tab `#wl-<audience>` capture.
+// structurally sound, CSP-safe, and escapes hostile copy. Since Task #3 every
+// template — originals included — is single-audience: the six-tab in-page
+// switcher was removed and each page exposes ONE `#wl-form`/`#wl-msg` posting a
+// single fixed audience (the audience is chosen in step 1). For the 16 ported
+// designs that audience must match the catalog entry.
 //
 // Complements `landing_templates.test.ts` (Task #26), which guards the 16
 // ported designs' palette lockstep + signature colours. This file adds the
@@ -105,47 +106,52 @@ for (const key of TEMPLATE_KEYS) {
       'no external font URLs',
     );
     assert.ok(
-      !/<link\b[^>]*rel=["']?stylesheet/i.test(html),
+      !/\brel\s*=\s*["']?\s*stylesheet/i.test(html),
       'no external stylesheet <link>',
     );
 
-    // ── Waitlist capture — branch by the two form architectures ───────
+    // ── Waitlist capture — single-audience for EVERY template (Task #3) ─
     const catalogAudiences = [...new Set(
       TEMPLATES.filter((t) => t.visualTemplate === key).map((t) => t.audience),
     )];
 
-    if (html.includes('id="wl-form"')) {
-      // Ported single-audience design: exactly one capture form + message node.
-      assert.equal(count(html, 'id="wl-form"'), 1, 'exactly one #wl-form');
-      assert.equal(count(html, 'id="wl-msg"'), 1, 'exactly one #wl-msg');
-      assert.ok(
-        html.includes(`/api/brand/landing/${SLUG}/waitlist`),
-        'posts to the slug-scoped waitlist endpoint',
-      );
+    // Exactly one capture form + message node, posting to the slug endpoint.
+    assert.equal(count(html, 'id="wl-form"'), 1, 'exactly one #wl-form');
+    assert.equal(count(html, 'id="wl-msg"'), 1, 'exactly one #wl-msg');
+    assert.ok(
+      html.includes(`/api/brand/landing/${SLUG}/waitlist`),
+      'posts to the slug-scoped waitlist endpoint',
+    );
+    assert.ok(
+      html.includes("credentials:'omit'"),
+      'waitlist POST omits credentials so CSRF is never triggered for logged-in visitors',
+    );
 
-      // Posts exactly one fixed audience, valid and matching the catalog entry.
-      const posted = [...html.matchAll(/audience:"([^"]+)"/g)].map((m) => m[1]);
-      assert.equal(posted.length, 1, `posts exactly one fixed audience (got ${posted.length})`);
-      assert.ok(AUDIENCES.includes(posted[0]), `posted audience "${posted[0]}" is a known audience`);
-      assert.equal(catalogAudiences.length, 1, `catalog maps "${key}" to exactly one audience`);
+    // The six-tab audience switcher is fully gone — no switchTab script and no
+    // per-audience capture forms/panels in any rendered page.
+    assert.ok(!html.includes('switchTab('), 'no six-tab switcher script');
+    assert.ok(
+      !/id="wl-(customer|partner|investor|advisor|mentor|cofounder)"/.test(html),
+      'no per-audience six-tab capture forms',
+    );
+
+    // Posts exactly one fixed audience, and it is a known one.
+    const posted = [...html.matchAll(/audience:"([^"]+)"/g)].map((m) => m[1]);
+    assert.equal(posted.length, 1, `posts exactly one fixed audience (got ${posted.length})`);
+    assert.ok(AUDIENCES.includes(posted[0]), `posted audience "${posted[0]}" is a known audience`);
+
+    // The 16 ported designs map to exactly one catalog audience — cross-check
+    // it. The 5 original layouts are not catalog visualTemplate targets; they
+    // render the audience chosen in step 1 (the fixture omits it → 'customer').
+    if (catalogAudiences.length === 1) {
       assert.equal(
         posted[0],
         catalogAudiences[0],
         `posted audience matches the catalog audience for "${key}"`,
       );
     } else {
-      // Original multi-audience design: the six-tab capture, exactly one
-      // form + message node per audience (no duplicated/missing panels).
-      for (const a of AUDIENCES) {
-        assert.equal(count(html, `id="wl-${a}"`), 1, `exactly one #wl-${a} capture form`);
-        assert.equal(count(html, `id="msg-${a}"`), 1, `exactly one #msg-${a} message node`);
-      }
-      assert.ok(
-        html.includes(`/api/brand/landing/${SLUG}/waitlist`),
-        'posts to the slug-scoped waitlist endpoint',
-      );
-      // The original styles are not catalog visualTemplate targets.
       assert.equal(catalogAudiences.length, 0, `original style "${key}" is not a catalog visualTemplate`);
+      assert.equal(posted[0], 'customer', `original style "${key}" posts the step-1 default audience`);
     }
   });
 }

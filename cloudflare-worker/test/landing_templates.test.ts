@@ -85,3 +85,74 @@ for (const key of Object.keys(TEMPLATE_SIGNATURE_PALETTES)) {
     }
   });
 }
+
+// Task #10 — guard that a CONFIGURED brand logo actually renders on EVERY
+// signature template, in the nav AND a secondary brand surface (hero/footer).
+//
+// Palette presence is enforced above; logo presence was not. 11 of the 16
+// signature templates silently dropped a configured logo_url (rendering a
+// decorative monogram/dot/square instead) and the other 5 only showed it once
+// in the nav. This locks the logo in so a future template edit can't ship a
+// logo-less page without a test failing.
+//
+// "Configured" keys off the <img> emitted from row.logo_url — NOT the
+// always-present svgLogo fallback, which is intentional when no logo is set.
+const LOGO_URL = 'https://cdn.example.com/brandkit/logo-SIGNATURE.png';
+
+function countOccurrences(haystack, needle) {
+  let n = 0;
+  let i = 0;
+  for (;;) {
+    const idx = haystack.indexOf(needle, i);
+    if (idx === -1) return n;
+    n++;
+    i = idx + needle.length;
+  }
+}
+
+// The nav is the first <nav>...</nav>. The "secondary" brand surface is any
+// markup after that nav closes (hero/sections/footer).
+function navSlice(html) {
+  const open = html.indexOf('<nav');
+  if (open === -1) return '';
+  const close = html.indexOf('</nav>', open);
+  return close === -1 ? '' : html.slice(open, close + '</nav>'.length);
+}
+function afterNav(html) {
+  const close = html.indexOf('</nav>');
+  return close === -1 ? '' : html.slice(close + '</nav>'.length);
+}
+
+for (const key of Object.keys(TEMPLATE_SIGNATURE_PALETTES)) {
+  test(`signature template "${key}" renders a configured logo in nav + hero/footer`, () => {
+    const sig = TEMPLATE_SIGNATURE_PALETTES[key];
+    const row = { ...baseRow, template: key, ...sig, logo_url: LOGO_URL };
+    const html = renderLandingTemplate(row, { noindex: true, nonce: 'test-nonce' });
+
+    // The configured logo must be emitted as an <img> carrying the configured
+    // src — not the svgLogo monogram fallback, and not merely a URL reference in
+    // an og:image/meta tag.
+    const IMG = `<img src="${LOGO_URL}"`;
+    assert.ok(
+      html.includes(IMG),
+      `"${key}" must render the configured logo as an <img src>`,
+    );
+
+    // It appears as an <img> at least twice: once in the nav and once in a
+    // secondary brand surface (hero or footer).
+    const total = countOccurrences(html, IMG);
+    assert.ok(
+      total >= 2,
+      `"${key}" must render the configured logo <img> in nav + hero/footer (found ${total} occurrence(s))`,
+    );
+
+    assert.ok(
+      navSlice(html).includes(IMG),
+      `"${key}" must render the configured logo <img> inside the <nav>`,
+    );
+    assert.ok(
+      afterNav(html).includes(IMG),
+      `"${key}" must render the configured logo <img> in the hero/footer (after the nav)`,
+    );
+  });
+}

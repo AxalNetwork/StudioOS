@@ -8,11 +8,10 @@ import SafeMount from './components/SafeMount';
 import CookieConsent from './components/CookieConsent';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import {
-  LayoutDashboard, Target, FileText, Users, DollarSign,
-  Ticket, Menu, X, Zap, Handshake, Rocket, UserCircle,
-  Globe, Brain, Activity, LogOut, Shield,
-  ChevronDown, ChevronLeft, ChevronRight, Eye, ArrowLeft, Code, ShieldCheck, Share2, Wallet, Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, MessageSquare, Package, Lock, Calendar,
-  Settings as SettingsIcon, PieChart as PieIcon, Heart, Bookmark, Megaphone, BookOpen, Search
+  Menu, X,
+  LogOut, Shield,
+  ChevronDown, ChevronLeft, ChevronRight, Eye, ArrowLeft, Sparkles,
+  Search
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, defaultOpenGroups, filterItemsByTier, hasTier, hasInvestorTier } from './sidebarConfig';
 import PaywallModal, { openPaywall } from './components/PaywallModal';
@@ -28,6 +27,8 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
+const ExecutionPage = lazy(() => import('./pages/ExecutionPage'));
+const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
 const IncorporatePage = lazy(() => import('./pages/IncorporatePage'));
 const IncorporateSuccessPage = lazy(() => import('./pages/IncorporateSuccessPage'));
@@ -132,6 +133,13 @@ const FundsPage = lazy(() => import('./pages/FundsPage'));
 const InvestorPricingPage = lazy(() => import('./pages/InvestorPricingPage'));
 const ReservesPage = lazy(() => import('./pages/ReservesPage'));
 const WaterfallPage = lazy(() => import('./pages/WaterfallPage'));
+const ICDecisionsPage = lazy(() => import('./pages/ICDecisionsPage'));
+const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
+const LPReportingPage = lazy(() => import('./pages/LPReportingPage'));
+const PortfolioUpdatesPage = lazy(() => import('./pages/PortfolioUpdatesPage'));
+const PortfolioPositionsPage = lazy(() => import('./pages/PortfolioPositionsPage'));
+const ContactsPage = lazy(() => import('./pages/ContactsPage'));
+const RaisePipelinePage = lazy(() => import('./pages/RaisePipelinePage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const DocsPage = lazy(() => import('./pages/DocsPage'));
 const OnboardingPersonaPage = lazy(() => import('./pages/OnboardingPersonaPage'));
@@ -193,7 +201,10 @@ const ROLE_COLORS = {
 
 const ROLE_DEFAULT_PATH = {
   admin: '/studio',
-  founder: '/founder',
+  // Task #19 — "Founder Portal" folded into Home (Studio). Founders land on
+  // /studio directly; /founder now redirects founders there anyway, so pointing
+  // the default here avoids an extra redirect hop on login/root navigation.
+  founder: '/studio',
   partner: '/partner-portal',
   investor: '/studio',
   mentor: '/office-hours',
@@ -228,6 +239,11 @@ function getSidebarGroups(role, primaryPersonaId, user) {
   // so we never duplicate a row.
   const persona = primaryPersonaId ? PERSONA_LOOKUP[primaryPersonaId] : null;
   if (!persona || !Array.isArray(persona.nav_extras) || persona.nav_extras.length === 0) {
+    return groups;
+  }
+  // Never inject a persona group whose role_alignment differs from the
+  // current user — a Founder nav extra has no place in an Investor sidebar.
+  if (persona.role_alignment && String(persona.role_alignment) !== String(role)) {
     return groups;
   }
   const existingPaths = new Set();
@@ -275,6 +291,7 @@ function abbreviateLabel(label) {
 }
 
 function SidebarNav({ groups, role, onNavigate, user, collapsed }) {
+  const navLocation = useLocation();
   const [query, setQuery] = useState('');
   // Persisted open-state per group key. We seed once from
   // localStorage merged with `defaultOpenGroups()` so first-time users
@@ -370,8 +387,14 @@ function SidebarNav({ groups, role, onNavigate, user, collapsed }) {
               </button>
             )}
             {isOpen && visibleItems.map((item) => {
-              const { to, icon: Icon, label, highlight, requiredTier, requiredInvestorTier } = item;
+              const { to, icon: Icon, label, highlight, requiredTier, requiredInvestorTier, match } = item;
               const abbr = abbreviateLabel(label);
+              // Task #12 — items may declare `match` (path prefixes) so a
+              // consolidated destination (e.g. Execution) highlights across
+              // all of its sub-views instead of only its exact `to` path.
+              const manualActive = Array.isArray(match)
+                ? match.some((p) => navLocation.pathname === p || navLocation.pathname.startsWith(`${p}/`))
+                : null;
               // Task #6 / #7 — items the user can't afford render as a
               // "locked" button that opens PaywallModal. Bypass roles + users
               // on the right tier render as normal NavLinks. Investor tier
@@ -411,26 +434,27 @@ function SidebarNav({ groups, role, onNavigate, user, collapsed }) {
                 <NavLink
                   key={to}
                   to={to}
-                  end
+                  end={manualActive === null}
                   onClick={onNavigate}
                   title={collapsed ? label : undefined}
-                  className={({ isActive }) =>
-                    collapsed
+                  className={({ isActive }) => {
+                    const active = manualActive === null ? isActive : manualActive;
+                    return collapsed
                       ? `flex flex-col items-center gap-0.5 px-1 py-2 text-[10px] transition-colors ${
-                          isActive
+                          active
                             ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border-r-2 border-violet-600'
                             : highlight
                               ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50/60 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40'
                               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
                         }`
                       : `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
-                          isActive
+                          active
                             ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border-r-2 border-violet-600'
                             : highlight
                               ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50/60 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40'
                               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
-                        }`
-                  }
+                        }`;
+                  }}
                 >
                   {Icon && <Icon size={collapsed ? 18 : 16} />}
                   {collapsed ? (
@@ -1155,6 +1179,10 @@ function AppInner() {
       <Route path="/auth/recover" element={<RecoverPage />} />
       <Route path="/auth/recover/*" element={<RecoverPage />} />
       <Route path="/esign/:token" element={<ESignPage />} />
+      {/* Task #1 (Spin-Out Teams) — tokenized co-founder/advisor invite
+          acceptance. Public route; the page bounces logged-out visitors to
+          sign-in with a `?next=` return path, then POSTs the bound token. */}
+      <Route path="/projects/invitations/accept" element={<AcceptInvitePage />} />
       {/* Task #9 (X-2) — Public token-gated partner onboarding wizard.
           Mounted at the path embedded in admin-emailed magic links AND a
           query-string variant for fallback share-by-link channels. */}
@@ -1232,6 +1260,12 @@ function AppInner() {
       <Route path="/scoring" element={guard(['admin', 'partner', 'investor'], <ScoringPage />)} />
       <Route path="/projects" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectsPage />)} />
       <Route path="/projects/:id" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectDetail />)} />
+      {/* Task #12 — Founder Execution area: one deep-linkable shell wrapping the
+          Projects / Board / Roadmap views. Standalone routes above stay intact
+          for other personas. */}
+      <Route path="/execution" element={guard(['admin', 'founder'], <ExecutionPage />)} />
+      <Route path="/execution/board" element={guard(['admin', 'founder'], <ExecutionPage />)} />
+      <Route path="/execution/roadmap" element={guard(['admin', 'founder'], <ExecutionPage />)} />
       <Route path="/legal" element={guard(['admin', 'founder'], <LegalPage />)} />
       <Route path="/incorporate" element={guard(['admin', 'founder', 'partner', 'investor'], <IncorporatePage />)} />
       <Route path="/incorporate/success" element={guard(['admin', 'founder', 'partner', 'investor'], <IncorporateSuccessPage />)} />
@@ -1283,18 +1317,38 @@ function AppInner() {
       <Route path="/funds" element={guard(['admin', 'investor'], <FundsPage currentUser={user} />)} />
       <Route path="/portfolio/reserves" element={guard(['admin', 'investor'], <ReservesPage />)} />
       <Route path="/portfolio/waterfall" element={guard(['admin', 'investor'], <WaterfallPage />)} />
-      <Route path="/founder" element={guard(['admin', 'founder'], <FounderPortal />)} />
+      {/* Task #19 — the founder sidebar no longer surfaces "Founder Portal"
+          (folded into Studio/Home). Founders hitting the old link are
+          redirected to /studio; admins keep the Founder Portal surface. */}
+      <Route path="/founder" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/studio" replace /> : <FounderPortal />)} />
+      {/* Task #18 — investor-lifecycle features ported from PR #119. */}
+      <Route path="/ic" element={guard(['admin', 'partner', 'investor'], <ICDecisionsPage />)} />
+      <Route path="/ic/:uid" element={guard(['admin', 'partner', 'investor'], <ICDecisionPage />)} />
+      <Route path="/lp-reports" element={guard(['admin', 'investor'], <LPReportingPage />)} />
+      <Route path="/portfolio/updates" element={guard(['admin', 'partner', 'investor', 'founder'], <PortfolioUpdatesPage />)} />
+      <Route path="/portfolio/positions" element={guard(['admin', 'investor'], <PortfolioPositionsPage />)} />
+      {/* Contacts — founder inbound relationship hub (PR #120). */}
+      <Route path="/contacts" element={guard(['admin', 'founder'], <ContactsPage />)} />
+      {/* Raise pipeline — investor contacts promoted from the Contacts hub. */}
+      <Route path="/raise" element={guard(['admin', 'founder'], <RaisePipelinePage />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferEarnPage />)} />
       <Route path="/integrations" element={guard(['admin', 'partner', 'investor'], <IntegrationsPage />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <PayoutsPage />)} />
       <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkPage />)} />
+      {/* Task #17 — investor "Discover" nav lands on the network/archetype
+          discovery surface. Distinct path from /network so the sidebar item
+          highlights correctly. */}
+      <Route path="/play" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkPage />)} />
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
       <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />
       <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], <PipelinePage />)} />
       <Route path="/relationships" element={guard(['admin', 'founder', 'partner', 'investor'], <RelationshipsPage />)} />
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
-      <Route path="/partner-portal" element={guard(['admin', 'partner', 'investor'], <PartnerPortal />)} />
+      {/* Task #17 — the investor sidebar no longer surfaces "Investor Portal"
+          (redundant with Studio). Investors hitting the old bookmark are
+          redirected to /studio; admin/partner keep the LP/capital-call surface. */}
+      <Route path="/partner-portal" element={guard(['admin', 'partner', 'investor'], user?.role === 'investor' ? <Navigate to="/studio" replace /> : <PartnerPortal />)} />
       {/* Task #9 (X-2) — Deal-specific Partner Portal (referral code,
           granted tiers, redemption count). Distinct from the legacy
           /partner-portal which keeps the LP/capital-call surface. */}
@@ -1305,6 +1359,10 @@ function AppInner() {
           redirected into the hash-anchored docs surface. */}
       <Route path="/docs/admin/*" element={<AdminDocsPathGuard />} />
       <Route path="/docs" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <DocsPage />)} />
+      {/* Task #17 — investor "Profile" nav lands on the self-profile surface
+          (the Settings profile section rendered at its own path so the sidebar
+          item highlights independently of Settings). */}
+      <Route path="/profile" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SettingsPage />)} />
       <Route path="/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SettingsPage />)} />
 
       {/* Task #53 — Public partner directory + profiles (no auth). The

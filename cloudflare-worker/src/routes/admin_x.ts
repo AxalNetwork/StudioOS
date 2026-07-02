@@ -201,21 +201,6 @@ function isoDay(d = new Date()): string {
 }
 
 /**
- * Read sent-today via the source-of-truth D1 query (atomic + consistent).
- * KV is only used as a non-authoritative cache hint for fast UI reads.
- */
-async function readSentToday(env: Env, accountId: number): Promise<number> {
-  try {
-    const row: any = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM x_posts
-        WHERE account_id = ? AND status = 'sent'
-          AND date(sent_at) = date('now')`,
-    ).bind(accountId).first();
-    return Number(row?.n || 0);
-  } catch { return 0; }
-}
-
-/**
  * Atomic reservation count: sent-today PLUS every row currently in 'sending'
  * for this account. Because `/send` CAS-flips head + children to 'sending'
  * BEFORE the cap check, two concurrent thread sends on the same account

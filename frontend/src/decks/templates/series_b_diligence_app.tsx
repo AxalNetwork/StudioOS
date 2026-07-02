@@ -11,7 +11,7 @@
 
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { Slide16x9, type DeckProps as RegistryDeckProps, BrandProvider, useBrandContext } from '../DeckBase';
+import { Slide16x9, type DeckProps as RegistryDeckProps, BrandProvider } from '../DeckBase';
 import {
   ResponsiveContainer,
   AreaChart, Area,
@@ -19,7 +19,7 @@ import {
   BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, Legend, ComposedChart,
-  PieChart, Pie, Cell, Sector,
+  PieChart, Pie, Cell,
 } from 'recharts';
 
 // ─────────────────────────────────────────────────────────────────
@@ -183,7 +183,6 @@ export type DeckProps = {
 
 const PAPER = '#FFFFFF';
 const INK = '#0B1220';
-const INK_2 = '#1E293B';
 const ACCENT = '#1E40AF';       // navy primary
 const ACCENT_2 = '#0EA5E9';      // sky
 const ACCENT_3 = '#7C3AED';      // violet (segment differentiator)
@@ -420,24 +419,6 @@ const ChartTooltip = ({ active, payload, label, suffix = '', prefix = '' }: any)
     </div>
   );
 };
-
-const SectionDivider: React.FC<{ section: string; index: number }> = ({ section, index }) => (
-  <div
-    className="relative"
-    style={{
-      aspectRatio: '16 / 9', width: '100%', maxHeight: '100vh',
-      background: INK, color: PAPER, fontFamily: FONT,
-      padding: 'clamp(40px, 6vw, 96px)', display: 'flex', flexDirection: 'column', justifyContent: 'center',
-    }}
-  >
-    <div style={{ fontSize: 12, letterSpacing: 8, color: ACCENT_2, fontWeight: 700, fontFamily: FONT_MONO }}>
-      {section}
-    </div>
-    <div style={{ fontSize: 'clamp(48px, 6vw, 96px)', fontWeight: 800, letterSpacing: -3, marginTop: 12 }}>
-      {SLIDE_TITLES[index]}
-    </div>
-  </div>
-);
 
 // ─────────────────────────────────────────────────────────────────
 // SVG primitives
@@ -2697,7 +2678,6 @@ export const Deck_series_b_diligence_app: React.FC<RegistryDeckProps> = ({ data,
 );
 
 const Deck_series_b_diligence_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
-  const { accent: brandAccent } = useBrandContext();
   const merged = useMemo(
     () => mergeShape(SAMPLE_DATA, data || {}) as SeriesBData,
     [data],

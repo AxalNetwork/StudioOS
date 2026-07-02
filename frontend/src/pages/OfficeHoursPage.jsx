@@ -5,7 +5,7 @@
  * mentees after a session.
  */
 import { useEffect, useState } from 'react';
-import { Calendar, Plus, Trash2, CheckCircle, XCircle, Star, X, Loader2, UserCircle } from 'lucide-react';
+import { Calendar, Plus, Trash2, CheckCircle, Star, X, Loader2, UserCircle } from 'lucide-react';
 import { api } from '../lib/api';
 import PageExplainer from '../components/PageExplainer';
 
@@ -246,7 +246,7 @@ export default function OfficeHoursPage() {
   const [slots, setSlots] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [reviewing, setReviewing] = useState(null);
-  const [err, setErr] = useState(null);
+  const [, setErr] = useState(null);
 
   async function loadAll() {
     try {

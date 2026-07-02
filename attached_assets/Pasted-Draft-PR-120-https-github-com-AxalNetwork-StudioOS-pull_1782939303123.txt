@@ -1,0 +1,27 @@
+Draft PR [#120](https://github.com/AxalNetwork/StudioOS/pull/120) created and I'm now subscribed to its activity. Let me check current CI status.
+
+CI is running (CodeQL Python + JS-TS, both in progress); no review comments yet. Let me arm the hourly self check-in since webhooks don't deliver CI success/conflicts.
+
+The Contacts backbone is built, pushed, and draft PR [#120](https://github.com/AxalNetwork/StudioOS/pull/120) is open (superseding the closed #119). I'm subscribed and have an hourly check-in armed.
+
+## What I built
+
+**Capture → Contacts routing**, worker-first:
+
+- **`contacts` + `contact_replies` + `contact_tasks`** tables (migration `120`, plus a lazy `ensureSchema` in the route mirroring `brand.ts` so the tables exist at runtime before the migration is applied).
+- **`/api/contacts`** — founder-scoped inbox: audience filter, status pipeline (`new → invited → contacted → replied → qualified → active → passed`), reply log, follow-up tasks, `invite`, and **`promote`** (customer → Customer Discovery, investor → raise pipeline; the other four stay in Contacts). Exported `ingestContact` applies the routing (`routed_to`: discovery/raise/network).
+- **`brand.ts` landing subscribe dual-writes**: the legacy `waitlist_signups` insert stays CHECK-safe (only the original 3 audiences), and every signup also flows into the Contacts hub with the **full 6-audience set** (adds advisor/mentor/cofounder). The Contacts write is wrapped in try/catch so **capture never fails** even if the hub errors.
+- **SPA**: `api.js` contacts methods, `ContactsPage.jsx` (inbox + detail drawer with status/replies/tasks/promote/invite), route, and a **Contacts** item in the founder **Validate** sidebar group.
+
+This matches the architecture I recommended: one unified system, audience as a dimension, customers/investors branching out and the rest living in Contacts.
+
+## Verification
+- **API drift passes** — `node scripts/check-api-drift.mjs` → ✅ (933 SPA paths, 124 worker mounts; `/api/contacts` covered).
+- Full `tsc`/`vite build` couldn't run locally (Replit firewall) — CI covers it. Files follow existing patterns exactly, and I confirmed no import cycle (`brand.ts` → `contacts.ts` only, not back).
+
+## Follow-ups I deliberately left (noted in code)
+- **Transactional email** on invite (reuse `routes/email.ts`) — the invite currently creates the `invited` contact record but doesn't send the email yet.
+- **Deep promote** — promoting a customer/investor stamps `promoted_to` + qualifies them; actually *creating* the linked Discovery interview / raise-pipeline record is the next step.
+- Extending the landing form UI to expose the 3 new audiences (advisor/mentor/cofounder) — the backend accepts them now.
+
+CI is running on #120; I'll surface any failures or review comments as they come in.

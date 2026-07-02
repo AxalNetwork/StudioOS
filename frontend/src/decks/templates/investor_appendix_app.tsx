@@ -15,11 +15,10 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { BrandProvider, useBrandContext } from '../DeckBase';
+import { BrandProvider } from '../DeckBase';
 import {
   AreaChart,
   Area,
-  LineChart,
   Line,
   BarChart,
   Bar,
@@ -29,7 +28,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Cell,
 } from 'recharts';
 
 /* ───────────────────────────── tokens ───────────────────────────── */
@@ -253,6 +251,9 @@ const intShort = (n: number) => {
 };
 
 const setIn = <T,>(obj: T, path: (string | number)[], v: unknown): T => {
+  // Prototype-pollution guard: reject __proto__/constructor/prototype path
+  // segments before any nested write (CodeQL js/prototype-polluting-function).
+  if (path.some((k) => k === '__proto__' || k === 'constructor' || k === 'prototype')) return obj;
   const next = structuredClone(obj) as Record<string, unknown>;
   let cur: Record<string, unknown> = next as Record<string, unknown>;
   for (let i = 0; i < path.length - 1; i++) cur = cur[path[i] as string] as Record<string, unknown>;
@@ -400,18 +401,6 @@ const ArrAreaChart: React.FC<{ data: ArrPoint[]; height?: number }> = ({ data, h
   </ResponsiveContainer>
 );
 
-const NrrLine: React.FC<{ data: ArrPoint[]; height?: number }> = ({ data, height = 200 }) => (
-  <ResponsiveContainer width="100%" height={height}>
-    <LineChart data={data} margin={{ top: 10, right: 16, bottom: 0, left: 0 }}>
-      <CartesianGrid stroke={C.lineSoft} strokeDasharray="3 3" vertical={false} />
-      <XAxis dataKey="month" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} />
-      <YAxis tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} domain={[80, 'auto']} tickFormatter={(v) => `${v}%`} />
-      <Tooltip content={<ChartTip />} />
-      <Line type="monotone" dataKey="nrr_pct" name="NRR" stroke={C.navy} strokeWidth={2} dot={false} />
-    </LineChart>
-  </ResponsiveContainer>
-);
-
 const BarCompare: React.FC<{ data: ChannelPoint[]; height?: number }> = ({ data, height = 220 }) => (
   <ResponsiveContainer width="100%" height={height}>
     <BarChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
@@ -553,38 +542,6 @@ const PositioningMap: React.FC<{ points: { name: string; x: number; y: number }[
     })}
   </svg>
 );
-
-const Flywheel: React.FC<{ spokes: string[] }> = ({ spokes }) => {
-  const cx = 180;
-  const cy = 180;
-  return (
-    <svg viewBox="0 0 360 360" className="w-full h-full">
-      <circle cx={cx} cy={cy} r="100" fill="none" stroke={C.line} />
-      <circle cx={cx} cy={cy} r="40" fill={C.accent} />
-      <text x={cx} y={cy + 5} textAnchor="middle" fontFamily={fontSerif} fontWeight={700} fontSize="13" fill="#fff">
-        Flywheel
-      </text>
-      {spokes.map((s, i) => {
-        const ang = (i / spokes.length) * Math.PI * 2 - Math.PI / 2;
-        const x = cx + 100 * Math.cos(ang);
-        const y = cy + 100 * Math.sin(ang);
-        const lx = cx + 142 * Math.cos(ang);
-        const ly = cy + 142 * Math.sin(ang);
-        return (
-          <g key={s}>
-            <circle cx={x} cy={y} r="18" fill="#fff" stroke={C.accent} strokeWidth={2} />
-            <text x={x} y={y + 4} textAnchor="middle" fontFamily={fontMono} fontWeight={700} fontSize="10" fill={C.accent}>
-              {i + 1}
-            </text>
-            <text x={lx} y={ly} textAnchor="middle" fontFamily={fontSans} fontSize="10" fill={C.ink}>
-              {s}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-};
 
 const Funnel: React.FC<{ stages: { stage: string; count: number; conv_pct: number }[] }> = ({ stages }) => {
   const max = Math.max(...stages.map((s) => s.count));
@@ -2906,8 +2863,6 @@ export const Deck_investor_appendix_app: React.FC<RegistryDeckProps> = ({ data, 
 );
 
 const Deck_investor_appendix_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
-  const { accent: brandAccent } = useBrandContext();
-  const ac = brandAccent || C.accent;
   const merged = useMemo(
     () => mergeShape(SAMPLE_DATA, data || {}) as InvestorData,
     [data],

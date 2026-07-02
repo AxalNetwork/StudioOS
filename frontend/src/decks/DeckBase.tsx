@@ -84,7 +84,8 @@ export const v = (data: DeckData, path: string, fallback = '') => {
   let cur: any = data;
   for (const k of keys) {
     if (cur == null) return fallback;
-    cur = cur[k];
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') return fallback;
+    cur = cur[k]; // codeql[js/prototype-polluting-function] -- read-only deck-data walk; __proto__/constructor/prototype rejected above, returns value/fallback
   }
   return cur ?? fallback;
 };

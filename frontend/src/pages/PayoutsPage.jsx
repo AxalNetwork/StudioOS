@@ -1,13 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Wallet, DollarSign, Clock, CheckCircle2, XCircle, Loader2, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { api } from '../lib/api';
-
-const STATUS_META = {
-  requested: { label: 'Requested', color: 'bg-amber-100 text-amber-700', icon: Clock },
-  processing: { label: 'Processing', color: 'bg-blue-100 text-blue-700', icon: Loader2 },
-  completed: { label: 'Completed', color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle2 },
-  failed: { label: 'Failed', color: 'bg-red-100 text-red-700', icon: XCircle },
-};
 
 export default function PayoutsPage() {
   const [commissions, setCommissions] = useState({ balance_cents: 0, lifetime_cents: 0, commissions: [] });

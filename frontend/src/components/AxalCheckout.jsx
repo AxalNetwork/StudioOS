@@ -3,7 +3,7 @@ import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-
 import { Loader2, Lock, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSettings } from '../contexts/SettingsContext';
-import { getStripe, buildAppearance, STRIPE_PUBLISHABLE_KEY } from '../lib/stripe';
+import { getStripe, buildAppearance } from '../lib/stripe';
 import Skeleton from './Skeleton';
 
 /**

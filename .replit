@@ -24,6 +24,10 @@ args = "Backend API"
 task = "workflow.run"
 args = "Start application"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "retention"
+
 [[workflows.workflow]]
 name = "Backend API"
 author = "agent"
@@ -48,6 +52,17 @@ task = "shell.exec"
 args = "cd frontend && npm run dev"
 waitForPort = 5000
 
+[[workflows.workflow]]
+name = "retention"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run test:retention"
+
+[workflows.workflow.metadata]
+isValidation = true
+
 [[ports]]
 localPort = 5000
 externalPort = 80
@@ -55,10 +70,6 @@ externalPort = 80
 [[ports]]
 localPort = 5001
 externalPort = 3001
-
-[[ports]]
-localPort = 5002
-externalPort = 3002
 
 [[ports]]
 localPort = 8000

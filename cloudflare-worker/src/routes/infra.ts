@@ -418,6 +418,33 @@ infra.get('/cron-history', async (c) => {
   });
 });
 
+// GET /api/infra/reembed-metrics — per-type search re-index counts over the last
+// N hours. Surfaces whether the hourly axal-search sweep is keeping up: summed
+// enqueued / failed / skipped per entity type, tick count, and last-run stamp.
+// Backed by the 'reembed' rows the cron sweep writes to system_metrics.
+infra.get('/reembed-metrics', async (c) => {
+  await ensureInfraSchema(c.env);
+  await requireAdmin(c);
+  const hoursRaw = parseInt(c.req.query('hours') || '24', 10);
+  const hours = Math.max(1, Math.min(168, Number.isFinite(hoursRaw) ? hoursRaw : 24));
+  const since = new Date(Date.now() - hours * 3_600_000).toISOString().replace('T', ' ').slice(0, 19);
+
+  const rows = await c.env.DB.prepare(
+    `SELECT json_extract(labels,'$.type') AS type,
+            COALESCE(SUM(json_extract(labels,'$.enqueued')), 0) AS enqueued,
+            COALESCE(SUM(json_extract(labels,'$.failed')), 0) AS failed,
+            COALESCE(SUM(json_extract(labels,'$.skipped')), 0) AS skipped,
+            COUNT(*) AS ticks,
+            MAX(timestamp) AS last_run_at
+       FROM system_metrics
+      WHERE metric_name = 'reembed' AND timestamp >= ?
+      GROUP BY type
+      ORDER BY type`
+  ).bind(since).all();
+
+  return c.json({ ok: true, hours, items: rows.results || [] });
+});
+
 // POST /api/infra/cron-log — internal endpoint for the cron handler to record runs.
 // Not a public admin surface; called from index.ts scheduled().
 // Task #7 (IE) — requireAdmin so perimeter-only users cannot write synthetic audit rows.

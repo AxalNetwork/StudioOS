@@ -10,6 +10,1040 @@
 > written for the people using the platform, not the engineers
 > building it.
 
+## Investor lifecycle: IC Decisions, LP Reporting, Company Updates, Cap Table (Task #18)
+
+Ported four investor-lifecycle features from the superseded PR #119 into `main`,
+re-applied against current schema (Worker-first; no FastAPI dev-API port).
+
+- **D1 migrations**: `cloudflare-worker/sql/migrations/123_ic_decisions.sql`
+  (`ic_decisions` + `ic_votes`), `124_lp_reports.sql`, `125_portfolio_updates.sql`,
+  `126_portfolio_positions.sql`. All `CREATE TABLE IF NOT EXISTS` (idempotent);
+  renumbered from the branch's 116–119 to avoid colliding with main's 116–122.
+- **Worker routes**: new `routes/ic.ts`, `routes/lp_reports.ts`,
+  `routes/portfolio_updates.ts`, `routes/positions.ts`, mounted in `src/index.ts`
+  at `/api/ic`, `/api/lp-reports`, `/api/portfolio-updates`, `/api/positions`.
+  Gating: `/api/ic` added to `INVESTOR_PRO_PREFIXES` (professional tier);
+  `/api/lp-reports` + `/api/positions` added to `STUDIO_PREFIXES`;
+  `/api/portfolio-updates` enforces per-role access in-route (founders own their
+  project's updates; investor side reads submitted only).
+- **`ic.ts` adaptation**: the branch seeded IC memos from a non-existent
+  `scoring_snapshots` table; re-pointed the optional `from_scoring` seed at main's
+  structured `deal_memos` columns (problem/solution/why_now/key_insight/risks),
+  composed into a readable memo. Degrades to null when absent.
+- **`lp_reports.ts` access**: create/edit/publish require a GP (admin **or**
+  investor) via `requireGp`, not admin-only; list/detail also surface a report to
+  its author regardless of status so investor GPs manage their own drafts, while
+  LPs stay scoped to published reports for funds they belong to.
+- **Frontend**: new pages `ICDecisionsPage`, `ICDecisionPage`, `LPReportingPage`,
+  `PortfolioUpdatesPage`, `PortfolioPositionsPage`; lazy-imported and routed in
+  `App.jsx` (`/ic`, `/ic/:uid`, `/lp-reports`, `/portfolio/updates`,
+  `/portfolio/positions`) with role guards. Added `api.js` client methods
+  (`icList/icCreate/icGet/icUpdate/icVote`, `lpReports*`, `portfolioUpdate*`,
+  `positions*`). Sidebar (`sidebarConfig.js`, investor role): IC Decisions →
+  Commit; Company Updates, Cap Table, LP Reporting → Support.
+- PR #119 (branch `claude/laughing-hamilton-oyg9lp`) closed and deleted; superseded
+  by this re-application. `npm run test:drift` passes.
+
+## Regroup the founder sidebar around the venture lifecycle — Task #19
+
+The founder left rail (`SIDEBAR_GROUPS.founder` in `frontend/src/sidebarConfig.js`)
+is regrouped from 8 groups / ~33 items into **Home → Build → Validate → Raise →
+Launch → More → Account**, the same sidebar-level treatment Task #17 gave the
+investor side. Every surviving route, icon and `requiredTier` gate is preserved;
+no pages are merged.
+
+- **Build** is now execution/construction only: Execution (`/execution`, keeps the
+  Task #12/#14 `match` array), Studio Ops, Metrics (`/build/metrics`), Brand &
+  Landing, Spin-Outs. Customer Discovery moves to Validate; Pitch Deck, Financial
+  Model and Cap Table move to Raise.
+- **Validate** — Customer Discovery, Needs Board, Service Catalogue, AI Advisory
+  Suite, Find a Mentor (growth), Find a Co-founder (studio), Network
+  (`/relationships`).
+- **Raise** — Pitch Deck (growth), Financial Model, Cap Table, Legal & Capital
+  (studio), Incorporate, Co-Founder Agreement (studio), Compliance Calendar,
+  83(b) Tracker (studio).
+- **Launch** — Events, Co-Marketing (`/comarketing`, newly surfaced), Articles.
+- **More** — Refer & Earn, Founder Wellbeing, Network Effects, Liquidity & Exits
+  (studio), Payouts, Calendar, Discover (`/play`).
+- **Account** — Trust Center, Identity / KYC (`/kyc`, newly surfaced), My Profile
+  (`/profile`, newly surfaced), Support, Activity Log, Documentation, Settings.
+- **Intentional removals** (documented in a header comment so a future nav-drop
+  guard treats them as deliberate; routes stay registered): "Founder Portal"
+  (`/founder`) folded into Home — founders hitting `/founder` are now redirected
+  to `/studio` in `frontend/src/App.jsx` (admins keep the FounderPortal surface,
+  mirroring the `/partner-portal` investor redirect); "Portfolio Health"
+  (`/portfolio/health`) folded into Metrics; "Network Effects"
+  (`/network-effects`) demoted to More behind the single "Network" entry.
+- Founder persona only — admin/partner/investor/mentor sidebars are untouched.
+  No backend, data-model or page changes.
+
+## Remove leftover "Play & Discover" (/play) code — finish Task #8
+
+The user-facing "Play & Discover" surface was already removed (routes, sidebar,
+onboarding/landing CTAs, and the `pages/play/` files). This finishes the job by
+deleting the now-orphaned code that only the retired player used, leaving the
+shared archetype/skill surfaces (Profile & Fit, archetype badges, admin
+Assessment Studio) fully intact.
+
+- **Frontend (`frontend/src/lib/api.js`)**: trimmed the `assessment` client to the
+  two still-used read methods (`myResults`, `results`); removed the orphaned player
+  methods (`games`, `start`, `session`, `next`, `respond`, `complete`, `publish`,
+  `myBadges`).
+- **Frontend (`frontend/src/components/play/`)**: deleted `CardRadar.jsx` and
+  `SpectrumBar.jsx` (zero importers — only the deleted player / trading-card pages
+  used them). Kept `SkillRadar.jsx`, `ArchetypeBadge.jsx`, `mechanics.jsx` (still
+  used by Profile & Fit, Network, Events, and the admin Assessment Studio preview).
+- **Worker (`cloudflare-worker/src/routes/assessment.ts`)**: removed the player
+  runtime endpoints (`/games`, `/sessions*`, `/results/publish`, `/badges/me`) and
+  their now-unused helpers/imports; kept the consent-gated read endpoints
+  `GET /results/me` and `GET /results/:userId`. The `/api/assessment` mount +
+  prefix are unchanged, so `check-api-drift` still passes.
+- **Docs (`design/GAMIFIED_ASSESSMENT_SYSTEM.md`)**: added a "player surface
+  removed" status banner.
+- **Kept intact**: `services/assessmentScoring.ts`, migrations `107/108`, the admin
+  Assessment Studio + Best-Fit console, and all archetype/skill displays.
+- Not user-facing (the surface was already gone), so no `CHANGELOG-user.md` line.
+- Drift guard: `check-api-drift.mjs` ✅.
+
+## Fix recurring blank page after login on the apex — Task #15
+
+The apex `axal.vc` served Worker-rendered app routes (`/studio`, `/login`,
+`/dashboard`, `/api/*`) whose `index.html` references build-specific hashed
+`/assets/*` files, but `/assets/*` itself was NOT route-carved to the Worker, so
+those requests fell through to GitHub Pages (a DIFFERENT `docs/` build). The
+hashes 404'd, React never booted, and the page rendered blank. The custom domain
+`app.axal.vc` was unaffected (the Worker serves every path there).
+
+- `wrangler.toml` — add `axal.vc/assets/*` to BOTH the top-level `[[routes]]`
+  block AND `[[env.production.routes]]`, kept in lockstep (per the Task #37 note
+  that the live deploy binds the top-level block). Only `/assets/*` is carved;
+  the static roots (favicons, manifest, logos) have stable names that resolve
+  identically on either host and stay on Pages to keep the skew surface minimal.
+- `scripts/lib/assetRetention.mjs` + `scripts/build-frontend.mjs` — new build
+  wrapper (`npm run build` → `node scripts/build-frontend.mjs`) that runs the
+  Vite build and then restores the last `ASSET_RETAIN_BUILDS` (default 3) builds'
+  hashed assets into `docs/assets`, recording them in `docs/.asset-retention.json`.
+  This keeps the Pages-served apex root — which briefly references the previous
+  build's hashes right after a deploy — working during the deploy→Pages-catch-up
+  window now that `/assets/*` routes to the Worker. The pure planning logic is
+  unit-tested in `scripts/lib/assetRetention.test.mjs` (`npm run test:retention`,
+  appended to `npm run test:drift`).
+- `package.json` — `deploy` now runs `npm run build` first so a deploy can never
+  ship a stale `docs/` bundle.
+- `scripts/check-spa-live.mjs` — the post-deploy smoke check now probes `/studio`
+  and `/login`, and on the apex asserts each hashed `/assets/*` is Worker-served
+  (no `server: GitHub.com` / `x-github-request-id`) so a deploy where the carve
+  silently isn't in effect fails loudly instead of shipping a blank site.
+
+## True-merge the founder Execution page — Task #14
+
+The founder Execution page (`/execution`) was built as a tab switcher (Projects /
+Board / Roadmap behind tabs), so only one area showed at a time. Rebuilt it as a
+single combined page that renders all three areas stacked together — every
+element and interaction from all three original pages at once, nothing hidden.
+
+- `frontend/src/pages/ExecutionPage.jsx` — replaced the tab chrome with one
+  page: a single "Execution" title, then three clearly-labelled sections
+  (Projects, Pipeline Board, Roadmap), each with its own subordinate `<h2>`
+  section header + icon and separated by dividers. The three underlying pages
+  are mounted stacked and keep all behavior (Add Project form + list, drag-drop
+  Kanban, live vote widget, deal drawer, OKR board + modal, etc.).
+- `frontend/src/pages/{ProjectsPage,PipelinePage,RoadmapPage}.jsx` — each now
+  accepts an `embedded` prop (default `false`) that suppresses only its own
+  duplicate top-level page title/explainer (and, for Pipeline, its outer
+  `p-6 max-w-[1600px]` padding) so a single "Execution" title governs the merged
+  page. All action controls (New Project / New Pipeline Project / project select
+  + Add OKR) stay visible. Standalone `/projects`, `/pipeline`, `/build/roadmap`
+  routes pass no prop → rendered exactly as before for the other personas.
+- Routing — `/execution` stays the single combined page. The now-redundant
+  `/execution/board` and `/execution/roadmap` sub-routes still resolve to
+  `ExecutionPage` but now scroll to the matching section (via `id` anchors), so
+  no dead route remains and old deep links keep working. The sidebar `match`
+  prefix keeps the Execution item highlighted across all three.
+- Founder persona only; no backend, data-model or data-merge changes.
+
+## Merge founder Projects, Pipeline & Roadmap into one Execution area — Task #12
+
+The founder-only "Build" sidebar group's three separate destinations — Projects
+(`/projects`), Pipeline Board (`/pipeline`) and Roadmap (`/build/roadmap`) — are
+collapsed into a single **Execution** item (`SIDEBAR_GROUPS.founder` in
+`frontend/src/sidebarConfig.js`) that opens one deep-linkable page with a view
+switcher.
+
+- New `frontend/src/pages/ExecutionPage.jsx` — a shell that renders a header +
+  segmented Projects / Board / Roadmap switcher and mounts the existing
+  `ProjectsPage`, `PipelinePage` and `RoadmapPage` components unchanged as the
+  three view bodies (Projects is the default). The active view derives from the
+  path, so each view is deep-linkable and the browser back button steps between
+  them.
+- Routes (`frontend/src/App.jsx`) — `/execution` (Projects), `/execution/board`
+  and `/execution/roadmap`, all guarded `['admin','founder']`. The standalone
+  `/projects`, `/projects/:id`, `/pipeline` and `/build/roadmap` routes are left
+  intact for the other personas and for in-app deep links (project detail,
+  spin-out flows). Opening a project from the Projects view still routes to
+  `/projects/:id`.
+- Sidebar active state — `SidebarNav` items may now declare a `match` array of
+  path prefixes; the Execution item highlights across all its views (and the
+  legacy `/projects`, `/pipeline`, `/build/roadmap` paths) via `manualActive`
+  instead of only its exact `to`.
+- Founder persona only — admin/partner/investor/mentor sidebars and routes are
+  untouched. No data models or backend endpoints merged.
+
+## Reorder the investor Legal & Compliance nav — Task #11
+
+The investor left rail's **Legal & Compliance** group (`SIDEBAR_GROUPS.investor`
+in `frontend/src/sidebarConfig.js`) is reordered top-to-bottom to match the trust
+mental model: **Trust Center** (`/trust`, overview + score) → **Identity
+Verification** (`/kyc`, account-level KYC/AML) → **Due Diligence**
+(`/admin/due-diligence`, case-level risk) → **Legal & Capital Engine**
+(`/legal-capital`, execution layer). The last item is renamed from "Legal &
+Capital" to **Legal & Capital Engine** (investor persona only). All destinations
+and icons are unchanged; no other persona or investor group is affected.
+
+## Regroup the investor Portfolio section into four groups — Task #9
+
+The investor left rail's single flat "Portfolio" group (6 items) is now four
+purpose-named groups in `frontend/src/sidebarConfig.js`
+(`SIDEBAR_GROUPS.investor`), so operational dashboards, modeling and liquidity
+are distinguishable at a glance:
+
+- **Fund Overview** — Capital & Investment Ops (`/capital`), VC Funds (`/funds`)
+- **Portfolio Health** — Portfolio Health (`/portfolio/health`), Risk Matrix
+  (`/portfolio/risk-matrix`)
+- **Fund Modeling** — Reserve Allocation (`/portfolio/reserves`), Exit Waterfall
+  (`/portfolio/waterfall`)
+- **Liquidity** — Liquidity & Exits (`/liquidity`)
+
+**Risk Matrix** moves out of the former **Scoring & Risk** group (Task #8) into
+the new **Portfolio Health** group — it now appears in exactly one place. The
+now single-item Scoring & Risk group is renamed to **Scoring** (holds only
+Scoring Engine). Two labels are updated to the requested naming: "Capital &
+Investment" → **Capital & Investment Ops**, "Funds" → **VC Funds**.
+
+Sidebar-only regrouping: no routes added/removed, no pages merged. Every `to:`
+path and icon is preserved (DollarSign, TrendingUp, Heart, ShieldAlert, Layers).
+The `home`/`pipeline`/`signals`/`journal`/`legal`/`more`/`account` groups and all
+other roles are untouched. App.jsx's accordion render + tier-gating path is
+unaffected; `defaultOpenGroups('investor')` still opens Home + the first content
+group (Pipeline).
+
+## Consolidate the investor sidebar into four concept groups — Task #8
+
+The investor left rail's single flat "Deal Flow" group (8 items) is now four
+collapsible concept groups in `frontend/src/sidebarConfig.js`
+(`SIDEBAR_GROUPS.investor`):
+
+- **Pipeline** — Projects, Pipeline Board, Deal Flow
+- **Scoring & Risk** — Scoring Engine, Risk Matrix
+- **Signals** — AI Matches, Market Intelligence
+- **Journal** — Watchlist & Decision Journal (relabelled from "Watchlist &
+  Journal")
+
+Sidebar-only regrouping: no routes added/removed, no pages merged. Every `to:`
+path, icon, and `requiredInvestorTier` gate (`professional` on `/pipeline` and
+`/deals`) is preserved. The `home` group, the `portfolio`/`legal`/`more`/
+`account` groups, and all other roles are untouched. App.jsx's accordion render
++ tier-gating path is unaffected; `defaultOpenGroups('investor')` still opens
+Home + the first content group (now "Pipeline").
+
+## Pitch Deck — Axal VC Spin-Out slide count now consistent everywhere
+
+The Axal VC Spin-Out template card was still showing the wrong slide count
+in production because the Worker API (`DECK_METHODS` in
+`cloudflare-worker/src/services/decks/methods.ts`) had `slide_count: 10`
+while the frontend registry (`frontend/src/decks/templates/index.ts`) was
+already correct at `11`. The API value wins at runtime, so the card
+rendered the old count. Updated the Worker spec to `slide_count: 11` and
+adjusted the inline comment listing the canonical slide sequence. Also
+updated the backend dev fallback (`backend/app/api/routes/decks.py`) from
+`14` → `11` so dev/staging stay in sync.
+
+## Email security: consolidate DMARC + serve /.well-known/security.txt
+
+Cloudflare Email Security flagged `axal.vc`. Verified live DNS (not just the
+dashboard screenshots) and addressed the findings:
+
+- **DMARC (RFC 7489) — the real error, now fixed.** `_dmarc.axal.vc` had TWO
+  `v=DMARC1; p=none` TXT records (rua → `…@dmarc-reports.cloudflare.net` and
+  `dmarc@axal.vc`). With more than one DMARC record, receivers ignore ALL of
+  them, so DMARC was effectively off. Consolidated to a SINGLE record that
+  preserves both aggregate-report destinations, applied to live DNS via the
+  Cloudflare API (kept the existing record ID, replaced its content, deleted the
+  duplicate):
+  `v=DMARC1; p=none; rua=mailto:41b1c9616822463cb5eb67a841281ae9@dmarc-reports.cloudflare.net,mailto:dmarc@axal.vc`.
+  This was a Cloudflare DNS change, not code. Policy stays `p=none` (monitor-only);
+  raising to `quarantine`/`reject` is a deliberate follow-up.
+- **security.txt (RFC 9116).** Added `frontend/public/.well-known/security.txt`
+  (mirrored into the committed `docs/` artifact) with Contact + Expires +
+  Canonical. It is served by the Worker assets binding, but the apex only routes
+  an explicit allow-list of paths, so `axal.vc/.well-known/security.txt` was
+  added to BOTH the top-level `[[routes]]` and `[[env.production.routes]]`
+  blocks in `wrangler.toml` (the live apex deploy binds the top-level block;
+  env-only routes silently 404 on the apex). Takes effect on `npm run deploy`.
+- **SPF — no change (false positive).** The "multiple SPF records" flag conflates
+  two records on DIFFERENT hostnames: apex `axal.vc`
+  (`v=spf1 include:_spf.mx.cloudflare.net ~all`) and subdomain `send.axal.vc`
+  (`v=spf1 include:amazonses.com ~all`). Each hostname is allowed exactly one and
+  has exactly one. DKIM passes. The `~all` "soft fail" is standard.
+
+Not user-facing; no `CHANGELOG-user.md` entry.
+
+## Fix public waitlist form for logged-in visitors (CSRF)
+
+`cloudflare-worker/src/services/landingTemplates.ts` (Task #20): the server-rendered
+waitlist form used a bare `fetch` with no `credentials` option, which on a same-origin
+request sends the browser's default (include). When a logged-in owner tested the form,
+their `studioos_auth` cookie was attached, so the Worker's CSRF middleware (mounted
+at `/api/*`) enforced the double-submit `X-CSRF-Token` check. The form didn't send
+that header, so every POST returned 403 "CSRF token missing or invalid". Anonymous
+visitors were unaffected because the middleware skips when the auth cookie is absent.
+
+Fix: added `credentials:'omit'` to the inline `fetch` call. The waitlist route is
+public (no `requireAuth`) so omitting credentials loses nothing, and it completely
+removes the CSRF cookie-tripwire for everyone.
+
+## Template library: fix Axal VC Spin-Out slide count label
+
+`frontend/src/decks/templates/index.ts`: the `axal_spinout_demoday` template card
+read "9 slides · editorial · binds to Lab data" and `slide_count: 9`. The actual
+spin-out deck has been 11 slides since the `Product demo` and `Review the deal`
+slides were added (tests: `frontend/test/spinout_demoday_deck.test.mjs`).
+Changed `slide_count` to `11` and description to "11 slides ...".
+
+## Production client-error telemetry + post-login blank hardening — Task #10
+
+Fixes the "passkey sign-in → /studio shows an error flash, then a permanent
+white blank" report. Root cause was NOT passkey-specific (server-side passkey
+auth + sessions verified healthy against prod D1): it was shared post-login
+client fragility combined with `reportError` being a **prod no-op**, so the real
+failure left no trace anywhere. Three layers:
+
+- **Observability** — `frontend/src/lib/log.js` rewritten. `reportError`/`reportWarn`
+  now ALWAYS `console.*` and push a sanitized, capped ring buffer to
+  `localStorage` (`axal:client-errors`, last 50; readable via
+  `window.__axalErrors()` / clearable via `window.__axalClearErrors()`). Errors
+  (prod only) also fire a sanitized, fire-and-forget `fetch` beacon
+  (`keepalive`, `credentials:'omit'` → no cookie, no CSRF, no token/PII) to
+  `POST /api/client-error`. Self-throttled: ≤25 beacons/page-session, identical
+  scope+message deduped within 5s.
+- **Worker sink** — new `app.post('/api/client-error')` in
+  `cloudflare-worker/src/index.ts` (right after `/api/health`). Size-caps the
+  body (8 KB) before `JSON.parse`, clips each field, keeps a bounded UA only (no
+  IP — the client already redacts secrets/PII; Cloudflare's edge logs retain the
+  source IP if ever needed for abuse), and emits one greppable
+  `console.error('[client-error]', …)` line so the
+  failure shows in `wrangler tail` / deployment logs. Never throws; always 204.
+  New `client_error` rate-limit bucket (60/min/IP, fail-open) in
+  `cloudflare-worker/src/middleware/rateLimit.ts`.
+- **Stop the blank** — `frontend/src/pages/Dashboard.jsx`: `load()` failures now
+  `reportError('Dashboard:load', …)` and render a persistent, actionable
+  fallback (`DashboardFallback`, Try-again + Reload) instead of a bare error
+  `<div>`; the old `if (!data) return null` (a silent white page) is replaced by
+  the same fallback guarded on `!data || !data.user`; a malformed 200 (missing
+  `user`) is reported via effect; `user.email.split` → `user.email?.split('@')[0]
+  || 'there'`. `frontend/src/components/RouteErrorBoundary.jsx`: a freshly-caught
+  error (`caughtAt` stamp) is now held across a redirect-induced pathname change
+  for up to 3 s (deferred reset via timer, cleared on unmount/retry) so an
+  error+`<Navigate>` race can't erase the card before the user sees it — chunk
+  auto-reload path untouched. `frontend/src/lib/api.js`: the 401 → `/login`
+  bounce now `reportError`s (keepalive beacon survives the hard navigation)
+  before redirecting.
+
+## Auto-apply D1 migrations on deploy — Task #9
+
+`npm run deploy` now applies pending D1 migrations automatically via a
+forward-only runner + ledger, replacing the per-file manual
+`wrangler d1 execute …` workflow.
+
+- `scripts/lib/migrationPlan.mjs` — pure, I/O-free planning core: ledger DDL
+  (`schema_migrations`: `filename` PK, `checksum`, `applied_at`), deterministic
+  ordering (`compareMigrations` sorts by numeric prefix then full filename, so
+  the duplicate prefixes `011_`/`068_`/`118_` are stable), `classifyIdempotency`
+  / `auditMigrations` (flags `ALTER`, un-`IF NOT EXISTS` CREATE/DROP, bare
+  `INSERT`), `planActions` (apply vs baseline), and `applyPlan` (the apply loop;
+  `exec`/`record` are injected, first failure aborts and is returned in
+  `failure` — never swallowed).
+- `scripts/migrate-d1.mjs` — CLI that binds wrangler to the core. Targets:
+  `--local` (`studioos-db --local`), `--remote` (`studioos-db`), `--preview`
+  (`studioos-db-preview --env preview --remote`). Modes: default apply,
+  `--baseline`, `--audit`, `--dry-run`. Reads the ledger via
+  `wrangler d1 execute … --command … --json`; records each applied file with
+  `INSERT OR REPLACE`. Warns (does not re-run) on checksum drift for an
+  already-applied file. A migration failure exits non-zero naming the file.
+- **Safety guard**: a plain `--remote`/`--local` run against a DB that has app
+  tables but no ledger aborts and points at `--baseline`. This prevents the
+  catastrophic first-deploy replay — the migration set is NOT self-contained
+  (base tables live in `sql/schema.sql`; ~57 of 124 files carry non-idempotent
+  `ALTER ADD COLUMN` / bare `INSERT` that would fail `duplicate column` on
+  replay against the canonical schema).
+- **One-time baseline**: `--baseline` applies the pending *idempotent* files
+  (real apply for the genuinely-pending `IF NOT EXISTS`/`INSERT OR IGNORE` ones,
+  no-op for the rest) and **records the non-idempotent files without executing
+  them**, printing each for manual verification.
+- Wiring: `package.json` gains `predeploy` (`migrate-d1.mjs --remote`, runs
+  before `deploy`; failure blocks the deploy) plus `d1:migrate:remote|local|
+  preview`, `d1:baseline`, `d1:audit` aliases. Existing `postdeploy`
+  (`check-spa-live`) and the schema-bootstrap `d1:migrate` are unchanged.
+- Tests: `cloudflare-worker/test/migrate_d1_plan.test.ts` drives the shipped
+  apply loop against `node:sqlite` — apply-once, no-op replay, abort-loud on a
+  broken migration (later files neither applied nor recorded), baseline records
+  non-idempotent files without executing, duplicate-prefix ordering, and the
+  audit classification of the real migration set. Registered in
+  `npm run test:drift`.
+- Deviation from brief: the planned "replay the full ordered set once" baseline
+  is unsafe because the set is not self-contained, so baseline is
+  idempotency-aware (apply idempotent, record-without-running non-idempotent);
+  the audit surfaces exactly which files need a manual verify.
+
+## Guard the users-table rebuild against silent data loss — Task #7
+
+The boot-time `users` table rebuild (relaxing the legacy role CHECK to accept
+'investor') had no test. A future edit could reintroduce the original
+data-destroying behaviour. Added a test that pins the loss-free contract.
+
+- `cloudflare-worker/src/util/usersRoleRebuild.ts` (new) — extracted the inline
+  role-CHECK rebuild block out of `ensureInvestorSchema` in index.ts into a pure,
+  testable `rebuildUsersRoleCheckForInvestor(env): { rebuilt }`. Behaviour
+  identical (DDL derived from sqlite_master, full column copy, index replay,
+  deferred-FK batch). Needed because the inline version sat behind a once-only
+  module guard + the whole worker bootstrap and couldn't be driven from a test.
+- `cloudflare-worker/src/index.ts` — `ensureInvestorSchema` now calls the helper
+  (same try/catch + warn).
+- `cloudflare-worker/test/users_role_rebuild.test.ts` (new) — runs the rebuild
+  against a real in-memory SQLite (node:sqlite) seeded with the legacy role CHECK,
+  extra PII/billing/linkedin columns, child-FK rows and several user indexes;
+  asserts every column, index, row, value and id survives, child rows still join,
+  'investor' is now accepted while invalid roles are still rejected, and a second
+  run is a no-op (needsRebuild=false). FK enforcement off to mirror D1.
+- `package.json` — registered the test in `test:drift`.
+
+Not user-facing; no `CHANGELOG-user.md` entry.
+
+## Cover the cron overload-hardening with automated tests — Task #4
+
+Task #1's transient-overload hardening (retry-with-backoff, batched enqueue,
+no-drop watermark) had no automated coverage. Added unit tests that pin all
+three invariants so a future change can't silently regress them.
+
+- `cloudflare-worker/src/util/reembedSweep.ts` (new) — extracted the inline
+  chunk-enqueue + watermark loop from the scheduled handler's minute-7 re-embed
+  sweep into a pure, testable `enqueueReembedChunks(env, type, ids, since,
+  chunkSize)` returning `{ lastOk, okCount, failed }`. Behaviour unchanged.
+- `cloudflare-worker/src/index.ts` — the re-embed loop now calls
+  `enqueueReembedChunks` instead of the inline loop (KV watermark put +
+  `recordReembed` + console.info unchanged).
+- `cloudflare-worker/test/cron_reembed_reliability.test.ts` (new) — 9 tests:
+  `withD1Retry`/`isTransientD1Error` retry only on transient signatures and
+  rethrow other errors immediately; `Jobs.enqueueMany` issues one batched write
+  and is a no-op on `[]`; `enqueueReembedChunks` advances the watermark only to
+  the last successfully enqueued chunk (full-success, mid-failure, first-chunk
+  failure cases).
+- `package.json` — registered the new test in `test:drift`.
+
+Not user-facing; no `CHANGELOG-user.md` entry.
+
+## Surface hourly search re-index health in the admin Cron tab — Task #5
+
+The hourly axal-search re-embed sweep now persists per-type counts to
+`system_metrics` (metric_name `reembed`, labels `{type, enqueued, failed,
+skipped}`) so its health is visible without grepping Worker tail logs.
+
+- `cloudflare-worker/src/index.ts` — the re-embed loop writes a best-effort
+  `reembed` metric row per type per tick (only when enqueued/failed/skipped > 0,
+  to avoid zero-row bloat). The academy_lesson table-absent skip path records
+  `skipped=1`.
+- `cloudflare-worker/src/routes/infra.ts` — new `GET /api/infra/reembed-metrics?hours=N`
+  (admin) aggregates summed enqueued/failed/skipped, tick count and last-run per
+  type over the window (clamped 1–168h, default 24h).
+- `frontend/src/lib/api.js` — `infraReembedMetrics(hours)`.
+- `frontend/src/pages/CronTab.jsx` — new "Search re-index (last 24h)" card with a
+  per-type table (failed counts highlighted red, skipped amber).
+
+Verification: `cloudflare-worker` `tsc --noEmit`, `check-dark-mode`,
+`check-sql-unsafe`, `check-api-drift` all pass.
+
+## Merge auto-fix PRs #106, #107, #109; leave #108 open — Task #20
+
+Merged three single-file auto-fix PRs opened by the "AI findings" code-quality bot
+(all green on CodeQL / Semgrep / scan / analyze), and left PR #108
+(`frontend/src/sidebarConfig.js` investor-tier gating) open for separate review.
+
+- `scripts/lfs-size-gate.mjs` (#109) — `execSync(string)` → `execFileSync("git", [...])`,
+  removing the shell-injection vector and the obsolete CodeQL suppression. The autofix
+  renamed `sh` → `git` but left one callsite behind: `isLfsTracked()` still called the
+  now-undefined `sh(...)`, an undefined-reference its `try/catch` silently swallowed —
+  so the gate treated every file as un-tracked and would wrongly reject LFS-tracked
+  types (`.docx`, `.pptx`, `.woff2`, large `.png/.pdf`, …). CI missed it (`node --check`
+  is syntax-only; CodeQL/Semgrep check injection, not undefined refs). Completed the
+  migration in the same change: `isLfsTracked()` now uses the array-args
+  `git(["check-attr", "filter", "--", path])` helper.
+- `backend/app/api/routes/progress.py` (#107) — adds the missing `import logging`
+  (module already calls `logging.getLogger(...)` / `logger.debug(...)`). Dev-only backend.
+- `frontend/src/pages/CustomerDiscoveryPage.jsx` (#106) — awaits per-project waitlist
+  loads via `Promise.all(list.map(...))` instead of `forEach(async …)`, and tightens the
+  "reflect new interview" guard to compare the returned interview's `project_id`.
+
+## Clear residual code-scanning alerts: SVG-sanitizer ReDoS + dead React state — Task #17
+
+Pushed the already-merged security fixes to GitHub (the workflow-scoped Task #6
+commit needed the `GITHUB_TOKEN` path because Replit's OAuth lacks `workflow`
+scope) and closed the last three open CodeQL alerts at the root cause rather than
+dismissing them:
+
+- `backend/app/api/routes/brand.py` — `_SVG_EVENT_ATTR` and `_SVG_ANY_HREF` began
+  with `\s+`, making `re.sub` O(n²) on a long run of spaces in attacker-controlled
+  SVG (CodeQL `py/polynomial-redos`, ×2, high severity). Changed the leading
+  quantifier to a single `\s`: with `.sub` scanning every start position one
+  separator still locates the attribute, and matching is now linear (8000-space
+  payload measured ~795 ms → ~0.3 ms). Stripping behaviour is unchanged — verified
+  against `onload`/`onerror`/`onmouseover`/`href`/`xlink:href` vectors with benign
+  attributes preserved.
+- `frontend/src/components/RouteErrorBoundary.jsx` — `state.info` was written
+  (`info: null`) in two `setState` calls but never read (CodeQL
+  `js/react/unused-or-undefined-state-property`). Removed the dead writes; the
+  `info` parameter of `componentDidCatch` (the React errorInfo) is unaffected.
+
+## Harden backup & DR-drill workflows against shell injection — Task #6
+
+Followed up Task #1 (which hardened the three scanner/CI workflows) by closing the
+same untrusted-input-into-`run:` footgun in the two remaining workflows that still
+interpolated GitHub-context values directly inside shell blocks. Every such value
+now flows through a step-level `env:` and is referenced as a quoted shell variable.
+
+- `.github/workflows/dr-drill.yml` — `${{ github.run_id }}` in the failure-pager
+  curl payload now passes through `env: RUN_ID` and is referenced as `${RUN_ID}`.
+- `.github/workflows/backup-d1.yml` — `${{ steps.name.outputs.filename }}` and
+  `${{ steps.name.outputs.key }}` across the Export / Upload / heartbeat steps now
+  pass through `env: BACKUP_FILENAME` / `BACKUP_KEY` and are referenced as
+  `${BACKUP_FILENAME}` / `${BACKUP_KEY}`. (The Notify step already routed
+  `PAGER_WEBHOOK_URL` and `TARGET_DB` via env — left as-is.)
+- Behavior is identical; both files parse (validated with PyYAML: 5 and 8 steps).
+  No GitHub-context `${{ … }}` remains inside any `run:` block in either file.
+
+## Harden tail-consumer guard against multiple consumers — Task #15
+
+`scripts/check-tail-consumer.mjs` located the `[[tail_consumers]]` and
+`[[env.production.tail_consumers]]` tables with `Array.prototype.find()`, which
+only inspects the FIRST matching array-of-tables entry. If a second tail consumer
+were ever added before `studioos-tail`, the guard would false-positive and block
+`npm run test:drift`. Replaced the first-match lookup with an all-tables scan so
+`studioos-tail` is detected regardless of position or sibling consumers.
+
+- Extracted the validation into a pure, side-effect-free
+  `collectTailConsumerErrors(rootText, tailText)` (exported); the CLI body is now
+  guarded so importing the module for tests no longer reads files or calls
+  `process.exit`.
+- Top-level/production lookups use `sections.some(name === … && declaresService)`
+  instead of `find()`; empty-set still fails (missing-table case preserved).
+- Added `cloudflare-worker/test/check-tail-consumer.test.mjs` (5 cases: canonical
+  pass; second consumer ordered BEFORE `studioos-tail` regression; missing top
+  table; missing production table; reverse binding on the consumer worker) and
+  wired it into `test:drift` alongside `api_drift.test.mjs`.
+- Behavior unchanged on current config: standalone guard and the drift
+  check-script chain + new `node --test` group pass. Full `npm run test:drift`
+  was not run end-to-end in-agent (exceeds the tool time limit); the touched
+  segment was verified directly.
+
+## Drive GitHub Code Scanning to zero — Task #14
+
+Resolved all 123 open GitHub code-scanning alerts (CodeQL + Semgrep) via a hybrid
+disposition: 30 deterministic code fixes (auto-close on the next scan) + 93
+documented API dismissals (true false positives / test-only / accepted noise).
+`npm run test:drift` does NOT run CodeQL/Semgrep, so closure to zero is confirmed
+only by the fresh scan on `main` after push. The 93 dismissals were verified by
+re-querying `state=open` (123 → 30, the 30 remaining being exactly the fix set
+awaiting rescan).
+
+### 30 code fixes (auto-close on rescan)
+- empty-except ×5 — explanatory comment added: `backend/app/api/routes/brand.py`,
+  `market_intel.py`, `matches.py`, `progress.py`, `backend/app/services/use_of_funds.py`.
+- implicit-string-concat ×11 — explicit `+` between adjacent string literals:
+  `backend/app/api/routes/profiling.py`.
+- polynomial-redos ×2 — unquoted-attribute branch tightened to `[^\s"'>]+`:
+  `brand.py`.
+- `len(... .all())` → COUNT ×4 — `select(func.count()).select_from(X)... .first() or 0`
+  (added `func` to the `sqlmodel` import): `company.py` (×2), `needs.py`,
+  `backend/app/services/score_integrity.py`.
+- unused symbols removed — `brand.py` slug; `RouteErrorBoundary.jsx` info state;
+  `scripts/lfs-size-gate.mjs` `mkdirSync`; test imports in
+  `cloudflare-worker/test/admin.user-conversations.test.mjs` (`mkdir`) and
+  `incorporationPacket.test.ts` (the whole `pdf.ts` import line — both names unused;
+  CodeQL collapses to one alert per import line).
+- incomplete-sanitization — global `replaceAll`: `frontend/src/components/DataImportsTab.jsx`.
+- missing-integrity — SRI hash + `crossorigin` on the qrcode jsDelivr script:
+  `frontend/public/verify-email.html`.
+- hardening — `backend/app/services/calendar_unified.py` drops `r.text` from a log
+  line (reworded); `backend/app/services/notify.py` restricts the Slack webhook to
+  `https://hooks.slack.com/`.
+
+### 93 dismissals (code-scanning REST API, structured `dismissed_reason` + comment)
+- false positive ×84 — parameterized SQLAlchemy `text()`, trusted format strings,
+  guarded prototype-pollution loops, build-script `RegExp`s, server-rendered email
+  hrefs, defensive conditionals, `global` memo sentinels, protocol-validated `<a>`
+  hrefs (xss-through-dom), same-origin `safeNextPath()` redirects, intentional HTML
+  entity normalization, Map-key OAuth-reason lookup, signature-free `jwt.decode`
+  reading only `jti`, `sha1(usedforsecurity=False)`, public RFC-6238 demo TOTP,
+  fixed Sumsub `urlopen`, CI-only LFS git commands, non-SRI `<link>` element.
+- used in tests ×4 — test-fixture regexps / tag matcher.
+- won't fix ×5 — Cloudflare Turnstile (provider serves `api.js` with no stable
+  hash), intentional token wipe, intentionally preserved component, configurable
+  Slack webhook `urlopen`.
+
+Each HIGH-severity dismissal (xss-through-dom, client-side url-redirect,
+double-escaping, user-controlled-bypass) was re-verified safe at the sink and
+already carries an inline `codeql[...]` / `nosemgrep` justification.
+
+## Slim down role sidebars — PR #101
+
+Each role's sidebar now collapses into fewer, broader groups plus a single
+"More" bucket for advanced/occasional destinations, shortening the learning
+curve without dropping any destinations. Pure regrouping: the post-merge set of
+`to:` paths per role is identical to `main` — no route added, removed, or
+duplicated (verified by a 3-way merge + per-role path diff before merging). The
+squash merge also preserved main's `/dashboard`→`/studio` rename and the My
+Profile removal that landed after this branch was cut.
+
+- `frontend/src/sidebarConfig.js`: `SIDEBAR_GROUPS` regrouped per role — admin
+  11→7 groups, founder 8→6, partner 7→6, investor 7→6; mentor unchanged. The
+  `hasTier` / `hasInvestorTier` / `defaultOpenGroups` / `filterItemsByTier`
+  helpers and the item `{ to, icon, label, requiredTier, requiredInvestorTier }`
+  shape are untouched, so App.jsx's accordion render + tier-gating path is
+  unaffected.
+
+## Reply-To sender on network invites — Task #5
+
+Network/referral invite emails (Refer & Earn — both the bulk send and the
+per-invite reminder) now carry a `Reply-To` set to the inviting user, so a
+recipient who hits "Reply" reaches the sender directly instead of the
+unmonitored `noreply@axal.vc` mailbox. The From address stays
+`noreply@axal.vc` (Axal's DKIM/SPF/DMARC-aligned domain) with the display name
+`{sender} via Axal StudioOS`.
+
+- `services/email.ts`: `buildRawEmail` gained an optional `replyTo` (emitted as
+  a sanitized `Reply-To:` header). New exported `buildReferralInviteRaw`
+  composes the invite From/Reply-To via a new `formatAddress` helper that
+  CR/LF-strips and quotes display names so a sender name can't smuggle headers
+  or spoof a second From address. `sendReferralInviteEmail` now takes the
+  sender's email.
+- `routes/email.ts`: both invite entry points pass `sender.email`; dedupe,
+  quota, cooldown, and tracking writes unchanged.
+- Test: `test/referral_invite_replyto.test.ts` (Reply-To present, From on
+  `noreply@axal.vc`, CR/LF + angle-bracket injection neutralised).
+
+## Clear code-quality scanning alerts — Task #3
+
+Removed standing CodeQL Note/Warning quality alerts (unused
+imports/variables/functions, useless assignments, orphaned dead-code chains)
+across `frontend/`, `cloudflare-worker/`, and `backend/`. Behavior-preserving
+only: every removal verified unused (no JSX/dynamic/re-export reference);
+`npm run test:drift` green, frontend `npm run build` clean, and the dev
+FastAPI backend still imports.
+
+- Frontend: dead imports/vars/components pruned across ~70 pages, components,
+  and deck templates — e.g. orphaned `useNavigate`/`useAuth` imports, the
+  abandoned brand-accent chains in deck templates (computed an accent that was
+  never applied), and unused recharts series imports.
+- Worker: unused imports/vars cleared in routes/services (verified with
+  `tsc --noEmit` plus `--noUnusedLocals`).
+- Backend: unused imports/vars removed; empty-except blocks given explicit
+  handling; the duplicate dict key de-duplicated; implicit string-concat list
+  and the unused loop var fixed.
+
+**Intentional exception** — `frontend/src/pages/admin/AdminX.jsx`'s
+`AdminXFull` is left in place despite its unused-function Note. The file's
+docstring marks the X (Twitter) broadcaster as TEMPORARILY DISABLED and
+`AdminXFull` as "preserved verbatim — no logic loss" with a documented
+re-enable runbook; deleting it would destroy intentionally-kept feature code
+and invalidate that runbook.
+
+## Fix real security findings in hand-written source — Task #23
+
+Closed the remaining High/Error code-scanning alerts that survive the
+generated/pasted-file exclusions, split into genuine fixes and justified inline
+suppressions of confirmed false positives. No sanitizer was weakened —
+uploaded-SVG/PDF/email handling still rejects everything it did before. Sole
+gate: `npm run test:drift` (green; note it does NOT run CodeQL/Semgrep).
+
+**Genuine fixes**
+- ReDoS / catastrophic-backtracking hardening on attacker-controlled input:
+  - `cloudflare-worker/src/routes/imports.ts` — PDF `TJ`-array regex bounded
+    `[^\[\]\\]` class (#356).
+  - `cloudflare-worker/src/templates/email/layout.ts` — polynomial template
+    regexes use `[^{}]` (#3450).
+  - `backend/app/api/routes/brand.py` — SVG danger-tag block is tempered-greedy;
+    `_EMAIL_RE` linear `[^@\s.]+` (#2324/#2325).
+  - `backend/app/api/routes/project_members.py` — invite `_EMAIL_RE` linear
+    `[^\s@.]+` (#3707).
+- `cloudflare-worker/src/services/market-data.ts` — precompiled per-tag regex map
+  instead of a non-literal RegExp per call (#340).
+- `backend/app/api/routes/email.py` — SHA1 id marked `usedforsecurity=False`
+  (#292).
+- Test-regex correctness: anchored expectations in `newsRender.test.ts`
+  (#2914/#2915); corrected `rel=stylesheet` filter in
+  `landing_templates_render.test.ts` (#3615).
+
+**Confirmed false positives — justified inline suppressions (behavior unchanged)**
+- `ProjectDetail.jsx` — `js/xss-through-dom`; `<a href>` is http/https
+  protocol-validated before render.
+- `CalendarPage.jsx` — `js/user-controlled-bypass`; query value only selects a
+  frozen, `hasOwnProperty`-guarded UI-message map entry.
+- `LoginPage.jsx` — `js/client-side-unvalidated-url-redirection`; `safeNextPath()`
+  returns only same-origin `/`-prefixed paths.
+- `nameCheck.ts` — `js/double-escaping`; intentional entity normalization.
+- `scripts/lfs-size-gate.mjs` — `js/indirect-command-line-injection`; CI-only,
+  args from trusted git output.
+- `settings.py` — Semgrep `unverified-jwt-decode`; token already verified
+  upstream, decode only reads `jti` for the sessions UI.
+- SQLAlchemy `text()` Semgrep errors across `migrations.py`, `profiling.py`,
+  `progress.py` — `# nosemgrep` + reason; static schema SQL and bound parameters,
+  no user data interpolated (dev-only FastAPI).
+
+**Prototype-pollution path walkers (`js/prototype-polluting-function`)**
+- Read-only/static walkers get a `__proto__/constructor/prototype` guard plus a
+  narrow suppression: `mergeFields.ts`, `legalMergeSchema.ts`,
+  `templates/email/layout.ts`, `frontend/src/decks/DeckBase.tsx`
+  (#341/#3300/#343/#392).
+- Deck-template dotted-path *writers* that assign caller-supplied paths now reject
+  `__proto__/constructor/prototype` segments — a real fix matching the existing
+  guard in the Shape-A templates and `axal_spinout_demoday_app.tsx`:
+  `demo_day_app.tsx`, `investor_appendix_app.tsx`, `narrative_brand_app.tsx`,
+  `partnership_bd_app.tsx`, `sales_commercial_app.tsx` (#3453/#941/#862).
+
+CodeQL inline suppressions use `// codeql[rule-id] -- reason` (block-comment form
+inside JSX attributes). There is no prior repo precedent for inline CodeQL
+suppression; if GitHub code scanning does not honor inline markers, these FPs
+must be dismissed in the SARIF/UI instead — the guards above remain real
+hardening regardless.
+
+## Fix reversed tail-consumer loop flooding `studioos` observability — Task #25
+
+Cloudflare Observability showed a self-amplifying flood of `Handler does not
+export a tail() function.` errors on the production `studioos` worker (~1,900 in
+a short window). Root cause was a REVERSE tail-consumer binding in the live
+environment wiring `studioos-tail` → `studioos`. The main worker is the log
+*producer* — it only exports `fetch()`/`scheduled()`, no `tail()` — so every
+tail batch routed back to it threw, and each thrown error was itself logged and
+produced another tail event, making the loop self-sustaining.
+
+The correct one-directional topology (`studioos` producer → `studioos-tail`
+consumer → `studioos-logs` R2) is already declared correctly in the root
+`wrangler.toml` under both `[[tail_consumers]]` and
+`[[env.production.tail_consumers]]` (kept in lockstep). No code wiring change
+was needed; the bad reverse binding exists only in the live environment.
+
+- **Repo cleanup** (`cloudflare-worker-tail/wrangler.toml`): removed the two
+  references to a non-existent `docs/CLOUDFLARE_DASHBOARD_TASKS.md` and the
+  instruction to manually bind a tail consumer in the dashboard. The header now
+  states explicitly that producer→consumer wiring is owned entirely by the root
+  `wrangler.toml`, that there is NO dashboard step, and that a manual (esp.
+  reverse) dashboard binding is what triggers this incident. The existing NOTE
+  against adding `[[tail_consumers]]` to the consumer config is retained.
+- **Rejected**: adding a no-op `tail()` to `studioos` — it would silently
+  swallow the misrouted events and mask the misconfiguration rather than fix it.
+- **Operator action remaining (needs Cloudflare access)**: remove the reverse
+  binding on the live `studioos-tail` worker — either re-deploy `studioos-tail`
+  from the clean config (`cd cloudflare-worker-tail && npx wrangler deploy`) to
+  reconcile its tail-consumer list to empty, or delete `studioos` from its
+  tail/trace consumers in the dashboard. This is the step that actually stops
+  the errors; it cannot be done from the repo alone.
+
+## Stripe import error states are now covered by route-level regression tests — Task #13
+
+`POST /api/progress/metrics/:projectId/import-stripe` returns four distinct
+outcomes the Metrics page depends on, but nothing locked in the contract. The
+frontend reads BOTH the HTTP status and `error.data.code` (the
+`{ detail: { code, message } }` shape) on a failure, so a refactor of
+`syncStripeForUser`'s return shape or the route's status codes could silently
+swap a typed, user-friendly message for a raw error — or return a 2xx the page
+treats as success when there is nothing to import.
+
+- **Regression guard** (`cloudflare-worker/test/stripe_import_route.test.ts`,
+  added to `npm run test:drift`): drives the REAL mounted `progress` Hono router
+  with a forged founder JWT against an in-memory SQLite D1 and a stubbed Stripe
+  REST API, so the whole chain runs unmocked: `requireAuth` → `loadProject` →
+  `ensureCanEdit` → `syncStripeForUser` → the route's outcome classification.
+  Each case asserts the HTTP status AND the `detail` object so the `e.data.code`
+  contract stays intact:
+  - not connected (no integration row) → 400 `stripe_not_connected`;
+  - connected but credentials missing (decrypted blob has no `access_token`) →
+    400 `stripe_not_connected`;
+  - upstream Stripe failure (non-ok REST response) → 502 `stripe_sync_failed`,
+    with the upstream reason surfaced in `detail.message` (not swallowed);
+  - connected but no active/trialing subs → 400 `stripe_no_data`, and NO
+    `source='stripe'` snapshot row written (ties to Task #12);
+  - success (mrr or customers > 0) → 200 `source:'stripe'` with the computed
+    `mrr`/`customers` and exactly one snapshot persisted.
+- Harness mirrors `stripe_import_empty.test.ts` (node:sqlite D1 adapter +
+  `encryptCredentials` + global-fetch Stripe stub) and `capital.test.ts` (jose
+  `SignJWT` minted token, `router.request(path, init, env)`). No production code
+  changed — this task only adds the missing route-level coverage.
+
+## Blank Stripe import no longer saves a misleading $0 metric — Task #12
+
+A manual "Import from Stripe" against a connected account with no active/
+trialing subscriptions correctly shows the "connected but no synced billing data
+yet" message — but the shared sync had *already* written a `source='stripe'`
+snapshot with MRR/customers = 0 before the route could classify the result as
+no-data, so a misleading $0 Stripe row appeared in the metrics history on the
+next Metrics-page load.
+
+- `cloudflare-worker/src/integrations/providers/stripe.ts` (`syncStripeForUser`,
+  the manual-button-only entry point called from `routes/progress.ts`'s
+  `POST /metrics/:projectId/import-stripe`): when the computed metrics have no
+  usable data (`mrr === 0 && paying_customers === 0`), it now skips
+  `projectMetricsToProject` entirely — no `metrics_snapshots` row and no
+  `financial_models` write — while still updating `last_synced_at` / clearing
+  `last_error` and returning `imported: 0`. The route's no-data classification
+  (`!result.mrr && !result.customers`) and message are unchanged. A $0-MRR
+  account that still has a paying customer counts as real data and is persisted.
+- The shared cron reconcile (`syncAllStripeIntegrations`) and webhook
+  (`handleStripeConnectEvent`) paths run through `sync()`, which is untouched and
+  still writes/refreshes the zero snapshot as before.
+- **Regression guard** (`cloudflare-worker/test/stripe_import_empty.test.ts`,
+  added to `npm run test:drift`): drives the real `syncStripeForUser` against an
+  in-memory SQLite D1 (DQS enabled to match the engine) with a stubbed Stripe
+  REST API — asserts an empty account writes no snapshot row (and no
+  `financial_models` row), one active sub writes exactly one row with the right
+  MRR, and a $0-MRR-but-one-customer account still persists.
+
+## Configured brand logo now renders on every signature landing template — Task #10
+
+Every one of the 16 signature landing templates now shows the project's
+configured logo (`landing_pages.logo_url`, falling back to `logo_svg` / generated
+monogram) in **both** the nav and the footer. Previously 11 of them dropped the
+logo in the nav (showing a monogram/dot/square or just the name) and none
+rendered it in a secondary surface, so a missing or misconfigured logo could ship
+unnoticed. (The 5 original non-signature templates — minimal, bold-hero,
+video-first, editorial, product-mock — are out of scope for this change.)
+
+- **Shared infra** (`cloudflare-worker/src/services/landingTemplates.ts`):
+  - `svgLogoInline(name, color)` — container-filling (100% w/h) variant of
+    `svgLogo` for chip placement; `svgLogo` is left untouched because the original
+    hero layouts rely on its intrinsic 200px size.
+  - `BrandKit.logoInline` (built in `buildBrandKit`) — a 100%-sized
+    `<img src=logo_url …object-fit:cover>` when a logo is configured, else
+    `logo_svg` / `svgLogoInline`. `logoMarkup` (96px hero variant) is unchanged.
+  - `logoChip(bk, size, radius)` — self-contained, inline-styled
+    (`overflow:hidden`, fixed size) brand-logo chip. Inline styles only because
+    each template emits its own scoped `<style>` (no shared stylesheet) and the
+    CSP allows style attributes; a custom `logo_svg` of unknown size is clipped to
+    the chip rather than blowing out the nav.
+- **All 16 templates** now emit `logoChip(bk, …)` in the footer; the 11 that
+  dropped the nav logo (distribution-deck, pilot-partner-page, partner-hub,
+  partner-pipeline-pro, co-founder-builder, co-founder-canvas, cofounder-connect,
+  co-founder-quest, mentor-connect, mentor-connect-page, builders-launchpad) now
+  render the chip in the nav in place of the decorative monogram/dot/square. The 5
+  that already showed `logoMarkup` in the nav (advisor-connect, proof-builder,
+  capital-ready-kit, capital-storyteller, seed-stage-spark) keep it and gain the
+  footer chip.
+- **Regression guard** (`cloudflare-worker/test/landing_templates.test.ts`):
+  per-signature-key test renders each template with a sentinel `logo_url` and
+  asserts the `<img src=…>` appears at least twice — once inside the `<nav>` and
+  once after it — so a template that silently drops the configured logo fails
+  `npm run test:drift`.
+
+## Waitlist customers in Customer Discovery — Task #5
+
+Customer-audience waitlist signups now surface inside **Customer Discovery**,
+grouped by project, with a lightweight CRM layer: promote-to-interview, send a
+product-invitation email, and send a follow-up email — each tracking per-signup
+status and writing an activity-log entry.
+
+- **Schema (additive)** — `cloudflare-worker/sql/migrations/121_waitlist_crm.sql`
+  adds `crm_status TEXT DEFAULT 'new'`, `invited_at`, `followed_up_at`,
+  `promoted_at`, `promoted_interview_id INTEGER`, and an index on
+  `(project_id, crm_status)` to `waitlist_signups`. Applied lazily/replay-safely
+  in the Worker by `ensureWaitlistCrmColumns(env)`
+  (`cloudflare-worker/src/services/waitlistCrmSchema.ts`, WeakMap-cached,
+  try/catch per `ALTER` since D1 has no `ADD COLUMN IF NOT EXISTS`), mirroring
+  the `discoveryInterviewSchema.ts` precedent.
+- **Worker endpoints** (`cloudflare-worker/src/routes/progress.ts`, mounted under
+  `/api/progress`, all `loadProject` + `ensureCanView`/`ensureCanEdit`,
+  customer-audience only via `WHERE audience = 'customer'`):
+  - `GET /discovery/:projectId/waitlist` — lists serialized signups + CRM fields.
+  - `POST /discovery/:projectId/waitlist/:signupId/promote` — creates an interview
+    reusing the existing INSERT shape (and the `FREE_TIER_LIMITS.discoveryInterviews`
+    free-tier cap via `userMeetsTier`/`ensureTier`), writes a `waitlist_promoted`
+    activity log, stamps `promoted_*`. **Idempotent**: a repeat promote returns the
+    existing interview with `already_promoted: true` (200, not 409); a concurrency
+    guard (`UPDATE … WHERE promoted_interview_id IS NULL` + `meta.changes`) ensures
+    a single winner, and the loser deletes its orphan interview.
+  - `POST …/invite` + `POST …/follow-up` — send via the existing
+    `send(env, key, …)` pipeline with the new templates, then advance CRM state
+    monotonically (`new < invited < followed_up < promoted`) and log activity.
+- **Email-send semantics** (both backends): success → advance CRM + log,
+  `email_sent: true`. Not-configured (Worker `gmail_creds_missing` with no
+  `GMAIL_CLIENT_ID/SECRET/REFRESH_TOKEN`; dev Gmail not configured) → SOFT path:
+  still advance + log, `email_sent: false`, `email_reason: 'not_configured'`.
+  Any other hard failure → `502 { detail: { code: 'email_send_failed' } }`, CRM
+  NOT advanced.
+- **Templates** (`cloudflare-worker/src/templates/email/registry.ts`):
+  `waitlist_product_invitation` + `waitlist_follow_up`, category `'marketing'`
+  with NO marketing-unsubscribe flag (recipients are waitlist signups, not
+  platform users — opt-out copy lives in the body; `replyTo: support@axal.vc`).
+  Vars: `name`, `product_name`, `founder_name`, `cta_url` (landing-page URL when a
+  `landing_pages` row exists for the project, else the app base).
+- **Dev parity** (`backend/app/api/routes/progress.py`, FastAPI/Postgres, never
+  deployed): `_ensure_waitlist_crm_schema` (`ADD COLUMN IF NOT EXISTS`), the same
+  4 endpoints (raw `text()` SQL for `waitlist_signups`, `Interview` entity for
+  promote, `ActivityLog` writes), and the same response shapes + email semantics
+  gated on `email_service._is_gmail_configured()`.
+- **Frontend**: `frontend/src/lib/api.js` adds `listWaitlistCustomers`,
+  `promoteWaitlistCustomer`, `inviteWaitlistCustomer`, `followUpWaitlistCustomer`.
+  `frontend/src/pages/CustomerDiscoveryPage.jsx` now loads ALL projects (interview
+  form still targets the first project), and renders a **Waitlist customers**
+  section grouped by project — rows show name/email/source/date + a status badge,
+  with per-button loading and inline success/error (including the
+  not-configured case), dark-mode variants, and empty states. No new top-level
+  app routes.
+
+## Import from Stripe (Metrics) — Task #4
+
+The Metrics page **"Import from Stripe"** button now pulls live billing data
+instead of returning a fake empty success.
+
+- `POST /api/progress/metrics/:projectId/import-stripe`
+  (`cloudflare-worker/src/routes/progress.ts`) now calls the existing
+  `syncStripeForUser(env, userId, projectId)`
+  (`cloudflare-worker/src/integrations/providers/stripe.ts`) — `requireAuth`,
+  `loadProject`, and `ensureCanEdit` checks unchanged. The previous body was a
+  placeholder returning a fake `{ ok: true, imported: 0, detail: 'not_configured' }`.
+- Result → response mapping (frontend reads `error.data.code` only on non-2xx,
+  via `frontend/src/lib/api.js`'s `detail` object path, matching the FastAPI shape):
+  - `not_connected` / `credentials_missing` → `400 { detail: { code: 'stripe_not_connected', message } }`
+  - connected but no active/trialing subscriptions (`mrr` and `customers` both 0)
+    → `400 { detail: { code: 'stripe_no_data', message } }`
+  - any other sync failure → `502 { detail: { code: 'stripe_sync_failed', message } }`
+  - success → `200 { ok, imported, source: 'stripe', mrr, customers }`; the
+    `source='stripe'` snapshot is written by the shared sync and the stat cards
+    update on the page's refresh.
+- `syncStripeForUser` is shared with the Stripe cron/webhook resync paths and was
+  left unchanged; `cloudflare-worker/src/routes/metrics.ts` relay unchanged. No
+  FastAPI change (dev-only, never deployed).
+
+## Template-Driven Brand Page Editor — Task #3
+
+Brand & Landing **step 3 is now template-aware**: the editable fields adapt to the
+visual template chosen in step 2, and every template renders from saved content.
+
+- New column `landing_pages.content_json TEXT` = `{ [templateKey]: { field: string | item[] } }`
+  (migration `sql/migrations/120_landing_content_json.sql`; ensured in worker
+  `ensureLandingPageBrandKitColumns` + FastAPI `_ensure_schema`). Worker GET/PUT and
+  FastAPI get/upsert read/write it (validated JSON, clamped); `api.js` passes it in the draft.
+- `LANDING_CONTENT_SCHEMA` + render helpers `landingContent(row, key).t(field)` (escaped,
+  falls back to schema default) / `.list(field)` in
+  `cloudflare-worker/src/services/landingTemplates.ts`; mirrored as `TEMPLATE_CONTENT_SCHEMA`
+  in `frontend/src/lib/brand/templates.js`. New lockstep parity test
+  `cloudflare-worker/test/landing_content_schema.test.ts` (added to the `test:drift` list in
+  `package.json`). Only the 16 signature templates carry editable fields; the 5 originals map to `[]`.
+- All 16 signature render fns now read editable copy via the helper with the **logo guaranteed**
+  in nav + hero/footer and palette pulled from the brand kit (no literal palette constants).
+  Spin-Out deck theming (`services/decks/branding.ts`) untouched.
+- `BrandBuilderPage.jsx`: dynamic step-3 form generated from the schema
+  (`text` / `textarea` / add-remove `groupList`), persisting per template in
+  `draft.content_json[draft.template]`. Content blocks are seeded with schema defaults on
+  template-select (an effect keyed on `draft.template`) and on landing load (covers switching
+  between two projects that share a template). Palette swatches relabeled by role
+  (Primary / Background / Text / Secondary / Accent). Heading renamed to "3. Brand & page content".
+- Replaced the "Generate 5 options" name-picker with **one-click AI auto-fill**:
+  `POST /api/brand/landing/autofill` (worker: `aiRouterRun` task `brand_autofill` →
+  `heuristicTemplateContent` fallback, clamped via `sanitizeLandingContent`; dev FastAPI:
+  deterministic hero copy via `_heuristic_hero_copy`, empty content). Auto-fill populates
+  **every editable hero field — brand `name`, `headline`, `subheadline`, `tagline`, `cta_text`** —
+  plus the chosen template's content, all from the project name + sector + 1-paragraph
+  description, **without mutating those three step-1 inputs** (`name`/`cta` added to the AI JSON
+  contract + heuristic fallback in worker `aiTemplateContent`/route and FastAPI; applied in
+  `BrandBuilderPage.autofill`).
+- Removed the 6-tab "Audience-specific copy" UI block, the hardcoded fallback brand names,
+  and the unused `/brand/suggest` path (its dead `brand_suggest` TaskClass renamed to
+  `brand_autofill` in `services/aiRouter.ts`). The persisted `audience_*` columns and the
+  waitlist audience labels/colors are retained.
+- The **5 original rendered templates** (`minimal`/`bold_hero`/`video_first`/`editorial`/
+  `product_mock`) are now **single-audience too**: the in-page six-tab switcher and its
+  `switchTab` script/CSS were removed from the server-rendered HTML, so each published page
+  renders copy for the one audience selected in step 1 (`selectedAudience(row)`, falling back to
+  `customer`) and posts that audience through the shared `singleWaitlistScript` (`#wl-form`/
+  `#wl-msg`). `landing_templates_render.test.ts` updated to assert single-audience capture and
+  no six-tab markup for every template. The dev FastAPI parity renderer
+  `_render_landing_html` (served by `GET /landing/{slug}` + `/landing/preview/{token}` in
+  `backend/app/main.py`) was converted the same way — it now renders the single `row.audience`
+  (fallback `customer`) with one `#wl-form`/`#wl-msg`, dropping the six-tab markup, `switchTab`
+  script, and `.tabs/.tab/.panel/.badge` CSS.
+- `npm run test:drift` green (incl. `check-dark-mode`, api drift, 43 landing tests incl. the
+  schema-parity test, and worker `tsc --noEmit`).
+
+## Spin-Out pitch deck — source-driven slide editor — Task #2
+
+For the `axal_spinout_demoday` template ONLY, the Pitch Deck Builder's
+center-rail slide editor is now a dedicated, source-driven panel
+(`frontend/src/components/SpinoutSlideEditor.jsx`); all other templates keep the
+generic `SlideEditor`. `PitchDeckPage.jsx` branches on `isSpinoutDeck`.
+
+- Most fields are AUTO: read-only, pulled from the live project-derived deck data
+  (the dotted-key `fields` map from `api.spinoutDeck`), rendered as dashed
+  read-only cards with an "Auto" badge and a react-router `Link` to their source
+  page. Config is keyed by `slide.spec_id`: cover (project, founder(s) from
+  account, description, sector, validation signal — all auto), validation
+  (data-driven from `validation.cards_json` so labels never drift), market
+  (TAM/SAM/SOM + why-now), roadmap, team_network, cap_table (+ a separate
+  incorporation row), ask (raise / use-of-funds / milestone), review_the_deal.
+- A few NARRATIVE fields are EDITABLE and write back to PROJECT columns via
+  `api.updateProject` (explicit Save → `api.getProject` refetch → `onSaved()`
+  bumps `deckDataReload` so the live preview + PPTX export refresh): problem
+  (`problem_statement`); solution (`solution`, help text tailored to Axal's
+  "solution-side" data→decision framing); product_demo
+  (`product_demo_{video,live,screenshot}_url` + `product_demo_caption`).
+- Cover drops the editable project selector + founder-name input (both now auto).
+- Founders auto-row falls back to `team.founder.name` (dev mirror exposes a
+  singular `founder`; the worker exposes the `founders` array).
+- No assembler change: the editor consumes the existing
+  `cloudflare-worker/src/services/decks/spinoutDeckData.ts` /
+  `backend/app/api/routes/projects.py` dotted-key contract. `npm run test:drift`
+  green (incl. `check-dark-mode`, `spinoutDeckData`, `useOfFunds`, `tsc`).
+
+## Spin-Out projects can be built by a team (co-founders + advisors) — Task #1
+
+A single-founder Spin-Out project (`projects.founder_id`) can now be built by a
+TEAM. The owner (and admin/partner staff) add co-founders and advisors from
+"Edit Project" via co-founder match, user id, email, or a tokenized invite link.
+Co-founders read+edit project DATA; advisors are read-only; investors are never
+members and can never edit.
+
+- Schema: new `project_members` + `project_member_invitations` tables. Worker
+  migration `cloudflare-worker/sql/migrations/119_project_membership.sql`; both
+  runtimes self-heal on the cold path — worker
+  `cloudflare-worker/src/services/projectAccess.ts::ensureProjectMembershipSchema`,
+  backend `backend/app/api/routes/project_members.py` ensure-on-boot wired in
+  `backend/app/main.py` (logs "project membership tables ensured").
+- Access predicate unions `founder_id` ownership with accepted `project_members`
+  rows. Worker `services/projectAccess.ts::canAccessProject` + backend
+  `services/project_access.py::can_access_project` gate list/get/PUT/spinout/
+  deck-data: advisors fail write checks, co-founders pass, admin/partner bypass.
+  Investors NEVER pass a write check on either layer and are excluded from the
+  roster view; in dev FastAPI they keep their existing privileged deal READ only
+  (the Worker is the stricter, deployed source of truth).
+- Endpoints (Worker `routes/projects.ts` + FastAPI `routes/project_members.py`):
+  GET `/:id/members` (roster + invitations + stage gate + `can_manage`/`can_edit`/
+  `my_role`), POST `/:id/members` (direct add: `user_id` | `cofounder_match`),
+  POST `/:id/invitations` (tokenized link, token sha256-hashed at rest, raw token
+  returned once, 14-day expiry), DELETE `/:id/invitations/:invId`, DELETE
+  `/:id/members/:userId` (never the owner), POST `/invitations/accept` (binds to
+  `invitee_user_id` or normalized email; client cannot supply role/status/
+  project_id; idempotent re-add reactivates a previously removed row).
+- Roster MANAGEMENT (invite/add/remove) is owner + admin/partner only and is
+  stage-gated: NEW founders (Spin-Out Lab active, pre-incorporation) are locked
+  until lab week ≥ `TEAM_BUILDING_MIN_LAB_WEEK` (2); EXISTING founders are
+  unlocked. Dev FastAPI users carry no spinout-lab columns, so dev resolves to
+  unlocked; the Worker enforces the real gate in prod.
+- Frontend: `frontend/src/lib/api.js` membership methods; `ProjectMembersSection`
+  inside `EditProjectModal` (`frontend/src/pages/ProjectDetail.jsx`) drives off
+  `can_manage`/`locked`/`gate_reason`/`unlock_week`; new
+  `frontend/src/pages/AcceptInvitePage.jsx` + public route
+  `/projects/invitations/accept` in `App.jsx`; share links (WhatsApp/Telegram/
+  mailto) built from `window.location.origin`. "Edit Project" now shows for
+  accepted co-founders and admin/partner managers (not just owner/admin) via the
+  new `can_edit` flag from GET `/:id/members`.
+
 ## Compare multiple cap-table scenarios per project (draft variants)
 
 Teams can now model alternative cap tables for a project — different SAFE caps,

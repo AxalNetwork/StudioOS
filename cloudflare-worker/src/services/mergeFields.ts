@@ -42,7 +42,8 @@ function resolveDotted(scope: Record<string, unknown>, path: string): unknown {
   let cur: unknown = scope;
   for (const p of parts) {
     if (cur == null || typeof cur !== 'object') return undefined;
-    cur = (cur as Record<string, unknown>)[p];
+    if (p === '__proto__' || p === 'constructor' || p === 'prototype') return undefined;
+    cur = (cur as Record<string, unknown>)[p]; // codeql[js/prototype-polluting-function] -- read-only walk; __proto__/constructor/prototype rejected above, result is stringified and never assigned
   }
   return cur;
 }
