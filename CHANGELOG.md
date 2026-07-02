@@ -10,6 +10,44 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+> ## Contacts promotion creates real downstream records (Task #32)
+>
+> `POST /api/contacts/:uid/promote` (`routes/contacts.ts`) previously only
+> stamped `promoted_to` + `status='qualified'`. It now creates and links a real
+> downstream record per audience, idempotently, and the contact links back via
+> the new `contacts.promoted_ref_id`.
+>
+> - **Customer → discovery interview** — inserts a `discovery_interviews` row
+>   (seeded from the contact) and links it via `promoted_ref_id`. Respects the
+>   free-tier interview cap with an explicit `402` (mirrors create-interview /
+>   waitlist-promote — no silent tier bypass).
+> - **Investor → raise prospect** — inserts a row in the new `raise_prospects`
+>   table (`uid`, `project_id`, `contact_id`, `name`/`email`/`firm`, `stage`,
+>   `notes`) at stage `to_contact`; the contact's message seeds the notes.
+> - **Idempotent** — a re-promote returns the existing linked record
+>   (`already_promoted: true`), never a duplicate; a dangling `promoted_ref_id`
+>   (target row deleted) or a legacy stamp (old promote left `promoted_ref_id`
+>   NULL) heals into a real record. Concurrency is guarded by only letting the
+>   request that flips `promoted_ref_id` from the value it observed at read
+>   (`NULL` or the stale/dangling ref) win — the loser deletes its just-created
+>   row and returns the winner's (mirrors the waitlist→interview promote).
+> - **Other audiences** (partner/advisor/mentor/cofounder) return an explicit
+>   `400` — no promotion target.
+> - **New raise-pipeline endpoints** `GET /api/contacts/raise-prospects` and
+>   `PUT /api/contacts/raise-prospects/:id` (stage/notes/firm/name), scoped to
+>   the caller's own projects; registered before `/:uid`. `RAISE_STAGES` =
+>   `to_contact → contacted → meeting → diligence → committed / passed`.
+> - **Migration** `sql/migrations/128_contact_promotion.sql` —
+>   `ALTER TABLE contacts ADD COLUMN promoted_ref_id` + `CREATE TABLE
+>   raise_prospects` (+2 indexes). `ensureSchema` self-heals both on prod's
+>   lazy-init path (PRAGMA-guarded ALTER). Best-effort `contact_promoted`
+>   activity log never blocks the write.
+> - **Frontend** — new `pages/RaisePipelinePage.jsx` (lazy `/raise` route,
+>   `guard(['admin','founder'])`, "Raise Pipeline" sidebar item), `raiseProspects`/
+>   `raiseProspectUpdate` in `lib/api.js`, and `pages/ContactsPage.jsx` now shows
+>   a "View in …" link (discovery / raise) once a contact is promoted instead of
+>   the Promote button.
+>
 > ## Contacts invites now send a real email (Task #31)
 >
 > `POST /api/contacts/invite` (`routes/contacts.ts`) previously only created an

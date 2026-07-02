@@ -16,11 +16,20 @@ import type { Env, User } from '../types';
 import { requireRole } from '../auth';
 import { isAdmin, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { sendContactInviteEmail } from '../services/email';
+import { FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
+import {
+  ensureDiscoveryInterviewFeaturedColumn,
+  ensureDiscoveryValidationRatingColumns,
+} from '../services/discoveryInterviewSchema';
+import { hashEmail } from '../util/hashEmail';
 
 const r = new Hono<{ Bindings: Env }>();
 
 export const CONTACT_AUDIENCES = ['customer', 'investor', 'partner', 'advisor', 'mentor', 'cofounder'];
 const CONTACT_STATUSES = ['new', 'invited', 'contacted', 'replied', 'qualified', 'active', 'passed'];
+
+/** Investor raise-pipeline stages a promoted investor prospect moves through. */
+export const RAISE_STAGES = ['to_contact', 'contacted', 'meeting', 'diligence', 'committed', 'passed'];
 
 /** Audience → founder workflow the contact should feed. */
 export function routeFor(audience: string): string {
@@ -29,11 +38,33 @@ export function routeFor(audience: string): string {
   return 'network';
 }
 
+/** D1 autoincrement id from an INSERT result (meta shape varies across libs). */
+function lastInsertId(res: { meta?: { last_row_id?: number } }): number {
+  const id = res.meta?.last_row_id;
+  return typeof id === 'number' ? id : 0;
+}
+
+/** Rows changed by an UPDATE — used for the flip-from-NULL concurrency guard. */
+function changedRows(res: { meta?: { changes?: number } }): number {
+  return Number(res.meta?.changes ?? 0);
+}
+
+/** Best-effort activity log — never blocks the promote write. */
+async function logPromotion(env: Env, user: User, projectId: number, detail: string): Promise<void> {
+  try {
+    const project = await env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(projectId).first<{ name: string }>();
+    const actor = await hashEmail(user.email);
+    await env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`,
+    ).bind('contact_promoted', `Project ${project?.name ?? projectId}: ${detail}`, actor, user.id, projectId).run();
+  } catch { /* activity logging must never block the write */ }
+}
+
 type ContactRow = {
   id: number; uid: string; project_id: number; audience: string; routed_to: string;
   name: string | null; email: string; cta: string | null; message: string | null;
   source: string | null; landing_page_id: number | null; status: string;
-  promoted_to: string | null; last_activity_at: string | null;
+  promoted_to: string | null; promoted_ref_id: number | null; last_activity_at: string | null;
   created_at: string; updated_at: string;
 };
 
@@ -52,6 +83,7 @@ async function ensureSchema(env: Env): Promise<void> {
        landing_page_id INTEGER,
        status TEXT NOT NULL DEFAULT 'new',
        promoted_to TEXT,
+       promoted_ref_id INTEGER,
        last_activity_at TEXT,
        created_at TEXT NOT NULL DEFAULT (datetime('now')),
        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -77,8 +109,34 @@ async function ensureSchema(env: Env): Promise<void> {
        created_at TEXT NOT NULL DEFAULT (datetime('now'))
      )`,
     `CREATE INDEX IF NOT EXISTS idx_contact_tasks_contact ON contact_tasks(contact_id)`,
+    // Task #32 — investor raise pipeline. One row per promoted investor
+    // prospect; the promoted contact links here via promoted_ref_id.
+    `CREATE TABLE IF NOT EXISTS raise_prospects (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       uid TEXT UNIQUE NOT NULL,
+       project_id INTEGER NOT NULL,
+       contact_id INTEGER,
+       name TEXT, email TEXT, firm TEXT,
+       stage TEXT NOT NULL DEFAULT 'to_contact',
+       notes TEXT,
+       created_at TEXT NOT NULL DEFAULT (datetime('now')),
+       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_raise_prospects_project ON raise_prospects(project_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_raise_prospects_contact ON raise_prospects(contact_id)`,
   ];
   for (const s of stmts) await env.DB.prepare(s).run();
+  // Task #32 — self-heal promoted_ref_id on an EXISTING prod contacts table
+  // (CREATE TABLE IF NOT EXISTS never adds columns to a table that already
+  // exists). Canonical add is migration 128; this is the runtime safety net.
+  try {
+    const info = await env.DB.prepare(`PRAGMA table_info(contacts)`).all<{ name: string }>();
+    const have = new Set((info.results || []).map((x) => x.name));
+    if (!have.has('promoted_ref_id')) {
+      try { await env.DB.prepare(`ALTER TABLE contacts ADD COLUMN promoted_ref_id INTEGER`).run(); }
+      catch (e) { console.warn('[contacts] ALTER promoted_ref_id failed (likely already applied)', e); }
+    }
+  } catch (e) { console.warn('[contacts] promoted_ref_id bootstrap failed', e); }
   _ensured = true;
 }
 
@@ -224,6 +282,53 @@ r.post('/invite', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// GET /api/contacts/raise-prospects — investor raise pipeline (own projects).
+// Registered BEFORE /:uid so the static segment wins the Hono route match.
+r.get('/raise-prospects', async (c) => {
+  try {
+    const user = await requireRole(c, 'founder');
+    await ensureSchema(c.env);
+    const scope = await ownedProjectScope(c.env, user);
+    let where = '1=1';
+    const params: any[] = [];
+    if (scope !== 'all') {
+      if (scope.length === 0) return c.json({ items: [], stages: RAISE_STAGES });
+      where += ` AND project_id IN (${scope.map(() => '?').join(',')})`;
+      params.push(...scope);
+    }
+    const pid = c.req.query('project_id');
+    if (pid) { where += ' AND project_id = ?'; params.push(Number(pid)); }
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM raise_prospects WHERE ${where} ORDER BY updated_at DESC LIMIT 500`,
+    ).bind(...params).all<any>();
+    return c.json({ items: rows.results || [], stages: RAISE_STAGES });
+  } catch (e) { return mapError(c, e); }
+});
+
+// PUT /api/contacts/raise-prospects/:id — update stage / notes / firm / name.
+r.put('/raise-prospects/:id', async (c) => {
+  try {
+    const user = await requireRole(c, 'founder');
+    await ensureSchema(c.env);
+    const id = Number(c.req.param('id'));
+    const row = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
+    if (!row) return c.json({ detail: 'Not found' }, 404);
+    const scope = await ownedProjectScope(c.env, user);
+    if (scope !== 'all' && !scope.includes(Number(row.project_id))) return c.json({ detail: 'Forbidden' }, 403);
+    const body = await c.req.json().catch(() => ({} as any));
+    let stage = row.stage;
+    if (body.stage && RAISE_STAGES.includes(body.stage)) stage = body.stage;
+    const notes = body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 4000) : null) : row.notes;
+    const firm = body.firm !== undefined ? (body.firm ? String(body.firm).slice(0, 200) : null) : row.firm;
+    const name = body.name !== undefined ? (body.name ? String(body.name).slice(0, 200) : null) : row.name;
+    await c.env.DB.prepare(
+      `UPDATE raise_prospects SET stage=?, notes=?, firm=?, name=?, updated_at=? WHERE id=?`,
+    ).bind(stage, notes, firm, name, nowIso(), id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
+    return c.json(fresh);
+  } catch (e) { return mapError(c, e); }
+});
+
 // GET /api/contacts/:uid — detail with replies + tasks
 r.get('/:uid', async (c) => {
   try {
@@ -313,7 +418,17 @@ r.post('/:uid/tasks/:taskId/toggle', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-// POST /api/contacts/:uid/promote — route a contact into its downstream workflow
+// POST /api/contacts/:uid/promote — create/link a REAL downstream record.
+//
+// Customers → a Customer Discovery interview (discovery_interviews); investors
+// → a raise-pipeline prospect (raise_prospects). Idempotent: a re-promote (or
+// double-click / retry) returns the existing linked record instead of creating
+// a duplicate. The contact links back via promoted_ref_id (interpreted through
+// promoted_to). Concurrency is guarded by only letting the request that flips
+// promoted_ref_id from NULL win; the loser deletes its just-created row and
+// returns the winner's — mirroring the waitlist→interview promote in
+// routes/progress.ts. Others (partner/advisor/mentor/cofounder) have no
+// downstream module and stay in Contacts.
 r.post('/:uid/promote', async (c) => {
   try {
     const user = await requireRole(c, 'founder');
@@ -321,15 +436,109 @@ r.post('/:uid/promote', async (c) => {
     const row = await loadOwned(c.env, c.req.param('uid'), user);
     if (row === 'notfound') return c.json({ detail: 'Not found' }, 404);
     if (row === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
-    // Customers → Customer Discovery; investors → raise pipeline. Others have no
-    // separate destination (they live in Contacts). Deep record creation in the
-    // target module is a follow-up; here we stamp the promotion + qualify.
-    const target = row.audience === 'customer' ? 'discovery' : row.audience === 'investor' ? 'raise' : null;
-    if (!target) return c.json({ detail: 'This audience has no promotion target; manage it here.' }, 400);
-    await c.env.DB.prepare('UPDATE contacts SET promoted_to=?, status=?, last_activity_at=?, updated_at=? WHERE id=?')
-      .bind(target, 'qualified', nowIso(), nowIso(), row.id).run();
-    const fresh = await c.env.DB.prepare('SELECT * FROM contacts WHERE id = ?').bind(row.id).first<ContactRow>();
-    return c.json({ ...fresh, promoted_to: target });
+    const db = c.env.DB;
+
+    // ---- Customer → Customer Discovery interview ----
+    if (row.audience === 'customer') {
+      await ensureDiscoveryInterviewFeaturedColumn(c.env);
+      await ensureDiscoveryValidationRatingColumns(c.env);
+
+      // Idempotent — return the existing interview unless the link dangles
+      // (interview since deleted → fall through and re-create).
+      if (row.promoted_to === 'discovery' && row.promoted_ref_id) {
+        const existing = await db.prepare('SELECT * FROM discovery_interviews WHERE id = ?')
+          .bind(row.promoted_ref_id).first<any>();
+        if (existing) {
+          const fresh = await db.prepare('SELECT * FROM contacts WHERE id = ?').bind(row.id).first<ContactRow>();
+          return c.json({ ...fresh, record: existing, already_promoted: true });
+        }
+      }
+
+      // Free-tier cap mirrors create-interview / waitlist-promote so the button
+      // is not a tier-cap bypass. Explicit 402 — never a silent fallback.
+      if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+        const cnt = await db.prepare('SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?')
+          .bind(row.project_id).first<{ n: number }>();
+        if (Number(cnt?.n ?? 0) >= FREE_TIER_LIMITS.discoveryInterviews) {
+          return c.json({ detail: `Free tier is capped at ${FREE_TIER_LIMITS.discoveryInterviews} customer interviews. Upgrade to Growth to promote more.` }, 402);
+        }
+      }
+
+      const intervieweeName = (row.name && row.name.trim()) ? row.name.trim() : row.email;
+      const notes = `Promoted from Contacts (${row.source || 'landing'}). Contact: ${row.email}`;
+      const res = await db.prepare(
+        `INSERT INTO discovery_interviews
+           (project_id, interviewee_name, interviewee_role, interview_date,
+            notes, hypotheses_json, pains_json, featured,
+            validation_rating, validation_comment, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        row.project_id, intervieweeName, null, nowIso().slice(0, 10),
+        notes, '[]', '[]', 0, null, null, nowIso(), nowIso(),
+      ).run();
+      const newId = lastInsertId(res);
+
+      const upd = await db.prepare(
+        `UPDATE contacts SET promoted_to='discovery', promoted_ref_id=?, status='qualified', last_activity_at=?, updated_at=?
+          WHERE id=? AND (promoted_ref_id IS NULL OR promoted_ref_id = ?)`,
+      ).bind(newId, nowIso(), nowIso(), row.id, row.promoted_ref_id).run();
+      if (changedRows(upd) === 0) {
+        // Lost the race — drop our interview and return the winner's link.
+        await db.prepare('DELETE FROM discovery_interviews WHERE id = ?').bind(newId).run();
+        const winner = await db.prepare('SELECT * FROM contacts WHERE id = ?').bind(row.id).first<ContactRow>();
+        const winnerRec = winner?.promoted_ref_id
+          ? await db.prepare('SELECT * FROM discovery_interviews WHERE id = ?').bind(winner.promoted_ref_id).first<any>()
+          : null;
+        return c.json({ ...winner, record: winnerRec, already_promoted: true });
+      }
+
+      await logPromotion(c.env, user, row.project_id, `promoted ${row.email} to a customer interview`);
+      const fresh = await db.prepare('SELECT * FROM contacts WHERE id = ?').bind(row.id).first<ContactRow>();
+      const record = await db.prepare('SELECT * FROM discovery_interviews WHERE id = ?').bind(newId).first<any>();
+      return c.json({ ...fresh, record });
+    }
+
+    // ---- Investor → raise-pipeline prospect ----
+    if (row.audience === 'investor') {
+      if (row.promoted_to === 'raise' && row.promoted_ref_id) {
+        const existing = await db.prepare('SELECT * FROM raise_prospects WHERE id = ?')
+          .bind(row.promoted_ref_id).first<any>();
+        if (existing) {
+          const fresh = await db.prepare('SELECT * FROM contacts WHERE id = ?').bind(row.id).first<ContactRow>();
+          return c.json({ ...fresh, record: existing, already_promoted: true });
+        }
+      }
+
+      const res = await db.prepare(
+        `INSERT INTO raise_prospects (uid, project_id, contact_id, name, email, firm, stage, notes, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        newUid(), row.project_id, row.id, row.name || null, row.email, null,
+        'to_contact', row.message ? String(row.message).slice(0, 4000) : null,
+        nowIso(), nowIso(),
+      ).run();
+      const newId = lastInsertId(res);
+
+      const upd = await db.prepare(
+        `UPDATE contacts SET promoted_to='raise', promoted_ref_id=?, status='qualified', last_activity_at=?, updated_at=?
+          WHERE id=? AND (promoted_ref_id IS NULL OR promoted_ref_id = ?)`,
+      ).bind(newId, nowIso(), nowIso(), row.id, row.promoted_ref_id).run();
+      if (changedRows(upd) === 0) {
+        await db.prepare('DELETE FROM raise_prospects WHERE id = ?').bind(newId).run();
+        const winner = await db.prepare('SELECT * FROM contacts WHERE id = ?').bind(row.id).first<ContactRow>();
+        const winnerRec = winner?.promoted_ref_id
+          ? await db.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(winner.promoted_ref_id).first<any>()
+          : null;
+        return c.json({ ...winner, record: winnerRec, already_promoted: true });
+      }
+
+      await logPromotion(c.env, user, row.project_id, `promoted ${row.email} to the raise pipeline`);
+      const fresh = await db.prepare('SELECT * FROM contacts WHERE id = ?').bind(row.id).first<ContactRow>();
+      const record = await db.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(newId).first<any>();
+      return c.json({ ...fresh, record });
+    }
+
+    return c.json({ detail: 'This audience has no promotion target; manage it here.' }, 400);
   } catch (e) { return mapError(c, e); }
 });
 

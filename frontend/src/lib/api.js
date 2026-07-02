@@ -2273,6 +2273,8 @@ export const api = {
   contactAddTask: (uid, data) => request(`/contacts/${uid}/tasks`, { method: 'POST', body: JSON.stringify(data) }),
   contactToggleTask: (uid, taskId) => request(`/contacts/${uid}/tasks/${taskId}/toggle`, { method: 'POST' }),
   contactPromote: (uid) => request(`/contacts/${uid}/promote`, { method: 'POST' }),
+  raiseProspects: (projectId) => request(projectId ? `/contacts/raise-prospects?project_id=${projectId}` : '/contacts/raise-prospects'),
+  raiseProspectUpdate: (id, data) => request(`/contacts/raise-prospects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Users, Plus, RefreshCw, X, Send, ArrowUpRight, CheckSquare, Square } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
@@ -208,11 +209,18 @@ function ContactDrawer({ contact, busy, onClose, onStatus, onPromote, onChanged,
           </select>
         </div>
 
-        {canPromote && (
+        {canPromote && !contact.promoted_ref_id && (
           <button onClick={() => onPromote(contact.uid)} disabled={busy}
             className="mb-4 inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm">
             <ArrowUpRight size={14} /> Promote to {contact.audience === 'customer' ? 'Customer Discovery' : 'Raise pipeline'}
           </button>
+        )}
+
+        {contact.promoted_ref_id && (
+          <Link to={contact.promoted_to === 'discovery' ? '/build/discovery' : '/raise'}
+            className="mb-4 inline-flex items-center gap-2 px-4 py-2 border border-emerald-600 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg text-sm">
+            <ArrowUpRight size={14} /> View in {contact.promoted_to === 'discovery' ? 'Customer Discovery' : 'Raise pipeline'}
+          </Link>
         )}
 
         {contact.message && <p className="mb-4 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap border-l-2 border-gray-200 dark:border-gray-700 pl-3">{contact.message}</p>}

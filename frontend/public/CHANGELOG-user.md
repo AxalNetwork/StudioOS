@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Promoting a contact now sets up their next step
+
+When you promote a contact, we now do more than mark them qualified — we create
+the right next record for you automatically. Promote a customer and we start a
+customer discovery interview for them; promote an investor and they land in your
+new Raise Pipeline, ready to move from "to contact" through meetings and
+diligence all the way to "committed." Promoting the same contact twice is safe —
+it just takes you to the record that already exists, never a duplicate — and each
+contact now links straight through to whatever it became.
+
+---
+
 ## Invites now actually email your contacts
 
 When you add a contact with "Send as invitation" checked, we now send them a

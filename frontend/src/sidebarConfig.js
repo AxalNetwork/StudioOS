@@ -185,6 +185,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/build/deck', icon: Sparkles, label: 'Pitch Deck', requiredTier: 'growth' },
       { to: '/build/financials', icon: DollarSign, label: 'Financial Model' },
       { to: '/build/captable', icon: PieIcon, label: 'Cap Table' },
+      { to: '/raise', icon: TrendingUp, label: 'Raise Pipeline' },
       { to: '/legal-capital', icon: Scale, label: 'Legal & Capital', requiredTier: 'studio' },
       { to: '/incorporate', icon: Scale, label: 'Incorporate' },
       { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement', requiredTier: 'studio' },
