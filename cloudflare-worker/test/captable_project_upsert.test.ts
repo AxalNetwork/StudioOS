@@ -50,6 +50,7 @@ type ScenarioRow = {
   id: number; uid: string; owner_user_id: number; project_id: number | null;
   name: string; inputs_json: string; result_json: string | null;
   computed_at: string | null; created_at: string; updated_at: string;
+  is_variant?: number;
 };
 
 /**
@@ -60,11 +61,17 @@ type ScenarioRow = {
  */
 function makeEnv(
   user: any,
-  opts: { project?: any; scenarios?: ScenarioRow[] } = {},
+  opts: {
+    project?: any;
+    scenarios?: ScenarioRow[];
+    enforceCanonicalUnique?: boolean;
+    staleFirstCanonicalLookup?: boolean;
+  } = {},
 ): { env: any; rows: ScenarioRow[] } {
   const project = opts.project ?? null;
   const rows: ScenarioRow[] = (opts.scenarios ?? []).map((r) => ({ ...r }));
   let nextId = rows.reduce((m, r) => Math.max(m, r.id || 0), 0) + 1;
+  let canonicalLookups = 0;
 
   const handle = (rawSql: string) => {
     const s = rawSql.toLowerCase();
@@ -84,13 +91,18 @@ function makeEnv(
             return rows.find((r) => r.uid === bound[0]) ?? null;
           }
           if (s.includes('where project_id')) {
-            // PUT clash guard: "... WHERE project_id = ? AND uid != ? LIMIT 1".
+            // PUT clash guard: "... WHERE project_id = ? AND uid != ? ...".
             if (s.includes('uid !=')) {
-              return rows.find((r) => r.project_id === bound[0] && r.uid !== bound[1]) ?? null;
+              return rows.find((r) => r.project_id === bound[0] && r.uid !== bound[1] && !r.is_variant) ?? null;
             }
-            // by-project / upsert lookup: latest row for the project.
+            // Canonical by-project / upsert lookup: newest is_variant=0 row.
+            // Task #32 — optionally return null on the FIRST such lookup to
+            // simulate a stale snapshot (the losing racer reads before the
+            // winner's INSERT is visible), forcing the INSERT path below.
+            canonicalLookups++;
+            if (opts.staleFirstCanonicalLookup && canonicalLookups === 1) return null;
             const matches = rows
-              .filter((r) => r.project_id === bound[0])
+              .filter((r) => r.project_id === bound[0] && !r.is_variant)
               .sort((a, b) => (a.updated_at < b.updated_at ? 1 : a.updated_at > b.updated_at ? -1 : 0));
             return matches[0] ?? null;
           }
@@ -99,13 +111,21 @@ function makeEnv(
       },
       async run() {
         if (s.includes('insert into cap_table_scenarios')) {
+          const isVariantInsert = bound.length >= 10 && bound[9] === 1;
+          // Task #32 — emulate the partial unique index: reject a SECOND
+          // canonical (is_variant=0) INSERT for a project that already has one.
+          if (opts.enforceCanonicalUnique && !isVariantInsert && bound[2] != null
+              && rows.some((r) => r.project_id === bound[2] && !r.is_variant)) {
+            throw new Error('D1_ERROR: UNIQUE constraint failed: cap_table_scenarios.project_id: SQLITE_CONSTRAINT');
+          }
           // bound: uid, owner_user_id, project_id, name, inputs_json,
-          //        result_json, computed_at, created_at, updated_at
+          //        result_json, computed_at, created_at, updated_at[, is_variant]
           rows.push({
             id: nextId++,
             uid: bound[0], owner_user_id: bound[1], project_id: bound[2],
             name: bound[3], inputs_json: bound[4], result_json: bound[5],
             computed_at: bound[6], created_at: bound[7], updated_at: bound[8],
+            is_variant: isVariantInsert ? 1 : 0,
           });
         } else if (s.includes('update cap_table_scenarios')) {
           // POST upsert: SET name, inputs_json, result_json, computed_at,
@@ -233,4 +253,45 @@ test('Worker: PUT refuses to bind a second scenario to a project that already ha
   // No duplicate row, and the free scenario stayed unbound.
   assert.equal(rows.length, 2);
   assert.equal(rows.find((r) => r.uid === 'uid-free')!.project_id, null);
+});
+
+test('Worker: a save that loses the INSERT race resolves to the single existing row (no duplicate, no 500)', async () => {
+  // Task #32 — DB-level guard. Two saves for the same project can race between
+  // the upsert SELECT and the INSERT (double-click / two tabs / retry). The
+  // winner commits the project's canonical row; the loser reads a stale snapshot
+  // (no canonical yet), takes the INSERT path, and collides with the partial
+  // unique index. The route must recover by editing the winner — 200, one row.
+  const token = await mintToken(ADMIN_ID, 'admin');
+  const NOW = '2026-06-28T00:00:00.000Z';
+  const { env, rows } = makeEnv(
+    { id: ADMIN_ID, role: 'admin', is_active: 1 },
+    {
+      project: { id: PROJECT_ID, founder_id: 7 },
+      scenarios: [
+        {
+          id: 1, uid: 'uid-winner', owner_user_id: ADMIN_ID, project_id: PROJECT_ID,
+          is_variant: 0, name: 'Winner', inputs_json: JSON.stringify(INPUTS_V1),
+          result_json: '{}', computed_at: NOW, created_at: NOW, updated_at: NOW,
+        },
+      ],
+      enforceCanonicalUnique: true,
+      staleFirstCanonicalLookup: true,
+    },
+  );
+
+  const res = await req(env, token, '/scenarios', {
+    method: 'POST',
+    body: JSON.stringify({ name: 'Loser save', project_id: PROJECT_ID, inputs: INPUTS_V2 }),
+  });
+  assert.equal(res.status, 200, await res.clone().text());
+  const body = (await res.json()) as any;
+
+  // Recovered by editing the winner: same uid, content updated to our payload.
+  assert.equal(body.uid, 'uid-winner');
+  assert.equal(body.name, 'Loser save');
+  assert.equal(body.inputs.founders.length, 2);
+
+  // Exactly ONE canonical row for the project — the race created no duplicate.
+  assert.equal(rows.filter((r) => r.project_id === PROJECT_ID).length, 1);
+  assert.equal(rows.length, 1);
 });

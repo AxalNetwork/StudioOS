@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your project's cap table can't be duplicated by a double-click
+
+If you save a project's cap table twice at almost the same moment — a
+double-click, two open tabs, or a slow save that quietly retries — you'll never
+end up with two competing cap tables for that project. Whatever you save simply
+updates the project's single cap table. Your named "what-if" variants are
+unaffected: you can still keep as many of those as you like.
+
+---
+
 ## A clearer "Profiling completion" and a new values wheel
 
 Your Profile & Fit page now measures "Profiling completion" against just the

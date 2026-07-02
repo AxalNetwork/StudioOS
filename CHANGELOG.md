@@ -10,6 +10,39 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+> ## Cap tables: DB-level guard against duplicates from simultaneous saves
+>
+> Task #28 made "one cap table per project" an application-code rule (POST
+> upserts by `project_id`; PUT refuses to bind a second) and Task #30 proved it
+> for SEQUENTIAL saves — but two simultaneous saves (double-click / two tabs / a
+> retry) could still race between the SELECT and the INSERT and create two
+> canonical rows. This adds the guarantee at the DATABASE level, on both stores.
+>
+> - **Partial unique index (canonical-only)** — a new migration
+>   `cloudflare-worker/sql/migrations/129_captable_one_canonical_per_project.sql`
+>   and a matching `__table_args__` `Index` on `CapTableScenario`
+>   (`backend/app/models/entities.py`) enforce uniqueness of
+>   `cap_table_scenarios(project_id)` WHERE `project_id IS NOT NULL AND
+>   COALESCE(is_variant,0)=0`. The index MUST stay partial: draft variants
+>   (`is_variant=1`, Task #29) legitimately share a `project_id`. The migration
+>   first demotes any pre-existing duplicate canonicals to variants (keep newest
+>   by `updated_at,id` — non-destructive) so the index can build; it is
+>   idempotent (window-fn dedup + `CREATE UNIQUE INDEX IF NOT EXISTS`).
+> - **Graceful upsert recovery** — `routes/captable.ts` (new `isUniqueViolation`
+>   helper) and `backend/app/api/routes/captable.py` (new
+>   `_find_canonical_for_project` helper) catch the unique violation on the create
+>   path and re-resolve to the winning row + UPDATE it (edit-existing, not a 500)
+>   — the same last-writer-wins semantics as the Task #28 upsert. The PUT path
+>   surfaces the existing `409 project_has_cap_table` instead of a 500. FastAPI
+>   `_ensure_schema` self-heals the index (dedup + partial index) on existing dev
+>   DBs (`create_all` only builds it on fresh DBs).
+> - **Tests** — concurrency regressions in
+>   `cloudflare-worker/test/captable_project_upsert.test.ts` (a save that loses
+>   the INSERT race resolves to the one existing row, no 500) and
+>   `tests/test_captable_project_upsert.py` (the real partial index rejects a
+>   second canonical while allowing variants; a stale-read race through the
+>   endpoint resolves to a single row).
+>
 > ## Profile & Fit: "Profiling completion" scoped to the fit bank + a values wheel (Task #40)
 >
 > Integrates PR #121 (`claude/ecstatic-hawking-tcrmqh`). GitHub auth was
