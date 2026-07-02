@@ -41,13 +41,29 @@
 >   banks (`cloudflare-worker/src/services/advisor/banks/fit_*.ts`) expanded to ≥5
 >   skill axes / ≥4 value dims / 4 archetype traits per role; they stay out of the
 >   manifest/drift guard so new questions don't trip CI.
+> - **Adaptive selector now live in the advisor flow (Task #46)** — new
+>   `applyAdaptiveProfiling(bank, answered, { keepIds })` in `profilingModules.ts`
+>   wraps `selectAdaptiveProfiling` for the route layer: it trims fit questions
+>   from confident modules and gap-fill-orders the rest while preserving non-fit
+>   and answered positions, and `keepIds` shields the pinned/current question so
+>   the poll-refresh idempotence on `/start` and `/next-question` still holds. It
+>   is applied to the ranker's candidate pool at all five asking sites in
+>   `cloudflare-worker/src/routes/advisor.ts` (`/start`, `/answer`, `/skip`,
+>   `/next-question`, `/turn`) plus the read-only `/queue` preview (so its peek
+>   matches what `/turn` will actually ask). Previously `selectAdaptiveProfiling`
+>   shipped but no live path called it, so the "skip confident modules" behaviour
+>   was inert; the untrimmed bank is still used for `syncBankTotal`/counts and
+>   `/progress`.
 > - **Frontend** — `frontend/src/components/profile/ProfileFitSection.jsx` renders
 >   per-module completion and the conversational archetype;
 >   `frontend/src/lib/assessmentMeta.js` adds the per-role archetype copy.
 > - **Tests** — new `cloudflare-worker/test/profilingModules.test.ts` and
 >   `cloudflare-worker/test/archetypeScoring.test.ts`, both wired into the
 >   `test:drift` strip-types list in root `package.json`; `advisor.profiling.test.ts`
->   updated for the module model. Full drift gate green.
+>   updated for the module model. `profilingModules.test.ts` also covers
+>   `applyAdaptiveProfiling` (drops confident-module fit questions while keeping
+>   non-fit ones, `keepIds` shields a pin, gap-fill front-loads). Full drift gate
+>   green.
 >
 > ## Profiling: mentors no longer answer double to reach "Profiling complete"
 >

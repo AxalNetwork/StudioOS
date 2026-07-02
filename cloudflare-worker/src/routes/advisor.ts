@@ -66,7 +66,7 @@ import {
 // answer lands (the raw score is persisted to field_sources below).
 import { recomputeUserFit } from '../services/axalFit';
 import { recomputeUserArchetype } from '../services/archetypeScoring';
-import { computeProfilingCompletion } from '../services/advisor/profilingModules';
+import { computeProfilingCompletion, applyAdaptiveProfiling } from '../services/advisor/profilingModules';
 import { routeAnswer, recordFieldSource, type WriteResult } from '../services/advisor/writeRouter';
 import { hashEmail } from '../util/hashEmail';
 // Task #4 (AW) — 7-layer advisor guardrails.
@@ -580,7 +580,13 @@ advisor.post('/start', async (c) => {
   // path returns the SAME pending question. Without this the rerank
   // recency filter would suppress the just-recorded firstQ assistant
   // message and return a different question (architect-flagged regression).
-  const next = await pickNextQuestion(c.env, user.id, conv.id, bank, answered, {
+  // Task #46 — adaptive candidate pool: drop fit questions from already-
+  // confident modules and gap-fill-order the rest before ranking. Keep the
+  // pinned question so the poll/refresh idempotence above still holds.
+  const rankBank = applyAdaptiveProfiling(bank, answered, {
+    keepIds: conv.current_question_id ? new Set([conv.current_question_id]) : undefined,
+  });
+  const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, answered, {
     pinnedId: conv.current_question_id,
   });
 
@@ -1047,7 +1053,9 @@ advisor.post('/answer', async (c) => {
   // as /turn. We pass `extraAnswered: answered` so the just-saved
   // (and any hydrated) ids are honoured even before the cross-conv
   // read inside nextTurn sees them.
-  const turn = await smNextTurn(c.env, liveUser.id, bank, {
+  // Task #46 — trim confident-module fit questions from the ranker's pool.
+  const rankBank = applyAdaptiveProfiling(bank, answered);
+  const turn = await smNextTurn(c.env, liveUser.id, rankBank, {
     week: gate.week,
     completedMilestones: gate.completedMilestones,
     extraAnswered: answered,
@@ -1236,7 +1244,9 @@ advisor.post('/skip', async (c) => {
   // by the time nextTurn loads cross-conversation answered ids the
   // skipped question is already in `answered` — extraAnswered is a
   // belt-and-braces guard against same-isolate read lag.
-  const turn = await smNextTurn(c.env, user.id, bank, {
+  // Task #46 — trim confident-module fit questions from the ranker's pool.
+  const rankBank = applyAdaptiveProfiling(bank, answered);
+  const turn = await smNextTurn(c.env, user.id, rankBank, {
     week: gate.week,
     completedMilestones: gate.completedMilestones,
     extraAnswered: answered,
@@ -1406,7 +1416,12 @@ advisor.get('/next-question', async (c) => {
   // When focus is set, only honour the pin if the pinned question is
   // in-focus (selectBank already applied the focus filter to `bank`,
   // so the helper's "pinnedId must be in bank" check handles this).
-  const next = await pickNextQuestion(c.env, user.id, conv.id, bank, answered, {
+  // Task #46 — adaptive candidate pool (skip confident modules, gap-fill
+  // first). Preserve the pinned question so a poll/refresh stays idempotent.
+  const rankBank = applyAdaptiveProfiling(bank, answered, {
+    keepIds: conv.current_question_id ? new Set([conv.current_question_id]) : undefined,
+  });
+  const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, answered, {
     pinnedId: conv.current_question_id,
   });
   return c.json({
@@ -2283,7 +2298,9 @@ advisor.post('/turn', async (c) => {
   if (blocked) return blocked;
   const focus = (c.req.query('focus') || '').trim() || null;
   const { user, visible, deferred, answered, gate, focusPage } = await buildVisibleBank(c, focus);
-  const result = await smNextTurn(c.env, user.id, visible, {
+  // Task #46 — adaptive candidate pool: skip already-confident modules.
+  const rankVisible = applyAdaptiveProfiling(visible, answered);
+  const result = await smNextTurn(c.env, user.id, rankVisible, {
     focusPage,
     week: gate.week,
     completedMilestones: gate.completedMilestones,
@@ -2326,7 +2343,12 @@ advisor.get('/queue', async (c) => {
   const mergedAnswered = new Set<string>([...fromAnswers, ...answered]);
   const recentlyAsked = await loadRecentlyAsked(c.env, user.id, now - ANTI_REPEAT_WINDOW_MS);
   const recentActivityPages = await loadRecentActivityPages(c.env, user.id, now - RECENT_ACTIVITY_WINDOW_MS);
-  const result = pickNext(visible, mergedAnswered, {
+  // Task #46 — trim confident-module fit questions so this read-only preview
+  // matches what /turn will actually ask (must use mergedAnswered, not the
+  // request-scoped `answered`, so already-answered ids across conversations
+  // count toward module confidence here too).
+  const rankVisible = applyAdaptiveProfiling(visible, mergedAnswered);
+  const result = pickNext(rankVisible, mergedAnswered, {
     focusPage,
     week: gate.week,
     completedMilestones: gate.completedMilestones,
