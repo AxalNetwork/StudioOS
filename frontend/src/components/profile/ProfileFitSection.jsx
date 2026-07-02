@@ -141,31 +141,49 @@ function ValuesLeanCard({ state, className }) {
 }
 
 // ── Archetype ─────────────────────────────────────────────────────────────────
-function ArchetypeCard({ state, className }) {
+// Task #45 — the archetype now comes primarily from the CONVERSATION: the
+// advisor's archetype-trait fit answers are classified by archetypeScoring.ts
+// and surfaced on api.bestFit.me() as `archetype`. That path works for every
+// persona without the separate gamified track, so the card no longer reads
+// "missing" for anyone who only talked to the advisor. We fall back to the
+// gamified assessment result (assessment.myResults) when there's no
+// conversational archetype yet.
+function ArchetypeCard({ state, fitState, className }) {
   const { data, error } = state;
+  const fitData = fitState?.data;
   let body;
-  if (error) {
+  if (error && !fitData) {
     body = <ErrorNote>Couldn’t load your archetype. {error}</ErrorNote>;
-  } else if (!data) {
+  } else if (!data && !fitData) {
     body = <div className="py-6 flex justify-center text-gray-400"><Loader2 className="animate-spin" size={18} /></div>;
   } else {
-    const list = (Array.isArray(data.results) ? data.results : []).filter((r) => r.archetype_slug);
-    const latest = list.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))[0] || null;
+    // Prefer the conversational archetype; fall back to the gamified result.
+    const conv = fitData?.archetype && fitData.archetype.slug
+      ? { slug: fitData.archetype.slug, label: fitData.archetype.label, confidence: fitData.archetype.confidence }
+      : null;
+    let latest = conv;
     if (!latest) {
-      body = <Nudge>Complete the advisor’s founder questions to reveal your archetype.</Nudge>;
+      const list = (Array.isArray(data?.results) ? data.results : []).filter((r) => r.archetype_slug);
+      const g = list.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))[0] || null;
+      if (g) latest = { slug: g.archetype_slug, label: g.archetype_label, confidence: null };
+    }
+    if (!latest) {
+      body = <Nudge>Answer a few archetype questions in the advisor to reveal your archetype.</Nudge>;
     } else {
-      const meta = archetypeMeta(latest.archetype_slug);
+      const meta = archetypeMeta(latest.slug);
       const Icon = iconFor(meta?.icon);
       const accent = meta?.accent || '#7c3aed';
+      const pct = latest.confidence != null ? Math.round(Number(latest.confidence) * 100) : null;
       body = (
         <div className="flex items-start gap-3">
           <div className="w-11 h-11 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${accent}22`, color: accent }}>
             <Icon size={22} />
           </div>
           <div className="min-w-0">
-            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{latest.archetype_label || meta?.label || latest.archetype_slug}</p>
+            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{latest.label || meta?.label || latest.slug}</p>
             {meta?.tagline && <p className="text-xs font-medium" style={{ color: accent }}>{meta.tagline}</p>}
             {meta?.description && <p className={`${SUB} mt-1`}>{meta.description}</p>}
+            {pct != null && <p className={`${SUB} mt-1`}>{pct}% confidence</p>}
           </div>
         </div>
       );
@@ -525,7 +543,7 @@ export default function ProfileFitSection({ className = '' }) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
         <SkillsRadarCard state={radar} className="lg:col-span-2" />
         <ValuesLeanCard state={values} className="lg:col-span-2" />
-        <ArchetypeCard state={results} className="lg:col-span-2" />
+        <ArchetypeCard state={results} fitState={fit} className="lg:col-span-2" />
         <CompletionCard state={progress} className="md:col-span-1 lg:col-span-2" />
         <FitCard state={fit} className="md:col-span-1 lg:col-span-4" />
         <MatchSummaryCard className="md:col-span-2 lg:col-span-4" />

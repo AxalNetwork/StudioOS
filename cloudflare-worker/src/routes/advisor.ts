@@ -57,7 +57,6 @@ import {
   groupByPage,
   groupBySection,
   profilingBankFor,
-  profilingSectionsForBank,
   sortByImportance,
   type BankName,
   type Persona,
@@ -66,6 +65,8 @@ import {
 // Task #19 — Best-Fit. Recompute the user's persona fit scores after a fit
 // answer lands (the raw score is persisted to field_sources below).
 import { recomputeUserFit } from '../services/axalFit';
+import { recomputeUserArchetype } from '../services/archetypeScoring';
+import { computeProfilingCompletion } from '../services/advisor/profilingModules';
 import { routeAnswer, recordFieldSource, type WriteResult } from '../services/advisor/writeRouter';
 import { hashEmail } from '../util/hashEmail';
 // Task #4 (AW) — 7-layer advisor guardrails.
@@ -976,6 +977,14 @@ advisor.post('/answer', async (c) => {
     } catch (e) {
       console.warn('[advisor] recomputeUserFit failed', (e as Error).message);
     }
+    // Task #45 — recompute the archetype from the same fit answers. The
+    // archetype_trait raw scores are in field_sources (above), so
+    // recomputeUserArchetype reads them and appends a profile_archetypes row.
+    try {
+      await recomputeUserArchetype(c.env, user.id);
+    } catch (e) {
+      console.warn('[advisor] recomputeUserArchetype failed', (e as Error).message);
+    }
   }
 
   // Task #6 (CB) — state-machine side effects (counter bump,
@@ -1474,36 +1483,43 @@ advisor.get('/progress', async (c) => {
     percent: g.total > 0 ? Math.round((g.answered / g.total) * 100) : 0,
   }));
 
-  // Task #40 — Profiling completion. Scoped to the conversational fit.* bank
-  // ONLY (Skills / Work values / Axal Fit & values), NOT the full working bank,
-  // so the Profile & Fit "Profiling completion" card shows an honest
-  // denominator instead of the whole persona dashboard bank. Admin / unknown
-  // personas have no fit bank → applicable:false ("not applicable").
+  // Task #40 / #45 — Profiling completion. Scoped to the conversational fit.*
+  // bank ONLY (Skills / Work values / Archetype / Axal Fit), NOT the full working
+  // bank. Task #45 replaces the old "raw answered / bank size" count with a
+  // confidence-based model (services/advisor/profilingModules.ts): each module
+  // has a `required` = min(floor, questions available) so the card shows a real,
+  // reachable target per module (e.g. Skills 3/5, Archetype 0/3) instead of one
+  // shallow "0 / 17". `complete` means every module has reached confidence.
+  // Admin / unknown personas have no fit bank → applicable:false.
   const profilingVisible = filterByContext(profilingBankFor(persona), {
     persona,
     week: gate.week,
     tiers: gate.tiers,
     completedMilestones: gate.completedMilestones,
   }).visible;
-  const profilingSections = profilingSectionsForBank(profilingVisible).map((g) => {
-    const answered = g.ids.filter((id) => capturedSet.has(id)).length;
-    return {
-      key: g.key,
-      label: g.label,
-      total: g.ids.length,
-      answered,
-      percent: g.ids.length > 0 ? Math.round((answered / g.ids.length) * 100) : 0,
-    };
-  });
-  const profilingTotal = profilingVisible.length;
-  const profilingAnswered = profilingVisible.filter((q) => capturedSet.has(q.id)).length;
+  const profCompletion = computeProfilingCompletion(profilingVisible, capturedSet);
   const profiling = {
-    applicable: profilingTotal > 0,
-    total: profilingTotal,
-    answered: profilingAnswered,
-    percent: profilingTotal > 0 ? Math.round((profilingAnswered / profilingTotal) * 100) : 0,
-    complete: profilingTotal > 0 && profilingAnswered >= profilingTotal,
-    sections: profilingSections,
+    applicable: profCompletion.applicable,
+    // `total` / `answered` now track the confidence-weighted required counts
+    // (Σ required across modules), NOT the raw bank size, so the headline
+    // "N / M answered" reflects "answered toward confidence", not a fake total.
+    total: profCompletion.required,
+    answered: profCompletion.answered,
+    percent: profCompletion.percent,
+    complete: profCompletion.complete,
+    sections: profCompletion.modules.map((m) => ({
+      key: m.key,
+      label: m.label,
+      // `total` on a section = its required (confidence) count; `available`
+      // exposes the adaptive headroom for clients that want it.
+      total: m.required,
+      available: m.available,
+      answered: m.answered,
+      coverage: m.coverage,
+      target_coverage: m.target_coverage,
+      percent: m.percent,
+      confident: m.confident,
+    })),
   };
 
   // Overall — counts include skipped to preserve the AC-1 contract
