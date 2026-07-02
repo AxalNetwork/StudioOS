@@ -10,6 +10,26 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+> ## Logo SVGs: locked the stored-XSS sanitizer on both stores
+>
+> Founder-supplied `logo_svg` is rendered raw into the public landing page (a
+> stored-XSS sink) and scrubbed at the write boundary by `sanitizeSvg`
+> (`cloudflare-worker/src/routes/brand.ts`) / `_sanitize_svg`
+> (`backend/app/api/routes/brand.py`) — but neither had a committed test, so a
+> future edit could silently weaken the guard and only surface once a founder's
+> page was exploited. This adds regressions on both stores.
+>
+> - **Worker** — `sanitizeSvg` is now exported (no logic change) and locked by
+>   `cloudflare-worker/test/brand_svg_sanitize.test.ts`, wired into the
+>   `test:drift` strip-types file list in root `package.json`. Asserts it strips
+>   `<script>`, `on*=` handlers, `javascript:` URLs, `<foreignObject>`, and
+>   external `href`/`xlink:href`; returns null for non-SVG/empty; neutralizes an
+>   obfuscated nested payload (fixed-point loop); and preserves a benign SVG.
+> - **FastAPI** — `tests/test_brand_svg_sanitize.py` mirrors the same cases for
+>   `_sanitize_svg` so the two implementations don't drift.
+> - Both suites treat "token stripped OR whole SVG dropped (null)" as
+>   neutralized, matching the sanitizers' strip-then-drop belt-and-suspenders.
+>
 > ## Cap tables: DB-level guard against duplicates from simultaneous saves
 >
 > Task #28 made "one cap table per project" an application-code rule (POST
