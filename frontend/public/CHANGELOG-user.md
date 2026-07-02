@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Invites now actually email your contacts
+
+When you add a contact with "Send as invitation" checked, we now send them a
+real invitation email on your behalf. You can include an optional personal note,
+and any reply comes straight back to you. If an invite can't be sent, we tell you
+right away instead of leaving you guessing — and the contact is still saved so
+you can try again.
+
+---
+
 ## New Contacts hub for founders
 
 Every lead who fills out one of your landing-page forms now flows into a

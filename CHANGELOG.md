@@ -10,6 +10,30 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+> ## Contacts invites now send a real email (Task #31)
+>
+> `POST /api/contacts/invite` (`routes/contacts.ts`) previously only created an
+> 'invited' contact row (delivery was a TODO). It now sends a real invitation
+> via Gmail and surfaces the outcome explicitly instead of swallowing it.
+>
+> - **New sender** `sendContactInviteEmail` + pure, exported `buildContactInviteRaw`
+>   in `services/email.ts` (mirrors `buildReferralInviteRaw`): From stays on
+>   `noreply@axal.vc`; the founder's identity rides in the From display name and a
+>   `Reply-To`, both built via `formatAddress` (CR/LF-stripped + quoted, so a
+>   crafted name/email can't inject headers). Missing Gmail creds → logged +
+>   returns false.
+> - **Route** loads the founder (sender name/email) and project name, calls the
+>   sender wrapped in try/catch, and returns `email_sent` (plus `email_error` on
+>   failure) on the 201 — never swallowed. On success it writes an outbound
+>   `contact_replies` row and bumps `last_activity_at` so the contact history
+>   reflects the delivered invite; on failure the contact row is still created so
+>   the founder can retry. Optional `message` (≤2000 chars) is threaded through.
+> - **Frontend** `pages/ContactsPage.jsx`: invite form gains an optional personal
+>   message textarea; a green banner confirms delivery, a rose banner surfaces
+>   `email_sent:false`.
+> - **Test** `test/contact_invite_replyto.test.ts` (Reply-To/From + header-
+>   injection safety), registered in `test:drift`.
+>
 > ## Contacts backbone — inbound relationship hub (Task #30, PR #120)
 >
 > Integrated the capture→Contacts backbone from PR #120 (the PR itself was

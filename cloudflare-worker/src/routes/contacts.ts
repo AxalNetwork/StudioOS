@@ -15,6 +15,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireRole } from '../auth';
 import { isAdmin, mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { sendContactInviteEmail } from '../services/email';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -174,7 +175,10 @@ r.post('/', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-// POST /api/contacts/invite — founder sends an invitation (creates an 'invited' contact)
+// POST /api/contacts/invite — founder sends an invitation (creates an 'invited'
+// contact AND delivers a real invitation email). Delivery failures are surfaced
+// explicitly via `email_sent`/`email_error` on the response — never swallowed —
+// while the contact row is still created so the founder can retry from the hub.
 r.post('/invite', async (c) => {
   try {
     const user = await requireRole(c, 'founder');
@@ -187,13 +191,36 @@ r.post('/invite', async (c) => {
     }
     const scope = await ownedProjectScope(c.env, user);
     if (scope !== 'all' && !scope.includes(projectId)) return c.json({ detail: 'Forbidden' }, 403);
+    const message = body.message ? String(body.message).slice(0, 2000) : '';
     await ingestContact(c.env, {
       projectId, email, name: body.name, audience: body.audience,
-      cta: 'invite', message: body.message, source: 'invite', status: 'invited',
+      cta: 'invite', message: message || null, source: 'invite', status: 'invited',
     });
-    // Note: transactional email delivery reuses routes/email.ts (follow-up wiring).
     const row = await c.env.DB.prepare('SELECT * FROM contacts WHERE project_id = ? AND email = ? ORDER BY id DESC LIMIT 1').bind(projectId, email).first<ContactRow>();
-    return c.json(row, 201);
+
+    // Deliver the invitation email. The founder is the sender (Reply-To) so the
+    // recipient's reply reaches them directly; From stays on noreply@axal.vc.
+    const project = await c.env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(projectId).first<{ name: string }>();
+    const link = c.env.APP_URL || c.env.PUBLIC_BASE_URL || 'https://axal.vc';
+    let emailSent = false;
+    let emailError: string | null = null;
+    try {
+      emailSent = await sendContactInviteEmail(
+        c.env, email, row?.name || body.name || '', user.name || 'Axal StudioOS',
+        user.email || '', project?.name || '', link, message,
+      );
+      if (!emailSent) emailError = 'Email provider is not configured or rejected the message';
+    } catch (e: any) {
+      emailError = e?.message || 'Unknown error sending invite email';
+    }
+    // Only stamp the activity log once the invite has actually gone out, so the
+    // contact history never claims a delivery that failed.
+    if (emailSent && row) {
+      await c.env.DB.prepare('INSERT INTO contact_replies (contact_id, direction, body, created_by, created_at) VALUES (?, ?, ?, ?, ?)')
+        .bind(row.id, 'outbound', message ? `Invitation email sent:\n${message}` : 'Invitation email sent.', user.id, nowIso()).run();
+      await c.env.DB.prepare('UPDATE contacts SET last_activity_at=?, updated_at=? WHERE id=?').bind(nowIso(), nowIso(), row.id).run();
+    }
+    return c.json({ ...row, email_sent: emailSent, ...(emailError ? { email_error: emailError } : {}) }, 201);
   } catch (e) { return mapError(c, e); }
 });
 

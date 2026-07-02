@@ -495,6 +495,124 @@ export async function sendReferralInviteEmail(
   }
 }
 
+/**
+ * Build the raw MIME for a founder-initiated Contacts invite.
+ *
+ * The From address stays on Axal's authenticated domain (noreply@axal.vc) so
+ * DKIM/SPF/DMARC alignment holds; the founder's identity rides in the From
+ * *display name* (`{founder} via Axal StudioOS`) and a Reply-To header so a
+ * recipient who hits "Reply" reaches the founder directly. All sender-controlled
+ * values are CR/LF-stripped (and display names quoted) via formatAddress so they
+ * can't smuggle extra headers or spoof a second address.
+ *
+ * Exported for unit testing (see test/contact_invite_replyto.test.ts).
+ */
+export function buildContactInviteRaw(
+  to: string,
+  recipientName: string,
+  senderName: string,
+  senderEmail: string,
+  projectName: string,
+  link: string,
+  personalMessage: string,
+): string {
+  const who = senderName || 'A founder at Axal StudioOS';
+  const project = projectName || 'their venture';
+  const greet = recipientName ? `Hi ${recipientName.split(' ')[0]},` : 'Hi,';
+  const noteBlock = personalMessage
+    ? `<tr><td style="padding:0 32px 8px;"><div style="background:#faf5ff;border-left:3px solid #7c3aed;border-radius:8px;padding:14px 16px;color:#4b5563;font-size:14px;line-height:1.55;white-space:pre-wrap;">${escapeHtml(personalMessage)}</div></td></tr>`
+    : '';
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
+<tr><td align="center">
+<table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;">
+<tr><td style="padding:32px 32px 20px;border-bottom:1px solid #f3f4f6;">
+  <table cellpadding="0" cellspacing="0"><tr>
+    <td style="vertical-align:middle;padding-right:10px;">
+      <img src="https://axal.vc/axal-mark.png" alt="Axal VC" width="36" height="36" style="display:block;border:0;border-radius:8px;" />
+    </td>
+    <td style="vertical-align:middle;">
+      <span style="font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.01em;">Axal StudioOS</span>
+      <div style="font-size:11px;color:#9ca3af;margin-top:2px;">Venture Studio</div>
+    </td>
+  </tr></table>
+</td></tr>
+<tr><td style="padding:28px 32px 0;">
+  <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">${escapeHtml(who)} would like to connect</h1>
+  <p style="font-size:14px;color:#6b7280;margin:0 0 18px;line-height:1.6;">${escapeHtml(greet)}</p>
+  <p style="font-size:14px;color:#374151;margin:0 0 18px;line-height:1.65;">
+    ${escapeHtml(who)} invited you to connect about <strong>${escapeHtml(project)}</strong> on Axal StudioOS.
+    You can reply straight to this email to reach them directly, or use the link below to learn more.
+  </p>
+</td></tr>
+${noteBlock}
+<tr><td style="padding:0 32px;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:8px 0 24px;">
+    <a href="${link}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;padding:16px 32px;border-radius:14px;">Learn more</a>
+  </td></tr></table>
+</td></tr>
+<tr><td style="padding:0 32px 32px;">
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:16px 18px;">
+    <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">Or paste this link into your browser:</p>
+    <a href="${link}" style="color:#2563eb;word-break:break-all;font-size:12px;">${link}</a>
+  </div>
+  <p style="font-size:11px;color:#9ca3af;margin:20px 0 0;line-height:1.6;">
+    You're receiving this because ${escapeHtml(who)} added you as a contact on Axal StudioOS.
+    If you didn't expect this, you can safely ignore it — we won't send a follow-up.
+  </p>
+</td></tr>
+</table></td></tr></table></body></html>`;
+  const noteText = personalMessage ? `\n\n${personalMessage}\n\n` : '\n\n';
+  const text = `${greet}\n\n${who} invited you to connect about ${project} on Axal StudioOS.${noteText}Learn more: ${link}\n\nJust reply to this email to reach ${who} directly.\n\n— Axal StudioOS`;
+  const subject = `${who} would like to connect with you`;
+  const from = formatAddress(`${who} via Axal StudioOS`, 'noreply@axal.vc');
+  const safeSenderEmail = stripHeaderInjection(senderEmail);
+  const replyTo = safeSenderEmail ? formatAddress(who, safeSenderEmail) : undefined;
+  return buildRawEmail(to, subject, html, text, from, replyTo);
+}
+
+/**
+ * Deliver a founder-initiated Contacts invite via Gmail. Returns whether Gmail
+ * accepted the message so the caller can surface delivery success/failure to the
+ * founder (never swallowed). Missing Gmail creds → logged + returns false.
+ */
+export async function sendContactInviteEmail(
+  env: Env,
+  to: string,
+  recipientName: string,
+  senderName: string,
+  senderEmail: string,
+  projectName: string,
+  link: string,
+  personalMessage: string,
+): Promise<boolean> {
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
+    console.error('[EMAIL] Gmail credentials missing — contact invite not sent');
+    return false;
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const rawEmail = buildContactInviteRaw(to, recipientName, senderName, senderEmail, projectName, link, personalMessage);
+    const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw }),
+    });
+    if (!res.ok) {
+      const err: any = await res.json().catch(() => ({}));
+      console.error('[EMAIL] Contact invite send failed:', err);
+      return false;
+    }
+    return true;
+  } catch (e: any) {
+    console.error(`[EMAIL] Contact invite failed for ${to}: ${e?.message || 'Unknown error'}`);
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Epic 5 — Admin alerts when a score is flagged for review (anomaly, hash
 // mismatch, or missing signature). Two flavours: real-time per-event, and

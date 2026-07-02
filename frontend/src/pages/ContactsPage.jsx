@@ -23,10 +23,11 @@ export default function ContactsPage() {
   const [audience, setAudience] = useState('');
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
+  const [notice, setNotice] = useState(null);
   const [open, setOpen] = useState(null); // detail (full object from contactGet)
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ project_id: '', email: '', name: '', audience: 'customer', invite: false });
+  const [form, setForm] = useState({ project_id: '', email: '', name: '', audience: 'customer', invite: false, message: '' });
 
   const load = () => {
     setLoading(true);
@@ -46,12 +47,22 @@ export default function ContactsPage() {
 
   const onCreate = async (e) => {
     e.preventDefault();
-    setBusy(true); setErr(null);
+    setBusy(true); setErr(null); setNotice(null);
     try {
       const payload = { project_id: Number(form.project_id), email: form.email, name: form.name || undefined, audience: form.audience };
-      if (form.invite) await api.contactInvite(payload); else await api.contactCreate(payload);
+      if (form.invite) {
+        if (form.message) payload.message = form.message;
+        const res = await api.contactInvite(payload);
+        if (res && res.email_sent === false) {
+          setErr(`Contact added, but the invite email couldn't be sent${res.email_error ? `: ${res.email_error}` : '.'}`);
+        } else {
+          setNotice(`Invitation email sent to ${form.email}.`);
+        }
+      } else {
+        await api.contactCreate(payload);
+      }
       setCreating(false);
-      setForm({ project_id: '', email: '', name: '', audience: 'customer', invite: false });
+      setForm({ project_id: '', email: '', name: '', audience: 'customer', invite: false, message: '' });
       load();
     } catch (e2) { setErr(e2.message || 'Failed'); }
     finally { setBusy(false); }
@@ -87,7 +98,8 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      {err && <div className="mb-4 px-4 py-2 bg-rose-50 text-rose-700 rounded-lg text-sm">{err}</div>}
+      {err && <div className="mb-4 px-4 py-2 bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 rounded-lg text-sm">{err}</div>}
+      {notice && <div className="mb-4 px-4 py-2 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 rounded-lg text-sm">{notice}</div>}
 
       {creating && (
         <form onSubmit={onCreate} className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
@@ -105,8 +117,13 @@ export default function ContactsPage() {
           </div>
           <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 mb-3">
             <input type="checkbox" checked={form.invite} onChange={(e) => setForm({ ...form, invite: e.target.checked })} />
-            Send as invitation (marks status “invited”)
+            Send as invitation (emails the contact & marks status “invited”)
           </label>
+          {form.invite && (
+            <textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })}
+              placeholder="Optional personal message (included in the invite email)" rows={3}
+              className="w-full px-3 py-2 mb-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+          )}
           <button disabled={busy} className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-sm">
             {form.invite ? <Send size={14} /> : <Plus size={14} />} {busy ? 'Saving…' : form.invite ? 'Send invite' : 'Add contact'}
           </button>
