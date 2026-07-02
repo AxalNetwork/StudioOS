@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { api, assessment } from '../../lib/api';
 import SkillRadar from '../play/SkillRadar';
+import ValuesRadial from './ValuesRadial';
 import { openPaywall } from '../PaywallModal';
 import { archetypeMeta, iconFor, humanize } from '../../lib/assessmentMeta';
 
@@ -110,7 +111,7 @@ function ValuesLeanCard({ state, className }) {
       body = (
         <>
           {top.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-3">
+            <div className="flex flex-wrap gap-1.5 mb-2">
               {top.map((label) => (
                 <span key={label} className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">
                   {label}
@@ -118,11 +119,13 @@ function ValuesLeanCard({ state, className }) {
               ))}
             </div>
           )}
-          <ul className="space-y-1.5">
-            {vector.slice(0, 6).map((v) => (
-              <li key={v.dimension_slug} className="flex items-center justify-between gap-3 text-sm">
+          {/* Radial "values wheel" — mirrors the Personal Values Profile chart. */}
+          <ValuesRadial vector={vector} height={210} />
+          <ul className="mt-1 space-y-1">
+            {vector.slice(0, 4).map((v) => (
+              <li key={v.dimension_slug} className="flex items-center justify-between gap-3 text-xs">
                 <span className="text-gray-700 dark:text-gray-300 truncate">{v.dimension_label || v.dimension_slug}</span>
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">{leanLabel(v)}</span>
+                <span className="font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">{leanLabel(v)}</span>
               </li>
             ))}
           </ul>
@@ -168,6 +171,10 @@ function ArchetypeCard({ state, className }) {
 }
 
 // ── Completion % ──────────────────────────────────────────────────────────────
+// Reads the `profiling` block from /api/advisor/progress, which is scoped to the
+// fit.* questions that actually drive the four Profile & Fit dimensions (17–34
+// per persona) — NOT the whole dashboard-population bank. Falls back to the
+// legacy flat fields only when an older worker hasn't shipped `profiling` yet.
 function CompletionCard({ state, className }) {
   const { data, error } = state;
   let body;
@@ -176,26 +183,52 @@ function CompletionCard({ state, className }) {
   } else if (!data) {
     body = <div className="py-4 flex justify-center text-gray-400"><Loader2 className="animate-spin" size={18} /></div>;
   } else {
-    // /api/advisor/progress returns { persona, total, answered, skipped, percent }.
-    const pct = Math.max(0, Math.min(100, Math.round(Number(data.percent) || 0)));
-    const asked = Number(data.answered) || 0;
-    const total = Number(data.total) || 0;
-    body = (
-      <>
-        <div className="flex items-baseline justify-between mb-2">
-          <span className="text-2xl font-bold text-gray-900 dark:text-gray-100">{pct}%</span>
-          <span className={SUB}>{asked}{total ? ` / ${total}` : ''} answered</span>
-        </div>
-        <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
-          <div className="h-full bg-violet-600 dark:bg-violet-500 transition-all" style={{ width: `${pct}%` }} />
-        </div>
-        <p className={`${SUB} mt-2`}>
-          {pct >= 100
-            ? <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={13} /> Profiling complete</span>
-            : 'Keep chatting with the advisor to sharpen every result above.'}
-        </p>
-      </>
-    );
+    const prof = data.profiling || null;
+    // Prefer the scoped profiling block; fall back to legacy flat fields.
+    const pct = Math.max(0, Math.min(100, Math.round(Number(prof ? prof.percent : data.percent) || 0)));
+    const asked = Number(prof ? prof.answered : data.answered) || 0;
+    const total = Number(prof ? prof.total : data.total) || 0;
+    const sections = Array.isArray(prof?.sections) ? prof.sections.filter((s) => Number(s.total) > 0) : [];
+
+    if (prof && prof.applicable === false) {
+      // Admin / undetected persona — no profiling questions apply.
+      body = <Nudge>Profiling isn’t set up for this account type.</Nudge>;
+    } else {
+      body = (
+        <>
+          <div className="flex items-baseline justify-between mb-2">
+            <span className="text-2xl font-bold text-gray-900 dark:text-gray-100">{pct}%</span>
+            <span className={SUB}>{asked}{total ? ` / ${total}` : ''} answered</span>
+          </div>
+          <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+            <div className="h-full bg-violet-600 dark:bg-violet-500 transition-all" style={{ width: `${pct}%` }} />
+          </div>
+          {sections.length > 0 && (
+            <ul className="mt-3 space-y-1.5">
+              {sections.map((s) => {
+                const sPct = Math.max(0, Math.min(100, Math.round(Number(s.percent) || 0)));
+                return (
+                  <li key={s.key} className="text-xs">
+                    <div className="flex items-center justify-between text-gray-600 dark:text-gray-300">
+                      <span>{s.label}</span>
+                      <span className="text-gray-500 dark:text-gray-400">{Number(s.answered) || 0}/{Number(s.total) || 0}</span>
+                    </div>
+                    <div className="mt-0.5 h-1 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                      <div className="h-full bg-violet-400 dark:bg-violet-500" style={{ width: `${sPct}%` }} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <p className={`${SUB} mt-2`}>
+            {pct >= 100
+              ? <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={13} /> Profiling complete</span>
+              : 'Keep chatting with the advisor to sharpen every result above.'}
+          </p>
+        </>
+      );
+    }
   }
   return <CardShell title="Profiling completion" icon={UserCircle} className={className}>{body}</CardShell>;
 }

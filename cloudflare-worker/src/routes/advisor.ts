@@ -56,6 +56,7 @@ import {
   filterByContext,
   groupByPage,
   groupBySection,
+  profilingSectionsForBank,
   sortByImportance,
   type BankName,
   type Persona,
@@ -1482,12 +1483,42 @@ advisor.get('/progress', async (c) => {
   const skp = Number(conv?.skipped_count || 0);
   const overallPct = total > 0 ? Math.round(((ans + skp) / total) * 100) : 100;
 
+  // "Your Profile & Fit" completion — the fit.* questions ONLY, not the whole
+  // dashboard-population bank. Fixes the old card showing 11 (admin) / 200+
+  // (partner) questions: those counts were the full page-fill bank. Here we
+  // count the conversational profiling questions that actually drive the
+  // Skills radar, Work-values chart, and Axal Fit & values, broken out per
+  // section so the card reads a true "n / m answered".
+  const profilingGroups = profilingSectionsForBank(visibleBank);
+  const profilingSections = profilingGroups.map((g) => {
+    const answered = g.ids.filter((id) => capturedSet.has(id)).length;
+    return {
+      key: g.key,
+      label: g.label,
+      total: g.ids.length,
+      answered,
+      percent: g.ids.length > 0 ? Math.round((answered / g.ids.length) * 100) : 0,
+    };
+  });
+  const profilingTotal = profilingSections.reduce((s, x) => s + x.total, 0);
+  const profilingAnswered = profilingSections.reduce((s, x) => s + x.answered, 0);
+  const profilingPct = profilingTotal > 0 ? Math.round((profilingAnswered / profilingTotal) * 100) : 0;
+
   return c.json({
     persona: personaFor(user),
     conversation_id: conv?.uid || null,
     conversation_uid: conv?.uid || null,
     by_page: byPage,
     by_section: bySection,
+    // Profile & Fit completion — scoped to the fit.* profiling questions.
+    profiling: {
+      total: profilingTotal,
+      answered: profilingAnswered,
+      percent: profilingPct,
+      complete: profilingTotal > 0 && profilingAnswered >= profilingTotal,
+      applicable: profilingTotal > 0, // false for admin / undetected personas
+      sections: profilingSections,
+    },
     overall: {
       total, answered: ans, skipped: skp, percent: overallPct,
       deferred: deferredCount,

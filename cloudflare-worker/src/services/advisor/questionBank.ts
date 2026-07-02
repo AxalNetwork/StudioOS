@@ -420,6 +420,61 @@ export function groupBySection(bank: Question[]): Array<{ section: string; ids: 
   return Array.from(groups.values()).sort((a, b) => a.section.localeCompare(b.section));
 }
 
+// ---------------------------------------------------------------------------
+// Profiling completion — the "Your Profile & Fit" dimensions ONLY.
+//
+// The dashboard-population bank (existingFounder ~120, operatingPartner ~200,
+// …) exists to fill EVERY page's data, so counting it as "profiling completion"
+// on the Profile & Fit card produced the wrong "200+ questions" figure. The
+// four Profile & Fit dimensions are driven exclusively by the conversational
+// `fit.*` banks (17–34 questions/persona). This helper buckets those fit
+// questions into the sections the Profile & Fit UI actually renders so the
+// completion card can report a true per-section count.
+//
+// Each fit question is assigned to exactly ONE section (no double-counting) by
+// priority: skill_axis → Skills, value_dim → Work values, everything else
+// (rubric_category / axal_value / red-flag probes) → Axal Fit & values.
+// Archetype is a separate assessment-game flow and is reported independently.
+// ---------------------------------------------------------------------------
+export type ProfilingSectionKey = 'skills' | 'values' | 'axal_fit';
+
+export const PROFILING_SECTIONS: Array<{ key: ProfilingSectionKey; label: string }> = [
+  { key: 'skills', label: 'Skills' },
+  { key: 'values', label: 'Work values' },
+  { key: 'axal_fit', label: 'Axal Fit & values' },
+];
+
+/** The Profile & Fit section a single fit.* question feeds. */
+export function profilingSectionFor(q: Question): ProfilingSectionKey | null {
+  if (!FIT_ID_RE.test(q.id)) return null;
+  const m = q.measures;
+  if (m?.skill_axis) return 'skills';
+  if (m?.value_dim) return 'values';
+  return 'axal_fit'; // rubric_category, axal_value, or a bare red-flag probe
+}
+
+export interface ProfilingSectionGroup {
+  key: ProfilingSectionKey;
+  label: string;
+  ids: string[];
+}
+
+/**
+ * Group a working bank's fit.* questions into the Profile & Fit sections.
+ * Returns every section (even empty ones) in display order so the completion
+ * card renders a stable layout. Non-fit dashboard questions are ignored.
+ */
+export function profilingSectionsForBank(bank: Question[]): ProfilingSectionGroup[] {
+  const byKey = new Map<ProfilingSectionKey, string[]>();
+  for (const s of PROFILING_SECTIONS) byKey.set(s.key, []);
+  for (const q of bank) {
+    const key = profilingSectionFor(q);
+    if (!key) continue;
+    byKey.get(key)!.push(q.id);
+  }
+  return PROFILING_SECTIONS.map((s) => ({ key: s.key, label: s.label, ids: byKey.get(s.key)! }));
+}
+
 /**
  * Sort questions critical-first within their section, preserving
  * original order otherwise.
