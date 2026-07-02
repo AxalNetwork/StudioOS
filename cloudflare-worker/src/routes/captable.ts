@@ -120,6 +120,11 @@ function asJsonError(c: any, err: unknown) {
   throw err;
 }
 
+/** D1/SQLite surfaces a unique-index violation as "UNIQUE constraint failed". */
+function isUniqueViolation(err: unknown): boolean {
+  return /unique constraint failed/i.test(String((err as any)?.message ?? err ?? ''));
+}
+
 captable.post('/simulate', async (c) => {
   await requireAuth(c);
   const body = await c.req.json().catch(() => ({}));
@@ -178,11 +183,35 @@ captable.post('/scenarios', async (c) => {
   }
 
   const uid = crypto.randomUUID();
-  await c.env.DB.prepare(
-    `INSERT INTO cap_table_scenarios
-       (uid, owner_user_id, project_id, name, inputs_json, result_json, computed_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(uid, user.id, projectId, name, JSON.stringify(inputs), JSON.stringify(result), now, now, now).run();
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO cap_table_scenarios
+         (uid, owner_user_id, project_id, name, inputs_json, result_json, computed_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(uid, user.id, projectId, name, JSON.stringify(inputs), JSON.stringify(result), now, now, now).run();
+  } catch (e) {
+    // Task #32 — DB-level "one canonical cap table per project" guard (partial
+    // unique index). Two saves for the same project can race between the SELECT
+    // above and this INSERT (double-click / two tabs / a retry); the index
+    // rejects the second INSERT. Recover exactly like the upsert branch — load
+    // the row the winner created and UPDATE it — so a lost race is a silent edit,
+    // not a 500.
+    if (projectId != null && isUniqueViolation(e)) {
+      const winner = await c.env.DB.prepare(
+        'SELECT * FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant,0) = 0 ORDER BY updated_at DESC LIMIT 1',
+      ).bind(projectId).first<ScenarioRow>();
+      if (winner) {
+        await c.env.DB.prepare(
+          `UPDATE cap_table_scenarios
+              SET name = ?, inputs_json = ?, result_json = ?, computed_at = ?, updated_at = ?
+            WHERE id = ?`,
+        ).bind(name, JSON.stringify(inputs), JSON.stringify(result), now, now, winner.id).run();
+        const merged = await loadByUid(c.env, winner.uid);
+        if (merged) return c.json(serialize(merged));
+      }
+    }
+    throw e;
+  }
   const row = await loadByUid(c.env, uid);
   if (!row) return c.json({ detail: 'Insert failed' }, 500);
   return c.json(serialize(row));
@@ -297,12 +326,22 @@ captable.put('/scenarios/:uid', async (c) => {
   const result = simulate(inputs);
   const now = new Date().toISOString();
   const projectId = body?.project_id !== undefined ? body.project_id : row.project_id;
-  await c.env.DB.prepare(
-    `UPDATE cap_table_scenarios
-        SET name = ?, inputs_json = ?, result_json = ?, computed_at = ?,
-            updated_at = ?, project_id = ?
-      WHERE uid = ?`,
-  ).bind(name, JSON.stringify(inputs), JSON.stringify(result), now, now, projectId, row.uid).run();
+  try {
+    await c.env.DB.prepare(
+      `UPDATE cap_table_scenarios
+          SET name = ?, inputs_json = ?, result_json = ?, computed_at = ?,
+              updated_at = ?, project_id = ?
+        WHERE uid = ?`,
+    ).bind(name, JSON.stringify(inputs), JSON.stringify(result), now, now, projectId, row.uid).run();
+  } catch (e) {
+    // Task #32 — the DB partial unique index backstops the app-level clash check
+    // above: if a concurrent save bound this project between that SELECT and
+    // here, surface the same 409 instead of a 500.
+    if (isUniqueViolation(e)) {
+      return c.json({ detail: { code: 'project_has_cap_table', message: 'This project already has a cap table. Edit that one instead.' } }, 409);
+    }
+    throw e;
+  }
   const fresh = await loadByUid(c.env, row.uid);
   return c.json(serialize(fresh as ScenarioRow));
 });

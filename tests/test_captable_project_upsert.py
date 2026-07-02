@@ -18,6 +18,7 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
@@ -160,3 +161,93 @@ def test_put_refuses_binding_a_second_scenario_to_a_used_project(env):
             select(CapTableScenario).where(CapTableScenario.uid == free_uid)
         ).first()
     assert still_free.project_id is None
+
+
+def test_db_rejects_second_canonical_but_allows_variants(env):
+    """Task #32 — the partial unique index enforces one canonical cap table per
+    project at the DB level, while draft variants (is_variant=1) coexist freely.
+    This is the guarantee the app-code upsert can't make under real concurrency."""
+    client, engine = env
+
+    with Session(engine) as s:
+        s.add(CapTableScenario(
+            owner_user_id=ADMIN_ID, project_id=PROJECT_ID, name="Canonical",
+            inputs_json=json.dumps(INPUTS_V1),
+        ))
+        s.commit()
+
+    # A SECOND canonical for the same project is rejected by the unique index.
+    with Session(engine) as s:
+        s.add(CapTableScenario(
+            owner_user_id=ADMIN_ID, project_id=PROJECT_ID, name="Dupe",
+            inputs_json=json.dumps(INPUTS_V1),
+        ))
+        with pytest.raises(IntegrityError):
+            s.commit()
+        s.rollback()
+
+    # Variants (is_variant=1) are NOT blocked — many can share the project.
+    with Session(engine) as s:
+        s.add(CapTableScenario(
+            owner_user_id=ADMIN_ID, project_id=PROJECT_ID, name="Variant A",
+            inputs_json=json.dumps(INPUTS_V1), is_variant=1,
+        ))
+        s.add(CapTableScenario(
+            owner_user_id=ADMIN_ID, project_id=PROJECT_ID, name="Variant B",
+            inputs_json=json.dumps(INPUTS_V1), is_variant=1,
+        ))
+        s.commit()  # must not raise
+
+    rows = _rows_for_project(engine, PROJECT_ID)
+    assert sum(1 for r in rows if not r.is_variant) == 1
+    assert sum(1 for r in rows if r.is_variant) == 2
+
+
+def test_concurrent_create_resolves_to_single_row(env, monkeypatch):
+    """Task #32 — two near-simultaneous saves for the same project must resolve to
+    ONE canonical row. Simulate the race: the winner's row already exists, but OUR
+    request's pre-check reads a stale snapshot (returns None), so it takes the
+    INSERT path and collides with the partial unique index. The endpoint must
+    recover by editing the winner — 200, not 500 — leaving exactly one row."""
+    import backend.app.api.routes.captable as cap
+
+    client, engine = env
+
+    # The race winner: a canonical row already committed for the project.
+    with Session(engine) as s:
+        winner = CapTableScenario(
+            owner_user_id=ADMIN_ID, project_id=PROJECT_ID, name="Winner",
+            inputs_json=json.dumps(INPUTS_V1), result_json="{}",
+        )
+        s.add(winner); s.commit(); s.refresh(winner)
+        winner_uid = winner.uid
+
+    # Force the create endpoint's canonical pre-check to MISS once (stale read),
+    # so it attempts the INSERT the DB unique index rejects. The recovery
+    # re-lookup (2nd call) sees the real winner.
+    real = cap._find_canonical_for_project
+    calls = {"n": 0}
+
+    def flaky(session, project_id):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return None
+        return real(session, project_id)
+
+    monkeypatch.setattr(cap, "_find_canonical_for_project", flaky)
+
+    r = client.post(
+        "/api/captable/scenarios",
+        json={"name": "Loser save", "project_id": PROJECT_ID, "inputs": INPUTS_V2},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # Recovered by editing the winner: same uid, content updated to our payload.
+    assert body["uid"] == winner_uid
+    assert body["name"] == "Loser save"
+    assert len(body["inputs"]["founders"]) == 2
+
+    # Exactly ONE canonical row for the project — the race created no duplicate.
+    rows = _rows_for_project(engine, PROJECT_ID)
+    assert len(rows) == 1
+    assert rows[0].uid == winner_uid

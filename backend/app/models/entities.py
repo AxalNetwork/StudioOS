@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field
-from sqlalchemy import UniqueConstraint, event
+from sqlalchemy import UniqueConstraint, event, Index, text
 from typing import Optional
 from datetime import datetime, date
 from enum import Enum
@@ -460,6 +460,21 @@ class CapTableScenario(SQLModel, table=True):
     # Task #29 — 0 = canonical (the project's one cap table, the only row the
     # deck + one-per-project upsert read), 1 = named draft variant for compare.
     is_variant: int = Field(default=0)
+
+    __table_args__ = (
+        # Task #32 — DB-level guarantee: at most ONE canonical cap table
+        # (is_variant=0) per project. Draft variants (is_variant=1) share the
+        # same project_id and coexist freely, so the unique index is PARTIAL.
+        # Mirrors cloudflare-worker/sql/migrations/
+        # 129_captable_one_canonical_per_project.sql.
+        Index(
+            "uq_captable_one_canonical_per_project",
+            "project_id",
+            unique=True,
+            sqlite_where=text("project_id IS NOT NULL AND COALESCE(is_variant, 0) = 0"),
+            postgresql_where=text("project_id IS NOT NULL AND COALESCE(is_variant, 0) = 0"),
+        ),
+    )
 
 
 class FounderRiskProfile(SQLModel, table=True):

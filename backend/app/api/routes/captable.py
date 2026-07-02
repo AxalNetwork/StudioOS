@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field as PField
 from sqlalchemy import func, text
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, desc, select
 
 from backend.app.api.routes.auth import get_current_user
@@ -43,9 +44,35 @@ def _ensure_schema(session: Session) -> None:
     global _schema_ready
     if _schema_ready:
         return
+    # Task #29 — is_variant column (SQLite has no ADD COLUMN IF NOT EXISTS).
     try:
         session.exec(text(
             "ALTER TABLE cap_table_scenarios ADD COLUMN is_variant INTEGER NOT NULL DEFAULT 0"
+        ))
+        session.commit()
+    except Exception:
+        session.rollback()
+    # Task #32 — DB-level one-canonical-per-project guard on existing dev DBs
+    # (create_all only builds the index on FRESH DBs). Collapse any duplicate
+    # canonicals (keep newest, demote the rest to variants — non-destructive),
+    # then create the partial unique index. The syntax is valid on both SQLite
+    # and Postgres, and both statements are idempotent; wrapped so a pre-existing
+    # dupe that can't be collapsed can never crash the route.
+    try:
+        session.exec(text(
+            "UPDATE cap_table_scenarios SET is_variant = 1 WHERE id IN ("
+            "  SELECT id FROM ("
+            "    SELECT id, ROW_NUMBER() OVER ("
+            "      PARTITION BY project_id ORDER BY updated_at DESC, id DESC"
+            "    ) AS rn FROM cap_table_scenarios"
+            "    WHERE project_id IS NOT NULL AND COALESCE(is_variant, 0) = 0"
+            "  ) ranked WHERE rn > 1"
+            ")"
+        ))
+        session.exec(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_captable_one_canonical_per_project "
+            "ON cap_table_scenarios(project_id) "
+            "WHERE project_id IS NOT NULL AND COALESCE(is_variant, 0) = 0"
         ))
         session.commit()
     except Exception:
@@ -193,6 +220,19 @@ def list_scenarios(
     return {"items": [_serialize(s, with_result=False) for s in rows]}
 
 
+def _find_canonical_for_project(session: Session, project_id: int) -> Optional[CapTableScenario]:
+    """The project's single canonical cap table (is_variant=0), newest first.
+
+    Used by the create-upsert pre-check AND its unique-violation recovery.
+    """
+    return session.exec(
+        select(CapTableScenario)
+        .where(CapTableScenario.project_id == project_id)
+        .where(func.coalesce(CapTableScenario.is_variant, 0) == 0)
+        .order_by(desc(CapTableScenario.updated_at))
+    ).first()
+
+
 @router.post("/scenarios")
 def create_scenario(
     body: ScenarioIn,
@@ -211,12 +251,7 @@ def create_scenario(
     # duplicate (guards against stale frontend state). Access to the existing
     # project's scenario is already gated by _ensure_project_write_access above.
     if body.project_id is not None:
-        existing = session.exec(
-            select(CapTableScenario)
-            .where(CapTableScenario.project_id == body.project_id)
-            .where(func.coalesce(CapTableScenario.is_variant, 0) == 0)
-            .order_by(desc(CapTableScenario.updated_at))
-        ).first()
+        existing = _find_canonical_for_project(session, body.project_id)
         if existing is not None:
             existing.name = body.name
             existing.inputs_json = json.dumps(body.inputs)
@@ -234,7 +269,31 @@ def create_scenario(
         result_json=json.dumps(result),
         computed_at=now,
     )
-    session.add(s); session.commit(); session.refresh(s)
+    session.add(s)
+    try:
+        session.commit()
+    except IntegrityError:
+        # Task #32 — DB-level "one canonical cap table per project" guard (partial
+        # unique index). A concurrent save created the project's canonical row
+        # between the SELECT above and this commit; the index rejected our
+        # duplicate. Recover like the upsert branch — edit the winner — so a lost
+        # race is a silent edit, not a 500.
+        session.rollback()
+        winner = (
+            _find_canonical_for_project(session, body.project_id)
+            if body.project_id is not None
+            else None
+        )
+        if winner is None:
+            raise
+        winner.name = body.name
+        winner.inputs_json = json.dumps(body.inputs)
+        winner.result_json = json.dumps(result)
+        winner.computed_at = now
+        winner.updated_at = now
+        session.add(winner); session.commit(); session.refresh(winner)
+        return _serialize(winner)
+    session.refresh(s)
     return _serialize(s)
 
 
@@ -372,7 +431,22 @@ def update_scenario(
     s.updated_at = now
     if body.project_id is not None:
         s.project_id = body.project_id
-    session.add(s); session.commit(); session.refresh(s)
+    session.add(s)
+    try:
+        session.commit()
+    except IntegrityError:
+        # Task #32 — the DB partial unique index backstops the app-level clash
+        # check above: if a concurrent save bound this project between that SELECT
+        # and here, surface the same 409 instead of a 500.
+        session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "project_has_cap_table",
+                "message": "This project already has a cap table. Edit that one instead.",
+            },
+        )
+    session.refresh(s)
     return _serialize(s)
 
 
