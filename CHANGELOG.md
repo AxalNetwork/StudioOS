@@ -10,6 +10,27 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+> ## Profiling: mentors no longer answer double to reach "Profiling complete"
+>
+> The Profile & Fit "Profiling completion" card counts only the conversational
+> `fit.*` bank per persona (Task #40). But the mentor persona carries BOTH the
+> mentor and coach fit banks — the coach bank has no advisor role of its own, so
+> it rides inside the mentor conversation to feed axalFit/bestFit — and the two
+> banks measure the SAME six rubric categories + the IDENTICAL five Axal values.
+> So a mentor had to answer ~34 questions to hit 100%, roughly double every other
+> persona (founder 25, investor 18, partner 17).
+>
+> - **Card scoped to the primary bank** — `profilingBankFor('mentor')`
+>   (`cloudflare-worker/src/services/advisor/questionBank.ts`) now returns just
+>   `fitMentor` (17, == partner). The coach bank is STILL delivered in the mentor
+>   conversation (`bankFor` unchanged) and still feeds axalFit/bestFit
+>   (`fitMeasuresIndex` unchanged) — only the completion-card denominator changed,
+>   so no conversational coverage or matching signal is lost.
+> - **Tests** — `cloudflare-worker/test/advisor.profiling.test.ts` updated to the
+>   new mentor size (34 → 17) and now pins the split invariant: no `fit.coach.*`
+>   in the mentor card, but `fit.coach.*` still present in `bankFor('mentor')`
+>   (guards against "fixing" the card by dropping coach from the conversation).
+>
 > ## Logo SVGs: locked the stored-XSS sanitizer on both stores
 >
 > Founder-supplied `logo_svg` is rendered raw into the public landing page (a

@@ -294,7 +294,18 @@ export const PROFILING_SECTION_LABELS: Record<ProfilingSectionKey, string> = {
 
 /**
  * The profiling (Best-Fit) bank for a persona: the `fit.*` questions only.
- * Mentor carries both mentor + coach fit banks (coach has no advisor role).
+ *
+ * Task #41 — the mentor persona ALSO carries the coach fit bank in the
+ * conversation (`bankFor` appends fitCoach because coach has no advisor role of
+ * its own) and those coach answers still feed axalFit/bestFit. But the
+ * "Profiling completion" CARD measures only the mentor's PRIMARY fit bank
+ * (fitMentor, 17). The coach bank is a second lens over the SAME six rubric
+ * categories + the identical five Axal values, so counting both made a mentor
+ * answer ~34 questions to reach 100% — roughly double every other persona
+ * (founder 25, investor 18, partner 17). Scoping the card to the primary bank
+ * makes the completion effort comparable without dropping any conversational
+ * coverage or axalFit/bestFit signal.
+ *
  * Admin / unknown have no fit bank, so profiling is "not applicable".
  */
 export function profilingBankFor(persona: Persona): Question[] {
@@ -302,7 +313,7 @@ export function profilingBankFor(persona: Persona): Question[] {
     case 'founder':  return [...BANKS.fitFounder];
     case 'investor': return [...BANKS.fitInvestor];
     case 'partner':  return [...BANKS.fitPartner];
-    case 'mentor':   return [...BANKS.fitMentor, ...BANKS.fitCoach];
+    case 'mentor':   return [...BANKS.fitMentor];
     default:         return [];
   }
 }

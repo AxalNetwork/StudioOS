@@ -24,13 +24,17 @@ import {
   type Persona,
 } from '../src/services/advisor/questionBank.ts';
 
-// Expected fit.* bank sizes (founder 20 + investor 13 + partner 12 + mentor 12
-// + coach 12, each persona also carrying the 5 shared Axal values).
+// Expected fit.* PROFILING-CARD bank sizes per persona. Each persona's card
+// measures ONE fit bank — its rubric questions + the 5 shared Axal values:
+// founder 20+5, investor 13+5, partner 12+5, mentor 12+5. The mentor ALSO
+// carries the coach bank in the conversation (for axalFit/bestFit signal), but
+// the completion card is scoped to the primary mentor bank so a mentor's effort
+// is comparable to other personas (Task #41), not ~double (was 34).
 const EXPECTED: Record<string, number> = {
   founder: 25,
   investor: 18,
   partner: 17,
-  mentor: 34, // mentor (12+5) + coach (12+5)
+  mentor: 17, // mentor (12+5) — coach bank excluded from the completion card
 };
 
 test('profilingBankFor returns the fit.* bank sized per persona', () => {
@@ -87,4 +91,21 @@ test('section assignment follows skill_axis → value_dim → axal_fit priority'
   assert.equal(profilingSectionForQuestion(byId.get('fit.founder.vision_north_star')!), 'axal_fit');
   // An Axal value row → Axal Fit & values.
   assert.equal(profilingSectionForQuestion(byId.get('fit.founder.axal_integrity')!), 'axal_fit');
+});
+
+test('mentor completion card is scoped to the primary bank, but coach is still delivered in-conversation (Task #41)', () => {
+  // The card counts ONLY the mentor's primary fit bank — no coach questions —
+  // so a mentor reaches "Profiling complete" with the same effort as other
+  // personas (17, == partner) instead of ~double (was 34).
+  const card = profilingBankFor('mentor' as Persona);
+  assert.equal(card.length, 17);
+  assert.ok(card.some((q) => q.id.startsWith('fit.mentor.')), 'card must contain the mentor fit bank');
+  assert.ok(card.every((q) => !q.id.startsWith('fit.coach.')), 'coach questions must NOT count toward the mentor card');
+
+  // ...but the coach bank is STILL delivered in the mentor conversation, so the
+  // axalFit/bestFit coach-rubric signal is not lost. Guards against "fixing" the
+  // card by dropping coach from the conversation.
+  const convo = bankFor('mentor' as Persona);
+  assert.ok(convo.some((q) => q.id.startsWith('fit.coach.')), 'coach bank must still ride inside the mentor conversation');
+  assert.ok(convo.some((q) => q.id.startsWith('fit.mentor.')), 'mentor bank must still be delivered in the mentor conversation');
 });
