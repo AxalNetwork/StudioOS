@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Mentors no longer have to answer double to complete their profile
+
+If you're a mentor, your "Profiling completion" used to ask for roughly twice as
+many answers as everyone else before it read as complete — because mentors were
+being measured on two overlapping sets of questions at once. Now your completion
+is measured on a single set, so reaching "Profiling complete" takes about the
+same effort as it does for founders, investors, and partners. The advisor may
+still ask you a few extra questions during your conversation to sharpen your
+matches — those just no longer count against your completion bar.
+
+---
+
 ## Your project's cap table can't be duplicated by a double-click
 
 If you save a project's cap table twice at almost the same moment — a
