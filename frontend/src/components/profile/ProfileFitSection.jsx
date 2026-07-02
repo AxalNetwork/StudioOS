@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { api, assessment } from '../../lib/api';
 import SkillRadar from '../play/SkillRadar';
+import ValuesRadial from '../play/ValuesRadial';
 import { openPaywall } from '../PaywallModal';
 import { archetypeMeta, iconFor, humanize } from '../../lib/assessmentMeta';
 
@@ -118,19 +119,25 @@ function ValuesLeanCard({ state, className }) {
               ))}
             </div>
           )}
-          <ul className="space-y-1.5">
-            {vector.slice(0, 6).map((v) => (
-              <li key={v.dimension_slug} className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-gray-700 dark:text-gray-300 truncate">{v.dimension_label || v.dimension_slug}</span>
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">{leanLabel(v)}</span>
-              </li>
-            ))}
-          </ul>
+          {/* Task #40 — plot the values wheel once ≥3 dimensions are measured;
+              fall back to the compact lean list while signal is still thin. */}
+          {vector.length >= 3 ? (
+            <ValuesRadial vector={data.vector} height={210} />
+          ) : (
+            <ul className="space-y-1.5">
+              {vector.slice(0, 6).map((v) => (
+                <li key={v.dimension_slug} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-gray-700 dark:text-gray-300 truncate">{v.dimension_label || v.dimension_slug}</span>
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">{leanLabel(v)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       );
     }
   }
-  return <CardShell title="Values lean" icon={Heart} className={className}>{body}</CardShell>;
+  return <CardShell title="Values" icon={Heart} className={className}>{body}</CardShell>;
 }
 
 // ── Archetype ─────────────────────────────────────────────────────────────────
@@ -176,26 +183,56 @@ function CompletionCard({ state, className }) {
   } else if (!data) {
     body = <div className="py-4 flex justify-center text-gray-400"><Loader2 className="animate-spin" size={18} /></div>;
   } else {
-    // /api/advisor/progress returns { persona, total, answered, skipped, percent }.
-    const pct = Math.max(0, Math.min(100, Math.round(Number(data.percent) || 0)));
-    const asked = Number(data.answered) || 0;
-    const total = Number(data.total) || 0;
-    body = (
-      <>
-        <div className="flex items-baseline justify-between mb-2">
-          <span className="text-2xl font-bold text-gray-900 dark:text-gray-100">{pct}%</span>
-          <span className={SUB}>{asked}{total ? ` / ${total}` : ''} answered</span>
-        </div>
-        <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
-          <div className="h-full bg-violet-600 dark:bg-violet-500 transition-all" style={{ width: `${pct}%` }} />
-        </div>
-        <p className={`${SUB} mt-2`}>
-          {pct >= 100
-            ? <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={13} /> Profiling complete</span>
-            : 'Keep chatting with the advisor to sharpen every result above.'}
-        </p>
-      </>
-    );
+    // Task #40 — /api/advisor/progress now returns a `profiling` block scoped to
+    // the conversational fit.* questions ONLY (Skills / Work values / Axal Fit &
+    // values), so this card no longer counts the whole persona dashboard bank as
+    // its denominator. Fall back to the legacy flat fields if an older server
+    // response is in play during a rollout.
+    const prof = data.profiling;
+    if (prof && prof.applicable === false) {
+      body = <Nudge>Profiling questions don’t apply to your account type.</Nudge>;
+    } else {
+      const clamp = (n) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+      const pct = clamp(prof ? prof.percent : data.percent);
+      const asked = Number(prof ? prof.answered : data.answered) || 0;
+      const total = Number(prof ? prof.total : data.total) || 0;
+      const sections = Array.isArray(prof?.sections) ? prof.sections : [];
+      const complete = prof ? !!prof.complete : pct >= 100;
+      body = (
+        <>
+          <div className="flex items-baseline justify-between mb-2">
+            <span className="text-2xl font-bold text-gray-900 dark:text-gray-100">{pct}%</span>
+            <span className={SUB}>{asked}{total ? ` / ${total}` : ''} answered</span>
+          </div>
+          <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+            <div className="h-full bg-violet-600 dark:bg-violet-500 transition-all" style={{ width: `${pct}%` }} />
+          </div>
+          {sections.length > 0 && (
+            <ul className="mt-3 space-y-2">
+              {sections.map((s) => {
+                const sp = clamp(s.percent);
+                return (
+                  <li key={s.key || s.label}>
+                    <div className="flex items-center justify-between gap-2 text-xs mb-1">
+                      <span className="text-gray-600 dark:text-gray-300 truncate">{s.label}</span>
+                      <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">{Number(s.answered) || 0}/{Number(s.total) || 0}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                      <div className="h-full bg-violet-500 dark:bg-violet-400 transition-all" style={{ width: `${sp}%` }} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <p className={`${SUB} mt-2`}>
+            {complete
+              ? <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={13} /> Profiling complete</span>
+              : 'Keep chatting with the advisor to sharpen every result above.'}
+          </p>
+        </>
+      );
+    }
   }
   return <CardShell title="Profiling completion" icon={UserCircle} className={className}>{body}</CardShell>;
 }

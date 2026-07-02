@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A clearer "Profiling completion" and a new values wheel
+
+Your Profile & Fit page now measures "Profiling completion" against just the
+profiling questions the advisor actually asks you — so the number reflects how
+far you've really come instead of an inflated total. It also breaks your progress
+into Skills, Work values, and Axal Fit & values, so you can see exactly where to
+focus next. And your values now appear as a wheel that makes your overall shape
+easy to read at a glance.
+
+---
+
 ## Fixed a rare blank page in Safari
 
 Some people opening the site in Safari right after we shipped an update could see
