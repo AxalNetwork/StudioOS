@@ -52,6 +52,43 @@ export function buildFitBank(persona: FitPersona, rows: FitRowSpec[]): Question[
 }
 
 /**
+ * Task #45 — Archetype trait probes, asked of every persona. Four generic
+ * behavioural leanings (builder / visionary / connector / operator) that the
+ * nearest-centroid classifier in services/archetypeScoring.ts maps to a
+ * role-specific archetype. Kept generic so every bank shares one compact,
+ * diagnostic set — the archetype module only needs 3 of the 4 answered to
+ * classify confidently, so this is deliberately small, not a survey.
+ */
+export function archetypeTraitRows(): FitRowSpec[] {
+  return [
+    {
+      key: 'arch_builder',
+      prompt: 'How much do you gravitate to hands-on making — building the thing yourself rather than directing from above?',
+      hint: '0 = I direct and delegate, 5 = I love being hands-on in the work.',
+      measures: { archetype_trait: 'builder' },
+    },
+    {
+      key: 'arch_visionary',
+      prompt: 'How much of your energy goes to the long-range picture and narrative versus the immediate task in front of you?',
+      hint: '0 = focused on the next task, 5 = focused on the long-range vision.',
+      measures: { archetype_trait: 'visionary' },
+    },
+    {
+      key: 'arch_connector',
+      prompt: 'How central are people and relationships to how you create value — do you win mostly through your network?',
+      hint: '0 = I work mostly solo, 5 = I create value mostly through people.',
+      measures: { archetype_trait: 'connector' },
+    },
+    {
+      key: 'arch_operator',
+      prompt: 'How much do you rely on process, systems, and discipline rather than improvising as you go?',
+      hint: '0 = I improvise, 5 = I run on process and systems.',
+      measures: { archetype_trait: 'operator' },
+    },
+  ];
+}
+
+/**
  * The 5 Axal behavioral values, asked of every persona. Three carry a red-flag
  * probe that fires when the self-rating is at or below the threshold.
  */

@@ -5,7 +5,7 @@
  * axalFit.ts plus a domain skill axis and the 5 Axal values.
  */
 import type { Question } from '../questionBank.ts';
-import { buildFitBank, axalValueRows } from './fitShared.ts';
+import { buildFitBank, axalValueRows, archetypeTraitRows } from './fitShared.ts';
 
 export const FIT_MENTOR_BANK: Question[] = buildFitBank('mentor', [
   // ---- domain_expertise -----------------------------------------------
@@ -26,6 +26,20 @@ export const FIT_MENTOR_BANK: Question[] = buildFitBank('mentor', [
   // ---- values_alignment -----------------------------------------------
   { key: 'values_align', prompt: 'How much do you mentor to genuinely help the founder rather than to advance your own interests?', measures: { rubric_category: 'values_alignment' } },
   { key: 'values_conflicts', prompt: 'How openly do you flag conflicts of interest instead of letting them sit unsaid?', measures: { rubric_category: 'values_alignment', red_flag: { key: 'transactional', at_or_below: 1 } } },
+  // ---- skills breadth (the domains founders come to you for) ----------
+  // Task #45 — mentors advise across the whole company, not just product; these
+  // give the radar signal across ≥5 axes (domain_recency above covers product).
+  { key: 'skill_gtm', prompt: 'How strong is your guidance on go-to-market and sales for the founders you help?', hint: '0 = not my area, 5 = a real strength.', measures: { skill_axis: 'gtm_sales' } },
+  { key: 'skill_marketing', prompt: 'How strong is your guidance on marketing, positioning, and brand?', hint: '0 = not my area, 5 = a real strength.', measures: { skill_axis: 'marketing_brand' } },
+  { key: 'skill_finance_ops', prompt: 'How strong is your guidance on finance, fundraising strategy, and operations?', hint: '0 = not my area, 5 = a real strength.', measures: { skill_axis: 'finance_ops' } },
+  { key: 'skill_capital', prompt: 'How strong is your ability to open your network and capital doors for founders?', hint: '0 = not my area, 5 = a real strength.', measures: { skill_axis: 'capital_network' } },
+  // ---- work values (Schwartz dims for a rounded values wheel) ---------
+  { key: 'val_benevolence', prompt: 'How much is helping founders grow, for its own sake, a core motivation for you?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_benevolence' } },
+  { key: 'val_universalism', prompt: 'How much do fairness and the wider impact of the companies you help matter to you?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_universalism' } },
+  { key: 'val_self_direction', prompt: 'How much do you value mentoring on your own terms rather than to a set curriculum?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_self_direction' } },
+  { key: 'val_achievement', prompt: 'How much does seeing the founders you back succeed measurably drive you?', hint: '0 = not important to me, 5 = very important.', measures: { value_dim: 'schwartz_achievement' } },
+  // ---- archetype traits ----------------------------------------------
+  ...archetypeTraitRows(),
   // ---- Axal values ----------------------------------------------------
   ...axalValueRows(),
 ]);

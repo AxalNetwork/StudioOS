@@ -6,7 +6,7 @@
 // render a level bar without a dedicated endpoint).
 import {
   Compass, Rocket, Ruler, Zap, Flag, Award, Medal, Sparkles, Trophy, Star,
-  Mic, Network, Ticket,
+  Mic, Network, Ticket, Target, Handshake, TrendingUp, Users, ClipboardCheck,
 } from 'lucide-react';
 
 // Value spectrums are bipolar (−2..+2). `low` = negative pole, `high` = positive
@@ -65,6 +65,72 @@ export const ARCHETYPES = {
     description: 'High autonomy and risk appetite with a fast, instinct-led style. Thrives without a playbook.',
     icon: 'zap', accent: '#eab308',
   },
+
+  // Task #45 — conversational archetypes for the non-founder personas (computed
+  // from the advisor's archetype-trait fit answers, see archetypeScoring.ts).
+  // Investor.
+  inv_thesis_backer: {
+    label: 'Thesis-Driven Backer', tagline: 'Conviction before the crowd.',
+    description: 'Invests against a sharp thesis with rigor and patience; leads on conviction.',
+    icon: 'target', accent: '#0ea5e9',
+  },
+  inv_network_amplifier: {
+    label: 'Network Amplifier', tagline: 'Opens doors, compounds relationships.',
+    description: 'Creates value mostly through people — introductions, reputation, and reach.',
+    icon: 'network', accent: '#8b5cf6',
+  },
+  inv_hands_on_partner: {
+    label: 'Hands-On Partner', tagline: 'Rolls up sleeves beside the founder.',
+    description: 'Gets into the work with founders across product, GTM, and operations.',
+    icon: 'handshake', accent: '#f97316',
+  },
+  inv_disciplined_allocator: {
+    label: 'Disciplined Allocator', tagline: 'Rigorous, patient, process-led.',
+    description: 'Runs on process and diligence; deploys with discipline over hype.',
+    icon: 'clipboard-check', accent: '#10b981',
+  },
+  // Partner.
+  pt_strategic_connector: {
+    label: 'Strategic Connector', tagline: 'Aligns the right people to the plan.',
+    description: 'Bridges strategy and network to move companies forward.',
+    icon: 'network', accent: '#0ea5e9',
+  },
+  pt_embedded_operator: {
+    label: 'Embedded Operator', tagline: 'In the trenches, delivering.',
+    description: 'Hands-on execution support with real operational depth.',
+    icon: 'ruler', accent: '#f97316',
+  },
+  pt_growth_catalyst: {
+    label: 'Growth Catalyst', tagline: 'Turns momentum into scale.',
+    description: 'Blends people, building, and vision to accelerate growth.',
+    icon: 'trending-up', accent: '#8b5cf6',
+  },
+  pt_systems_builder: {
+    label: 'Systems Builder', tagline: 'Puts durable machinery in place.',
+    description: 'Installs process and systems that outlast any single engagement.',
+    icon: 'ruler', accent: '#10b981',
+  },
+  // Mentor / coach.
+  mt_sage_guide: {
+    label: 'Sage Guide', tagline: 'Wisdom and perspective when it counts.',
+    description: 'Leads with long-range perspective, judgement, and empathy.',
+    icon: 'compass', accent: '#0ea5e9',
+  },
+  mt_hands_on_coach: {
+    label: 'Hands-On Coach', tagline: 'Beside you, session by session.',
+    description: 'Practical, relationship-led coaching with steady cadence.',
+    icon: 'users', accent: '#f97316',
+  },
+  mt_accountability_anchor: {
+    label: 'Accountability Anchor', tagline: 'Keeps commitments honest.',
+    description: 'Structured, dependable, and disciplined about follow-through.',
+    icon: 'clipboard-check', accent: '#10b981',
+  },
+  mt_craft_master: {
+    label: 'Craft Master', tagline: 'Deep expertise, generously shared.',
+    description: 'Teaches from earned, hands-on mastery of the craft.',
+    icon: 'star', accent: '#8b5cf6',
+  },
 };
 
 const ICONS = {
@@ -72,6 +138,9 @@ const ICONS = {
   award: Award, medal: Medal, trophy: Trophy, star: Star, sparkles: Sparkles,
   // Task #7 — event-participation badge icons.
   mic: Mic, network: Network, ticket: Ticket,
+  // Task #45 — role archetype icons.
+  target: Target, handshake: Handshake, 'trending-up': TrendingUp,
+  users: Users, 'clipboard-check': ClipboardCheck,
 };
 export function iconFor(name) {
   return ICONS[String(name || '').toLowerCase()] || Sparkles;

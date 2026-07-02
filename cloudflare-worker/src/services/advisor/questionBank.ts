@@ -75,6 +75,10 @@ export interface FitMeasures {
   skill_axis?: string;        // RADAR_AXES slug → user_skills
   value_dim?: string;         // value_dimensions slug → user_values
   axal_value?: string;        // one of axalFit AXAL_VALUES → axal_values
+  // Task #45 — Archetype module. A shared trait axis (see
+  // services/archetypeScoring.ts ARCHETYPE_TRAITS) the answer loads. Feeds the
+  // nearest-centroid archetype classifier + the Archetype profiling module.
+  archetype_trait?: string;
   red_flag?: { key: string; at_or_below: number };
 }
 
@@ -126,14 +130,18 @@ export const BANK_SIZE_TARGETS = {
   mentor: 30,
   admin: 10,
   operatingPartnerPerSubtype: 50, // ×4 sub-types = 200 total
-  // Task #19 — Best-Fit conversational banks. Documentation-only minimums
+  // Task #19 / #45 — Best-Fit conversational banks. Documentation-only minimums
   // (not enforced by scripts/check-advisor-bank-drift.mjs, which scans only the
-  // 6 manifest banks). Each must cover its full axalFit RUBRIC + the 5 Axal values.
-  fitFounder: 25,
-  fitInvestor: 18,
-  fitPartner: 17,
-  fitMentor: 17,
-  fitCoach: 17,
+  // 6 manifest banks). Each covers its full axalFit RUBRIC + the 5 Axal values,
+  // PLUS (Task #45) enough Skills (≥5 radar axes), Work-values (≥4 dimensions),
+  // and Archetype-trait (4 traits) questions to reach per-module confidence.
+  // Adaptive selection means a user answers only the minimum, not all of these.
+  fitFounder: 32,
+  fitInvestor: 28,
+  fitPartner: 27,
+  fitMentor: 29,
+  fitCoach: 17, // coach rides in the mentor conversation; skills/values/archetype
+                // stay on the mentor bank so they're never asked twice.
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -283,14 +291,24 @@ export function fitMeasuresIndex(): FitMeasureEntry[] {
 // using the full working bank.
 // ---------------------------------------------------------------------------
 
-// The three surfaces the Profile & Fit page renders profiling signal into.
-export type ProfilingSectionKey = 'skills' | 'work_values' | 'axal_fit';
+// The four surfaces the Profile & Fit page renders profiling signal into.
+// Task #45 — 'archetype' promoted to a first-class module. Previously the
+// completion card measured only skills / work_values / axal_fit, so the
+// Archetype card could never reach "complete" from the conversation and always
+// read "Archetype missing…" until the user did the separate gamified track.
+export type ProfilingSectionKey = 'skills' | 'work_values' | 'archetype' | 'axal_fit';
 
 export const PROFILING_SECTION_LABELS: Record<ProfilingSectionKey, string> = {
   skills: 'Skills',
   work_values: 'Work values',
+  archetype: 'Archetype',
   axal_fit: 'Axal Fit & values',
 };
+
+// Canonical module order — the completion card renders sections in this order.
+export const PROFILING_SECTION_ORDER: ProfilingSectionKey[] = [
+  'skills', 'work_values', 'archetype', 'axal_fit',
+];
 
 /**
  * The profiling (Best-Fit) bank for a persona: the `fit.*` questions only.
@@ -299,12 +317,13 @@ export const PROFILING_SECTION_LABELS: Record<ProfilingSectionKey, string> = {
  * conversation (`bankFor` appends fitCoach because coach has no advisor role of
  * its own) and those coach answers still feed axalFit/bestFit. But the
  * "Profiling completion" CARD measures only the mentor's PRIMARY fit bank
- * (fitMentor, 17). The coach bank is a second lens over the SAME six rubric
- * categories + the identical five Axal values, so counting both made a mentor
- * answer ~34 questions to reach 100% — roughly double every other persona
- * (founder 25, investor 18, partner 17). Scoping the card to the primary bank
- * makes the completion effort comparable without dropping any conversational
- * coverage or axalFit/bestFit signal.
+ * (fitMentor). The coach bank is a second lens over the SAME rubric categories +
+ * the identical five Axal values, so counting both would make a mentor answer
+ * roughly double every other persona. Scoping the card to the primary bank keeps
+ * the completion effort comparable without dropping any conversational coverage
+ * or axalFit/bestFit signal. Task #45 keeps Skills/Work-values/Archetype trait
+ * questions ONLY on the mentor bank (not coach) for the same "never asked twice"
+ * reason, so the mentor completion card measures them exactly once.
  *
  * Admin / unknown have no fit bank, so profiling is "not applicable".
  */
@@ -321,12 +340,18 @@ export function profilingBankFor(persona: Persona): Question[] {
 /**
  * Which profiling section a fit question belongs to. Single-bucket, priority
  * ordered so the section totals partition the bank exactly:
- *   skill_axis  → Skills (feeds the 8-axis radar)
- *   value_dim   → Work values (feeds the 15-dimension values vector)
- *   otherwise   → Axal Fit & values (rubric_category + the 5 Axal values)
+ *   archetype_trait → Archetype (feeds the nearest-centroid classifier)
+ *   skill_axis      → Skills (feeds the 8-axis radar)
+ *   value_dim       → Work values (feeds the 15-dimension values vector)
+ *   otherwise       → Axal Fit & values (rubric_category + the 5 Axal values)
+ *
+ * Archetype wins over skill/value so a question authored to classify the user's
+ * archetype (even if it also nudges a radar axis) is counted where the operator
+ * expects it. Skill still wins over value for the historical exec_ship_rate case.
  */
 export function profilingSectionForQuestion(q: Question): ProfilingSectionKey {
   const m = q.measures;
+  if (m?.archetype_trait) return 'archetype';
   if (m?.skill_axis) return 'skills';
   if (m?.value_dim) return 'work_values';
   return 'axal_fit';
@@ -339,14 +364,13 @@ export function profilingSectionForQuestion(q: Question): ProfilingSectionKey {
 export function profilingSectionsForBank(
   bank: Question[],
 ): Array<{ key: ProfilingSectionKey; label: string; ids: string[] }> {
-  const order: ProfilingSectionKey[] = ['skills', 'work_values', 'axal_fit'];
   const groups = new Map<ProfilingSectionKey, string[]>();
-  for (const k of order) groups.set(k, []);
+  for (const k of PROFILING_SECTION_ORDER) groups.set(k, []);
   for (const q of bank) {
     if (!FIT_ID_RE.test(q.id)) continue;
     groups.get(profilingSectionForQuestion(q))!.push(q.id);
   }
-  return order
+  return PROFILING_SECTION_ORDER
     .map((key) => ({ key, label: PROFILING_SECTION_LABELS[key], ids: groups.get(key)! }))
     .filter((g) => g.ids.length > 0);
 }

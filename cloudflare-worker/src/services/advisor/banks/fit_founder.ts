@@ -7,7 +7,7 @@
  * (Mission-First / Speed-First / Risk-Seeking / Hyper-Growth / Autonomy).
  */
 import type { Question } from '../questionBank.ts';
-import { buildFitBank, axalValueRows } from './fitShared.ts';
+import { buildFitBank, axalValueRows, archetypeTraitRows } from './fitShared.ts';
 
 export const FIT_FOUNDER_BANK: Question[] = buildFitBank('founder', [
   // ---- vision_clarity -------------------------------------------------
@@ -39,6 +39,15 @@ export const FIT_FOUNDER_BANK: Question[] = buildFitBank('founder', [
   { key: 'lean_risk', prompt: 'How comfortable are you making big, hard-to-reverse bets under real uncertainty?', hint: '0 = risk-averse, 5 = risk-seeking.', measures: { value_dim: 'founder_risk_appetite' } },
   { key: 'lean_growth', prompt: 'How much do you bias toward aggressive growth over durable, sustainable building?', hint: '0 = sustainable, 5 = hyper-growth.', measures: { value_dim: 'founder_growth_vs_sustain' } },
   { key: 'lean_autonomy', prompt: 'How much do you prefer flexible autonomy over defined process and structure?', hint: '0 = process & structure, 5 = autonomy & flex.', measures: { value_dim: 'founder_autonomy_vs_structure' } },
+  // ---- skills breadth (radar axes not already covered above) ----------
+  // Task #45 — the radar needs signal across ≥5 of the 8 axes; the rubric
+  // questions above only touch product/gtm_sales/marketing_brand/capital_network,
+  // so these broaden coverage to engineering / design / finance_ops.
+  { key: 'skill_engineering', prompt: 'How strong is your own hands-on engineering — could you build or credibly lead the build of the product?', hint: '0 = not my strength, 5 = deep engineering strength.', measures: { skill_axis: 'engineering' } },
+  { key: 'skill_design', prompt: 'How strong is your product/design sense — shaping something people find intuitive and want to use?', hint: '0 = not my strength, 5 = a real strength.', measures: { skill_axis: 'design' } },
+  { key: 'skill_finance_ops', prompt: 'How comfortable are you running the numbers and operations — budgets, runway, hiring plans, cadence?', hint: '0 = not my strength, 5 = a real strength.', measures: { skill_axis: 'finance_ops' } },
+  // ---- archetype traits ----------------------------------------------
+  ...archetypeTraitRows(),
   // ---- Axal values ----------------------------------------------------
   ...axalValueRows(),
 ]);
