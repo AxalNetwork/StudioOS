@@ -6,6 +6,19 @@ import TopLevelErrorBoundary from './components/TopLevelErrorBoundary';
 import './index.css';
 import { registerServiceWorker } from './lib/pwa';
 
+// Task #37 — tell the un-bundled boot watchdog (index.html) that the entry
+// module actually executed, so it won't trigger a recovery reload. Also strip
+// the `?__reboot=` cache-busting param the watchdog appends, so it doesn't
+// linger in the URL once we've successfully booted.
+try {
+  window.__axalBooted = true;
+  const _u = new URL(window.location.href);
+  if (_u.searchParams.has('__reboot')) {
+    _u.searchParams.delete('__reboot');
+    window.history.replaceState(null, '', _u.pathname + _u.search + _u.hash);
+  }
+} catch { /* no window / URL — nothing to do */ }
+
 // Recover from stale chunk loads after a deploy. The most common cause of a
 // blank production page is a dynamic import 404 — the user has an old HTML
 // (or SW-cached HTML) referencing a hashed JS chunk that no longer exists.
@@ -69,6 +82,9 @@ window.addEventListener('load', () => {
   setTimeout(() => {
     try { sessionStorage.removeItem('axal:chunk-reload'); } catch {}
     try { sessionStorage.removeItem('axal:chunk-reload-boundary'); } catch {}
+    // Task #37 — the app booted, so clear the boot-watchdog guard too; the
+    // next real entry-chunk failure (e.g. a future deploy) can recover again.
+    try { sessionStorage.removeItem('axal:boot-reboot'); } catch {}
   }, 5000);
 });
 

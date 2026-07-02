@@ -2,6 +2,10 @@ export interface Env {
   DB: D1Database;
   TOKENS: KVNamespace;
   RATE_LIMITS: KVNamespace;
+  // Task #37 — Workers Static Assets binding (the Vite-built SPA in ./docs).
+  // Optional so unit tests that construct a bare Env still typecheck; the
+  // fetch handler guards on `env.ASSETS` before using it.
+  ASSETS?: Fetcher;
   JWT_SECRET: string;
   // Dedicated HMAC key for Epic 5 score signing. REQUIRED in production
   // (T9): boot fails fast if missing or <32 bytes. In dev/preview it MAY
