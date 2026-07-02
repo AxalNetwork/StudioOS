@@ -14,7 +14,7 @@
 // offline.html, manifest, icons) so old caches drop on activate. Vite-built
 // /assets/* files are content-hashed in their filenames, so the cache-first
 // rule is safe across deploys without a version bump.
-const VERSION = 'v10-2026-06-10a';
+const VERSION = 'v11-2026-07-02a';
 const PRECACHE = `studioos-precache-${VERSION}`;
 const RUNTIME_STATIC = `studioos-static-${VERSION}`;
 const RUNTIME_API = `studioos-api-${VERSION}`;
@@ -90,11 +90,22 @@ async function networkFirst(req, cacheName) {
   }
 }
 
+function isHtmlResponse(res) {
+  const ct = (res && res.headers && res.headers.get('content-type')) || '';
+  return /text\/html/i.test(ct);
+}
+
 async function cacheFirst(req, cacheName) {
+  // Task #37 — never serve or store an HTML response for a hashed asset. After
+  // a deploy the origin may return the SPA-fallback index.html (or, with the
+  // hardened Worker, a 404) for a missing hashed chunk; caching that HTML and
+  // replaying it for a .js/.css request renders the page blank on the next
+  // visit. Ignoring HTML lets the request surface the real 404 so the page's
+  // boot watchdog / stale-chunk recovery can reload onto the current build.
   const cached = await caches.match(req);
-  if (cached) return cached;
+  if (cached && !isHtmlResponse(cached)) return cached;
   const res = await fetch(req);
-  if (res && res.status === 200) {
+  if (res && res.status === 200 && !isHtmlResponse(res)) {
     const cache = await caches.open(cacheName);
     cache.put(req, res.clone()).catch(() => {});
   }

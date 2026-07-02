@@ -5,6 +5,105 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Mentors no longer have to answer double to complete their profile
+
+If you're a mentor, your "Profiling completion" used to ask for roughly twice as
+many answers as everyone else before it read as complete — because mentors were
+being measured on two overlapping sets of questions at once. Now your completion
+is measured on a single set, so reaching "Profiling complete" takes about the
+same effort as it does for founders, investors, and partners. The advisor may
+still ask you a few extra questions during your conversation to sharpen your
+matches — those just no longer count against your completion bar.
+
+---
+
+## Your project's cap table can't be duplicated by a double-click
+
+If you save a project's cap table twice at almost the same moment — a
+double-click, two open tabs, or a slow save that quietly retries — you'll never
+end up with two competing cap tables for that project. Whatever you save simply
+updates the project's single cap table. Your named "what-if" variants are
+unaffected: you can still keep as many of those as you like.
+
+---
+
+## A clearer "Profiling completion" and a new values wheel
+
+Your Profile & Fit page now measures "Profiling completion" against just the
+profiling questions the advisor actually asks you — so the number reflects how
+far you've really come instead of an inflated total. It also breaks your progress
+into Skills, Work values, and Axal Fit & values, so you can see exactly where to
+focus next. And your values now appear as a wheel that makes your overall shape
+easy to read at a glance.
+
+---
+
+## Fixed a rare blank page in Safari
+
+Some people opening the site in Safari right after we shipped an update could see
+a blank page until they cleared their browser or waited it out. We fixed the
+underlying cause, and the app now detects that situation and quietly refreshes
+itself onto the latest version instead of showing a blank screen.
+
+---
+
+## Promoting a contact now sets up their next step
+
+When you promote a contact, we now do more than mark them qualified — we create
+the right next record for you automatically. Promote a customer and we start a
+customer discovery interview for them; promote an investor and they land in your
+new Raise Pipeline, ready to move from "to contact" through meetings and
+diligence all the way to "committed." Promoting the same contact twice is safe —
+it just takes you to the record that already exists, never a duplicate — and each
+contact now links straight through to whatever it became.
+
+---
+
+## Invites now actually email your contacts
+
+When you add a contact with "Send as invitation" checked, we now send them a
+real invitation email on your behalf. You can include an optional personal note,
+and any reply comes straight back to you. If an invite can't be sent, we tell you
+right away instead of leaving you guessing — and the contact is still saved so
+you can try again.
+
+---
+
+## New Contacts hub for founders
+
+Every lead who fills out one of your landing-page forms now flows into a
+single Contacts space in the sidebar. Each contact is tagged by who they are
+(customer, investor, partner, advisor, mentor, or co-founder) and lands in the
+right lane automatically — customers head toward discovery, investors toward
+your raise, and everyone else into your network. From a contact you can log
+replies, add follow-up tasks and check them off, and update their status as
+the relationship moves along. Existing lead capture keeps working exactly as
+before; this just gives you one place to manage everyone who reaches out.
+
+---
+
+## Tighter access controls on investor and founder data
+
+The four new investor-lifecycle areas — IC Decisions, LP Reporting, Company
+Updates, and Cap Table — now have automated tests that continuously verify
+every access rule. That means a founder's portfolio update stays visible only
+to that founder (and the investor side once it's submitted), an investor's
+LP report stays scoped to the funds they belong to, and only admins can add
+new cap-table positions. These checks run on every build so a future change
+can't accidentally open the wrong door.
+
+---
+
+## Cleaner sidebar for investors and partners
+
+If your profile listed a founder persona, the left-hand menu used to
+inject a "For Founder — New Venture" section with Founder Portal and
+Spin-Outs links even when you were logged in as an investor or partner.
+That section no longer appears in the wrong role — your sidebar stays
+relevant to the role you're actually using.
+
+---
+
 ## New investor tools: IC decisions, LP reporting, company updates and cap tables
 
 Investors have four new areas in the sidebar. Under **Commit**, **IC Decisions**

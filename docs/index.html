@@ -51,6 +51,74 @@
       } catch (e) { /* no-op */ }
     })();
   </script>
+  <script>
+    // Task #37 — production boot watchdog (un-bundled, so it runs even when the
+    // entry module 404s). The recurring Safari blank page happens when the apex
+    // root HTML (served by GitHub Pages) references a build hash the Worker no
+    // longer serves: the hashed entry chunk fails to load, so main.jsx — and
+    // its in-app stale-chunk recovery — never runs and the page stays blank.
+    // This inline script lives in the HTML itself, so it always executes,
+    // detects the failure, clears the service worker + caches ONCE, and reloads
+    // with a cache-busting query so Safari re-fetches fresh HTML instead of its
+    // cached stale copy. A sessionStorage guard prevents any reload loop.
+    (function () {
+      try {
+        var isDev = !!document.querySelector('script[src="/@vite/client"]') ||
+                    /[?&](localhost|replit\.dev|replit\.app|repl\.co)/.test(window.location.host) ||
+                    window.location.port === '5000';
+        if (isDev) return;
+        var REBOOT_KEY = 'axal:boot-reboot';
+        function rebootOnce() {
+          // Storage-free loop guard: if we already rebooted (the URL carries
+          // ?__reboot), never reboot again — even when sessionStorage is blocked
+          // and the entry chunk is permanently missing. Prevents an infinite
+          // reload loop; the page fails as a clean 404/blank instead.
+          try {
+            if (/[?&]__reboot=/.test(window.location.search)) return;
+          } catch (e) { /* location unreadable — fall through to storage guard */ }
+          try {
+            if (sessionStorage.getItem(REBOOT_KEY) === '1') return;
+            sessionStorage.setItem(REBOOT_KEY, '1');
+          } catch (e) { /* storage blocked — the ?__reboot guard above still bounds us to one reload */ }
+          var go = function () {
+            try {
+              var u = new URL(window.location.href);
+              u.searchParams.set('__reboot', String(Date.now()));
+              window.location.replace(u.toString());
+            } catch (e) { window.location.reload(); }
+          };
+          var clearCaches = function () {
+            if (window.caches && caches.keys) {
+              caches.keys()
+                .then(function (keys) { return Promise.all(keys.map(function (k) { return caches.delete(k); })); })
+                .catch(function () {})
+                .then(go, go);
+            } else { go(); }
+          };
+          if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+            navigator.serviceWorker.getRegistrations()
+              .then(function (regs) { return Promise.all(regs.map(function (r) { return r.unregister(); })); })
+              .catch(function () {})
+              .then(clearCaches, clearCaches);
+          } else { clearCaches(); }
+        }
+        // Fire the instant a hashed entry/vendor module 404s. Capture phase is
+        // required to see resource-load errors at the window level.
+        window.addEventListener('error', function (e) {
+          var t = e && e.target;
+          if (t && t.tagName === 'SCRIPT' && typeof t.src === 'string' &&
+              /\/assets\/[^"']+\.js(?:$|\?)/.test(t.src)) {
+            rebootOnce();
+          }
+        }, true);
+        // Belt-and-suspenders: if the app hasn't signalled boot after 15s (the
+        // entry never executed for any reason), recover once.
+        window.setTimeout(function () {
+          if (!window.__axalBooted) rebootOnce();
+        }, 15000);
+      } catch (e) { /* the watchdog must never throw */ }
+    })();
+  </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
   <title>Global Venture Partner Network — partners, capital & founders</title>
@@ -100,14 +168,14 @@
       }
     })();
   </script>
-  <script type="module" crossorigin src="/assets/index-Dy0hnLD3.js"></script>
+  <script type="module" crossorigin src="/assets/index-C8tkLlzt.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-aKtaBQYM.js">
   <link rel="modulepreload" crossorigin href="/assets/jsx-runtime-2Zwg-L3c.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-CZgWQFsJ.js">
   <link rel="modulepreload" crossorigin href="/assets/log-C5wZECLb.js">
-  <link rel="modulepreload" crossorigin href="/assets/api-Cb3negYR.js">
+  <link rel="modulepreload" crossorigin href="/assets/api-CyIUMkqf.js">
   <link rel="modulepreload" crossorigin href="/assets/createLucideIcon-Cn8d9JH0.js">
-  <link rel="stylesheet" crossorigin href="/assets/index-LOvQ_j1L.css">
+  <link rel="stylesheet" crossorigin href="/assets/index-YAHQWiq1.css">
 </head>
 <body class="bg-white text-gray-900">
   <div id="root"></div>
