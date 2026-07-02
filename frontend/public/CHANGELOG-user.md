@@ -5,6 +5,15 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Fixed a rare blank page in Safari
+
+Some people opening the site in Safari right after we shipped an update could see
+a blank page until they cleared their browser or waited it out. We fixed the
+underlying cause, and the app now detects that situation and quietly refreshes
+itself onto the latest version instead of showing a blank screen.
+
+---
+
 ## Promoting a contact now sets up their next step
 
 When you promote a contact, we now do more than mark them qualified — we create

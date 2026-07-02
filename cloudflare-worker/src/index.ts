@@ -922,6 +922,34 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
 
 export default {
   fetch: async (request: Request, env: Env, ctx: ExecutionContext) => {
+    // Task #37 — hardened static-asset serving. wrangler.toml lists
+    // `/assets/*` in `run_worker_first`, so hashed SPA assets are routed
+    // through the Worker BEFORE any DB/secret work. We serve the real file
+    // from the ASSETS binding, but if the SPA fallback returned index.html
+    // (`text/html`) for a MISSING hashed asset, we convert it to a real 404.
+    // Otherwise the browser executes HTML as a JS/CSS module and the page
+    // renders blank — the recurring Safari blank page: after a deploy the
+    // apex root HTML (GitHub Pages) can reference a build hash this Worker no
+    // longer serves. A clean 404 lets the client boot-watchdog (index.html)
+    // and the stale-chunk recovery (main.jsx) reload onto the current build
+    // instead of blanking.
+    if (request.method === 'GET' && env.ASSETS) {
+      const { pathname } = new URL(request.url);
+      if (pathname.startsWith('/assets/')) {
+        const assetRes = await env.ASSETS.fetch(request);
+        const ctype = assetRes.headers.get('content-type') || '';
+        if (/text\/html/i.test(ctype)) {
+          return new Response('Asset not found\n', {
+            status: 404,
+            headers: {
+              'content-type': 'text/plain; charset=utf-8',
+              'cache-control': 'no-store',
+            },
+          });
+        }
+        return assetRes;
+      }
+    }
     try {
       assertJwtSecretStrength(env);
       // T9 — SCORING_HMAC_SECRET is hard-required in production so the

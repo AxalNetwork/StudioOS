@@ -10,6 +10,50 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+> ## Fix recurring Safari blank page on axal.vc (Task #37)
+>
+> The apex root HTML (`axal.vc/`) is served by GitHub Pages from committed
+> `docs/index.html`, while hashed `/assets/*` are served by the Worker from the
+> freshly deployed `docs/`. When Pages lags the Worker by more than
+> `ASSET_RETAIN_BUILDS` builds, the root HTML references an entry-chunk hash the
+> Worker no longer has. Cloudflare Static Assets `not_found_handling =
+> "single-page-application"` then returned `index.html` (200 `text/html`) for the
+> missing `/assets/*.js`, so the browser executed HTML as a JS module → React
+> never booted → blank page. Safari-specific because its service-worker cache
+> masked it in Chrome until ITP evicted the SW cache. Because the failure is the
+> ENTRY chunk, `main.jsx`'s in-app stale-chunk recovery never ran (it lives
+> inside the chunk that failed to load), so nothing self-healed. Layered fix:
+>
+> - **Worker fails loud instead of blank** (`cloudflare-worker/src/index.ts`,
+>   `types.ts`, `wrangler.toml`) — `/assets/*` added to `run_worker_first` in BOTH
+>   route/assets blocks; the fetch handler now serves the real file from the
+>   `ASSETS` binding but converts an SPA-fallback `text/html` response for a
+>   hashed asset into a real `404` (`no-store`). The browser never executes HTML
+>   as a module again.
+> - **Un-bundled boot watchdog** (`frontend/index.html`) — an inline `<head>`
+>   script (runs even when the entry chunk 404s) catches capture-phase `error`
+>   events on `/assets/*.js` and, as a 15s fallback, checks `window.__axalBooted`.
+>   On failure it unregisters the SW, clears caches ONCE (sessionStorage guard
+>   `axal:boot-reboot`, no reload loop), and reloads with a `?__reboot=<ts>`
+>   cache-buster so Safari re-fetches fresh HTML instead of its cached stale copy.
+>   `main.jsx` sets `window.__axalBooted`, strips `?__reboot`, and clears the
+>   guard on successful boot. Gated to production (dev is inert).
+> - **Service worker stops poisoning/masking** (`frontend/public/sw.js`) — the
+>   cache-first path never serves or stores a `text/html` response for a hashed
+>   asset; `VERSION` bumped so the improved SW replaces the old one.
+> - **Latent Safari <16.4 parse error** — the single-asterisk italic strip in
+>   `frontend/src/lib/legalDocFormat.js` + `cloudflare-worker/src/services/legalDocFormat.ts`
+>   used a `(?<!\s)` lookbehind (a hard parse error on Safari <16.4, breaking any
+>   chunk that imports it). Rewritten lookbehind-free, behavior-equivalent
+>   (`legalDocFormat.test.ts` still green).
+>
+> `check-spa-live.mjs` (postdeploy) already fails the deploy if any apex hashed
+> asset resolves as `text/html` — it detects the skew but cannot prevent it, so
+> the durable prevention is deploy discipline: a deploy is `npm run deploy`
+> (rebuilds `docs/` + Worker) **plus** an immediate GitHub push so Pages never
+> lags beyond `ASSET_RETAIN_BUILDS`. The client-side parts (watchdog, SW, bundle)
+> only reach the apex root once `docs/` is rebuilt by the deploy and pushed.
+>
 > ## Contacts promotion creates real downstream records (Task #32)
 >
 > `POST /api/contacts/:uid/promote` (`routes/contacts.ts`) previously only

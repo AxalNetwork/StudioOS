@@ -154,7 +154,7 @@ function stripInline(s: string): string {
     // bold: **text**
     .replace(/\*\*([^*\n]+?)\*\*/g, '$1')
     // italic: *text* (bounded so it doesn't eat stray asterisks)
-    .replace(/(^|[^\w*])\*(?!\s)([^*\n]+?)(?<!\s)\*(?![\w*])/g, '$1$2')
+    .replace(/(^|[^\w*])\*([^\s*\n](?:[^*\n]*?[^\s*\n])?)\*(?![\w*])/g, '$1$2')
     // strikethrough: ~~text~~
     .replace(/~~([^~\n]+?)~~/g, '$1')
     // inline code: `code`
