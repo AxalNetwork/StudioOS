@@ -5,6 +5,33 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A partner menu built around how you actually work
+
+If you're a service partner, your left-hand menu is now organised around your
+day-to-day: **Home → Sourcing → Engage → Earn → Account**. Finding leads and
+showing what you offer lives under **Sourcing** (including your renamed **My
+Services** and demand insights), delivering and staying in touch lives under
+**Engage** (with **Partners** now folded into **Relationships**), getting paid
+lives under **Earn**, and your profile, trust centre and settings sit under
+**Account**. We also trimmed investor- and founder-only pages you never used out
+of your menu — nothing was deleted, those pages still open if you have a direct
+link, they're just no longer cluttering your sidebar. (Service partners only;
+other roles are unchanged.)
+
+---
+
+## Your profile now builds four clear parts — including your archetype — just by chatting
+
+Your "Profile & Fit" page now measures four things separately — your Skills, your
+Work values, your Archetype, and your Axal Fit — and shows how far along each one
+is, instead of one confusing overall number. Your archetype now appears from your
+advisor conversation alone, so you no longer need to finish the separate gamified
+assessment to see it. The advisor also asks smarter follow-up questions: it skips
+the areas you've already answered enough on and focuses on the gaps, so you reach
+a complete, trustworthy profile in about twenty answers.
+
+---
+
 ## Mentors no longer have to answer double to complete their profile
 
 If you're a mentor, your "Profiling completion" used to ask for roughly twice as
