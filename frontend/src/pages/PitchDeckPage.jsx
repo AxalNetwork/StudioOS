@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import PageExplainer from '../components/PageExplainer';
 import { reportError } from '../lib/log';
 import {
@@ -519,7 +519,16 @@ export default function PitchDeckPage() {
                 : 'Templates auto-fill from your project, financials, and cap table.'}
             </p>
           </div>
-          <PageExplainer page="pitch_deck" />
+          <div className="flex items-center gap-2">
+            <Link
+              to="/build/deck-reviewer"
+              className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-300 text-sm hover:bg-orange-100 dark:hover:bg-orange-950/50"
+              title="Upload a finished deck and get an honest investor-style review"
+            >
+              <FileText className="w-4 h-4" /> Pitch deck reviewer
+            </Link>
+            <PageExplainer page="pitch_deck" />
+          </div>
         </header>
 
         {/* Project picker + recommendation banner */}

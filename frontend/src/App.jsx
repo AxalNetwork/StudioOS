@@ -156,6 +156,8 @@ const OnboardingPartnerPage = lazy(() => import('./pages/OnboardingPartnerPage')
 const OnboardingChatPage = lazy(() => import('./pages/OnboardingChatPage'));
 const BrandBuilderPage = lazy(() => import('./pages/BrandBuilderPage'));
 const PitchDeckPage = lazy(() => import('./pages/PitchDeckPage'));
+const DeckReviewerPage = lazy(() => import('./pages/DeckReviewerPage'));
+const CompetitorAnalysisPage = lazy(() => import('./pages/CompetitorAnalysisPage'));
 const FinancialsPage = lazy(() => import('./pages/FinancialsPage'));
 const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage'));
 const CustomerDiscoveryPage = lazy(() => import('./pages/CustomerDiscoveryPage'));
@@ -1205,6 +1207,8 @@ function AppInner() {
       <Route path="/onboarding/partner" element={guard(['admin', 'partner'], <OnboardingPartnerPage />)} />
       <Route path="/build/brand" element={guard(['admin', 'founder'], <BrandBuilderPage />)} />
       <Route path="/build/deck" element={guard(['admin', 'founder'], <PitchDeckPage />)} />
+      <Route path="/build/deck-reviewer" element={guard(['admin', 'founder'], <DeckReviewerPage />)} />
+      <Route path="/build/competitors" element={guard(['admin', 'founder', 'partner', 'investor'], <CompetitorAnalysisPage />)} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], <FinancialsPage />)} />
       <Route path="/build/discovery" element={guard(['admin', 'founder', 'partner', 'investor'], <DiscoveryPage />)} />
       <Route path="/customer-discovery" element={guard(['admin', 'founder'], <CustomerDiscoveryPage />)} />

@@ -138,6 +138,8 @@ import customerChat from './routes/customer_chat';
 import importsRoutes from './routes/imports';
 import brand, { renderLandingHtml, renderLandingPreview, renderTemplatePreview } from './routes/brand';
 import decks from './routes/decks';
+import competitors from './routes/competitors';
+import deckReviewer from './routes/deck_reviewer';
 // Task #6 — share-link viewer onboarding (signup/NDA/feedback/deal-pack)
 // + conversion tracking. MUST be mounted BEFORE the `/api/decks`
 // catch-all so its `/share/:token/...` subpaths take precedence over
@@ -697,6 +699,11 @@ app.route('/api/brand', brand);
 // resolve to the new handlers before falling through to the catch-all.
 app.route('/api/decks', deckShareActions);
 app.route('/api/decks', decks);
+// Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
+// Reviewer (document conversion + investor-style review). Both are
+// Cloudflare-native: D1 + R2 + Workers AI, no paid third-party APIs.
+app.route('/api/competitors', competitors);
+app.route('/api/deck-reviewer', deckReviewer);
 
 // Public landing page HTML (no /api prefix). Founders publish via the
 // authenticated /api/brand/landing/by-project/:pid/publish endpoint;

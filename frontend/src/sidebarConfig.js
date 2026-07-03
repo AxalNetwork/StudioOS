@@ -176,6 +176,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
       { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
       { to: '/services', icon: Package, label: 'Service Catalogue' },
+      { to: '/build/competitors', icon: Megaphone, label: 'Competitor Analysis' },
       { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
       { to: '/mentors', icon: UserCircle, label: 'Find a Mentor', requiredTier: 'growth' },
       { to: '/cofounder', icon: Users, label: 'Find a Co-founder', requiredTier: 'studio' },
@@ -183,6 +184,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'raise', label: 'Raise', items: [
       { to: '/build/deck', icon: Sparkles, label: 'Pitch Deck', requiredTier: 'growth' },
+      { to: '/build/deck-reviewer', icon: FileText, label: 'Pitch Deck Reviewer' },
       { to: '/build/financials', icon: DollarSign, label: 'Financial Model' },
       { to: '/build/captable', icon: PieIcon, label: 'Cap Table' },
       { to: '/raise', icon: TrendingUp, label: 'Raise Pipeline' },
