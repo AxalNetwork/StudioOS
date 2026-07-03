@@ -2448,6 +2448,35 @@ export const api = {
   bestFit: {
     me: () => request('/best-fit/me'),
   },
+
+  // Competitor Analysis — in-house crawl + Workers AI synthesis (no paid APIs).
+  competitors: {
+    analyze: (data) => request('/competitors/analyze', { method: 'POST', body: JSON.stringify(data || {}) }),
+    list: () => request('/competitors'),
+    get: (id) => request(`/competitors/${id}`),
+    save: (id, patch) => request(`/competitors/${id}`, { method: 'PATCH', body: JSON.stringify(patch || {}) }),
+    addCandidate: (id, data) => request(`/competitors/${id}/candidates`, { method: 'POST', body: JSON.stringify(data || {}) }),
+    removeCandidate: (id, cid) => request(`/competitors/${id}/candidates/${cid}`, { method: 'DELETE' }),
+    rerun: (id, data) => request(`/competitors/${id}/rerun`, { method: 'POST', body: JSON.stringify(data || {}) }),
+    refresh: (id) => request(`/competitors/${id}/refresh`, { method: 'POST', body: JSON.stringify({}) }),
+    remove: (id) => request(`/competitors/${id}`, { method: 'DELETE' }),
+    fetchUrl: (url, refresh) => request('/competitors/fetch', { method: 'POST', body: JSON.stringify({ url, refresh: !!refresh }) }),
+    exportUrl: (id, format) => `/api/competitors/${id}/export?format=${encodeURIComponent(format || 'json')}`,
+  },
+
+  // Pitch Deck Reviewer — Cloudflare document conversion + investor-style review.
+  deckReviewer: {
+    // FormData upload: request() detects FormData and omits the JSON Content-Type.
+    upload: (formData) => request('/deck-reviewer/upload', { method: 'POST', body: formData }),
+    paste: (data) => request('/deck-reviewer/paste', { method: 'POST', body: JSON.stringify(data || {}) }),
+    list: () => request('/deck-reviewer'),
+    get: (id) => request(`/deck-reviewer/${id}`),
+    save: (id, patch) => request(`/deck-reviewer/${id}`, { method: 'PATCH', body: JSON.stringify(patch || {}) }),
+    regenerate: (id) => request(`/deck-reviewer/${id}/regenerate`, { method: 'POST', body: JSON.stringify({}) }),
+    purgeRaw: (id) => request(`/deck-reviewer/${id}/raw`, { method: 'DELETE' }),
+    remove: (id) => request(`/deck-reviewer/${id}`, { method: 'DELETE' }),
+    exportUrl: (id, format) => `/api/deck-reviewer/${id}/export?format=${encodeURIComponent(format || 'json')}`,
+  },
 };
 
 // Task #3 — Due Diligence module. Admin/partner/investor/mentor only;

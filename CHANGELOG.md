@@ -10,6 +10,45 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Competitor Analysis + Pitch Deck Reviewer — two Cloudflare-native founder tools (PR #125)
+
+Adds two founder tools built entirely on D1 + R2 + Workers AI with no paid
+third-party APIs. Both are additive (new routes/pages/tables only; no existing
+behaviour changed) and reachable from the sidebar (Validate → Competitor
+Analysis, Raise → Pitch Deck Reviewer), plus cross-links from the Pitch Deck
+Builder and Project detail pages. Integrated from branch
+`claude/competitor-analysis-feature-lf6uvj`.
+
+- **Competitor Analysis** (`/build/competitors`) — discovers and ranks
+  competitors from an existing startup/project or a custom market, enriches them
+  via an in-house SSRF-guarded public-web crawl
+  (`cloudflare-worker/src/services/webFetch.ts`), and synthesizes an editable
+  landscape report (feature/pricing tables, gaps, wedge, next actions).
+  `routes/competitors.ts` (mounted at `/api/competitors`); synthesis in
+  `services/competitorAnalysis.ts`; schema `sql/competitor_analysis.sql` +
+  lazy `services/competitorSchema.ts`.
+- **Pitch Deck Reviewer** (`/build/deck-reviewer`) — accepts a PDF/DOC/DOCX/PPTX
+  upload (≤20 MB, validated server-side, stored privately in R2) or pasted text,
+  extracts text via Cloudflare document conversion (`services/deckExtract.ts`,
+  with a guaranteed manual-paste fallback), maps it into 12 standard deck
+  sections, and generates an investor-style review — editable and exportable
+  (JSON/MD). `routes/deck_reviewer.ts` (mounted at `/api/deck-reviewer`); schema
+  `sql/deck_reviews.sql` + lazy `services/deckReviewSchema.ts`.
+- **Security** — every endpoint calls `requireAuth` and scopes all rows to
+  `user.id`; the crawl is SSRF-guarded (http(s)-only; blocks
+  localhost/private/loopback/link-local/metadata hosts) and per-user
+  rate-limited via the `RATE_LIMITS` KV namespace. No new bindings or secrets
+  (reuses the `FILES` R2 bucket with distinct key prefixes). D1 schema self-heals
+  at runtime via the lazy `ensure*Schema` services if the SQL files aren't applied.
+- **Frontend** — `frontend/src/pages/CompetitorAnalysisPage.jsx` +
+  `DeckReviewerPage.jsx`; API client blocks `api.competitors` / `api.deckReviewer`
+  in `frontend/src/lib/api.js`; routes in `App.jsx`; nav in `sidebarConfig.js`.
+- **Verification** — `npm run test:drift` api-drift/dark-mode/sql-unsafe checks
+  pass; `cloudflare-worker` `tsc --noEmit` clean; frontend build clean. Runtime
+  (D1/R2/Workers AI) exercises against the deployed worker only — by design the
+  feature is not runnable in the Replit dev (FastAPI) backend, so the two pages
+  return API errors in the dev preview until deployed.
+
 ## Autopopulate profiles from LinkedIn — account + PDF, review-and-confirm (Task #67)
 
 Users can prefill their profile (headline, about/bio, experience, education,

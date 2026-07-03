@@ -5,6 +5,28 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Size up your competition
+
+There's a new **Competitor Analysis** tool under **Validate** in the sidebar.
+Start from one of your startups or just describe a market, and StudioOS finds and
+ranks the main players, pulls details from their public websites, and builds an
+editable landscape for you — feature and pricing comparisons, gaps in the market,
+a suggested wedge, and recommended next steps. You can add or remove competitors
+by hand, re-run the analysis, and export the whole thing as a document. There's
+also a quick link to it from any project page.
+
+---
+
+## Get an honest review of your pitch deck
+
+The new **Pitch Deck Reviewer** under **Raise** lets you upload a finished deck
+(PDF, Word, or PowerPoint) — or simply paste your text — and get a candid,
+investor-style review. It maps your deck to the twelve sections investors expect
+to see, tells you what's strong and what's missing, and gives you editable notes
+you can export. You'll find a shortcut to it right from the Pitch Deck Builder.
+
+---
+
 ## Fill in your profile from LinkedIn
 
 Setting up your profile just got a lot faster. In **Settings → Profile**, you can

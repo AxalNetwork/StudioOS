@@ -159,6 +159,13 @@ export default function ProjectDetail() {
             >
               <PieChart size={12} /> Cap Table
             </Link>
+            <Link
+              to="/build/competitors"
+              className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-xs text-gray-700 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300"
+              title="Map this market's competitive landscape"
+            >
+              <Search size={12} /> Competitor Analysis
+            </Link>
             {project.uid && (
               <Link
                 to={`/startups/${project.uid}`}
