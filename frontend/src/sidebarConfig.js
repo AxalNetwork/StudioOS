@@ -217,24 +217,30 @@ export const SIDEBAR_GROUPS = {
     ]},
   ],
 
-  // Service-partner sidebar audit — regroup around the partner lifecycle:
-  // Home → Offer → Match → Engage → Deliver → Earn → Insights → Account. This
-  // replaces the former investor-shaped layout (Sourcing / Insights /
-  // Capital & Legal / Network) that carried founder-, investor-, and
-  // studio-internal surfaces a service partner never acts on. Sidebar-level
-  // only: every surviving route/icon is preserved and no pages are merged.
-  // Mirrors the investor (Task #17) and founder (Task #19) reorgs.
+  // Service-partner sidebar audit — regroup around the partner lifecycle but
+  // collapse it into FIVE fuller groups so no section is a header over a single
+  // item and the nav stays short: Home → Find Work → Engage → Earn → Account.
+  // The lifecycle stages still map cleanly — Offer + Match + (demand) signal
+  // live in "Find Work"; Deliver + relationships live in "Engage" — they're
+  // just no longer separate one-line sections. This replaces the former
+  // investor-shaped layout (Sourcing / Insights / Capital & Legal / Network)
+  // that carried founder-, investor-, and studio-internal surfaces a service
+  // partner never acts on. Sidebar-level only: every surviving route/icon is
+  // preserved and no pages are merged. Mirrors the investor (Task #17) and
+  // founder (Task #19) reorgs.
   //
-  // Each feature now has exactly one home:
-  //   • Partners is folded into Relationships (Engage) — both manage the
-  //     partner's contacts/graph; the /partners route stays registered.
-  //   • "My Service Catalogue" is shortened to "My Services" (Offer).
+  // Merges (each feature has exactly one home):
+  //   • Partners → Relationships (Engage); match keeps the item active on the
+  //     legacy /partners route, which stays registered.
+  //   • "My Service Catalogue" → "My Services" (Find Work).
+  //   • Demand Insights folds into Find Work (the one partner-native signal)
+  //     so the standalone Insights section is gone.
   //
   // Intentional removals from the partner nav (documented so a nav-integrity
   // guard treats them as deliberate, not silent drops — every route below
   // stays registered and reachable for other roles or via deep link):
-  //   • /studio "Studio" — the generic studio dashboard; Partner Portal is the
-  //     partner's home, so the duplicate tile is dropped.
+  //   • /partner-portal "Partner Portal" — Studio is the home now, so the
+  //     duplicate portal tile is dropped (route stays for admin / deep links).
   //   • /projects "Projects" and /pipeline "Pipeline Board" — studio/investor
   //     execution + deal-pipeline surfaces, not partner-facing.
   //   • /deals "Deal Flow" — only relevant to investor-type partners
@@ -242,6 +248,8 @@ export const SIDEBAR_GROUPS = {
   //     re-surfaced when the sidebar supports persona gating.
   //   • /scoring "Scoring Engine", /portfolio/risk-matrix "Risk Matrix",
   //     /admin/due-diligence "Due Diligence" — investor/studio diligence tools.
+  //   • /market-intel "Market Intelligence" — investor-flavoured intel dropped
+  //     to keep the partner UX lean; Demand Insights is the kept signal.
   //   • /portfolio/health "Portfolio Health", /portfolio/coverage
   //     "Portfolio Coverage", /watchlist "Watchlist & Journal",
   //     /liquidity "Liquidity & Exits", /legal-capital "Legal & Capital" —
@@ -254,32 +262,25 @@ export const SIDEBAR_GROUPS = {
   //     content/press partners.
   partner: [
     { key: 'home', label: 'Home', items: [
-      { to: '/partner-portal', icon: UserCircle, label: 'Partner Portal', highlight: true },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
     ]},
-    { key: 'offer', label: 'Offer', items: [
+    { key: 'find-work', label: 'Find Work', items: [
       { to: '/services', icon: Package, label: 'My Services' },
-    ]},
-    { key: 'match', label: 'Match', items: [
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
       { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
       { to: '/marketplace', icon: Briefcase, label: 'Marketplace' },
+      { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
     ]},
     { key: 'engage', label: 'Engage', items: [
+      { to: '/partner/office-hours', icon: Calendar, label: 'My Office Hours' },
+      { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/relationships', icon: Handshake, label: 'Relationships', match: ['/relationships', '/partners'] },
       { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
     ]},
-    { key: 'deliver', label: 'Deliver', items: [
-      { to: '/partner/office-hours', icon: Calendar, label: 'My Office Hours' },
-      { to: '/calendar', icon: Calendar, label: 'Calendar' },
-    ]},
     { key: 'earn', label: 'Earn', items: [
       { to: '/payouts', icon: Wallet, label: 'Payouts' },
       { to: '/refer', icon: Share2, label: 'Refer & Earn' },
-    ]},
-    { key: 'insights', label: 'Insights', items: [
-      { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
-      { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust Center' },
