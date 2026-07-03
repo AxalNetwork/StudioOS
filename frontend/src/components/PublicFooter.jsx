@@ -99,11 +99,10 @@ export default function PublicFooter() {
           <div>
             <h3 className="font-semibold text-gray-900 mb-4">Network</h3>
             <ul className="space-y-2">
-              <li><a href="/#network" className="text-sm text-gray-600 hover:text-gray-900">Partners</a></li>
-              <li><a href="/#network" className="text-sm text-gray-600 hover:text-gray-900">Capital</a></li>
-              <li><a href="/#network" className="text-sm text-gray-600 hover:text-gray-900">Deals</a></li>
-              <li><a href="/#network" className="text-sm text-gray-600 hover:text-gray-900">Intelligence</a></li>
-              <li><a href="/#network" className="text-sm text-gray-600 hover:text-gray-900">Legal</a></li>
+              <li><Link to="/articles" className="text-sm text-gray-600 hover:text-gray-900">Articles</Link></li>
+              <li><Link to="/directory" className="text-sm text-gray-600 hover:text-gray-900">Directory</Link></li>
+              <li><Link to="/events" className="text-sm text-gray-600 hover:text-gray-900">Programs &amp; Events</Link></li>
+              <li><Link to="/circles" className="text-sm text-gray-600 hover:text-gray-900">Communities &amp; Circles</Link></li>
             </ul>
           </div>
 
