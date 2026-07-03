@@ -660,3 +660,37 @@ test('answered question is never re-served and its followups are preserved', asy
   });
   assert.equal(t3.next_question, null);
 });
+
+// ---------------------------------------------------------------------------
+// Task #52 (BLOCK-ADV-02) — same-session repeat guard via the markAsked path.
+//
+// Distinct from the answered-set dedupe above: here the question is NEVER
+// answered. Serving it once makes nextTurn await markAsked(), stamping
+// `advisor_state.last_asked_at`; loadRecentlyAsked + ANTI_REPEAT_PENALTY must
+// then stop the very next same-session turn from re-serving it — even though
+// it outranks its peer on importance and is still unanswered. Exercises the
+// markAsked → loadRecentlyAsked → anti-repeat round-trip end-to-end.
+// ---------------------------------------------------------------------------
+test('a just-asked (unanswered) question is not repeated on the next same-session turn', async () => {
+  const env = makeDb();
+  const nowMs = Date.now();
+  const A = q({ id: 'a', importance: 'critical' }); // outranks B on importance alone
+  const B = q({ id: 'b', importance: 'normal' });
+  const bank = [A, B];
+
+  // Turn 1 — A (critical) wins; nextTurn awaits markAsked(A), stamping
+  // advisor_state.last_asked_at inside the anti-repeat window.
+  const t1 = await SM.nextTurn(env, 40, bank, {
+    focusPage: null, week: 1, completedMilestones: new Set(), now: nowMs,
+  });
+  assert.equal(t1.next_question!.id, 'a');
+  assert.ok(env._tables.advisor_state.some((r: any) => r.question_id === 'a'));
+
+  // Turn 2 — same session, A still unanswered. The -100 anti-repeat penalty
+  // sinks A below its normal-importance peer, so B is served and A is NOT
+  // repeated back-to-back.
+  const t2 = await SM.nextTurn(env, 40, bank, {
+    focusPage: null, week: 1, completedMilestones: new Set(), now: nowMs,
+  });
+  assert.equal(t2.next_question!.id, 'b');
+});
