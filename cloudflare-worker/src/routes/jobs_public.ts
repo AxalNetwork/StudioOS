@@ -17,7 +17,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { verifyTurnstile } from '../services/turnstile';
 import { ensureJobBoardSchema } from '../services/jobBoardSchema';
-import { shapeJobPosting } from '../services/jobBoardCommon';
+import { shapeJobPosting, safeHttpUrl, buildPublicJobFeedWhere } from '../services/jobBoardCommon';
 import { putResumeFromDataUri } from '../services/r2';
 import { notify } from '../services/notify';
 
@@ -68,14 +68,10 @@ jobsPublic.get('/jobs', async (c) => {
   const remote = c.req.query('remote');
   const q = c.req.query('q');
 
-  // All predicate columns are qualified with `j.` — job_postings and projects
-  // both have a `status` column, so an unqualified WHERE would be ambiguous.
-  const where: string[] = [`j.status = 'published'`, 'j.admin_published = 1'];
-  const binds: unknown[] = [];
-  if (employmentType) { where.push('j.employment_type = ?'); binds.push(employmentType); }
-  if (seniority) { where.push('j.seniority = ?'); binds.push(seniority); }
-  if (remote === '1') { where.push('j.remote = 1'); }
-  if (q) { where.push('(j.title LIKE ? OR j.summary LIKE ? OR j.location_text LIKE ?)'); binds.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+  // Predicate + binds built by a pure, unit-tested helper. Search spans role
+  // (title/summary), city (location_text) AND startup name (projects.name via
+  // the LEFT JOIN below) per the spec's "search by role/startup/city" ask.
+  const { where, binds } = buildPublicJobFeedWhere({ employmentType, seniority, remote, q });
 
   const rows = await c.env.DB.prepare(
     `SELECT j.*, p.name AS project_name
@@ -141,8 +137,11 @@ jobsPublic.post('/jobs/:slug/apply', async (c) => {
   }
 
   const coverNote = body.cover_note ? String(body.cover_note).slice(0, 5000) : null;
-  const linkedin = body.linkedin_url ? String(body.linkedin_url).slice(0, 500) : null;
-  const portfolio = body.portfolio_url ? String(body.portfolio_url).slice(0, 500) : null;
+  // Only accept absolute http(s) links — collapse javascript:/data:/garbage to
+  // null so a hostile value can never be stored and later rendered as a live
+  // href in the founder's applicants view (stored link-injection / XSS).
+  const linkedin = safeHttpUrl(body.linkedin_url);
+  const portfolio = safeHttpUrl(body.portfolio_url);
   const userId = await resolveUserIdByEmail(c.env, email);
 
   try {

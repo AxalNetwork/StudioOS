@@ -60,6 +60,56 @@ export function normalizeSeniority(v: unknown): typeof SENIORITIES[number] {
 }
 
 /**
+ * Applicant-supplied links (LinkedIn / portfolio) are rendered as clickable
+ * `href`s in the founder's applicants view, so an unvalidated value like
+ * `javascript:…` or `data:…` is a stored link-injection / XSS vector. Accept
+ * ONLY absolute http(s) URLs; anything else (bad scheme, unparseable, empty)
+ * collapses to null so it is stored/rendered as "no link" rather than a live
+ * hostile href. Caps length at 500 to match the column bound.
+ */
+export function safeHttpUrl(v: unknown): string | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(s);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  return s.slice(0, 500);
+}
+
+/**
+ * Builds the parameterized WHERE fragments + binds for the public job feed.
+ * Extracted as a pure helper so the "search by role / startup / city" behavior
+ * is unit-testable without a live DB. `q` spans role title/summary, city
+ * (location_text) AND startup name (projects.name, aliased `p` in the feed
+ * query). Always constrains to the published + admin-approved publish gate.
+ * All columns are qualified (`j.`/`p.`) because job_postings and projects both
+ * carry a `status` column — an unqualified predicate would be ambiguous.
+ */
+export function buildPublicJobFeedWhere(filters: {
+  employmentType?: string | null;
+  seniority?: string | null;
+  remote?: string | null;
+  q?: string | null;
+}): { where: string[]; binds: unknown[] } {
+  const where: string[] = [`j.status = 'published'`, 'j.admin_published = 1'];
+  const binds: unknown[] = [];
+  if (filters.employmentType) { where.push('j.employment_type = ?'); binds.push(filters.employmentType); }
+  if (filters.seniority) { where.push('j.seniority = ?'); binds.push(filters.seniority); }
+  if (filters.remote === '1') { where.push('j.remote = 1'); }
+  if (filters.q) {
+    where.push('(j.title LIKE ? OR j.summary LIKE ? OR j.location_text LIKE ? OR p.name LIKE ?)');
+    const like = `%${filters.q}%`;
+    binds.push(like, like, like, like);
+  }
+  return { where, binds };
+}
+
+/**
  * Public-safe job-posting projection. `includePrivate` adds owner/admin-only
  * operational fields (admin flag, review notes). NEVER includes applicant data.
  */

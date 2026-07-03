@@ -76,6 +76,12 @@ export default function RegisterPage() {
     }
     const p = params.get('product');
     if (p === 'spinout-lab') setProductIntent('spinout-lab');
+    // Prefill the email when arriving from a flow that already captured it
+    // (e.g. the public job-board apply → register hand-off passes ?email=).
+    const em = params.get('email');
+    if (em && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) {
+      setForm((f) => ({ ...f, email: em }));
+    }
   }, []);
 
   const laneCopy = {
