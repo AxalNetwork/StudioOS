@@ -17,10 +17,12 @@ authed roles) post roles that go through an admin review queue before
 publishing; the public can browse published roles and apply with a résumé, no
 account required.
 
-- **Schema** — `cloudflare-worker/sql/migrations/131_job_board.sql` adds
+- **Schema** — `cloudflare-worker/sql/migrations/132_job_board.sql` adds
   `job_postings` (status DEFAULT `'draft'`, lifecycle
   `draft → pending_review → published | rejected | closed`) and
-  `job_applications` (status DEFAULT `'submitted'`).
+  `job_applications` (status DEFAULT `'submitted'`). Non-admin postings MUST be
+  tied to a project the founder can write to; admins may post platform-level
+  roles. (Renumbered 131→132 to sit after Task #66's `131_profiles_follows.sql`.)
 - **Worker** — `services/{jobBoardSchema,jobBoardCommon,r2}.ts`; routes
   `routes/{jobs,jobs_public,admin_jobs}.ts` mounted in `src/index.ts`. Résumés
   are PDF-only (≤5MB), stored in R2, downloaded via short-lived signed URLs.
@@ -35,8 +37,20 @@ account required.
   `[[env.production.routes]]` in `wrangler.toml`.
 - **Test** — `cloudflare-worker/test/job_board.test.ts` (pure helpers),
   appended to the `test:drift` file list in root `package.json`.
-- **Deviation** — Worker-only; the dev FastAPI backend has no job-board parity
-  (consistent with Events). The admin/founder pages 404 in local dev.
+- **Linking** — an application is matched to a platform account by email at
+  apply-time, via the applicants `LEFT JOIN users` when a founder reads
+  applicants, and via a deterministic backfill on that read (and on
+  `my-applications`). `shapeJobApplication` surfaces the member profile whenever
+  the email join resolves, so "applicant profile once registered" holds even
+  before `user_id` is backfilled. Applicant links (LinkedIn/portfolio) are
+  scheme-validated (`safeHttpUrl`: http/https only) before storage and re-checked
+  before render.
+- **Deviation (explicit scope sign-off)** — Worker-only; the dev FastAPI backend
+  has no job-board parity. This matches the actual Events precedent (Events is
+  also Worker-only — no FastAPI events routes/tables; `/api/public/events` 404s
+  under `npm run dev`), so the spec's "add dev parity following Events" premise
+  did not hold. Confirmed with the user to skip dev parity. Admin/founder job
+  pages 404 in local dev; the public `/jobs` page renders a clean error state.
 
 ## Rich profiles, follows & followed-entity news (Task #66)
 
