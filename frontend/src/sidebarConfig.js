@@ -219,10 +219,14 @@ export const SIDEBAR_GROUPS = {
 
   // Service-partner sidebar audit — regroup around the partner lifecycle but
   // collapse it into FIVE fuller groups so no section is a header over a single
-  // item and the nav stays short: Home → Find Work → Engage → Earn → Account.
+  // item and the nav stays short: Home → Sourcing → Engage → Earn → Account.
   // The lifecycle stages still map cleanly — Offer + Match + (demand) signal
-  // live in "Find Work"; Deliver + relationships live in "Engage" — they're
-  // just no longer separate one-line sections. This replaces the former
+  // live in "Sourcing"; Deliver + relationships live in "Engage" — they're
+  // just no longer separate one-line sections. "Sourcing" is the partner
+  // lane's own verb ("Source thesis-aligned companies; monetise services",
+  // brand/gvpn.ts) — this is a venture partner network, not a job board, so
+  // the label is deliberately venture-native rather than gig-marketplace. This
+  // replaces the former
   // investor-shaped layout (Sourcing / Insights / Capital & Legal / Network)
   // that carried founder-, investor-, and studio-internal surfaces a service
   // partner never acts on. Sidebar-level only: every surviving route/icon is
@@ -232,8 +236,8 @@ export const SIDEBAR_GROUPS = {
   // Merges (each feature has exactly one home):
   //   • Partners → Relationships (Engage); match keeps the item active on the
   //     legacy /partners route, which stays registered.
-  //   • "My Service Catalogue" → "My Services" (Find Work).
-  //   • Demand Insights folds into Find Work (the one partner-native signal)
+  //   • "My Service Catalogue" → "My Services" (Sourcing).
+  //   • Demand Insights folds into Sourcing (the one partner-native signal)
   //     so the standalone Insights section is gone.
   //
   // Intentional removals from the partner nav (documented so a nav-integrity
@@ -264,7 +268,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
     ]},
-    { key: 'find-work', label: 'Find Work', items: [
+    { key: 'sourcing', label: 'Sourcing', items: [
       { to: '/services', icon: Package, label: 'My Services' },
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
       { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
