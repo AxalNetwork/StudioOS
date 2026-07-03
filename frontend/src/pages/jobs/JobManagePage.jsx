@@ -26,6 +26,18 @@ function fmtDate(iso) {
   catch { return iso; }
 }
 
+// Defense-in-depth: the Worker already collapses non-http(s) applicant links to
+// null on write, but never render an applicant-supplied value as a live href
+// without re-checking the scheme (guards legacy rows + belt-and-suspenders
+// against a stored `javascript:`/`data:` link-injection).
+function isSafeHttpUrl(v) {
+  if (!v) return false;
+  try {
+    const u = new URL(String(v));
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch { return false; }
+}
+
 export default function JobManagePage() {
   const { id } = useParams();
   const { toast, showToast } = useToast();
@@ -175,12 +187,12 @@ export default function JobManagePage() {
                     <a href={`mailto:${app.email}`} className="inline-flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400">
                       <Mail size={13} /> {app.email}
                     </a>
-                    {app.linkedin_url ? (
+                    {isSafeHttpUrl(app.linkedin_url) ? (
                       <a href={app.linkedin_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400">
                         <Linkedin size={13} /> LinkedIn
                       </a>
                     ) : null}
-                    {app.portfolio_url ? (
+                    {isSafeHttpUrl(app.portfolio_url) ? (
                       <a href={app.portfolio_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400">
                         <Link2 size={13} /> Portfolio
                       </a>

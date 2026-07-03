@@ -35,6 +35,8 @@ import {
   normalizeSeniority,
   shapeJobPosting,
   shapeJobApplication,
+  safeHttpUrl,
+  buildPublicJobFeedWhere,
 } from '../src/services/jobBoardCommon.ts';
 
 test('taxonomy constants stay in the documented shape', () => {
@@ -178,4 +180,56 @@ test('ensureUniqueJobSlug appends a numeric suffix until the slug is free', asyn
   assert.equal(await ensureUniqueJobSlug(makeEnv(new Set()), 'Engineer'), 'engineer');
   assert.equal(await ensureUniqueJobSlug(makeEnv(new Set(['engineer'])), 'Engineer'), 'engineer-2');
   assert.equal(await ensureUniqueJobSlug(makeEnv(new Set(['engineer', 'engineer-2'])), 'Engineer'), 'engineer-3');
+});
+
+test('safeHttpUrl accepts only absolute http(s) URLs and blocks hostile schemes', () => {
+  // Accepted
+  assert.equal(safeHttpUrl('https://linkedin.com/in/ada'), 'https://linkedin.com/in/ada');
+  assert.equal(safeHttpUrl('http://example.com/portfolio'), 'http://example.com/portfolio');
+  assert.equal(safeHttpUrl('  https://trim.me/x  '), 'https://trim.me/x');
+  // Rejected — hostile / non-http schemes that would be a live href XSS vector
+  assert.equal(safeHttpUrl('javascript:alert(1)'), null);
+  assert.equal(safeHttpUrl('JavaScript:alert(document.cookie)'), null);
+  assert.equal(safeHttpUrl('data:text/html,<script>alert(1)</script>'), null);
+  assert.equal(safeHttpUrl('vbscript:msgbox(1)'), null);
+  assert.equal(safeHttpUrl('file:///etc/passwd'), null);
+  // Rejected — unparseable / scheme-less / empty
+  assert.equal(safeHttpUrl('linkedin.com/in/ada'), null);
+  assert.equal(safeHttpUrl('not a url'), null);
+  assert.equal(safeHttpUrl(''), null);
+  assert.equal(safeHttpUrl('   '), null);
+  assert.equal(safeHttpUrl(null), null);
+  assert.equal(safeHttpUrl(undefined), null);
+});
+
+test('safeHttpUrl caps stored length at 500 chars', () => {
+  const long = `https://example.com/${'a'.repeat(1000)}`;
+  const out = safeHttpUrl(long);
+  assert.equal(out?.length, 500);
+});
+
+test('buildPublicJobFeedWhere always enforces the published + admin-approved gate', () => {
+  const { where, binds } = buildPublicJobFeedWhere({});
+  assert.ok(where.includes(`j.status = 'published'`), 'must require published status');
+  assert.ok(where.includes('j.admin_published = 1'), 'must require admin approval');
+  assert.deepEqual(binds, []);
+});
+
+test('buildPublicJobFeedWhere search spans role, city AND startup name', () => {
+  const { where, binds } = buildPublicJobFeedWhere({ q: 'acme' });
+  const clause = where.find((w) => w.includes('LIKE'));
+  assert.ok(clause, 'a LIKE search clause must be present');
+  assert.match(clause as string, /j\.title LIKE \?/); // role title
+  assert.match(clause as string, /j\.summary LIKE \?/); // role summary
+  assert.match(clause as string, /j\.location_text LIKE \?/); // city
+  assert.match(clause as string, /p\.name LIKE \?/); // startup name
+  assert.deepEqual(binds, ['%acme%', '%acme%', '%acme%', '%acme%']);
+});
+
+test('buildPublicJobFeedWhere applies structured filters as parameterized binds', () => {
+  const { where, binds } = buildPublicJobFeedWhere({ employmentType: 'contract', seniority: 'senior', remote: '1' });
+  assert.ok(where.includes('j.employment_type = ?'));
+  assert.ok(where.includes('j.seniority = ?'));
+  assert.ok(where.includes('j.remote = 1')); // literal, not bound
+  assert.deepEqual(binds, ['contract', 'senior']);
 });

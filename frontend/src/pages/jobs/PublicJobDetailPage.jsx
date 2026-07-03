@@ -2,7 +2,7 @@
 // Mirrors PublicEventDetailPage: slate palette, Turnstile lifecycle, inline
 // success/error states. Adds an optional resume upload (PDF ≤ 5MB → data URI).
 import React, { useEffect, useRef, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Briefcase, MapPin, Globe, ArrowLeft, Loader2, AlertTriangle, CheckCircle2, Upload, X,
 } from 'lucide-react';
@@ -42,6 +42,7 @@ const APPLY_ERROR_MESSAGES = {
 
 export default function PublicJobDetailPage() {
   const { slug } = useParams();
+  const navigate = useNavigate();
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -117,6 +118,26 @@ export default function PublicJobDetailPage() {
       }
     };
   }, [formVisible, job]);
+
+  // Where the applicant is routed after a successful submit. Spec: successful
+  // apply must route the applicant INTO the existing registration flow (or
+  // sign-in if they already have an account) — not just show a link. Prefill
+  // their email so the flow is one tap; the application is linked to the new
+  // account by email match on the founder's applicants view.
+  const postApplyDest = () => {
+    const email = encodeURIComponent(form.email || '');
+    return status.result?.has_account
+      ? `/login?email=${email}`
+      : `/register?email=${email}&intent=job-application`;
+  };
+
+  // Surface the confirmation briefly, then auto-advance into registration/sign-in.
+  useEffect(() => {
+    if (status.state !== 'sent') return undefined;
+    const t = setTimeout(() => navigate(postApplyDest()), 2500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status.state, status.result]);
 
   const onPickResume = (e) => {
     setResumeError('');
@@ -233,20 +254,18 @@ export default function PublicJobDetailPage() {
                   <CheckCircle2 size={40} className="mx-auto text-emerald-500 mb-3" />
                   <h2 className="text-xl font-semibold">Application submitted</h2>
                   <p className="mt-2 text-slate-600 dark:text-slate-400">
-                    Thanks for applying to <span className="font-medium">{job.title}</span>. The team will be in touch.
+                    Thanks for applying to <span className="font-medium">{job.title}</span>.{' '}
+                    {status.result?.has_account
+                      ? 'Sign in to track your application — taking you there now…'
+                      : 'Finish creating your account to track this and future applications — taking you there now…'}
                   </p>
-                  <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
-                    {status.result?.has_account ? (
-                      <>Already have an Axal account?{' '}
-                        <Link to="/login" className="text-violet-600 dark:text-violet-400 font-medium hover:underline">
-                          Sign in
-                        </Link>{' '}to track your application.</>
-                    ) : (
-                      <><Link to="/register" className="text-violet-600 dark:text-violet-400 font-medium hover:underline">
-                        Create an account
-                      </Link>{' '}to track this and future applications.</>
-                    )}
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate(postApplyDest())}
+                    className="mt-4 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-violet-600 text-white font-medium text-sm hover:bg-violet-700"
+                  >
+                    {status.result?.has_account ? 'Sign in now' : 'Create your account'}
+                  </button>
                 </div>
               ) : (
                 <form onSubmit={submit} className="space-y-4">
