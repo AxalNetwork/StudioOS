@@ -104,6 +104,7 @@ export default function PublicFooter() {
               <li><Link to="/directory" className="text-sm text-gray-600 hover:text-gray-900">Directory</Link></li>
               <li><Link to="/events" className="text-sm text-gray-600 hover:text-gray-900">Programs &amp; Events</Link></li>
               <li><Link to="/circles" className="text-sm text-gray-600 hover:text-gray-900">Communities &amp; Circles</Link></li>
+              <li><Link to="/jobs" className="text-sm text-gray-600 hover:text-gray-900">Jobs</Link></li>
             </ul>
           </div>
 

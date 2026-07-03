@@ -10,6 +10,50 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Homepage audit: cut clutter, fix dead-end links, sharpen the join CTA (Task #14, PR #128)
+
+Audit and rework of the public front page (`frontend/src/pages/LandingPage.jsx`)
+plus `PublicNav`/`PublicFooter` for clarity, trust, and conversion. The old
+homepage answered "what is Axal / who is it for / why join" slowly (jargon hero,
+9 sections, ~30 links) and shipped two real defects: the closing CTA 404'd, and
+most "Platform" cards bounced logged-out visitors to a login wall. This tightens
+the page to one primary action (**Join Axal**) and points every link at a page a
+visitor can actually reach. Integrated from branch `claude/axal-homepage-audit-24yasv`.
+
+- **Landing page** — applied wholesale (main's `LandingPage.jsx` was byte-identical
+  to the branch base, so the rewrite is a clean derivative — no reconciliation
+  needed). Hero: plain-language subhead (drops the "six-layer venture OS" jargon),
+  one primary CTA (Join Axal) + one secondary (Explore the network). Reordered for
+  conversion: hero → who it's for (lanes, `#lanes`) → how it works → Spin-Out Lab →
+  what's inside (`#platform`, trimmed 12 → 6 cards, every card links to a public
+  page or `/register?lane=…`) → events/articles teasers → join. Removed the
+  standalone six-layer "Network Layers" section (and its `../brand/gvpn`
+  `NETWORK_LAYERS` import + now-unused lucide icons). Closing CTA now SPA-links to
+  `/register` (was the nonexistent absolute `https://axal.vc/signup` → 404 via
+  catch-all). One dark-mode fix on the new LANES card (`bg-white` → added
+  `dark:bg-gray-900`) to satisfy the dark-mode drift guard.
+- **PublicNav — reconciled, not overwritten** (branch was cut before Task #8/#9,
+  which had already rewritten this file). Applied PR #128's intent: dropped the
+  `/#platform` jargon anchor for **Who it's for** (`/#lanes`), added **Jobs**
+  (Task #68's public board), relabeled the primary CTA **Get Started → Join Axal**
+  (both desktop and mobile). **Preserved Task #9's Circles** link (the branch
+  predated it) so the audited nav is now Who it's for · Spin-Out Lab · Directory ·
+  Events · Circles · Jobs — every item a real public destination.
+- **PublicFooter — preserved Task #8/#9, took only the non-regressing net-new.**
+  PR #128's targeted footer bug (the dead `/#network` anchor in the Network column)
+  was **already fixed by Task #9**, and its other footer changes would have
+  regressed Task #8's audience-page Products column + Resources column and Task #9's
+  Communities & Circles link. So the richer #8/#9 footer is kept as-is; the only
+  change taken from PR #128 is adding a **Jobs** link to the Network column.
+- **No new wiring** — PR #128 adds no new routes (it only re-points existing
+  `<Link>`/`href` targets), so no `wrangler.toml` apex routes, no `isPublicPath`
+  allowlist entry, and no new `/api/*` calls (`api-drift` guard clean). The one
+  fetch (`/api/dashboard/stats`) is unchanged.
+- **Verification** — `npm run test:drift` (dark-mode + api-drift + sql-unsafe +
+  worker `tsc --noEmit` + full worker test suite) and `npm run test:retention`
+  green; all lucide icons + the `useForcedLightTheme` hook resolve in current main;
+  homepage renders in the dev preview.
+
 ## Public Network layer — Communities & Circles (Task #9, PR #127)
 
 Frontend-only public "Network" layer that ties the existing public surfaces
