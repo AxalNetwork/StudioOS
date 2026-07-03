@@ -301,6 +301,108 @@ export async function updatePersonalProfile(
   return after;
 }
 
+// --- Background block (Task #66) --------------------------------------------
+// Structured, public-facing career background: experience / education /
+// certifications (JSON arrays) plus a website URL. These render on the public
+// person profile. Stored on `users` as JSON text; never affects the
+// profile-completion ring (that is corporate/identity/KYC-oriented).
+
+export interface ProfileBackground {
+  experience: Array<Record<string, unknown>>;
+  education: Array<Record<string, unknown>>;
+  certifications: Array<Record<string, unknown>>;
+  website: string | null;
+}
+
+function parseJsonArray(raw: unknown): Array<Record<string, unknown>> {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw as Array<Record<string, unknown>>;
+  try {
+    const parsed = JSON.parse(String(raw));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+// Whitelist + clamp each entry so a hostile client can't stuff arbitrary
+// blobs into a public surface. Unknown keys are dropped; strings are trimmed.
+function sanitizeEntries(
+  arr: unknown,
+  keys: string[],
+  maxEntries = 30,
+  maxLen = 500,
+): Array<Record<string, unknown>> {
+  const src = Array.isArray(arr) ? arr : [];
+  const out: Array<Record<string, unknown>> = [];
+  for (const item of src.slice(0, maxEntries)) {
+    if (!item || typeof item !== 'object') continue;
+    const rec: Record<string, unknown> = {};
+    for (const k of keys) {
+      const v = (item as Record<string, unknown>)[k];
+      if (v == null) continue;
+      const s = String(v).trim();
+      if (s) rec[k] = s.slice(0, maxLen);
+    }
+    if (Object.keys(rec).length) out.push(rec);
+  }
+  return out;
+}
+
+// Accept both the worker-native (`org`/`summary`) and the shared-frontend /
+// FastAPI (`company`/`description`) key spellings so no field is silently
+// dropped on prod. The public renderer reads either spelling.
+const EXPERIENCE_KEYS = ['title', 'org', 'company', 'location', 'start', 'end', 'summary', 'description'];
+const EDUCATION_KEYS = ['school', 'degree', 'field', 'start', 'end'];
+const CERTIFICATION_KEYS = ['name', 'issuer', 'year', 'url'];
+
+export async function getProfileBackground(env: Env, userId: number): Promise<ProfileBackground> {
+  const row = await env.DB.prepare(
+    `SELECT experience, education, certifications, website FROM users WHERE id = ?`,
+  ).bind(userId).first<any>();
+  return {
+    experience: parseJsonArray(row?.experience),
+    education: parseJsonArray(row?.education),
+    certifications: parseJsonArray(row?.certifications),
+    website: row?.website || null,
+  };
+}
+
+export interface ProfileBackgroundPatch {
+  experience?: unknown;
+  education?: unknown;
+  certifications?: unknown;
+  website?: string | null;
+}
+
+export async function updateProfileBackground(
+  env: Env,
+  userId: number,
+  patch: ProfileBackgroundPatch,
+): Promise<ProfileBackground> {
+  const updates: Array<[string, unknown]> = [];
+  if ('experience' in patch) {
+    updates.push(['experience', JSON.stringify(sanitizeEntries(patch.experience, EXPERIENCE_KEYS))]);
+  }
+  if ('education' in patch) {
+    updates.push(['education', JSON.stringify(sanitizeEntries(patch.education, EDUCATION_KEYS))]);
+  }
+  if ('certifications' in patch) {
+    updates.push(['certifications', JSON.stringify(sanitizeEntries(patch.certifications, CERTIFICATION_KEYS))]);
+  }
+  if ('website' in patch) {
+    const w = patch.website == null ? null : String(patch.website).trim().slice(0, 300);
+    if (w && !/^https?:\/\//i.test(w)) {
+      throw new ProfileValidationError('website must start with http:// or https://', 'website');
+    }
+    updates.push(['website', w || null]);
+  }
+  if (updates.length) {
+    const setSql = updates.map(([col]) => `${col} = ?`).join(', ');
+    const params = updates.map(([, v]) => v);
+    await env.DB.prepare(`UPDATE users SET ${setSql} WHERE id = ?`).bind(...params, userId).run();
+  }
+  return getProfileBackground(env, userId);
+}
+
 // --- Corporate block --------------------------------------------------------
 
 export interface UboEntry {
@@ -696,6 +798,11 @@ export async function ensureProfileExpansionSchema(env: Env): Promise<void> {
     ['postal_code', 'TEXT'],
     ['country', 'TEXT'],
     ['profile_completion_pct', 'INTEGER DEFAULT 0'],
+    // Task #66 — structured public background fields (JSON arrays) + website.
+    ['experience', 'TEXT'],
+    ['education', 'TEXT'],
+    ['certifications', 'TEXT'],
+    ['website', 'TEXT'],
   ];
   for (const [c, t] of cols) {
     try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN ${c} ${t}`).run(); } catch {}

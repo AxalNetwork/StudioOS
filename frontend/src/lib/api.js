@@ -844,6 +844,16 @@ export const api = {
     }),
   // Task #55 — public profile page (/u/:handle), unauthenticated.
   publicGetUserByHandle: (handle) => request(`/public/u/${encodeURIComponent(handle)}`),
+  // Task #66 — public, shareable startup profile (/startups/:handle → project uid).
+  publicGetStartup: (handle) => request(`/public/startup/${encodeURIComponent(handle)}`),
+  // Task #66 — follow graph (people + startups). entityType is 'user' | 'project'.
+  follow: (entityType, entityId) =>
+    request('/follows', { method: 'POST', body: JSON.stringify({ entity_type: entityType, entity_id: entityId }) }),
+  unfollow: (entityType, entityId) =>
+    request('/follows', { method: 'DELETE', body: JSON.stringify({ entity_type: entityType, entity_id: entityId }) }),
+  followStatus: (entityType, entityId) =>
+    request(`/follows/status?entity_type=${encodeURIComponent(entityType)}&entity_id=${encodeURIComponent(entityId)}`),
+  followsMine: () => request('/follows/mine'),
   setPartnerFeatured: (partnerId, body) => request(`/marketplace/providers/${partnerId}/featured`, {
     method: 'POST', body: JSON.stringify(body),
   }),
@@ -1718,6 +1728,10 @@ export const api = {
   // ---------- Settings (Epic 3) ----------
   getSettings: () => request('/settings'),
   updateSettings: (data) => request('/settings', { method: 'PATCH', body: JSON.stringify(data) }),
+  // Task #66 — structured career background (experience / education / certifications / website).
+  getProfileBackground: () => request('/settings/profile/background'),
+  updateProfileBackground: (data) =>
+    request('/settings/profile/background', { method: 'PUT', body: JSON.stringify(data) }),
   uploadHeadshot: (data_uri) => request('/settings/headshot', { method: 'POST', body: JSON.stringify({ data_uri }) }),
   requestEmailChange: (new_email) => request('/settings/email-change/request', { method: 'POST', body: JSON.stringify({ new_email }) }),
   confirmEmailChange: (token) => request('/settings/email-change/confirm', { method: 'POST', body: JSON.stringify({ token }) }),

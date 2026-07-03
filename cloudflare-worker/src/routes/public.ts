@@ -12,6 +12,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { ensureProfileExpansionSchema } from '../services/profileExpansion';
+import { ensureFollowsSchema } from './follows';
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -74,38 +76,237 @@ async function ensureMarketingSchema(env: Env): Promise<void> {
   }
 }
 
-type PublicUserRow = {
-  uid: string;
-  name: string | null;
-  role: string;
-  display_name: string | null;
-  headline: string | null;
+function safeJsonParse<T>(raw: unknown, fallback: T): T {
+  if (!raw) return fallback;
+  if (typeof raw === 'object') return raw as T;
+  try { return JSON.parse(String(raw)) as T; } catch { return fallback; }
+}
+
+// Per-role default visibility. Mirrors backend/app/api/routes/public_profiles.py
+// so the same profile renders identically on prod (Worker) and dev (FastAPI).
+const _PROFILE_DEFAULTS: Record<string, Record<string, boolean>> = {
+  founder: { name: true, bio: true, headshot: true, socials: false, projects: true, traction: true, background: true },
+  investor: { name: true, bio: true, headshot: true, socials: false, thesis: true, portfolio_summary: false, background: true },
+  partner: { name: true, bio: true, headshot: true, socials: false, services: true, background: true },
+  admin: { name: true, bio: true, headshot: true, socials: false, background: true },
 };
 
+function effectiveFlags(privacyPrefs: any, role: string): Record<string, boolean> {
+  const base = { ...(_PROFILE_DEFAULTS[role] || _PROFILE_DEFAULTS.admin) };
+  const pp = (safeJsonParse<any>(privacyPrefs, {}) || {}).public_profile || {};
+  if (pp && typeof pp === 'object') {
+    for (const [k, v] of Object.entries(pp)) base[k] = !!v;
+  }
+  return base;
+}
+
+async function followerCountFor(env: Env, type: 'user' | 'project', id: number): Promise<number> {
+  try {
+    await ensureFollowsSchema(env);
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS c FROM follows WHERE entity_type = ? AND entity_id = ?`,
+    ).bind(type, id).first<{ c: number }>();
+    return Number(row?.c || 0);
+  } catch { return 0; }
+}
+
+// Rich public person profile — Task #66. Role-tailored + privacy-gated.
 publicRoutes.get('/u/:handle', async (c) => {
   const handle = String(c.req.param('handle') || '').trim().toLowerCase();
   if (!handle) return c.json({ detail: 'handle required' }, 400);
-  let row: PublicUserRow | null = null;
+  await ensureProfileExpansionSchema(c.env);
+
+  // Broad select with a minimal fallback for older/dev DBs missing the
+  // lazily-added identity columns (bio/socials/headshot_r2_key/privacy_prefs).
+  let row: any = null;
   try {
     row = await c.env.DB.prepare(
-      `SELECT uid, name, role, display_name, headline
-         FROM users
-        WHERE lower(uid) = ? AND is_active = 1`,
-    ).bind(handle).first<PublicUserRow>();
+      `SELECT id, uid, name, role, display_name, headline, bio, socials,
+              headshot_r2_key, privacy_prefs, experience, education, certifications,
+              website, founder_id, investor_id, partner_id, created_at
+         FROM users WHERE lower(uid) = ? AND is_active = 1`,
+    ).bind(handle).first<any>();
   } catch {
-    // display_name / headline columns may be missing on dev DBs.
-    const fallback = await c.env.DB.prepare(
-      `SELECT uid, name, role FROM users WHERE lower(uid) = ? AND is_active = 1`,
-    ).bind(handle).first<{ uid: string; name: string | null; role: string }>();
-    row = fallback ? { ...fallback, display_name: null, headline: null } : null;
+    row = await c.env.DB.prepare(
+      `SELECT id, uid, name, role, founder_id, investor_id, partner_id, created_at
+         FROM users WHERE lower(uid) = ? AND is_active = 1`,
+    ).bind(handle).first<any>();
   }
   if (!row) return c.json({ detail: 'Not found' }, 404);
-  return c.json({
+
+  const role = String(row.role || '').toLowerCase();
+  const flags = effectiveFlags(row.privacy_prefs, role);
+  const socials = safeJsonParse<Record<string, string>>(row.socials, {}) || {};
+
+  const payload: Record<string, unknown> = {
+    id: row.id,
     uid: row.uid,
     handle: row.uid,
-    display_name: row.display_name || row.name || null,
+    role,
+    joined_at: row.created_at || null,
+    name: flags.name ? (row.display_name || row.name || null) : null,
+    display_name: flags.name ? (row.display_name || row.name || null) : null,
     headline: row.headline || null,
-    role: row.role,
+    bio: flags.bio ? (row.bio || null) : null,
+    headshot_url: flags.headshot && row.headshot_r2_key ? `/api/settings/headshot/${row.uid}` : null,
+    socials: flags.socials
+      ? Object.fromEntries(Object.entries(socials).filter(([, v]) => typeof v === 'string' && v))
+      : {},
+    website: flags.background ? (row.website || socials.website || null) : null,
+    followers: await followerCountFor(c.env, 'user', row.id),
+    visible_fields: flags,
+  };
+
+  // Structured career background (public, LinkedIn-style).
+  if (flags.background) {
+    payload.experience = safeJsonParse(row.experience, []);
+    payload.education = safeJsonParse(row.education, []);
+    payload.certifications = safeJsonParse(row.certifications, []);
+  }
+
+  // Founder → cross-linkable startups.
+  if (role === 'founder' && row.founder_id && (flags.projects || flags.traction)) {
+    const pr = await c.env.DB.prepare(
+      `SELECT uid, name, sector, stage, status FROM projects
+         WHERE founder_id = ? AND deleted_at IS NULL`,
+    ).bind(row.founder_id).all<any>();
+    const projects = (pr.results || []).filter(
+      (p: any) => !['archived', 'rejected', 'intake'].includes(String(p.status || '').toLowerCase()),
+    );
+    if (flags.projects) {
+      payload.projects = projects.slice(0, 12).map((p: any) => ({
+        handle: p.uid, name: p.name, sector: p.sector, stage: p.stage,
+      }));
+    }
+    if (flags.traction) {
+      payload.traction = { active_projects: projects.length };
+    }
+  }
+
+  // Investor → thesis.
+  if (role === 'investor' && row.investor_id && flags.thesis) {
+    const inv = await c.env.DB.prepare(
+      `SELECT investor_type, sector_focus, stage_focus, check_size_min, check_size_max, accreditation_status
+         FROM investors WHERE id = ?`,
+    ).bind(row.investor_id).first<any>();
+    if (inv) {
+      payload.thesis = {
+        investor_type: inv.investor_type,
+        sector_focus: inv.sector_focus || null,
+        stage_focus: inv.stage_focus || null,
+        check_size_min: inv.check_size_min,
+        check_size_max: inv.check_size_max,
+        accredited: (inv.accreditation_status || '') === 'verified',
+      };
+    }
+  }
+
+  // Partner → services summary.
+  if (role === 'partner' && row.partner_id && flags.services) {
+    const p = await c.env.DB.prepare(
+      `SELECT specialization, company FROM partners WHERE id = ?`,
+    ).bind(row.partner_id).first<any>();
+    if (p) {
+      payload.services = {
+        specialization: p.specialization || null,
+        company: p.company || null,
+      };
+    }
+  }
+
+  return c.json(payload);
+});
+
+// Task #66 — Public, shareable startup profile. Handle is the project uid.
+// Returns only fields safe for anonymous sharing (no data-room links, no
+// financial internals beyond headline traction), founder cards for
+// cross-linking, recent SUBMITTED updates, and the published landing URL.
+// Projects that are archived/rejected/intake or soft-deleted are not
+// addressable in public (mirrors the founder-block visibility rule).
+publicRoutes.get('/startup/:handle', async (c) => {
+  const handle = String(c.req.param('handle') || '').trim().toLowerCase();
+  if (!handle) return c.json({ detail: 'handle required' }, 400);
+
+  const proj = await c.env.DB.prepare(
+    `SELECT id, uid, name, sector, stage, status, description, problem_statement,
+            solution, why_now, users_count, revenue, funding_needed, founded_year,
+            hq, website, founder_id, created_at
+       FROM projects WHERE lower(uid) = ? AND deleted_at IS NULL`,
+  ).bind(handle).first<any>();
+  if (!proj) return c.json({ detail: 'Not found' }, 404);
+  const status = String(proj.status || '').toLowerCase();
+  if (['archived', 'rejected', 'intake'].includes(status)) {
+    return c.json({ detail: 'Not found' }, 404);
+  }
+
+  // Founder card(s) — the primary founder user, safe fields only.
+  const founders: any[] = [];
+  if (proj.founder_id) {
+    try {
+      const fr = await c.env.DB.prepare(
+        `SELECT uid, name, display_name, headline, role, headshot_r2_key
+           FROM users WHERE founder_id = ? AND is_active = 1`,
+      ).bind(proj.founder_id).all<any>();
+      for (const u of fr.results || []) {
+        founders.push({
+          handle: u.uid,
+          name: u.display_name || u.name || null,
+          headline: u.headline || null,
+          role: u.role,
+          headshot_url: u.headshot_r2_key ? `/api/settings/headshot/${u.uid}` : null,
+        });
+      }
+    } catch { /* founder card is best-effort */ }
+  }
+
+  // Recent submitted updates (news feed).
+  let updates: any[] = [];
+  try {
+    const ur = await c.env.DB.prepare(
+      `SELECT uid, period, title, submitted_at FROM portfolio_updates
+         WHERE project_id = ? AND status = 'submitted'
+         ORDER BY COALESCE(submitted_at, updated_at) DESC LIMIT 6`,
+    ).bind(proj.id).all<any>();
+    updates = (ur.results || []).map((u: any) => ({
+      uid: u.uid, period: u.period, title: u.title, submitted_at: u.submitted_at,
+    }));
+  } catch { /* portfolio_updates may not exist on some dev DBs */ }
+
+  // Site/Website button target: an explicit startup website URL wins; when
+  // absent, fall back to a published Brand & Landing page (Brand Builder output).
+  let website: string | null = proj.website ? String(proj.website).trim() || null : null;
+  if (!website) {
+    try {
+      const lp = await c.env.DB.prepare(
+        `SELECT slug, published FROM landing_pages WHERE project_id = ?`,
+      ).bind(proj.id).first<any>();
+      if (lp && lp.published) website = `https://axal.vc/landing/${lp.slug}`;
+    } catch { /* landing_pages may not exist */ }
+  }
+
+  return c.json({
+    id: proj.id,
+    handle: proj.uid,
+    name: proj.name,
+    sector: proj.sector || null,
+    stage: proj.stage || null,
+    status,
+    description: proj.description || null,
+    problem_statement: proj.problem_statement || null,
+    solution: proj.solution || null,
+    why_now: proj.why_now || null,
+    founded_year: proj.founded_year || null,
+    hq: proj.hq || null,
+    traction: {
+      users: proj.users_count || null,
+      revenue: proj.revenue || null,
+      funding_needed: proj.funding_needed || null,
+    },
+    founders,
+    updates,
+    website,
+    followers: await followerCountFor(c.env, 'project', proj.id),
+    joined_at: proj.created_at || null,
   });
 });
 

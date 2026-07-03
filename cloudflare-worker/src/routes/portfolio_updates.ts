@@ -12,8 +12,40 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, canAccessFounderResource } from '../auth';
 import { isAdmin, isInvestor, isPartner, isFounder, mapError, nowIso, newUid, jload } from './_t13t14t15_helpers';
+import { notify } from '../services/notify';
+import { ensureFollowsSchema } from './follows';
 
 const r = new Hono<{ Bindings: Env }>();
+
+// Task #66 — when a portfolio update goes live, notify everyone following
+// the startup. Best-effort: never blocks or fails the submit. Excludes the
+// author so founders don't get pinged about their own update.
+async function notifyProjectFollowers(env: Env, projectId: number, update: UpdateRow): Promise<void> {
+  try {
+    await ensureFollowsSchema(env);
+    const proj = await env.DB.prepare(
+      'SELECT uid, name FROM projects WHERE id = ? AND deleted_at IS NULL',
+    ).bind(projectId).first<{ uid: string; name: string }>();
+    if (!proj) return;
+    const followers = await env.DB.prepare(
+      "SELECT follower_user_id AS uid FROM follows WHERE entity_type = 'project' AND entity_id = ?",
+    ).bind(projectId).all<{ uid: number }>();
+    for (const f of followers.results || []) {
+      if (f.uid === update.author_user_id) continue;
+      await notify(env, {
+        userId: f.uid,
+        type: 'followed_entity_news',
+        title: `${proj.name} posted an update`,
+        body: update.title || null,
+        link: `/startups/${proj.uid}`,
+        payload: { entity_type: 'project', handle: proj.uid, update_uid: update.uid },
+        category: 'proactive_nudges',
+      });
+    }
+  } catch (e) {
+    console.warn('[portfolio_updates] follower fan-out failed', e);
+  }
+}
 
 type UpdateRow = {
   id: number; uid: string; project_id: number; author_user_id: number;
@@ -99,6 +131,9 @@ r.post('/', async (c) => {
       nowIso(), nowIso(),
     ).run();
     const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE id = ?').bind((ins as any).meta?.last_row_id).first<UpdateRow>();
+    if (submit && u) {
+      c.executionCtx.waitUntil(notifyProjectFollowers(c.env, projectId, u));
+    }
     return c.json(await dto(c.env, u!), 201);
   } catch (e) { return mapError(c, e); }
 });
@@ -157,9 +192,13 @@ r.post('/:uid/submit', async (c) => {
     const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid')).first<UpdateRow>();
     if (!u) return c.json({ detail: 'Not found' }, 404);
     if (u.author_user_id !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const wasSubmitted = u.status === 'submitted';
     await c.env.DB.prepare("UPDATE portfolio_updates SET status='submitted', submitted_at=?, updated_at=? WHERE id=?")
       .bind(nowIso(), nowIso(), u.id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE id = ?').bind(u.id).first<UpdateRow>();
+    if (!wasSubmitted && fresh) {
+      c.executionCtx.waitUntil(notifyProjectFollowers(c.env, fresh.project_id, fresh));
+    }
     return c.json(await dto(c.env, fresh!));
   } catch (e) { return mapError(c, e); }
 });

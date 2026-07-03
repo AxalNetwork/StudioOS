@@ -237,6 +237,9 @@ class Project(SQLModel, table=True):
     product_demo_live_url: Optional[str] = None
     product_demo_caption: Optional[str] = None
     product_demo_screenshot_url: Optional[str] = None
+    # Task #66 — startup website URL. The public startup profile's Site button
+    # prefers this over a published Brand & Landing page fallback.
+    website: Optional[str] = None
     # Growth & Expansion Track — Task 2: 'spin_out' (default) | 'growth_sprint'
     track_type: str = Field(default="spin_out", index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)

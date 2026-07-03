@@ -122,6 +122,8 @@ class ProjectUpdate(BaseModel):
     product_demo_live_url: Optional[str] = None
     product_demo_caption: Optional[str] = None
     product_demo_screenshot_url: Optional[str] = None
+    # Task #66 — startup website URL.
+    website: Optional[str] = None
 
 
 class FounderCreate(BaseModel):

@@ -13,8 +13,46 @@ import { clampLimit, parseOffset } from '../util/pagination';
 import { ensureNewsSchema } from '../services/newsSchema';
 import { bustArticleEdgeCache, renderMarkdown, snapshotRevision } from '../services/newsRender';
 import { notifyArticle } from '../services/articleNotify';
+import { notify } from '../services/notify';
+import { ensureFollowsSchema } from './follows';
 
 const adminArticles = new Hono<{ Bindings: Env }>();
+
+// Task #66 — when an article is published, notify everyone following its
+// author (entity_type='user'). Best-effort: never blocks or fails publish.
+// Excludes the author so they aren't pinged about their own piece. Mirrors
+// notifyProjectFollowers in routes/portfolio_updates.ts.
+async function notifyAuthorFollowers(
+  env: Env,
+  authorUserId: number | null | undefined,
+  article: { id: number; slug: string; title: string },
+): Promise<void> {
+  if (!authorUserId) return;
+  try {
+    await ensureFollowsSchema(env);
+    const author = await env.DB.prepare(
+      'SELECT uid, name FROM users WHERE id = ?',
+    ).bind(authorUserId).first<{ uid: string; name: string }>();
+    if (!author) return;
+    const followers = await env.DB.prepare(
+      "SELECT follower_user_id AS uid FROM follows WHERE entity_type = 'user' AND entity_id = ?",
+    ).bind(authorUserId).all<{ uid: number }>();
+    for (const f of followers.results || []) {
+      if (f.uid === authorUserId) continue;
+      await notify(env, {
+        userId: f.uid,
+        type: 'followed_entity_news',
+        title: `${author.name || 'Someone you follow'} published an article`,
+        body: article.title || null,
+        link: `/articles/${article.slug}`,
+        payload: { entity_type: 'user', handle: author.uid, article_id: article.id },
+        category: 'proactive_nudges',
+      });
+    }
+  } catch (e) {
+    console.warn('[admin_articles] author follower fan-out failed', e);
+  }
+}
 
 async function loadArticle(env: Env, id: number) {
   return env.DB.prepare(
@@ -179,6 +217,10 @@ adminArticles.post('/:id/publish', async (c) => {
   await bustArticleEdgeCache(c.env, row.slug, id, row.author_user_id);
   await notifyArticle(c.env, 'author_published', {
     articleId: id, slug: row.slug, title: row.title, authorUserId: row.author_user_id,
+  });
+  // Task #66 — fan out to followers of the author (best-effort, non-blocking).
+  await notifyAuthorFollowers(c.env, row.author_user_id, {
+    id, slug: row.slug, title: row.title,
   });
   const updated = await loadArticle(c.env, id);
   return c.json({ article: updated });

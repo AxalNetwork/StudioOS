@@ -167,6 +167,7 @@ import introductionsRoutes from './routes/introductions';
 import investorSeatsRoutes, { downgradeExpiredInvestorTrials } from './routes/investor_seats';
 import { requireInvestorTier } from './middleware/requireInvestorTier';
 import watchlistRoutes from './routes/watchlist';
+import followsRoutes from './routes/follows';
 import journalRoutes from './routes/journal';
 import portfolioRoutes from './routes/portfolio';
 import referencesRoutes from './routes/references';
@@ -797,6 +798,8 @@ app.route('/api/investor-seats', investorSeatsRoutes);
 // Reference Checks. watchlistRoutes mounts both /watchlist and /antiportfolio so
 // it sits at the /api root.
 app.route('/api', watchlistRoutes);
+// Task #66 — follow graph for people + startups (open to any signed-in user).
+app.route('/api/follows', followsRoutes);
 app.route('/api/journal', journalRoutes);
 app.route('/api/portfolio', portfolioRoutes);
 // Task #1 (AG) — public profile facade (no auth) sits between /api/portfolio

@@ -98,6 +98,7 @@ const NOTIFICATION_EVENTS = [
   { key: 'mentor_session_booked', label: 'Mentor session booked' },
   { key: 'dd_report_ready', label: 'Due-diligence report ready' },
   { key: 'vote_threshold_reached', label: 'Pipeline vote threshold reached' },
+  { key: 'followed_entity_news', label: 'News from people & startups I follow' },
   { key: 'weekly_digest', label: 'Weekly digest' },
   { key: 'product_announcements', label: 'Product announcements' },
 ];
@@ -514,6 +515,7 @@ function ProfileTabs({ data, onSaved, flash, patch }) {
         <>
           <PersonalIdentityCard flash={flash} onPctChange={setPct} pct={pct} />
           <ProfileSection data={data} onSaved={onSaved} flash={flash} patch={patch} />
+          <ProfileBackgroundSection flash={flash} />
           <ProfileExtrasCard flash={flash} />
           <JurisdictionsSection data={data} patch={patch} />
           <RolePreferencesSection data={data} patch={patch} />
@@ -958,6 +960,136 @@ function ProfileSection({ data, onSaved, flash, patch }) {
         </div>
       </Card>
     </>
+  );
+}
+
+// Task #66 — structured career background editor (experience / education /
+// certifications + website). Persists via /settings/profile/background; the
+// same shape is surfaced (opt-in) on the public profile page.
+const BG_KINDS = [
+  { key: 'experience', label: 'Experience', fields: [
+    { k: 'title', label: 'Title' }, { k: 'company', label: 'Company' },
+    { k: 'start', label: 'Start' }, { k: 'end', label: 'End' },
+    { k: 'description', label: 'Description', textarea: true },
+  ] },
+  { key: 'education', label: 'Education', fields: [
+    { k: 'school', label: 'School' }, { k: 'degree', label: 'Degree' },
+    { k: 'field', label: 'Field of study' },
+    { k: 'start', label: 'Start' }, { k: 'end', label: 'End' },
+  ] },
+  { key: 'certifications', label: 'Certifications', fields: [
+    { k: 'name', label: 'Name' }, { k: 'issuer', label: 'Issuer' },
+    { k: 'year', label: 'Year' },
+  ] },
+];
+
+function ProfileBackgroundSection({ flash }) {
+  const [bg, setBg] = useState(null);
+  const [website, setWebsite] = useState('');
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getProfileBackground()
+      .then(r => {
+        if (cancelled) return;
+        setBg({
+          experience: Array.isArray(r.experience) ? r.experience : [],
+          education: Array.isArray(r.education) ? r.education : [],
+          certifications: Array.isArray(r.certifications) ? r.certifications : [],
+        });
+        setWebsite(r.website || '');
+      })
+      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load background'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const save = async (next, nextWebsite) => {
+    setBusy(true);
+    try {
+      const payload = {
+        experience: next.experience,
+        education: next.education,
+        certifications: next.certifications,
+        website: (nextWebsite ?? website).trim() || null,
+      };
+      const r = await api.updateProfileBackground(payload);
+      setBg({
+        experience: Array.isArray(r.experience) ? r.experience : [],
+        education: Array.isArray(r.education) ? r.education : [],
+        certifications: Array.isArray(r.certifications) ? r.certifications : [],
+      });
+      setWebsite(r.website || '');
+      flash('Saved');
+    } catch (e) {
+      flash(e.message || 'Failed to save', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addEntry = (kind) => {
+    const next = { ...bg, [kind]: [...(bg[kind] || []), {}] };
+    setBg(next);
+  };
+  const removeEntry = (kind, idx) => {
+    const next = { ...bg, [kind]: bg[kind].filter((_, i) => i !== idx) };
+    setBg(next);
+    save(next);
+  };
+  const setField = (kind, idx, field, value) => {
+    const rows = bg[kind].map((row, i) => i === idx ? { ...row, [field]: value } : row);
+    setBg({ ...bg, [kind]: rows });
+  };
+
+  if (err) return <Card title="Background"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (!bg) return <Card title="Background"><div className="text-sm text-gray-500">Loading…</div></Card>;
+
+  return (
+    <Card title="Background"
+      description="Experience, education and certifications. Shown on your public profile when you enable it in Privacy.">
+      <Field label="Website" hint="Must start with http:// or https://">
+        <input value={website} onChange={e => setWebsite(e.target.value)}
+          onBlur={() => save(bg)} placeholder="https://…" className={inputCls} disabled={busy} />
+      </Field>
+      {BG_KINDS.map(kind => (
+        <div key={kind.key} className="mt-5">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-medium text-gray-800 dark:text-gray-200">{kind.label}</h4>
+            <button type="button" onClick={() => addEntry(kind.key)} disabled={busy}
+              className="text-xs text-violet-700 hover:text-violet-800 disabled:opacity-50">+ Add</button>
+          </div>
+          <div className="space-y-3">
+            {(bg[kind.key] || []).length === 0 && (
+              <p className="text-xs text-gray-400">None added.</p>
+            )}
+            {(bg[kind.key] || []).map((row, idx) => (
+              <div key={idx} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {kind.fields.map(f => (
+                    <div key={f.k} className={f.textarea ? 'sm:col-span-2' : ''}>
+                      <label className="text-[11px] text-gray-500">{f.label}</label>
+                      {f.textarea ? (
+                        <textarea value={row[f.k] || ''} rows={2}
+                          onChange={e => setField(kind.key, idx, f.k, e.target.value)}
+                          onBlur={() => save(bg)} className={inputCls} disabled={busy} />
+                      ) : (
+                        <input value={row[f.k] || ''}
+                          onChange={e => setField(kind.key, idx, f.k, e.target.value)}
+                          onBlur={() => save(bg)} className={inputCls} disabled={busy} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button type="button" onClick={() => removeEntry(kind.key, idx)} disabled={busy}
+                  className="text-xs text-red-600 hover:text-red-700 disabled:opacity-50">Remove</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </Card>
   );
 }
 
@@ -1938,6 +2070,7 @@ const PUBLIC_PROFILE_FIELDS_COMMON = [
   { key: 'bio', label: 'Bio' },
   { key: 'headshot', label: 'Headshot' },
   { key: 'socials', label: 'Social links' },
+  { key: 'background', label: 'Background (experience, education, certifications)' },
 ];
 const PUBLIC_PROFILE_FIELDS_BY_ROLE = {
   founder: [

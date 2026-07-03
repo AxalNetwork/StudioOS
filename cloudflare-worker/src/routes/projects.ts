@@ -76,6 +76,7 @@ export async function ensureProjectProductDemoColumns(env: Env): Promise<void> {
     `ALTER TABLE projects ADD COLUMN product_demo_live_url TEXT`,
     `ALTER TABLE projects ADD COLUMN product_demo_caption TEXT`,
     `ALTER TABLE projects ADD COLUMN product_demo_screenshot_url TEXT`,
+    `ALTER TABLE projects ADD COLUMN website TEXT`,
   ]) {
     try { await env.DB.exec(ddl); } catch (_e) { /* duplicate column on re-run is fine */ }
   }
@@ -546,11 +547,20 @@ projects.put('/:id', async (c) => {
       data[k] = s || null;
     }
   }
-  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url'];
+  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
   // Normalise: coerce boolean → 0/1 for the NDA flag, trim URL, allow
   // explicit null to clear either field.
   if (data.data_room_nda_required !== undefined) {
     data.data_room_nda_required = data.data_room_nda_required ? 1 : 0;
+  }
+  // Task #66 — startup website URL: trim, allow null to clear, require
+  // an http(s) scheme when present (mirrors the personal-website guard).
+  if (data.website !== undefined && data.website !== null) {
+    const w = String(data.website || '').trim();
+    if (w && !/^https?:\/\//i.test(w)) {
+      return c.json({ error: 'invalid_website', detail: 'website must start with http:// or https://' }, 400);
+    }
+    data.website = w || null;
   }
   if (data.data_room_url !== undefined && data.data_room_url !== null) {
     const u = String(data.data_room_url || '').trim();

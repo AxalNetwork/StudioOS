@@ -59,18 +59,19 @@ logger = logging.getLogger("studioos.public_profiles")
 _DEFAULTS: dict[str, dict[str, bool]] = {
     "founder": {
         "name": True, "bio": True, "headshot": True, "socials": False,
-        "projects": True, "traction": True,
+        "projects": True, "traction": True, "background": True,
     },
     "investor": {
         "name": True, "bio": True, "headshot": True, "socials": False,
-        "thesis": True, "portfolio_summary": False,
+        "thesis": True, "portfolio_summary": False, "background": True,
     },
     "partner": {
         "name": True, "bio": True, "headshot": True, "socials": False,
-        "services": True, "reviews": True, "pricing": False,
+        "services": True, "reviews": True, "pricing": False, "background": True,
     },
     "admin": {  # admins get the founder-style default if they ever expose
         "name": True, "bio": True, "headshot": True, "socials": False,
+        "background": True,
     },
 }
 
@@ -111,7 +112,7 @@ def _load_extras(session: Session, user_id: int) -> dict[str, Any]:
     try:
         row = session.exec(text(
             "SELECT bio, headshot_local_path, socials, privacy_prefs, "
-            "       deletion_requested_at "
+            "       deletion_requested_at, experience, education, certifications, website "
             "FROM users WHERE id = :uid"
         ).bindparams(uid=user_id)).first()
     except Exception as exc:  # noqa: BLE001
@@ -253,11 +254,29 @@ def get_public_profile(handle: str, session: Session = Depends(get_session)):
 
     socials = _safe_json(extras.get("socials"), {}) or {}
 
+    # Task #66 — follower count (public, best-effort).
+    followers = 0
+    try:
+        row = session.exec(text(
+            "SELECT COUNT(*) AS c FROM follows WHERE entity_type = 'user' AND entity_id = :uid"
+        ).bindparams(uid=user.id)).first()
+        followers = int((row._mapping["c"] if row else 0) or 0)  # type: ignore[attr-defined]
+    except Exception:
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        followers = 0
+
+    _name = (user.name if flags.get("name") else None)
     payload: dict[str, Any] = {
+        "id": user.id,
         "handle": user.handle,
         "role": role,
         "joined_at": str(user.created_at) if user.created_at else None,
-        "name": (user.name if flags.get("name") else None),
+        "name": _name,
+        # Frontend reads display_name || name — echo name for parity.
+        "display_name": _name,
         "bio": (extras.get("bio") if flags.get("bio") else None),
         "headshot_url": (
             f"/api/settings/headshot/{user.uid}"
@@ -268,10 +287,22 @@ def get_public_profile(handle: str, session: Session = Depends(get_session)):
             {k: v for k, v in socials.items() if isinstance(v, str) and v}
             if flags.get("socials") else {}
         ),
+        # Task #66 — public website (background-gated; falls back to socials.website).
+        "website": (
+            (extras.get("website") or socials.get("website") or None)
+            if flags.get("background") else None
+        ),
+        "followers": followers,
         # Echo the effective flag map so the owner-side editor can show
         # "this is what visitors see" without a second round-trip.
         "visible_fields": flags,
     }
+
+    # Task #66 — structured career background (public, LinkedIn-style).
+    if flags.get("background"):
+        payload["experience"] = _safe_json(extras.get("experience"), [])
+        payload["education"] = _safe_json(extras.get("education"), [])
+        payload["certifications"] = _safe_json(extras.get("certifications"), [])
 
     if role == "founder":
         block = _founder_block(session, user, flags, extras)
@@ -284,3 +315,139 @@ def get_public_profile(handle: str, session: Session = Depends(get_session)):
         payload.update(_partner_block(session, user, flags))
 
     return payload
+
+
+# Task #66 — Public, shareable startup profile. Handle is the project uid.
+# Mirrors cloudflare-worker/src/routes/public.ts GET /startup/:handle. Returns
+# only fields safe for anonymous sharing (no data-room links, no financial
+# internals beyond headline traction), founder cards for cross-linking, recent
+# SUBMITTED updates, and the published landing URL. Projects that are
+# archived/rejected/intake (or soft-deleted) are not addressable in public.
+@router.get("/startup/{handle}")
+def get_public_startup(handle: str, session: Session = Depends(get_session)):
+    h = (handle or "").strip().lower()
+    if not h or len(h) > 64:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    proj = session.exec(
+        select(Project).where(func.lower(Project.uid) == h)  # type: ignore[attr-defined]
+    ).first()
+    if not proj:
+        raise HTTPException(status_code=404, detail="Not found")
+    # Soft-delete guard (best-effort — the dev schema may not have the column).
+    if getattr(proj, "deleted_at", None):
+        raise HTTPException(status_code=404, detail="Not found")
+    status = (getattr(proj.status, "value", str(proj.status)) or "").lower()
+    if status in ("archived", "rejected", "intake"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    # Founder card(s) — the primary founder user(s), safe fields only.
+    founders: list[dict[str, Any]] = []
+    if proj.founder_id:
+        try:
+            f_users = session.exec(
+                select(User).where(
+                    User.founder_id == proj.founder_id,  # type: ignore[arg-type]
+                    User.is_active == True,  # noqa: E712
+                )
+            ).all()
+            for u in f_users:
+                ex = _load_extras(session, u.id)
+                founders.append({
+                    "handle": u.uid,
+                    "name": u.name or None,
+                    "headline": None,
+                    "role": _role(u),
+                    "headshot_url": (
+                        f"/api/settings/headshot/{u.uid}"
+                        if ex.get("headshot_local_path") else None
+                    ),
+                })
+        except Exception:  # noqa: BLE001
+            try:
+                session.rollback()
+            except Exception:
+                pass
+
+    # Recent submitted updates (news feed) — table is dev-managed / optional.
+    updates: list[dict[str, Any]] = []
+    try:
+        rows = session.exec(text(
+            "SELECT uid, period, title, submitted_at FROM portfolio_updates "
+            "WHERE project_id = :pid AND status = 'submitted' "
+            "ORDER BY COALESCE(submitted_at, updated_at) DESC LIMIT 6"
+        ).bindparams(pid=proj.id)).all()
+        updates = [
+            {
+                "uid": r._mapping["uid"],  # type: ignore[attr-defined]
+                "period": r._mapping["period"],  # type: ignore[attr-defined]
+                "title": r._mapping["title"],  # type: ignore[attr-defined]
+                "submitted_at": str(r._mapping["submitted_at"]) if r._mapping["submitted_at"] else None,  # type: ignore[attr-defined]
+            }
+            for r in rows
+        ]
+    except Exception:
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        updates = []
+
+    # Site/Website button target: an explicit startup website URL wins; when
+    # absent, fall back to a published Brand & Landing page (Brand Builder output).
+    website: str | None = None
+    _explicit = (getattr(proj, "website", None) or "").strip() or None
+    if _explicit:
+        website = _explicit
+    else:
+        try:
+            lp = session.exec(text(
+                "SELECT slug, published FROM landing_pages WHERE project_id = :pid"
+            ).bindparams(pid=proj.id)).first()
+            if lp and lp._mapping.get("published"):  # type: ignore[attr-defined]
+                website = f"https://axal.vc/landing/{lp._mapping['slug']}"  # type: ignore[attr-defined]
+        except Exception:
+            try:
+                session.rollback()
+            except Exception:
+                pass
+            website = None
+
+    # Follower count (public, best-effort).
+    followers = 0
+    try:
+        row = session.exec(text(
+            "SELECT COUNT(*) AS c FROM follows WHERE entity_type = 'project' AND entity_id = :pid"
+        ).bindparams(pid=proj.id)).first()
+        followers = int((row._mapping["c"] if row else 0) or 0)  # type: ignore[attr-defined]
+    except Exception:
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        followers = 0
+
+    return {
+        "id": proj.id,
+        "handle": proj.uid,
+        "name": proj.name,
+        "sector": proj.sector or None,
+        "stage": proj.stage or None,
+        "status": status,
+        "description": proj.description or None,
+        "problem_statement": proj.problem_statement or None,
+        "solution": proj.solution or None,
+        "why_now": proj.why_now or None,
+        "founded_year": getattr(proj, "founded_year", None) or None,
+        "hq": getattr(proj, "hq", None) or None,
+        "traction": {
+            "users": proj.users_count or None,
+            "revenue": proj.revenue or None,
+            "funding_needed": proj.funding_needed or None,
+        },
+        "founders": founders,
+        "updates": updates,
+        "website": website,
+        "followers": followers,
+        "joined_at": str(proj.created_at) if proj.created_at else None,
+    }
