@@ -634,6 +634,13 @@ def update_project(project_id: int, data: ProjectUpdate, session: Session = Depe
         if uof_error:
             raise HTTPException(status_code=400, detail={"error": uof_error, "code": "invalid_use_of_funds"})
         update_data["use_of_funds"] = uof_value
+    # Task #66 — startup website: trim, allow null to clear, require an
+    # http(s) scheme when present (mirrors the Worker validation).
+    if "website" in update_data and update_data["website"] is not None:
+        w = str(update_data["website"] or "").strip()
+        if w and not (w.startswith("http://") or w.startswith("https://")):
+            raise HTTPException(status_code=400, detail={"error": "invalid_website", "detail": "website must start with http:// or https://"})
+        update_data["website"] = w or None
     for key, val in update_data.items():
         setattr(project, key, val)
     project.updated_at = datetime.utcnow()

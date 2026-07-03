@@ -13,6 +13,18 @@ goes live. Anyone can browse published roles and apply with their details and a
 résumé — no account needed. If you do have an account, you can track the roles
 you've posted and the applications you've made from the **Jobs** menu.
 
+## Richer profiles, follows, and news from people & startups you care about
+
+Your profile can now tell your full story. Add your **experience, education, and
+certifications** — plus a personal website — from Settings, and choose whether to
+show them on your public profile. Every person and startup now has a shareable
+public page, and startups get their own page at a clean link you can send anyone.
+
+You can also **follow** the founders, investors, and startups you want to keep up
+with. Each profile shows its follower count, and when a startup you follow posts
+an update, we'll let you know. Prefer quiet? Turn "News from people & startups I
+follow" on or off anytime under Notifications.
+
 ---
 
 ## A partner menu built around how you actually work

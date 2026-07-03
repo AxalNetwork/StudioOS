@@ -468,6 +468,9 @@ from backend.app.api.routes import portfolio_health as _portfolio_health
 app.include_router(_portfolio_health.router, prefix="/api")
 from backend.app.api.routes import watchlist as _watchlist
 app.include_router(_watchlist.router, prefix="/api")
+# Task #66 — follow graph for people + startups (/api/follows).
+from backend.app.api.routes import follows as _follows
+app.include_router(_follows.router, prefix="/api")
 app.include_router(funds.router, prefix="/api")
 app.include_router(liquidity.router, prefix="/api")
 app.include_router(partnernet.router, prefix="/api")

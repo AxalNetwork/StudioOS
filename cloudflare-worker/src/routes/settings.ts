@@ -43,6 +43,8 @@ import {
   updateCorporateProfile,
   computeMissingRequiredFields,
   ProfileValidationError,
+  getProfileBackground,
+  updateProfileBackground,
 } from '../services/profileExpansion';
 import { hashEmail } from '../util/hashEmail';
 import { MATCHING_MIN_COMPLETION_PCT } from '../services/matchingConsent';
@@ -1193,6 +1195,32 @@ settings.put('/profile/identity', async (c) => {
     if (e instanceof SettingsValidationError) return handleSettingsError(c, e);
     return handleProfileError(c, e);
   }
+});
+
+// Task #66 — structured public career background (experience / education /
+// certifications) + website. Rendered on the public person profile.
+settings.get('/profile/background', async (c) => {
+  await ensureProfileExpansionSchema(c.env);
+  const user = await requireAuth(c);
+  try { return c.json(await getProfileBackground(c.env, user.id)); }
+  catch (e) { return handleProfileError(c, e); }
+});
+settings.put('/profile/background', async (c) => {
+  await ensureProfileExpansionSchema(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const patch: Record<string, unknown> = {};
+  for (const k of ['experience', 'education', 'certifications', 'website']) {
+    if (k in body) patch[k] = (body as any)[k];
+  }
+  try {
+    const updated = await updateProfileBackground(c.env, user.id, patch);
+    await recordProfileAudit(
+      c.env, user.id, user.email, 'profile_background_updated',
+      `Updated background fields: ${Object.keys(patch).join(', ') || '(none)'}`,
+    );
+    return c.json(updated);
+  } catch (e) { return handleProfileError(c, e); }
 });
 
 settings.get('/profile/details', async (c) => {

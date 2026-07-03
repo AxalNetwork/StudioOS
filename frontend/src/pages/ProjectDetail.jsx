@@ -159,6 +159,17 @@ export default function ProjectDetail() {
             >
               <PieChart size={12} /> Cap Table
             </Link>
+            {project.uid && (
+              <Link
+                to={`/startups/${project.uid}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-xs text-gray-700 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300"
+                title="Open this startup's public profile page"
+              >
+                <ExternalLink size={12} /> Public Page
+              </Link>
+            )}
             {canEdit && (
               <button
                 onClick={handleCbClick}
@@ -932,6 +943,7 @@ const EDITABLE_FIELDS = [
   { key: 'sector', label: 'Sector', sectorSelect: true },
   { key: 'problem_statement', label: 'Problem Statement', textarea: true },
   { key: 'solution', label: 'Solution', textarea: true },
+  { key: 'website', label: 'Website (https://…)' },
 ];
 
 // Task #2 — paid-pilot status enum surfaced on the Spin-Out Demo Day
@@ -1314,6 +1326,7 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
     sector: project.sector || '',
     problem_statement: project.problem_statement || '',
     solution: project.solution || '',
+    website: project.website || '',
   }));
   // Task #1 — founder company / affiliation lives on the linked founder
   // row; surfaced on the Spin-Out deck's merged Team & network slide.

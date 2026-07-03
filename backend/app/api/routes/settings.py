@@ -12,6 +12,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import secrets
 import time
 import uuid
@@ -45,6 +46,12 @@ _USER_COLUMNS = [
     ("jwt_min_iat", "BIGINT DEFAULT 0"),
     ("deletion_requested_at", "TIMESTAMP"),
     ("totp_recovery_codes", "TEXT"),
+    # Task #66 — structured, public-facing career background (JSON text) +
+    # a website URL. Mirrors the worker's profileExpansion.ts columns.
+    ("experience", "TEXT"),
+    ("education", "TEXT"),
+    ("certifications", "TEXT"),
+    ("website", "TEXT"),
 ]
 
 FOUNDER_INVITE_CAP_PER_PROJECT = 10
@@ -377,6 +384,121 @@ def patch_settings(
         )
     session.commit()
     return {"ok": True, "updated": len(updates)}
+
+
+# --- Profile background (Task #66) ------------------------------------------
+# Structured, public-facing career background: experience / education /
+# certifications (JSON arrays) plus a website URL. Mirrors the worker's
+# services/profileExpansion.ts getProfileBackground / updateProfileBackground.
+# Stored on `users` as JSON text; renders on the public person profile.
+
+# Whitelisted keys per entry. A UNION of the worker's sanitizeEntries keys
+# and the Task #66 spec keys so whatever the shared frontend sends (which
+# targets the prod Worker) survives sanitisation on dev too.
+_EXPERIENCE_KEYS = ("title", "org", "location", "start", "end", "summary", "company", "description")
+_EDUCATION_KEYS = ("school", "degree", "field", "start", "end")
+_CERTIFICATION_KEYS = ("name", "issuer", "year", "url")
+
+
+def _parse_json_array(raw: Any) -> list:
+    """Parse a JSON-text column into a list; default to [] on any failure."""
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return raw
+    try:
+        parsed = json.loads(str(raw))
+        return parsed if isinstance(parsed, list) else []
+    except Exception:
+        return []
+
+
+def _sanitize_entries(arr: Any, keys: tuple, max_entries: int = 50, max_len: int = 500) -> list:
+    """Whitelist + clamp each entry so a hostile client can't stuff arbitrary
+    blobs into a public surface. Unknown keys dropped; strings trimmed."""
+    src = arr if isinstance(arr, list) else []
+    out: list = []
+    for item in src[:max_entries]:
+        if not isinstance(item, dict):
+            continue
+        rec: dict = {}
+        for k in keys:
+            v = item.get(k)
+            if v is None:
+                continue
+            s = str(v).strip()
+            if s:
+                rec[k] = s[:max_len]
+        if rec:
+            out.append(rec)
+    return out
+
+
+def _load_background(session: Session, user_id: int) -> dict:
+    try:
+        row = session.exec(text(
+            "SELECT experience, education, certifications, website "
+            "FROM users WHERE id = :uid"
+        ).bindparams(uid=user_id)).first()
+    except Exception:
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        row = None
+    m = dict(row._mapping) if row else {}  # type: ignore[attr-defined]
+    return {
+        "experience": _parse_json_array(m.get("experience")),
+        "education": _parse_json_array(m.get("education")),
+        "certifications": _parse_json_array(m.get("certifications")),
+        "website": m.get("website") or None,
+    }
+
+
+class _BackgroundPatch(BaseModel):
+    experience: Optional[list] = None
+    education: Optional[list] = None
+    certifications: Optional[list] = None
+    website: Optional[str] = None
+
+
+@router.get("/profile/background")
+def get_profile_background(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_schema(session)
+    return _load_background(session, user.id)
+
+
+@router.put("/profile/background")
+def put_profile_background(
+    payload: _BackgroundPatch = Body(...),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_schema(session)
+    fields = payload.model_dump(exclude_unset=True)
+    updates: list[tuple[str, Any]] = []
+    if "experience" in fields:
+        updates.append(("experience", json.dumps(_sanitize_entries(payload.experience, _EXPERIENCE_KEYS))))
+    if "education" in fields:
+        updates.append(("education", json.dumps(_sanitize_entries(payload.education, _EDUCATION_KEYS))))
+    if "certifications" in fields:
+        updates.append(("certifications", json.dumps(_sanitize_entries(payload.certifications, _CERTIFICATION_KEYS))))
+    if "website" in fields:
+        w = (payload.website or "").strip()[:300] if payload.website else ""
+        if w and not re.match(r"^https?://", w, re.IGNORECASE):
+            raise HTTPException(status_code=400, detail="website must start with http:// or https://")
+        updates.append(("website", w or None))
+
+    for col, val in updates:
+        session.exec(
+            text(f"UPDATE users SET {col} = :v WHERE id = :uid").bindparams(v=val, uid=user.id)
+        )
+    if updates:
+        session.commit()
+    return _load_background(session, user.id)
 
 
 # --- Headshot upload + stream -----------------------------------------------

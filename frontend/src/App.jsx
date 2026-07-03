@@ -176,6 +176,7 @@ const PartnerInsightsPage = lazy(() => import('./pages/PartnerInsightsPage'));
 const PublicDirectoryPage = lazy(() => import('./pages/PublicDirectoryPage'));
 const PublicPartnerProfilePage = lazy(() => import('./pages/PublicPartnerProfilePage'));
 const PublicProfilePage = lazy(() => import('./pages/PublicProfilePage'));
+const PublicStartupProfilePage = lazy(() => import('./pages/PublicStartupProfilePage'));
 const PitchDeckPrintPage = lazy(() => import('./pages/PitchDeckPrintPage'));
 import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 const EmailChangeConfirmPage = lazy(() => import('./pages/EmailChangeConfirmPage'));
@@ -1386,6 +1387,7 @@ function AppInner() {
       <Route path="/partners/:slug" element={<PublicPartnerProfilePage />} />
       {/* Task #55 — Public profile pages, unauthenticated, role-tailored. */}
       <Route path="/u/:handle" element={<PublicProfilePage />} />
+      <Route path="/startups/:handle" element={<PublicStartupProfilePage />} />
       {/* Task #5 — Public event surface (no auth). */}
       <Route path="/events" element={<PublicEventsPage />} />
       <Route path="/events/:slug" element={<PublicEventDetailPage />} />

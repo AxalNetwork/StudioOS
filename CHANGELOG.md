@@ -10,33 +10,61 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
-> ## Public job board: founders post roles, applicants apply (Task #68)
->
-> A public-facing job board mirroring the Events feature. Founders (and other
-> authed roles) post roles that go through an admin review queue before
-> publishing; the public can browse published roles and apply with a résumé, no
-> account required.
->
-> - **Schema** — `cloudflare-worker/sql/migrations/131_job_board.sql` adds
->   `job_postings` (status DEFAULT `'draft'`, lifecycle
->   `draft → pending_review → published | rejected | closed`) and
->   `job_applications` (status DEFAULT `'submitted'`).
-> - **Worker** — `services/{jobBoardSchema,jobBoardCommon,r2}.ts`; routes
->   `routes/{jobs,jobs_public,admin_jobs}.ts` mounted in `src/index.ts`. Résumés
->   are PDF-only (≤5MB), stored in R2, downloaded via short-lived signed URLs.
->   Public apply is Turnstile-gated and rate-limited.
-> - **Frontend** — `pages/jobs/{PublicJobsPage,PublicJobDetailPage,MyJobsPage,`
->   `JobEditorPage,JobManagePage,MyApplicationsPage}.jsx` +
->   `pages/admin/AdminJobsPage.jsx`; `api.js` gains `jobs`/`jobsPublic`/`adminJobs`
->   namespaces; routes + lazy imports in `App.jsx`; "Jobs" sidebar entries per
->   role and a "Job Board Admin" entry for admins in `sidebarConfig.js`.
-> - **Apex routing** — `axal.vc/jobs` (feed) + `axal.vc/jobs/*` (detail at
->   `/jobs/:slug`) carved to the Worker in BOTH `[[routes]]` and
->   `[[env.production.routes]]` in `wrangler.toml`.
-> - **Test** — `cloudflare-worker/test/job_board.test.ts` (pure helpers),
->   appended to the `test:drift` file list in root `package.json`.
-> - **Deviation** — Worker-only; the dev FastAPI backend has no job-board parity
->   (consistent with Events). The admin/founder pages 404 in local dev.
+## Public job board: founders post roles, applicants apply (Task #68)
+
+A public-facing job board mirroring the Events feature. Founders (and other
+authed roles) post roles that go through an admin review queue before
+publishing; the public can browse published roles and apply with a résumé, no
+account required.
+
+- **Schema** — `cloudflare-worker/sql/migrations/131_job_board.sql` adds
+  `job_postings` (status DEFAULT `'draft'`, lifecycle
+  `draft → pending_review → published | rejected | closed`) and
+  `job_applications` (status DEFAULT `'submitted'`).
+- **Worker** — `services/{jobBoardSchema,jobBoardCommon,r2}.ts`; routes
+  `routes/{jobs,jobs_public,admin_jobs}.ts` mounted in `src/index.ts`. Résumés
+  are PDF-only (≤5MB), stored in R2, downloaded via short-lived signed URLs.
+  Public apply is Turnstile-gated and rate-limited.
+- **Frontend** — `pages/jobs/{PublicJobsPage,PublicJobDetailPage,MyJobsPage,`
+  `JobEditorPage,JobManagePage,MyApplicationsPage}.jsx` +
+  `pages/admin/AdminJobsPage.jsx`; `api.js` gains `jobs`/`jobsPublic`/`adminJobs`
+  namespaces; routes + lazy imports in `App.jsx`; "Jobs" sidebar entries per
+  role and a "Job Board Admin" entry for admins in `sidebarConfig.js`.
+- **Apex routing** — `axal.vc/jobs` (feed) + `axal.vc/jobs/*` (detail at
+  `/jobs/:slug`) carved to the Worker in BOTH `[[routes]]` and
+  `[[env.production.routes]]` in `wrangler.toml`.
+- **Test** — `cloudflare-worker/test/job_board.test.ts` (pure helpers),
+  appended to the `test:drift` file list in root `package.json`.
+- **Deviation** — Worker-only; the dev FastAPI backend has no job-board parity
+  (consistent with Events). The admin/founder pages 404 in local dev.
+
+## Rich profiles, follows & followed-entity news (Task #66)
+
+Structured founder/investor career **background** (experience / education /
+certifications + website): new columns via `131_profiles_follows.sql`,
+`profileExpansion.ts` (`get/updateProfileBackground`) + `GET/PUT
+/settings/profile/background` (Worker `settings.ts`; FastAPI `settings.py`),
+and an editor card in `SettingsPage.jsx` (`ProfileBackgroundSection`). Public
+surfacing is opt-in via a new `background` privacy flag.
+
+**Follow system** (people + startups): `follows` table + `/api/follows`
+(`POST`/`DELETE`/`status`/`mine`) mounted in both Worker (`follows.ts`,
+`index.ts`) and FastAPI (`follows.py`, `main.py`); `FollowButton.jsx`,
+`PersonCard.jsx`, `StartupCard.jsx`. Follower counts are public; follow state
+requires auth (signed-out follow routes to `/login?next=`).
+
+**Public shareable startup page**: `GET /public/startup/:handle` (Worker
+`public.ts` + FastAPI `public_profiles.py`), `PublicStartupProfilePage.jsx` at
+route `/startups/:handle`; internal `ProjectDetail.jsx` surfaces a "Public
+Page" link. `GET /public/u/:handle` enriched with `id`, `background`
+(experience/education/certifications), `website`, `followers`. Numeric `id`
+added to both public payloads so `FollowButton` can key off it.
+
+**Followed-entity news notifications**: `notifyProjectFollowers` fan-out in
+`portfolio_updates.ts` (type `followed_entity_news`, category
+`proactive_nudges`, link `/startups/:uid`) via `waitUntil`, plus new
+notification pref `followed_entity_news` in `SettingsPage.jsx`. (FastAPI dev
+has no portfolio-updates route, so no dev fan-out target exists.)
 >
 > ## Partner sidebar: regrouped around the service-partner lifecycle (Task #47, PR #122)
 >

@@ -155,6 +155,8 @@ def ensure_project_product_demo_columns() -> None:
             "product_demo_live_url",
             "product_demo_caption",
             "product_demo_screenshot_url",
+            # Task #66 — startup website URL (mirrors Worker D1 migration 131).
+            "website",
         ):
             try:
                 session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input

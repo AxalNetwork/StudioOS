@@ -3,9 +3,74 @@ import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Globe, ShieldCheck, Sparkles,
   Briefcase, Target, Star, Users, DollarSign,
+  GraduationCap, Award,
 } from 'lucide-react';
 import { api, articles as articlesApi } from '../lib/api';
 import TrustScoreBadge from '../components/TrustScoreBadge';
+import FollowButton from '../components/profile/FollowButton';
+
+// Task #66 — structured career background (experience / education /
+// certifications), rendered LinkedIn-style when the owner opts in.
+function BackgroundBlock({ p }) {
+  const exp = Array.isArray(p.experience) ? p.experience : [];
+  const edu = Array.isArray(p.education) ? p.education : [];
+  const certs = Array.isArray(p.certifications) ? p.certifications : [];
+  if (exp.length === 0 && edu.length === 0 && certs.length === 0) return null;
+  const span = (a, b) => [a, b].filter(Boolean).join(' – ') || null;
+  return (
+    <>
+      {exp.length > 0 && (
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
+            <Briefcase size={16} className="text-slate-600" /> Experience
+          </h2>
+          <ul className="space-y-4">
+            {exp.map((e, i) => (
+              <li key={i} className="border-b border-gray-100 pb-4 last:border-0 dark:border-gray-800">
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {e.title || 'Role'}{(e.company || e.org) ? ` · ${e.company || e.org}` : ''}
+                </p>
+                {span(e.start, e.end) && <p className="text-xs text-gray-500">{span(e.start, e.end)}</p>}
+                {(e.description || e.summary) && <p className="mt-1 whitespace-pre-line text-sm text-gray-600 dark:text-gray-400">{e.description || e.summary}</p>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {edu.length > 0 && (
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
+            <GraduationCap size={16} className="text-slate-600" /> Education
+          </h2>
+          <ul className="space-y-3">
+            {edu.map((e, i) => (
+              <li key={i} className="border-b border-gray-100 pb-3 last:border-0 dark:border-gray-800">
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{e.school || 'School'}</p>
+                {(e.degree || e.field) && <p className="text-xs text-gray-600 dark:text-gray-400">{[e.degree, e.field].filter(Boolean).join(', ')}</p>}
+                {span(e.start, e.end) && <p className="text-xs text-gray-500">{span(e.start, e.end)}</p>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {certs.length > 0 && (
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
+            <Award size={16} className="text-slate-600" /> Certifications
+          </h2>
+          <ul className="space-y-2">
+            {certs.map((cert, i) => (
+              <li key={i} className="text-sm text-gray-700 dark:text-gray-300">
+                <span className="font-medium">{cert.name || 'Certification'}</span>
+                {cert.issuer ? ` · ${cert.issuer}` : ''}{cert.year ? ` (${cert.year})` : ''}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </>
+  );
+}
 
 // Task #1 — Author's published-articles strip. Renders on every public
 // profile (any role); hides itself when the author has nothing live.
@@ -324,11 +389,17 @@ export default function PublicProfilePage() {
                   </div>
                   <p className="mt-0.5 font-mono text-xs text-gray-400">@{p.handle}</p>
                   {p.bio && <p className="mt-3 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">{p.bio}</p>}
-                  {Object.keys(p.socials || {}).length > 0 && (
+                  {(Object.keys(p.socials || {}).length > 0 || p.website) && (
                     <div className="mt-3 flex flex-wrap gap-3">
-                      {Object.entries(p.socials).map(([k, v]) => <SocialLink key={k} kind={k} href={v} />)}
+                      {Object.entries(p.socials || {}).map(([k, v]) => <SocialLink key={k} kind={k} href={v} />)}
+                      {p.website && !((p.socials || {}).website) && <SocialLink kind="website" href={p.website} />}
                     </div>
                   )}
+                  <div className="mt-4">
+                    {p.id != null && (
+                      <FollowButton entityType="user" entityId={p.id} initialFollowers={p.followers} />
+                    )}
+                  </div>
                 </div>
               </div>
             </section>
@@ -337,6 +408,7 @@ export default function PublicProfilePage() {
               {role === 'founder'  && <FounderBlock  p={p} />}
               {role === 'investor' && <InvestorBlock p={p} />}
               {role === 'partner'  && <PartnerBlock  p={p} />}
+              <BackgroundBlock p={p} />
               {p.user_id && <ArticlesTab userId={p.user_id} />}
             </div>
 
