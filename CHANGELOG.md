@@ -10,6 +10,34 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+> ## Public job board: founders post roles, applicants apply (Task #68)
+>
+> A public-facing job board mirroring the Events feature. Founders (and other
+> authed roles) post roles that go through an admin review queue before
+> publishing; the public can browse published roles and apply with a résumé, no
+> account required.
+>
+> - **Schema** — `cloudflare-worker/sql/migrations/131_job_board.sql` adds
+>   `job_postings` (status DEFAULT `'draft'`, lifecycle
+>   `draft → pending_review → published | rejected | closed`) and
+>   `job_applications` (status DEFAULT `'submitted'`).
+> - **Worker** — `services/{jobBoardSchema,jobBoardCommon,r2}.ts`; routes
+>   `routes/{jobs,jobs_public,admin_jobs}.ts` mounted in `src/index.ts`. Résumés
+>   are PDF-only (≤5MB), stored in R2, downloaded via short-lived signed URLs.
+>   Public apply is Turnstile-gated and rate-limited.
+> - **Frontend** — `pages/jobs/{PublicJobsPage,PublicJobDetailPage,MyJobsPage,`
+>   `JobEditorPage,JobManagePage,MyApplicationsPage}.jsx` +
+>   `pages/admin/AdminJobsPage.jsx`; `api.js` gains `jobs`/`jobsPublic`/`adminJobs`
+>   namespaces; routes + lazy imports in `App.jsx`; "Jobs" sidebar entries per
+>   role and a "Job Board Admin" entry for admins in `sidebarConfig.js`.
+> - **Apex routing** — `axal.vc/jobs` (feed) + `axal.vc/jobs/*` (detail at
+>   `/jobs/:slug`) carved to the Worker in BOTH `[[routes]]` and
+>   `[[env.production.routes]]` in `wrangler.toml`.
+> - **Test** — `cloudflare-worker/test/job_board.test.ts` (pure helpers),
+>   appended to the `test:drift` file list in root `package.json`.
+> - **Deviation** — Worker-only; the dev FastAPI backend has no job-board parity
+>   (consistent with Events). The admin/founder pages 404 in local dev.
+>
 > ## Partner sidebar: regrouped around the service-partner lifecycle (Task #47, PR #122)
 >
 > The service-partner left rail (`SIDEBAR_GROUPS.partner` in

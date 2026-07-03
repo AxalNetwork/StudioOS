@@ -206,6 +206,15 @@ zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/events/*"
 zone_name  = "axal.vc"
+# Task #68 — Public job board. /jobs (feed) + /jobs/* (detail at /jobs/:slug)
+# must be apex-routed so the SPA serves them (not Jekyll). Exact + wildcard to
+# avoid hijacking similar Jekyll paths (e.g., /jobs-*).
+[[routes]]
+pattern    = "axal.vc/jobs"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/jobs/*"
+zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/invite"
 zone_name  = "axal.vc"
@@ -770,6 +779,13 @@ pattern    = "axal.vc/events"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/events/*"
+zone_name  = "axal.vc"
+# Task #68 — Public job board. Mirror of top-level routes block above.
+[[env.production.routes]]
+pattern    = "axal.vc/jobs"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/jobs/*"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/invite"

@@ -183,6 +183,11 @@ import publicRoutes from './routes/public';
 import eventsRoutes from './routes/events';
 import eventsPublicRoutes from './routes/events_public';
 import adminEventsRoutes from './routes/admin_events';
+// Task #68 — Public Job Board (Worker on D1): founder /api/jobs, public feed +
+// apply on /api/public/jobs*, admin review queue on /api/admin/jobs.
+import jobsRoutes from './routes/jobs';
+import jobsPublicRoutes from './routes/jobs_public';
+import adminJobsRoutes from './routes/admin_jobs';
 // Task #44 — Gamified Assessment engine (player + admin authoring).
 import assessmentRoutes from './routes/assessment';
 import adminAssessmentRoutes from './routes/admin_assessment';
@@ -644,6 +649,9 @@ app.route('/api/admin/promos', adminPromos);
 // Task #39 — Event engine admin (§8.3). Mount BEFORE the catch-all /api/admin
 // so /api/admin/events/* resolves here, not in the generic admin router.
 app.route('/api/admin/events', adminEventsRoutes);
+// Task #68 — Job Board admin review queue. Mount BEFORE the catch-all
+// /api/admin so /api/admin/jobs/* resolves here, not in the generic admin router.
+app.route('/api/admin/jobs', adminJobsRoutes);
 app.route('/api/admin/assessment', adminAssessmentRoutes);
 // Task #19 — Best-Fit admin surfaces. Mount BEFORE the catch-all /api/admin so
 // the specific prefixes resolve here, not in the generic admin router.
@@ -740,6 +748,8 @@ app.route('/api/studioops', studioops);
 app.route('/api/dashboard', dashboard);
 // Task #39 — Event engine authed routes (§8.1).
 app.route('/api/events', eventsRoutes);
+// Task #68 — Job Board founder routes (post/manage roles, read applicants).
+app.route('/api/jobs', jobsRoutes);
 // Task #44 — Gamified Assessment player routes (§7.1).
 app.route('/api/assessment', assessmentRoutes);
 app.route('/api/matches', matches);
@@ -795,6 +805,9 @@ app.route('/api/portfolio', portfolioRoutes);
 // Mounted BEFORE publicRoutes so /api/public/events* + /api/public/invite*
 // resolve here (no path collision with the profile facade).
 app.route('/api/public', eventsPublicRoutes);
+// Task #68 — Job Board public feed + apply. Mount BEFORE the generic
+// publicRoutes so /api/public/jobs* resolves to the job board.
+app.route('/api/public', jobsPublicRoutes);
 app.route('/api/public', publicRoutes);
 // Task #10 (LD) — Public team roster. Mounted under /api/public so it
 // sits OUTSIDE auth + the /api/admin/* CF Access perimeter; the Jekyll

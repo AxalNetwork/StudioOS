@@ -139,6 +139,11 @@ export async function request(path, options = {}) {
           // Task #5 — Public event surface (no auth)
           || currentPath === '/events'
           || currentPath.startsWith('/events/')
+          // Public job board surface (no auth): /jobs (feed) and
+          // /jobs/:slug (detail) must stay reachable for anonymous
+          // visitors when a background settings/me 401 fires.
+          || currentPath === '/jobs'
+          || currentPath.startsWith('/jobs/')
           || currentPath.startsWith('/invite/');
         // `_suppressAuthRedirect` is set only while the catch-all 404 page is
         // mounted (an unknown URL), so a logged-out visitor there sees the 404
@@ -2853,6 +2858,62 @@ export const adminEvents = {
   setCapacity: (id, capacity) =>
     request(`/admin/events/${id}/capacity`, { method: 'POST', body: JSON.stringify({ capacity }) }),
   analytics: () => request('/admin/events/analytics'),
+};
+
+// Task #68 — Job Board. `jobs` covers the authenticated founder surface (post
+// roles, review-submit, applicant review); `jobsPublic` the no-auth,
+// Turnstile-gated public surface (feed, detail, apply); `adminJobs` the admin
+// review queue. Each path maps 1:1 to a /api/{jobs,public/jobs,admin/jobs}
+// route on the worker (api-drift guard verifies the prefixes).
+export const jobs = {
+  // Founder's own postings + CRUD
+  mine: () => request('/jobs'),
+  get: (id) => request(`/jobs/${id}`),
+  create: (payload) => request('/jobs', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id, patch) => request(`/jobs/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  submitReview: (id) => request(`/jobs/${id}/submit-review`, { method: 'POST', body: '{}' }),
+  close: (id) => request(`/jobs/${id}/close`, { method: 'POST', body: '{}' }),
+  // Applicant review (founder/admin only — the sole PII surface)
+  applications: (id) => request(`/jobs/${id}/applications`),
+  // Mints a one-time signed resume download URL ({ url, expires_at }).
+  resume: (id, appId) => request(`/jobs/${id}/applications/${appId}/resume`),
+  // Caller's own applications across all postings.
+  myApplications: () => request('/jobs/my-applications'),
+};
+
+// Public (no-auth) job surface — feed, detail, apply (Turnstile-gated).
+export const jobsPublic = {
+  list: ({ limit = 20, offset = 0, employment_type, seniority, remote, q } = {}) => {
+    const qs = new URLSearchParams();
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    if (employment_type) qs.set('employment_type', employment_type);
+    if (seniority) qs.set('seniority', seniority);
+    if (remote) qs.set('remote', '1');
+    if (q) qs.set('q', q);
+    return request(`/public/jobs?${qs.toString()}`);
+  },
+  read: (slug) => request(`/public/jobs/${encodeURIComponent(slug)}`),
+  apply: (slug, payload) =>
+    request(`/public/jobs/${encodeURIComponent(slug)}/apply`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    }),
+};
+
+// Admin job review queue.
+export const adminJobs = {
+  list: ({ status, limit = 50, offset = 0 } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    return request(`/admin/jobs?${qs.toString()}`);
+  },
+  get: (id) => request(`/admin/jobs/${id}`),
+  approve: (id) => request(`/admin/jobs/${id}/approve`, { method: 'POST', body: '{}' }),
+  reject: (id, reason) => request(`/admin/jobs/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  unpublish: (id) => request(`/admin/jobs/${id}/unpublish`, { method: 'POST', body: '{}' }),
 };
 
 // Assessment results — read-only client for archetype/skill display (Profile &
