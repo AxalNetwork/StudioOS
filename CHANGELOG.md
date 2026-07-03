@@ -10,6 +10,39 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Audience product pages + footer product nav (Task #8, PR #126)
+
+Four public, data-driven marketing pages — For Founders, For Investors & LPs,
+For Service Partners, For Advisors — plus a footer Products nav that links to
+them. Frontend-only — new routes/pages plus a footer reorganization. Integrated
+from branch `claude/axal-product-pages-footer-27zk13`.
+
+- **Pages** — one component `frontend/src/pages/ProductAudiencePage.jsx`
+  rendered per slug (`founders` / `investors` / `service-partners` /
+  `advisors`), driven entirely by `frontend/src/data/productPages.js`
+  (`PRODUCT_PAGES`, `PRODUCT_PAGE_ORDER`, `PRODUCT_FOOTER_LINKS`). Reuses the
+  public marketing chrome (`PublicNav` + `PublicFooter`) and `usePageMeta` for
+  per-page SEO; an unknown slug falls back to `NotFoundPage`.
+- **Routes** — `/for-founders`, `/for-investors`, `/for-service-partners`,
+  `/for-advisors` added as lazy routes in `frontend/src/App.jsx`.
+- **Footer** — `frontend/src/components/PublicFooter.jsx` Products column now
+  maps `PRODUCT_FOOTER_LINKS` (the four audience pages) instead of the previous
+  hardcoded list. To avoid dropping public discoverability, the content/product
+  links from the old list (Spin-Out Lab / Insights / Articles) move to a new
+  Resources column (footer grid widened 5→6); the LP Portal (`/register?lane=lp`)
+  and Partner Network (`/register?lane=partner`) register lanes are intentionally
+  superseded by the richer For Investors & LPs / For Service Partners pages,
+  whose CTAs funnel to those same register lanes.
+- **Apex routing** — each page carved to the Worker in BOTH `[[routes]]` and
+  `[[env.production.routes]]` in `wrangler.toml` (exact + `/*` per page), so a
+  hard load / shared link on `axal.vc/for-*` is served by the SPA instead of
+  falling through to Jekyll. Routes only take effect on `npm run deploy`. The
+  four URLs are also added to both `sitemap.xml` copies (`frontend/public/` +
+  `docs/`).
+- **Verification** — `npm run test:drift` (tsc --noEmit + guards) and
+  `npm run test:retention` green; every imported lucide icon resolves in the
+  repo's lucide version; the four pages render in the dev preview.
+
 ## Competitor Analysis + Pitch Deck Reviewer — two Cloudflare-native founder tools (PR #125)
 
 Adds two founder tools built entirely on D1 + R2 + Workers AI with no paid

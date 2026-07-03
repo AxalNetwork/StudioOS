@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New pages that explain StudioOS for your role
+
+There are now dedicated pages that spell out what StudioOS offers to each kind
+of member — **For Founders**, **For Investors / LPs**, **For Service Partners**,
+and **For Advisors**. Each one walks through the tools and support that matter
+most to that role, with a clear next step to get started. You'll find links to
+all four in the **Products** section of the site footer.
+
+---
+
 ## Size up your competition
 
 There's a new **Competitor Analysis** tool under **Validate** in the sidebar.

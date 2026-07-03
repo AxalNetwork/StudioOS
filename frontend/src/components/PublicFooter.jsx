@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import { openCookiePreferences } from '../lib/cookieConsent';
+import { PRODUCT_FOOTER_LINKS } from '../data/productPages';
 
 const socials = [
   {
@@ -69,7 +70,7 @@ export default function PublicFooter() {
   return (
     <footer className="bg-gray-50 border-t border-gray-200">
       <div className="max-w-7xl mx-auto px-6 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-8 mb-12">
           <div className="md:col-span-2">
             <div className="flex items-center gap-2 mb-4">
               <img src="/axal-mark.png" alt="Axal VC" className="h-8" />
@@ -110,11 +111,20 @@ export default function PublicFooter() {
           <div>
             <h3 className="font-semibold text-gray-900 mb-4">Products</h3>
             <ul className="space-y-2">
+              {PRODUCT_FOOTER_LINKS.map(({ label, to }) => (
+                <li key={to}>
+                  <Link to={to} className="text-sm text-gray-600 hover:text-gray-900">{label}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="font-semibold text-gray-900 mb-4">Resources</h3>
+            <ul className="space-y-2">
               <li><Link to="/spinout-lab" className="text-sm text-gray-600 hover:text-gray-900">Spin-Out Lab</Link></li>
               <li><Link to="/insights" className="text-sm text-gray-600 hover:text-gray-900">Insights</Link></li>
               <li><Link to="/articles" className="text-sm text-gray-600 hover:text-gray-900">Articles</Link></li>
-              <li><Link to="/register?lane=lp" className="text-sm text-gray-600 hover:text-gray-900">LP Portal</Link></li>
-              <li><Link to="/register?lane=partner" className="text-sm text-gray-600 hover:text-gray-900">Partner Network</Link></li>
             </ul>
           </div>
 

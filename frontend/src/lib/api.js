@@ -111,6 +111,14 @@ export async function request(path, options = {}) {
           || currentPath === '/register'
           || currentPath === '/verify-email'
           || currentPath === '/spinout-lab'
+          // Audience product pages (For Founders / Investors & LPs / Service
+          // Partners / Advisors) — public marketing surfaces. A background
+          // settings/me 401 for an anonymous visitor must not bounce them to
+          // /login (mirrors /spinout-lab above).
+          || currentPath === '/for-founders'
+          || currentPath === '/for-investors'
+          || currentPath === '/for-service-partners'
+          || currentPath === '/for-advisors'
           // Audience-specific marketing landing pages (/lp/founder,
           // /lp/investor, /lp/partner, /lp/customer-discovery,
           // /lp/spinout-demo-day). Public surfaces: a background

@@ -130,6 +130,10 @@ const PublicJobsPage = lazy(() => import('./pages/jobs/PublicJobsPage'));
 const PublicJobDetailPage = lazy(() => import('./pages/jobs/PublicJobDetailPage'));
 // Task #4 (ID) — Public marketing surfaces.
 const PricingPage = lazy(() => import('./pages/PricingPage'));
+// Audience product pages (For Founders / Investors & LPs / Service Partners /
+// Advisors) — one data-driven component rendered per slug from
+// data/productPages.js; footer links live in components/PublicFooter.jsx.
+const ProductAudiencePage = lazy(() => import('./pages/ProductAudiencePage'));
 const DemoPage = lazy(() => import('./pages/DemoPage'));
 const StatusPage = lazy(() => import('./pages/StatusPage'));
 const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
@@ -1180,6 +1184,11 @@ function AppInner() {
 <Routes>
       <Route path="/" element={user ? <Navigate to={ROLE_DEFAULT_PATH[user.role] || '/studio'} replace /> : <LandingPage />} />
       <Route path="/spinout-lab" element={<SpinoutLabPage />} />
+      {/* Audience product pages — public marketing surface. */}
+      <Route path="/for-founders" element={<ProductAudiencePage slug="founders" />} />
+      <Route path="/for-investors" element={<ProductAudiencePage slug="investors" />} />
+      <Route path="/for-service-partners" element={<ProductAudiencePage slug="service-partners" />} />
+      <Route path="/for-advisors" element={<ProductAudiencePage slug="advisors" />} />
       <Route path="/pricing/investor" element={<InvestorPricingPage />} />
       <Route path="/register" element={<AuthScreen user={user} clearSession={clearSession}><RegisterPage /></AuthScreen>} />
       <Route path="/login" element={<AuthScreen user={user} clearSession={clearSession}><LoginPage /></AuthScreen>} />
