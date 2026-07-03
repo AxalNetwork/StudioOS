@@ -150,12 +150,23 @@ test('shapeJobApplication derives has_resume and never inlines the resume', () =
   assert.equal(noResume.has_resume, false);
 });
 
-test('shapeJobApplication attaches member only once the applicant has an account', () => {
+test('shapeJobApplication attaches member once a platform account exists', () => {
+  // No account yet (neither the email JOIN nor a backfilled user_id) → no member.
   const anon = shapeJobApplication({ id: 1, posting_id: 1, email: 'x@y.com', status: 'submitted', created_at: 't', user_id: null }) as Record<string, unknown>;
   assert.equal(anon.member, null);
 
-  const member = shapeJobApplication({
+  // The applicant registered AFTER applying: the applicants LEFT JOIN on users
+  // surfaces member_id by email even though user_id has not been backfilled yet.
+  // This is the "profile once registered" reliability guarantee.
+  const joined = shapeJobApplication({
     id: 2, posting_id: 1, email: 'x@y.com', status: 'submitted', created_at: 't',
+    user_id: null, member_id: 99, member_name: 'Grace', member_email: 'grace@axal.vc', member_role: 'founder',
+  }) as Record<string, unknown>;
+  assert.deepEqual(joined.member, { id: 99, name: 'Grace', email: 'grace@axal.vc', role: 'founder' });
+
+  // Backfilled row (user_id set, no join columns) still resolves the member id.
+  const member = shapeJobApplication({
+    id: 3, posting_id: 1, email: 'x@y.com', status: 'submitted', created_at: 't',
     user_id: 42, member_name: 'Ada', member_email: 'ada@axal.vc', member_role: 'founder',
   }) as Record<string, unknown>;
   assert.deepEqual(member.member, { id: 42, name: 'Ada', email: 'ada@axal.vc', role: 'founder' });

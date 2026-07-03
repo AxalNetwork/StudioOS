@@ -150,6 +150,12 @@ export function shapeJobPosting(row: any, opts: { includePrivate?: boolean } = {
  */
 export function shapeJobApplication(row: any) {
   if (!row) return null;
+  // A matching platform account is surfaced via the applicants LEFT JOIN on
+  // users (by email), so `member` appears as soon as the applicant registers —
+  // even before `user_id` has been backfilled onto the application row. Gating
+  // on the joined `member_id` (falling back to `user_id`) makes "profile once
+  // registered" reliable rather than dependent on a prior backfill pass.
+  const memberId = row.member_id ?? row.user_id ?? null;
   return {
     id: row.id,
     posting_id: row.posting_id,
@@ -163,10 +169,9 @@ export function shapeJobApplication(row: any) {
     resume_name: row.resume_name ?? null,
     status: row.status,
     created_at: row.created_at,
-    // Present only once the applicant has a platform account (LEFT JOIN users).
-    member: row.user_id
+    member: memberId
       ? {
-          id: row.member_id ?? row.user_id,
+          id: memberId,
           name: row.member_name ?? null,
           email: row.member_email ?? null,
           role: row.member_role ?? null,

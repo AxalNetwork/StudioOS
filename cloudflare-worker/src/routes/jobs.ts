@@ -135,6 +135,9 @@ jobs.post('/', async (c) => {
   if (!title) return c.json({ error: 'title_required' }, 400);
 
   const projectId = body.project_id != null ? Number(body.project_id) : null;
+  // Founder-posted roles are tied to a startup: non-admins MUST attach a project
+  // they can write to. Admins may post platform-level roles without one.
+  if (u.role !== 'admin' && projectId == null) return c.json({ error: 'project_required' }, 400);
   const projErr = await validateProjectId(c, u, projectId);
   if (projErr) return projErr;
 
@@ -198,6 +201,8 @@ jobs.patch('/:id', async (c) => {
   if ('remote' in body) { sets.push('remote = ?'); binds.push(body.remote ? 1 : 0); }
   if ('project_id' in body) {
     const projectId = body.project_id != null ? Number(body.project_id) : null;
+    // A non-admin cannot detach a role from its startup (see POST /).
+    if (u.role !== 'admin' && projectId == null) return c.json({ error: 'project_required' }, 400);
     const projErr = await validateProjectId(c, u, projectId);
     if (projErr) return projErr;
     sets.push('project_id = ?'); binds.push(projectId);
@@ -253,6 +258,23 @@ jobs.get('/:id/applications', async (c) => {
   const posting = await loadPosting(c.env, id);
   if (!posting) return c.json({ error: 'not_found' }, 404);
   if (!canManage(posting, u)) return c.json({ error: 'forbidden' }, 403);
+  // Deterministically link any email-only applications on THIS posting to a
+  // since-registered account (same rule as my-applications, but applied when a
+  // founder reads applicants) so user_id and the member profile are consistent
+  // at read time — not dependent on the applicant having first re-visited their
+  // own applications. Fully parameterized; only `id` is bound.
+  try {
+    await c.env.DB.prepare(
+      `UPDATE job_applications
+          SET user_id = (SELECT u.id FROM users u WHERE lower(u.email) = lower(job_applications.email)),
+              updated_at = datetime('now')
+        WHERE posting_id = ?
+          AND user_id IS NULL
+          AND EXISTS (SELECT 1 FROM users u WHERE lower(u.email) = lower(job_applications.email))`,
+    ).bind(id).run();
+  } catch (e) {
+    console.warn('[jobs] applicant link backfill failed:', (e as Error).message);
+  }
   const rows = await c.env.DB.prepare(
     `SELECT a.*, mu.id AS member_id, mu.name AS member_name, mu.email AS member_email, mu.role AS member_role
        FROM job_applications a
