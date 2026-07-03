@@ -3,12 +3,11 @@ import { Link } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
 const LINKS = [
-  { label: 'Network', href: '/#network' },
   { label: 'Platform', href: '/#platform' },
-  { label: 'Lanes', href: '/#lanes' },
-  { label: 'Events', href: '/events' },
-  { label: 'Spin-Out Lab', href: '/spinout-lab' },
   { label: 'Directory', href: '/directory' },
+  { label: 'Events', href: '/events' },
+  { label: 'Circles', href: '/circles' },
+  { label: 'Spin-Out Lab', href: '/spinout-lab' },
 ];
 
 export default function PublicNav() {

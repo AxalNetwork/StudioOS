@@ -180,6 +180,7 @@ const NeedsBoardPage = lazy(() => import('./pages/NeedsBoardPage'));
 const ServiceCatalogPage = lazy(() => import('./pages/ServiceCatalogPage'));
 const PartnerInsightsPage = lazy(() => import('./pages/PartnerInsightsPage'));
 const PublicDirectoryPage = lazy(() => import('./pages/PublicDirectoryPage'));
+const CirclesPage = lazy(() => import('./pages/CirclesPage'));
 const PublicPartnerProfilePage = lazy(() => import('./pages/PublicPartnerProfilePage'));
 const PublicProfilePage = lazy(() => import('./pages/PublicProfilePage'));
 const PublicStartupProfilePage = lazy(() => import('./pages/PublicStartupProfilePage'));
@@ -1397,6 +1398,9 @@ function AppInner() {
           per React Router v6 path ranking, so authenticated users still
           land on the internal CRM at /partners. */}
       <Route path="/directory" element={<PublicDirectoryPage />} />
+      {/* Task #9 — Public Network layer: Communities & Circles (curated). */}
+      <Route path="/circles" element={<CirclesPage />} />
+      <Route path="/communities" element={<Navigate to="/circles" replace />} />
       <Route path="/partners/:slug" element={<PublicPartnerProfilePage />} />
       {/* Task #55 — Public profile pages, unauthenticated, role-tailored. */}
       <Route path="/u/:handle" element={<PublicProfilePage />} />

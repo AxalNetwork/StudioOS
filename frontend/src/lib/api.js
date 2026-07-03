@@ -126,6 +126,11 @@ export async function request(path, options = {}) {
           // them to /login.
           || currentPath.startsWith('/lp/')
           || currentPath === '/directory'
+          // Task #9 — Public Network layer: Circles (+ /communities redirect).
+          // Public marketing surfaces: a background settings/me 401 for an
+          // anonymous visitor must not bounce them to /login.
+          || currentPath === '/circles'
+          || currentPath === '/communities'
           || currentPath === '/roadmap'
           || currentPath === '/about'
           || currentPath === '/contact'

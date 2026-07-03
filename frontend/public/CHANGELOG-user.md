@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Discover Communities & Circles
+
+There's a new **Circles** page where you can explore the network's communities —
+founder, investor, city, and topic circles organised by stage and theme. Search
+and filter by type, access, or region, then join a public circle or request
+access to a private one. It sits alongside the **Directory**, **Programs &
+Events**, and **Articles** under a shared network menu, so it's easy to move
+between them. (The old **/communities** link now brings you straight here.)
+
+---
+
 ## New pages that explain StudioOS for your role
 
 There are now dedicated pages that spell out what StudioOS offers to each kind

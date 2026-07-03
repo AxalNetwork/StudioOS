@@ -2,14 +2,76 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Search, Star, ShieldCheck, Clock, Sparkles, Filter, X,
+  Handshake, Rocket, TrendingUp, GraduationCap, MapPin, ArrowRight,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
+import NetworkSubNav from '../components/NetworkSubNav';
+import { DIRECTORY_CATEGORIES, DIRECTORY_PREVIEWS } from '../data/network';
 
 const CATEGORIES = ['legal', 'accounting', 'design', 'recruiting', 'fractional_cfo', 'gtm', 'engineering', 'marketing'];
 const CAPACITY = ['available', 'limited', 'unavailable'];
 const PRICING = ['$', '$$', '$$$'];
+
+const TAB_ICONS = { Handshake, Rocket, TrendingUp, GraduationCap };
+
+// Preview card for the not-yet-live Directory tabs (Startups / Investors & LPs
+// / Advisors). Explicitly badged as a preview so it's never mistaken for a
+// verified, live listing.
+function PreviewCard({ p }) {
+  return (
+    <div className="rounded-xl border border-dashed border-gray-300 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="truncate text-base font-semibold text-gray-900 dark:text-gray-100">{p.name}</h3>
+          <p className="text-xs text-gray-500">{p.category}</p>
+        </div>
+        <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+          Preview
+        </span>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+        {p.geography && <span className="inline-flex items-center gap-1"><MapPin size={12} />{p.geography}</span>}
+        {p.stage && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-600 dark:bg-gray-800 dark:text-gray-300">{p.stage}</span>}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {(p.tags || []).map((t) => (
+          <span key={t} className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700 dark:bg-gray-800 dark:text-gray-300">{t}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// "Coming soon" panel wrapping the preview grid for non-live tabs.
+function ComingSoonTab({ category }) {
+  const previews = DIRECTORY_PREVIEWS[category.id] || [];
+  return (
+    <div>
+      <div className="mb-5 flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+        <div className="rounded-lg bg-violet-100 p-2 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+          <Sparkles size={16} />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            {category.label} directory
+            <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+              Coming soon
+            </span>
+          </p>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{category.blurb} A public, searchable {category.label.toLowerCase()} directory is on the way — here's a preview of the structure.</p>
+          <Link to="/register" className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300">
+            Get listed <ArrowRight size={14} />
+          </Link>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {previews.map((p) => <PreviewCard key={p.name} p={p} />)}
+      </div>
+    </div>
+  );
+}
 
 function Stars({ value }) {
   if (value == null) return <span className="text-xs text-gray-500">No reviews yet</span>;
@@ -90,6 +152,8 @@ export default function PublicDirectoryPage() {
     q: '', category: '', capacity: '', pricing: '', verified_only: false, rate_max: '',
   });
   const [showFilters, setShowFilters] = useState(false);
+  const [tab, setTab] = useState('partners');
+  const activeCategory = DIRECTORY_CATEGORIES.find((c) => c.id === tab);
 
   const load = (params) => {
     setLoading(true); setError(null);
@@ -119,15 +183,47 @@ export default function PublicDirectoryPage() {
   const standard = useMemo(() => partners.filter((p) => !p.featured), [partners]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white">
+    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white dark:from-slate-950 dark:to-slate-950">
       <PublicNav />
+      <div className="pt-16"><NetworkSubNav /></div>
 
-      <section className="mx-auto max-w-6xl px-6 pt-32 pb-10">
+      <section className="mx-auto max-w-6xl px-6 pt-10 pb-10">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Service Provider Directory</h1>
-          <p className="mt-1 text-gray-600">Browse vetted partners — ranked by completed engagements, ratings, response time and KYB status.</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Network Directory</h1>
+          <p className="mt-1 text-gray-600 dark:text-gray-300">Discover the people and companies in the Axal VC network — startups, service partners, investors, and advisors.</p>
         </div>
 
+        {/* Category tabs */}
+        <div className="mb-6 flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-800">
+          {DIRECTORY_CATEGORIES.map((c) => {
+            const Icon = TAB_ICONS[c.icon] || Handshake;
+            const active = tab === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setTab(c.id)}
+                className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                  active
+                    ? 'border-violet-600 text-violet-700 dark:border-violet-400 dark:text-violet-300'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100'
+                }`}
+              >
+                <Icon size={15} /> {c.label}
+                {!c.live && (
+                  <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                    Soon
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {tab !== 'partners' ? (
+          <ComingSoonTab category={activeCategory} />
+        ) : (
+        <>
         <div className="mb-6 flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[240px]">
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
@@ -223,6 +319,8 @@ export default function PublicDirectoryPage() {
               </div>
             )}
           </>
+        )}
+        </>
         )}
       </section>
 

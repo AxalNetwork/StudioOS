@@ -10,6 +10,34 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Public Network layer — Communities & Circles (Task #9, PR #127)
+
+Frontend-only public "Network" layer that ties the existing public surfaces
+(Directory, Programs & Events, Articles) together and adds a new curated
+Circles page. Integrated from branch `claude/axal-network-section-clfpoq`.
+
+- **New page** — `frontend/src/pages/CirclesPage.jsx` at `/circles`, a curated
+  Communities & Circles browser (type overview, search + access/region filters,
+  featured + all cards). Pure static content from a new curated source
+  `frontend/src/data/network.js` (`CIRCLES`, `CIRCLE_TYPES`, `DIRECTORY_CATEGORIES`,
+  `DIRECTORY_PREVIEWS`, etc.) — no backend/D1/API changes.
+- **Redirect** — `/communities` → `/circles` via `<Navigate replace>` in
+  `frontend/src/App.jsx`.
+- **Shared sub-nav** — `frontend/src/components/NetworkSubNav.jsx` (Articles,
+  Directory, Programs & Events, Circles) rendered on the network pages.
+- **Directory upgrade** — `frontend/src/pages/PublicDirectoryPage.jsx` gains
+  category tabs + previews; still reads only `api.publicListPartners`.
+- **Events upgrade** — `frontend/src/pages/events/PublicEventsPage.jsx` restyled
+  under the network sub-nav; still reads only `eventsPublic.list` / `icsUrl`.
+- **Nav/footer** — `PublicNav.jsx` LINKS now Platform · Directory · Events ·
+  Circles · Spin-Out Lab. `PublicFooter.jsx` Network column upgraded to real
+  links (Articles, Directory, Programs & Events, Communities & Circles);
+  reconciled with Task #8 — Products column (`PRODUCT_FOOTER_LINKS`) and
+  Resources column kept, duplicate Articles dropped from Resources.
+- **Apex routing** — `/circles` + `/communities` (exact + `/*`) added to BOTH
+  the top-level `[[routes]]` and `[[env.production.routes]]` blocks in
+  `wrangler.toml`.
+
 ## Audience product pages + footer product nav (Task #8, PR #126)
 
 Four public, data-driven marketing pages — For Founders, For Investors & LPs,
