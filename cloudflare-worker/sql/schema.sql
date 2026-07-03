@@ -114,6 +114,10 @@ CREATE TABLE IF NOT EXISTS users (
     linkedin_email TEXT,
     linkedin_name TEXT,
     linkedin_connected_at TEXT,
+    -- Task #67 — profile photo URL captured at OAuth callback (licdn.com CDN),
+    -- used by the "Import from LinkedIn" flow. Apply-time fetch is host-
+    -- allowlisted to prevent SSRF.
+    linkedin_picture_url TEXT,
     -- Task #1 (DB) — public FOUNDER_ID / PARTNER_ID surfaced in legal
     -- contracts (via {{counterparty.founder_id}} merge field). Allocated
     -- on first role grant (services/publicIds.ts) from id_sequences.

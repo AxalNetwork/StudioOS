@@ -514,6 +514,7 @@ function ProfileTabs({ data, onSaved, flash, patch }) {
       {sub === 'personal' && (
         <>
           <PersonalIdentityCard flash={flash} onPctChange={setPct} pct={pct} />
+          <LinkedInImportSection flash={flash} />
           <ProfileSection data={data} onSaved={onSaved} flash={flash} patch={patch} />
           <ProfileBackgroundSection flash={flash} />
           <ProfileExtrasCard flash={flash} />
@@ -1090,6 +1091,221 @@ function ProfileBackgroundSection({ flash }) {
         </div>
       ))}
     </Card>
+  );
+}
+
+// Task #67 — Autopopulate profile from LinkedIn. Two sources: the connected
+// LinkedIn account (name + photo only) and a LinkedIn "Save to PDF" export
+// (full career history). NOTHING is published automatically — the parsed
+// proposal opens in a review dialog where the user edits/deselects before
+// applying. Uploads are PDF-only, ≤8 MB, and validated server-side too.
+const LI_MAX_PDF_BYTES = 8 * 1024 * 1024;
+const LI_FIELD_DEFS = [
+  { k: 'display_name', label: 'Display name' },
+  { k: 'full_legal_name', label: 'Full legal name' },
+  { k: 'headline', label: 'Headline' },
+  { k: 'location', label: 'Location (saved as city)' },
+  { k: 'website', label: 'Website' },
+];
+
+function LinkedInImportReview({ proposal, onCancel, onApplied, flash }) {
+  const [fields, setFields] = useState({ ...(proposal.fields || {}) });
+  const [bio, setBio] = useState(proposal.fields?.bio || '');
+  const [experience, setExperience] = useState(proposal.experience || []);
+  const [education, setEducation] = useState(proposal.education || []);
+  const [certifications, setCertifications] = useState(proposal.certifications || []);
+  const [includePhoto, setIncludePhoto] = useState(!!proposal.photo_url);
+  const [busy, setBusy] = useState(false);
+
+  const removeFrom = (setter, list, idx) => setter(list.filter((_, i) => i !== idx));
+
+  const apply = async () => {
+    setBusy(true);
+    try {
+      const outFields = {};
+      for (const { k } of LI_FIELD_DEFS) {
+        const v = (fields[k] || '').trim();
+        if (v) outFields[k] = v;
+      }
+      if (bio.trim()) outFields.bio = bio.trim();
+      const payload = {
+        fields: outFields,
+        experience,
+        education,
+        certifications,
+        photo_url: includePhoto ? (proposal.photo_url || null) : null,
+      };
+      const res = await api.linkedinImportApply(payload);
+      const n = (res.applied || []).length;
+      flash(n ? `Imported ${n} field${n === 1 ? '' : 's'} from LinkedIn` : 'Nothing to import');
+      onApplied();
+    } catch (e) {
+      flash(e.message || 'Import failed', 'error');
+      setBusy(false);
+    }
+  };
+
+  const renderList = (title, list, setter, cols) => (
+    <div className="mt-4">
+      <h4 className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">{title}</h4>
+      {list.length === 0 ? (
+        <p className="text-xs text-gray-400">None detected.</p>
+      ) : (
+        <div className="space-y-2">
+          {list.map((row, idx) => (
+            <div key={idx} className="rounded-lg border border-gray-200 dark:border-gray-700 p-2.5 flex items-start justify-between gap-3">
+              <div className="text-xs text-gray-700 dark:text-gray-300 space-y-0.5 min-w-0">
+                {cols.map(c => row[c.k] ? (
+                  <div key={c.k} className="truncate"><span className="text-gray-400">{c.label}: </span>{row[c.k]}</div>
+                ) : null)}
+              </div>
+              <button type="button" onClick={() => removeFrom(setter, list, idx)} disabled={busy}
+                className="text-xs text-red-600 hover:text-red-700 shrink-0 disabled:opacity-50">Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Review LinkedIn import</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Nothing is saved until you apply. Edit or remove anything below.</p>
+          </div>
+          <button onClick={onCancel} disabled={busy} className="text-gray-400 hover:text-gray-600 disabled:opacity-50"><X size={18} /></button>
+        </div>
+        <div className="p-5 overflow-y-auto">
+          {(proposal.warnings || []).length > 0 && (
+            <div className="mb-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 space-y-1">
+              {proposal.warnings.map((w, i) => (
+                <p key={i} className="text-xs text-amber-800 dark:text-amber-300 flex gap-1.5"><AlertTriangle size={13} className="shrink-0 mt-0.5" />{w}</p>
+              ))}
+            </div>
+          )}
+          {includePhoto && proposal.photo_url && (
+            <label className="flex items-center gap-3 mb-4">
+              <img src={proposal.photo_url} alt="" className="w-14 h-14 rounded-full object-cover border border-gray-200 dark:border-gray-700" />
+              <span className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+                <input type="checkbox" checked={includePhoto} onChange={e => setIncludePhoto(e.target.checked)} />
+                Use this LinkedIn photo as my headshot
+              </span>
+            </label>
+          )}
+          <div className="grid sm:grid-cols-2 gap-3">
+            {LI_FIELD_DEFS.map(({ k, label }) => (
+              <Field key={k} label={label}>
+                <input value={fields[k] || ''} onChange={e => setFields({ ...fields, [k]: e.target.value })}
+                  className={inputCls} disabled={busy} />
+              </Field>
+            ))}
+          </div>
+          <div className="mt-3">
+            <Field label="About / bio" hint="Up to 2,000 characters.">
+              <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3} className={inputCls} disabled={busy} />
+            </Field>
+          </div>
+          {renderList('Experience', experience, setExperience, [
+            { k: 'title', label: 'Title' }, { k: 'company', label: 'Company' },
+            { k: 'start', label: 'Start' }, { k: 'end', label: 'End' },
+          ])}
+          {renderList('Education', education, setEducation, [
+            { k: 'school', label: 'School' }, { k: 'degree', label: 'Degree' }, { k: 'field', label: 'Field' },
+          ])}
+          {renderList('Certifications', certifications, setCertifications, [
+            { k: 'name', label: 'Name' }, { k: 'issuer', label: 'Issuer' }, { k: 'year', label: 'Year' },
+          ])}
+        </div>
+        <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 rounded-b-xl flex justify-end gap-2">
+          <button onClick={onCancel} disabled={busy}
+            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Cancel</button>
+          <button onClick={apply} disabled={busy}
+            className="px-3 py-1.5 text-sm rounded-lg bg-violet-600 text-white hover:bg-violet-700 flex items-center gap-1.5 disabled:opacity-50">
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}{busy ? 'Applying…' : 'Apply to profile'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LinkedInImportSection({ flash }) {
+  const [busy, setBusy] = useState(false);
+  const [proposal, setProposal] = useState(null);
+  const fileRef = useRef(null);
+
+  const importFromAccount = async () => {
+    setBusy(true);
+    try {
+      const { proposal: p } = await api.linkedinImportPreview({ source: 'account' });
+      setProposal(p);
+    } catch (e) {
+      flash(e.message || 'Could not import from LinkedIn', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onFile = async (file) => {
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      flash('Please upload a PDF (LinkedIn → More → Save to PDF).', 'error');
+      return;
+    }
+    if (file.size > LI_MAX_PDF_BYTES) {
+      flash('PDF must be under 8MB.', 'error');
+      return;
+    }
+    const dataUri = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    setBusy(true);
+    try {
+      const { proposal: p } = await api.linkedinImportPreview({ source: 'pdf', pdf_data_uri: dataUri });
+      setProposal(p);
+    } catch (e) {
+      flash(e.message || 'Could not read that PDF', 'error');
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  return (
+    <>
+      <Card title="Autopopulate from LinkedIn"
+        description="Prefill your profile from your connected LinkedIn account or a LinkedIn PDF export. You review and confirm everything before it's saved.">
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={importFromAccount} disabled={busy}
+            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-1.5 disabled:opacity-50">
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Import from connected account
+          </button>
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={busy}
+            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-1.5 disabled:opacity-50">
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Upload LinkedIn PDF
+          </button>
+          <input ref={fileRef} type="file" accept="application/pdf,.pdf" className="hidden"
+            onChange={e => onFile(e.target.files?.[0])} />
+        </div>
+        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
+          To get your PDF: on LinkedIn, open your profile → More → Save to PDF. PDF only, up to 8MB.
+        </p>
+      </Card>
+      {proposal && (
+        <LinkedInImportReview
+          proposal={proposal}
+          flash={flash}
+          onCancel={() => setProposal(null)}
+          onApplied={() => { setProposal(null); setTimeout(() => window.location.reload(), 600); }}
+        />
+      )}
+    </>
   );
 }
 

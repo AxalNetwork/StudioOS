@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Fill in your profile from LinkedIn
+
+Setting up your profile just got a lot faster. In **Settings → Profile**, you can
+now autopopulate your details from LinkedIn — either from your connected LinkedIn
+account, or by uploading a LinkedIn PDF export of your profile. We'll pull in your
+headline, about, experience, education, certifications, location, website, and
+photo. Nothing is saved automatically: everything opens in a review screen first,
+so you can edit or remove anything before it goes on your profile.
+
+---
+
 ## A job board for the network
 
 You can now find and post jobs on StudioOS. Founders and team members can post

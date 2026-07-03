@@ -21,13 +21,14 @@ from pathlib import Path
 from typing import Any, Optional
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlmodel import Session, text
 
 from backend.app.api.routes.auth import get_current_user
 from backend.app.database import get_session
 from backend.app.models.entities import User
+from backend.app.services import linkedin_import as _lin
 from backend.app.services.email_service import send_verification_email
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
@@ -52,6 +53,9 @@ _USER_COLUMNS = [
     ("education", "TEXT"),
     ("certifications", "TEXT"),
     ("website", "TEXT"),
+    # Task #67 — LinkedIn profile photo URL captured at OAuth callback, used by
+    # the "Import from LinkedIn" flow (account source). Mirrors the worker.
+    ("linkedin_picture_url", "TEXT"),
 ]
 
 FOUNDER_INVITE_CAP_PER_PROJECT = 10
@@ -499,6 +503,168 @@ def put_profile_background(
     if updates:
         session.commit()
     return _load_background(session, user.id)
+
+
+# --- Task #67: Autopopulate profile from LinkedIn ---------------------------
+#
+# Dev mirror of the worker's /profile/linkedin-import/{preview,apply}. NOTHING
+# is written on /preview; the client shows the parsed proposal, the user edits/
+# deselects, then POSTs the reviewed proposal to /apply. Two sources: 'account'
+# (connected LinkedIn identity — usually only populated in prod) and 'pdf' (a
+# LinkedIn "Save to PDF" export as a data: URI, parsed in-process, PDF-only,
+# 8 MB cap, content-type + magic-byte validated, all text sanitized).
+
+
+def _linkedin_import_http_error(e: _lin.LinkedInImportError) -> HTTPException:
+    return HTTPException(status_code=e.status, detail={"error": e.message, "code": e.code})
+
+
+@router.post("/profile/linkedin-import/preview")
+def linkedin_import_preview(
+    payload: dict = Body(default=None),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_schema(session)
+    body = payload or {}
+    source = body.get("source")
+    if source not in ("account", "pdf"):
+        raise HTTPException(status_code=400, detail="source must be 'account' or 'pdf'")
+    try:
+        if source == "account":
+            row = session.exec(text(
+                "SELECT linkedin_sub, linkedin_name, linkedin_picture_url "
+                "FROM users WHERE id = :uid"
+            ).bindparams(uid=user.id)).first()
+            proposal = _lin.build_account_proposal(dict(row._mapping) if row else None)  # type: ignore[attr-defined]
+        else:
+            raw = _lin.decode_pdf_data_uri(body.get("pdf_data_uri"))
+            lines = _lin.extract_pdf_lines(raw)
+            proposal = _lin.parse_linkedin_profile(lines)
+    except _lin.LinkedInImportError as e:
+        raise _linkedin_import_http_error(e)
+    return Response(
+        content=json.dumps({"proposal": proposal}),
+        media_type="application/json",
+        headers={"X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.post("/profile/linkedin-import/apply")
+def linkedin_import_apply(
+    payload: dict = Body(default=None),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_schema(session)
+    try:
+        p = _lin.normalize_proposal_for_apply(payload or {})
+    except _lin.LinkedInImportError as e:
+        raise _linkedin_import_http_error(e)
+
+    applied: list[str] = []
+    fields = p["fields"]
+
+    # Identity fields → personal_data JSON. Location maps to city (freeform);
+    # never to country/postal, which are ISO-validated and would reject.
+    extras = _load_extras(session, user.id)
+    next_personal = dict(extras["personal"])
+    changed_personal = False
+    for k in ("display_name", "headline"):
+        if fields.get(k):
+            next_personal[k] = _trim(fields[k])
+            changed_personal = True
+            applied.append(k)
+    if fields.get("full_legal_name"):
+        next_personal["full_legal_name"] = _trim(fields["full_legal_name"])
+        changed_personal = True
+        applied.append("full_legal_name")
+    if fields.get("location"):
+        next_personal["city"] = _trim(fields["location"])
+        changed_personal = True
+        applied.append("city")
+    if changed_personal:
+        _save_extras_field(session, user.id, "personal_data", next_personal)
+
+    # Bio (about/summary) → users.bio column (2000-char cap already applied).
+    if fields.get("bio"):
+        session.exec(text("UPDATE users SET bio = :v WHERE id = :uid").bindparams(
+            v=fields["bio"][:2000], uid=user.id))
+        session.commit()
+        applied.append("bio")
+
+    # Structured career background → experience / education / certifications
+    # (JSON arrays) + website.
+    bg_updates: list[tuple[str, Any]] = []
+    if p["experience"]:
+        bg_updates.append(("experience", json.dumps(_sanitize_entries(p["experience"], _EXPERIENCE_KEYS))))
+    if p["education"]:
+        bg_updates.append(("education", json.dumps(_sanitize_entries(p["education"], _EDUCATION_KEYS))))
+    if p["certifications"]:
+        bg_updates.append(("certifications", json.dumps(_sanitize_entries(p["certifications"], _CERTIFICATION_KEYS))))
+    if fields.get("website"):
+        w = fields["website"].strip()[:300]
+        if re.match(r"^https?://", w, re.IGNORECASE):
+            bg_updates.append(("website", w))
+    for col, val in bg_updates:
+        session.exec(text(f"UPDATE users SET {col} = :v WHERE id = :uid").bindparams(v=val, uid=user.id))
+        applied.append(col)
+    if bg_updates:
+        session.commit()
+
+    # Photo (best-effort): fetch the host-allowlisted licdn URL and store it via
+    # the same hardened local-file headshot path. Never fatal.
+    photo_applied = False
+    if p["photo_url"] and _lin.is_linkedin_image_host(p["photo_url"]):
+        photo_applied = _apply_linkedin_photo(session, user, p["photo_url"])
+        if photo_applied:
+            applied.append("photo")
+
+    return Response(
+        content=json.dumps({"ok": True, "applied": applied, "photo_applied": photo_applied}),
+        media_type="application/json",
+        headers={"X-Content-Type-Options": "nosniff"},
+    )
+
+
+def _apply_linkedin_photo(session: Session, user: User, url: str) -> bool:
+    """Fetch a LinkedIn CDN photo (host already allowlisted) and persist it to
+    the local headshot path. Best-effort — any failure is swallowed."""
+    import urllib.request
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "AxalStudioOS"})
+        with urllib.request.urlopen(req, timeout=8) as resp:  # noqa: S310 — host allowlisted
+            ct = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            ext = _HEADSHOT_MIME.get(ct)
+            if not ext:
+                return False
+            raw_bytes = resp.read(3 * 1024 * 1024 + 1)
+        if not raw_bytes or len(raw_bytes) > 3 * 1024 * 1024:
+            return False
+        _HEADSHOT_DIR.mkdir(parents=True, exist_ok=True)
+        fname = f"{user.id}_{uuid.uuid4().hex}.{ext}"
+        fpath = _HEADSHOT_DIR / fname
+        fpath.write_bytes(raw_bytes)
+        prev = session.exec(text(
+            "SELECT headshot_local_path FROM users WHERE id = :uid").bindparams(uid=user.id)).first()
+        old_path = prev._mapping["headshot_local_path"] if prev else None  # type: ignore[attr-defined]
+        session.exec(text(
+            "UPDATE users SET headshot_local_path = :p WHERE id = :uid").bindparams(
+            p=str(fpath), uid=user.id))
+        session.commit()
+        if old_path and old_path != str(fpath):
+            try:
+                Path(old_path).unlink(missing_ok=True)
+            except OSError:
+                pass
+        return True
+    except Exception:
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        return False
 
 
 # --- Headshot upload + stream -----------------------------------------------

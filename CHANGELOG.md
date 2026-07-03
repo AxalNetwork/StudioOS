@@ -10,6 +10,36 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Autopopulate profiles from LinkedIn — account + PDF, review-and-confirm (Task #67)
+
+Users can prefill their profile (headline, about/bio, experience, education,
+certifications, location, website, photo) from either their connected LinkedIn
+account or a LinkedIn "Save to PDF" export. Nothing is auto-published: the parsed
+result opens in a review dialog where the user edits/removes fields before applying.
+
+- **Parser** — `cloudflare-worker/src/services/linkedinImport.ts` is a pure,
+  dependency-free parser (PDF text extraction via FlateDecode + section
+  heuristics) with `test/linkedinImport.test.ts` (11 cases; appended to the
+  `test:drift` strip-types group). `backend/app/services/linkedin_import.py`
+  mirrors it (zlib FlateDecode) for dev parity.
+- **Worker** — `POST /settings/profile/linkedin-import/{preview,apply}` in
+  `routes/settings.ts`. Uploads are PDF-only, ≤8MB, validated by declared
+  content-type **and** `%PDF` magic bytes, served/handled with `X-Content-Type-Options: nosniff`;
+  all extracted text is sanitized. `preview` never writes; `apply` whitelists
+  fields and persists (personal identity, `users.bio`, structured background).
+  Photo import fetches only from the `licdn.com` allowlist and routes through the
+  existing headshot pipeline. Migration `133_linkedin_picture_url.sql` + `schema.sql`
+  add `linkedin_picture_url`; the LinkedIn OAuth callback captures/clears it.
+- **Dev (FastAPI)** — matching column + preview/apply routes in
+  `backend/app/api/routes/settings.py` (also fixed a latent missing `Body` import).
+- **Frontend** — `lib/api.js` `linkedinImportPreview`/`linkedinImportApply`;
+  `SettingsPage.jsx` Profile → Personal gains an "Autopopulate from LinkedIn" card
+  (connected-account button + PDF upload) and a review-and-confirm modal
+  (editable/removable proposal, opt-in photo) with dark-mode variants.
+- **Drive-by fix** — `pages/jobs/JobManagePage.jsx` imported a nonexistent
+  `Linkedin` glyph from lucide-react (this repo's lucide predates it), breaking the
+  frontend build; replaced with the repo's inline-SVG pattern.
+
 ## Public job board: founders post roles, applicants apply (Task #68)
 
 A public-facing job board mirroring the Events feature. Founders (and other

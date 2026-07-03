@@ -1725,6 +1725,20 @@ export const api = {
     request('/linkedin/oauth/start', { method: 'POST', body: JSON.stringify(return_to ? { return_to } : {}) }),
   linkedinDisconnect: () => request('/linkedin/disconnect', { method: 'POST', body: JSON.stringify({}) }),
 
+  // Task #67 — Autopopulate profile from LinkedIn (connected account OR a
+  // LinkedIn PDF export). preview() never writes; apply() persists the
+  // user-reviewed proposal. source is 'account' | 'pdf'.
+  linkedinImportPreview: ({ source, pdf_data_uri } = {}) =>
+    request('/settings/profile/linkedin-import/preview', {
+      method: 'POST',
+      body: JSON.stringify(pdf_data_uri ? { source, pdf_data_uri } : { source }),
+    }),
+  linkedinImportApply: (proposal) =>
+    request('/settings/profile/linkedin-import/apply', {
+      method: 'POST',
+      body: JSON.stringify(proposal || {}),
+    }),
+
   // ---------- Settings (Epic 3) ----------
   getSettings: () => request('/settings'),
   updateSettings: (data) => request('/settings', { method: 'PATCH', body: JSON.stringify(data) }),
