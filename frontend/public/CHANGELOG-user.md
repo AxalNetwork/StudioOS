@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A job board for the network
+
+You can now find and post jobs on StudioOS. Founders and team members can post
+open roles from **Jobs** in the sidebar, and every role is reviewed before it
+goes live. Anyone can browse published roles and apply with their details and a
+résumé — no account needed. If you do have an account, you can track the roles
+you've posted and the applications you've made from the **Jobs** menu.
+
+---
+
 ## A partner menu built around how you actually work
 
 If you're a service partner, your left-hand menu is now organised around your

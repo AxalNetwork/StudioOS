@@ -71,6 +71,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/assessment', icon: Gamepad2, label: 'Assessment Studio' },
       { to: '/admin/best-fit', icon: Sparkles, label: 'Best-Fit Console' },
       { to: '/admin/events', icon: Ticket, label: 'Event Admin' },
+      { to: '/admin/jobs', icon: Briefcase, label: 'Job Board Admin' },
       { to: '/monitoring', icon: Activity, label: 'Monitoring' },
       { to: '/admin/telegram', icon: Send, label: 'Telegram Channels' },
       // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
@@ -111,6 +112,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
+      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/integrations', icon: Plug, label: 'Integrations' },
       { to: '/marketplace', icon: Briefcase, label: 'Marketplace' },
       { to: '/services', icon: Package, label: 'Service Catalogue' },
@@ -194,6 +196,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'launch', label: 'Launch', items: [
       { to: '/my/events', icon: Ticket, label: 'Events' },
+      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
     ]},
@@ -281,6 +284,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/relationships', icon: Handshake, label: 'Relationships', match: ['/relationships', '/partners'] },
       { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
+      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
     ]},
     { key: 'earn', label: 'Earn', items: [
       { to: '/payouts', icon: Wallet, label: 'Payouts' },
@@ -354,6 +358,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/partners', icon: Network, label: 'Partners' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
+      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/integrations', icon: Plug, label: 'Integrations' },
       { to: '/play', icon: Gamepad2, label: 'Discover' },
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
@@ -372,6 +377,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'engagements', label: 'Engagements', items: [
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
+      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/mentors', icon: UserCircle, label: 'Mentor Directory' },
       { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/tickets', icon: Ticket, label: 'Support' },

@@ -49,6 +49,7 @@ const PartnerOnboardPage = lazy(() => import('./pages/PartnerOnboardPage'));
 const AdminPartnerInvitations = lazy(() => import('./pages/admin/PartnerInvitations'));
 const AdminPublications = lazy(() => import('./pages/admin/Publications'));
 const AdminEventsPage = lazy(() => import('./pages/admin/AdminEventsPage'));
+const AdminJobsPage = lazy(() => import('./pages/admin/AdminJobsPage'));
 const AdminTeam = lazy(() => import('./pages/admin/AdminTeam'));
 const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
 const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'));
@@ -92,6 +93,10 @@ const CalendarPage = lazy(() => import('./pages/CalendarPage'));
 const MyEventsPage = lazy(() => import('./pages/events/MyEventsPage'));
 const EventEditorPage = lazy(() => import('./pages/events/EventEditorPage'));
 const EventManagePage = lazy(() => import('./pages/events/EventManagePage'));
+const MyJobsPage = lazy(() => import('./pages/jobs/MyJobsPage'));
+const JobEditorPage = lazy(() => import('./pages/jobs/JobEditorPage'));
+const JobManagePage = lazy(() => import('./pages/jobs/JobManagePage'));
+const MyApplicationsPage = lazy(() => import('./pages/jobs/MyApplicationsPage'));
 const CofounderPage = lazy(() => import('./pages/CofounderPage'));
 // Task #20 — /skills and /values are consolidated into the advisor flow.
 // The underlying SkillsProfilePage/ValuesAssessmentPage files are kept intact on
@@ -121,6 +126,8 @@ const RiskDisclosuresPage = lazy(() => import('./pages/RiskDisclosuresPage'));
 const PublicEventsPage = lazy(() => import('./pages/events/PublicEventsPage'));
 const PublicEventDetailPage = lazy(() => import('./pages/events/PublicEventDetailPage'));
 const InviteRsvpPage = lazy(() => import('./pages/events/InviteRsvpPage'));
+const PublicJobsPage = lazy(() => import('./pages/jobs/PublicJobsPage'));
+const PublicJobDetailPage = lazy(() => import('./pages/jobs/PublicJobDetailPage'));
 // Task #4 (ID) — Public marketing surfaces.
 const PricingPage = lazy(() => import('./pages/PricingPage'));
 const DemoPage = lazy(() => import('./pages/DemoPage'));
@@ -1250,6 +1257,7 @@ function AppInner() {
       <Route path="/admin/articles" element={guard(['admin'], <ArticlesQueuePage />)} />
       <Route path="/articles/:slug" element={<ArticleReaderPage />} />
       <Route path="/admin/events" element={guard(['admin'], <AdminEventsPage />)} />
+      <Route path="/admin/jobs" element={guard(['admin'], <AdminJobsPage />)} />
       <Route path="/admin/publications" element={guard(['admin'], <AdminPublications />)} />
       <Route path="/admin/publications/new" element={guard(['admin'], <AdminPublicationNew />)} />
       <Route path="/admin/publications/:id" element={guard(['admin'], <AdminPublicationDetail />)} />
@@ -1291,6 +1299,11 @@ function AppInner() {
       <Route path="/events/new" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <EventEditorPage />)} />
       <Route path="/events/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <EventEditorPage />)} />
       <Route path="/events/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <EventManagePage />)} />
+      <Route path="/my/jobs" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <MyJobsPage />)} />
+      <Route path="/my/applications" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <MyApplicationsPage />)} />
+      <Route path="/jobs/new" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <JobEditorPage />)} />
+      <Route path="/jobs/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <JobEditorPage />)} />
+      <Route path="/jobs/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <JobManagePage />)} />
       <Route path="/cofounder" element={guard(['admin', 'founder'], <CofounderPage />)} />
       {/* Task #20 — Consolidated profile/advisor flow. The advisor conversation
           now builds the skill + values profile; the legacy /skills and /values
@@ -1376,6 +1389,8 @@ function AppInner() {
       {/* Task #5 — Public event surface (no auth). */}
       <Route path="/events" element={<PublicEventsPage />} />
       <Route path="/events/:slug" element={<PublicEventDetailPage />} />
+      <Route path="/jobs" element={<PublicJobsPage />} />
+      <Route path="/jobs/:slug" element={<PublicJobDetailPage />} />
       <Route path="/invite/:token" element={<InviteRsvpPage />} />
 
       <Route path="/terms" element={<TermsPage />} />

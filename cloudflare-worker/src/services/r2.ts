@@ -142,3 +142,64 @@ export async function getHeadshot(env: Env, fileKey: string): Promise<R2ObjectBo
   if (!fileKey.startsWith('headshots/')) return null;
   return await env.FILES.get(fileKey);
 }
+
+// ---------------------------------------------------------------------------
+// Resumes (Task #68 — Job Board) — private applicant CVs stored under
+// resumes/{posting_id}/{uuid}.pdf. Same private-bucket model as KYC: no public
+// URL; a founder/admin fetches bytes only via a signed one-time download token
+// (services/signedDownload.ts). PDF-only initially.
+// ---------------------------------------------------------------------------
+
+const RESUME_MIME: Record<string, string> = {
+  'application/pdf': 'pdf',
+};
+
+const RESUME_MAX_BYTES = 5 * 1024 * 1024; // 5MB hard ceiling.
+
+export interface ResumeMeta {
+  file_key: string;
+  content_type: string;
+  size: number;
+  sha256: string;
+  uploaded_at: string;
+}
+
+export async function putResumeFromDataUri(
+  env: Env,
+  postingId: number,
+  dataUri: string,
+): Promise<ResumeMeta> {
+  if (!env.FILES) throw new Error('R2 binding FILES not configured');
+  const commaIdx = dataUri.indexOf(',');
+  if (commaIdx < 0 || !dataUri.startsWith('data:')) throw new Error('Invalid data URI');
+  const meta = dataUri.slice(5, commaIdx); // strip "data:"
+  const contentType = meta.replace(';base64', '').trim();
+  const ext = RESUME_MIME[contentType];
+  if (!ext) throw new Error(`Unsupported resume type: ${contentType} (allowed: PDF)`);
+  const b64 = dataUri.slice(commaIdx + 1);
+  // Cheap pre-check on the base64 length so we never atob() a multi-MB string
+  // just to reject it: 4 base64 chars ≈ 3 bytes.
+  if (Math.floor((b64.length * 3) / 4) > RESUME_MAX_BYTES) throw new Error('Resume exceeds 5MB limit');
+  const bytes = bytesFromBase64(b64);
+  if (bytes.byteLength > RESUME_MAX_BYTES) throw new Error('Resume exceeds 5MB limit');
+  const sha256 = await sha256Hex(bytes);
+  const uuid = crypto.randomUUID();
+  const fileKey = `resumes/${postingId}/${uuid}.${ext}`;
+  await env.FILES.put(fileKey, bytes, {
+    httpMetadata: { contentType },
+    customMetadata: { posting_id: String(postingId), sha256 },
+  });
+  return {
+    file_key: fileKey,
+    content_type: contentType,
+    size: bytes.byteLength,
+    sha256,
+    uploaded_at: new Date().toISOString(),
+  };
+}
+
+export async function getResume(env: Env, fileKey: string): Promise<R2ObjectBody | null> {
+  if (!env.FILES) return null;
+  if (!fileKey.startsWith('resumes/')) return null; // hard guard: never serve outside resumes/ prefix
+  return await env.FILES.get(fileKey);
+}
