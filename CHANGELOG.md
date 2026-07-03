@@ -10,6 +10,38 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+> ## Partner sidebar: regrouped around the service-partner lifecycle (Task #47, PR #122)
+>
+> The service-partner left rail (`SIDEBAR_GROUPS.partner` in
+> `frontend/src/sidebarConfig.js`) is regrouped around the partner lifecycle,
+> collapsing the former investor-shaped layout (Home / Sourcing / Insights /
+> Capital & Legal / Network / Account) into five fuller, action-first groups:
+> **Home → Sourcing → Engage → Earn → Account**. Sidebar-config only — every
+> surviving route and icon is preserved, no pages are merged, and each feature
+> gets exactly one home. Mirrors the investor (Task #17) and founder (Task #19)
+> reorgs.
+>
+> - **Merges** — Partners folds into **Relationships** (Engage; a
+>   `match: ['/relationships','/partners']` list keeps the item highlighted on the
+>   legacy `/partners` route, which stays registered); "My Service Catalogue" →
+>   **My Services** (Sourcing); Demand Insights folds into Sourcing (the one
+>   partner-native signal), so the standalone Insights section is gone. **My
+>   Profile** now appears under Account.
+> - **Intentional removals from the partner nav** (documented in-file so a
+>   nav-integrity guard treats them as deliberate, not silent drops) — Partner
+>   Portal tile, Projects, Pipeline Board, Deal Flow, Scoring Engine, Risk Matrix,
+>   Due Diligence, Market Intelligence, Portfolio Health/Coverage, Watchlist,
+>   Liquidity & Exits, Legal & Capital, Find a Mentor, Network Effects, Articles.
+>   Every one of those routes stays registered in `frontend/src/App.jsx` and
+>   reachable for other roles / via deep link.
+> - **Deferred** — persona gating of the conditionally-removed routes (Deal Flow,
+>   Liquidity, Legal & Capital, Find a Mentor, Articles) is out of scope; route
+>   registrations are left untouched so nothing becomes unreachable.
+> - Integrated PR #122 (branch `claude/axal-partner-sidebar-audit-hb1afr`) as a
+>   direct file write of the verified clean-superset branch head; the PR should be
+>   closed on GitHub as "integrated via main" once main is pushed (a fresh commit
+>   won't auto-close it).
+>
 > ## Profiling: four-module confidence-based question bank (Skills · Work values · Archetype · Axal Fit)
 >
 > The Profile & Fit profiling is redesigned so Skills / Work values / Archetype /

@@ -217,49 +217,78 @@ export const SIDEBAR_GROUPS = {
     ]},
   ],
 
+  // Service-partner sidebar audit — regroup around the partner lifecycle but
+  // collapse it into FIVE fuller groups so no section is a header over a single
+  // item and the nav stays short: Home → Sourcing → Engage → Earn → Account.
+  // The lifecycle stages still map cleanly — Offer + Match + (demand) signal
+  // live in "Sourcing"; Deliver + relationships live in "Engage" — they're
+  // just no longer separate one-line sections. "Sourcing" is the partner
+  // lane's own verb ("Source thesis-aligned companies; monetise services",
+  // brand/gvpn.ts) — this is a venture partner network, not a job board, so
+  // the label is deliberately venture-native rather than gig-marketplace. This
+  // replaces the former
+  // investor-shaped layout (Sourcing / Insights / Capital & Legal / Network)
+  // that carried founder-, investor-, and studio-internal surfaces a service
+  // partner never acts on. Sidebar-level only: every surviving route/icon is
+  // preserved and no pages are merged. Mirrors the investor (Task #17) and
+  // founder (Task #19) reorgs.
+  //
+  // Merges (each feature has exactly one home):
+  //   • Partners → Relationships (Engage); match keeps the item active on the
+  //     legacy /partners route, which stays registered.
+  //   • "My Service Catalogue" → "My Services" (Sourcing).
+  //   • Demand Insights folds into Sourcing (the one partner-native signal)
+  //     so the standalone Insights section is gone.
+  //
+  // Intentional removals from the partner nav (documented so a nav-integrity
+  // guard treats them as deliberate, not silent drops — every route below
+  // stays registered and reachable for other roles or via deep link):
+  //   • /partner-portal "Partner Portal" — Studio is the home now, so the
+  //     duplicate portal tile is dropped (route stays for admin / deep links).
+  //   • /projects "Projects" and /pipeline "Pipeline Board" — studio/investor
+  //     execution + deal-pipeline surfaces, not partner-facing.
+  //   • /deals "Deal Flow" — only relevant to investor-type partners
+  //     (GP / angel / scout / corporate-VC personas); conditional, to be
+  //     re-surfaced when the sidebar supports persona gating.
+  //   • /scoring "Scoring Engine", /portfolio/risk-matrix "Risk Matrix",
+  //     /admin/due-diligence "Due Diligence" — investor/studio diligence tools.
+  //   • /market-intel "Market Intelligence" — investor-flavoured intel dropped
+  //     to keep the partner UX lean; Demand Insights is the kept signal.
+  //   • /portfolio/health "Portfolio Health", /portfolio/coverage
+  //     "Portfolio Coverage", /watchlist "Watchlist & Journal",
+  //     /liquidity "Liquidity & Exits", /legal-capital "Legal & Capital" —
+  //     investor/founder capital surfaces; conditional for equity-holding
+  //     partners only.
+  //   • /mentors "Find a Mentor" — founder-oriented (a service partner is the
+  //     expert, not the mentee); conditional.
+  //   • /network-effects "Network Effects" — too abstract to earn a nav slot.
+  //   • /articles/draft "Articles" — low-frequency authoring; conditional for
+  //     content/press partners.
   partner: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/partner-portal', icon: UserCircle, label: 'Partner Portal', highlight: true },
     ]},
     { key: 'sourcing', label: 'Sourcing', items: [
-      { to: '/projects', icon: Zap, label: 'Projects' },
-      { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
-      { to: '/deals', icon: Handshake, label: 'Deal Flow' },
+      { to: '/services', icon: Package, label: 'My Services' },
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
+      { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
       { to: '/marketplace', icon: Briefcase, label: 'Marketplace' },
-      { to: '/partner/office-hours', icon: Calendar, label: 'My Office Hours' },
-    ]},
-    { key: 'insights', label: 'Insights', items: [
-      { to: '/scoring', icon: Target, label: 'Scoring Engine' },
-      { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
-      { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
       { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
     ]},
-    { key: 'capital', label: 'Capital & Legal', items: [
-      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
-      { to: '/payouts', icon: Wallet, label: 'Payouts' },
-      { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
-      { to: '/portfolio/coverage', icon: Network, label: 'Portfolio Coverage' },
-      { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
-      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
-      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
-      { to: '/trust', icon: Lock, label: 'Trust Center' },
-    ]},
-    { key: 'network', label: 'Network', items: [
-      { to: '/services', icon: Package, label: 'My Service Catalogue' },
-      { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
-      { to: '/partners', icon: Users, label: 'Partners' },
-      { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
-      { to: '/refer', icon: Share2, label: 'Refer & Earn' },
-      { to: '/relationships', icon: Handshake, label: 'Relationships' },
-      { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
-      { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
+    { key: 'engage', label: 'Engage', items: [
+      { to: '/partner/office-hours', icon: Calendar, label: 'My Office Hours' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
+      { to: '/relationships', icon: Handshake, label: 'Relationships', match: ['/relationships', '/partners'] },
+      { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
     ]},
+    { key: 'earn', label: 'Earn', items: [
+      { to: '/payouts', icon: Wallet, label: 'Payouts' },
+      { to: '/refer', icon: Share2, label: 'Refer & Earn' },
+    ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles/draft', icon: FileText, label: 'Articles' },
+      { to: '/trust', icon: Lock, label: 'Trust Center' },
+      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
