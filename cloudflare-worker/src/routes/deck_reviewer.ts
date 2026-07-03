@@ -10,9 +10,10 @@
  * editable; the review can be regenerated after edits.
  */
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
+import { canAccessProject } from '../services/projectAccess';
 import { ensureDeckReviewSchema } from '../services/deckReviewSchema';
 import {
   extractDeck,
@@ -88,13 +89,27 @@ async function loadReview(env: Env, userId: number, id: string): Promise<Record<
   return rows[0] ? mapRow(rows[0]) : null;
 }
 
-async function projectContext(env: Env, projectId: number | null): Promise<string | undefined> {
+async function projectContext(
+  env: Env,
+  user: Pick<User, 'id' | 'role' | 'founder_id'>,
+  projectId: number | null,
+): Promise<string | undefined> {
   if (!projectId) return undefined;
   try {
     const sql = getSQL(env);
-    const rows = await sql`SELECT name, sector, problem_statement FROM projects WHERE id = ${projectId}`;
+    const rows = await sql`SELECT id, founder_id, name, sector, problem_statement FROM projects WHERE id = ${projectId}`;
     const p = rows[0];
     if (!p) return undefined;
+    // Access control: never surface another user's project context into the
+    // AI prompt / review. Only the owner (via founder linkage), accepted
+    // co-founders/advisors, or studio staff may read it.
+    const allowed = await canAccessProject(
+      env,
+      user,
+      p as { id: number; founder_id: number | null },
+      { write: false },
+    );
+    if (!allowed) return undefined;
     return [p.name, p.sector, p.problem_statement].filter(Boolean).join(' · ') || undefined;
   } catch {
     return undefined;
@@ -162,7 +177,7 @@ deckReviewer.post('/upload', async (c) => {
   }
 
   const sections = await mapSections(c.env, user.id, extraction.markdown, extraction.chunks);
-  const ctx = await projectContext(c.env, projectId);
+  const ctx = await projectContext(c.env, user, projectId);
   const review = await generateReview(c.env, user.id, sections, { startup: ctx });
 
   await sql`UPDATE deck_reviews SET extraction_status = 'ok', status = 'complete', chunks_json = ${JSON.stringify(extraction.chunks)}, sections_json = ${JSON.stringify(sections)}, review_json = ${JSON.stringify(review)}, updated_at = ${nowIso()} WHERE id = ${id}`;
@@ -191,7 +206,7 @@ deckReviewer.post('/paste', async (c) => {
     VALUES (${id}, ${user.id}, ${projectId}, 'paste', ${typeof body.filename === 'string' ? body.filename.slice(0, 200) : 'Pasted deck'}, 'text/plain', ${text.length}, NULL, 0, 'ok', 'processing', ${typeof body.filename === 'string' ? body.filename.slice(0, 200) : 'Pasted deck'}, ${nowIso()}, ${nowIso()})`;
 
   const sections = await mapSections(c.env, user.id, text, chunks);
-  const ctx = await projectContext(c.env, projectId);
+  const ctx = await projectContext(c.env, user, projectId);
   const review = await generateReview(c.env, user.id, sections, { startup: ctx });
 
   await sql`UPDATE deck_reviews SET status = 'complete', chunks_json = ${JSON.stringify(chunks)}, sections_json = ${JSON.stringify(sections)}, review_json = ${JSON.stringify(review)}, updated_at = ${nowIso()} WHERE id = ${id}`;
@@ -260,7 +275,7 @@ deckReviewer.post('/:id/regenerate', async (c) => {
   if (!row) return c.json({ error: 'not_found' }, 404);
   let sections = safeParse<DeckSection[]>(row.sections_json, []);
   if (!sections.length) sections = mapSectionsHeuristic(safeParse<DeckChunk[]>(row.chunks_json, []));
-  const ctx = await projectContext(c.env, row.project_id ? Number(row.project_id) : null);
+  const ctx = await projectContext(c.env, user, row.project_id ? Number(row.project_id) : null);
   const review = await generateReview(c.env, user.id, sections, { startup: ctx });
   await sql`UPDATE deck_reviews SET review_json = ${JSON.stringify(review)}, status = 'complete', updated_at = ${nowIso()} WHERE id = ${id}`;
   await sql`INSERT INTO deck_review_history (id, review_id, review_json, created_at) VALUES (${crypto.randomUUID()}, ${id}, ${JSON.stringify(review)}, ${nowIso()})`;

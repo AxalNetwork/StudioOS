@@ -12,6 +12,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
+import { canAccessProject } from '../services/projectAccess';
 import { ensureCompetitorSchema } from '../services/competitorSchema';
 import {
   runCompetitorAnalysis,
@@ -152,6 +153,23 @@ competitors.post('/analyze', async (c) => {
     const projRows = await sql`SELECT * FROM projects WHERE id = ${pid}`;
     const project = projRows[0];
     if (project) {
+      // Access control: only the owner (via founder linkage), accepted
+      // co-founders/advisors, or studio staff may prefill from a project.
+      // Without this, any authenticated user could pass an arbitrary
+      // project_id and read another founder's private project fields back
+      // through inputs_json / the subsequent GET.
+      const allowed = await canAccessProject(
+        c.env,
+        user,
+        project as { id: number; founder_id: number | null },
+        { write: false },
+      );
+      if (!allowed) {
+        return c.json(
+          { error: 'forbidden', message: 'You do not have access to that project.' },
+          403,
+        );
+      }
       projectId = pid;
       mode = 'startup';
       const seeded = inputsFromProject(project);
