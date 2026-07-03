@@ -27,6 +27,22 @@ you can export. You'll find a shortcut to it right from the Pitch Deck Builder.
 
 ---
 
+## Writing and publishing articles now works end-to-end
+
+Your drafts now show up reliably. When you create a new draft in the Articles
+workspace, it appears in your list right away and stays there after a refresh —
+no more "No articles yet" when you know you've saved one. Drafts, submitted, and
+published articles all show in your authoring list.
+
+If you're on the Axal VC team, you can now take one of your own articles all the
+way live from inside the editor with a new **Publish now** button — no need to
+hand it off elsewhere first. Once published, it appears on the public Articles
+page and opens at its own link straight away. Everyone else still writes and
+submits their articles for review before they go live, as before.
+
+
+---
+
 ## Fill in your profile from LinkedIn
 
 Setting up your profile just got a lot faster. In **Settings → Profile**, you can

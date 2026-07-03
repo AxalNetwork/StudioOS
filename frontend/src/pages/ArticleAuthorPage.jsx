@@ -3,10 +3,11 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   FileText, Plus, RefreshCw, Loader2, Save, Send, ArrowLeft, ImageIcon,
   CheckCircle2, Eye, MessageSquare, ChevronDown, ChevronRight,
-  Copy, ExternalLink, ShieldAlert, Clock, Upload, X,
+  Copy, ExternalLink, ShieldAlert, Clock, Upload, X, Globe,
 } from 'lucide-react';
-import { articles as api } from '../lib/api';
+import { articles as api, adminArticles as adminApi } from '../lib/api';
 import { useToast } from '../components/useToast';
+import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import ReactMarkdown from 'react-markdown';
 import { wordsAndMinutes, slugify } from '../lib/articleMarkdown';
@@ -334,6 +335,8 @@ export default function ArticleAuthorPage() {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const toast = {
     error: (m) => showToast({ kind: 'error', msg: m }),
     success: (m) => showToast({ kind: 'success', msg: m }),
@@ -348,6 +351,7 @@ export default function ArticleAuthorPage() {
   const [slugTouched, setSlugTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [preview, setPreview] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [coverUploading, setCoverUploading] = useState(false);
@@ -573,6 +577,71 @@ export default function ArticleAuthorPage() {
       }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Admin-only end-to-end publish. Regular authors still go through the
+  // submit → review → approve → publish queue; an admin can take one of
+  // their own drafts all the way to public in one action by chaining the
+  // existing (unchanged) transition endpoints: submit → approve → publish.
+  // The PII linter + weekly cap on /submit are deliberately left intact.
+  const adminPublish = async () => {
+    if (!article || !isAdmin) return;
+    if (!editing.title.trim()) { toast.error('Title is required'); return; }
+    if ((editing.body_markdown || '').trim().length < 200) { toast.error('Body must be at least 200 characters'); return; }
+    setPublishing(true);
+    setPiiFindings(null);
+    setRateLimit(null);
+    setSubmitSuccess(false);
+    try {
+      // Persist latest edits first — except when the article is locked in
+      // review (PUT would 409 `locked_for_review`); there we publish the
+      // stored content as-is.
+      if ((articleRef.current?.status || article.status) !== 'in_review') {
+        const ok = await persist();
+        if (!ok) { setPublishing(false); return; }
+      }
+      let status = articleRef.current?.status || article.status;
+      if (['draft', 'changes_requested', 'rejected'].includes(status)) {
+        const r = await api.submit(article.id);
+        status = r.article.status;
+      }
+      if (['submitted', 'in_review'].includes(status)) {
+        await adminApi.approve(article.id);
+        status = 'approved';
+      }
+      if (status === 'approved') {
+        await adminApi.publish(article.id);
+      }
+      await loadOne(article.id);
+      await refresh();
+      toast.success('Published — live on the public page');
+    } catch (e) {
+      const code = e?.data?.error;
+      if (code === 'pii_blocked') {
+        const findings = e.data?.findings || [];
+        setPiiFindings(findings);
+        toast.error(`Publish blocked — ${findings.length} item${findings.length === 1 ? '' : 's'} of personal data found.`);
+      } else if (code === 'rate_limited') {
+        setRateLimit({
+          per_week: e.data?.per_week,
+          used: e.data?.used,
+          next_available_at: e.data?.next_available_at || null,
+        });
+        toast.error('Weekly submission limit reached.');
+      } else if (code === 'body_too_short') {
+        toast.error(`Body must be at least ${e.data?.min_chars || 200} characters.`);
+      } else if (code === 'title_required') {
+        toast.error('Title is required.');
+      } else {
+        reportError('ArticleAuthor:adminPublish', e);
+        toast.error(e?.data?.error || e?.message || 'Publish failed');
+      }
+      // Reflect any partial transition (e.g. submitted but approve failed).
+      await loadOne(article.id).catch(() => {});
+      await refresh().catch(() => {});
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -806,6 +875,16 @@ export default function ArticleAuthorPage() {
                     {isEditable && (
                       <button onClick={save} disabled={saving || !dirty} className="text-sm px-3 py-1.5 bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 rounded hover:opacity-90 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed">
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
+                      </button>
+                    )}
+                    {isAdmin && article.status !== 'published' && (
+                      <button
+                        onClick={adminPublish}
+                        disabled={publishing || submitting}
+                        title="Admin: publish this article straight to the public page"
+                        className="text-sm px-3 py-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700 flex items-center gap-1 disabled:opacity-50"
+                      >
+                        {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />} Publish now
                       </button>
                     )}
                     {article.status === 'published' ? (

@@ -49,6 +49,27 @@ Builder and Project detail pages. Integrated from branch
   feature is not runnable in the Replit dev (FastAPI) backend, so the two pages
   return API errors in the dev preview until deployed.
 
+## Fix admin article authoring & publishing (Task #1)
+
+The in-app Articles authoring list always showed "No articles yet" and admins
+had no in-app path to publish an article to the public page.
+
+- **Root cause** — `GET /api/articles/mine` was silently 404ing. In
+  `cloudflare-worker/src/routes/articles.ts` the `/:slug` catch-all is
+  registered before `/mine`, and Hono runs matching handlers in registration
+  order; the catch-all's reserved-word guard returned 404 for `mine` instead of
+  falling through. (`/sectors` worked only because it is registered before
+  `/:slug`.) The guard now `return next()`s so the specific handlers
+  (`/mine`, `/draft/:id`, `/trust/me`, …) run regardless of registration order.
+- **Admin publish path** — `frontend/src/pages/ArticleAuthorPage.jsx` adds an
+  admin-only "Publish now" button that chains the existing (unchanged)
+  transition endpoints submit → approve (`/admin/articles/:id/approve`) →
+  publish (`/admin/articles/:id/publish`); publish bursts the edge cache via
+  the existing `bustArticleEdgeCache`. Regular authors are unchanged and still
+  go through the submit → review → approve → publish queue. The PII linter and
+  weekly submission cap on `/submit` are left intact.
+
+
 ## Autopopulate profiles from LinkedIn — account + PDF, review-and-confirm (Task #67)
 
 Users can prefill their profile (headline, about/bio, experience, education,
