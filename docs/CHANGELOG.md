@@ -10,6 +10,93 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+> ## Partner sidebar: regrouped around the service-partner lifecycle (Task #47, PR #122)
+>
+> The service-partner left rail (`SIDEBAR_GROUPS.partner` in
+> `frontend/src/sidebarConfig.js`) is regrouped around the partner lifecycle,
+> collapsing the former investor-shaped layout (Home / Sourcing / Insights /
+> Capital & Legal / Network / Account) into five fuller, action-first groups:
+> **Home → Sourcing → Engage → Earn → Account**. Sidebar-config only — every
+> surviving route and icon is preserved, no pages are merged, and each feature
+> gets exactly one home. Mirrors the investor (Task #17) and founder (Task #19)
+> reorgs.
+>
+> - **Merges** — Partners folds into **Relationships** (Engage; a
+>   `match: ['/relationships','/partners']` list keeps the item highlighted on the
+>   legacy `/partners` route, which stays registered); "My Service Catalogue" →
+>   **My Services** (Sourcing); Demand Insights folds into Sourcing (the one
+>   partner-native signal), so the standalone Insights section is gone. **My
+>   Profile** now appears under Account.
+> - **Intentional removals from the partner nav** (documented in-file so a
+>   nav-integrity guard treats them as deliberate, not silent drops) — Partner
+>   Portal tile, Projects, Pipeline Board, Deal Flow, Scoring Engine, Risk Matrix,
+>   Due Diligence, Market Intelligence, Portfolio Health/Coverage, Watchlist,
+>   Liquidity & Exits, Legal & Capital, Find a Mentor, Network Effects, Articles.
+>   Every one of those routes stays registered in `frontend/src/App.jsx` and
+>   reachable for other roles / via deep link.
+> - **Deferred** — persona gating of the conditionally-removed routes (Deal Flow,
+>   Liquidity, Legal & Capital, Find a Mentor, Articles) is out of scope; route
+>   registrations are left untouched so nothing becomes unreachable.
+> - Integrated PR #122 (branch `claude/axal-partner-sidebar-audit-hb1afr`) as a
+>   direct file write of the verified clean-superset branch head; the PR should be
+>   closed on GitHub as "integrated via main" once main is pushed (a fresh commit
+>   won't auto-close it).
+>
+> ## Profiling: four-module confidence-based question bank (Skills · Work values · Archetype · Axal Fit)
+>
+> The Profile & Fit profiling is redesigned so Skills / Work values / Archetype /
+> Axal Fit each become a first-class module with a confidence floor and coverage
+> target, instead of one flat fit-bank count. Previously the completion card read a
+> fake `0 / 17`, the Skills radar and Values wheel were under-populated (1–4 skill
+> and 0–5 value questions per role), and Archetype depended entirely on the separate
+> gamified track — so conversational-only users saw "Archetype missing…". PR #123.
+>
+> - **Module registry** — new
+>   `cloudflare-worker/src/services/advisor/profilingModules.ts` defines the four
+>   modules (`skills · work_values · archetype · axal_fit`), each with a `floor`
+>   (answers required) and `targetCoverage` (distinct axes/dims/traits/categories).
+>   Completion is `answered/required` per module, required-weighted overall, and
+>   capped so over-answering one module can't mask a neglected one. Admin/unknown
+>   personas → not applicable.
+> - **Archetype from the conversation** — new `archetype_trait` measure on
+>   `FitMeasures` plus a nearest-centroid classifier
+>   `cloudflare-worker/src/services/archetypeScoring.ts` (4 trait axes
+>   `builder · visionary · connector · operator`, per-role sets). Results persist in
+>   new table `profile_archetypes` (migration
+>   `cloudflare-worker/sql/migrations/130_profile_archetypes.sql`, self-healed by
+>   `ensureArchetypeSchema`). No new write-router branch — the raw 0–5 score already
+>   lands in `field_sources`. `GET /api/best-fit/me` now also returns the
+>   conversational archetype so the card renders without the gamified track.
+> - **Adaptive follow-up** — `selectAdaptiveProfiling` drops questions from
+>   already-confident modules and prefers gap-filling ones (uncovered
+>   axis/dim/trait first), so full confidence is ~20 answers for every persona. Fit
+>   banks (`cloudflare-worker/src/services/advisor/banks/fit_*.ts`) expanded to ≥5
+>   skill axes / ≥4 value dims / 4 archetype traits per role; they stay out of the
+>   manifest/drift guard so new questions don't trip CI.
+> - **Adaptive selector now live in the advisor flow (Task #46)** — new
+>   `applyAdaptiveProfiling(bank, answered, { keepIds })` in `profilingModules.ts`
+>   wraps `selectAdaptiveProfiling` for the route layer: it trims fit questions
+>   from confident modules and gap-fill-orders the rest while preserving non-fit
+>   and answered positions, and `keepIds` shields the pinned/current question so
+>   the poll-refresh idempotence on `/start` and `/next-question` still holds. It
+>   is applied to the ranker's candidate pool at all five asking sites in
+>   `cloudflare-worker/src/routes/advisor.ts` (`/start`, `/answer`, `/skip`,
+>   `/next-question`, `/turn`) plus the read-only `/queue` preview (so its peek
+>   matches what `/turn` will actually ask). Previously `selectAdaptiveProfiling`
+>   shipped but no live path called it, so the "skip confident modules" behaviour
+>   was inert; the untrimmed bank is still used for `syncBankTotal`/counts and
+>   `/progress`.
+> - **Frontend** — `frontend/src/components/profile/ProfileFitSection.jsx` renders
+>   per-module completion and the conversational archetype;
+>   `frontend/src/lib/assessmentMeta.js` adds the per-role archetype copy.
+> - **Tests** — new `cloudflare-worker/test/profilingModules.test.ts` and
+>   `cloudflare-worker/test/archetypeScoring.test.ts`, both wired into the
+>   `test:drift` strip-types list in root `package.json`; `advisor.profiling.test.ts`
+>   updated for the module model. `profilingModules.test.ts` also covers
+>   `applyAdaptiveProfiling` (drops confident-module fit questions while keeping
+>   non-fit ones, `keepIds` shields a pin, gap-fill front-loads). Full drift gate
+>   green.
+>
 > ## Profiling: mentors no longer answer double to reach "Profiling complete"
 >
 > The Profile & Fit "Profiling completion" card counts only the conversational
