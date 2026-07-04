@@ -32,13 +32,16 @@ visitor can actually reach. Integrated from branch `claude/axal-homepage-audit-2
   `/register` (was the nonexistent absolute `https://axal.vc/signup` → 404 via
   catch-all). One dark-mode fix on the new LANES card (`bg-white` → added
   `dark:bg-gray-900`) to satisfy the dark-mode drift guard.
-- **PublicNav — reconciled, not overwritten** (branch was cut before Task #8/#9,
-  which had already rewritten this file). Applied PR #128's intent: dropped the
-  `/#platform` jargon anchor for **Who it's for** (`/#lanes`), added **Jobs**
-  (Task #68's public board), relabeled the primary CTA **Get Started → Join Axal**
-  (both desktop and mobile). **Preserved Task #9's Circles** link (the branch
-  predated it) so the audited nav is now Who it's for · Spin-Out Lab · Directory ·
-  Events · Circles · Jobs — every item a real public destination.
+- **PublicNav — preserved Task #9's nav, took only non-regressing additions.**
+  The branch was cut before Task #8/#9's nav rewrite, and the task's non-regression
+  contract requires keeping the current links, so the baseline nav is kept intact:
+  **Platform · Directory · Events · Circles · Spin-Out Lab**. PR #128's nav relabel
+  (dropping the `/#platform` anchor for a `/#lanes` "Who it's for" item) was
+  deliberately NOT applied — it would have removed a link Task #9 established. Only
+  the audit's non-violating additions were taken: added a **Jobs** link (Task #68's
+  public board) and unified the primary CTA **Get Started → Join Axal** (desktop +
+  mobile) to match the new landing hero. Final nav: Platform · Directory · Events ·
+  Circles · Spin-Out Lab · Jobs.
 - **PublicFooter — preserved Task #8/#9, took only the non-regressing net-new.**
   PR #128's targeted footer bug (the dead `/#network` anchor in the Network column)
   was **already fixed by Task #9**, and its other footer changes would have

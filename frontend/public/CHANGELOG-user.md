@@ -12,9 +12,9 @@ one plain-language promise and a single clear action — **Join Axal** — inste
 several competing buttons and jargon. It's reordered so you can quickly see who
 Axal is for, how it works, and what's inside, and we trimmed the long feature
 grid down to the strongest few. We also fixed links that led to dead ends or a
-sign-in wall — every link now takes you to a page you can actually open — and the
-top menu now points at real destinations: Who it's for, Spin-Out Lab, Directory,
-Events, Circles, and Jobs.
+sign-in wall — every link now takes you to a page you can actually open — added a
+Jobs link to the top menu, and made the main call-to-action a single, clear
+"Join Axal" button.
 
 ---
 

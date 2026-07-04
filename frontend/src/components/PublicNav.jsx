@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
 const LINKS = [
-  { label: 'Who it’s for', href: '/#lanes' },
-  { label: 'Spin-Out Lab', href: '/spinout-lab' },
+  { label: 'Platform', href: '/#platform' },
   { label: 'Directory', href: '/directory' },
   { label: 'Events', href: '/events' },
   { label: 'Circles', href: '/circles' },
+  { label: 'Spin-Out Lab', href: '/spinout-lab' },
   { label: 'Jobs', href: '/jobs' },
 ];
 
