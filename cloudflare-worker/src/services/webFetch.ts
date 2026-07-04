@@ -98,7 +98,6 @@ export function isSafePublicUrl(url: string): boolean {
 
 function decodeEntities(s: string): string {
   return s
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
@@ -108,10 +107,16 @@ function decodeEntities(s: string): string {
     .replace(/&#(\d+);/g, (_, d) => {
       const code = Number(d);
       return code > 0 && code < 0x110000 ? String.fromCodePoint(code) : '';
-    });
+    })
+    // Decode &amp; LAST so a double-encoded sequence (e.g. "&amp;lt;") is not
+    // collapsed into its final form ("<"). Prevents double-unescaping.
+    .replace(/&amp;/g, '&');
 }
 
 function stripTag(html: string, tag: string): string {
+  // `tag` is always one of a fixed set of literals (script/style/noscript/svg/head),
+  // never user input — this dynamic RegExp is not attacker-controlled.
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
   const re = new RegExp(`<${tag}[\\s\\S]*?</${tag}>`, 'gi');
   return html.replace(re, ' ');
 }

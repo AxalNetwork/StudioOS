@@ -38,10 +38,18 @@ auto-close on the next scan; Semgrep does honor `nosemgrep`).
   replaced every `try: session.rollback() except: pass` with `_safe_rollback(session)`; non-rollback
   empty-excepts (zlib inflate, headshot unlink) now log at `debug`. `follows.py::_schema_ready` is a
   known false positive — kept, commented.
+- **`webFetch.ts` (2 follow-on alerts that surfaced after the initial sweep)** — reordered
+  `decodeEntities` so `&amp;` is decoded LAST (fixes CodeQL `js/double-escaping`; prevents
+  double-unescaping of sequences like `&amp;lt;`; no change for normal single-encoded text), and
+  inline `// nosemgrep` on `stripTag`'s dynamic `RegExp` (built only from a fixed literal tag set —
+  `script/style/noscript/svg/head` — never user input).
 - **Verified** — `npm run test:drift` (full pre-merge gate) green; Worker `tsc --noEmit` clean; edited
   backend modules import and behave identically (SSRF guard rejects `http`/non-licdn; `sanitize_text` output unchanged).
-- **User-owned closure** — CodeQL SSRF/path FPs (and the `_schema_ready` FP) need UI dismissal
-  ("used in a controlled way"); fixed alerts auto-close on the next scan.
+- **False-positive closure (done)** — the 3 CodeQL FPs with no inline suppression (`py/full-ssrf`,
+  `py/path-injection`, `follows.py::_schema_ready` unused-global) were dismissed via the Code Scanning
+  REST API with reasons. Every other alert is fixed-in-code or `nosemgrep`-suppressed and auto-closes
+  on the next scan **after the commit is pushed to `origin/main`** — GitHub scans `origin/main`, not
+  Replit's local `main`, so a sync/push (`bash scripts/git-push.sh` or the Sync UI) is required.
 
 ## Homepage audit: cut clutter, fix dead-end links, sharpen the join CTA (Task #14, PR #128)
 
