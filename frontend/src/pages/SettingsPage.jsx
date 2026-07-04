@@ -3625,9 +3625,14 @@ function FounderBillingPanel({ data, flash }) {
   }, [flash]);
 
   const tier = String(status?.tier || data?.subscription_tier || 'free').toLowerCase();
-  const subStatus = status?.status || data?.subscription_status || 'active';
+  const subStatus = String(status?.status || data?.subscription_status || 'active').toLowerCase();
   const renews = status?.renews_at || data?.subscription_renews_at;
   const hasCustomer = status?.has_customer ?? !!data?.stripe_customer_id;
+  // Trial + Spin-Out Lab billing state (from /api/billing/tier/status).
+  const trialEnds = subStatus === 'trialing' && status?.trial_ends_at ? new Date(status.trial_ends_at) : null;
+  const spinoutLab = status?.spinout_lab?.active ? status.spinout_lab : null;
+  const daysUntil = (d) => (d ? Math.max(0, Math.ceil((d.getTime() - Date.now()) / 86_400_000)) : null);
+  const trialDaysLeft = daysUntil(trialEnds);
 
   const upgrade = async (target) => {
     setBusy(target);
@@ -3646,6 +3651,34 @@ function FounderBillingPanel({ data, flash }) {
 
   return (
     <>
+      {/* Spin-Out Lab exception — participants are free for 30 days and are
+          never pushed into the standard paid-plan trial / auto-charge flow.
+          Surfaced here so the guarantee is explicit inside Billing. */}
+      {spinoutLab && (
+        <Card title="Spin-Out Lab" description="You're on the house while you run your sprint.">
+          <div className="rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="text-lg font-semibold text-emerald-800 dark:text-emerald-200">
+                  Free for {spinoutLab.free_days || 30} days
+                </div>
+                <div className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
+                  No card required · you won't be auto-charged during the Lab
+                  {spinoutLab.free_until && (
+                    <> · free through {new Date(spinoutLab.free_until).toLocaleDateString()}</>
+                  )}
+                </div>
+              </div>
+              {typeof spinoutLab.days_remaining === 'number' && (
+                <span className="text-xs uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-semibold">
+                  {spinoutLab.days_remaining} day{spinoutLab.days_remaining === 1 ? '' : 's'} left
+                </span>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+
       <Card title="Current plan" description="Your founder workspace subscription.">
         {loading ? (
           <div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div>
@@ -3655,15 +3688,46 @@ function FounderBillingPanel({ data, flash }) {
               <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Tier</div>
               <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 {TIER_LABEL[tier] || tier}
+                {subStatus === 'trialing' && (
+                  <span className="ml-2 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">
+                    Trial
+                  </span>
+                )}
               </div>
               <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Status: <span className="capitalize">{subStatus}</span>
-                {renews ? <> · Renews {new Date(renews).toLocaleDateString()}</> : null}
+                {subStatus === 'trialing' && trialEnds
+                  ? <> · Trial ends {trialEnds.toLocaleDateString()}</>
+                  : renews ? <> · Renews {new Date(renews).toLocaleDateString()}</> : null}
               </div>
             </div>
           </div>
         )}
       </Card>
+
+      {/* Trial status card — clear countdown + when the first charge lands, so
+          founders on a paid-plan trial always know what happens next and how to
+          stop it. Managing/cancelling happens in the subscription card below. */}
+      {subStatus === 'trialing' && trialEnds && (
+        <Card title="Trial status" description="You're trialing a paid plan.">
+          <div className="rounded-lg border border-violet-300 dark:border-violet-700 bg-violet-50/60 dark:bg-violet-900/20 p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {trialDaysLeft} day{trialDaysLeft === 1 ? '' : 's'} left in your trial
+                </div>
+                <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+                  Your {TIER_LABEL[tier] || tier} plan begins on {trialEnds.toLocaleDateString()} — your card is
+                  charged then unless you cancel before the trial ends. Cancel any time from “Manage subscription” below.
+                </div>
+              </div>
+              <span className="text-xs uppercase tracking-wider px-2.5 py-1 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 font-semibold">
+                Ends {trialEnds.toLocaleDateString()}
+              </span>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Task #5 — active subscribers manage everything in-app (cancel, resume,
           plan swap with proration, payment methods, invoices). Free users see
@@ -3677,7 +3741,18 @@ function FounderBillingPanel({ data, flash }) {
         </Card>
       ) : (
         <>
-          <Card title="Plans" description="Upgrade any time. Manage or cancel from this page once subscribed.">
+          <Card
+            title="Plans"
+            description={spinoutLab
+              ? 'Upgrading is optional while you’re in the Spin-Out Lab — your free window keeps running until it ends.'
+              : 'Upgrade any time. Manage or cancel from this page once subscribed.'}
+          >
+            {spinoutLab && (
+              <div className="mb-3 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2">
+                You’re free for {spinoutLab.free_days || 30} days in the Spin-Out Lab. Upgrading starts a paid plan
+                now — there’s no need to unless you want the extra tooling early.
+              </div>
+            )}
             <div className="grid gap-3 sm:grid-cols-3">
               {ladder.map((t) => {
                 const current = t === tier;
