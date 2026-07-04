@@ -325,7 +325,7 @@ export default function LandingPage() {
               <br />globally.
             </h1>
             <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto mb-8 leading-relaxed">
-              Axal is one verified network for founders, investors, and partners —
+              Axal VC is one verified network for founders, investors, and partners —
               from first idea to funded company. Join the side that fits you.
             </p>
 
