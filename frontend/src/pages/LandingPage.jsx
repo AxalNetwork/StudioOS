@@ -570,7 +570,7 @@ export default function LandingPage() {
               to="/register"
               className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 transition-all px-7 py-3.5 rounded-xl text-sm font-medium text-white shadow-lg shadow-violet-600/30"
             >
-              Join Axal <ArrowRight size={16} />
+              Join Axal VC <ArrowRight size={16} />
             </Link>
             <Link
               to="/contact"
