@@ -13,6 +13,14 @@ import {
 } from '../middleware/requireInvestorTier';
 import { upsertPlanFromStripeSubscription } from '../services/subscriptionPlans';
 import { priceForPlanMetadata, getCatalog } from '../services/catalog';
+import {
+  ensureAccountPlanSchema,
+  planGroupForRole,
+  readAccountSubscription,
+  upsertAccountPlanFromStripe,
+  markAccountPlanDeleted,
+  devUpgradeAccountPlan,
+} from '../services/accountPlans';
 import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
 import { devPaymentFallbackAllowed } from '../util/paymentMode';
 import {
@@ -527,6 +535,142 @@ billing.all('/investor/dev-upgrade', async (c) => {
     return c.redirect(`${appUrl}/settings?tab=billing&investor_upgraded=1`);
   }
   return c.json({ ok: true, tier: cfg.tier, renews_at: renewsAt });
+});
+
+// ---------------------------------------------------------------------------
+// Persona (account-plan) billing — the generic subscription pipeline for every
+// signed-in role that isn't a founder or investor (partner, advisor/mentor, and
+// any future persona). Catalog products opt a persona in via
+// `metadata.plan_group === <group>`; state lives in the account_subscriptions
+// side table. Subscriptions are created INLINE (Payment Element in the SPA), so
+// there is no redirect to checkout.stripe.com.
+//
+//   GET  /api/billing/plan/status      → current plan/trial/renewal for the caller
+//   POST /api/billing/plan/checkout    → create an incomplete subscription; returns
+//                                        a client_secret the SPA confirms inline
+//   POST /api/billing/plan/dev-upgrade → keyless-dev simulated upgrade
+// ---------------------------------------------------------------------------
+
+// Resolve (creating if needed) the caller's general payments customer, mirroring
+// payments.ensurePaymentsCustomer without importing it (avoids a billing↔payments
+// import cycle). Persona subscriptions live on this same general customer, so the
+// existing /overview + management endpoints (scope=founder) already surface them.
+async function ensureGeneralCustomer(env: Env, user: TierUser): Promise<string> {
+  if (user.stripe_customer_id) return user.stripe_customer_id;
+  const customer = await stripeCall<{ id: string }>(env, '/customers', {
+    email: user.email,
+    name: user.name || user.email,
+    'metadata[user_id]': String(user.id),
+    'metadata[uid]': user.uid,
+  });
+  await env.DB.prepare('UPDATE users SET stripe_customer_id = ? WHERE id = ?')
+    .bind(customer.id, user.id).run();
+  return customer.id;
+}
+
+billing.get('/plan/status', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  const group = planGroupForRole(user.role);
+  // Founder/investor have their own status endpoints; this returns an inert
+  // shell for them so the frontend can call it uniformly without branching.
+  if (!group) {
+    return c.json({ plan_group: null, status: 'free', has_customer: !!user.stripe_customer_id });
+  }
+  const row = await readAccountSubscription(c.env, user.id);
+  // Best-effort: is there a live Stripe price for this persona's Pro plan? Lets
+  // the UI show a real "Subscribe" button vs a "coming soon / contact" state.
+  let hasPaidPrice = false;
+  if (c.env.STRIPE_SECRET_KEY) {
+    try {
+      hasPaidPrice = !!(await priceForPlanMetadata(c.env, 'plan_group', group, 'month'));
+    } catch { hasPaidPrice = false; }
+  }
+  const status = row?.status ?? 'free';
+  return c.json({
+    plan_group: group,
+    plan: row?.plan ?? null,
+    status,
+    renews_at: row?.period_end ?? null,
+    trial_ends_at: status === 'trialing' ? (row?.trial_end ?? row?.period_end ?? null) : null,
+    has_customer: !!user.stripe_customer_id,
+    has_paid_price: hasPaidPrice,
+  });
+});
+
+billing.post('/plan/checkout', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureAccountPlanSchema(c.env);
+  const group = planGroupForRole(user.role);
+  if (!group) return c.json({ error: 'no_plan_for_role' }, 400);
+  const body = await c.req.json().catch(() => ({} as { interval?: string }));
+  const interval = body.interval === 'year' ? 'year' : 'month';
+
+  const stripeKey = c.env.STRIPE_SECRET_KEY;
+  const price = stripeKey ? await priceForPlanMetadata(c.env, 'plan_group', group, interval) : null;
+  const priceId = price?.id;
+
+  // No resolvable SKU. Keyless dev → simulated dev-upgrade; otherwise fail loud.
+  if (!priceId) {
+    if (devPaymentFallbackAllowed(c.env)) {
+      const appUrl = c.env.APP_URL || 'http://localhost:5000';
+      return c.json({ url: `${appUrl}/api/billing/plan/dev-upgrade`, dev: true });
+    }
+    if (!stripeKey) return c.json({ error: 'stripe_not_configured' }, 503);
+    return c.json(
+      { error: 'catalog_price_missing', detail: `No active Stripe price for plan_group=${group} interval=${interval}` },
+      502,
+    );
+  }
+
+  const customer = await ensureGeneralCustomer(c.env, user);
+  // Create an incomplete subscription and hand back the first invoice's
+  // PaymentIntent client_secret; the SPA confirms the card inline (no redirect).
+  // metadata.kind='plan' + plan_group + user_id let the webhook route the
+  // resulting subscription.created/updated events into account_subscriptions.
+  const subParams: Record<string, string> = {
+    customer,
+    'items[0][price]': priceId,
+    'items[0][quantity]': '1',
+    payment_behavior: 'default_incomplete',
+    'payment_settings[save_default_payment_method]': 'on_subscription',
+    'expand[0]': 'latest_invoice.payment_intent',
+    'metadata[kind]': 'plan',
+    'metadata[plan_group]': group,
+    'metadata[user_id]': String(user.id),
+    'metadata[uid]': user.uid,
+    'metadata[price_id]': priceId,
+    ...automaticTaxParams(stripeTaxEnabled(c.env)),
+  };
+  try {
+    const sub = await stripeCall<{
+      id: string; status: string;
+      latest_invoice?: { payment_intent?: { client_secret?: string } };
+    }>(c.env, '/subscriptions', subParams);
+    const clientSecret = sub.latest_invoice?.payment_intent?.client_secret;
+    if (!clientSecret) {
+      // Zero-due first invoice (e.g. a trial) → already active/trialing.
+      if (sub.status === 'active' || sub.status === 'trialing') {
+        return c.json({ free: true, subscription_id: sub.id, status: sub.status });
+      }
+      return c.json({ error: 'no_client_secret' }, 502);
+    }
+    return c.json({ client_secret: clientSecret, subscription_id: sub.id, status: sub.status });
+  } catch (e) {
+    return c.json({ error: 'checkout_failed', detail: (e as Error).message }, 502);
+  }
+});
+
+billing.all('/plan/dev-upgrade', async (c) => {
+  if (!devPaymentFallbackAllowed(c.env)) return c.json({ error: 'not_found' }, 404);
+  const user = (await requireAuth(c)) as TierUser;
+  const group = planGroupForRole(user.role);
+  if (!group) return c.json({ error: 'no_plan_for_role' }, 400);
+  const periodEnd = await devUpgradeAccountPlan(c.env, user.id, group);
+  if (c.req.method === 'GET') {
+    const appUrl = c.env.APP_URL || 'http://localhost:5000';
+    return c.redirect(`${appUrl}/settings?tab=billing&upgraded=1`);
+  }
+  return c.json({ ok: true, plan_group: group, status: 'active', period_end: periodEnd });
 });
 
 // ---------------------------------------------------------------------------
@@ -1178,6 +1322,7 @@ billing.post('/stripe/webhook', async (c) => {
   await safeEnsure('mi', () => ensureMiPaywallSchema(c.env));
   await safeEnsure('tier', () => ensureTierSchema(c.env));
   await safeEnsure('investor', () => ensureInvestorPaywallSchema(c.env));
+  await safeEnsure('account_plans', () => ensureAccountPlanSchema(c.env));
   await safeEnsure('incorporations', async () => {
     const { ensureIncorporationsSchema } = await import('../services/incorporations');
     await ensureIncorporationsSchema(c.env);
@@ -1246,6 +1391,10 @@ async function handleStripeEvent(
     || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('expert_booking:'));
   const isIncorporation = meta.kind === 'incorporation'
     || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('incorporation:'));
+  // Persona account-plan subscription (partner, advisor/mentor, …). Stamped with
+  // kind='plan' + plan_group + user_id at /plan/checkout. Routed into the
+  // account_subscriptions side table, never the founder/investor/MI columns.
+  const isPlan = meta.kind === 'plan';
 
   switch (event.type) {
     case 'checkout.session.completed': {
@@ -1315,6 +1464,17 @@ async function handleStripeEvent(
       const periodEnd = obj.current_period_end
         ? new Date(Number(obj.current_period_end) * 1000).toISOString()
         : null;
+      // Persona account-plan subscription — self-contained: upsert the side
+      // table by user_id and return before any founder/investor/MI logic (those
+      // are gated on isTier/isInvestor and would no-op anyway, but returning
+      // keeps the persona path independent and cheap).
+      if (isPlan) {
+        const planUserId = Number(meta.user_id);
+        if (planUserId) {
+          await upsertAccountPlanFromStripe(env, obj, meta.plan_group ?? null, planUserId);
+        }
+        return;
+      }
       if (!customer) return;
       // Investor mirror — only touches users whose investor_stripe_customer_id matches.
       const invTier: InvestorTier | null = isInvestor && meta.investor_tier === 'institutional'
@@ -1478,6 +1638,9 @@ async function handleStripeEvent(
         `UPDATE mi_pro_subscriptions SET status = 'cancelled', updated_at = datetime('now')
          WHERE subscription_id = ?`
       ).bind(subId).run();
+      // Persona account-plan sub — cancelled scoped by subscription_id (no-op
+      // when this deletion belongs to a different pipeline).
+      await markAccountPlanDeleted(env, subId);
       // Task #6 — drop the founder tier back to free when the tier sub ends.
       await env.DB.prepare(
         `UPDATE users SET subscription_tier = 'free',

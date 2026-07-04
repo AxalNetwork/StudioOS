@@ -3568,12 +3568,11 @@ function BillingTab({ data, flash }) {
   if (role === 'founder') {
     return <FounderBillingPanel data={data} flash={flash} />;
   }
-  // Task #39 — every signed-in role can reach Billing. Non-subscription roles
-  // (admin, partner, mentor, …) have no founder/investor plan ladder, but they
-  // can still hold saved cards and one-off purchase receipts on the same
-  // general Stripe customer used for à la carte buys. Show those without the
-  // founder plan-upgrade UI.
-  return <GenericBillingPanel flash={flash} />;
+  // Every other signed-in role (partner, advisor/mentor, …) gets the generic
+  // account-plan pipeline: a persona plan ladder + native subscription
+  // management. Roles with no plan_group / no persona plans fall back inside
+  // PersonaBillingPanel to the saved-cards-and-receipts view — no regression.
+  return <PersonaBillingPanel data={data} flash={flash} />;
 }
 
 // Task #39 — billing surface for roles without a subscription plan ladder.
@@ -3591,6 +3590,214 @@ function GenericBillingPanel({ flash }) {
         Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
       </div>
     </Card>
+  );
+}
+
+// Persona plan catalog (display copy). Names / prices / features mirror the
+// marketing pricing pages; the paid "Pro" tier resolves its real Stripe price
+// server-side at checkout (or a keyless dev-upgrade), so this stays display-only
+// and never hardcodes a price id. Keyed by the plan_group the backend derives
+// from the role (partner → 'partner', mentor → 'advisor').
+const PERSONA_PLANS = {
+  partner: {
+    label: 'Partner',
+    starter: { name: 'Starter', price: '$0', tagline: 'Get listed and answer posted needs.',
+      features: ['Marketplace + directory listing', 'Manage up to 3 service offers', 'Respond to Needs Board posts', 'Stripe Connect payouts'] },
+    pro: { name: 'Pro', price: '$99', tagline: 'For partners who want inbound demand on tap.',
+      features: ['Unlimited service offers', 'Priority placement in search + directory', 'Full partner analytics dashboard', 'Verified partner badge', 'Partner deal portal access'] },
+    enterprise: { name: 'Enterprise / Custom', tagline: 'Firms and agencies scaling across the network.',
+      features: ['Featured marketplace placement', 'Multiple seats + team profiles', 'Dedicated partner manager'] },
+  },
+  advisor: {
+    label: 'Advisor',
+    starter: { name: 'Starter', price: '$0', tagline: 'Publish a profile and take founder matches.',
+      features: ['Public advisor profile + expertise tags', 'Founder matching', 'Office Hours workspace', 'Ratings + trust badge'] },
+    pro: { name: 'Pro', price: '$29', tagline: 'For advisors who want more reach and better matches.',
+      features: ['Priority founder matching', 'Boosted directory visibility', 'Featured advisor placement'] },
+    enterprise: { name: 'Enterprise / Custom', tagline: 'Advisory firms and expert networks.',
+      features: ['Multiple advisor seats + team profiles', 'Programmatic founder matching', 'Dedicated relationship manager'] },
+  },
+};
+
+// Native billing for personas without a bespoke pipeline (partner, advisor/
+// mentor, …). Drives the generic /api/billing/plan/* endpoints: current plan +
+// trial status, a persona plan ladder with inline (no-redirect) checkout, and
+// the shared BillingDashboard for cancel/resume, payment methods, and invoices
+// (the persona subscription lives on the general Stripe customer, which
+// scope="founder" reads). Falls back to the saved-cards view for any role that
+// has no persona plan.
+function PersonaBillingPanel({ data, flash }) {
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [checkout, setCheckout] = useState(null); // { clientSecret } once checkout starts
+  const [busy, setBusy] = useState(false);
+
+  const refresh = React.useCallback(() => {
+    setLoading(true);
+    api.planStatus()
+      .then(setStatus)
+      .catch(() => setStatus(null))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  // Flash on return from a (dev-upgrade) redirect, mirroring the other panels.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('upgraded') === '1') {
+      flash?.('Subscription updated.');
+      params.delete('upgraded');
+      const q = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (q ? '?' + q : ''));
+    }
+  }, [flash]);
+
+  const group = status?.plan_group || null;
+  const defs = group ? PERSONA_PLANS[group] : null;
+
+  if (loading) {
+    return <Card title="Billing" description="Your plan and payments."><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
+  }
+  // No persona plan for this role → saved cards + receipts only (no regression).
+  if (!group || !defs) {
+    return <GenericBillingPanel flash={flash} />;
+  }
+
+  const subStatus = String(status?.status || 'free').toLowerCase();
+  const isSubscribed = ['active', 'trialing', 'past_due'].includes(subStatus);
+  const trialEnds = subStatus === 'trialing' && status?.trial_ends_at ? new Date(status.trial_ends_at) : null;
+  const trialDaysLeft = trialEnds ? Math.max(0, Math.ceil((trialEnds.getTime() - Date.now()) / 86_400_000)) : null;
+  const renews = status?.renews_at ? new Date(status.renews_at) : null;
+  const hasCustomer = !!status?.has_customer;
+
+  const startCheckout = async () => {
+    setBusy(true);
+    try {
+      const res = await api.planCheckout('month');
+      if (res?.url) { window.location.href = res.url; return; }      // keyless dev-upgrade
+      if (res?.free) { flash?.('Your plan is now active.'); refresh(); return; }
+      if (res?.client_secret) { setCheckout({ clientSecret: res.client_secret }); return; }
+      flash?.('Could not start checkout. Please try again.', 'error');
+    } catch (e) {
+      flash?.(e?.message || 'Online signup for this plan isn’t available yet — contact billing@axal.vc.', 'error');
+    } finally { setBusy(false); }
+  };
+
+  const currentName = isSubscribed ? defs.pro.name : defs.starter.name;
+
+  return (
+    <>
+      <Card title="Current plan" description={`Your ${defs.label.toLowerCase()} subscription.`}>
+        <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">{defs.label}</div>
+            <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {currentName}
+              {subStatus === 'trialing' && (
+                <span className="ml-2 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">Trial</span>
+              )}
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Status: <span className="capitalize">{isSubscribed ? subStatus : 'free'}</span>
+              {subStatus === 'trialing' && trialEnds
+                ? <> · Trial ends {trialEnds.toLocaleDateString()}</>
+                : renews && isSubscribed ? <> · Renews {renews.toLocaleDateString()}</> : null}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Trial status card — clear countdown + first-charge date. */}
+      {subStatus === 'trialing' && trialEnds && (
+        <Card title="Trial status" description="You're trialing a paid plan.">
+          <div className="rounded-lg border border-violet-300 dark:border-violet-700 bg-violet-50/60 dark:bg-violet-900/20 p-4 flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                {trialDaysLeft} day{trialDaysLeft === 1 ? '' : 's'} left in your trial
+              </div>
+              <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+                Your {defs.pro.name} plan begins on {trialEnds.toLocaleDateString()} — your card is charged then unless
+                you cancel before the trial ends. Cancel any time from “Manage subscription” below.
+              </div>
+            </div>
+            <span className="text-xs uppercase tracking-wider px-2.5 py-1 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 font-semibold">
+              Ends {trialEnds.toLocaleDateString()}
+            </span>
+          </div>
+        </Card>
+      )}
+
+      {/* Manage existing subscription, or the plan ladder + inline checkout. */}
+      {isSubscribed && hasCustomer ? (
+        <Card title="Manage subscription" description="Change card, cancel, and review invoices without leaving Axal VC.">
+          <BillingDashboard scope="founder" flash={flash} onChanged={refresh} />
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+            Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
+          </div>
+        </Card>
+      ) : (
+        <Card title="Plans" description="Upgrade any time. Manage or cancel from this page once subscribed.">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[['starter', defs.starter], ['pro', defs.pro], ['enterprise', defs.enterprise]].map(([key, plan]) => {
+              const current = key === 'starter' && !isSubscribed;
+              return (
+                <div key={key}
+                  className={`rounded-lg border p-4 flex flex-col ${key === 'pro' ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
+                  <div className="font-semibold text-gray-900 dark:text-gray-100">{plan.name}</div>
+                  <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
+                    {plan.price ? <><span className="font-semibold">{plan.price}</span><span className="text-gray-500 dark:text-gray-400 text-xs"> / mo</span></> : <span className="font-semibold">Custom</span>}
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{plan.tagline}</div>
+                  <ul className="mt-3 space-y-1.5 flex-1">
+                    {plan.features.map((f) => (
+                      <li key={f} className="text-xs text-gray-600 dark:text-gray-300 flex items-start gap-1.5">
+                        <CheckCircle2 size={13} className="text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" />{f}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-3">
+                    {current && (
+                      <span className="text-xs uppercase tracking-wider text-violet-700 dark:text-violet-300 font-semibold">Current plan</span>
+                    )}
+                    {key === 'pro' && (
+                      <button type="button" disabled={busy} onClick={startCheckout}
+                        className="w-full px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium disabled:opacity-50">
+                        {busy ? 'Starting…' : 'Start 14-day trial'}
+                      </button>
+                    )}
+                    {key === 'enterprise' && (
+                      <a href="mailto:hello@axal.vc"
+                        className="block text-center w-full px-3 py-2 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md text-sm font-medium">
+                        Talk to us
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Inline (no-redirect) checkout once the user starts subscribing. */}
+          {checkout?.clientSecret && (
+            <div className="mt-4 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{defs.pro.name} — {defs.pro.price}/mo</div>
+                <button type="button" onClick={() => setCheckout(null)} className="text-xs text-gray-500 dark:text-gray-400 hover:underline">Cancel</button>
+              </div>
+              <AxalCheckout
+                clientSecret={checkout.clientSecret}
+                submitLabel="Subscribe"
+                onSuccess={() => { flash?.('Payment successful — activating your plan.'); setCheckout(null); refresh(); }}
+                onError={(e) => flash?.(e?.message || 'Payment failed', 'error')}
+              />
+            </div>
+          )}
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+            Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
+          </div>
+        </Card>
+      )}
+    </>
   );
 }
 
