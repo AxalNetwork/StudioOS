@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Subscription plans for partners and advisors
+
+If you're a partner or an advisor, **Settings → Billing** now has real plans you
+can manage yourself. You'll see your current plan, a clear list of what each tier
+includes, and — when you upgrade — you can pay right on the page without being
+sent off to another site. Once you're subscribed, the same page lets you update
+your card, review invoices, and cancel any time. Founders and investors keep
+their existing billing, and anyone without a plan still sees their saved cards
+and receipts exactly as before.
+
+---
+
 ## See your trial and Spin-Out Lab free time in Billing
 
 Your **Settings → Billing** page is now clearer about what you're paying — and

@@ -1853,6 +1853,15 @@ export const api = {
     request('/billing/tier/checkout', { method: 'POST', body: JSON.stringify({ tier }) }),
   tierPortal: () => request('/billing/tier/portal', { method: 'POST' }),
 
+  // ---------- Persona (account-plan) billing — partner, advisor/mentor, … ----------
+  // Generic subscription pipeline for every signed-in role that isn't a founder
+  // or investor. planStatus returns the caller's current plan/trial/renewal;
+  // planCheckout creates an incomplete subscription and returns a client_secret
+  // the SPA confirms inline (no redirect), or a dev-upgrade url in keyless dev.
+  planStatus: () => request('/billing/plan/status'),
+  planCheckout: (interval) =>
+    request('/billing/plan/checkout', { method: 'POST', body: JSON.stringify({ interval }) }),
+
   // ---------- Task #5 — In-app billing dashboard (replaces Stripe portal) ----------
   // `scope` is 'founder' (founder-tier customer) or 'investor' (investor
   // customer). Overview returns active subs, cards, upcoming + recent invoices.

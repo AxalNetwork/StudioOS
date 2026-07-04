@@ -10,6 +10,61 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Persona (account-plan) billing for every non-founder/non-investor role (Task #22, PR #130)
+
+A generic Stripe subscription pipeline for every signed-in role that isn't a
+founder or investor (partner, advisor/mentor, and any future persona). Founder
+(`metadata.tier`) and investor (`metadata.investor_tier`) keep their bespoke
+pipelines; everyone else now shares this one, keyed by a `plan_group` derived
+from the role. Integrated from branch `claude/axal-billing-subscription-ui-eadnp1`.
+
+- **Schema** — new migration `cloudflare-worker/sql/migrations/134_account_subscriptions.sql`
+  adds the `account_subscriptions` side table (keyed by `user_id`, one active
+  plan per account). State lives in a side table — NOT new `users` columns —
+  because `users` sits at D1's hard 100-column limit, exactly like
+  `mi_pro_subscriptions`. Every statement is additive + idempotent and never
+  seeds a row.
+- **Worker** — new `cloudflare-worker/src/services/accountPlans.ts` holds the
+  pipeline: `planGroupForRole` (role → `plan_group`, `null` for founder/investor,
+  `mentor`→`advisor` override, every other role defaults to its own name),
+  `ensureAccountPlanSchema` (statement-for-statement mirror of migration 134 so
+  dev/preview D1 self-heals), `readAccountSubscription`,
+  `accountFieldsFromStripeSub`, `upsertAccountPlanFromStripe`,
+  `markAccountPlanDeleted`, and a keyless-dev `devUpgradeAccountPlan`.
+- **Worker routes** — `cloudflare-worker/src/routes/billing.ts` adds
+  `GET /api/billing/plan/status`, `POST /api/billing/plan/checkout` (creates an
+  incomplete subscription and returns a PaymentIntent `client_secret` the SPA
+  confirms inline — no redirect to checkout.stripe.com), and a keyless-dev
+  `ALL /api/billing/plan/dev-upgrade`. The persona subscription rides the same
+  general Stripe customer via `ensureGeneralCustomer` (so the existing
+  `/overview` management endpoints with `scope=founder` surface it). The Stripe
+  webhook routes `metadata.kind==='plan'` events into `account_subscriptions`
+  (upsert on `subscription.created|updated`, cancel scoped by `subscription_id`
+  on `subscription.deleted`) and bootstraps the schema via `safeEnsure`.
+- **Frontend** — `frontend/src/lib/api.js` adds `planStatus` + `planCheckout`.
+  `frontend/src/pages/SettingsPage.jsx` `BillingTab` now routes non-founder/
+  non-investor roles to a new `PersonaBillingPanel` (was `GenericBillingPanel`):
+  a display-only `PERSONA_PLANS` ladder (Partner Starter/Pro $99/Enterprise;
+  Advisor Starter/Pro $29/Enterprise) with inline `AxalCheckout`, a trial-status
+  card, and the shared `BillingDashboard` for manage/cancel once subscribed.
+  Roles with no `plan_group`/no persona plans fall back to `GenericBillingPanel`
+  — no regression.
+- **Test** — new `cloudflare-worker/test/account_plans.test.ts` covers the pure
+  routing helpers; registered in the `test:drift` strip-types group.
+- **Deviation from PR** — the upstream Pro button read "Start 14-day trial" but
+  `/plan/checkout` never sent `trial_period_days`, so Stripe would have charged
+  immediately on day 0 (a customer-facing billing lie). Changed the button copy
+  to "Subscribe" so it matches the immediate-paid, inline-card flow the code
+  actually performs. The trial-status card is retained but only renders for subs
+  Stripe genuinely reports as `trialing`. A proper 14-day trial (which needs a
+  SetupIntent to collect a card up front so it can be charged at trial end) is
+  deferred as a follow-up rather than shipped half-working.
+- **Ops follow-up (out of scope)** — the live Stripe `partner` ($99) and
+  `advisor` ($29) recurring products/prices tagged `metadata.plan_group` must be
+  created in the Stripe dashboard before the Pro "Subscribe" button transacts;
+  until then keyless-dev falls back to `dev-upgrade` and prod fails loud with
+  `catalog_price_missing`.
+
 ## Founder-facing billing: trial status + Spin-Out Lab free window (Task #21, PR #129)
 
 Surfaces two billing states to founders in **Settings → Billing** that the API
