@@ -151,7 +151,7 @@ function StatsBar() {
     const ctrl = new AbortController();
     (async () => {
       try {
-        const res = await fetch('/api/dashboard/stats', { signal: ctrl.signal });
+        const res = await fetch('/api/public/stats', { signal: ctrl.signal });
         if (!res.ok) throw new Error('non-200');
         const data = await res.json();
         setStats({

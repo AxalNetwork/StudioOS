@@ -31,7 +31,6 @@ other 5 were Semgrep false positives whose same-line inline `nosemgrep` did NOT
 close them on GitHub (dynamic-regexp in `webFetch.stripTag` with fixed tag
 literals; allowlisted `urlopen` in `settings.py`; three SVG-sanitizer test
 fixtures) and were dismissed via the REST API.
-
 **Prod parity (Worker mirror).** CodeQL only flagged the dev-only FastAPI parser,
 but `cloudflare-worker/src/services/linkedinImport.ts` — the internet-facing
 surface — carried the *identical* polynomial number regex AND the old `\s*\n\s*`

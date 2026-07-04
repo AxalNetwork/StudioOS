@@ -47,11 +47,49 @@ from backend.app.models.entities import (
     Partner,
     PartnerReview,
     Project,
+    ScoreSnapshot,
     User,
+    VCFund,
 )
 
 router = APIRouter(prefix="/public", tags=["public-profiles"])
 logger = logging.getLogger("studioos.public_profiles")
+
+
+@router.get("/stats")
+def public_stats(session: Session = Depends(get_session)) -> dict[str, int]:
+    """Dev (FastAPI) mirror of the Worker's ``GET /api/public/stats``.
+
+    Unauthenticated landing-page headline counts. Each count is best-effort:
+    a failure on one query must not break the others or the page.
+    """
+    def _count(stmt) -> int:
+        try:
+            return session.exec(stmt).one() or 0
+        except Exception:
+            logger.exception("public_stats: count query failed")
+            return 0
+
+    partners = _count(
+        select(func.count(Partner.id)).where(Partner.status == "active")
+    )
+    funds = _count(
+        select(func.count(VCFund.id)).where(VCFund.status == "active")
+    )
+    deals_scored = _count(
+        select(func.count(func.distinct(ScoreSnapshot.project_id))).where(
+            ScoreSnapshot.is_sandbox == False  # noqa: E712
+        )
+    )
+    spinouts = _count(
+        select(func.count(Project.id)).where(Project.status == "spinout")
+    )
+    return {
+        "partners": partners,
+        "funds": funds,
+        "deals_scored": deals_scored,
+        "spinouts": spinouts,
+    }
 
 
 def _safe_rollback(session: Session) -> None:
