@@ -50,7 +50,7 @@ export default function PublicNav() {
             to="/register"
             className="text-sm bg-violet-600 hover:bg-violet-700 transition-colors text-white px-5 py-2 rounded-lg font-medium"
           >
-            Join Axal
+            Join Axal VC
           </Link>
         </div>
 
@@ -89,7 +89,7 @@ export default function PublicNav() {
                 onClick={() => setOpen(false)}
                 className="flex-1 text-center text-sm bg-violet-600 text-white px-4 py-2 rounded-lg font-medium"
               >
-                Join Axal
+                Join Axal VC
               </Link>
             </div>
           </div>
