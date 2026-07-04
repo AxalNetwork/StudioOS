@@ -5,6 +5,19 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## See your trial and Spin-Out Lab free time in Billing
+
+Your **Settings → Billing** page is now clearer about what you're paying — and
+when. If you're on a free trial of a paid plan, you'll see a **Trial status**
+card that counts down the days left and tells you the exact date your card is
+first charged, plus a reminder that you can cancel any time before then. And if
+you're in the **Spin-Out Lab**, a new card makes your free window explicit:
+you're free for 30 days, no card required, with the days remaining and the date
+your free time runs through — and upgrading stays optional until it ends. If
+you're not trialing or in the Lab, nothing changes.
+
+---
+
 ## A clearer, faster homepage
 
 The public front page has had a spring clean. The top of the page now leads with

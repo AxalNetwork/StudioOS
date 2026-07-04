@@ -10,6 +10,41 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Founder-facing billing: trial status + Spin-Out Lab free window (Task #21, PR #129)
+
+Surfaces two billing states to founders in **Settings → Billing** that the API
+already knew about but never showed: a paid-plan **trial** countdown and the
+**Spin-Out Lab** 30-day free exception. Additive only — no schema changes, no new
+API methods, no behaviour change for founders who are neither trialing nor in the
+Lab. Integrated from branch `claude/axal-billing-subscription-ui-eadnp1`.
+
+- **Worker** — `cloudflare-worker/src/routes/billing.ts` `GET /tier/status` now
+  also returns `trial_ends_at` (the current-period end when Stripe reports the
+  sub as `trialing` — the moment of first charge, so no dedicated column is
+  needed) and a `spinout_lab` block. A new best-effort helper
+  `spinoutLabBilling(env, userId)` reads `users.spinout_lab_active` /
+  `spinout_lab_started_at` and computes `free_until` + `days_remaining` from a
+  `SPINOUT_LAB_FREE_DAYS = 30` window; a lookup failure returns `null` rather
+  than 500-ing the Billing tab. The 30-day money guarantee is deliberately kept
+  DISTINCT from the 28-day guided sprint length in `routes/spinout_lab.ts`.
+- **Frontend** — `frontend/src/pages/SettingsPage.jsx` `FounderBillingPanel`
+  lowercases `subStatus` and derives `trialEnds` / `trialDaysLeft` / `spinoutLab`
+  from the status payload. Renders: an emerald **Spin-Out Lab** card ("Free for N
+  days" + days-left badge) above Current plan; a violet **Trial** badge + a
+  trial-aware "Trial ends …" line on the Current plan card; a **Trial status**
+  card (countdown + first-charge date + how to cancel); and a Lab-aware **Plans**
+  description with an emerald note. All new surfaces ship `dark:` variants (passes
+  the dark-mode drift guard). Mirrors the existing investor trial UI
+  (`InvestorBillingPanel`) for parity; reuses `api.tierStatus()` — no new client
+  methods.
+- **Scope** — Worker + SPA only; the dev FastAPI backend has no billing/tier
+  parity, so the two cards don't render under `npm run dev` (the panel degrades
+  cleanly to the existing free/Current-plan view). No `wrangler.toml` route
+  changes (existing `/api/*` mount).
+- **Verification** — `npm run test:drift` (dark-mode + api-drift + sql-unsafe +
+  tail-consumer guards, full worker test suite, `tsc --noEmit`) and
+  `npm run test:retention` green.
+
 ## Resolve all open GitHub Code Scanning alerts (CodeQL + Semgrep) (Task #15)
 
 Security-hygiene pass to clear the 27 open Code Scanning alerts on `main` with

@@ -320,14 +320,60 @@ billing.post('/tier/portal', async (c) => {
   }
 });
 
+// Spin-Out Lab billing exception. Participants get a 30-day free window and are
+// NEVER pushed into the standard paid-plan trial / auto-charge flow. This
+// billing guarantee is deliberately DISTINCT from the 4-week (28-day) guided
+// sprint length in routes/spinout_lab.ts: the sprint is the product experience;
+// this is the money guarantee surfaced in Settings → Billing so the two can
+// evolve independently.
+const SPINOUT_LAB_FREE_DAYS = 30;
+
+// Compute the founder's Spin-Out Lab billing state (or null when they're not in
+// the Lab). Best-effort: the spinout columns may not exist in every env, so a
+// lookup failure returns null rather than 500-ing the whole Billing tab.
+async function spinoutLabBilling(
+  env: Env,
+  userId: number | string,
+): Promise<{ active: true; free_days: number; free_until: string | null; days_remaining: number } | null> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT spinout_lab_active, spinout_lab_started_at FROM users WHERE id = ?`,
+    ).bind(userId).first<{ spinout_lab_active: number | null; spinout_lab_started_at: string | null }>();
+    if (!row || Number(row.spinout_lab_active ?? 0) !== 1) return null;
+    const started = row.spinout_lab_started_at;
+    let freeUntil: string | null = null;
+    let daysRemaining = SPINOUT_LAB_FREE_DAYS;
+    if (started) {
+      const startMs = Date.parse(started.replace(' ', 'T') + (started.includes('Z') ? '' : 'Z'));
+      if (Number.isFinite(startMs)) {
+        const endMs = startMs + SPINOUT_LAB_FREE_DAYS * 86_400_000;
+        freeUntil = new Date(endMs).toISOString();
+        daysRemaining = Math.max(0, Math.ceil((endMs - Date.now()) / 86_400_000));
+      }
+    }
+    return { active: true, free_days: SPINOUT_LAB_FREE_DAYS, free_until: freeUntil, days_remaining: daysRemaining };
+  } catch {
+    return null;
+  }
+}
+
 billing.get('/tier/status', async (c) => {
   const user = (await requireAuth(c)) as TierUser;
   await ensureTierSchema(c.env);
+  const status = user.subscription_status || 'active';
+  const renews = user.subscription_renews_at || null;
   return c.json({
     tier: user.subscription_tier || 'free',
-    status: user.subscription_status || 'active',
-    renews_at: user.subscription_renews_at || null,
+    status,
+    renews_at: renews,
+    // When Stripe reports the sub as `trialing`, the current-period end IS the
+    // trial end — the moment the first real charge is attempted. Surfacing it
+    // lets the Settings → Billing trial card show a countdown + "charges on
+    // <date>" without a dedicated column.
+    trial_ends_at: status === 'trialing' ? renews : null,
     has_customer: !!user.stripe_customer_id,
+    // 30-day free Spin-Out Lab window (null unless the founder is in the Lab).
+    spinout_lab: await spinoutLabBilling(c.env, user.id),
   });
 });
 
