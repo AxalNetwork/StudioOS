@@ -252,7 +252,7 @@ function CompletionCard({ state, className }) {
       );
     }
   }
-  return <CardShell title="Profiling completion" icon={UserCircle} className={className}>{body}</CardShell>;
+  return <CardShell title="Axal VC Fit & values" icon={UserCircle} className={className}>{body}</CardShell>;
 }
 
 // ── Fit + Axal-5 (self: api.bestFit.me) ──────────────────────────────────────
@@ -334,7 +334,7 @@ function FitCard({ state, className }) {
       );
     }
   }
-  return <CardShell title="Your Axal Fit & values" icon={Sparkles} className={className}>{body}</CardShell>;
+  return <CardShell title="Your Axal VC Fit & values" icon={Sparkles} className={className}>{body}</CardShell>;
 }
 
 // ── Match range (counts + teaser free; full list gated) ───────────────────────
