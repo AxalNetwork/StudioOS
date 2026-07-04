@@ -10,6 +10,39 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Resolve all open GitHub Code Scanning alerts (CodeQL + Semgrep) (Task #15)
+
+Security-hygiene pass to clear the 27 open Code Scanning alerts on `main` with
+**no behavior change**. Prod stays Worker-on-D1; the dev FastAPI is never
+deployed. Every fix is genuine hardening or dead-code removal; the handful of
+true false positives are annotated in-code and flagged for UI dismissal (CodeQL
+has no reliable inline-comment suppression on this repo — only fixed alerts
+auto-close on the next scan; Semgrep does honor `nosemgrep`).
+
+- **Worker dead code** — removed unused `notify` import (`cloudflare-worker/src/routes/jobs.ts`)
+  and unused `FEED_PREDICATE` const (`cloudflare-worker/src/routes/jobs_public.ts`).
+- **Semgrep test FPs** — inline `// nosemgrep` on the three `assertNeutralized(…, '<script', …)`
+  lines in `cloudflare-worker/test/brand_svg_sanitize.test.ts` (string literals in an XSS-sanitizer test, not a sink).
+- **SSRF hardening** (`backend/app/api/routes/settings.py::_apply_linkedin_photo`) —
+  re-assert `_lin.is_linkedin_image_host(url)` (https + `*.licdn`/`*.linkedin` host) immediately
+  before `urllib.request.urlopen`; `# noqa: S310` + `# nosemgrep`. Defense-in-depth; caller already checks.
+- **Path-injection** (same file) — defensive `if ext not in {"jpg","png","webp"}` before `write_bytes`
+  (filename is fully server-generated: numeric id + uuid4 + allowlisted ext, so this is a no-op guard).
+- **ReDoS** (`backend/app/services/linkedin_import.py`) — rewrote `_NL_RE` `\s*\n\s*` → `[^\S\n]*\n\s*`
+  (non-overlapping, linear; fuzz-verified equivalent over 500k random cases) and added length caps
+  `_MAX_SANITIZE_INPUT` (20k, `sanitize_text`) and `_MAX_CONTENT_CHARS` (2M, `_content_to_lines`,
+  alongside the existing 500k `finditer` guard).
+- **Hygiene** — dropped redundant local `import re` in `_is_email`; deleted the unused `_LITERAL_ESCAPES` dict.
+- **Empty-except sweep (14 alerts)** — added a per-module `logger` + small `_safe_rollback(session)`
+  helper (logs at `debug` with `exc_info`) in `settings.py`, `follows.py`, `public_profiles.py`;
+  replaced every `try: session.rollback() except: pass` with `_safe_rollback(session)`; non-rollback
+  empty-excepts (zlib inflate, headshot unlink) now log at `debug`. `follows.py::_schema_ready` is a
+  known false positive — kept, commented.
+- **Verified** — `npm run test:drift` (full pre-merge gate) green; Worker `tsc --noEmit` clean; edited
+  backend modules import and behave identically (SSRF guard rejects `http`/non-licdn; `sanitize_text` output unchanged).
+- **User-owned closure** — CodeQL SSRF/path FPs (and the `_schema_ready` FP) need UI dismissal
+  ("used in a controlled way"); fixed alerts auto-close on the next scan.
+
 ## Homepage audit: cut clutter, fix dead-end links, sharpen the join CTA (Task #14, PR #128)
 
 Audit and rework of the public front page (`frontend/src/pages/LandingPage.jsx`)

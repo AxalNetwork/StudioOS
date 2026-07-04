@@ -11,6 +11,7 @@ import base64
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 import secrets
@@ -32,6 +33,16 @@ from backend.app.services import linkedin_import as _lin
 from backend.app.services.email_service import send_verification_email
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
+
+logger = logging.getLogger("studioos.settings")
+
+
+def _safe_rollback(session: Session) -> None:
+    """Best-effort rollback; a failure here must not mask the original error."""
+    try:
+        session.rollback()
+    except Exception:
+        logger.debug("session rollback failed", exc_info=True)
 
 
 # --- one-shot schema migration ---------------------------------------------
@@ -222,8 +233,6 @@ _HEADSHOT_DIR = Path(os.environ.get("HEADSHOT_DIR", "/tmp/axal_headshots"))
 
 
 def _is_email(value: str) -> bool:
-    import re
-
     return bool(re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$", value or ""))
 
 
@@ -445,10 +454,7 @@ def _load_background(session: Session, user_id: int) -> dict:
             "FROM users WHERE id = :uid"
         ).bindparams(uid=user_id)).first()
     except Exception:
-        try:
-            session.rollback()
-        except Exception:
-            pass
+        _safe_rollback(session)
         row = None
     m = dict(row._mapping) if row else {}  # type: ignore[attr-defined]
     return {
@@ -633,8 +639,14 @@ def _apply_linkedin_photo(session: Session, user: User, url: str) -> bool:
     import urllib.request
 
     try:
+        # Defense-in-depth SSRF guard: re-assert the allowlist (https + LinkedIn
+        # CDN host) immediately before the request, independent of the caller's
+        # check. `is_linkedin_image_host` verifies scheme==https and hostname ∈
+        # *.licdn.com / *.linkedin.com, so the URL is not attacker-chosen.
+        if not _lin.is_linkedin_image_host(url):
+            return False
         req = urllib.request.Request(url, headers={"User-Agent": "AxalStudioOS"})
-        with urllib.request.urlopen(req, timeout=8) as resp:  # noqa: S310 — host allowlisted
+        with urllib.request.urlopen(req, timeout=8) as resp:  # noqa: S310 — host allowlisted  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             ct = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
             ext = _HEADSHOT_MIME.get(ct)
             if not ext:
@@ -643,6 +655,11 @@ def _apply_linkedin_photo(session: Session, user: User, url: str) -> bool:
         if not raw_bytes or len(raw_bytes) > 3 * 1024 * 1024:
             return False
         _HEADSHOT_DIR.mkdir(parents=True, exist_ok=True)
+        # Filename is fully server-generated: numeric user.id + uuid4 hex + an
+        # extension drawn only from the _HEADSHOT_MIME allowlist. Re-assert the
+        # extension so no attacker-controlled path segment can reach the write.
+        if ext not in {"jpg", "png", "webp"}:
+            return False
         fname = f"{user.id}_{uuid.uuid4().hex}.{ext}"
         fpath = _HEADSHOT_DIR / fname
         fpath.write_bytes(raw_bytes)
@@ -657,13 +674,10 @@ def _apply_linkedin_photo(session: Session, user: User, url: str) -> bool:
             try:
                 Path(old_path).unlink(missing_ok=True)
             except OSError:
-                pass
+                logger.debug("failed to remove previous headshot file", exc_info=True)
         return True
     except Exception:
-        try:
-            session.rollback()
-        except Exception:
-            pass
+        _safe_rollback(session)
         return False
 
 

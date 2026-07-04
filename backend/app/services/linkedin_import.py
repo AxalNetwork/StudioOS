@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import logging
 import re
 import zlib
 from typing import Any, Optional
@@ -21,6 +22,13 @@ from urllib.parse import urlparse
 
 MAX_PDF_BYTES = 8 * 1024 * 1024  # 8 MB hard ceiling.
 PDF_MIME = "application/pdf"
+
+logger = logging.getLogger("studioos.linkedin_import")
+
+# Hard ceilings on text length before it reaches the parsing/collapse regexes —
+# keeps the ReDoS worst-case bounded even on adversarial PDF text.
+_MAX_SANITIZE_INPUT = 20_000
+_MAX_CONTENT_CHARS = 2_000_000
 
 
 class LinkedInImportError(Exception):
@@ -37,13 +45,20 @@ class LinkedInImportError(Exception):
 
 _CTRL_RE = re.compile(r"[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]")
 _WS_RE = re.compile(r"[ \t\u00a0]+")
-_NL_RE = re.compile(r"\s*\n\s*")
+# Collapse whitespace around newlines. `[^\S\n]*` (horizontal whitespace only,
+# never a newline) has no overlap with the literal `\n`, so this stays linear
+# and non-backtracking — unlike the old `\s*\n\s*`, flagged by CodeQL as ReDoS.
+_NL_RE = re.compile(r"[^\S\n]*\n\s*")
 
 
 def sanitize_text(v: Any, max_len: int = 500) -> str:
     if v is None:
         return ""
     s = str(v)
+    # Bound the working length before any regex runs so the collapse passes
+    # below stay cheap even on adversarial PDF text (ReDoS defense).
+    if len(s) > _MAX_SANITIZE_INPUT:
+        s = s[:_MAX_SANITIZE_INPUT]
     s = _CTRL_RE.sub(" ", s)
     s = s.replace("<", " ").replace(">", " ")
     s = _WS_RE.sub(" ", s)
@@ -110,14 +125,8 @@ def _inflate(raw: bytes) -> bytes:
         if out:
             return out
     except zlib.error:
-        pass
+        logger.debug("streaming inflate failed", exc_info=True)
     return b""
-
-
-_LITERAL_ESCAPES = {
-    "\\n": "\n", "\\r": "\r", "\\t": "\t", "\\b": "\b", "\\f": "\f",
-    "\\(": "(", "\\)": ")", "\\\\": "\\",
-}
 
 
 def _decode_pdf_literal(s: str) -> str:
@@ -140,6 +149,10 @@ _WS_COLLAPSE = re.compile(r"\s+")
 
 
 def _content_to_lines(content: str, out: list) -> None:
+    # Bound content length before the finditer scan below (belt-and-braces with
+    # the 500k match guard) so a pathological stream can't blow up parsing time.
+    if len(content) > _MAX_CONTENT_CHARS:
+        content = content[:_MAX_CONTENT_CHARS]
     cur = {"s": ""}
 
     def push() -> None:

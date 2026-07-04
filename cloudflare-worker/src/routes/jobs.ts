@@ -18,7 +18,6 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { notify } from '../services/notify';
 import { ensureJobBoardSchema } from '../services/jobBoardSchema';
 import {
   ensureUniqueJobSlug,

@@ -54,6 +54,14 @@ router = APIRouter(prefix="/public", tags=["public-profiles"])
 logger = logging.getLogger("studioos.public_profiles")
 
 
+def _safe_rollback(session: Session) -> None:
+    """Best-effort rollback; a failure here must not mask the original error."""
+    try:
+        session.rollback()
+    except Exception:
+        logger.debug("session rollback failed", exc_info=True)
+
+
 # Per-role default visibility. Anything not listed here is hidden by
 # default. The merged result is ``DEFAULTS[role] | privacy_prefs``.
 _DEFAULTS: dict[str, dict[str, bool]] = {
@@ -262,10 +270,7 @@ def get_public_profile(handle: str, session: Session = Depends(get_session)):
         ).bindparams(uid=user.id)).first()
         followers = int((row._mapping["c"] if row else 0) or 0)  # type: ignore[attr-defined]
     except Exception:
-        try:
-            session.rollback()
-        except Exception:
-            pass
+        _safe_rollback(session)
         followers = 0
 
     _name = (user.name if flags.get("name") else None)
@@ -364,10 +369,7 @@ def get_public_startup(handle: str, session: Session = Depends(get_session)):
                     ),
                 })
         except Exception:  # noqa: BLE001
-            try:
-                session.rollback()
-            except Exception:
-                pass
+            _safe_rollback(session)
 
     # Recent submitted updates (news feed) — table is dev-managed / optional.
     updates: list[dict[str, Any]] = []
@@ -387,10 +389,7 @@ def get_public_startup(handle: str, session: Session = Depends(get_session)):
             for r in rows
         ]
     except Exception:
-        try:
-            session.rollback()
-        except Exception:
-            pass
+        _safe_rollback(session)
         updates = []
 
     # Site/Website button target: an explicit startup website URL wins; when
@@ -407,10 +406,7 @@ def get_public_startup(handle: str, session: Session = Depends(get_session)):
             if lp and lp._mapping.get("published"):  # type: ignore[attr-defined]
                 website = f"https://axal.vc/landing/{lp._mapping['slug']}"  # type: ignore[attr-defined]
         except Exception:
-            try:
-                session.rollback()
-            except Exception:
-                pass
+            _safe_rollback(session)
             website = None
 
     # Follower count (public, best-effort).
@@ -421,10 +417,7 @@ def get_public_startup(handle: str, session: Session = Depends(get_session)):
         ).bindparams(pid=proj.id)).first()
         followers = int((row._mapping["c"] if row else 0) or 0)  # type: ignore[attr-defined]
     except Exception:
-        try:
-            session.rollback()
-        except Exception:
-            pass
+        _safe_rollback(session)
         followers = 0
 
     return {
