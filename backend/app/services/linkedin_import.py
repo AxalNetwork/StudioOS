@@ -140,7 +140,9 @@ def _decode_pdf_literal(s: str) -> str:
 _CONTENT_RE = re.compile(
     r"\(((?:\\.|[^\\)])*)\)\s*(Tj|')"
     r"|\[((?:[^\]\\]|\\.)*)\]\s*TJ"
-    r"|(-?\d*\.?\d+)\s+(-?\d*\.?\d+)\s+(Td|TD)"
+    # Number sub-pattern is linear (no `\d*…\d+` overlap) to avoid polynomial
+    # backtracking (CodeQL py/polynomial-redos) while matching the same set.
+    r"|(-?(?:\d+\.\d+|\.\d+|\d+))\s+(-?(?:\d+\.\d+|\.\d+|\d+))\s+(Td|TD)"
     r"|(T\*)",
     re.DOTALL,
 )

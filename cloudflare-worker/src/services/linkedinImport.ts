@@ -28,6 +28,11 @@
 export const MAX_PDF_BYTES = 8 * 1024 * 1024; // 8 MB hard ceiling.
 export const PDF_MIME = 'application/pdf';
 
+// ReDoS defense: bound working length before any regex-heavy pass runs. Mirrors
+// the Python parser's _MAX_SANITIZE_INPUT / _MAX_CONTENT_CHARS (lock-step).
+const MAX_SANITIZE_INPUT = 20_000;
+const MAX_CONTENT_CHARS = 2_000_000;
+
 export interface ExperienceEntry {
   title?: string;
   company?: string;
@@ -83,10 +88,15 @@ export class LinkedInImportError extends Error {
 export function sanitizeText(v: unknown, maxLen = 500): string {
   if (v == null) return '';
   let s = String(v);
+  // Bound the working length before any regex runs so the collapse passes below
+  // stay linear even on adversarial PDF text (ReDoS defense).
+  if (s.length > MAX_SANITIZE_INPUT) s = s.slice(0, MAX_SANITIZE_INPUT);
   // Drop C0/C1 control chars except tab/newline, then angle brackets.
   s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, ' ');
   s = s.replace(/[<>]/g, ' ');
-  s = s.replace(/[ \t\u00A0]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
+  // `[^\S\n]*` (horizontal whitespace only) can't overlap the literal `\n`, so
+  // this collapse stays linear — unlike the old `\s*\n\s*` (CodeQL ReDoS).
+  s = s.replace(/[ \t\u00A0]+/g, ' ').replace(/[^\S\n]*\n\s*/g, '\n').trim();
   return s.slice(0, maxLen);
 }
 
@@ -168,13 +178,18 @@ function decodePdfLiteral(s: string): string {
  * (Tj / TJ / ') append to the current line; vertical Td/TD moves and T*
  * start a new line; horizontal-only Td inserts a space. */
 function contentToLines(content: string, out: string[]): void {
+  // Bound content length before the exec scan below (belt-and-braces with the
+  // 500k match guard) so a pathological stream can't blow up parsing time.
+  if (content.length > MAX_CONTENT_CHARS) content = content.slice(0, MAX_CONTENT_CHARS);
   let cur = '';
   const push = () => {
     const t = cur.replace(/\s+/g, ' ').trim();
     if (t) out.push(t);
     cur = '';
   };
-  const RE = /\(((?:\\.|[^\\)])*)\)\s*(Tj|')|\[((?:[^\]\\]|\\.)*)\]\s*TJ|(-?\d*\.?\d+)\s+(-?\d*\.?\d+)\s+(Td|TD)|(T\*)/g;
+  // Number sub-pattern is linear (no `\d*…\d+` overlap) to avoid polynomial
+  // backtracking (ReDoS) while matching the same set.
+  const RE = /\(((?:\\.|[^\\)])*)\)\s*(Tj|')|\[((?:[^\]\\]|\\.)*)\]\s*TJ|(-?(?:\d+\.\d+|\.\d+|\d+))\s+(-?(?:\d+\.\d+|\.\d+|\d+))\s+(Td|TD)|(T\*)/g;
   let m: RegExpExecArray | null;
   let guard = 0;
   while ((m = RE.exec(content)) !== null) {

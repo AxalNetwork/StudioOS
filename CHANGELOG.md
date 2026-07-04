@@ -15,9 +15,34 @@
 Security-hygiene pass to clear the 27 open Code Scanning alerts on `main` with
 **no behavior change**. Prod stays Worker-on-D1; the dev FastAPI is never
 deployed. Every fix is genuine hardening or dead-code removal; the handful of
-true false positives are annotated in-code and flagged for UI dismissal (CodeQL
-has no reliable inline-comment suppression on this repo — only fixed alerts
-auto-close on the next scan; Semgrep does honor `nosemgrep`).
+true false positives are annotated in-code and flagged for dismissal — neither
+CodeQL nor Semgrep inline-comment suppression reliably closes alerts in this
+repo's `semgrep scan --sarif` → `upload-sarif` → GitHub flow, so reviewed FPs are
+dismissed via the Code Scanning REST API; only genuinely fixed alerts auto-close
+on the next scan.
+
+**Follow-up — final green (all 29 resolved, 0 open):** the fix commits were pushed
+to `origin/main` and the post-push CodeQL/Semgrep rescan auto-closed 20. The
+residual 6 were resolved as follows. The last real ReDoS — `_CONTENT_RE`'s
+`-?\d*\.?\d+` number sub-pattern in `linkedin_import.py` (a `\d*…\d+` overlap the
+earlier `_NL_RE` fix didn't cover) — was linearized to `-?(?:\d+\.\d+|\.\d+|\d+)`,
+verified to match the identical set so PDF coordinate parsing is unchanged. The
+other 5 were Semgrep false positives whose same-line inline `nosemgrep` did NOT
+close them on GitHub (dynamic-regexp in `webFetch.stripTag` with fixed tag
+literals; allowlisted `urlopen` in `settings.py`; three SVG-sanitizer test
+fixtures) and were dismissed via the REST API.
+
+**Prod parity (Worker mirror).** CodeQL only flagged the dev-only FastAPI parser,
+but `cloudflare-worker/src/services/linkedinImport.ts` — the internet-facing
+surface — carried the *identical* polynomial number regex AND the old `\s*\n\s*`
+NL-collapse, without the Python side's length caps. Leaving it would mean the
+ReDoS remediation landed only on the surface that is never deployed, violating the
+"Worker parser in lock-step with the Python parser" invariant. Ported the same
+linear number sub-pattern, the linear `[^\S\n]*\n\s*` collapse, and
+`MAX_SANITIZE_INPUT` (20k) / `MAX_CONTENT_CHARS` (2M) caps to the Worker.
+Behavior-equivalent (0 diffs over exec + NL fuzz); digit-bomb parse time dropped
+from ~585ms to ~0ms. Takes effect on the next `npm run deploy`; `npm run
+test:drift` green.
 
 - **Worker dead code** — removed unused `notify` import (`cloudflare-worker/src/routes/jobs.ts`)
   and unused `FEED_PREDICATE` const (`cloudflare-worker/src/routes/jobs_public.ts`).
