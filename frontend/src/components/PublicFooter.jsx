@@ -151,7 +151,7 @@ export default function PublicFooter() {
         <div className="border-t border-gray-200 pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-xs text-gray-500">
-              © 2026 Axal VC Management LLC. Platform operated by Axal VC Management LLC.
+              © 2026 Axal VC. Platform operated by Axal VC Management LLC.
               Brand and platform IP owned by Axal VC Holdings LLC. All rights reserved.
             </p>
             <p className="text-xs text-gray-500 max-w-md text-right">
