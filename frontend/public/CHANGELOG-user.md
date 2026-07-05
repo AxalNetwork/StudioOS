@@ -5,6 +5,15 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## One place to build your team
+
+Finding a mentor, matching with a co-founder, and posting roles now live together
+in a single **Team** space under **Build**. Switch between **Mentor / Advisor**,
+**Co-Founder** and **Jobs** with a tab -- no more hunting across the menu. Your
+old links still work: they take you straight to the right tab.
+
+---
+
 ## Nail your pitch in one click
 
 There's a new **Positioning** tab under **Raise → Pitch**. Pick one of your

@@ -10,6 +10,27 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Build › Team workspace — Mentor/Advisor, Co-Founder & Jobs consolidation (PR #132)
+
+Founder information-architecture consolidation: the standalone Mentor/Advisor,
+Co-Founder and Jobs surfaces are now composed into one tabbed **Build › Team**
+workspace at `/build/team` (`frontend/src/pages/TeamBuildingPage.jsx`).
+
+- **Tabs** via `?tab=` (`mentor` / `cofounder` / `jobs`), deep-linkable. Each
+  sub-page (`MentorsPage`, `CofounderPage`, `jobs/MyJobsPage`) gains an
+  `embedded` prop that suppresses its own page header so the workspace's single
+  title governs.
+- **Tier gating** preserved per tab (mentor -> growth, cofounder -> studio, jobs
+  ungated) via `hasTier`; a founder without the plan sees an upgrade panel that
+  opens the shared paywall (`openPaywall`).
+- **Routing** (`frontend/src/App.jsx`): new `/build/team` route (admin/founder);
+  legacy `/mentors`, `/cofounder`, `/my/jobs` redirect a `founder` into the
+  matching tab while staying live for every other role.
+- **Nav** (`frontend/src/sidebarConfig.js`): single "Team" row added to the
+  founder Build group (alongside "Signals"); the former "Find a Mentor" /
+  "Find a Co-founder" (Validate) and "Jobs" (Launch) rows removed.
+- **Explainer** `team_building` added (`frontend/src/lib/explainers.js`).
+
 ## Task #10 — Pitch Positioning Generator
 
 New **Positioning** tab in the Pitch workspace: a one-liner & elevator-pitch
