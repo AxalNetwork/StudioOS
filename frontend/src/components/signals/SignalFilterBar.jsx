@@ -1,6 +1,6 @@
 import React from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
-import { facetLabel, prettify } from '../../lib/signalsMeta';
+import { facetLabel } from '../../lib/signalsMeta';
 
 /**
  * SignalFilterBar — the top filter row. Renders one <select> per facet the
