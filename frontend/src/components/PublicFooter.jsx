@@ -109,7 +109,7 @@ export default function PublicFooter() {
           </div>
 
           <div>
-            <h3 className="font-semibold text-gray-900 mb-4">Spin-Out Lab</h3>
+            <h3 className="font-semibold text-gray-900 mb-4">Products</h3>
             <ul className="space-y-2">
               <li><Link to="/spinout-lab" className="text-sm text-gray-600 hover:text-gray-900">Spin-Out Lab</Link></li>
               {PRODUCT_FOOTER_LINKS.map(({ label, to }) => (
