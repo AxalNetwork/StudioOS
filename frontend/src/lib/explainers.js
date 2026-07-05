@@ -77,6 +77,11 @@ export const EXPLAINERS = {
     body: 'Opt into the match pool, signal what you need, and we surface vetted candidates with overlapping conviction and complementary skills.',
     docPath: 'validate-grow/cofounder-match',
   },
+  team_building: {
+    title: 'Build the team around your company',
+    body: 'One workspace to recruit advice from mentors, find a co-founder, and hire for open roles — advisors, founders, and talent in one place.',
+    docPath: 'validate-grow/team-building',
+  },
   market_intel: {
     title: 'Market signal, on demand',
     body: 'Comp-set deltas, funding rounds, hiring velocity and news sentiment for the segments you care about — refreshed daily.',

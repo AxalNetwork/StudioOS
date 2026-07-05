@@ -10,6 +10,77 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #10 — Pitch Positioning Generator
+
+New **Positioning** tab in the Pitch workspace: a one-liner & elevator-pitch
+generator with "one-click positioning" — pick a startup and the system pulls its
+team, traction and updates, then the AI writes a one-liner, a short elevator
+pitch and 3-5 alternate positioning lines.
+
+- **Worker route**: `decks.post('/positioning', …)` in
+  `cloudflare-worker/src/routes/decks.ts` (registered after `/generate`, before
+  the `/:id` handlers). Growth-tier (`ensureTier(…, 'growth')`) + owner-scoped
+  (`projectOwned` → 404 `not found` / 403 `forbidden`). Grounding data is pulled
+  the same way as deck autofill: `projects.*`, cap-table founders
+  (`cap_table_holders`, `/founder/i` on `kind`, falls back to all holders),
+  `financial_models.computed_json`/`assumptions_json` (runway / burn / LTV:CAC),
+  the latest `score_snapshots.tier`, and the 5 most recent **submitted**
+  `portfolio_updates` (title + period). Calls OpenAI `gpt-4o-mini` with
+  `response_format: json_object` + `AbortSignal.timeout(45s)`. **Fails loud** —
+  no `OPENAI_API_KEY` → `503 {error:'ai_unavailable', code:'ai_unavailable'}`;
+  provider non-2xx / parse failure / empty output → `502 ai_failed`. NEVER
+  fabricates lines. Returns `{ project_id, project_name, one_liner,
+  elevator_pitch, positioning_lines[], sourced_from:{team,traction,updates,
+  financials} }`. All queries parameterised (`.bind`).
+- **Client** (`frontend/src/lib/api.js`): `api.deckPositioning(projectId)` →
+  `POST /decks/positioning`. Covered by the prefix-level api-drift guard (the
+  `/decks` mount already exists — no allowlist change).
+- **Frontend**: new `frontend/src/pages/PitchPositioningPage.jsx` (accepts
+  `embedded`) — startup picker (defaults to first project), one-click Generate/
+  Regenerate, "Grounded in" chips from `sourced_from`, per-line + copy-all
+  clipboard, and explicit loading / empty / error / `ai_unavailable` states
+  (amber for unavailable, red for failure; dev FastAPI 404 degrades to the same
+  explicit "not available in this preview" state — never fake output). Full
+  `dark:` variants throughout.
+- **Wiring**: `PitchWorkspacePage.jsx` gains a **Positioning** tab
+  (`/raise/pitch/positioning`) between Deck Builder and Review, sharing the
+  Deck Builder's Growth gate (`GROWTH_TABS`) so non-growth founders see the
+  existing `LockedDeck` upgrade panel. `App.jsx` adds the
+  `/raise/pitch/positioning` route (`guard(['admin','founder'])` →
+  `PitchWorkspacePage`).
+- **Scope**: Worker + SPA only; no schema/migration (generation is ephemeral).
+  Prod = Worker on D1; dev FastAPI has no `/decks/positioning`. Routes take
+  effect on `npm run deploy`.
+
+## Task #9 — Admin-managed Communities & Circles
+
+Replaced the FAKE hardcoded circles with a real, admin-authored, D1-backed system,
+and fixed the incoherent `/circles#circles` URL. The public `/circles` page now
+starts EMPTY and only shows circles an admin has published.
+
+- **Migration**: `cloudflare-worker/sql/migrations/137_circles.sql` — new `circles`
+  table (additive + idempotent, seeds NO rows) with public-feed / type / access
+  indexes. Mirrored at runtime by `src/services/circlesSchema.ts::ensureCirclesSchema`
+  (lazy `CREATE … IF NOT EXISTS` bootstrap, same pattern as jobBoardSchema/eventsSchema)
+  so dev/preview D1 serves the routes pre-migration.
+- **Shared helpers**: `src/services/circlesCommon.ts` — `shapeCircle` (snake_case row →
+  camelCase card shape), `parseCircleBody` (validation; explicit `name_required` 400, no
+  silent fallback), `slugify` + `uniqueCircleSlug`, `normalizeTags`, controlled
+  vocabularies mirroring `frontend/src/data/network.js`.
+- **Worker routes**: `routes/admin_circles.ts` mounted at `/api/admin/circles` (BEFORE the
+  catch-all `/api/admin`) — full CRUD + `publish`/`unpublish`/`feature`/`delete`, every
+  handler `requireAdmin`, mutations audit-logged (`report_type='circles'`, tolerant of the
+  optional `actor` column). `routes/circles_public.ts` mounted at `/api/public` (BEFORE the
+  generic `publicRoutes`) — `GET /public/circles`, published only, featured-first ordering.
+- **Frontend**: `lib/api.js` gains `circlesPublic.list()` + `adminCircles` client.
+  `pages/CirclesPage.jsx` rewritten to fetch the public feed (distinct empty/loading
+  states, graceful degradation on the dev 404); the hero "Browse circles" anchor now
+  scrolls via ref instead of the `#circles` hash. New `pages/admin/AdminCirclesPage.jsx`
+  (create/edit modal + publish/feature/delete), routed at `/admin/circles`
+  (`guard(['admin'])`) in `App.jsx`, linked from `sidebarConfig.js`. Removed the hardcoded
+  `CIRCLES` array from `data/network.js` (taxonomy + PROGRAMS + DIRECTORY_* retained).
+- **Routing note**: `/circles` route unchanged. Worker routes take effect on `npm run deploy`.
+
 ## Task #3 — Signals: founder decision engine over public-market evidence
 
 New product module integrated from PR #131 (`claude/signals-decision-engine-jxf5pu`).

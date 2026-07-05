@@ -5,6 +5,31 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Nail your pitch in one click
+
+There's a new **Positioning** tab under **Raise → Pitch**. Pick one of your
+startups and, in a click, we write you a punchy **one-liner**, a **20-second
+elevator pitch**, and a handful of **alternate positioning lines** to try out.
+It's built from your own startup's details — your team, traction, and recent
+updates — so it sounds like you, not a template. Copy any line (or all of them)
+straight into your deck or emails. If AI isn't available in your environment,
+we tell you plainly rather than making anything up.
+
+---
+
+## Communities & Circles — now curated by the team
+
+The **Circles** page is now managed by the Axal team. Instead of a fixed, made-up
+list, you'll see real communities as soon as they're launched — organised by stage,
+city, and topic. Admins can publish, feature, edit, and remove circles from a new
+management console, so what you see is always current.
+
+If no circles have launched yet, the page shows a friendly "no circles yet" message
+with a way to join the network, rather than placeholder content. We also fixed an
+odd link on the page so browsing now scrolls smoothly to the list.
+
+---
+
 ## Signals — public-market evidence for what to build next
 
 A new **Signals** dashboard helps you decide what to build next. It scans public

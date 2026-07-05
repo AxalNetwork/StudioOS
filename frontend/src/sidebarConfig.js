@@ -177,6 +177,11 @@ export const SIDEBAR_GROUPS = {
       { to: '/execution', icon: Zap, label: 'Execution', match: ['/execution', '/projects', '/pipeline', '/build/roadmap'] },
       { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
       { to: '/signals', icon: Radar, label: 'Signals' },
+      // Team Building — consolidates the former "Find a Mentor" (Validate),
+      // "Find a Co-founder" (Validate) and "Jobs" (Launch) items into one
+      // workspace at /build/team. `match` keeps this row active when a founder
+      // deep-links (or is redirected from) the legacy standalone routes.
+      { to: '/build/team', icon: Users, label: 'Team', match: ['/build/team', '/mentors', '/cofounder', '/my/jobs', '/jobs', '/my/applications'] },
       { to: '/build/metrics', icon: TrendingUp, label: 'Metrics' },
       { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
       { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
@@ -188,8 +193,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/services', icon: Package, label: 'Service Catalogue' },
       { to: '/build/competitors', icon: Megaphone, label: 'Competitor Analysis' },
       { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
-      { to: '/mentors', icon: UserCircle, label: 'Find a Mentor', requiredTier: 'growth' },
-      { to: '/cofounder', icon: Users, label: 'Find a Co-founder', requiredTier: 'studio' },
       { to: '/relationships', icon: Handshake, label: 'Network' },
     ]},
     // Task #1 — RAISE Workspaces. Ten items collapsed into three workspaces that
@@ -204,7 +207,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'launch', label: 'Launch', items: [
       { to: '/my/events', icon: Ticket, label: 'Events' },
-      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
+      // "Jobs" moved into the Build › Team workspace (/build/team?tab=jobs).
       { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
     ]},
@@ -297,7 +300,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust Center' },
-      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
