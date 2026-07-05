@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Refer & Earn and Payouts are now one place: Referrals
+
+We've combined **Refer & Earn** and **Payouts** into a single **Referrals** area
+in the sidebar. Open it and switch between two tabs: **Refer & Earn** (your
+referral link, share templates, LinkedIn import, and Stripe Connect setup) and
+**Payouts** (your available and lifetime earnings, commissions, and payout
+requests). Everything works exactly as before — it's just grouped so it's faster
+to find, since you refer people to earn and then collect your earnings in the same
+spot. Old **Payouts** bookmarks send you straight to the Payouts tab.
+
+---
+
 ## Nail your pitch in one click
 
 There's a new **Positioning** tab under **Raise → Pitch**. Pick one of your

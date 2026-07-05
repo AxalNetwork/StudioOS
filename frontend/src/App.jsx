@@ -113,9 +113,9 @@ const PortfolioHealthPage = lazy(() => import('./pages/PortfolioHealthPage'));
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
 const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
 const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
-const ReferEarnPage = lazy(() => import('./pages/ReferEarnPage'));
+// Task #15 — Refer & Earn + Payouts merged into one tabbed Referrals workspace.
+const ReferralsPage = lazy(() => import('./pages/ReferralsPage'));
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
-const PayoutsPage = lazy(() => import('./pages/PayoutsPage'));
 const MatchesPage = lazy(() => import('./pages/MatchesPage'));
 const StudioOpsPage = lazy(() => import('./pages/StudioOpsPage'));
 const NetworkEffectsPage = lazy(() => import('./pages/NetworkEffectsPage'));
@@ -1394,9 +1394,10 @@ function AppInner() {
       {/* Task #1 — RAISE Workspaces: legacy /raise (Raise Pipeline) now lives in
           the Capital workspace pipeline tab. */}
       <Route path="/raise" element={<Navigate to="/raise/capital/pipeline" replace />} />
-      <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferEarnPage />)} />
+      <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferralsPage />)} />
       <Route path="/integrations" element={guard(['admin', 'partner', 'investor'], <IntegrationsPage />)} />
-      <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <PayoutsPage />)} />
+      {/* Task #15 — /payouts is now the Payouts tab of the merged Referrals workspace. */}
+      <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/refer?tab=payouts" replace />)} />
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
       <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />

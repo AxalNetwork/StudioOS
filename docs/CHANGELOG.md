@@ -10,6 +10,39 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #15 — Merge Refer & Earn + Payouts into one Referrals workspace
+
+Frontend-only IA consolidation. The two separate founder/partner/investor/admin
+sidebar items and pages — Refer & Earn (`/refer`) and Payouts (`/payouts`) — now
+live in a single tabbed **Referrals** workspace. No business logic, data fetching,
+API, or schema changes; mirrors the `/build/team?tab=…` and RAISE consolidations.
+
+- **New workspace** (`frontend/src/pages/ReferralsPage.jsx`) — a two-tab page
+  ("Refer & Earn" default + "Payouts") composing the existing `ReferEarnPage` and
+  `PayoutsPage` via a new `embedded` prop; the active tab is driven by `?tab=`
+  (deep-linkable, survives refresh). Both children keep their own loading/empty/
+  results states and unchanged API calls.
+- **`embedded` prop** added to `ReferEarnPage` (suppresses its own icon/title/
+  `PageExplainer`/blurb header and drops the outer `p-6 max-w-6xl mx-auto` padding
+  when embedded) and `PayoutsPage` (drops the loading-state page padding when
+  embedded; it has no header of its own).
+- **Routing** (`frontend/src/App.jsx`) — `/refer` now renders `ReferralsPage`
+  (lazy import renamed from `ReferEarnPage`); `/payouts` redirects to
+  `/refer?tab=payouts`; the standalone `PayoutsPage` lazy import was removed
+  (the component is composed into the tab, not lazy-loaded).
+- **Sidebar** (`frontend/src/sidebarConfig.js`) — the two entries collapse to one
+  **Referrals** entry (`/refer`, `Share2`) in every persona that carried them:
+  admin (Network & Growth; `/payouts` dropped from Capital & Legal), founder
+  (More), partner (Earn). Investor never had either entry, so it's untouched.
+  Removed the now-unused `Wallet` icon import.
+- **Copy** — `lib/explainers.js` `refer_earn` retitled "Referrals" and reworded
+  for the merged workspace; Docs → Network "Refer & Earn" overview/howto/tips
+  (`pages/docs/sections/network.js`) now reference the Referrals workspace and its
+  Payouts tab instead of a separate sidebar item.
+- **Out of scope (unchanged)** — the admin management screen `/admin/refer-earn`
+  (`ReferEarnPayouts.jsx`), the canonical `/refer` route name, and all referral/
+  commission/payout business logic and Worker endpoints.
+
 ## Task #10 — Pitch Positioning Generator
 
 New **Positioning** tab in the Pitch workspace: a one-liner & elevator-pitch

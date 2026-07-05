@@ -198,8 +198,8 @@ export const EXPLAINERS = {
     docPath: 'portals/portfolio-health',
   },
   refer_earn: {
-    title: 'Refer & earn',
-    body: 'Share your referral link and earn for every founder, partner or investor who joins and converts. Payouts are tracked automatically.',
+    title: 'Referrals',
+    body: 'Share your referral link and earn for every founder, partner or investor who joins and converts, then collect what you earn from the Payouts tab.',
     docPath: 'network/refer-earn',
   },
   spinout_lab: {

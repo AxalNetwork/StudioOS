@@ -18,7 +18,7 @@
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Zap, Handshake, Rocket, UserCircle,
-  Globe, Brain, Activity, Shield, ShieldCheck, Share2, Wallet,
+  Globe, Brain, Activity, Shield, ShieldCheck, Share2,
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2, ShieldAlert,
@@ -96,7 +96,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'capital', label: 'Capital & Legal', items: [
       { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
-      { to: '/payouts', icon: Wallet, label: 'Payouts' },
       { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
       { to: '/portfolio/coverage', icon: Network, label: 'Portfolio Coverage' },
       { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
@@ -109,7 +108,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'network', label: 'Network & Growth', items: [
       { to: '/partners', icon: Users, label: 'Partners' },
-      { to: '/refer', icon: Share2, label: 'Refer & Earn' },
+      { to: '/refer', icon: Share2, label: 'Referrals' },
       { to: '/relationships', icon: Handshake, label: 'Relationships' },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
@@ -212,11 +211,10 @@ export const SIDEBAR_GROUPS = {
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
     ]},
     { key: 'more', label: 'More', items: [
-      { to: '/refer', icon: Share2, label: 'Refer & Earn' },
+      { to: '/refer', icon: Share2, label: 'Referrals' },
       { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits', requiredTier: 'studio' },
-      { to: '/payouts', icon: Wallet, label: 'Payouts' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
     ]},
     { key: 'account', label: 'Account', items: [
@@ -295,8 +293,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
     ]},
     { key: 'earn', label: 'Earn', items: [
-      { to: '/payouts', icon: Wallet, label: 'Payouts' },
-      { to: '/refer', icon: Share2, label: 'Refer & Earn' },
+      { to: '/refer', icon: Share2, label: 'Referrals' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust Center' },

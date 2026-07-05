@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { api } from '../lib/api';
 
-export default function PayoutsPage() {
+export default function PayoutsPage({ embedded = false }) {
   const [commissions, setCommissions] = useState({ balance_cents: 0, lifetime_cents: 0, commissions: [] });
   const [payouts, setPayouts] = useState([]);
   const [method, setMethod] = useState('wire');
@@ -49,7 +49,7 @@ export default function PayoutsPage() {
     }
   }
 
-  if (loading) return <div className="p-6 text-sm text-gray-500">Loading payouts…</div>;
+  if (loading) return <div className={`${embedded ? '' : 'p-6 '}text-sm text-gray-500 dark:text-gray-400`}>Loading payouts…</div>;
 
   return (
     <div className="space-y-6">
