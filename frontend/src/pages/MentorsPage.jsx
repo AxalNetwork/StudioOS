@@ -346,7 +346,7 @@ function MyBookings({ refreshKey }) {
   );
 }
 
-export default function MentorsPage() {
+export default function MentorsPage({ embedded = false }) {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -386,14 +386,18 @@ export default function MentorsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Mentor directory</h1>
-        <PageExplainer pageKey="mentors" />
-        <p className="text-sm text-gray-600 mt-1">
-          Find an operator-mentor for office hours or 1:1 guidance. Bookings include
-          two-sided reviews so quality compounds.
-        </p>
-      </div>
+      {/* When embedded inside the Team Building workspace the page-level
+          heading is suppressed so the parent's single title governs. */}
+      {!embedded && (
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Mentor directory</h1>
+          <PageExplainer pageKey="mentors" />
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            Find an operator-mentor for office hours or 1:1 guidance. Bookings include
+            two-sided reviews so quality compounds.
+          </p>
+        </div>
+      )}
 
       <div className="bg-white border border-gray-200 rounded-lg p-4 grid grid-cols-1 md:grid-cols-5 gap-3 items-end dark:bg-gray-900 dark:border-gray-800">
         <div className="md:col-span-2">

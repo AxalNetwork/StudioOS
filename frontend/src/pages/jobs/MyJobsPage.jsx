@@ -22,7 +22,7 @@ const EMPLOYMENT_LABELS = {
   full_time: 'Full-time', part_time: 'Part-time', intern: 'Internship', contract: 'Contract',
 };
 
-export default function MyJobsPage() {
+export default function MyJobsPage({ embedded = false }) {
   const { toast, showToast } = useToast();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +42,7 @@ export default function MyJobsPage() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+    <div className={embedded ? '' : 'max-w-5xl mx-auto px-4 sm:px-6 py-6'}>
       {toast ? (
         <div className={`mb-4 rounded-lg px-4 py-2 text-sm ${toast.kind === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'}`}>
           {toast.msg}
