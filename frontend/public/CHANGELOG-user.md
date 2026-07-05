@@ -5,6 +5,14 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Footer links now bring you back to the top of the page
+
+Clicking any link in the page footer — like **For Founders**, **For Investors**,
+**Articles**, **About**, or **Programs & Events** — now lands you at the top
+of the new page instead of leaving you halfway down.
+
+---
+
 ## Subscription plans for partners and advisors
 
 If you're a partner or an advisor, **Settings → Billing** now has real plans you

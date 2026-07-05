@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
+import ScrollToTop from './components/ScrollToTop';
 import TopLevelErrorBoundary from './components/TopLevelErrorBoundary';
 import './index.css';
 import { registerServiceWorker } from './lib/pwa';
@@ -92,6 +93,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <TopLevelErrorBoundary>
       <BrowserRouter>
+        <ScrollToTop />
         <App />
       </BrowserRouter>
     </TopLevelErrorBoundary>

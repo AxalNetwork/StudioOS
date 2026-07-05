@@ -10,6 +10,18 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Global scroll-to-top on every route change (scroll fix)
+
+Added a `ScrollToTop` component inside `<BrowserRouter>` so any
+client-side navigation (footer links, nav clicks, back/forward) resets
+`window.scrollY` to 0. Previously clicking a footer link mid-page
+(e.g. "For Founders", "For Investors", "Articles", "About") left the
+user at the same scroll position on the new page. The component
+watches `useLocation().pathname` and calls `window.scrollTo({ top: 0 })`
+with no animation (instant) so the destination always starts at the top.
+New file: `frontend/src/components/ScrollToTop.jsx`; wired into
+`frontend/src/main.jsx` immediately inside `<BrowserRouter>`.
+
 ## Persona (account-plan) billing for every non-founder/non-investor role (Task #22, PR #130)
 
 A generic Stripe subscription pipeline for every signed-in role that isn't a
