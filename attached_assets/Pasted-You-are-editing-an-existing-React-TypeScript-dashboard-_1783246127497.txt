@@ -1,0 +1,95 @@
+You are editing an existing React/TypeScript dashboard for the Axal.vc StudioOS app.
+
+Goal: Refactor the “RAISE” section navigation into three focused workspaces (Pitch, Capital, Legal Engine), merge “Pitch Deck” and “Pitch Deck Reviewer” into a single Pitch experience, and turn the legal tools into a single “Legal Engine” page with internal cards/tabs. Keep business logic, data models, and API calls exactly as they are; this is an information architecture + UI routing refactor, not a re-write of functionality.
+
+Current state (in the sidebar under RAISE):
+- Pitch Deck
+- Pitch Deck Reviewer
+- Financial Model
+- Cap Table
+- Raise Pipeline
+- Legal & Capital
+- Incorporate
+- Co-Founder Agreement
+- Compliance Calendar
+- 83(b) Tracker
+
+Target state (sidebar under RAISE):
+- Pitch
+- Capital
+- Legal Engine
+
+Behavioral requirements:
+
+1) PITCH
+- Create a single route/workspace, for example `/raise/pitch`.
+- Merge the existing “Pitch Deck” and “Pitch Deck Reviewer” pages into this route.
+- Inside the Pitch workspace, expose two main modes:
+  - “Edit Deck” (uses the existing Pitch Deck editor component/layout).
+  - “Review” (uses the existing Pitch Deck Reviewer feature, including any AI review, checklists, or scoring components).
+- Implement this as either:
+  - Tabs (Edit / Review), or
+  - A primary/secondary layout where “Edit Deck” is the default and “Review” is a secondary panel or tab.
+- Preserve all existing props, hooks, API calls, and data models for deck content and review. Only move/compose components; do not change their behavior.
+- Update navigation, breadcrumbs, and any deep links so that old routes for Pitch Deck and Pitch Deck Reviewer now redirect to `/raise/pitch` with the correct sub-tab selected.
+
+2) CAPITAL
+- Create a Capital workspace route, for example `/raise/capital`.
+- Inside this Capital page, surface three sub-areas based on the existing pages:
+  - Financial Model
+  - Cap Table
+  - Raise Pipeline
+- Implement these as tabs or a horizontal nav within the Capital workspace. Reuse the existing page components for each sub-area, but mount them inside this shared Capital layout.
+- Remove the separate sidebar entries for Financial Model, Cap Table, and Raise Pipeline; they should now be accessible only inside the Capital workspace.
+- Ensure the URL structure supports sub-routes or state, e.g. `/raise/capital/model`, `/raise/capital/cap-table`, `/raise/capital/pipeline`, or query parameters if that matches the existing routing system.
+- Add sensible defaults (e.g., `/raise/capital` loads the Financial Model tab by default).
+- Add any necessary redirects from the old routes to the new Capital routes so existing links continue to work.
+
+3) LEGAL ENGINE
+- Create a Legal Engine workspace route, for example `/raise/legal` or `/raise/legal-engine`.
+- Move the following existing features into this page:
+  - Incorporate
+  - Co-Founder Agreement
+  - Compliance Calendar
+  - 83(b) Tracker (and future jurisdiction-specific equivalents).
+- On the Legal Engine page, build a simple dashboard-style layout:
+  - A small header summarizing the company’s jurisdiction and a “Change jurisdiction” control (keep this wired to existing state/store if it exists; otherwise, just stub a dropdown with TODO comments).
+  - Four main cards/sections:
+    1) Incorporation
+    2) Founders & Agreements
+    3) Compliance & Filings Calendar
+    4) Equity Elections (83(b) and equivalents)
+  - Each card should:
+    - Reuse the existing page/component for that function as its “detail” view.
+    - Show a short descriptive summary and a status pill (Not Set Up / In Progress / Complete) derived from existing data where possible; if not available, compute status with simple heuristics or use placeholder status with TODO comments.
+- For the Equity Elections card:
+  - Keep the current 83(b) Tracker logic intact.
+  - Abstract the concept to “Equity Elections”, but still keep all existing US-specific behavior.
+  - Add a lightweight structure (e.g., a type or enum) that would allow additional election types later (UK s.431, AU ESS, etc.), without implementing them fully right now. Add TODO comments describing where those would plug in.
+- Remove the old “Legal & Capital” sidebar item; its responsibilities are now split across the Capital workspace and the Legal Engine workspace.
+
+4) SIDEBAR & ROUTING UPDATES
+- Update the main sidebar configuration so that, under the RAISE section, there are exactly three items:
+  - Pitch -> `/raise/pitch`
+  - Capital -> `/raise/capital`
+  - Legal Engine -> `/raise/legal` (or `/raise/legal-engine`, matching the route you create)
+- Ensure icon choices stay visually consistent with the previous icons (reuse existing icons where possible).
+- Remove or deprecate the old entries (Pitch Deck, Pitch Deck Reviewer, Financial Model, Cap Table, Raise Pipeline, Legal & Capital, Incorporate, Co-Founder Agreement, Compliance Calendar, 83(b) Tracker) from the sidebar.
+- Add redirects or route aliases as needed so that any existing links/bookmarks to the old routes still load the correct new workspace and tab.
+
+5) CODE QUALITY & NON-GOALS
+- Do NOT change any business logic, data fetching, or schemas. Only move, compose, and lightly adapt existing components and routes.
+- Keep file and folder naming consistent with the current project conventions for pages and layouts.
+- Add or update minimal tests (unit or integration) for:
+  - Rendering of the new Pitch, Capital, and Legal Engine routes.
+  - Basic navigation between tabs/cards inside each workspace.
+  - Redirect behavior from old routes to new ones.
+- Keep the visual design aligned with the existing design system (buttons, cards, typography). If the project has shared layout components for dashboards or workspaces, use them.
+
+Start by:
+1) Locating the sidebar/nav configuration for the RAISE section.
+2) Mapping each existing page/component to its new workspace.
+3) Introducing the three new workspace routes and wiring up the old components inside them.
+4) Cleaning up dead routes and adding redirects.
+
+When you’re done, the codebase should have a much slimmer RAISE sidebar (Pitch, Capital, Legal Engine) while preserving all existing features and data.
