@@ -10,6 +10,39 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Keep profile-background fields off `users` — companion `user_profile_ext` table (D1 100-column limit)
+
+Prod `users` sits at Cloudflare D1's hard 100-column-per-table limit, so the
+profile-background feature (experience / education / certifications / website +
+LinkedIn picture) could not add its columns via `ALTER TABLE users` — the deploy
+was blocked. Moved that state into a 1:1 companion side table
+`user_profile_ext(user_id PK, experience, education, certifications, website,
+linkedin_picture_url, created_at, updated_at)`, following the existing
+`corporate_profiles` / author-websites side-table pattern.
+
+- **Migrations** — `131_profiles_follows.sql` rewritten → `CREATE TABLE IF NOT
+  EXISTS user_profile_ext` + `follows` + indexes (dropped all `users` ALTERs, and
+  the `projects.website` ALTER since that column already exists on prod via the
+  runtime ensure in `routes/projects.ts`). `133_linkedin_picture_url.sql` rewritten
+  → `ALTER TABLE user_profile_ext ADD COLUMN linkedin_picture_url TEXT` (was an
+  ALTER on `users`).
+- **Worker** — `services/profileExpansion.ts`: `ensureProfileBackgroundSchema`
+  creates `user_profile_ext` (+ guarded ALTERs for self-heal); `getProfileBackground`
+  SELECTs from it by `user_id`; `updateProfileBackground` UPSERTs with
+  `ON CONFLICT(user_id)`. `routes/public.ts` LEFT JOINs `user_profile_ext` (u.-prefixed
+  columns). `routes/settings.ts` drops `linkedin_picture_url` from
+  `SETTINGS_USER_COLUMNS` and JOINs the side table for the profile preview.
+  `routes/linkedin.ts` writes/clears `linkedin_picture_url` via best-effort
+  UPSERT/UPDATE on the side table (OAuth callback + disconnect).
+- **Schema** — `sql/schema.sql` drops `users.linkedin_picture_url`, adds the
+  `user_profile_ext` table. Dev FastAPI (`backend/`) left unchanged: SQLite has no
+  column cap and the API contract is identical.
+- **Deploy** — migrations 131–135 applied via `scripts/migrate-d1.mjs --remote`
+  (prod ledger was at 130; 132 job-board / 134 account-subscriptions / 135
+  seed-article rode along, all pending & idempotent), then `npm run deploy` shipped
+  the Worker. Verified `user_profile_ext` present with all 8 columns and `users`
+  still at 100.
+
 ## Fold Identity Verification (KYC / AML) into the Trust Center (Task #25)
 
 The KYC form is now reachable from a single **Trust Center** nav entry per

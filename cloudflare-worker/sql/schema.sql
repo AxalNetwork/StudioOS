@@ -114,10 +114,6 @@ CREATE TABLE IF NOT EXISTS users (
     linkedin_email TEXT,
     linkedin_name TEXT,
     linkedin_connected_at TEXT,
-    -- Task #67 — profile photo URL captured at OAuth callback (licdn.com CDN),
-    -- used by the "Import from LinkedIn" flow. Apply-time fetch is host-
-    -- allowlisted to prevent SSRF.
-    linkedin_picture_url TEXT,
     -- Task #1 (DB) — public FOUNDER_ID / PARTNER_ID surfaced in legal
     -- contracts (via {{counterparty.founder_id}} merge field). Allocated
     -- on first role grant (services/publicIds.ts) from id_sequences.
@@ -134,6 +130,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_partner_public_id
   ON users(partner_public_id) WHERE partner_public_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_users_last_active
   ON users(last_active_at);
+
+-- Companion 1:1 table for per-user profile fields that would otherwise push the
+-- `users` table past Cloudflare D1's hard 100-column-per-table limit. Structured
+-- public career background (Task #66) + the LinkedIn photo URL (Task #67). Same
+-- side-table pattern as author_websites / corporate_profiles. Created by
+-- migrations 131/133 and self-healed by ensureProfileExpansionSchema().
+CREATE TABLE IF NOT EXISTS user_profile_ext (
+    user_id              INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    experience           TEXT,  -- JSON array of career/experience entries
+    education            TEXT,  -- JSON array of education entries
+    certifications       TEXT,  -- JSON array of certification entries
+    website              TEXT,  -- personal / professional website URL
+    linkedin_picture_url TEXT,  -- licdn.com CDN URL captured at OAuth callback
+    created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 -- Task #16 — Profile expansion (corporate block, one per user).
 CREATE TABLE IF NOT EXISTS corporate_profiles (

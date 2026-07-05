@@ -356,7 +356,7 @@ const CERTIFICATION_KEYS = ['name', 'issuer', 'year', 'url'];
 
 export async function getProfileBackground(env: Env, userId: number): Promise<ProfileBackground> {
   const row = await env.DB.prepare(
-    `SELECT experience, education, certifications, website FROM users WHERE id = ?`,
+    `SELECT experience, education, certifications, website FROM user_profile_ext WHERE user_id = ?`,
   ).bind(userId).first<any>();
   return {
     experience: parseJsonArray(row?.experience),
@@ -396,9 +396,17 @@ export async function updateProfileBackground(
     updates.push(['website', w || null]);
   }
   if (updates.length) {
-    const setSql = updates.map(([col]) => `${col} = ?`).join(', ');
+    const cols = updates.map(([col]) => col);
     const params = updates.map(([, v]) => v);
-    await env.DB.prepare(`UPDATE users SET ${setSql} WHERE id = ?`).bind(...params, userId).run();
+    // Companion 1:1 table (users is at D1's 100-column limit). Insert the row on
+    // first write; otherwise update only the columns present in the patch.
+    const insertCols = ['user_id', ...cols].join(', ');
+    const placeholders = ['?', ...cols.map(() => '?')].join(', ');
+    const setClause = cols.map((col) => `${col} = excluded.${col}`).join(', ');
+    await env.DB.prepare(
+      `INSERT INTO user_profile_ext (${insertCols}) VALUES (${placeholders})
+       ON CONFLICT(user_id) DO UPDATE SET ${setClause}, updated_at = datetime('now')`,
+    ).bind(userId, ...params).run();
   }
   return getProfileBackground(env, userId);
 }
@@ -798,11 +806,6 @@ export async function ensureProfileExpansionSchema(env: Env): Promise<void> {
     ['postal_code', 'TEXT'],
     ['country', 'TEXT'],
     ['profile_completion_pct', 'INTEGER DEFAULT 0'],
-    // Task #66 — structured public background fields (JSON arrays) + website.
-    ['experience', 'TEXT'],
-    ['education', 'TEXT'],
-    ['certifications', 'TEXT'],
-    ['website', 'TEXT'],
   ];
   for (const [c, t] of cols) {
     try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN ${c} ${t}`).run(); } catch {}
@@ -840,6 +843,33 @@ export async function ensureProfileExpansionSchema(env: Env): Promise<void> {
         ON corporate_profiles(aml_high_risk_jurisdiction)
         WHERE aml_high_risk_jurisdiction = 1`,
     ).run();
+    // Task #66/#67 — structured public background (experience/education/
+    // certifications/website) + the LinkedIn photo URL live on a companion 1:1
+    // table (users is at D1's 100-column limit; same pattern as author_websites
+    // / corporate_profiles). Migrations 131/133 create this on prod; this
+    // self-heals a cold DB. The guarded ALTERs cover a table that exists but
+    // predates a column (e.g. 131 applied, 133 not).
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS user_profile_ext (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        experience TEXT,
+        education TEXT,
+        certifications TEXT,
+        website TEXT,
+        linkedin_picture_url TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )`,
+    ).run();
+    for (const ddl of [
+      'ALTER TABLE user_profile_ext ADD COLUMN experience TEXT',
+      'ALTER TABLE user_profile_ext ADD COLUMN education TEXT',
+      'ALTER TABLE user_profile_ext ADD COLUMN certifications TEXT',
+      'ALTER TABLE user_profile_ext ADD COLUMN website TEXT',
+      'ALTER TABLE user_profile_ext ADD COLUMN linkedin_picture_url TEXT',
+    ]) {
+      try { await env.DB.prepare(ddl).run(); } catch { /* column exists — ignore */ }
+    }
   } catch (e) {
     console.error('[profile_expansion] migration failed', e);
   }

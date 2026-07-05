@@ -172,10 +172,13 @@ publicRoutes.get('/u/:handle', async (c) => {
   let row: any = null;
   try {
     row = await c.env.DB.prepare(
-      `SELECT id, uid, name, role, display_name, headline, bio, socials,
-              headshot_r2_key, privacy_prefs, experience, education, certifications,
-              website, founder_id, investor_id, partner_id, created_at
-         FROM users WHERE lower(uid) = ? AND is_active = 1`,
+      `SELECT u.id, u.uid, u.name, u.role, u.display_name, u.headline, u.bio, u.socials,
+              u.headshot_r2_key, u.privacy_prefs, e.experience, e.education,
+              e.certifications, e.website, u.founder_id, u.investor_id, u.partner_id,
+              u.created_at
+         FROM users u
+         LEFT JOIN user_profile_ext e ON e.user_id = u.id
+        WHERE lower(u.uid) = ? AND u.is_active = 1`,
     ).bind(handle).first<any>();
   } catch {
     row = await c.env.DB.prepare(

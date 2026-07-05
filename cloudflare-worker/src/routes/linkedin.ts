@@ -321,9 +321,19 @@ linkedin.get('/oauth/callback', async (c) => {
               SET linkedin_sub = ${sub},
                   linkedin_email = ${email || null},
                   linkedin_name = ${name || null},
-                  linkedin_picture_url = ${picture || null},
                   linkedin_connected_at = ${nowIso}
               WHERE id = ${userId}`;
+    // linkedin_picture_url lives on the companion user_profile_ext table (users
+    // is at D1's 100-column limit). Best-effort — never fail the connect.
+    try {
+      await sql`INSERT INTO user_profile_ext (user_id, linkedin_picture_url)
+                VALUES (${userId}, ${picture || null})
+                ON CONFLICT(user_id) DO UPDATE SET
+                  linkedin_picture_url = excluded.linkedin_picture_url,
+                  updated_at = datetime('now')`;
+    } catch (e: any) {
+      console.warn('[LINKEDIN] picture upsert skipped:', e?.message || e);
+    }
     await sql`INSERT INTO activity_logs (action, details, actor, user_id)
               VALUES ('linkedin_connected',
                       ${`User #${userId} linked LinkedIn identity sub=${sub}`},
@@ -347,8 +357,15 @@ linkedin.post('/disconnect', async (c) => {
     const sql = getSQL(c.env);
     await sql`UPDATE users
               SET linkedin_sub = NULL, linkedin_email = NULL, linkedin_name = NULL,
-                  linkedin_picture_url = NULL, linkedin_connected_at = NULL
+                  linkedin_connected_at = NULL
               WHERE id = ${user.id}`;
+    // Clear the companion-table picture too (best-effort; row may not exist).
+    try {
+      await sql`UPDATE user_profile_ext SET linkedin_picture_url = NULL,
+                  updated_at = datetime('now') WHERE user_id = ${user.id}`;
+    } catch (e: any) {
+      console.warn('[LINKEDIN] picture clear skipped:', e?.message || e);
+    }
     await sql`INSERT INTO activity_logs (action, details, actor, user_id)
               VALUES ('linkedin_disconnected', ${`User #${user.id} disconnected LinkedIn`}, ${user.email}, ${user.id})`;
     await sql.end();

@@ -1,7 +1,11 @@
 -- Task #67 — Autopopulate profiles from LinkedIn.
 --
 -- Capture the LinkedIn profile photo URL at OAuth callback so the "Import from
--- connected account" flow can propose it as a headshot. The URL is a
--- LinkedIn CDN (licdn.com) link; apply-time fetching is host-allowlisted to
--- prevent SSRF. Not a secret.
-ALTER TABLE users ADD COLUMN linkedin_picture_url TEXT;
+-- connected account" flow can propose it as a headshot. The URL is a LinkedIn
+-- CDN (licdn.com) link; apply-time fetching is host-allowlisted to prevent
+-- SSRF. Not a secret.
+--
+-- Lives on the companion `user_profile_ext` table (created in migration 131),
+-- NOT on `users`: `users` is at D1's hard 100-column limit, so an
+-- `ALTER TABLE users ADD COLUMN` aborts the deploy on prod.
+ALTER TABLE user_profile_ext ADD COLUMN linkedin_picture_url TEXT;

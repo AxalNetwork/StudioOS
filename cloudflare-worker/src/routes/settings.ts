@@ -74,7 +74,8 @@ const SETTINGS_USER_COLUMNS: Array<[string, string]> = [
   ['jwt_min_iat', 'INTEGER DEFAULT 0'], // bump on Sign-out-everywhere
   ['deletion_requested_at', 'TIMESTAMP'],
   ['totp_recovery_codes', 'TEXT'],      // JSON array of SHA-256 hex hashes
-  ['linkedin_picture_url', 'TEXT'],     // Task #67 — captured at OAuth callback
+  // linkedin_picture_url moved to the companion user_profile_ext table (users is
+  // at D1's 100-column limit); ensured by ensureProfileExpansionSchema.
 ];
 
 let migrated = false;
@@ -1276,8 +1277,10 @@ settings.post('/profile/linkedin-import/preview', async (c) => {
     let proposal: ImportProposal;
     if (source === 'account') {
       const sql = getSQL(c.env);
-      const rows = await sql`SELECT linkedin_sub, linkedin_name, linkedin_picture_url
-                             FROM users WHERE id = ${user.id}`;
+      const rows = await sql`SELECT u.linkedin_sub, u.linkedin_name, e.linkedin_picture_url
+                             FROM users u
+                             LEFT JOIN user_profile_ext e ON e.user_id = u.id
+                             WHERE u.id = ${user.id}`;
       await sql.end();
       proposal = buildAccountProposal(rows[0] as any);
     } else {

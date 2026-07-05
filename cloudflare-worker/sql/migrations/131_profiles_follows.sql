@@ -1,21 +1,30 @@
 -- Task #66 — Rich profiles + follow system.
 --
--- 1) Structured background fields on users (JSON arrays + website). These
---    surface on the public person profile (founder/investor) alongside the
---    existing bio/socials/headline. Stored as JSON text; the app parses them.
+-- 1) Structured background fields live on a companion 1:1 table
+--    `user_profile_ext` (keyed by user_id), NOT on `users`. `users` is at
+--    Cloudflare D1's hard 100-column-per-table limit, so any
+--    `ALTER TABLE users ADD COLUMN` aborts the deploy on prod with
+--    "too many columns on sqlite_altertab_users". Same side-table pattern as
+--    `author_websites` / `corporate_profiles`. Stored as JSON text; the app
+--    parses them. They surface on the public person profile alongside
+--    bio/socials/headline.
 -- 2) `follows` — a lightweight follow graph for people (entity_type='user')
 --    and startups (entity_type='project'). Distinct from `watchlist_items`
 --    (an investor-only DD instrument); follows is open to any signed-in user.
+--
+-- (The startup website URL — projects.website — is ensured at runtime in
+--  routes/projects.ts and is already present on prod, so it is intentionally
+--  NOT re-added here to avoid a duplicate-column abort.)
 
-ALTER TABLE users ADD COLUMN experience TEXT;      -- JSON array of {title, company|org, start, end, description|summary}
-ALTER TABLE users ADD COLUMN education TEXT;       -- JSON array of {school, degree, field, start, end}
-ALTER TABLE users ADD COLUMN certifications TEXT;  -- JSON array of {name, issuer, year, url}
-ALTER TABLE users ADD COLUMN website TEXT;         -- personal / professional website URL
-
--- 3) Startup website URL. The public startup profile's Site/Website button
---    prefers this explicit URL; when absent it falls back to a published
---    Brand & Landing page (landing_pages.slug → axal.vc/landing/:slug).
-ALTER TABLE projects ADD COLUMN website TEXT;      -- startup website / homepage URL
+CREATE TABLE IF NOT EXISTS user_profile_ext (
+    user_id        INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    experience     TEXT,  -- JSON array of {title, company|org, start, end, description|summary}
+    education      TEXT,  -- JSON array of {school, degree, field, start, end}
+    certifications TEXT,  -- JSON array of {name, issuer, year, url}
+    website        TEXT,  -- personal / professional website URL
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 CREATE TABLE IF NOT EXISTS follows (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
