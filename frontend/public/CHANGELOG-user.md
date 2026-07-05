@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Founder sidebar simplified
+
+Removed "My Profile" from the founder sidebar — it duplicated the Profile tab already inside **Settings**, so you can get there the same way with fewer sidebar entries.
+
+---
+
 ## New article: "How Global Partnerships Accelerate Scaling"
 
 Guillaume Lauzier's article on how global partnerships help startups scale faster — with less wasted capital and fewer blind spots — is back up on the Articles page, dated July 3, 2026, with its cover image.

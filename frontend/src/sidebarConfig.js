@@ -155,10 +155,12 @@ export const SIDEBAR_GROUPS = {
   //     /portfolio/health route stays registered and reachable for other roles.
   //   • "Network Effects" (/network-effects) is demoted to More while a single
   //     "Network" entry (/relationships) leads Validate; both routes stay live.
+  //   • "My Profile" (/profile) — the full Profile editor lives inside Settings
+  //     (/settings) as the first tab, so a separate sidebar item is redundant.
   //
   // Newly surfaced (routes already existed and are founder-accessible, they just
   // weren't in the founder nav): Co-Marketing (/comarketing, Launch), Identity /
-  // KYC (/kyc, Account), My Profile (/profile, Account), Discover (/play, More).
+  // KYC (/kyc, Account), Discover (/play, More).
   founder: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
@@ -214,7 +216,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust Center' },
       { to: '/kyc', icon: ShieldCheck, label: 'Identity / KYC' },
-      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },

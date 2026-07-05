@@ -10,6 +10,11 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Founder sidebar: remove "My Profile" (duplicate of Settings)
+
+The `/profile` route renders `SettingsPage` directly (→ line 1393 in `App.jsx`), so "My Profile" in the founder sidebar was a redundant nav item. Removed it from `SIDEBAR_GROUPS.founder` `account` group and added the removal to the documented "Intentional removals" comment block so nav-integrity checks treat it as deliberate. The route stays registered and reachable via deep link / back navigation from inside Settings.
+- **File:** `frontend/src/sidebarConfig.js`
+
 ## Re-added "How Global Partnerships Accelerate Scaling" article (Guillaume Lauzier)
 
 Re-seeded the `how-global-partnerships-accelerate-scaling` article (`articles.id = 10`, `author_user_id = 1` → guillaumelauzier@gmail.com), published `2026-07-03T09:00:00.000Z`, via `cloudflare-worker/sql/migrations/135_seed_global_partnerships_article.sql` (idempotent — guarded by `WHERE NOT EXISTS` on slug + author lookup, so a re-run/predeploy replay is a no-op) applied directly with `wrangler d1 execute studioos-db --remote`. `body_html` was pre-rendered offline with the same algorithm as `newsRender.ts::renderMarkdown` so it matches what `/admin/articles/:id/publish` would have produced.
