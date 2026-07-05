@@ -5,6 +5,57 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Removed the Referral Network page
+
+We removed the "Discover" item from the sidebar and the Referral Network page it opened (the interactive graph of your referral subtree). It added clutter without much value. Refer & Earn, your payouts, and everything else in your network stay exactly where they were.
+
+---
+
+## Founder sidebar simplified
+
+Removed "My Profile" from the founder sidebar — it duplicated the Profile tab already inside **Settings**, so you can get there the same way with fewer sidebar entries.
+
+---
+
+## New article: "How Global Partnerships Accelerate Scaling"
+
+Guillaume Lauzier's article on how global partnerships help startups scale faster — with less wasted capital and fewer blind spots — is back up on the Articles page, dated July 3, 2026, with its cover image.
+
+---
+
+## Footer links now bring you back to the top of the page
+
+Clicking any link in the page footer — like **For Founders**, **For Investors**,
+**Articles**, **About**, or **Programs & Events** — now lands you at the top
+of the new page instead of leaving you halfway down.
+
+---
+
+## Subscription plans for partners and advisors
+
+If you're a partner or an advisor, **Settings → Billing** now has real plans you
+can manage yourself. You'll see your current plan, a clear list of what each tier
+includes, and — when you upgrade — you can pay right on the page without being
+sent off to another site. Once you're subscribed, the same page lets you update
+your card, review invoices, and cancel any time. Founders and investors keep
+their existing billing, and anyone without a plan still sees their saved cards
+and receipts exactly as before.
+
+---
+
+## See your trial and Spin-Out Lab free time in Billing
+
+Your **Settings → Billing** page is now clearer about what you're paying — and
+when. If you're on a free trial of a paid plan, you'll see a **Trial status**
+card that counts down the days left and tells you the exact date your card is
+first charged, plus a reminder that you can cancel any time before then. And if
+you're in the **Spin-Out Lab**, a new card makes your free window explicit:
+you're free for 30 days, no card required, with the days remaining and the date
+your free time runs through — and upgrading stays optional until it ends. If
+you're not trialing or in the Lab, nothing changes.
+
+---
+
 ## A clearer, faster homepage
 
 The public front page has had a spring clean. The top of the page now leads with

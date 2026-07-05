@@ -1243,7 +1243,6 @@ export const api = {
   commissionsMe: () => request('/network/commissions/me'),
   payoutsMe: () => request('/network/payouts/me'),
   payoutRequest: (data) => request('/network/payout/request', { method: 'POST', body: JSON.stringify(data) }),
-  networkGraph: () => request('/network/graph'),
   adminCommissions: () => request('/network/admin/commissions'),
   adminCommissionRules: () => request('/network/admin/commission-rules'),
   adminPayouts: () => request('/network/admin/payouts'),

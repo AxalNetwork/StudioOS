@@ -109,7 +109,6 @@ const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
 const ReferEarnPage = lazy(() => import('./pages/ReferEarnPage'));
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
 const PayoutsPage = lazy(() => import('./pages/PayoutsPage'));
-const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const MatchesPage = lazy(() => import('./pages/MatchesPage'));
 const StudioOpsPage = lazy(() => import('./pages/StudioOpsPage'));
 const NetworkEffectsPage = lazy(() => import('./pages/NetworkEffectsPage'));
@@ -1362,11 +1361,6 @@ function AppInner() {
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferEarnPage />)} />
       <Route path="/integrations" element={guard(['admin', 'partner', 'investor'], <IntegrationsPage />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <PayoutsPage />)} />
-      <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkPage />)} />
-      {/* Task #17 — investor "Discover" nav lands on the network/archetype
-          discovery surface. Distinct path from /network so the sidebar item
-          highlights correctly. */}
-      <Route path="/play" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkPage />)} />
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
       <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />

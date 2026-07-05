@@ -10,6 +10,29 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Remove Discover sidebar item and Referral Network page (Task #26)
+
+Removed the low-value "Discover" nav item and the Referral Network graph page it
+(and `/network`) pointed at. The "Discover" sidebar entry (`/play`) and `/network`
+both mounted the same `NetworkPage` ("Interactive graph of your referral subtree"),
+so both routes and the component are gone.
+- **Frontend** — deleted `frontend/src/pages/NetworkPage.jsx`, its lazy import and
+  both routes (`/network`, `/play`) in `App.jsx`; dropped the two
+  `{ to: '/play', label: 'Discover' }` items (founder "More", investor "Account")
+  in `sidebarConfig.js` and the stale "Discover (/play)" note in its comment block;
+  removed the `networkGraph` client method in `lib/api.js` and the `network`
+  explainer in `lib/explainers.js` (both only used by that page); removed the
+  "View your referral network" link (and now-unused `Link` + `NetworkIcon` imports)
+  on `ReferEarnPage.jsx`; dropped the `/network` entry from the advisor `pageLabel`
+  map (`lib/advisor/router.js`) and repointed the co-founder advisor question's
+  `page_target` from `/network` to `/cofounder` (`lib/advisor/banks/newFounder.js`).
+- **Worker** — removed only the `GET /network/graph` handler from
+  `cloudflare-worker/src/routes/network.ts`; the rest of that file (referrals,
+  commissions, compounding bonuses) is untouched.
+- **Kept (out of scope)** — `/relationships` "Network", `/network-effects`
+  "Network Effects", `/refer` "Refer & Earn", the `Gamepad2` icon + Assessment
+  Studio item, and all other `/network/*` API routes.
+
 ## Founder sidebar: remove "My Profile" (duplicate of Settings)
 
 The `/profile` route renders `SettingsPage` directly (→ line 1393 in `App.jsx`), so "My Profile" in the founder sidebar was a redundant nav item. Removed it from `SIDEBAR_GROUPS.founder` `account` group and added the removal to the documented "Intentional removals" comment block so nav-integrity checks treat it as deliberate. The route stays registered and reachable via deep link / back navigation from inside Settings.

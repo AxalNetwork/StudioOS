@@ -160,7 +160,7 @@ export const SIDEBAR_GROUPS = {
   //
   // Newly surfaced (routes already existed and are founder-accessible, they just
   // weren't in the founder nav): Co-Marketing (/comarketing, Launch), Identity /
-  // KYC (/kyc, Account), Discover (/play, More).
+  // KYC (/kyc, Account).
   founder: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
@@ -211,7 +211,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits', requiredTier: 'studio' },
       { to: '/payouts', icon: Wallet, label: 'Payouts' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
-      { to: '/play', icon: Gamepad2, label: 'Discover' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust Center' },
@@ -363,7 +362,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/integrations', icon: Plug, label: 'Integrations' },
-      { to: '/play', icon: Gamepad2, label: 'Discover' },
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/activity', icon: Activity, label: 'Activity' },
       { to: '/docs', icon: BookOpen, label: 'Docs' },

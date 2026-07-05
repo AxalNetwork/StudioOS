@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Removed the Referral Network page
+
+We removed the "Discover" item from the sidebar and the Referral Network page it opened (the interactive graph of your referral subtree). It added clutter without much value. Refer & Earn, your payouts, and everything else in your network stay exactly where they were.
+
+---
+
 ## Founder sidebar simplified
 
 Removed "My Profile" from the founder sidebar — it duplicated the Profile tab already inside **Settings**, so you can get there the same way with fewer sidebar entries.

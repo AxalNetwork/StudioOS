@@ -119,7 +119,6 @@ export function pageLabel(path) {
     '/build/roadmap': 'Roadmap',
     '/build/brand': 'Brand',
     '/build/deck': 'Pitch Deck',
-    '/network': 'Network',
     '/onboarding/persona': 'Persona',
     '/matches': 'AI Matches',
     '/portfolio': 'Portfolio',

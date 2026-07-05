@@ -10,6 +10,207 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Remove Discover sidebar item and Referral Network page (Task #26)
+
+Removed the low-value "Discover" nav item and the Referral Network graph page it
+(and `/network`) pointed at. The "Discover" sidebar entry (`/play`) and `/network`
+both mounted the same `NetworkPage` ("Interactive graph of your referral subtree"),
+so both routes and the component are gone.
+- **Frontend** — deleted `frontend/src/pages/NetworkPage.jsx`, its lazy import and
+  both routes (`/network`, `/play`) in `App.jsx`; dropped the two
+  `{ to: '/play', label: 'Discover' }` items (founder "More", investor "Account")
+  in `sidebarConfig.js` and the stale "Discover (/play)" note in its comment block;
+  removed the `networkGraph` client method in `lib/api.js` and the `network`
+  explainer in `lib/explainers.js` (both only used by that page); removed the
+  "View your referral network" link (and now-unused `Link` + `NetworkIcon` imports)
+  on `ReferEarnPage.jsx`; dropped the `/network` entry from the advisor `pageLabel`
+  map (`lib/advisor/router.js`) and repointed the co-founder advisor question's
+  `page_target` from `/network` to `/cofounder` (`lib/advisor/banks/newFounder.js`).
+- **Worker** — removed only the `GET /network/graph` handler from
+  `cloudflare-worker/src/routes/network.ts`; the rest of that file (referrals,
+  commissions, compounding bonuses) is untouched.
+- **Kept (out of scope)** — `/relationships` "Network", `/network-effects`
+  "Network Effects", `/refer` "Refer & Earn", the `Gamepad2` icon + Assessment
+  Studio item, and all other `/network/*` API routes.
+
+## Founder sidebar: remove "My Profile" (duplicate of Settings)
+
+The `/profile` route renders `SettingsPage` directly (→ line 1393 in `App.jsx`), so "My Profile" in the founder sidebar was a redundant nav item. Removed it from `SIDEBAR_GROUPS.founder` `account` group and added the removal to the documented "Intentional removals" comment block so nav-integrity checks treat it as deliberate. The route stays registered and reachable via deep link / back navigation from inside Settings.
+- **File:** `frontend/src/sidebarConfig.js`
+
+## Re-added "How Global Partnerships Accelerate Scaling" article (Guillaume Lauzier)
+
+Re-seeded the `how-global-partnerships-accelerate-scaling` article (`articles.id = 10`, `author_user_id = 1` → guillaumelauzier@gmail.com), published `2026-07-03T09:00:00.000Z`, via `cloudflare-worker/sql/migrations/135_seed_global_partnerships_article.sql` (idempotent — guarded by `WHERE NOT EXISTS` on slug + author lookup, so a re-run/predeploy replay is a no-op) applied directly with `wrangler d1 execute studioos-db --remote`. `body_html` was pre-rendered offline with the same algorithm as `newsRender.ts::renderMarkdown` so it matches what `/admin/articles/:id/publish` would have produced.
+- **Cover image:** `cloudflare-worker/src/services/articleCoverData.ts` now exports `SEED_COVERS: SeedCover[]` (was a single hardcoded slug/mime/b64 triple) and `articleCovers.ts::ensureArticleCovers()` loops the array instead of handling one slug — same lazy self-seed-into-R2 pattern, extended to support more than one seeded cover. Compressed JPEG, 1280px wide, ~167KB.
+- **Prod deploy note:** the cover was also uploaded directly (`wrangler r2 object put studioos-files/articles/10/cover-seed.jpg`) and linked (`UPDATE articles SET cover_r2_key=...`) because `npm run deploy`'s predeploy migration runner is currently blocked by an unrelated pre-existing failure — `131_profiles_follows.sql` errors with `too many columns on sqlite_altertab_users: SQLITE_ERROR` on `--remote`. The new worker code (`articleCoverData.ts`/`articleCovers.ts`) has NOT been deployed yet; it typechecks clean and is a no-op once deployed since the article already has a cover. Fixing `131_profiles_follows.sql` is a separate, pre-existing issue.
+
+## Global scroll-to-top on every route change (scroll fix)
+
+Added a `ScrollToTop` component inside `<BrowserRouter>` so any
+client-side navigation (footer links, nav clicks, back/forward) resets
+`window.scrollY` to 0. Previously clicking a footer link mid-page
+(e.g. "For Founders", "For Investors", "Articles", "About") left the
+user at the same scroll position on the new page. The component
+watches `useLocation().pathname` and calls `window.scrollTo({ top: 0 })`
+with no animation (instant) so the destination always starts at the top.
+New file: `frontend/src/components/ScrollToTop.jsx`; wired into
+`frontend/src/main.jsx` immediately inside `<BrowserRouter>`.
+
+## Persona (account-plan) billing for every non-founder/non-investor role (Task #22, PR #130)
+
+A generic Stripe subscription pipeline for every signed-in role that isn't a
+founder or investor (partner, advisor/mentor, and any future persona). Founder
+(`metadata.tier`) and investor (`metadata.investor_tier`) keep their bespoke
+pipelines; everyone else now shares this one, keyed by a `plan_group` derived
+from the role. Integrated from branch `claude/axal-billing-subscription-ui-eadnp1`.
+
+- **Schema** — new migration `cloudflare-worker/sql/migrations/134_account_subscriptions.sql`
+  adds the `account_subscriptions` side table (keyed by `user_id`, one active
+  plan per account). State lives in a side table — NOT new `users` columns —
+  because `users` sits at D1's hard 100-column limit, exactly like
+  `mi_pro_subscriptions`. Every statement is additive + idempotent and never
+  seeds a row.
+- **Worker** — new `cloudflare-worker/src/services/accountPlans.ts` holds the
+  pipeline: `planGroupForRole` (role → `plan_group`, `null` for founder/investor,
+  `mentor`→`advisor` override, every other role defaults to its own name),
+  `ensureAccountPlanSchema` (statement-for-statement mirror of migration 134 so
+  dev/preview D1 self-heals), `readAccountSubscription`,
+  `accountFieldsFromStripeSub`, `upsertAccountPlanFromStripe`,
+  `markAccountPlanDeleted`, and a keyless-dev `devUpgradeAccountPlan`.
+- **Worker routes** — `cloudflare-worker/src/routes/billing.ts` adds
+  `GET /api/billing/plan/status`, `POST /api/billing/plan/checkout` (creates an
+  incomplete subscription and returns a PaymentIntent `client_secret` the SPA
+  confirms inline — no redirect to checkout.stripe.com), and a keyless-dev
+  `ALL /api/billing/plan/dev-upgrade`. The persona subscription rides the same
+  general Stripe customer via `ensureGeneralCustomer` (so the existing
+  `/overview` management endpoints with `scope=founder` surface it). The Stripe
+  webhook routes `metadata.kind==='plan'` events into `account_subscriptions`
+  (upsert on `subscription.created|updated`, cancel scoped by `subscription_id`
+  on `subscription.deleted`) and bootstraps the schema via `safeEnsure`.
+- **Frontend** — `frontend/src/lib/api.js` adds `planStatus` + `planCheckout`.
+  `frontend/src/pages/SettingsPage.jsx` `BillingTab` now routes non-founder/
+  non-investor roles to a new `PersonaBillingPanel` (was `GenericBillingPanel`):
+  a display-only `PERSONA_PLANS` ladder (Partner Starter/Pro $99/Enterprise;
+  Advisor Starter/Pro $29/Enterprise) with inline `AxalCheckout`, a trial-status
+  card, and the shared `BillingDashboard` for manage/cancel once subscribed.
+  Roles with no `plan_group`/no persona plans fall back to `GenericBillingPanel`
+  — no regression.
+- **Test** — new `cloudflare-worker/test/account_plans.test.ts` covers the pure
+  routing helpers; registered in the `test:drift` strip-types group.
+- **Deviation from PR** — the upstream Pro button read "Start 14-day trial" but
+  `/plan/checkout` never sent `trial_period_days`, so Stripe would have charged
+  immediately on day 0 (a customer-facing billing lie). Changed the button copy
+  to "Subscribe" so it matches the immediate-paid, inline-card flow the code
+  actually performs. The trial-status card is retained but only renders for subs
+  Stripe genuinely reports as `trialing`. A proper 14-day trial (which needs a
+  SetupIntent to collect a card up front so it can be charged at trial end) is
+  deferred as a follow-up rather than shipped half-working.
+- **Ops follow-up (out of scope)** — the live Stripe `partner` ($99) and
+  `advisor` ($29) recurring products/prices tagged `metadata.plan_group` must be
+  created in the Stripe dashboard before the Pro "Subscribe" button transacts;
+  until then keyless-dev falls back to `dev-upgrade` and prod fails loud with
+  `catalog_price_missing`.
+
+## Founder-facing billing: trial status + Spin-Out Lab free window (Task #21, PR #129)
+
+Surfaces two billing states to founders in **Settings → Billing** that the API
+already knew about but never showed: a paid-plan **trial** countdown and the
+**Spin-Out Lab** 30-day free exception. Additive only — no schema changes, no new
+API methods, no behaviour change for founders who are neither trialing nor in the
+Lab. Integrated from branch `claude/axal-billing-subscription-ui-eadnp1`.
+
+- **Worker** — `cloudflare-worker/src/routes/billing.ts` `GET /tier/status` now
+  also returns `trial_ends_at` (the current-period end when Stripe reports the
+  sub as `trialing` — the moment of first charge, so no dedicated column is
+  needed) and a `spinout_lab` block. A new best-effort helper
+  `spinoutLabBilling(env, userId)` reads `users.spinout_lab_active` /
+  `spinout_lab_started_at` and computes `free_until` + `days_remaining` from a
+  `SPINOUT_LAB_FREE_DAYS = 30` window; a lookup failure returns `null` rather
+  than 500-ing the Billing tab. The 30-day money guarantee is deliberately kept
+  DISTINCT from the 28-day guided sprint length in `routes/spinout_lab.ts`.
+- **Frontend** — `frontend/src/pages/SettingsPage.jsx` `FounderBillingPanel`
+  lowercases `subStatus` and derives `trialEnds` / `trialDaysLeft` / `spinoutLab`
+  from the status payload. Renders: an emerald **Spin-Out Lab** card ("Free for N
+  days" + days-left badge) above Current plan; a violet **Trial** badge + a
+  trial-aware "Trial ends …" line on the Current plan card; a **Trial status**
+  card (countdown + first-charge date + how to cancel); and a Lab-aware **Plans**
+  description with an emerald note. All new surfaces ship `dark:` variants (passes
+  the dark-mode drift guard). Mirrors the existing investor trial UI
+  (`InvestorBillingPanel`) for parity; reuses `api.tierStatus()` — no new client
+  methods.
+- **Scope** — Worker + SPA only; the dev FastAPI backend has no billing/tier
+  parity, so the two cards don't render under `npm run dev` (the panel degrades
+  cleanly to the existing free/Current-plan view). No `wrangler.toml` route
+  changes (existing `/api/*` mount).
+- **Verification** — `npm run test:drift` (dark-mode + api-drift + sql-unsafe +
+  tail-consumer guards, full worker test suite, `tsc --noEmit`) and
+  `npm run test:retention` green.
+
+## Resolve all open GitHub Code Scanning alerts (CodeQL + Semgrep) (Task #15)
+
+Security-hygiene pass to clear the 27 open Code Scanning alerts on `main` with
+**no behavior change**. Prod stays Worker-on-D1; the dev FastAPI is never
+deployed. Every fix is genuine hardening or dead-code removal; the handful of
+true false positives are annotated in-code and flagged for dismissal — neither
+CodeQL nor Semgrep inline-comment suppression reliably closes alerts in this
+repo's `semgrep scan --sarif` → `upload-sarif` → GitHub flow, so reviewed FPs are
+dismissed via the Code Scanning REST API; only genuinely fixed alerts auto-close
+on the next scan.
+
+**Follow-up — final green (all 29 resolved, 0 open):** the fix commits were pushed
+to `origin/main` and the post-push CodeQL/Semgrep rescan auto-closed 20. The
+residual 6 were resolved as follows. The last real ReDoS — `_CONTENT_RE`'s
+`-?\d*\.?\d+` number sub-pattern in `linkedin_import.py` (a `\d*…\d+` overlap the
+earlier `_NL_RE` fix didn't cover) — was linearized to `-?(?:\d+\.\d+|\.\d+|\d+)`,
+verified to match the identical set so PDF coordinate parsing is unchanged. The
+other 5 were Semgrep false positives whose same-line inline `nosemgrep` did NOT
+close them on GitHub (dynamic-regexp in `webFetch.stripTag` with fixed tag
+literals; allowlisted `urlopen` in `settings.py`; three SVG-sanitizer test
+fixtures) and were dismissed via the REST API.
+**Prod parity (Worker mirror).** CodeQL only flagged the dev-only FastAPI parser,
+but `cloudflare-worker/src/services/linkedinImport.ts` — the internet-facing
+surface — carried the *identical* polynomial number regex AND the old `\s*\n\s*`
+NL-collapse, without the Python side's length caps. Leaving it would mean the
+ReDoS remediation landed only on the surface that is never deployed, violating the
+"Worker parser in lock-step with the Python parser" invariant. Ported the same
+linear number sub-pattern, the linear `[^\S\n]*\n\s*` collapse, and
+`MAX_SANITIZE_INPUT` (20k) / `MAX_CONTENT_CHARS` (2M) caps to the Worker.
+Behavior-equivalent (0 diffs over exec + NL fuzz); digit-bomb parse time dropped
+from ~585ms to ~0ms. Takes effect on the next `npm run deploy`; `npm run
+test:drift` green.
+
+- **Worker dead code** — removed unused `notify` import (`cloudflare-worker/src/routes/jobs.ts`)
+  and unused `FEED_PREDICATE` const (`cloudflare-worker/src/routes/jobs_public.ts`).
+- **Semgrep test FPs** — inline `// nosemgrep` on the three `assertNeutralized(…, '<script', …)`
+  lines in `cloudflare-worker/test/brand_svg_sanitize.test.ts` (string literals in an XSS-sanitizer test, not a sink).
+- **SSRF hardening** (`backend/app/api/routes/settings.py::_apply_linkedin_photo`) —
+  re-assert `_lin.is_linkedin_image_host(url)` (https + `*.licdn`/`*.linkedin` host) immediately
+  before `urllib.request.urlopen`; `# noqa: S310` + `# nosemgrep`. Defense-in-depth; caller already checks.
+- **Path-injection** (same file) — defensive `if ext not in {"jpg","png","webp"}` before `write_bytes`
+  (filename is fully server-generated: numeric id + uuid4 + allowlisted ext, so this is a no-op guard).
+- **ReDoS** (`backend/app/services/linkedin_import.py`) — rewrote `_NL_RE` `\s*\n\s*` → `[^\S\n]*\n\s*`
+  (non-overlapping, linear; fuzz-verified equivalent over 500k random cases) and added length caps
+  `_MAX_SANITIZE_INPUT` (20k, `sanitize_text`) and `_MAX_CONTENT_CHARS` (2M, `_content_to_lines`,
+  alongside the existing 500k `finditer` guard).
+- **Hygiene** — dropped redundant local `import re` in `_is_email`; deleted the unused `_LITERAL_ESCAPES` dict.
+- **Empty-except sweep (14 alerts)** — added a per-module `logger` + small `_safe_rollback(session)`
+  helper (logs at `debug` with `exc_info`) in `settings.py`, `follows.py`, `public_profiles.py`;
+  replaced every `try: session.rollback() except: pass` with `_safe_rollback(session)`; non-rollback
+  empty-excepts (zlib inflate, headshot unlink) now log at `debug`. `follows.py::_schema_ready` is a
+  known false positive — kept, commented.
+- **`webFetch.ts` (2 follow-on alerts that surfaced after the initial sweep)** — reordered
+  `decodeEntities` so `&amp;` is decoded LAST (fixes CodeQL `js/double-escaping`; prevents
+  double-unescaping of sequences like `&amp;lt;`; no change for normal single-encoded text), and
+  inline `// nosemgrep` on `stripTag`'s dynamic `RegExp` (built only from a fixed literal tag set —
+  `script/style/noscript/svg/head` — never user input).
+- **Verified** — `npm run test:drift` (full pre-merge gate) green; Worker `tsc --noEmit` clean; edited
+  backend modules import and behave identically (SSRF guard rejects `http`/non-licdn; `sanitize_text` output unchanged).
+- **False-positive closure (done)** — the 3 CodeQL FPs with no inline suppression (`py/full-ssrf`,
+  `py/path-injection`, `follows.py::_schema_ready` unused-global) were dismissed via the Code Scanning
+  REST API with reasons. Every other alert is fixed-in-code or `nosemgrep`-suppressed and auto-closes
+  on the next scan **after the commit is pushed to `origin/main`** — GitHub scans `origin/main`, not
+  Replit's local `main`, so a sync/push (`bash scripts/git-push.sh` or the Sync UI) is required.
+
 ## Homepage audit: cut clutter, fix dead-end links, sharpen the join CTA (Task #14, PR #128)
 
 Audit and rework of the public front page (`frontend/src/pages/LandingPage.jsx`)
