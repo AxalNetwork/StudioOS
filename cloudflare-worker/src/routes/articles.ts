@@ -287,12 +287,17 @@ articles.get('/cover/:id', async (c) => {
   });
 });
 
-articles.get('/:slug', async (c) => {
+articles.get('/:slug', async (c, next) => {
   const slug = c.req.param('slug');
-  // Reserved sub-paths handled by their own routes above must not be
-  // shadowed by the slug catch-all.
+  // Reserved sub-paths (`/mine`, `/draft/:id`, `/trust/me`, …) have their own
+  // handlers, but Hono runs matching handlers in registration order and this
+  // catch-all is registered before some of them (e.g. `/mine`). Falling
+  // through with next() lets the specific handler run; if there is genuinely
+  // no match Hono's notFound() still yields a 404. Returning 404 here instead
+  // silently shadowed `GET /articles/mine`, which is why the authoring list
+  // always showed "No articles yet".
   if (['mine', 'draft', 'trust', 'cover', 'sectors', 'by-author', 'image'].includes(slug)) {
-    return c.json({ error: 'not_found' }, 404);
+    return next();
   }
   await ensureNewsSchema(c.env);
   await ensureAuthorWebsites(c.env);

@@ -3,12 +3,12 @@ import { Link } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
 const LINKS = [
-  { label: 'Network', href: '/#network' },
   { label: 'Platform', href: '/#platform' },
-  { label: 'Lanes', href: '/#lanes' },
-  { label: 'Events', href: '/events' },
-  { label: 'Spin-Out Lab', href: '/spinout-lab' },
   { label: 'Directory', href: '/directory' },
+  { label: 'Events', href: '/events' },
+  { label: 'Circles', href: '/circles' },
+  { label: 'Spin-Out Lab', href: '/spinout-lab' },
+  { label: 'Jobs', href: '/jobs' },
 ];
 
 export default function PublicNav() {
@@ -50,7 +50,7 @@ export default function PublicNav() {
             to="/register"
             className="text-sm bg-violet-600 hover:bg-violet-700 transition-colors text-white px-5 py-2 rounded-lg font-medium"
           >
-            Get Started
+            Join Axal VC
           </Link>
         </div>
 
@@ -89,7 +89,7 @@ export default function PublicNav() {
                 onClick={() => setOpen(false)}
                 className="flex-1 text-center text-sm bg-violet-600 text-white px-4 py-2 rounded-lg font-medium"
               >
-                Get Started
+                Join Axal VC
               </Link>
             </div>
           </div>

@@ -129,7 +129,7 @@ export default {
       overview:
         "KYC (Know Your Customer) verification is required before signing critical legal documents and before LP commitments are accepted. The flow takes 5–10 minutes and uses ID + selfie + address verification.",
       howto: [
-        'Open KYC when prompted (or from your account menu).',
+        'Open KYC when prompted, or from the Trust Center → Identity tab.',
         'Upload a government-issued ID (passport or driver’s license).',
         'Take a selfie with the same camera so we can match it.',
         'Confirm your residential address and submit.',

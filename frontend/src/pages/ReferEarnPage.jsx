@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import StripeConnectPayoutsPanel from '../components/StripeConnectPayoutsPanel';
-import { Link } from 'react-router-dom';
 import {
-  Copy, Check, Users, DollarSign, Share2, Network as NetworkIcon,
+  Copy, Check, Users, DollarSign, Share2,
   MessageCircle, Mail, Upload, Edit3, X, AlertCircle, Save,
   Send, Loader2, ShieldCheck, Info, FileDown, Bell, UserCheck, Clock,
 } from 'lucide-react';
@@ -662,10 +661,6 @@ export default function ReferEarnPage() {
 
           <div className="mt-4 text-xs text-gray-500 dark:text-gray-400">
             Anyone who registers with your code becomes attributed to you. Commissions accrue automatically when they hit milestones (KYC approval, deal funding, LP onboarding, etc.).
-            <br />
-            <Link to="/network" className="inline-flex items-center gap-1 text-violet-600 hover:underline mt-2">
-              <NetworkIcon size={12} /> View your referral network
-            </Link>
           </div>
         </div>
 

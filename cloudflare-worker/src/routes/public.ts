@@ -14,8 +14,59 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { ensureProfileExpansionSchema } from '../services/profileExpansion';
 import { ensureFollowsSchema } from './follows';
+import { kvGetJSON, kvPutJSON, createL1 } from '../kv';
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
+
+// ---------- /stats (Task #18) ---------------------------------------
+// Landing page headline stats — public, no-auth. Hit on every anon page
+// load, so it's cached: 30s per-isolate (L1) + 5min shared (KV) with D1
+// as the origin of truth on a full miss. Never throws — any query failure
+// falls back to 0 for that field so the page still renders.
+const STATS_L1_TTL_MS = 30_000;
+const STATS_KV_TTL_SEC = 300;
+const statsL1 = createL1<{ partners: number; funds: number; deals_scored: number; spinouts: number }>(STATS_L1_TTL_MS);
+const STATS_KV_KEY = 'cache:public-stats';
+
+async function countOrZero(env: Env, label: string, sql: string, params: any[] = []): Promise<number> {
+  try {
+    const row = await env.DB.prepare(sql).bind(...params).first<{ n: number }>();
+    return Number(row?.n || 0);
+  } catch (e: any) {
+    console.error(`[public/stats:${label}]`, String(e?.message || e));
+    return 0;
+  }
+}
+
+publicRoutes.get('/stats', async (c) => {
+  const now = Date.now();
+  const l1Hit = statsL1.map.get(STATS_KV_KEY);
+  if (l1Hit && l1Hit.exp > now) return c.json(l1Hit.v);
+
+  if (c.env.TOKENS) {
+    const kvHit = await kvGetJSON<{ partners: number; funds: number; deals_scored: number; spinouts: number }>(c.env.TOKENS, STATS_KV_KEY);
+    if (kvHit) {
+      statsL1.map.set(STATS_KV_KEY, { v: kvHit, exp: now + STATS_L1_TTL_MS });
+      return c.json(kvHit);
+    }
+  }
+
+  const [partners, funds, dealsScored, spinouts] = await Promise.all([
+    countOrZero(c.env, 'partners', `SELECT COUNT(*) as n FROM partners WHERE status = 'active'`),
+    countOrZero(c.env, 'funds', `SELECT COUNT(*) as n FROM vc_funds WHERE status = 'active'`),
+    countOrZero(c.env, 'deals_scored', `SELECT COUNT(DISTINCT project_id) as n FROM score_snapshots WHERE is_sandbox = 0`),
+    countOrZero(c.env, 'spinouts', `SELECT COUNT(*) as n FROM projects WHERE status = 'spinout' AND deleted_at IS NULL`),
+  ]);
+
+  const payload = { partners, funds, deals_scored: dealsScored, spinouts };
+  statsL1.map.set(STATS_KV_KEY, { v: payload, exp: now + STATS_L1_TTL_MS });
+  if (c.env.TOKENS) {
+    const ctx = (c.executionCtx as any);
+    const writeP = kvPutJSON(c.env.TOKENS, STATS_KV_KEY, payload, STATS_KV_TTL_SEC);
+    if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(writeP); else void writeP;
+  }
+  return c.json(payload);
+});
 
 // ------------------------------------------------------------------
 // Task #4 (ID) — schema bootstrap helper. The migration in
@@ -121,10 +172,13 @@ publicRoutes.get('/u/:handle', async (c) => {
   let row: any = null;
   try {
     row = await c.env.DB.prepare(
-      `SELECT id, uid, name, role, display_name, headline, bio, socials,
-              headshot_r2_key, privacy_prefs, experience, education, certifications,
-              website, founder_id, investor_id, partner_id, created_at
-         FROM users WHERE lower(uid) = ? AND is_active = 1`,
+      `SELECT u.id, u.uid, u.name, u.role, u.display_name, u.headline, u.bio, u.socials,
+              u.headshot_r2_key, u.privacy_prefs, e.experience, e.education,
+              e.certifications, e.website, u.founder_id, u.investor_id, u.partner_id,
+              u.created_at
+         FROM users u
+         LEFT JOIN user_profile_ext e ON e.user_id = u.id
+        WHERE lower(u.uid) = ? AND u.is_active = 1`,
     ).bind(handle).first<any>();
   } catch {
     row = await c.env.DB.prepare(

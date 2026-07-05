@@ -28,7 +28,6 @@ jobsPublic.use('*', async (c, next) => {
   await next();
 });
 
-const FEED_PREDICATE = `status = 'published' AND admin_published = 1`;
 const APPLY_IP_CAP = 10; // applications per IP per hour (best-effort)
 
 function clampInt(v: string | null, def: number, max: number): number {

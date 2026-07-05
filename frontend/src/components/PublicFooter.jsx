@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import { openCookiePreferences } from '../lib/cookieConsent';
+import { PRODUCT_FOOTER_LINKS } from '../data/productPages';
 
 const socials = [
   {
@@ -99,22 +100,23 @@ export default function PublicFooter() {
           <div>
             <h3 className="font-semibold text-gray-900 mb-4">Network</h3>
             <ul className="space-y-2">
-              <li><a href="/#network" className="text-sm text-gray-600 hover:text-gray-900">Partners</a></li>
-              <li><a href="/#network" className="text-sm text-gray-600 hover:text-gray-900">Capital</a></li>
-              <li><a href="/#network" className="text-sm text-gray-600 hover:text-gray-900">Deals</a></li>
-              <li><a href="/#network" className="text-sm text-gray-600 hover:text-gray-900">Intelligence</a></li>
-              <li><a href="/#network" className="text-sm text-gray-600 hover:text-gray-900">Legal</a></li>
+              <li><Link to="/articles" className="text-sm text-gray-600 hover:text-gray-900">Articles</Link></li>
+              <li><Link to="/directory" className="text-sm text-gray-600 hover:text-gray-900">Directory</Link></li>
+              <li><Link to="/events" className="text-sm text-gray-600 hover:text-gray-900">Programs &amp; Events</Link></li>
+              <li><Link to="/circles" className="text-sm text-gray-600 hover:text-gray-900">Communities &amp; Circles</Link></li>
+              <li><Link to="/jobs" className="text-sm text-gray-600 hover:text-gray-900">Jobs</Link></li>
             </ul>
           </div>
 
           <div>
-            <h3 className="font-semibold text-gray-900 mb-4">Products</h3>
+            <h3 className="font-semibold text-gray-900 mb-4">Spin-Out Lab</h3>
             <ul className="space-y-2">
               <li><Link to="/spinout-lab" className="text-sm text-gray-600 hover:text-gray-900">Spin-Out Lab</Link></li>
-              <li><Link to="/insights" className="text-sm text-gray-600 hover:text-gray-900">Insights</Link></li>
-              <li><Link to="/articles" className="text-sm text-gray-600 hover:text-gray-900">Articles</Link></li>
-              <li><Link to="/register?lane=lp" className="text-sm text-gray-600 hover:text-gray-900">LP Portal</Link></li>
-              <li><Link to="/register?lane=partner" className="text-sm text-gray-600 hover:text-gray-900">Partner Network</Link></li>
+              {PRODUCT_FOOTER_LINKS.map(({ label, to }) => (
+                <li key={to}>
+                  <Link to={to} className="text-sm text-gray-600 hover:text-gray-900">{label}</Link>
+                </li>
+              ))}
             </ul>
           </div>
 
@@ -142,7 +144,7 @@ export default function PublicFooter() {
         <div className="border-t border-gray-200 pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-xs text-gray-500">
-              © 2026 Axal VC Management LLC. Platform operated by Axal VC Management LLC.
+              © 2026 Axal VC. Platform operated by Axal VC Management LLC.
               Brand and platform IP owned by Axal VC Holdings LLC. All rights reserved.
             </p>
             <p className="text-xs text-gray-500 max-w-md text-right">

@@ -10,6 +10,508 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Fold Identity Verification (KYC / AML) into the Trust Center (Task #25)
+
+The KYC form is now reachable from a single **Trust Center** nav entry per
+persona — the standalone founder "Identity / KYC" sidebar item is gone, and the
+Trust Center **Identity** tab is a real entry point to the form (it previously
+only pointed users to Settings).
+- **Reusable component** — extracted the entire KYC form, status card, investor-
+  only gate, and the `Input`/`Select`/`CountrySelect` helpers out of
+  `frontend/src/pages/KYCPage.jsx` into `frontend/src/components/KycVerification.jsx`.
+  It takes an `embedded` prop: default (`false`) renders the full standalone page
+  chrome (icon + title + `PageExplainer` + max-width wrapper); `embedded` drops
+  the header/wrapper so it sits inside a Trust Center `Section`. `KYCPage` is now
+  a thin wrapper that renders `<KycVerification />`. No behaviour change on `/kyc`.
+- **Trust Center** (`frontend/src/pages/TrustCenterPage.jsx`) — the Identity tab
+  now renders `<KycVerification embedded />` instead of an `ObligationList` + a
+  dead-end "use the page in Settings" note. `tabsForRole` surfaces the Identity
+  tab for every KYC-eligible persona (`KYC_ELIGIBLE_ROLES = founder | partner |
+  investor | admin`, the same roles the `/trust` route is guarded to) rather than
+  only when the obligation matrix carries a `kyc_v1` row — so founders/partners
+  reach it too (they see the component's "not required" state). The component owns
+  its status (via `api.kycStatus`), so the redundant obligation pill was dropped.
+- **Sidebar** (`frontend/src/sidebarConfig.js`) — removed the founder `account`
+  group's `{ to: '/kyc', label: 'Identity / KYC' }` item; documented it under the
+  founder "Intentional removals" comment block and dropped it from the "Newly
+  surfaced" note. Investor already folded KYC into "Trust & Identity"; partner/
+  admin/mentor never carried a standalone `/kyc`. So founder is the only sidebar
+  edit.
+- **Route kept** — the `/kyc` route in `App.jsx` stays registered and reachable;
+  the onboarding KYC gate (`ALLOWED_BEFORE_KYC` / the investor redirect to `/kyc`)
+  is unchanged.
+- **Docs** — updated the `legal.js` KYC how-to step from "from your account menu"
+  to "from the Trust Center → Identity tab".
+
+## Remove Discover sidebar item and Referral Network page (Task #26)
+
+Removed the low-value "Discover" nav item and the Referral Network graph page it
+(and `/network`) pointed at. The "Discover" sidebar entry (`/play`) and `/network`
+both mounted the same `NetworkPage` ("Interactive graph of your referral subtree"),
+so both routes and the component are gone.
+- **Frontend** — deleted `frontend/src/pages/NetworkPage.jsx`, its lazy import and
+  both routes (`/network`, `/play`) in `App.jsx`; dropped the two
+  `{ to: '/play', label: 'Discover' }` items (founder "More", investor "Account")
+  in `sidebarConfig.js` and the stale "Discover (/play)" note in its comment block;
+  removed the `networkGraph` client method in `lib/api.js` and the `network`
+  explainer in `lib/explainers.js` (both only used by that page); removed the
+  "View your referral network" link (and now-unused `Link` + `NetworkIcon` imports)
+  on `ReferEarnPage.jsx`; dropped the `/network` entry from the advisor `pageLabel`
+  map (`lib/advisor/router.js`) and repointed the co-founder advisor question's
+  `page_target` from `/network` to `/cofounder` (`lib/advisor/banks/newFounder.js`).
+- **Worker** — removed only the `GET /network/graph` handler from
+  `cloudflare-worker/src/routes/network.ts`; the rest of that file (referrals,
+  commissions, compounding bonuses) is untouched.
+- **Kept (out of scope)** — `/relationships` "Network", `/network-effects`
+  "Network Effects", `/refer` "Refer & Earn", the `Gamepad2` icon + Assessment
+  Studio item, and all other `/network/*` API routes.
+
+## Founder sidebar: remove "My Profile" (duplicate of Settings)
+
+The `/profile` route renders `SettingsPage` directly (→ line 1393 in `App.jsx`), so "My Profile" in the founder sidebar was a redundant nav item. Removed it from `SIDEBAR_GROUPS.founder` `account` group and added the removal to the documented "Intentional removals" comment block so nav-integrity checks treat it as deliberate. The route stays registered and reachable via deep link / back navigation from inside Settings.
+- **File:** `frontend/src/sidebarConfig.js`
+
+## Re-added "How Global Partnerships Accelerate Scaling" article (Guillaume Lauzier)
+
+Re-seeded the `how-global-partnerships-accelerate-scaling` article (`articles.id = 10`, `author_user_id = 1` → guillaumelauzier@gmail.com), published `2026-07-03T09:00:00.000Z`, via `cloudflare-worker/sql/migrations/135_seed_global_partnerships_article.sql` (idempotent — guarded by `WHERE NOT EXISTS` on slug + author lookup, so a re-run/predeploy replay is a no-op) applied directly with `wrangler d1 execute studioos-db --remote`. `body_html` was pre-rendered offline with the same algorithm as `newsRender.ts::renderMarkdown` so it matches what `/admin/articles/:id/publish` would have produced.
+- **Cover image:** `cloudflare-worker/src/services/articleCoverData.ts` now exports `SEED_COVERS: SeedCover[]` (was a single hardcoded slug/mime/b64 triple) and `articleCovers.ts::ensureArticleCovers()` loops the array instead of handling one slug — same lazy self-seed-into-R2 pattern, extended to support more than one seeded cover. Compressed JPEG, 1280px wide, ~167KB.
+- **Prod deploy note:** the cover was also uploaded directly (`wrangler r2 object put studioos-files/articles/10/cover-seed.jpg`) and linked (`UPDATE articles SET cover_r2_key=...`) because `npm run deploy`'s predeploy migration runner is currently blocked by an unrelated pre-existing failure — `131_profiles_follows.sql` errors with `too many columns on sqlite_altertab_users: SQLITE_ERROR` on `--remote`. The new worker code (`articleCoverData.ts`/`articleCovers.ts`) has NOT been deployed yet; it typechecks clean and is a no-op once deployed since the article already has a cover. Fixing `131_profiles_follows.sql` is a separate, pre-existing issue.
+
+## Global scroll-to-top on every route change (scroll fix)
+
+Added a `ScrollToTop` component inside `<BrowserRouter>` so any
+client-side navigation (footer links, nav clicks, back/forward) resets
+`window.scrollY` to 0. Previously clicking a footer link mid-page
+(e.g. "For Founders", "For Investors", "Articles", "About") left the
+user at the same scroll position on the new page. The component
+watches `useLocation().pathname` and calls `window.scrollTo({ top: 0 })`
+with no animation (instant) so the destination always starts at the top.
+New file: `frontend/src/components/ScrollToTop.jsx`; wired into
+`frontend/src/main.jsx` immediately inside `<BrowserRouter>`.
+
+## Persona (account-plan) billing for every non-founder/non-investor role (Task #22, PR #130)
+
+A generic Stripe subscription pipeline for every signed-in role that isn't a
+founder or investor (partner, advisor/mentor, and any future persona). Founder
+(`metadata.tier`) and investor (`metadata.investor_tier`) keep their bespoke
+pipelines; everyone else now shares this one, keyed by a `plan_group` derived
+from the role. Integrated from branch `claude/axal-billing-subscription-ui-eadnp1`.
+
+- **Schema** — new migration `cloudflare-worker/sql/migrations/134_account_subscriptions.sql`
+  adds the `account_subscriptions` side table (keyed by `user_id`, one active
+  plan per account). State lives in a side table — NOT new `users` columns —
+  because `users` sits at D1's hard 100-column limit, exactly like
+  `mi_pro_subscriptions`. Every statement is additive + idempotent and never
+  seeds a row.
+- **Worker** — new `cloudflare-worker/src/services/accountPlans.ts` holds the
+  pipeline: `planGroupForRole` (role → `plan_group`, `null` for founder/investor,
+  `mentor`→`advisor` override, every other role defaults to its own name),
+  `ensureAccountPlanSchema` (statement-for-statement mirror of migration 134 so
+  dev/preview D1 self-heals), `readAccountSubscription`,
+  `accountFieldsFromStripeSub`, `upsertAccountPlanFromStripe`,
+  `markAccountPlanDeleted`, and a keyless-dev `devUpgradeAccountPlan`.
+- **Worker routes** — `cloudflare-worker/src/routes/billing.ts` adds
+  `GET /api/billing/plan/status`, `POST /api/billing/plan/checkout` (creates an
+  incomplete subscription and returns a PaymentIntent `client_secret` the SPA
+  confirms inline — no redirect to checkout.stripe.com), and a keyless-dev
+  `ALL /api/billing/plan/dev-upgrade`. The persona subscription rides the same
+  general Stripe customer via `ensureGeneralCustomer` (so the existing
+  `/overview` management endpoints with `scope=founder` surface it). The Stripe
+  webhook routes `metadata.kind==='plan'` events into `account_subscriptions`
+  (upsert on `subscription.created|updated`, cancel scoped by `subscription_id`
+  on `subscription.deleted`) and bootstraps the schema via `safeEnsure`.
+- **Frontend** — `frontend/src/lib/api.js` adds `planStatus` + `planCheckout`.
+  `frontend/src/pages/SettingsPage.jsx` `BillingTab` now routes non-founder/
+  non-investor roles to a new `PersonaBillingPanel` (was `GenericBillingPanel`):
+  a display-only `PERSONA_PLANS` ladder (Partner Starter/Pro $99/Enterprise;
+  Advisor Starter/Pro $29/Enterprise) with inline `AxalCheckout`, a trial-status
+  card, and the shared `BillingDashboard` for manage/cancel once subscribed.
+  Roles with no `plan_group`/no persona plans fall back to `GenericBillingPanel`
+  — no regression.
+- **Test** — new `cloudflare-worker/test/account_plans.test.ts` covers the pure
+  routing helpers; registered in the `test:drift` strip-types group.
+- **Deviation from PR** — the upstream Pro button read "Start 14-day trial" but
+  `/plan/checkout` never sent `trial_period_days`, so Stripe would have charged
+  immediately on day 0 (a customer-facing billing lie). Changed the button copy
+  to "Subscribe" so it matches the immediate-paid, inline-card flow the code
+  actually performs. The trial-status card is retained but only renders for subs
+  Stripe genuinely reports as `trialing`. A proper 14-day trial (which needs a
+  SetupIntent to collect a card up front so it can be charged at trial end) is
+  deferred as a follow-up rather than shipped half-working.
+- **Ops follow-up (out of scope)** — the live Stripe `partner` ($99) and
+  `advisor` ($29) recurring products/prices tagged `metadata.plan_group` must be
+  created in the Stripe dashboard before the Pro "Subscribe" button transacts;
+  until then keyless-dev falls back to `dev-upgrade` and prod fails loud with
+  `catalog_price_missing`.
+
+## Founder-facing billing: trial status + Spin-Out Lab free window (Task #21, PR #129)
+
+Surfaces two billing states to founders in **Settings → Billing** that the API
+already knew about but never showed: a paid-plan **trial** countdown and the
+**Spin-Out Lab** 30-day free exception. Additive only — no schema changes, no new
+API methods, no behaviour change for founders who are neither trialing nor in the
+Lab. Integrated from branch `claude/axal-billing-subscription-ui-eadnp1`.
+
+- **Worker** — `cloudflare-worker/src/routes/billing.ts` `GET /tier/status` now
+  also returns `trial_ends_at` (the current-period end when Stripe reports the
+  sub as `trialing` — the moment of first charge, so no dedicated column is
+  needed) and a `spinout_lab` block. A new best-effort helper
+  `spinoutLabBilling(env, userId)` reads `users.spinout_lab_active` /
+  `spinout_lab_started_at` and computes `free_until` + `days_remaining` from a
+  `SPINOUT_LAB_FREE_DAYS = 30` window; a lookup failure returns `null` rather
+  than 500-ing the Billing tab. The 30-day money guarantee is deliberately kept
+  DISTINCT from the 28-day guided sprint length in `routes/spinout_lab.ts`.
+- **Frontend** — `frontend/src/pages/SettingsPage.jsx` `FounderBillingPanel`
+  lowercases `subStatus` and derives `trialEnds` / `trialDaysLeft` / `spinoutLab`
+  from the status payload. Renders: an emerald **Spin-Out Lab** card ("Free for N
+  days" + days-left badge) above Current plan; a violet **Trial** badge + a
+  trial-aware "Trial ends …" line on the Current plan card; a **Trial status**
+  card (countdown + first-charge date + how to cancel); and a Lab-aware **Plans**
+  description with an emerald note. All new surfaces ship `dark:` variants (passes
+  the dark-mode drift guard). Mirrors the existing investor trial UI
+  (`InvestorBillingPanel`) for parity; reuses `api.tierStatus()` — no new client
+  methods.
+- **Scope** — Worker + SPA only; the dev FastAPI backend has no billing/tier
+  parity, so the two cards don't render under `npm run dev` (the panel degrades
+  cleanly to the existing free/Current-plan view). No `wrangler.toml` route
+  changes (existing `/api/*` mount).
+- **Verification** — `npm run test:drift` (dark-mode + api-drift + sql-unsafe +
+  tail-consumer guards, full worker test suite, `tsc --noEmit`) and
+  `npm run test:retention` green.
+
+## Resolve all open GitHub Code Scanning alerts (CodeQL + Semgrep) (Task #15)
+
+Security-hygiene pass to clear the 27 open Code Scanning alerts on `main` with
+**no behavior change**. Prod stays Worker-on-D1; the dev FastAPI is never
+deployed. Every fix is genuine hardening or dead-code removal; the handful of
+true false positives are annotated in-code and flagged for dismissal — neither
+CodeQL nor Semgrep inline-comment suppression reliably closes alerts in this
+repo's `semgrep scan --sarif` → `upload-sarif` → GitHub flow, so reviewed FPs are
+dismissed via the Code Scanning REST API; only genuinely fixed alerts auto-close
+on the next scan.
+
+**Follow-up — final green (all 29 resolved, 0 open):** the fix commits were pushed
+to `origin/main` and the post-push CodeQL/Semgrep rescan auto-closed 20. The
+residual 6 were resolved as follows. The last real ReDoS — `_CONTENT_RE`'s
+`-?\d*\.?\d+` number sub-pattern in `linkedin_import.py` (a `\d*…\d+` overlap the
+earlier `_NL_RE` fix didn't cover) — was linearized to `-?(?:\d+\.\d+|\.\d+|\d+)`,
+verified to match the identical set so PDF coordinate parsing is unchanged. The
+other 5 were Semgrep false positives whose same-line inline `nosemgrep` did NOT
+close them on GitHub (dynamic-regexp in `webFetch.stripTag` with fixed tag
+literals; allowlisted `urlopen` in `settings.py`; three SVG-sanitizer test
+fixtures) and were dismissed via the REST API.
+**Prod parity (Worker mirror).** CodeQL only flagged the dev-only FastAPI parser,
+but `cloudflare-worker/src/services/linkedinImport.ts` — the internet-facing
+surface — carried the *identical* polynomial number regex AND the old `\s*\n\s*`
+NL-collapse, without the Python side's length caps. Leaving it would mean the
+ReDoS remediation landed only on the surface that is never deployed, violating the
+"Worker parser in lock-step with the Python parser" invariant. Ported the same
+linear number sub-pattern, the linear `[^\S\n]*\n\s*` collapse, and
+`MAX_SANITIZE_INPUT` (20k) / `MAX_CONTENT_CHARS` (2M) caps to the Worker.
+Behavior-equivalent (0 diffs over exec + NL fuzz); digit-bomb parse time dropped
+from ~585ms to ~0ms. Takes effect on the next `npm run deploy`; `npm run
+test:drift` green.
+
+- **Worker dead code** — removed unused `notify` import (`cloudflare-worker/src/routes/jobs.ts`)
+  and unused `FEED_PREDICATE` const (`cloudflare-worker/src/routes/jobs_public.ts`).
+- **Semgrep test FPs** — inline `// nosemgrep` on the three `assertNeutralized(…, '<script', …)`
+  lines in `cloudflare-worker/test/brand_svg_sanitize.test.ts` (string literals in an XSS-sanitizer test, not a sink).
+- **SSRF hardening** (`backend/app/api/routes/settings.py::_apply_linkedin_photo`) —
+  re-assert `_lin.is_linkedin_image_host(url)` (https + `*.licdn`/`*.linkedin` host) immediately
+  before `urllib.request.urlopen`; `# noqa: S310` + `# nosemgrep`. Defense-in-depth; caller already checks.
+- **Path-injection** (same file) — defensive `if ext not in {"jpg","png","webp"}` before `write_bytes`
+  (filename is fully server-generated: numeric id + uuid4 + allowlisted ext, so this is a no-op guard).
+- **ReDoS** (`backend/app/services/linkedin_import.py`) — rewrote `_NL_RE` `\s*\n\s*` → `[^\S\n]*\n\s*`
+  (non-overlapping, linear; fuzz-verified equivalent over 500k random cases) and added length caps
+  `_MAX_SANITIZE_INPUT` (20k, `sanitize_text`) and `_MAX_CONTENT_CHARS` (2M, `_content_to_lines`,
+  alongside the existing 500k `finditer` guard).
+- **Hygiene** — dropped redundant local `import re` in `_is_email`; deleted the unused `_LITERAL_ESCAPES` dict.
+- **Empty-except sweep (14 alerts)** — added a per-module `logger` + small `_safe_rollback(session)`
+  helper (logs at `debug` with `exc_info`) in `settings.py`, `follows.py`, `public_profiles.py`;
+  replaced every `try: session.rollback() except: pass` with `_safe_rollback(session)`; non-rollback
+  empty-excepts (zlib inflate, headshot unlink) now log at `debug`. `follows.py::_schema_ready` is a
+  known false positive — kept, commented.
+- **`webFetch.ts` (2 follow-on alerts that surfaced after the initial sweep)** — reordered
+  `decodeEntities` so `&amp;` is decoded LAST (fixes CodeQL `js/double-escaping`; prevents
+  double-unescaping of sequences like `&amp;lt;`; no change for normal single-encoded text), and
+  inline `// nosemgrep` on `stripTag`'s dynamic `RegExp` (built only from a fixed literal tag set —
+  `script/style/noscript/svg/head` — never user input).
+- **Verified** — `npm run test:drift` (full pre-merge gate) green; Worker `tsc --noEmit` clean; edited
+  backend modules import and behave identically (SSRF guard rejects `http`/non-licdn; `sanitize_text` output unchanged).
+- **False-positive closure (done)** — the 3 CodeQL FPs with no inline suppression (`py/full-ssrf`,
+  `py/path-injection`, `follows.py::_schema_ready` unused-global) were dismissed via the Code Scanning
+  REST API with reasons. Every other alert is fixed-in-code or `nosemgrep`-suppressed and auto-closes
+  on the next scan **after the commit is pushed to `origin/main`** — GitHub scans `origin/main`, not
+  Replit's local `main`, so a sync/push (`bash scripts/git-push.sh` or the Sync UI) is required.
+
+## Homepage audit: cut clutter, fix dead-end links, sharpen the join CTA (Task #14, PR #128)
+
+Audit and rework of the public front page (`frontend/src/pages/LandingPage.jsx`)
+plus `PublicNav`/`PublicFooter` for clarity, trust, and conversion. The old
+homepage answered "what is Axal / who is it for / why join" slowly (jargon hero,
+9 sections, ~30 links) and shipped two real defects: the closing CTA 404'd, and
+most "Platform" cards bounced logged-out visitors to a login wall. This tightens
+the page to one primary action (**Join Axal**) and points every link at a page a
+visitor can actually reach. Integrated from branch `claude/axal-homepage-audit-24yasv`.
+
+- **Landing page** — applied wholesale (main's `LandingPage.jsx` was byte-identical
+  to the branch base, so the rewrite is a clean derivative — no reconciliation
+  needed). Hero: plain-language subhead (drops the "six-layer venture OS" jargon),
+  one primary CTA (Join Axal) + one secondary (Explore the network). Reordered for
+  conversion: hero → who it's for (lanes, `#lanes`) → how it works → Spin-Out Lab →
+  what's inside (`#platform`, trimmed 12 → 6 cards, every card links to a public
+  page or `/register?lane=…`) → events/articles teasers → join. Removed the
+  standalone six-layer "Network Layers" section (and its `../brand/gvpn`
+  `NETWORK_LAYERS` import + now-unused lucide icons). Closing CTA now SPA-links to
+  `/register` (was the nonexistent absolute `https://axal.vc/signup` → 404 via
+  catch-all). One dark-mode fix on the new LANES card (`bg-white` → added
+  `dark:bg-gray-900`) to satisfy the dark-mode drift guard.
+- **PublicNav — preserved Task #9's nav, took only non-regressing additions.**
+  The branch was cut before Task #8/#9's nav rewrite, and the task's non-regression
+  contract requires keeping the current links, so the baseline nav is kept intact:
+  **Platform · Directory · Events · Circles · Spin-Out Lab**. PR #128's nav relabel
+  (dropping the `/#platform` anchor for a `/#lanes` "Who it's for" item) was
+  deliberately NOT applied — it would have removed a link Task #9 established. Only
+  the audit's non-violating additions were taken: added a **Jobs** link (Task #68's
+  public board) and unified the primary CTA **Get Started → Join Axal** (desktop +
+  mobile) to match the new landing hero. Final nav: Platform · Directory · Events ·
+  Circles · Spin-Out Lab · Jobs.
+- **PublicFooter — preserved Task #8/#9, took only the non-regressing net-new.**
+  PR #128's targeted footer bug (the dead `/#network` anchor in the Network column)
+  was **already fixed by Task #9**, and its other footer changes would have
+  regressed Task #8's audience-page Products column + Resources column and Task #9's
+  Communities & Circles link. So the richer #8/#9 footer is kept as-is; the only
+  change taken from PR #128 is adding a **Jobs** link to the Network column.
+- **No new wiring** — PR #128 adds no new routes (it only re-points existing
+  `<Link>`/`href` targets), so no `wrangler.toml` apex routes, no `isPublicPath`
+  allowlist entry, and no new `/api/*` calls (`api-drift` guard clean). The one
+  fetch (`/api/dashboard/stats`) is unchanged.
+- **Verification** — `npm run test:drift` (dark-mode + api-drift + sql-unsafe +
+  worker `tsc --noEmit` + full worker test suite) and `npm run test:retention`
+  green; all lucide icons + the `useForcedLightTheme` hook resolve in current main;
+  homepage renders in the dev preview.
+
+## Public Network layer — Communities & Circles (Task #9, PR #127)
+
+Frontend-only public "Network" layer that ties the existing public surfaces
+(Directory, Programs & Events, Articles) together and adds a new curated
+Circles page. Integrated from branch `claude/axal-network-section-clfpoq`.
+
+- **New page** — `frontend/src/pages/CirclesPage.jsx` at `/circles`, a curated
+  Communities & Circles browser (type overview, search + access/region filters,
+  featured + all cards). Pure static content from a new curated source
+  `frontend/src/data/network.js` (`CIRCLES`, `CIRCLE_TYPES`, `DIRECTORY_CATEGORIES`,
+  `DIRECTORY_PREVIEWS`, etc.) — no backend/D1/API changes.
+- **Redirect** — `/communities` → `/circles` via `<Navigate replace>` in
+  `frontend/src/App.jsx`.
+- **Shared sub-nav** — `frontend/src/components/NetworkSubNav.jsx` (Articles,
+  Directory, Programs & Events, Circles) rendered on the network pages.
+- **Directory upgrade** — `frontend/src/pages/PublicDirectoryPage.jsx` gains
+  category tabs + previews; still reads only `api.publicListPartners`.
+- **Events upgrade** — `frontend/src/pages/events/PublicEventsPage.jsx` restyled
+  under the network sub-nav; still reads only `eventsPublic.list` / `icsUrl`.
+- **Nav/footer** — `PublicNav.jsx` LINKS now Platform · Directory · Events ·
+  Circles · Spin-Out Lab. `PublicFooter.jsx` Network column upgraded to real
+  links (Articles, Directory, Programs & Events, Communities & Circles);
+  reconciled with Task #8 — Products column (`PRODUCT_FOOTER_LINKS`) and
+  Resources column kept, duplicate Articles dropped from Resources.
+- **Apex routing** — `/circles` + `/communities` (exact + `/*`) added to BOTH
+  the top-level `[[routes]]` and `[[env.production.routes]]` blocks in
+  `wrangler.toml`.
+
+## Audience product pages + footer product nav (Task #8, PR #126)
+
+Four public, data-driven marketing pages — For Founders, For Investors & LPs,
+For Service Partners, For Advisors — plus a footer Products nav that links to
+them. Frontend-only — new routes/pages plus a footer reorganization. Integrated
+from branch `claude/axal-product-pages-footer-27zk13`.
+
+- **Pages** — one component `frontend/src/pages/ProductAudiencePage.jsx`
+  rendered per slug (`founders` / `investors` / `service-partners` /
+  `advisors`), driven entirely by `frontend/src/data/productPages.js`
+  (`PRODUCT_PAGES`, `PRODUCT_PAGE_ORDER`, `PRODUCT_FOOTER_LINKS`). Reuses the
+  public marketing chrome (`PublicNav` + `PublicFooter`) and `usePageMeta` for
+  per-page SEO; an unknown slug falls back to `NotFoundPage`.
+- **Routes** — `/for-founders`, `/for-investors`, `/for-service-partners`,
+  `/for-advisors` added as lazy routes in `frontend/src/App.jsx`.
+- **Footer** — `frontend/src/components/PublicFooter.jsx` Products column now
+  maps `PRODUCT_FOOTER_LINKS` (the four audience pages) instead of the previous
+  hardcoded list. To avoid dropping public discoverability, the content/product
+  links from the old list (Spin-Out Lab / Insights / Articles) move to a new
+  Resources column (footer grid widened 5→6); the LP Portal (`/register?lane=lp`)
+  and Partner Network (`/register?lane=partner`) register lanes are intentionally
+  superseded by the richer For Investors & LPs / For Service Partners pages,
+  whose CTAs funnel to those same register lanes.
+- **Apex routing** — each page carved to the Worker in BOTH `[[routes]]` and
+  `[[env.production.routes]]` in `wrangler.toml` (exact + `/*` per page), so a
+  hard load / shared link on `axal.vc/for-*` is served by the SPA instead of
+  falling through to Jekyll. Routes only take effect on `npm run deploy`. The
+  four URLs are also added to both `sitemap.xml` copies (`frontend/public/` +
+  `docs/`).
+- **Verification** — `npm run test:drift` (tsc --noEmit + guards) and
+  `npm run test:retention` green; every imported lucide icon resolves in the
+  repo's lucide version; the four pages render in the dev preview.
+
+## Competitor Analysis + Pitch Deck Reviewer — two Cloudflare-native founder tools (PR #125)
+
+Adds two founder tools built entirely on D1 + R2 + Workers AI with no paid
+third-party APIs. Both are additive (new routes/pages/tables only; no existing
+behaviour changed) and reachable from the sidebar (Validate → Competitor
+Analysis, Raise → Pitch Deck Reviewer), plus cross-links from the Pitch Deck
+Builder and Project detail pages. Integrated from branch
+`claude/competitor-analysis-feature-lf6uvj`.
+
+- **Competitor Analysis** (`/build/competitors`) — discovers and ranks
+  competitors from an existing startup/project or a custom market, enriches them
+  via an in-house SSRF-guarded public-web crawl
+  (`cloudflare-worker/src/services/webFetch.ts`), and synthesizes an editable
+  landscape report (feature/pricing tables, gaps, wedge, next actions).
+  `routes/competitors.ts` (mounted at `/api/competitors`); synthesis in
+  `services/competitorAnalysis.ts`; schema `sql/competitor_analysis.sql` +
+  lazy `services/competitorSchema.ts`.
+- **Pitch Deck Reviewer** (`/build/deck-reviewer`) — accepts a PDF/DOC/DOCX/PPTX
+  upload (≤20 MB, validated server-side, stored privately in R2) or pasted text,
+  extracts text via Cloudflare document conversion (`services/deckExtract.ts`,
+  with a guaranteed manual-paste fallback), maps it into 12 standard deck
+  sections, and generates an investor-style review — editable and exportable
+  (JSON/MD). `routes/deck_reviewer.ts` (mounted at `/api/deck-reviewer`); schema
+  `sql/deck_reviews.sql` + lazy `services/deckReviewSchema.ts`.
+- **Security** — every endpoint calls `requireAuth` and scopes all rows to
+  `user.id`; the crawl is SSRF-guarded (http(s)-only; blocks
+  localhost/private/loopback/link-local/metadata hosts) and per-user
+  rate-limited via the `RATE_LIMITS` KV namespace. No new bindings or secrets
+  (reuses the `FILES` R2 bucket with distinct key prefixes). D1 schema self-heals
+  at runtime via the lazy `ensure*Schema` services if the SQL files aren't applied.
+- **Frontend** — `frontend/src/pages/CompetitorAnalysisPage.jsx` +
+  `DeckReviewerPage.jsx`; API client blocks `api.competitors` / `api.deckReviewer`
+  in `frontend/src/lib/api.js`; routes in `App.jsx`; nav in `sidebarConfig.js`.
+- **Verification** — `npm run test:drift` api-drift/dark-mode/sql-unsafe checks
+  pass; `cloudflare-worker` `tsc --noEmit` clean; frontend build clean. Runtime
+  (D1/R2/Workers AI) exercises against the deployed worker only — by design the
+  feature is not runnable in the Replit dev (FastAPI) backend, so the two pages
+  return API errors in the dev preview until deployed.
+
+## Fix admin article authoring & publishing (Task #1)
+
+The in-app Articles authoring list always showed "No articles yet" and admins
+had no in-app path to publish an article to the public page.
+
+- **Root cause** — `GET /api/articles/mine` was silently 404ing. In
+  `cloudflare-worker/src/routes/articles.ts` the `/:slug` catch-all is
+  registered before `/mine`, and Hono runs matching handlers in registration
+  order; the catch-all's reserved-word guard returned 404 for `mine` instead of
+  falling through. (`/sectors` worked only because it is registered before
+  `/:slug`.) The guard now `return next()`s so the specific handlers
+  (`/mine`, `/draft/:id`, `/trust/me`, …) run regardless of registration order.
+- **Admin publish path** — `frontend/src/pages/ArticleAuthorPage.jsx` adds an
+  admin-only "Publish now" button that chains the existing (unchanged)
+  transition endpoints submit → approve (`/admin/articles/:id/approve`) →
+  publish (`/admin/articles/:id/publish`); publish bursts the edge cache via
+  the existing `bustArticleEdgeCache`. Regular authors are unchanged and still
+  go through the submit → review → approve → publish queue. The PII linter and
+  weekly submission cap on `/submit` are left intact.
+
+
+## Autopopulate profiles from LinkedIn — account + PDF, review-and-confirm (Task #67)
+
+Users can prefill their profile (headline, about/bio, experience, education,
+certifications, location, website, photo) from either their connected LinkedIn
+account or a LinkedIn "Save to PDF" export. Nothing is auto-published: the parsed
+result opens in a review dialog where the user edits/removes fields before applying.
+
+- **Parser** — `cloudflare-worker/src/services/linkedinImport.ts` is a pure,
+  dependency-free parser (PDF text extraction via FlateDecode + section
+  heuristics) with `test/linkedinImport.test.ts` (11 cases; appended to the
+  `test:drift` strip-types group). `backend/app/services/linkedin_import.py`
+  mirrors it (zlib FlateDecode) for dev parity.
+- **Worker** — `POST /settings/profile/linkedin-import/{preview,apply}` in
+  `routes/settings.ts`. Uploads are PDF-only, ≤8MB, validated by declared
+  content-type **and** `%PDF` magic bytes, served/handled with `X-Content-Type-Options: nosniff`;
+  all extracted text is sanitized. `preview` never writes; `apply` whitelists
+  fields and persists (personal identity, `users.bio`, structured background).
+  Photo import fetches only from the `licdn.com` allowlist and routes through the
+  existing headshot pipeline. Migration `133_linkedin_picture_url.sql` + `schema.sql`
+  add `linkedin_picture_url`; the LinkedIn OAuth callback captures/clears it.
+- **Dev (FastAPI)** — matching column + preview/apply routes in
+  `backend/app/api/routes/settings.py` (also fixed a latent missing `Body` import).
+- **Frontend** — `lib/api.js` `linkedinImportPreview`/`linkedinImportApply`;
+  `SettingsPage.jsx` Profile → Personal gains an "Autopopulate from LinkedIn" card
+  (connected-account button + PDF upload) and a review-and-confirm modal
+  (editable/removable proposal, opt-in photo) with dark-mode variants.
+- **Drive-by fix** — `pages/jobs/JobManagePage.jsx` imported a nonexistent
+  `Linkedin` glyph from lucide-react (this repo's lucide predates it), breaking the
+  frontend build; replaced with the repo's inline-SVG pattern.
+
+## Public job board: founders post roles, applicants apply (Task #68)
+
+A public-facing job board mirroring the Events feature. Founders (and other
+authed roles) post roles that go through an admin review queue before
+publishing; the public can browse published roles and apply with a résumé, no
+account required.
+
+- **Schema** — `cloudflare-worker/sql/migrations/132_job_board.sql` adds
+  `job_postings` (status DEFAULT `'draft'`, lifecycle
+  `draft → pending_review → published | rejected | closed`) and
+  `job_applications` (status DEFAULT `'submitted'`). Non-admin postings MUST be
+  tied to a project the founder can write to; admins may post platform-level
+  roles. (Renumbered 131→132 to sit after Task #66's `131_profiles_follows.sql`.)
+- **Worker** — `services/{jobBoardSchema,jobBoardCommon,r2}.ts`; routes
+  `routes/{jobs,jobs_public,admin_jobs}.ts` mounted in `src/index.ts`. Résumés
+  are PDF-only (≤5MB), stored in R2, downloaded via short-lived signed URLs.
+  Public apply is Turnstile-gated and rate-limited.
+- **Frontend** — `pages/jobs/{PublicJobsPage,PublicJobDetailPage,MyJobsPage,`
+  `JobEditorPage,JobManagePage,MyApplicationsPage}.jsx` +
+  `pages/admin/AdminJobsPage.jsx`; `api.js` gains `jobs`/`jobsPublic`/`adminJobs`
+  namespaces; routes + lazy imports in `App.jsx`; "Jobs" sidebar entries per
+  role and a "Job Board Admin" entry for admins in `sidebarConfig.js`.
+- **Apex routing** — `axal.vc/jobs` (feed) + `axal.vc/jobs/*` (detail at
+  `/jobs/:slug`) carved to the Worker in BOTH `[[routes]]` and
+  `[[env.production.routes]]` in `wrangler.toml`.
+- **Test** — `cloudflare-worker/test/job_board.test.ts` (pure helpers),
+  appended to the `test:drift` file list in root `package.json`.
+- **Linking** — an application is matched to a platform account by email at
+  apply-time, via the applicants `LEFT JOIN users` when a founder reads
+  applicants, and via a deterministic backfill on that read (and on
+  `my-applications`). `shapeJobApplication` surfaces the member profile whenever
+  the email join resolves, so "applicant profile once registered" holds even
+  before `user_id` is backfilled. Applicant links (LinkedIn/portfolio) are
+  scheme-validated (`safeHttpUrl`: http/https only) before storage and re-checked
+  before render.
+- **Deviation (explicit scope sign-off)** — Worker-only; the dev FastAPI backend
+  has no job-board parity. This matches the actual Events precedent (Events is
+  also Worker-only — no FastAPI events routes/tables; `/api/public/events` 404s
+  under `npm run dev`), so the spec's "add dev parity following Events" premise
+  did not hold. Confirmed with the user to skip dev parity. Admin/founder job
+  pages 404 in local dev; the public `/jobs` page renders a clean error state.
+
+## Rich profiles, follows & followed-entity news (Task #66)
+
+Structured founder/investor career **background** (experience / education /
+certifications + website): new columns via `131_profiles_follows.sql`,
+`profileExpansion.ts` (`get/updateProfileBackground`) + `GET/PUT
+/settings/profile/background` (Worker `settings.ts`; FastAPI `settings.py`),
+and an editor card in `SettingsPage.jsx` (`ProfileBackgroundSection`). Public
+surfacing is opt-in via a new `background` privacy flag.
+
+**Follow system** (people + startups): `follows` table + `/api/follows`
+(`POST`/`DELETE`/`status`/`mine`) mounted in both Worker (`follows.ts`,
+`index.ts`) and FastAPI (`follows.py`, `main.py`); `FollowButton.jsx`,
+`PersonCard.jsx`, `StartupCard.jsx`. Follower counts are public; follow state
+requires auth (signed-out follow routes to `/login?next=`).
+
+**Public shareable startup page**: `GET /public/startup/:handle` (Worker
+`public.ts` + FastAPI `public_profiles.py`), `PublicStartupProfilePage.jsx` at
+route `/startups/:handle`; internal `ProjectDetail.jsx` surfaces a "Public
+Page" link. `GET /public/u/:handle` enriched with `id`, `background`
+(experience/education/certifications), `website`, `followers`. Numeric `id`
+added to both public payloads so `FollowButton` can key off it.
+
+**Followed-entity news notifications**: `notifyProjectFollowers` fan-out in
+`portfolio_updates.ts` (type `followed_entity_news`, category
+`proactive_nudges`, link `/startups/:uid`) via `waitUntil`, plus new
+notification pref `followed_entity_news` in `SettingsPage.jsx`. (FastAPI dev
+has no portfolio-updates route, so no dev fan-out target exists.)
+>
 > ## Partner sidebar: regrouped around the service-partner lifecycle (Task #47, PR #122)
 >
 > The service-partner left rail (`SIDEBAR_GROUPS.partner` in

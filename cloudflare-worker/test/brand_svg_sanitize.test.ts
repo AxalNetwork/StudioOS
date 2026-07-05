@@ -38,7 +38,7 @@ test('sanitizeSvg strips <script> tags and their payload', () => {
   const r = sanitizeSvg(
     `<svg xmlns="http://www.w3.org/2000/svg"><script>alert('xss')</script><path d="M0 0"/></svg>`,
   );
-  assertNeutralized(r, '<script', 'script', "alert('xss')");
+  assertNeutralized(r, '<script', 'script', "alert('xss')"); // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
   // The benign geometry survives — the SVG wasn't nuked wholesale.
   assert.ok(r && r.includes('<path'), `expected <path> to survive, got: ${JSON.stringify(r)}`);
 });
@@ -61,7 +61,7 @@ test('sanitizeSvg strips <foreignObject> and any HTML it smuggles', () => {
   const r = sanitizeSvg(
     `<svg><foreignObject><body xmlns="http://www.w3.org/1999/xhtml"><script>alert(1)</script></body></foreignObject><path d="M0 0"/></svg>`,
   );
-  assertNeutralized(r, 'foreignObject', '<script', 'alert(1)');
+  assertNeutralized(r, 'foreignObject', '<script', 'alert(1)'); // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
 });
 
 test('sanitizeSvg strips external references (http(s) href / xlink:href)', () => {
@@ -75,7 +75,7 @@ test('sanitizeSvg neutralizes obfuscated nested payloads (fixed-point loop)', ()
   // A single-pass stripper would reconstruct <script> here; the loop + the
   // final belt-and-suspenders check must still neutralize it.
   const r = sanitizeSvg(`<svg><scr<script>ipt>alert(1)</script><path d="M0 0"/></svg>`);
-  assertNeutralized(r, '<script', 'javascript:', 'onload', 'onerror');
+  assertNeutralized(r, '<script', 'javascript:', 'onload', 'onerror'); // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
 });
 
 test('sanitizeSvg returns null for non-SVG or empty input', () => {

@@ -16,6 +16,13 @@ import {
 import { api } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
+import KycVerification from '../components/KycVerification';
+
+// Task #25 — every persona that can reach the Trust Center (route-guarded to
+// these roles in App.jsx) is KYC-eligible, so the Identity tab is always shown
+// for them rather than only when the obligation matrix happens to surface a
+// kyc_v1 row. Founders/partners see the "not required" state inside the tab.
+const KYC_ELIGIBLE_ROLES = new Set(['founder', 'partner', 'investor', 'admin']);
 
 // ---------------------------------------------------------------------------
 // Obligation key → human label + which tab the obligation lives under.
@@ -627,7 +634,10 @@ function tabsForRole(role, obligations) {
   // isn't represented as an obligation.
   const tabs = [{ key: 'overview', label: 'Overview', icon: Globe }];
   const has = (tabKey) => obligations.some(o => OBLIGATION_META[o.obligation_key]?.tab === tabKey);
-  if (has('identity'))      tabs.push({ key: 'identity',      label: 'Identity',         icon: IdCard });
+  // Task #25 — surface Identity for every KYC-eligible persona (not only when the
+  // obligation matrix carries a kyc_v1 row) so it's the single entry point to the
+  // Identity Verification form now that the standalone "/kyc" nav item is gone.
+  if (has('identity') || KYC_ELIGIBLE_ROLES.has(role)) tabs.push({ key: 'identity', label: 'Identity', icon: IdCard });
   if (has('entity'))        tabs.push({ key: 'entity',        label: 'Entity (KYB)',     icon: Building2 });
   if (has('accreditation')) tabs.push({ key: 'accreditation', label: 'Accreditation',    icon: BadgeCheck });
   tabs.push({ key: 'agreements', label: 'Agreements', icon: FileSignature });
@@ -701,14 +711,13 @@ export default function TrustCenterPage() {
     </Section>
   );
 
+  // Task #25 — the Identity tab is now a real entry point to the Identity
+  // Verification (KYC / AML) form, rendered inline via <KycVerification embedded />
+  // (was a dead-end pointer to Settings). The component supplies its own status
+  // card and investor-only gate; status syncs nightly into the Trust score.
   const identity = (
-    <Section icon={IdCard} title="Identity (KYC)" subtitle="Government-issued ID + selfie via your KYC provider.">
-      <ObligationList
-        obligations={obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'identity')}
-        emptyText="KYC not required for your role."
-        onStart={startObligation}
-      />
-      <p className="text-xs text-slate-500 mt-3">Use the Identity Verification page in Settings to submit ID. Status syncs nightly into your Trust score.</p>
+    <Section icon={IdCard} title="Identity (KYC)" subtitle="Government-issued ID for AML compliance — submit it right here. Status syncs into your Trust score.">
+      <KycVerification embedded />
     </Section>
   );
 

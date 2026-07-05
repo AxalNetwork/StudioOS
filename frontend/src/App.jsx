@@ -109,7 +109,6 @@ const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
 const ReferEarnPage = lazy(() => import('./pages/ReferEarnPage'));
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
 const PayoutsPage = lazy(() => import('./pages/PayoutsPage'));
-const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const MatchesPage = lazy(() => import('./pages/MatchesPage'));
 const StudioOpsPage = lazy(() => import('./pages/StudioOpsPage'));
 const NetworkEffectsPage = lazy(() => import('./pages/NetworkEffectsPage'));
@@ -130,6 +129,10 @@ const PublicJobsPage = lazy(() => import('./pages/jobs/PublicJobsPage'));
 const PublicJobDetailPage = lazy(() => import('./pages/jobs/PublicJobDetailPage'));
 // Task #4 (ID) — Public marketing surfaces.
 const PricingPage = lazy(() => import('./pages/PricingPage'));
+// Audience product pages (For Founders / Investors & LPs / Service Partners /
+// Advisors) — one data-driven component rendered per slug from
+// data/productPages.js; footer links live in components/PublicFooter.jsx.
+const ProductAudiencePage = lazy(() => import('./pages/ProductAudiencePage'));
 const DemoPage = lazy(() => import('./pages/DemoPage'));
 const StatusPage = lazy(() => import('./pages/StatusPage'));
 const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
@@ -163,6 +166,8 @@ const OnboardingPartnerPage = lazy(() => import('./pages/OnboardingPartnerPage')
 const OnboardingChatPage = lazy(() => import('./pages/OnboardingChatPage'));
 const BrandBuilderPage = lazy(() => import('./pages/BrandBuilderPage'));
 const PitchDeckPage = lazy(() => import('./pages/PitchDeckPage'));
+const DeckReviewerPage = lazy(() => import('./pages/DeckReviewerPage'));
+const CompetitorAnalysisPage = lazy(() => import('./pages/CompetitorAnalysisPage'));
 const FinancialsPage = lazy(() => import('./pages/FinancialsPage'));
 const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage'));
 const CustomerDiscoveryPage = lazy(() => import('./pages/CustomerDiscoveryPage'));
@@ -174,6 +179,7 @@ const NeedsBoardPage = lazy(() => import('./pages/NeedsBoardPage'));
 const ServiceCatalogPage = lazy(() => import('./pages/ServiceCatalogPage'));
 const PartnerInsightsPage = lazy(() => import('./pages/PartnerInsightsPage'));
 const PublicDirectoryPage = lazy(() => import('./pages/PublicDirectoryPage'));
+const CirclesPage = lazy(() => import('./pages/CirclesPage'));
 const PublicPartnerProfilePage = lazy(() => import('./pages/PublicPartnerProfilePage'));
 const PublicProfilePage = lazy(() => import('./pages/PublicProfilePage'));
 const PublicStartupProfilePage = lazy(() => import('./pages/PublicStartupProfilePage'));
@@ -1178,6 +1184,11 @@ function AppInner() {
 <Routes>
       <Route path="/" element={user ? <Navigate to={ROLE_DEFAULT_PATH[user.role] || '/studio'} replace /> : <LandingPage />} />
       <Route path="/spinout-lab" element={<SpinoutLabPage />} />
+      {/* Audience product pages — public marketing surface. */}
+      <Route path="/for-founders" element={<ProductAudiencePage slug="founders" />} />
+      <Route path="/for-investors" element={<ProductAudiencePage slug="investors" />} />
+      <Route path="/for-service-partners" element={<ProductAudiencePage slug="service-partners" />} />
+      <Route path="/for-advisors" element={<ProductAudiencePage slug="advisors" />} />
       <Route path="/pricing/investor" element={<InvestorPricingPage />} />
       <Route path="/register" element={<AuthScreen user={user} clearSession={clearSession}><RegisterPage /></AuthScreen>} />
       <Route path="/login" element={<AuthScreen user={user} clearSession={clearSession}><LoginPage /></AuthScreen>} />
@@ -1213,6 +1224,8 @@ function AppInner() {
       <Route path="/onboarding/partner" element={guard(['admin', 'partner'], <OnboardingPartnerPage />)} />
       <Route path="/build/brand" element={guard(['admin', 'founder'], <BrandBuilderPage />)} />
       <Route path="/build/deck" element={guard(['admin', 'founder'], <PitchDeckPage />)} />
+      <Route path="/build/deck-reviewer" element={guard(['admin', 'founder'], <DeckReviewerPage />)} />
+      <Route path="/build/competitors" element={guard(['admin', 'founder', 'partner', 'investor'], <CompetitorAnalysisPage />)} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], <FinancialsPage />)} />
       <Route path="/build/discovery" element={guard(['admin', 'founder', 'partner', 'investor'], <DiscoveryPage />)} />
       <Route path="/customer-discovery" element={guard(['admin', 'founder'], <CustomerDiscoveryPage />)} />
@@ -1348,11 +1361,6 @@ function AppInner() {
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferEarnPage />)} />
       <Route path="/integrations" element={guard(['admin', 'partner', 'investor'], <IntegrationsPage />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <PayoutsPage />)} />
-      <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkPage />)} />
-      {/* Task #17 — investor "Discover" nav lands on the network/archetype
-          discovery surface. Distinct path from /network so the sidebar item
-          highlights correctly. */}
-      <Route path="/play" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkPage />)} />
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
       <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />
@@ -1384,6 +1392,9 @@ function AppInner() {
           per React Router v6 path ranking, so authenticated users still
           land on the internal CRM at /partners. */}
       <Route path="/directory" element={<PublicDirectoryPage />} />
+      {/* Task #9 — Public Network layer: Communities & Circles (curated). */}
+      <Route path="/circles" element={<CirclesPage />} />
+      <Route path="/communities" element={<Navigate to="/circles" replace />} />
       <Route path="/partners/:slug" element={<PublicPartnerProfilePage />} />
       {/* Task #55 — Public profile pages, unauthenticated, role-tailored. */}
       <Route path="/u/:handle" element={<PublicProfilePage />} />

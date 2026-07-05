@@ -48,6 +48,16 @@ import {
 } from '../services/profileExpansion';
 import { hashEmail } from '../util/hashEmail';
 import { MATCHING_MIN_COMPLETION_PCT } from '../services/matchingConsent';
+import {
+  LinkedInImportError,
+  decodePdfDataUri,
+  extractPdfLines,
+  parseLinkedInProfile,
+  buildAccountProposal,
+  isLinkedInImageHost,
+  normalizeProposalForApply,
+  type ImportProposal,
+} from '../services/linkedinImport';
 
 const settings = new Hono<{ Bindings: Env }>();
 
@@ -64,6 +74,8 @@ const SETTINGS_USER_COLUMNS: Array<[string, string]> = [
   ['jwt_min_iat', 'INTEGER DEFAULT 0'], // bump on Sign-out-everywhere
   ['deletion_requested_at', 'TIMESTAMP'],
   ['totp_recovery_codes', 'TEXT'],      // JSON array of SHA-256 hex hashes
+  // linkedin_picture_url moved to the companion user_profile_ext table (users is
+  // at D1's 100-column limit); ensured by ensureProfileExpansionSchema.
 ];
 
 let migrated = false;
@@ -133,6 +145,16 @@ const FOUNDER_INVITE_EXPIRY_DAYS = 14;
 function safeJson<T>(s: any, fallback: T): T {
   if (!s) return fallback;
   try { return typeof s === 'string' ? JSON.parse(s) as T : s as T; } catch { return fallback; }
+}
+
+// base64-encode bytes in chunks (avoid call-stack blowups on large buffers).
+function base64FromBytes(bytes: Uint8Array): string {
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
 }
 
 function clampStr(v: unknown, max: number): string | null {
@@ -1221,6 +1243,137 @@ settings.put('/profile/background', async (c) => {
     );
     return c.json(updated);
   } catch (e) { return handleProfileError(c, e); }
+});
+
+// Task #67 — Autopopulate profile from LinkedIn.
+//
+// Two review-and-confirm endpoints. NOTHING is written on /preview; the client
+// shows the parsed proposal, the user edits/deselects, then POSTs the reviewed
+// proposal to /apply. Two sources:
+//   - source:'account' — reads the connected LinkedIn identity (prod only; the
+//     columns are populated at OAuth callback). Includes the licdn photo.
+//   - source:'pdf'     — a LinkedIn "Save to PDF" export as a data: URI. Parsed
+//     in-Worker with no external calls (sandboxed). PDF-only, 8 MB cap,
+//     content-type + magic-byte validated, all text sanitized.
+// Responses carry X-Content-Type-Options: nosniff.
+function linkedinImportErr(c: Context, e: unknown) {
+  if (e instanceof LinkedInImportError) {
+    return c.json({ error: e.message, code: e.code }, e.status as 400);
+  }
+  console.error('[linkedin-import] unexpected:', (e as any)?.message || e);
+  return c.json({ error: 'Import failed. Please try again.' }, 500);
+}
+
+settings.post('/profile/linkedin-import/preview', async (c) => {
+  await ensureProfileExpansionSchema(c.env);
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const source = body?.source === 'account' ? 'account' : body?.source === 'pdf' ? 'pdf' : null;
+  if (!source) {
+    return c.json({ error: "source must be 'account' or 'pdf'" }, 400);
+  }
+  try {
+    let proposal: ImportProposal;
+    if (source === 'account') {
+      const sql = getSQL(c.env);
+      const rows = await sql`SELECT u.linkedin_sub, u.linkedin_name, e.linkedin_picture_url
+                             FROM users u
+                             LEFT JOIN user_profile_ext e ON e.user_id = u.id
+                             WHERE u.id = ${user.id}`;
+      await sql.end();
+      proposal = buildAccountProposal(rows[0] as any);
+    } else {
+      const { bytes } = decodePdfDataUri(body?.pdf_data_uri);
+      const lines = await extractPdfLines(bytes);
+      proposal = parseLinkedInProfile(lines);
+    }
+    c.header('X-Content-Type-Options', 'nosniff');
+    return c.json({ proposal });
+  } catch (e) { return linkedinImportErr(c, e); }
+});
+
+settings.post('/profile/linkedin-import/apply', async (c) => {
+  await ensureProfileExpansionSchema(c.env);
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  try {
+    const p = normalizeProposalForApply(body);
+    const applied: string[] = [];
+
+    // Identity fields → personal profile. Location maps to city (freeform);
+    // never to country/postal, which are ISO-validated and would reject.
+    const personalPatch: Record<string, unknown> = {};
+    if (p.fields.display_name) personalPatch.display_name = p.fields.display_name;
+    if (p.fields.full_legal_name) personalPatch.full_legal_name = p.fields.full_legal_name;
+    if (p.fields.headline) personalPatch.headline = p.fields.headline;
+    if (p.fields.location) personalPatch.city = p.fields.location;
+    if (Object.keys(personalPatch).length) {
+      await updatePersonalProfile(c.env, user.id, personalPatch);
+      applied.push(...Object.keys(personalPatch));
+    }
+
+    // Bio (about/summary) is a direct users.bio write (2000-char cap already
+    // applied in normalizeProposalForApply).
+    if (p.fields.bio) {
+      await c.env.DB.prepare(`UPDATE users SET bio = ? WHERE id = ?`)
+        .bind(p.fields.bio, user.id).run();
+      applied.push('bio');
+    }
+
+    // Structured career background → experience / education / certifications
+    // (JSON arrays) + website. Only include what the user kept.
+    const bgPatch: Record<string, unknown> = {};
+    if (p.experience.length) bgPatch.experience = p.experience;
+    if (p.education.length) bgPatch.education = p.education;
+    if (p.certifications.length) {
+      // ProfileBackground certifications use {name, issuer, year, url}; our
+      // parser emits {name, issuer, year} — shape-compatible.
+      bgPatch.certifications = p.certifications;
+    }
+    if (p.fields.website) bgPatch.website = p.fields.website;
+    if (Object.keys(bgPatch).length) {
+      await updateProfileBackground(c.env, user.id, bgPatch);
+      applied.push(...Object.keys(bgPatch));
+    }
+
+    // Photo (best-effort): fetch the host-allowlisted licdn URL, re-encode as a
+    // data: URI, store via the same hardened headshot path. Never fatal.
+    let photoApplied = false;
+    if (p.photo_url && isLinkedInImageHost(p.photo_url) && c.env.FILES) {
+      try {
+        const res = await fetch(p.photo_url, { redirect: 'error' });
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
+        if (res.ok && /^image\/(jpeg|png|webp)/.test(ct)) {
+          const buf = new Uint8Array(await res.arrayBuffer());
+          if (buf.byteLength > 0 && buf.byteLength <= 3 * 1024 * 1024) {
+            const b64 = base64FromBytes(buf);
+            const meta = await putHeadshotFromDataUri(
+              c.env, user.id, `data:${ct.split(';')[0]};base64,${b64}`,
+            );
+            const sql = getSQL(c.env);
+            const prev = await sql`SELECT headshot_r2_key FROM users WHERE id = ${user.id}`;
+            const oldKey = prev[0]?.headshot_r2_key;
+            await sql`UPDATE users SET headshot_r2_key = ${meta.file_key} WHERE id = ${user.id}`;
+            await sql.end();
+            if (oldKey && oldKey !== meta.file_key) { try { await c.env.FILES.delete(oldKey); } catch {} }
+            photoApplied = true;
+            applied.push('photo');
+          }
+        }
+      } catch (e) {
+        console.error('[linkedin-import] photo fetch failed (non-fatal):', (e as any)?.message || e);
+      }
+    }
+
+    await recordProfileAudit(
+      c.env, user.id, user.email, 'profile_linkedin_import',
+      `Applied LinkedIn import fields: ${applied.join(', ') || '(none)'}`,
+    );
+    c.header('X-Content-Type-Options', 'nosniff');
+    return c.json({ ok: true, applied, photo_applied: photoApplied });
+  } catch (e) { return linkedinImportErr(c, e); }
 });
 
 settings.get('/profile/details', async (c) => {

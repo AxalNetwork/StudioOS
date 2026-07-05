@@ -167,11 +167,6 @@ export const EXPLAINERS = {
     body: 'Run joint launches with partners — shared assets, dual-tracked attribution and a single dashboard both sides can read.',
     docPath: 'network/partners',
   },
-  network: {
-    title: 'Refer & earn',
-    body: 'Refer founders, partners or capital and earn from every successful match. Payouts and tax forms are tracked here.',
-    docPath: 'network/refer-earn',
-  },
   calendar: {
     title: 'Unified calendar',
     body: 'Connect Google or Outlook once and we surface every Axal VC commitment — office hours, board meetings, filings — alongside your personal events.',

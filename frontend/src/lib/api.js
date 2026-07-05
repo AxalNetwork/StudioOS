@@ -111,6 +111,14 @@ export async function request(path, options = {}) {
           || currentPath === '/register'
           || currentPath === '/verify-email'
           || currentPath === '/spinout-lab'
+          // Audience product pages (For Founders / Investors & LPs / Service
+          // Partners / Advisors) — public marketing surfaces. A background
+          // settings/me 401 for an anonymous visitor must not bounce them to
+          // /login (mirrors /spinout-lab above).
+          || currentPath === '/for-founders'
+          || currentPath === '/for-investors'
+          || currentPath === '/for-service-partners'
+          || currentPath === '/for-advisors'
           // Audience-specific marketing landing pages (/lp/founder,
           // /lp/investor, /lp/partner, /lp/customer-discovery,
           // /lp/spinout-demo-day). Public surfaces: a background
@@ -118,6 +126,11 @@ export async function request(path, options = {}) {
           // them to /login.
           || currentPath.startsWith('/lp/')
           || currentPath === '/directory'
+          // Task #9 — Public Network layer: Circles (+ /communities redirect).
+          // Public marketing surfaces: a background settings/me 401 for an
+          // anonymous visitor must not bounce them to /login.
+          || currentPath === '/circles'
+          || currentPath === '/communities'
           || currentPath === '/roadmap'
           || currentPath === '/about'
           || currentPath === '/contact'
@@ -1230,7 +1243,6 @@ export const api = {
   commissionsMe: () => request('/network/commissions/me'),
   payoutsMe: () => request('/network/payouts/me'),
   payoutRequest: (data) => request('/network/payout/request', { method: 'POST', body: JSON.stringify(data) }),
-  networkGraph: () => request('/network/graph'),
   adminCommissions: () => request('/network/admin/commissions'),
   adminCommissionRules: () => request('/network/admin/commission-rules'),
   adminPayouts: () => request('/network/admin/payouts'),
@@ -1725,6 +1737,20 @@ export const api = {
     request('/linkedin/oauth/start', { method: 'POST', body: JSON.stringify(return_to ? { return_to } : {}) }),
   linkedinDisconnect: () => request('/linkedin/disconnect', { method: 'POST', body: JSON.stringify({}) }),
 
+  // Task #67 — Autopopulate profile from LinkedIn (connected account OR a
+  // LinkedIn PDF export). preview() never writes; apply() persists the
+  // user-reviewed proposal. source is 'account' | 'pdf'.
+  linkedinImportPreview: ({ source, pdf_data_uri } = {}) =>
+    request('/settings/profile/linkedin-import/preview', {
+      method: 'POST',
+      body: JSON.stringify(pdf_data_uri ? { source, pdf_data_uri } : { source }),
+    }),
+  linkedinImportApply: (proposal) =>
+    request('/settings/profile/linkedin-import/apply', {
+      method: 'POST',
+      body: JSON.stringify(proposal || {}),
+    }),
+
   // ---------- Settings (Epic 3) ----------
   getSettings: () => request('/settings'),
   updateSettings: (data) => request('/settings', { method: 'PATCH', body: JSON.stringify(data) }),
@@ -1825,6 +1851,15 @@ export const api = {
   tierCheckout: (tier) =>
     request('/billing/tier/checkout', { method: 'POST', body: JSON.stringify({ tier }) }),
   tierPortal: () => request('/billing/tier/portal', { method: 'POST' }),
+
+  // ---------- Persona (account-plan) billing — partner, advisor/mentor, … ----------
+  // Generic subscription pipeline for every signed-in role that isn't a founder
+  // or investor. planStatus returns the caller's current plan/trial/renewal;
+  // planCheckout creates an incomplete subscription and returns a client_secret
+  // the SPA confirms inline (no redirect), or a dev-upgrade url in keyless dev.
+  planStatus: () => request('/billing/plan/status'),
+  planCheckout: (interval) =>
+    request('/billing/plan/checkout', { method: 'POST', body: JSON.stringify({ interval }) }),
 
   // ---------- Task #5 — In-app billing dashboard (replaces Stripe portal) ----------
   // `scope` is 'founder' (founder-tier customer) or 'investor' (investor
@@ -2433,6 +2468,35 @@ export const api = {
   // stay gated via matches.summary / admin-only report).
   bestFit: {
     me: () => request('/best-fit/me'),
+  },
+
+  // Competitor Analysis — in-house crawl + Workers AI synthesis (no paid APIs).
+  competitors: {
+    analyze: (data) => request('/competitors/analyze', { method: 'POST', body: JSON.stringify(data || {}) }),
+    list: () => request('/competitors'),
+    get: (id) => request(`/competitors/${id}`),
+    save: (id, patch) => request(`/competitors/${id}`, { method: 'PATCH', body: JSON.stringify(patch || {}) }),
+    addCandidate: (id, data) => request(`/competitors/${id}/candidates`, { method: 'POST', body: JSON.stringify(data || {}) }),
+    removeCandidate: (id, cid) => request(`/competitors/${id}/candidates/${cid}`, { method: 'DELETE' }),
+    rerun: (id, data) => request(`/competitors/${id}/rerun`, { method: 'POST', body: JSON.stringify(data || {}) }),
+    refresh: (id) => request(`/competitors/${id}/refresh`, { method: 'POST', body: JSON.stringify({}) }),
+    remove: (id) => request(`/competitors/${id}`, { method: 'DELETE' }),
+    fetchUrl: (url, refresh) => request('/competitors/fetch', { method: 'POST', body: JSON.stringify({ url, refresh: !!refresh }) }),
+    exportUrl: (id, format) => `/api/competitors/${id}/export?format=${encodeURIComponent(format || 'json')}`,
+  },
+
+  // Pitch Deck Reviewer — Cloudflare document conversion + investor-style review.
+  deckReviewer: {
+    // FormData upload: request() detects FormData and omits the JSON Content-Type.
+    upload: (formData) => request('/deck-reviewer/upload', { method: 'POST', body: formData }),
+    paste: (data) => request('/deck-reviewer/paste', { method: 'POST', body: JSON.stringify(data || {}) }),
+    list: () => request('/deck-reviewer'),
+    get: (id) => request(`/deck-reviewer/${id}`),
+    save: (id, patch) => request(`/deck-reviewer/${id}`, { method: 'PATCH', body: JSON.stringify(patch || {}) }),
+    regenerate: (id) => request(`/deck-reviewer/${id}/regenerate`, { method: 'POST', body: JSON.stringify({}) }),
+    purgeRaw: (id) => request(`/deck-reviewer/${id}/raw`, { method: 'DELETE' }),
+    remove: (id) => request(`/deck-reviewer/${id}`, { method: 'DELETE' }),
+    exportUrl: (id, format) => `/api/deck-reviewer/${id}/export?format=${encodeURIComponent(format || 'json')}`,
   },
 };
 

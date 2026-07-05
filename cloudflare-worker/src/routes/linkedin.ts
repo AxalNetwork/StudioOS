@@ -284,8 +284,8 @@ linkedin.get('/oauth/callback', async (c) => {
     return redirectBack(c.env, 'error', returnTo, 'token_unavailable' satisfies LinkedInCallbackCode);
   }
 
-  // Fetch verified identity. /v2/userinfo (OIDC) returns { sub, email, name, ... }
-  let sub = '', email = '', name = '';
+  // Fetch verified identity. /v2/userinfo (OIDC) returns { sub, email, name, picture, ... }
+  let sub = '', email = '', name = '', picture = '';
   try {
     const uiRes = await fetch(LINKEDIN_USERINFO_URL, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -299,6 +299,11 @@ linkedin.get('/oauth/callback', async (c) => {
     sub = String(ui?.sub || '');
     email = String(ui?.email || '');
     name = String(ui?.name || [ui?.given_name, ui?.family_name].filter(Boolean).join(' ') || '');
+    // Task #67 — capture the profile photo URL (licdn.com CDN) for the
+    // "Import from LinkedIn" flow. Only store https licdn/linkedin hosts so the
+    // apply-time fetch can trust it (SSRF guard). Non-matching values dropped.
+    const pic = String(ui?.picture || '');
+    if (/^https:\/\/([a-z0-9-]+\.)*(licdn|linkedin)\.com\//i.test(pic)) picture = pic.slice(0, 1000);
     if (!sub) return redirectBack(c.env, 'error', returnTo, 'identity_unavailable' satisfies LinkedInCallbackCode);
   } catch (e: any) {
     console.error('[LINKEDIN] userinfo threw:', e?.message || e);
@@ -318,6 +323,17 @@ linkedin.get('/oauth/callback', async (c) => {
                   linkedin_name = ${name || null},
                   linkedin_connected_at = ${nowIso}
               WHERE id = ${userId}`;
+    // linkedin_picture_url lives on the companion user_profile_ext table (users
+    // is at D1's 100-column limit). Best-effort — never fail the connect.
+    try {
+      await sql`INSERT INTO user_profile_ext (user_id, linkedin_picture_url)
+                VALUES (${userId}, ${picture || null})
+                ON CONFLICT(user_id) DO UPDATE SET
+                  linkedin_picture_url = excluded.linkedin_picture_url,
+                  updated_at = datetime('now')`;
+    } catch (e: any) {
+      console.warn('[LINKEDIN] picture upsert skipped:', e?.message || e);
+    }
     await sql`INSERT INTO activity_logs (action, details, actor, user_id)
               VALUES ('linkedin_connected',
                       ${`User #${userId} linked LinkedIn identity sub=${sub}`},
@@ -340,8 +356,16 @@ linkedin.post('/disconnect', async (c) => {
   try {
     const sql = getSQL(c.env);
     await sql`UPDATE users
-              SET linkedin_sub = NULL, linkedin_email = NULL, linkedin_name = NULL, linkedin_connected_at = NULL
+              SET linkedin_sub = NULL, linkedin_email = NULL, linkedin_name = NULL,
+                  linkedin_connected_at = NULL
               WHERE id = ${user.id}`;
+    // Clear the companion-table picture too (best-effort; row may not exist).
+    try {
+      await sql`UPDATE user_profile_ext SET linkedin_picture_url = NULL,
+                  updated_at = datetime('now') WHERE user_id = ${user.id}`;
+    } catch (e: any) {
+      console.warn('[LINKEDIN] picture clear skipped:', e?.message || e);
+    }
     await sql`INSERT INTO activity_logs (action, details, actor, user_id)
               VALUES ('linkedin_disconnected', ${`User #${user.id} disconnected LinkedIn`}, ${user.email}, ${user.id})`;
     await sql.end();

@@ -163,11 +163,51 @@ zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/directory/*"
 zone_name  = "axal.vc"
+# Task #9 — Public Network layer: Circles (+ /communities redirect to /circles).
+[[routes]]
+pattern    = "axal.vc/circles"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/circles/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/communities"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/communities/*"
+zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/contact"
 zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/contact/*"
+zone_name  = "axal.vc"
+# Audience product pages (For Founders / Investors & LPs / Service Partners /
+# Advisors) served by the SPA on the apex. Exact + wildcard each, mirroring the
+# other public marketing routes, so Jekyll keeps every other apex path.
+[[routes]]
+pattern    = "axal.vc/for-founders"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/for-founders/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/for-investors"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/for-investors/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/for-service-partners"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/for-service-partners/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/for-advisors"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/for-advisors/*"
 zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/lp"
@@ -695,11 +735,51 @@ zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/directory/*"
 zone_name  = "axal.vc"
+# Task #9 — Public Network layer: Circles (+ /communities redirect to /circles).
+[[env.production.routes]]
+pattern    = "axal.vc/circles"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/circles/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/communities"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/communities/*"
+zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/contact"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/contact/*"
+zone_name  = "axal.vc"
+# Audience product pages (For Founders / Investors & LPs / Service Partners /
+# Advisors) served by the SPA on the apex. Exact + wildcard each, mirroring the
+# other public marketing routes, so Jekyll keeps every other apex path.
+[[env.production.routes]]
+pattern    = "axal.vc/for-founders"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/for-founders/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/for-investors"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/for-investors/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/for-service-partners"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/for-service-partners/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/for-advisors"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/for-advisors/*"
 zone_name  = "axal.vc"
 # Audience-specific landing pages served by the SPA on the apex
 # (/lp/founder, /lp/customer-discovery, /lp/investor, /lp/partner,

@@ -171,7 +171,7 @@ export const NEW_FOUNDER_BANK = [
     type: 'short',
     explainer: 'We’ll use this in the deck and surface co-founder matching if you’re solo.',
     doc_anchor: 'getting-started/invite-team',
-    page_target: '/network',
+    page_target: '/cofounder',
     validate: maxChars(280),
   },
 

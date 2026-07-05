@@ -5,6 +5,173 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Identity verification now lives in the Trust Center
+
+Verifying your identity (KYC / AML) is now part of your **Trust Center** instead
+of a separate sidebar item. Open the Trust Center, go to the **Identity** tab,
+and you can fill in and submit the whole verification form right there — no more
+hopping over to Settings. Your verification status shows at the top, and it still
+feeds into your Trust score. If verification isn't required for your account type,
+the tab simply tells you so.
+
+---
+
+## Removed the Referral Network page
+
+We removed the "Discover" item from the sidebar and the Referral Network page it opened (the interactive graph of your referral subtree). It added clutter without much value. Refer & Earn, your payouts, and everything else in your network stay exactly where they were.
+
+---
+
+## Founder sidebar simplified
+
+Removed "My Profile" from the founder sidebar — it duplicated the Profile tab already inside **Settings**, so you can get there the same way with fewer sidebar entries.
+
+---
+
+## New article: "How Global Partnerships Accelerate Scaling"
+
+Guillaume Lauzier's article on how global partnerships help startups scale faster — with less wasted capital and fewer blind spots — is back up on the Articles page, dated July 3, 2026, with its cover image.
+
+---
+
+## Footer links now bring you back to the top of the page
+
+Clicking any link in the page footer — like **For Founders**, **For Investors**,
+**Articles**, **About**, or **Programs & Events** — now lands you at the top
+of the new page instead of leaving you halfway down.
+
+---
+
+## Subscription plans for partners and advisors
+
+If you're a partner or an advisor, **Settings → Billing** now has real plans you
+can manage yourself. You'll see your current plan, a clear list of what each tier
+includes, and — when you upgrade — you can pay right on the page without being
+sent off to another site. Once you're subscribed, the same page lets you update
+your card, review invoices, and cancel any time. Founders and investors keep
+their existing billing, and anyone without a plan still sees their saved cards
+and receipts exactly as before.
+
+---
+
+## See your trial and Spin-Out Lab free time in Billing
+
+Your **Settings → Billing** page is now clearer about what you're paying — and
+when. If you're on a free trial of a paid plan, you'll see a **Trial status**
+card that counts down the days left and tells you the exact date your card is
+first charged, plus a reminder that you can cancel any time before then. And if
+you're in the **Spin-Out Lab**, a new card makes your free window explicit:
+you're free for 30 days, no card required, with the days remaining and the date
+your free time runs through — and upgrading stays optional until it ends. If
+you're not trialing or in the Lab, nothing changes.
+
+---
+
+## A clearer, faster homepage
+
+The public front page has had a spring clean. The top of the page now leads with
+one plain-language promise and a single clear action — **Join Axal** — instead of
+several competing buttons and jargon. It's reordered so you can quickly see who
+Axal is for, how it works, and what's inside, and we trimmed the long feature
+grid down to the strongest few. We also fixed links that led to dead ends or a
+sign-in wall — every link now takes you to a page you can actually open — added a
+Jobs link to the top menu, and made the main call-to-action a single, clear
+"Join Axal" button.
+
+---
+
+## Discover Communities & Circles
+
+There's a new **Circles** page where you can explore the network's communities —
+founder, investor, city, and topic circles organised by stage and theme. Search
+and filter by type, access, or region, then join a public circle or request
+access to a private one. It sits alongside the **Directory**, **Programs &
+Events**, and **Articles** under a shared network menu, so it's easy to move
+between them. (The old **/communities** link now brings you straight here.)
+
+---
+
+## New pages that explain StudioOS for your role
+
+There are now dedicated pages that spell out what StudioOS offers to each kind
+of member — **For Founders**, **For Investors / LPs**, **For Service Partners**,
+and **For Advisors**. Each one walks through the tools and support that matter
+most to that role, with a clear next step to get started. You'll find links to
+all four in the **Products** section of the site footer.
+
+---
+
+## Size up your competition
+
+There's a new **Competitor Analysis** tool under **Validate** in the sidebar.
+Start from one of your startups or just describe a market, and StudioOS finds and
+ranks the main players, pulls details from their public websites, and builds an
+editable landscape for you — feature and pricing comparisons, gaps in the market,
+a suggested wedge, and recommended next steps. You can add or remove competitors
+by hand, re-run the analysis, and export the whole thing as a document. There's
+also a quick link to it from any project page.
+
+---
+
+## Get an honest review of your pitch deck
+
+The new **Pitch Deck Reviewer** under **Raise** lets you upload a finished deck
+(PDF, Word, or PowerPoint) — or simply paste your text — and get a candid,
+investor-style review. It maps your deck to the twelve sections investors expect
+to see, tells you what's strong and what's missing, and gives you editable notes
+you can export. You'll find a shortcut to it right from the Pitch Deck Builder.
+
+---
+
+## Writing and publishing articles now works end-to-end
+
+Your drafts now show up reliably. When you create a new draft in the Articles
+workspace, it appears in your list right away and stays there after a refresh —
+no more "No articles yet" when you know you've saved one. Drafts, submitted, and
+published articles all show in your authoring list.
+
+If you're on the Axal VC team, you can now take one of your own articles all the
+way live from inside the editor with a new **Publish now** button — no need to
+hand it off elsewhere first. Once published, it appears on the public Articles
+page and opens at its own link straight away. Everyone else still writes and
+submits their articles for review before they go live, as before.
+
+
+---
+
+## Fill in your profile from LinkedIn
+
+Setting up your profile just got a lot faster. In **Settings → Profile**, you can
+now autopopulate your details from LinkedIn — either from your connected LinkedIn
+account, or by uploading a LinkedIn PDF export of your profile. We'll pull in your
+headline, about, experience, education, certifications, location, website, and
+photo. Nothing is saved automatically: everything opens in a review screen first,
+so you can edit or remove anything before it goes on your profile.
+
+---
+
+## A job board for the network
+
+You can now find and post jobs on StudioOS. Founders and team members can post
+open roles from **Jobs** in the sidebar, and every role is reviewed before it
+goes live. Anyone can browse published roles and apply with their details and a
+résumé — no account needed. If you do have an account, you can track the roles
+you've posted and the applications you've made from the **Jobs** menu.
+
+## Richer profiles, follows, and news from people & startups you care about
+
+Your profile can now tell your full story. Add your **experience, education, and
+certifications** — plus a personal website — from Settings, and choose whether to
+show them on your public profile. Every person and startup now has a shareable
+public page, and startups get their own page at a clean link you can send anyone.
+
+You can also **follow** the founders, investors, and startups you want to keep up
+with. Each profile shows its follower count, and when a startup you follow posts
+an update, we'll let you know. Prefer quiet? Turn "News from people & startups I
+follow" on or off anytime under Notifications.
+
+---
+
 ## A partner menu built around how you actually work
 
 If you're a service partner, your left-hand menu is now organised around your

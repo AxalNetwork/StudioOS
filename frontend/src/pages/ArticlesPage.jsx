@@ -7,6 +7,7 @@ import { articles as api } from '../lib/api';
 import { reportError } from '../lib/log';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
+import NetworkSubNav from '../components/NetworkSubNav';
 
 const ROLE_FILTERS = [
   { id: '', label: 'All authors' },
@@ -235,6 +236,7 @@ export default function ArticlesPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col pt-16">
       <PublicNav />
+      <NetworkSubNav />
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
         <div className="max-w-6xl mx-auto px-6 py-8">
           <h1 className="text-3xl font-bold flex items-center gap-2">

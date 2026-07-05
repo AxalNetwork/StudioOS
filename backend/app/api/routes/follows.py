@@ -31,6 +31,14 @@ router = APIRouter(prefix="/follows", tags=["follows"])
 _schema_ready = False
 
 
+def _safe_rollback(session: Session) -> None:
+    """Best-effort rollback; a failure here must not mask the original error."""
+    try:
+        session.rollback()
+    except Exception:
+        logger.debug("session rollback failed", exc_info=True)
+
+
 def _ensure_follows_schema(session: Session) -> None:
     """Idempotent CREATE TABLE / INDEX. Mirrors the worker's follows table.
     Each statement is its own transaction so one failure doesn't poison the
@@ -63,6 +71,8 @@ def _ensure_follows_schema(session: Session) -> None:
             session.commit()
         except Exception:
             session.rollback()
+    # One-time init guard (declared global above, read at function entry): set
+    # only after the schema is ensured so later requests skip this work.
     _schema_ready = True
 
 
@@ -99,10 +109,7 @@ def _follower_count(session: Session, t: str, i: int) -> int:
         ).bindparams(t=t, i=i)).first()
         return int((row._mapping["c"] if row else 0) or 0)  # type: ignore[attr-defined]
     except Exception:
-        try:
-            session.rollback()
-        except Exception:
-            pass
+        _safe_rollback(session)
         return 0
 
 
@@ -189,10 +196,7 @@ def follow_status(
             ).bindparams(f=user.id, t=t, i=i)).first()
             following = bool(row)
         except Exception:
-            try:
-                session.rollback()
-            except Exception:
-                pass
+            _safe_rollback(session)
     return {"following": following, "followers": _follower_count(session, t, i)}
 
 
@@ -208,10 +212,7 @@ def follows_mine(
             "WHERE follower_user_id = :f ORDER BY created_at DESC LIMIT 500"
         ).bindparams(f=user.id)).all()
     except Exception:
-        try:
-            session.rollback()
-        except Exception:
-            pass
+        _safe_rollback(session)
         rows = []
     user_ids = [int(r._mapping["entity_id"]) for r in rows if r._mapping["entity_type"] == "user"]  # type: ignore[attr-defined]
     project_ids = [int(r._mapping["entity_id"]) for r in rows if r._mapping["entity_type"] == "project"]  # type: ignore[attr-defined]
@@ -223,10 +224,7 @@ def follows_mine(
                 "SELECT id, uid, name, role FROM users WHERE id = ANY(:ids)"
             ).bindparams(ids=user_ids)).all()
         except Exception:
-            try:
-                session.rollback()
-            except Exception:
-                pass
+            _safe_rollback(session)
             ur = []
         for u in ur:
             m = u._mapping  # type: ignore[attr-defined]
@@ -245,10 +243,7 @@ def follows_mine(
                 "SELECT id, uid, name, sector, stage FROM projects WHERE id = ANY(:ids)"
             ).bindparams(ids=project_ids)).all()
         except Exception:
-            try:
-                session.rollback()
-            except Exception:
-                pass
+            _safe_rollback(session)
             pr = []
         for p in pr:
             m = p._mapping  # type: ignore[attr-defined]

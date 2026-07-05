@@ -155,10 +155,15 @@ export const SIDEBAR_GROUPS = {
   //     /portfolio/health route stays registered and reachable for other roles.
   //   • "Network Effects" (/network-effects) is demoted to More while a single
   //     "Network" entry (/relationships) leads Validate; both routes stay live.
+  //   • "My Profile" (/profile) — the full Profile editor lives inside Settings
+  //     (/settings) as the first tab, so a separate sidebar item is redundant.
+  //   • standalone "Identity / KYC" (/kyc) — folded into "Trust Center" (/trust)
+  //     as a single nav entry; the Identity Verification form now renders on the
+  //     Trust Center "Identity" tab (Task #25). The /kyc route stays registered
+  //     and reachable (the onboarding KYC gate still redirects there).
   //
   // Newly surfaced (routes already existed and are founder-accessible, they just
-  // weren't in the founder nav): Co-Marketing (/comarketing, Launch), Identity /
-  // KYC (/kyc, Account), My Profile (/profile, Account), Discover (/play, More).
+  // weren't in the founder nav): Co-Marketing (/comarketing, Launch).
   founder: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
@@ -178,6 +183,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
       { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
       { to: '/services', icon: Package, label: 'Service Catalogue' },
+      { to: '/build/competitors', icon: Megaphone, label: 'Competitor Analysis' },
       { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
       { to: '/mentors', icon: UserCircle, label: 'Find a Mentor', requiredTier: 'growth' },
       { to: '/cofounder', icon: Users, label: 'Find a Co-founder', requiredTier: 'studio' },
@@ -185,6 +191,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'raise', label: 'Raise', items: [
       { to: '/build/deck', icon: Sparkles, label: 'Pitch Deck', requiredTier: 'growth' },
+      { to: '/build/deck-reviewer', icon: FileText, label: 'Pitch Deck Reviewer' },
       { to: '/build/financials', icon: DollarSign, label: 'Financial Model' },
       { to: '/build/captable', icon: PieIcon, label: 'Cap Table' },
       { to: '/raise', icon: TrendingUp, label: 'Raise Pipeline' },
@@ -207,12 +214,9 @@ export const SIDEBAR_GROUPS = {
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits', requiredTier: 'studio' },
       { to: '/payouts', icon: Wallet, label: 'Payouts' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
-      { to: '/play', icon: Gamepad2, label: 'Discover' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust Center' },
-      { to: '/kyc', icon: ShieldCheck, label: 'Identity / KYC' },
-      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -360,7 +364,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/integrations', icon: Plug, label: 'Integrations' },
-      { to: '/play', icon: Gamepad2, label: 'Discover' },
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/activity', icon: Activity, label: 'Activity' },
       { to: '/docs', icon: BookOpen, label: 'Docs' },

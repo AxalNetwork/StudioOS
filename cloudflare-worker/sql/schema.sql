@@ -131,6 +131,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_partner_public_id
 CREATE INDEX IF NOT EXISTS idx_users_last_active
   ON users(last_active_at);
 
+-- Companion 1:1 table for per-user profile fields that would otherwise push the
+-- `users` table past Cloudflare D1's hard 100-column-per-table limit. Structured
+-- public career background (Task #66) + the LinkedIn photo URL (Task #67). Same
+-- side-table pattern as author_websites / corporate_profiles. Created by
+-- migrations 131/133 and self-healed by ensureProfileExpansionSchema().
+CREATE TABLE IF NOT EXISTS user_profile_ext (
+    user_id              INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    experience           TEXT,  -- JSON array of career/experience entries
+    education            TEXT,  -- JSON array of education entries
+    certifications       TEXT,  -- JSON array of certification entries
+    website              TEXT,  -- personal / professional website URL
+    linkedin_picture_url TEXT,  -- licdn.com CDN URL captured at OAuth callback
+    created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Task #16 — Profile expansion (corporate block, one per user).
 CREATE TABLE IF NOT EXISTS corporate_profiles (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

@@ -514,6 +514,7 @@ function ProfileTabs({ data, onSaved, flash, patch }) {
       {sub === 'personal' && (
         <>
           <PersonalIdentityCard flash={flash} onPctChange={setPct} pct={pct} />
+          <LinkedInImportSection flash={flash} />
           <ProfileSection data={data} onSaved={onSaved} flash={flash} patch={patch} />
           <ProfileBackgroundSection flash={flash} />
           <ProfileExtrasCard flash={flash} />
@@ -1090,6 +1091,221 @@ function ProfileBackgroundSection({ flash }) {
         </div>
       ))}
     </Card>
+  );
+}
+
+// Task #67 — Autopopulate profile from LinkedIn. Two sources: the connected
+// LinkedIn account (name + photo only) and a LinkedIn "Save to PDF" export
+// (full career history). NOTHING is published automatically — the parsed
+// proposal opens in a review dialog where the user edits/deselects before
+// applying. Uploads are PDF-only, ≤8 MB, and validated server-side too.
+const LI_MAX_PDF_BYTES = 8 * 1024 * 1024;
+const LI_FIELD_DEFS = [
+  { k: 'display_name', label: 'Display name' },
+  { k: 'full_legal_name', label: 'Full legal name' },
+  { k: 'headline', label: 'Headline' },
+  { k: 'location', label: 'Location (saved as city)' },
+  { k: 'website', label: 'Website' },
+];
+
+function LinkedInImportReview({ proposal, onCancel, onApplied, flash }) {
+  const [fields, setFields] = useState({ ...(proposal.fields || {}) });
+  const [bio, setBio] = useState(proposal.fields?.bio || '');
+  const [experience, setExperience] = useState(proposal.experience || []);
+  const [education, setEducation] = useState(proposal.education || []);
+  const [certifications, setCertifications] = useState(proposal.certifications || []);
+  const [includePhoto, setIncludePhoto] = useState(!!proposal.photo_url);
+  const [busy, setBusy] = useState(false);
+
+  const removeFrom = (setter, list, idx) => setter(list.filter((_, i) => i !== idx));
+
+  const apply = async () => {
+    setBusy(true);
+    try {
+      const outFields = {};
+      for (const { k } of LI_FIELD_DEFS) {
+        const v = (fields[k] || '').trim();
+        if (v) outFields[k] = v;
+      }
+      if (bio.trim()) outFields.bio = bio.trim();
+      const payload = {
+        fields: outFields,
+        experience,
+        education,
+        certifications,
+        photo_url: includePhoto ? (proposal.photo_url || null) : null,
+      };
+      const res = await api.linkedinImportApply(payload);
+      const n = (res.applied || []).length;
+      flash(n ? `Imported ${n} field${n === 1 ? '' : 's'} from LinkedIn` : 'Nothing to import');
+      onApplied();
+    } catch (e) {
+      flash(e.message || 'Import failed', 'error');
+      setBusy(false);
+    }
+  };
+
+  const renderList = (title, list, setter, cols) => (
+    <div className="mt-4">
+      <h4 className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">{title}</h4>
+      {list.length === 0 ? (
+        <p className="text-xs text-gray-400">None detected.</p>
+      ) : (
+        <div className="space-y-2">
+          {list.map((row, idx) => (
+            <div key={idx} className="rounded-lg border border-gray-200 dark:border-gray-700 p-2.5 flex items-start justify-between gap-3">
+              <div className="text-xs text-gray-700 dark:text-gray-300 space-y-0.5 min-w-0">
+                {cols.map(c => row[c.k] ? (
+                  <div key={c.k} className="truncate"><span className="text-gray-400">{c.label}: </span>{row[c.k]}</div>
+                ) : null)}
+              </div>
+              <button type="button" onClick={() => removeFrom(setter, list, idx)} disabled={busy}
+                className="text-xs text-red-600 hover:text-red-700 shrink-0 disabled:opacity-50">Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Review LinkedIn import</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Nothing is saved until you apply. Edit or remove anything below.</p>
+          </div>
+          <button onClick={onCancel} disabled={busy} className="text-gray-400 hover:text-gray-600 disabled:opacity-50"><X size={18} /></button>
+        </div>
+        <div className="p-5 overflow-y-auto">
+          {(proposal.warnings || []).length > 0 && (
+            <div className="mb-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 space-y-1">
+              {proposal.warnings.map((w, i) => (
+                <p key={i} className="text-xs text-amber-800 dark:text-amber-300 flex gap-1.5"><AlertTriangle size={13} className="shrink-0 mt-0.5" />{w}</p>
+              ))}
+            </div>
+          )}
+          {includePhoto && proposal.photo_url && (
+            <label className="flex items-center gap-3 mb-4">
+              <img src={proposal.photo_url} alt="" className="w-14 h-14 rounded-full object-cover border border-gray-200 dark:border-gray-700" />
+              <span className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+                <input type="checkbox" checked={includePhoto} onChange={e => setIncludePhoto(e.target.checked)} />
+                Use this LinkedIn photo as my headshot
+              </span>
+            </label>
+          )}
+          <div className="grid sm:grid-cols-2 gap-3">
+            {LI_FIELD_DEFS.map(({ k, label }) => (
+              <Field key={k} label={label}>
+                <input value={fields[k] || ''} onChange={e => setFields({ ...fields, [k]: e.target.value })}
+                  className={inputCls} disabled={busy} />
+              </Field>
+            ))}
+          </div>
+          <div className="mt-3">
+            <Field label="About / bio" hint="Up to 2,000 characters.">
+              <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3} className={inputCls} disabled={busy} />
+            </Field>
+          </div>
+          {renderList('Experience', experience, setExperience, [
+            { k: 'title', label: 'Title' }, { k: 'company', label: 'Company' },
+            { k: 'start', label: 'Start' }, { k: 'end', label: 'End' },
+          ])}
+          {renderList('Education', education, setEducation, [
+            { k: 'school', label: 'School' }, { k: 'degree', label: 'Degree' }, { k: 'field', label: 'Field' },
+          ])}
+          {renderList('Certifications', certifications, setCertifications, [
+            { k: 'name', label: 'Name' }, { k: 'issuer', label: 'Issuer' }, { k: 'year', label: 'Year' },
+          ])}
+        </div>
+        <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 rounded-b-xl flex justify-end gap-2">
+          <button onClick={onCancel} disabled={busy}
+            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Cancel</button>
+          <button onClick={apply} disabled={busy}
+            className="px-3 py-1.5 text-sm rounded-lg bg-violet-600 text-white hover:bg-violet-700 flex items-center gap-1.5 disabled:opacity-50">
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}{busy ? 'Applying…' : 'Apply to profile'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LinkedInImportSection({ flash }) {
+  const [busy, setBusy] = useState(false);
+  const [proposal, setProposal] = useState(null);
+  const fileRef = useRef(null);
+
+  const importFromAccount = async () => {
+    setBusy(true);
+    try {
+      const { proposal: p } = await api.linkedinImportPreview({ source: 'account' });
+      setProposal(p);
+    } catch (e) {
+      flash(e.message || 'Could not import from LinkedIn', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onFile = async (file) => {
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      flash('Please upload a PDF (LinkedIn → More → Save to PDF).', 'error');
+      return;
+    }
+    if (file.size > LI_MAX_PDF_BYTES) {
+      flash('PDF must be under 8MB.', 'error');
+      return;
+    }
+    const dataUri = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    setBusy(true);
+    try {
+      const { proposal: p } = await api.linkedinImportPreview({ source: 'pdf', pdf_data_uri: dataUri });
+      setProposal(p);
+    } catch (e) {
+      flash(e.message || 'Could not read that PDF', 'error');
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  return (
+    <>
+      <Card title="Autopopulate from LinkedIn"
+        description="Prefill your profile from your connected LinkedIn account or a LinkedIn PDF export. You review and confirm everything before it's saved.">
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={importFromAccount} disabled={busy}
+            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-1.5 disabled:opacity-50">
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Import from connected account
+          </button>
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={busy}
+            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-1.5 disabled:opacity-50">
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Upload LinkedIn PDF
+          </button>
+          <input ref={fileRef} type="file" accept="application/pdf,.pdf" className="hidden"
+            onChange={e => onFile(e.target.files?.[0])} />
+        </div>
+        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
+          To get your PDF: on LinkedIn, open your profile → More → Save to PDF. PDF only, up to 8MB.
+        </p>
+      </Card>
+      {proposal && (
+        <LinkedInImportReview
+          proposal={proposal}
+          flash={flash}
+          onCancel={() => setProposal(null)}
+          onApplied={() => { setProposal(null); setTimeout(() => window.location.reload(), 600); }}
+        />
+      )}
+    </>
   );
 }
 
@@ -3352,12 +3568,11 @@ function BillingTab({ data, flash }) {
   if (role === 'founder') {
     return <FounderBillingPanel data={data} flash={flash} />;
   }
-  // Task #39 — every signed-in role can reach Billing. Non-subscription roles
-  // (admin, partner, mentor, …) have no founder/investor plan ladder, but they
-  // can still hold saved cards and one-off purchase receipts on the same
-  // general Stripe customer used for à la carte buys. Show those without the
-  // founder plan-upgrade UI.
-  return <GenericBillingPanel flash={flash} />;
+  // Every other signed-in role (partner, advisor/mentor, …) gets the generic
+  // account-plan pipeline: a persona plan ladder + native subscription
+  // management. Roles with no plan_group / no persona plans fall back inside
+  // PersonaBillingPanel to the saved-cards-and-receipts view — no regression.
+  return <PersonaBillingPanel data={data} flash={flash} />;
 }
 
 // Task #39 — billing surface for roles without a subscription plan ladder.
@@ -3375,6 +3590,214 @@ function GenericBillingPanel({ flash }) {
         Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
       </div>
     </Card>
+  );
+}
+
+// Persona plan catalog (display copy). Names / prices / features mirror the
+// marketing pricing pages; the paid "Pro" tier resolves its real Stripe price
+// server-side at checkout (or a keyless dev-upgrade), so this stays display-only
+// and never hardcodes a price id. Keyed by the plan_group the backend derives
+// from the role (partner → 'partner', mentor → 'advisor').
+const PERSONA_PLANS = {
+  partner: {
+    label: 'Partner',
+    starter: { name: 'Starter', price: '$0', tagline: 'Get listed and answer posted needs.',
+      features: ['Marketplace + directory listing', 'Manage up to 3 service offers', 'Respond to Needs Board posts', 'Stripe Connect payouts'] },
+    pro: { name: 'Pro', price: '$99', tagline: 'For partners who want inbound demand on tap.',
+      features: ['Unlimited service offers', 'Priority placement in search + directory', 'Full partner analytics dashboard', 'Verified partner badge', 'Partner deal portal access'] },
+    enterprise: { name: 'Enterprise / Custom', tagline: 'Firms and agencies scaling across the network.',
+      features: ['Featured marketplace placement', 'Multiple seats + team profiles', 'Dedicated partner manager'] },
+  },
+  advisor: {
+    label: 'Advisor',
+    starter: { name: 'Starter', price: '$0', tagline: 'Publish a profile and take founder matches.',
+      features: ['Public advisor profile + expertise tags', 'Founder matching', 'Office Hours workspace', 'Ratings + trust badge'] },
+    pro: { name: 'Pro', price: '$29', tagline: 'For advisors who want more reach and better matches.',
+      features: ['Priority founder matching', 'Boosted directory visibility', 'Featured advisor placement'] },
+    enterprise: { name: 'Enterprise / Custom', tagline: 'Advisory firms and expert networks.',
+      features: ['Multiple advisor seats + team profiles', 'Programmatic founder matching', 'Dedicated relationship manager'] },
+  },
+};
+
+// Native billing for personas without a bespoke pipeline (partner, advisor/
+// mentor, …). Drives the generic /api/billing/plan/* endpoints: current plan +
+// trial status, a persona plan ladder with inline (no-redirect) checkout, and
+// the shared BillingDashboard for cancel/resume, payment methods, and invoices
+// (the persona subscription lives on the general Stripe customer, which
+// scope="founder" reads). Falls back to the saved-cards view for any role that
+// has no persona plan.
+function PersonaBillingPanel({ data, flash }) {
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [checkout, setCheckout] = useState(null); // { clientSecret } once checkout starts
+  const [busy, setBusy] = useState(false);
+
+  const refresh = React.useCallback(() => {
+    setLoading(true);
+    api.planStatus()
+      .then(setStatus)
+      .catch(() => setStatus(null))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  // Flash on return from a (dev-upgrade) redirect, mirroring the other panels.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('upgraded') === '1') {
+      flash?.('Subscription updated.');
+      params.delete('upgraded');
+      const q = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (q ? '?' + q : ''));
+    }
+  }, [flash]);
+
+  const group = status?.plan_group || null;
+  const defs = group ? PERSONA_PLANS[group] : null;
+
+  if (loading) {
+    return <Card title="Billing" description="Your plan and payments."><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
+  }
+  // No persona plan for this role → saved cards + receipts only (no regression).
+  if (!group || !defs) {
+    return <GenericBillingPanel flash={flash} />;
+  }
+
+  const subStatus = String(status?.status || 'free').toLowerCase();
+  const isSubscribed = ['active', 'trialing', 'past_due'].includes(subStatus);
+  const trialEnds = subStatus === 'trialing' && status?.trial_ends_at ? new Date(status.trial_ends_at) : null;
+  const trialDaysLeft = trialEnds ? Math.max(0, Math.ceil((trialEnds.getTime() - Date.now()) / 86_400_000)) : null;
+  const renews = status?.renews_at ? new Date(status.renews_at) : null;
+  const hasCustomer = !!status?.has_customer;
+
+  const startCheckout = async () => {
+    setBusy(true);
+    try {
+      const res = await api.planCheckout('month');
+      if (res?.url) { window.location.href = res.url; return; }      // keyless dev-upgrade
+      if (res?.free) { flash?.('Your plan is now active.'); refresh(); return; }
+      if (res?.client_secret) { setCheckout({ clientSecret: res.client_secret }); return; }
+      flash?.('Could not start checkout. Please try again.', 'error');
+    } catch (e) {
+      flash?.(e?.message || 'Online signup for this plan isn’t available yet — contact billing@axal.vc.', 'error');
+    } finally { setBusy(false); }
+  };
+
+  const currentName = isSubscribed ? defs.pro.name : defs.starter.name;
+
+  return (
+    <>
+      <Card title="Current plan" description={`Your ${defs.label.toLowerCase()} subscription.`}>
+        <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">{defs.label}</div>
+            <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {currentName}
+              {subStatus === 'trialing' && (
+                <span className="ml-2 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">Trial</span>
+              )}
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Status: <span className="capitalize">{isSubscribed ? subStatus : 'free'}</span>
+              {subStatus === 'trialing' && trialEnds
+                ? <> · Trial ends {trialEnds.toLocaleDateString()}</>
+                : renews && isSubscribed ? <> · Renews {renews.toLocaleDateString()}</> : null}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Trial status card — clear countdown + first-charge date. */}
+      {subStatus === 'trialing' && trialEnds && (
+        <Card title="Trial status" description="You're trialing a paid plan.">
+          <div className="rounded-lg border border-violet-300 dark:border-violet-700 bg-violet-50/60 dark:bg-violet-900/20 p-4 flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                {trialDaysLeft} day{trialDaysLeft === 1 ? '' : 's'} left in your trial
+              </div>
+              <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+                Your {defs.pro.name} plan begins on {trialEnds.toLocaleDateString()} — your card is charged then unless
+                you cancel before the trial ends. Cancel any time from “Manage subscription” below.
+              </div>
+            </div>
+            <span className="text-xs uppercase tracking-wider px-2.5 py-1 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 font-semibold">
+              Ends {trialEnds.toLocaleDateString()}
+            </span>
+          </div>
+        </Card>
+      )}
+
+      {/* Manage existing subscription, or the plan ladder + inline checkout. */}
+      {isSubscribed && hasCustomer ? (
+        <Card title="Manage subscription" description="Change card, cancel, and review invoices without leaving Axal VC.">
+          <BillingDashboard scope="founder" flash={flash} onChanged={refresh} />
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+            Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
+          </div>
+        </Card>
+      ) : (
+        <Card title="Plans" description="Upgrade any time. Manage or cancel from this page once subscribed.">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[['starter', defs.starter], ['pro', defs.pro], ['enterprise', defs.enterprise]].map(([key, plan]) => {
+              const current = key === 'starter' && !isSubscribed;
+              return (
+                <div key={key}
+                  className={`rounded-lg border p-4 flex flex-col ${key === 'pro' ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
+                  <div className="font-semibold text-gray-900 dark:text-gray-100">{plan.name}</div>
+                  <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
+                    {plan.price ? <><span className="font-semibold">{plan.price}</span><span className="text-gray-500 dark:text-gray-400 text-xs"> / mo</span></> : <span className="font-semibold">Custom</span>}
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{plan.tagline}</div>
+                  <ul className="mt-3 space-y-1.5 flex-1">
+                    {plan.features.map((f) => (
+                      <li key={f} className="text-xs text-gray-600 dark:text-gray-300 flex items-start gap-1.5">
+                        <CheckCircle2 size={13} className="text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" />{f}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-3">
+                    {current && (
+                      <span className="text-xs uppercase tracking-wider text-violet-700 dark:text-violet-300 font-semibold">Current plan</span>
+                    )}
+                    {key === 'pro' && (
+                      <button type="button" disabled={busy} onClick={startCheckout}
+                        className="w-full px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium disabled:opacity-50">
+                        {busy ? 'Starting…' : 'Subscribe'}
+                      </button>
+                    )}
+                    {key === 'enterprise' && (
+                      <a href="mailto:hello@axal.vc"
+                        className="block text-center w-full px-3 py-2 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md text-sm font-medium">
+                        Talk to us
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Inline (no-redirect) checkout once the user starts subscribing. */}
+          {checkout?.clientSecret && (
+            <div className="mt-4 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{defs.pro.name} — {defs.pro.price}/mo</div>
+                <button type="button" onClick={() => setCheckout(null)} className="text-xs text-gray-500 dark:text-gray-400 hover:underline">Cancel</button>
+              </div>
+              <AxalCheckout
+                clientSecret={checkout.clientSecret}
+                submitLabel="Subscribe"
+                onSuccess={() => { flash?.('Payment successful — activating your plan.'); setCheckout(null); refresh(); }}
+                onError={(e) => flash?.(e?.message || 'Payment failed', 'error')}
+              />
+            </div>
+          )}
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+            Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
+          </div>
+        </Card>
+      )}
+    </>
   );
 }
 
@@ -3409,9 +3832,14 @@ function FounderBillingPanel({ data, flash }) {
   }, [flash]);
 
   const tier = String(status?.tier || data?.subscription_tier || 'free').toLowerCase();
-  const subStatus = status?.status || data?.subscription_status || 'active';
+  const subStatus = String(status?.status || data?.subscription_status || 'active').toLowerCase();
   const renews = status?.renews_at || data?.subscription_renews_at;
   const hasCustomer = status?.has_customer ?? !!data?.stripe_customer_id;
+  // Trial + Spin-Out Lab billing state (from /api/billing/tier/status).
+  const trialEnds = subStatus === 'trialing' && status?.trial_ends_at ? new Date(status.trial_ends_at) : null;
+  const spinoutLab = status?.spinout_lab?.active ? status.spinout_lab : null;
+  const daysUntil = (d) => (d ? Math.max(0, Math.ceil((d.getTime() - Date.now()) / 86_400_000)) : null);
+  const trialDaysLeft = daysUntil(trialEnds);
 
   const upgrade = async (target) => {
     setBusy(target);
@@ -3430,6 +3858,34 @@ function FounderBillingPanel({ data, flash }) {
 
   return (
     <>
+      {/* Spin-Out Lab exception — participants are free for 30 days and are
+          never pushed into the standard paid-plan trial / auto-charge flow.
+          Surfaced here so the guarantee is explicit inside Billing. */}
+      {spinoutLab && (
+        <Card title="Spin-Out Lab" description="You're on the house while you run your sprint.">
+          <div className="rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="text-lg font-semibold text-emerald-800 dark:text-emerald-200">
+                  Free for {spinoutLab.free_days || 30} days
+                </div>
+                <div className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
+                  No card required · you won't be auto-charged during the Lab
+                  {spinoutLab.free_until && (
+                    <> · free through {new Date(spinoutLab.free_until).toLocaleDateString()}</>
+                  )}
+                </div>
+              </div>
+              {typeof spinoutLab.days_remaining === 'number' && (
+                <span className="text-xs uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-semibold">
+                  {spinoutLab.days_remaining} day{spinoutLab.days_remaining === 1 ? '' : 's'} left
+                </span>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+
       <Card title="Current plan" description="Your founder workspace subscription.">
         {loading ? (
           <div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div>
@@ -3439,15 +3895,46 @@ function FounderBillingPanel({ data, flash }) {
               <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Tier</div>
               <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 {TIER_LABEL[tier] || tier}
+                {subStatus === 'trialing' && (
+                  <span className="ml-2 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">
+                    Trial
+                  </span>
+                )}
               </div>
               <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Status: <span className="capitalize">{subStatus}</span>
-                {renews ? <> · Renews {new Date(renews).toLocaleDateString()}</> : null}
+                {subStatus === 'trialing' && trialEnds
+                  ? <> · Trial ends {trialEnds.toLocaleDateString()}</>
+                  : renews ? <> · Renews {new Date(renews).toLocaleDateString()}</> : null}
               </div>
             </div>
           </div>
         )}
       </Card>
+
+      {/* Trial status card — clear countdown + when the first charge lands, so
+          founders on a paid-plan trial always know what happens next and how to
+          stop it. Managing/cancelling happens in the subscription card below. */}
+      {subStatus === 'trialing' && trialEnds && (
+        <Card title="Trial status" description="You're trialing a paid plan.">
+          <div className="rounded-lg border border-violet-300 dark:border-violet-700 bg-violet-50/60 dark:bg-violet-900/20 p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {trialDaysLeft} day{trialDaysLeft === 1 ? '' : 's'} left in your trial
+                </div>
+                <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+                  Your {TIER_LABEL[tier] || tier} plan begins on {trialEnds.toLocaleDateString()} — your card is
+                  charged then unless you cancel before the trial ends. Cancel any time from “Manage subscription” below.
+                </div>
+              </div>
+              <span className="text-xs uppercase tracking-wider px-2.5 py-1 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 font-semibold">
+                Ends {trialEnds.toLocaleDateString()}
+              </span>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Task #5 — active subscribers manage everything in-app (cancel, resume,
           plan swap with proration, payment methods, invoices). Free users see
@@ -3461,7 +3948,18 @@ function FounderBillingPanel({ data, flash }) {
         </Card>
       ) : (
         <>
-          <Card title="Plans" description="Upgrade any time. Manage or cancel from this page once subscribed.">
+          <Card
+            title="Plans"
+            description={spinoutLab
+              ? 'Upgrading is optional while you’re in the Spin-Out Lab — your free window keeps running until it ends.'
+              : 'Upgrade any time. Manage or cancel from this page once subscribed.'}
+          >
+            {spinoutLab && (
+              <div className="mb-3 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2">
+                You’re free for {spinoutLab.free_days || 30} days in the Spin-Out Lab. Upgrading starts a paid plan
+                now — there’s no need to unless you want the extra tooling early.
+              </div>
+            )}
             <div className="grid gap-3 sm:grid-cols-3">
               {ladder.map((t) => {
                 const current = t === tier;

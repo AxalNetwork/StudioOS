@@ -47,11 +47,57 @@ from backend.app.models.entities import (
     Partner,
     PartnerReview,
     Project,
+    ScoreSnapshot,
     User,
+    VCFund,
 )
 
 router = APIRouter(prefix="/public", tags=["public-profiles"])
 logger = logging.getLogger("studioos.public_profiles")
+
+
+@router.get("/stats")
+def public_stats(session: Session = Depends(get_session)) -> dict[str, int]:
+    """Dev (FastAPI) mirror of the Worker's ``GET /api/public/stats``.
+
+    Unauthenticated landing-page headline counts. Each count is best-effort:
+    a failure on one query must not break the others or the page.
+    """
+    def _count(stmt) -> int:
+        try:
+            return session.exec(stmt).one() or 0
+        except Exception:
+            logger.exception("public_stats: count query failed")
+            return 0
+
+    partners = _count(
+        select(func.count(Partner.id)).where(Partner.status == "active")
+    )
+    funds = _count(
+        select(func.count(VCFund.id)).where(VCFund.status == "active")
+    )
+    deals_scored = _count(
+        select(func.count(func.distinct(ScoreSnapshot.project_id))).where(
+            ScoreSnapshot.is_sandbox == False  # noqa: E712
+        )
+    )
+    spinouts = _count(
+        select(func.count(Project.id)).where(Project.status == "spinout")
+    )
+    return {
+        "partners": partners,
+        "funds": funds,
+        "deals_scored": deals_scored,
+        "spinouts": spinouts,
+    }
+
+
+def _safe_rollback(session: Session) -> None:
+    """Best-effort rollback; a failure here must not mask the original error."""
+    try:
+        session.rollback()
+    except Exception:
+        logger.debug("session rollback failed", exc_info=True)
 
 
 # Per-role default visibility. Anything not listed here is hidden by
@@ -262,10 +308,7 @@ def get_public_profile(handle: str, session: Session = Depends(get_session)):
         ).bindparams(uid=user.id)).first()
         followers = int((row._mapping["c"] if row else 0) or 0)  # type: ignore[attr-defined]
     except Exception:
-        try:
-            session.rollback()
-        except Exception:
-            pass
+        _safe_rollback(session)
         followers = 0
 
     _name = (user.name if flags.get("name") else None)
@@ -364,10 +407,7 @@ def get_public_startup(handle: str, session: Session = Depends(get_session)):
                     ),
                 })
         except Exception:  # noqa: BLE001
-            try:
-                session.rollback()
-            except Exception:
-                pass
+            _safe_rollback(session)
 
     # Recent submitted updates (news feed) — table is dev-managed / optional.
     updates: list[dict[str, Any]] = []
@@ -387,10 +427,7 @@ def get_public_startup(handle: str, session: Session = Depends(get_session)):
             for r in rows
         ]
     except Exception:
-        try:
-            session.rollback()
-        except Exception:
-            pass
+        _safe_rollback(session)
         updates = []
 
     # Site/Website button target: an explicit startup website URL wins; when
@@ -407,10 +444,7 @@ def get_public_startup(handle: str, session: Session = Depends(get_session)):
             if lp and lp._mapping.get("published"):  # type: ignore[attr-defined]
                 website = f"https://axal.vc/landing/{lp._mapping['slug']}"  # type: ignore[attr-defined]
         except Exception:
-            try:
-                session.rollback()
-            except Exception:
-                pass
+            _safe_rollback(session)
             website = None
 
     # Follower count (public, best-effort).
@@ -421,10 +455,7 @@ def get_public_startup(handle: str, session: Session = Depends(get_session)):
         ).bindparams(pid=proj.id)).first()
         followers = int((row._mapping["c"] if row else 0) or 0)  # type: ignore[attr-defined]
     except Exception:
-        try:
-            session.rollback()
-        except Exception:
-            pass
+        _safe_rollback(session)
         followers = 0
 
     return {
