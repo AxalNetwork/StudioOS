@@ -22,7 +22,7 @@ import {
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2, ShieldAlert,
-  Gavel, Inbox, FileBarChart,
+  Gavel, Inbox, FileBarChart, Radar,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -87,6 +87,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
       { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
+      { to: '/signals', icon: Radar, label: 'Signals' },
       { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
       { to: '/deals', icon: Handshake, label: 'Deal Flow' },
@@ -174,6 +175,7 @@ export const SIDEBAR_GROUPS = {
       // across every Execution view and its legacy deep-linked routes.
       { to: '/execution', icon: Zap, label: 'Execution', match: ['/execution', '/projects', '/pipeline', '/build/roadmap'] },
       { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
+      { to: '/signals', icon: Radar, label: 'Signals' },
       { to: '/build/metrics', icon: TrendingUp, label: 'Metrics' },
       { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
       { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
@@ -380,6 +382,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/mentors', icon: UserCircle, label: 'Mentor Directory' },
+      { to: '/signals', icon: Radar, label: 'Signals' },
       { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
     ]},

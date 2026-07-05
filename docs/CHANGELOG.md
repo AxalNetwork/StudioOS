@@ -10,6 +10,81 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #1 — RAISE Workspaces: collapse the founder "Raise" nav into 3 workspaces
+
+Frontend-only IA change. The founder sidebar's "Raise" group had 10 items; it now
+has 3 workspaces that compose the *existing* pages via a new `embedded` prop — no
+business logic, API, schema, or backend changes.
+
+- **New workspaces** (`frontend/src/pages/`):
+  - `PitchWorkspacePage.jsx` — `/raise/pitch` (Edit Deck, default) + `/raise/pitch/review`.
+    Wraps `PitchDeckPage` (growth gate preserved via `hasTier`/`LockedDeck`/`openPaywall`)
+    and `DeckReviewerPage` (free) in `embedded` mode.
+  - `CapitalWorkspacePage.jsx` — `/raise/capital` (Financial Model, default) +
+    `/raise/capital/cap-table` + `/raise/capital/pipeline`. Wraps `FinancialsPage`,
+    `CapTablePage`, `RaisePipelinePage`.
+  - `LegalEnginePage.jsx` — `/raise/legal-engine` master-detail hub with 4 cards
+    (Incorporation, Founders & Agreements [studio], Compliance & Filings, Equity
+    Elections [studio]) → sub-routes `/raise/legal-engine/{incorporation,founders,compliance,equity}`.
+    Wraps `IncorporatePage`, `CofounderAgreementPage`, `CompliancePage`, `Section83bPage`.
+    Studio gates preserved via `hasTier`/`LockedCard`/`openPaywall`. Includes a
+    presentational-only jurisdiction selector and generic status pill (both TODO-marked
+    for backend wiring); `ELECTION_TYPES` has structural TODO placeholders for UK s.431
+    and AU ESS.
+- **`embedded` prop** added to the 9 reused pages (`PitchDeckPage`, `DeckReviewerPage`,
+  `Financials`, `CapTablePage`, `RaisePipelinePage`, `IncorporatePage`,
+  `CofounderAgreementPage`, `CompliancePage`, `Section83bPage`): each page's own
+  title/explainer/back-button is wrapped in `{!embedded && …}` and its outer page
+  padding dropped when embedded, keeping max-width centering. Pattern mirrors
+  `ExecutionPage.jsx`.
+- **Routing** (`frontend/src/App.jsx`): 11 new workspace routes (pitch ×2 / capital ×4 /
+  legal-engine ×5) added after `/execution/roadmap`, guarded for the roles of the pages
+  they wrap (pitch & capital: admin/founder; legal-engine: admin/founder/partner).
+  Legacy redirects: `/build/deck` → `/raise/pitch`, `/build/deck-reviewer` →
+  `/raise/pitch/review`, `/raise` → `/raise/capital/pipeline`. Removed the now-unused
+  `PitchDeckPage`/`DeckReviewerPage`/`RaisePipelinePage` lazy imports. Shared standalone
+  routes (`/build/financials`, `/build/captable`, `/incorporate`, `/incorporate/*`,
+  `/compliance`, `/legal-capital`) kept intact for the investor/partner personas.
+- **Sidebar** (`frontend/src/sidebarConfig.js`): founder "Raise" group slimmed to Pitch
+  (`/raise/pitch`), Capital (`/raise/capital`), Legal Engine (`/raise/legal-engine`).
+  Pitch item ungated so the free reviewer stays reachable; gates live inside the
+  workspaces. Investor/partner "Capital & Legal" group and other roles untouched.
+- **Tests**: `frontend/tests/e2e/raise_workspaces.spec.js` — renders, URL-driven tab/card
+  nav, and legacy redirects (tier-independent assertions).
+
+## Keep profile-background fields off `users` — companion `user_profile_ext` table (D1 100-column limit)
+
+Prod `users` sits at Cloudflare D1's hard 100-column-per-table limit, so the
+profile-background feature (experience / education / certifications / website +
+LinkedIn picture) could not add its columns via `ALTER TABLE users` — the deploy
+was blocked. Moved that state into a 1:1 companion side table
+`user_profile_ext(user_id PK, experience, education, certifications, website,
+linkedin_picture_url, created_at, updated_at)`, following the existing
+`corporate_profiles` / author-websites side-table pattern.
+
+- **Migrations** — `131_profiles_follows.sql` rewritten → `CREATE TABLE IF NOT
+  EXISTS user_profile_ext` + `follows` + indexes (dropped all `users` ALTERs, and
+  the `projects.website` ALTER since that column already exists on prod via the
+  runtime ensure in `routes/projects.ts`). `133_linkedin_picture_url.sql` rewritten
+  → `ALTER TABLE user_profile_ext ADD COLUMN linkedin_picture_url TEXT` (was an
+  ALTER on `users`).
+- **Worker** — `services/profileExpansion.ts`: `ensureProfileBackgroundSchema`
+  creates `user_profile_ext` (+ guarded ALTERs for self-heal); `getProfileBackground`
+  SELECTs from it by `user_id`; `updateProfileBackground` UPSERTs with
+  `ON CONFLICT(user_id)`. `routes/public.ts` LEFT JOINs `user_profile_ext` (u.-prefixed
+  columns). `routes/settings.ts` drops `linkedin_picture_url` from
+  `SETTINGS_USER_COLUMNS` and JOINs the side table for the profile preview.
+  `routes/linkedin.ts` writes/clears `linkedin_picture_url` via best-effort
+  UPSERT/UPDATE on the side table (OAuth callback + disconnect).
+- **Schema** — `sql/schema.sql` drops `users.linkedin_picture_url`, adds the
+  `user_profile_ext` table. Dev FastAPI (`backend/`) left unchanged: SQLite has no
+  column cap and the API contract is identical.
+- **Deploy** — migrations 131–135 applied via `scripts/migrate-d1.mjs --remote`
+  (prod ledger was at 130; 132 job-board / 134 account-subscriptions / 135
+  seed-article rode along, all pending & idempotent), then `npm run deploy` shipped
+  the Worker. Verified `user_profile_ext` present with all 8 columns and `users`
+  still at 100.
+
 ## Fold Identity Verification (KYC / AML) into the Trust Center (Task #25)
 
 The KYC form is now reachable from a single **Trust Center** nav entry per

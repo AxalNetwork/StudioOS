@@ -10,6 +10,39 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #3 — Signals: founder decision engine over public-market evidence
+
+New product module integrated from PR #131 (`claude/signals-decision-engine-jxf5pu`).
+A decision-support engine that surfaces founder-actionable startup opportunities from
+**public** company data — deliberately not a trading/markets UI (no price/quote/OHLC).
+One engine powers two modes (Founder "what to build next" / Advisor "what to point
+founders toward"); the mode toggle changes ordering + framing copy only.
+
+- **Worker API** (`cloudflare-worker/`): new `routes/signals.ts` mounted at
+  `app.route('/api/signals', signalsRoutes)` in `src/index.ts` (after `/api/insights`).
+  Endpoints: `GET /` (ranked+filtered list), `/filters`, `/kpis`, `/sources`, `/meta`,
+  `GET /:id` (registered last so the static sub-paths win), `POST /refresh` (admin-only).
+  Every endpoint gates on `requireAuth`. Engine/ranking/sources/types/seed live under
+  `src/services/signals/*`. The engine falls back to an in-code seed corpus when the D1
+  tables are empty or not yet migrated, so the UI works pre-migration.
+- **Migration**: `sql/migrations/136_signals.sql` (renumbered from the PR's colliding
+  `134_signals.sql`; 134/135 were already taken). Additive + idempotent (all
+  `CREATE TABLE/INDEX IF NOT EXISTS`), seeds no rows. Tables: `signal_sources`,
+  `signal_companies`, `signals`, `signal_company_map`, `signal_evidence`,
+  `signal_ingest_runs`.
+- **Frontend** (`frontend/`): new `pages/SignalsPage.jsx` (KPI strip, filter bar,
+  ranked cards, evidence slide-over, loading/empty/error states — reuses `EmptyState`/
+  `ErrorState`, full `dark:` variants), `components/signals/*`, `lib/signalsMeta.js`.
+  Routed at `/signals` in `App.jsx` (guard `admin/founder/partner/investor/mentor`).
+  `lib/api.js` adds `api.signals.{list,get,filters,kpis,sources,meta,refresh}` → `/signals/*`.
+  `sidebarConfig.js` adds a `Radar` "Signals" item to the admin (studio), founder
+  (build) and mentor (engagements) groups.
+- Prod = Worker only; dev FastAPI has no `/api/signals` (Signals shows an error state in
+  the dev preview by design). `npm run test:drift` (incl `tsc --noEmit`) and `npm run build` pass.
+- **Integration note**: main-agent git writes are blocked in this environment, so the PR's
+  20 files were ported directly onto `main` rather than pushed to the branch — PR #131
+  should be closed as superseded once these changes land on `main`.
+
 ## Task #1 — RAISE Workspaces: collapse the founder "Raise" nav into 3 workspaces
 
 Frontend-only IA change. The founder sidebar's "Raise" group had 10 items; it now

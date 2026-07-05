@@ -5,6 +5,21 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A simpler "Raise" menu — three focused workspaces
+
+The **Raise** section of the sidebar used to have ten separate links. It's now
+three tidy workspaces:
+
+- **Pitch** — build your investor deck and get an AI review, side by side in tabs.
+- **Capital** — your financial model, cap table, and investor raise pipeline in one place.
+- **Legal Engine** — incorporation, founder agreements, compliance, and equity elections (like 83(b)), all from one hub.
+
+Everything you had before is still here — just grouped so it's faster to find. Your
+plan's features work exactly as before, and old bookmarks automatically send you to
+the right workspace.
+
+---
+
 ## Identity verification now lives in the Trust Center
 
 Verifying your identity (KYC / AML) is now part of your **Trust Center** instead

@@ -941,6 +941,24 @@ export const api = {
   insightsNewsletterUnsubscribe: () => request('/insights/newsletter/unsubscribe', { method: 'POST' }),
   insightsNewsletterPreview: () => request('/insights/newsletter/preview'),
 
+  // Signals — founder decision engine over public-market evidence. Worker-only
+  // (dev FastAPI has no /api/signals). Shared by Founder + Advisor/Mentor modes;
+  // `mode` only changes ordering + copy, never the underlying data.
+  signals: {
+    list: (params = {}) => {
+      const qs = new URLSearchParams(
+        Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''),
+      ).toString();
+      return request('/signals' + (qs ? `?${qs}` : ''));
+    },
+    get: (id, mode = 'founder') => request(`/signals/${encodeURIComponent(id)}?mode=${mode}`),
+    filters: () => request('/signals/filters'),
+    kpis: (mode = 'founder') => request(`/signals/kpis?mode=${mode}`),
+    sources: () => request('/signals/sources'),
+    meta: () => request('/signals/meta'),
+    refresh: () => request('/signals/refresh', { method: 'POST' }),
+  },
+
   askAdvisory: (data) => request('/advisory/ask', { method: 'POST', body: JSON.stringify(data) }),
   financialPlan: (data) => request('/advisory/financial-plan', { method: 'POST', body: JSON.stringify(data) }),
   runDiligence: (data) => request('/advisory/diligence', { method: 'POST', body: JSON.stringify(data) }),

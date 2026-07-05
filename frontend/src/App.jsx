@@ -173,6 +173,7 @@ const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage'));
 const CustomerDiscoveryPage = lazy(() => import('./pages/CustomerDiscoveryPage'));
 const RoadmapPage = lazy(() => import('./pages/RoadmapPage'));
 const MetricsPage = lazy(() => import('./pages/MetricsPage'));
+const SignalsPage = lazy(() => import('./pages/SignalsPage'));
 const CapTablePage = lazy(() => import('./pages/CapTablePage'));
 const MarketplacePage = lazy(() => import('./pages/MarketplacePage'));
 const NeedsBoardPage = lazy(() => import('./pages/NeedsBoardPage'));
@@ -1233,6 +1234,9 @@ function AppInner() {
       <Route path="/customer-discovery" element={guard(['admin', 'founder'], <CustomerDiscoveryPage />)} />
       <Route path="/build/roadmap" element={guard(['admin', 'founder', 'partner', 'investor'], <RoadmapPage />)} />
       <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], <MetricsPage />)} />
+      {/* Signals — founder decision engine over public-market evidence. Shared
+          by Founder + Advisor/Mentor modes (mode changes ordering + copy only). */}
+      <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SignalsPage user={user} />)} />
       <Route path="/build/captable" element={guard(['admin', 'founder', 'partner', 'investor'], <CapTablePage />)} />
       <Route path="/marketplace" element={guard(['admin', 'founder', 'partner', 'investor'], <MarketplacePage user={user} />)} />
       <Route path="/needs" element={guard(['admin', 'founder', 'partner', 'investor'], <NeedsBoardPage user={user} />)} />

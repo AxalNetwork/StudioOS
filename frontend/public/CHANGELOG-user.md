@@ -5,6 +5,23 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Signals — public-market evidence for what to build next
+
+A new **Signals** dashboard helps you decide what to build next. It scans public
+company and market data and surfaces founder-ready opportunities as ranked cards —
+each with a plain-English thesis, a "why now", the kinds of customers it points to,
+and the public evidence behind it. Open any card to see the full evidence trail.
+
+It's not a stock or trading screen — there are no price charts. Instead it answers
+two questions from one place: **Founder mode** ("what should I build next?") and
+**Advisor mode** ("what should I point founders toward?"). Switch modes to reorder
+the list and change the framing. Filter by region, sector, company size, customer
+type and more, or search across signals.
+
+You'll find **Signals** in the sidebar — available to founders, mentors and admins.
+
+---
+
 ## A simpler "Raise" menu — three focused workspaces
 
 The **Raise** section of the sidebar used to have ten separate links. It's now
