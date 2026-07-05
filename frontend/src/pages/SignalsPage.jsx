@@ -6,7 +6,6 @@ import ErrorState from '../components/ErrorState';
 import SignalCard from '../components/signals/SignalCard';
 import SignalFilterBar from '../components/signals/SignalFilterBar';
 import SignalKPIStrip from '../components/signals/SignalKPIStrip';
-import SignalModeToggle from '../components/signals/SignalModeToggle';
 import SignalEvidencePanel from '../components/signals/SignalEvidencePanel';
 
 /**
@@ -20,11 +19,8 @@ import SignalEvidencePanel from '../components/signals/SignalEvidencePanel';
  */
 export default function SignalsPage({ user }) {
   const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
-  const isAdvisorRole = ['mentor', 'partner', 'investor', 'admin'].includes(
-    String(user?.role || '').toLowerCase(),
-  );
+  const mode = String(user?.role || '').toLowerCase() === 'mentor' ? 'advisor' : 'founder';
 
-  const [mode, setMode] = useState(isAdvisorRole && String(user?.role).toLowerCase() === 'mentor' ? 'advisor' : 'founder');
   const [filters, setFilters] = useState({});
   const [facets, setFacets] = useState(null);
   const [data, setData] = useState(null);
@@ -107,7 +103,6 @@ export default function SignalsPage({ user }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <SignalModeToggle mode={mode} onChange={setMode} />
           {isAdmin && (
             <button
               onClick={onRefresh}
@@ -122,15 +117,15 @@ export default function SignalsPage({ user }) {
         </div>
       </div>
 
-      {/* Mode helper strip */}
-      <div className="flex items-start gap-2 rounded-lg bg-violet-50/60 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/40 px-4 py-2.5 text-sm text-violet-900 dark:text-violet-200">
-        <Sparkles size={15} className="mt-0.5 shrink-0 text-violet-500" />
-        <span>
-          {mode === 'advisor'
-            ? 'Advisor mode — signals ordered by how confidently you can point a founder toward them.'
-            : 'Founder mode — signals ordered by how buildable and actionable the opportunity is right now.'}
-        </span>
-      </div>
+      {/* Advisor-mode helper strip */}
+      {mode === 'advisor' && (
+        <div className="flex items-start gap-2 rounded-lg bg-violet-50/60 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/40 px-4 py-2.5 text-sm text-violet-900 dark:text-violet-200">
+          <Sparkles size={15} className="mt-0.5 shrink-0 text-violet-500" />
+          <span>
+            Advisor mode — signals ordered by how confidently you can point a founder toward them.
+          </span>
+        </div>
+      )}
 
       {/* KPI strip */}
       <SignalKPIStrip kpis={kpis} loading={loading && !kpis} />
