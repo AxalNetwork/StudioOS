@@ -10,6 +10,12 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Re-added "How Global Partnerships Accelerate Scaling" article (Guillaume Lauzier)
+
+Re-seeded the `how-global-partnerships-accelerate-scaling` article (`articles.id = 10`, `author_user_id = 1` → guillaumelauzier@gmail.com), published `2026-07-03T09:00:00.000Z`, via `cloudflare-worker/sql/migrations/135_seed_global_partnerships_article.sql` (idempotent — guarded by `WHERE NOT EXISTS` on slug + author lookup, so a re-run/predeploy replay is a no-op) applied directly with `wrangler d1 execute studioos-db --remote`. `body_html` was pre-rendered offline with the same algorithm as `newsRender.ts::renderMarkdown` so it matches what `/admin/articles/:id/publish` would have produced.
+- **Cover image:** `cloudflare-worker/src/services/articleCoverData.ts` now exports `SEED_COVERS: SeedCover[]` (was a single hardcoded slug/mime/b64 triple) and `articleCovers.ts::ensureArticleCovers()` loops the array instead of handling one slug — same lazy self-seed-into-R2 pattern, extended to support more than one seeded cover. Compressed JPEG, 1280px wide, ~167KB.
+- **Prod deploy note:** the cover was also uploaded directly (`wrangler r2 object put studioos-files/articles/10/cover-seed.jpg`) and linked (`UPDATE articles SET cover_r2_key=...`) because `npm run deploy`'s predeploy migration runner is currently blocked by an unrelated pre-existing failure — `131_profiles_follows.sql` errors with `too many columns on sqlite_altertab_users: SQLITE_ERROR` on `--remote`. The new worker code (`articleCoverData.ts`/`articleCovers.ts`) has NOT been deployed yet; it typechecks clean and is a no-op once deployed since the article already has a cover. Fixing `131_profiles_follows.sql` is a separate, pre-existing issue.
+
 ## Global scroll-to-top on every route change (scroll fix)
 
 Added a `ScrollToTop` component inside `<BrowserRouter>` so any

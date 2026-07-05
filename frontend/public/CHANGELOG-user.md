@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New article: "How Global Partnerships Accelerate Scaling"
+
+Guillaume Lauzier's article on how global partnerships help startups scale faster — with less wasted capital and fewer blind spots — is back up on the Articles page, dated July 3, 2026, with its cover image.
+
+---
+
 ## Footer links now bring you back to the top of the page
 
 Clicking any link in the page footer — like **For Founders**, **For Investors**,
