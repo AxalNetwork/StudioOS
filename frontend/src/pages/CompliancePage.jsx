@@ -320,7 +320,7 @@ function EventCard({ event, projectName, onUpdated, onDeleted }) {
   );
 }
 
-export default function CompliancePage() {
+export default function CompliancePage({ embedded = false }) {
   const navigate = useNavigate();
   const [events, setEvents] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -393,25 +393,29 @@ export default function CompliancePage() {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <button
-        onClick={() => navigate(-1)}
-        className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 mb-3"
-      >
-        <ArrowLeft size={14} /> Back
-      </button>
+    <div className={embedded ? 'max-w-6xl mx-auto' : 'p-6 max-w-6xl mx-auto'}>
+      {!embedded && (
+        <button
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 mb-3"
+        >
+          <ArrowLeft size={14} /> Back
+        </button>
+      )}
 
       <div className="flex items-start justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 inline-flex items-center gap-2 dark:text-gray-100">
-            <CalendarCheck className="text-violet-600" /> Compliance Calendar
-          </h1>
-        <PageExplainer pageKey="compliance" />
-          <p className="mt-1 text-sm text-gray-600 max-w-2xl">
-            Recurring obligations to keep your entity in good standing — auto-populated from your jurisdiction at incorporation.
-            We'll ping you at 30, 14, 7 and 1 day before each deadline.
-          </p>
-        </div>
+        {!embedded && (
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 inline-flex items-center gap-2 dark:text-gray-100">
+              <CalendarCheck className="text-violet-600" /> Compliance Calendar
+            </h1>
+            <PageExplainer pageKey="compliance" />
+            <p className="mt-1 text-sm text-gray-600 max-w-2xl">
+              Recurring obligations to keep your entity in good standing — auto-populated from your jurisdiction at incorporation.
+              We'll ping you at 30, 14, 7 and 1 day before each deadline.
+            </p>
+          </div>
+        )}
         <button
           onClick={() => setShowCreate(true)}
           className="inline-flex items-center gap-1 px-3 py-2 bg-violet-600 text-white text-sm rounded hover:bg-violet-700"

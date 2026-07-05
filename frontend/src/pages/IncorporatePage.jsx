@@ -654,7 +654,7 @@ function DoneStep({ jurisdiction, order, raOffer, complianceProducts, navigate }
   );
 }
 
-export default function IncorporatePage() {
+export default function IncorporatePage({ embedded = false }) {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [jurisdictions, setJurisdictions] = useState([]);
@@ -878,17 +878,19 @@ export default function IncorporatePage() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="mb-6">
-        <div className="text-xs uppercase tracking-wide text-violet-600 font-semibold flex items-center gap-1.5 mb-1">
-          <Scale size={14} /> Jurisdiction Wizard
+      {!embedded && (
+        <div className="mb-6">
+          <div className="text-xs uppercase tracking-wide text-violet-600 font-semibold flex items-center gap-1.5 mb-1">
+            <Scale size={14} /> Jurisdiction Wizard
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Incorporate your company</h1>
+          <PageExplainer pageKey="incorporate" />
+          <p className="text-sm text-gray-600 mt-1">
+            Pick the right jurisdiction in five questions. We'll prep the founder document set and
+            hand you off to a filing partner where one is supported.
+          </p>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Incorporate your company</h1>
-        <PageExplainer pageKey="incorporate" />
-        <p className="text-sm text-gray-600 mt-1">
-          Pick the right jurisdiction in five questions. We'll prep the founder document set and
-          hand you off to a filing partner where one is supported.
-        </p>
-      </div>
+      )}
 
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 dark:bg-gray-900 dark:border-gray-800">
         <Stepper current={step} />

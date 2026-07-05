@@ -70,7 +70,7 @@ function TxtInput({ value, onChange, ...rest }) {
   );
 }
 
-export default function CapTablePage() {
+export default function CapTablePage({ embedded = false }) {
   const [inputs, setInputs] = useState(DEFAULT_INPUTS);
   const [result, setResult] = useState(null);
   const [errors, setErrors] = useState([]);
@@ -384,17 +384,19 @@ export default function CapTablePage() {
   }, [result]);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className={embedded ? 'max-w-7xl mx-auto' : 'p-6 max-w-7xl mx-auto'}>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 dark:text-gray-100">
-            <PieIcon className="text-violet-600" /> Cap-Table Simulator
-          </h1>
-        <PageExplainer pageKey="captable" />
-          <p className="text-sm text-gray-500">
-            Model SAFE notes, priced rounds, dilution, and exit waterfalls before you sign.
-          </p>
-        </div>
+        {!embedded && (
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 dark:text-gray-100">
+              <PieIcon className="text-violet-600" /> Cap-Table Simulator
+            </h1>
+            <PageExplainer pageKey="captable" />
+            <p className="text-sm text-gray-500">
+              Model SAFE notes, priced rounds, dilution, and exit waterfalls before you sign.
+            </p>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={selectedProjectId}

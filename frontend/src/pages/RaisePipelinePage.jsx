@@ -24,7 +24,7 @@ const STAGE_BADGE = {
   passed: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500',
 };
 
-export default function RaisePipelinePage() {
+export default function RaisePipelinePage({ embedded = false }) {
   useAuth();
   const [items, setItems] = useState([]);
   const [stages, setStages] = useState(STAGES);
@@ -55,14 +55,16 @@ export default function RaisePipelinePage() {
   return (
     <div className="max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <TrendingUp size={22} /> Raise Pipeline
-          </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Investor contacts promoted from your Contacts hub — move each prospect through the raise stages.
-          </p>
-        </div>
+        {!embedded && (
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <TrendingUp size={22} /> Raise Pipeline
+            </h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Investor contacts promoted from your Contacts hub — move each prospect through the raise stages.
+            </p>
+          </div>
+        )}
         <button onClick={load} disabled={loading}
           className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh

@@ -189,17 +189,15 @@ export const SIDEBAR_GROUPS = {
       { to: '/cofounder', icon: Users, label: 'Find a Co-founder', requiredTier: 'studio' },
       { to: '/relationships', icon: Handshake, label: 'Network' },
     ]},
+    // Task #1 — RAISE Workspaces. Ten items collapsed into three workspaces that
+    // compose the existing pages (Pitch/Capital/Legal Engine). The Pitch item is
+    // ungated so the free reviewer stays reachable — the growth gate on the deck
+    // editor and the studio gates on founder agreements / equity elections are
+    // preserved inside their workspaces.
     { key: 'raise', label: 'Raise', items: [
-      { to: '/build/deck', icon: Sparkles, label: 'Pitch Deck', requiredTier: 'growth' },
-      { to: '/build/deck-reviewer', icon: FileText, label: 'Pitch Deck Reviewer' },
-      { to: '/build/financials', icon: DollarSign, label: 'Financial Model' },
-      { to: '/build/captable', icon: PieIcon, label: 'Cap Table' },
-      { to: '/raise', icon: TrendingUp, label: 'Raise Pipeline' },
-      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital', requiredTier: 'studio' },
-      { to: '/incorporate', icon: Scale, label: 'Incorporate' },
-      { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement', requiredTier: 'studio' },
-      { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
-      { to: '/incorporate/83b', icon: Calendar, label: '83(b) Tracker', requiredTier: 'studio' },
+      { to: '/raise/pitch', icon: Sparkles, label: 'Pitch' },
+      { to: '/raise/capital', icon: DollarSign, label: 'Capital' },
+      { to: '/raise/legal-engine', icon: Scale, label: 'Legal Engine' },
     ]},
     { key: 'launch', label: 'Launch', items: [
       { to: '/my/events', icon: Ticket, label: 'Events' },

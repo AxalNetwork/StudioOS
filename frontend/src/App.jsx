@@ -28,6 +28,9 @@ const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const ExecutionPage = lazy(() => import('./pages/ExecutionPage'));
+const PitchWorkspacePage = lazy(() => import('./pages/PitchWorkspacePage'));
+const CapitalWorkspacePage = lazy(() => import('./pages/CapitalWorkspacePage'));
+const LegalEnginePage = lazy(() => import('./pages/LegalEnginePage'));
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
 const IncorporatePage = lazy(() => import('./pages/IncorporatePage'));
@@ -149,7 +152,6 @@ const LPReportingPage = lazy(() => import('./pages/LPReportingPage'));
 const PortfolioUpdatesPage = lazy(() => import('./pages/PortfolioUpdatesPage'));
 const PortfolioPositionsPage = lazy(() => import('./pages/PortfolioPositionsPage'));
 const ContactsPage = lazy(() => import('./pages/ContactsPage'));
-const RaisePipelinePage = lazy(() => import('./pages/RaisePipelinePage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const DocsPage = lazy(() => import('./pages/DocsPage'));
 const OnboardingPersonaPage = lazy(() => import('./pages/OnboardingPersonaPage'));
@@ -165,8 +167,6 @@ const OnboardingInvestorPage = lazy(() => import('./pages/OnboardingInvestorPage
 const OnboardingPartnerPage = lazy(() => import('./pages/OnboardingPartnerPage'));
 const OnboardingChatPage = lazy(() => import('./pages/OnboardingChatPage'));
 const BrandBuilderPage = lazy(() => import('./pages/BrandBuilderPage'));
-const PitchDeckPage = lazy(() => import('./pages/PitchDeckPage'));
-const DeckReviewerPage = lazy(() => import('./pages/DeckReviewerPage'));
 const CompetitorAnalysisPage = lazy(() => import('./pages/CompetitorAnalysisPage'));
 const FinancialsPage = lazy(() => import('./pages/FinancialsPage'));
 const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage'));
@@ -1223,8 +1223,10 @@ function AppInner() {
       <Route path="/onboarding/investor" element={guard(['admin', 'investor'], <OnboardingInvestorPage />)} />
       <Route path="/onboarding/partner" element={guard(['admin', 'partner'], <OnboardingPartnerPage />)} />
       <Route path="/build/brand" element={guard(['admin', 'founder'], <BrandBuilderPage />)} />
-      <Route path="/build/deck" element={guard(['admin', 'founder'], <PitchDeckPage />)} />
-      <Route path="/build/deck-reviewer" element={guard(['admin', 'founder'], <DeckReviewerPage />)} />
+      {/* Task #1 — RAISE Workspaces: founder-exclusive Pitch Deck / Reviewer
+          routes now live inside the Pitch workspace; redirect to the right tab. */}
+      <Route path="/build/deck" element={<Navigate to="/raise/pitch" replace />} />
+      <Route path="/build/deck-reviewer" element={<Navigate to="/raise/pitch/review" replace />} />
       <Route path="/build/competitors" element={guard(['admin', 'founder', 'partner', 'investor'], <CompetitorAnalysisPage />)} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], <FinancialsPage />)} />
       <Route path="/build/discovery" element={guard(['admin', 'founder', 'partner', 'investor'], <DiscoveryPage />)} />
@@ -1288,6 +1290,22 @@ function AppInner() {
       <Route path="/execution" element={guard(['admin', 'founder'], <ExecutionPage />)} />
       <Route path="/execution/board" element={guard(['admin', 'founder'], <ExecutionPage />)} />
       <Route path="/execution/roadmap" element={guard(['admin', 'founder'], <ExecutionPage />)} />
+      {/* Task #1 — RAISE Workspaces. Three founder workspaces compose the
+          existing pages via an `embedded` prop; each guarded for the roles of
+          the pages it wraps. Standalone routes (/build/financials, /build/captable,
+          /incorporate, /incorporate/*, /compliance, /legal-capital) stay intact
+          for the investor/partner personas that share them. */}
+      <Route path="/raise/pitch" element={guard(['admin', 'founder'], <PitchWorkspacePage />)} />
+      <Route path="/raise/pitch/review" element={guard(['admin', 'founder'], <PitchWorkspacePage />)} />
+      <Route path="/raise/capital" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
+      <Route path="/raise/capital/model" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
+      <Route path="/raise/capital/cap-table" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
+      <Route path="/raise/capital/pipeline" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
+      <Route path="/raise/legal-engine" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
+      <Route path="/raise/legal-engine/incorporation" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
+      <Route path="/raise/legal-engine/founders" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
+      <Route path="/raise/legal-engine/compliance" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
+      <Route path="/raise/legal-engine/equity" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
       <Route path="/legal" element={guard(['admin', 'founder'], <LegalPage />)} />
       <Route path="/incorporate" element={guard(['admin', 'founder', 'partner', 'investor'], <IncorporatePage />)} />
       <Route path="/incorporate/success" element={guard(['admin', 'founder', 'partner', 'investor'], <IncorporateSuccessPage />)} />
@@ -1357,7 +1375,9 @@ function AppInner() {
       {/* Contacts — founder inbound relationship hub (PR #120). */}
       <Route path="/contacts" element={guard(['admin', 'founder'], <ContactsPage />)} />
       {/* Raise pipeline — investor contacts promoted from the Contacts hub. */}
-      <Route path="/raise" element={guard(['admin', 'founder'], <RaisePipelinePage />)} />
+      {/* Task #1 — RAISE Workspaces: legacy /raise (Raise Pipeline) now lives in
+          the Capital workspace pipeline tab. */}
+      <Route path="/raise" element={<Navigate to="/raise/capital/pipeline" replace />} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferEarnPage />)} />
       <Route path="/integrations" element={guard(['admin', 'partner', 'investor'], <IntegrationsPage />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <PayoutsPage />)} />

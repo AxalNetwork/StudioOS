@@ -31,7 +31,7 @@ import { spinoutPreviewMeta as computeSpinoutPreviewMeta } from './spinoutPrevie
  * the paywall instead of applying. Free-tier exports always render the
  * Axal VC footer; Growth+ removes it; Studio may add a custom watermark.
  */
-export default function PitchDeckPage() {
+export default function PitchDeckPage({ embedded = false }) {
   useAuth();
   const { toast, showToast } = useToast(3500);
   const addToast = (msg, kind = 'ok') => showToast({ msg, kind: kind === 'success' ? 'ok' : kind === 'error' ? 'err' : kind === 'info' ? 'info' : 'ok' });
@@ -506,30 +506,32 @@ export default function PitchDeckPage() {
 
   // ----------------------------------------------------------
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 dark:text-slate-100">
-      <div className="max-w-[1500px] mx-auto px-4 py-6">
-        <header className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Sparkles className="w-6 h-6 text-violet-600" /> Pitch Deck Builder
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-slate-400">
-              {templateCount != null
-                ? `${templateCount} templates, auto-filled from your project, financials, and cap table.`
-                : 'Templates auto-fill from your project, financials, and cap table.'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              to="/build/deck-reviewer"
-              className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-300 text-sm hover:bg-orange-100 dark:hover:bg-orange-950/50"
-              title="Upload a finished deck and get an honest investor-style review"
-            >
-              <FileText className="w-4 h-4" /> Pitch deck reviewer
-            </Link>
-            <PageExplainer page="pitch_deck" />
-          </div>
-        </header>
+    <div className={embedded ? '' : 'min-h-screen bg-gray-50 dark:bg-slate-950 dark:text-slate-100'}>
+      <div className={embedded ? '' : 'max-w-[1500px] mx-auto px-4 py-6'}>
+        {!embedded && (
+          <header className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-bold flex items-center gap-2">
+                <Sparkles className="w-6 h-6 text-violet-600" /> Pitch Deck Builder
+              </h1>
+              <p className="text-sm text-gray-500 dark:text-slate-400">
+                {templateCount != null
+                  ? `${templateCount} templates, auto-filled from your project, financials, and cap table.`
+                  : 'Templates auto-fill from your project, financials, and cap table.'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/build/deck-reviewer"
+                className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-300 text-sm hover:bg-orange-100 dark:hover:bg-orange-950/50"
+                title="Upload a finished deck and get an honest investor-style review"
+              >
+                <FileText className="w-4 h-4" /> Pitch deck reviewer
+              </Link>
+              <PageExplainer page="pitch_deck" />
+            </div>
+          </header>
+        )}
 
         {/* Project picker + recommendation banner */}
         <div className="flex flex-wrap items-center gap-3 mb-4">

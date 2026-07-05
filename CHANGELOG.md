@@ -10,6 +10,48 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #1 — RAISE Workspaces: collapse the founder "Raise" nav into 3 workspaces
+
+Frontend-only IA change. The founder sidebar's "Raise" group had 10 items; it now
+has 3 workspaces that compose the *existing* pages via a new `embedded` prop — no
+business logic, API, schema, or backend changes.
+
+- **New workspaces** (`frontend/src/pages/`):
+  - `PitchWorkspacePage.jsx` — `/raise/pitch` (Edit Deck, default) + `/raise/pitch/review`.
+    Wraps `PitchDeckPage` (growth gate preserved via `hasTier`/`LockedDeck`/`openPaywall`)
+    and `DeckReviewerPage` (free) in `embedded` mode.
+  - `CapitalWorkspacePage.jsx` — `/raise/capital` (Financial Model, default) +
+    `/raise/capital/cap-table` + `/raise/capital/pipeline`. Wraps `FinancialsPage`,
+    `CapTablePage`, `RaisePipelinePage`.
+  - `LegalEnginePage.jsx` — `/raise/legal-engine` master-detail hub with 4 cards
+    (Incorporation, Founders & Agreements [studio], Compliance & Filings, Equity
+    Elections [studio]) → sub-routes `/raise/legal-engine/{incorporation,founders,compliance,equity}`.
+    Wraps `IncorporatePage`, `CofounderAgreementPage`, `CompliancePage`, `Section83bPage`.
+    Studio gates preserved via `hasTier`/`LockedCard`/`openPaywall`. Includes a
+    presentational-only jurisdiction selector and generic status pill (both TODO-marked
+    for backend wiring); `ELECTION_TYPES` has structural TODO placeholders for UK s.431
+    and AU ESS.
+- **`embedded` prop** added to the 9 reused pages (`PitchDeckPage`, `DeckReviewerPage`,
+  `Financials`, `CapTablePage`, `RaisePipelinePage`, `IncorporatePage`,
+  `CofounderAgreementPage`, `CompliancePage`, `Section83bPage`): each page's own
+  title/explainer/back-button is wrapped in `{!embedded && …}` and its outer page
+  padding dropped when embedded, keeping max-width centering. Pattern mirrors
+  `ExecutionPage.jsx`.
+- **Routing** (`frontend/src/App.jsx`): 11 new workspace routes (pitch ×2 / capital ×4 /
+  legal-engine ×5) added after `/execution/roadmap`, guarded for the roles of the pages
+  they wrap (pitch & capital: admin/founder; legal-engine: admin/founder/partner).
+  Legacy redirects: `/build/deck` → `/raise/pitch`, `/build/deck-reviewer` →
+  `/raise/pitch/review`, `/raise` → `/raise/capital/pipeline`. Removed the now-unused
+  `PitchDeckPage`/`DeckReviewerPage`/`RaisePipelinePage` lazy imports. Shared standalone
+  routes (`/build/financials`, `/build/captable`, `/incorporate`, `/incorporate/*`,
+  `/compliance`, `/legal-capital`) kept intact for the investor/partner personas.
+- **Sidebar** (`frontend/src/sidebarConfig.js`): founder "Raise" group slimmed to Pitch
+  (`/raise/pitch`), Capital (`/raise/capital`), Legal Engine (`/raise/legal-engine`).
+  Pitch item ungated so the free reviewer stays reachable; gates live inside the
+  workspaces. Investor/partner "Capital & Legal" group and other roles untouched.
+- **Tests**: `frontend/tests/e2e/raise_workspaces.spec.js` — renders, URL-driven tab/card
+  nav, and legacy redirects (tier-independent assertions).
+
 ## Keep profile-background fields off `users` — companion `user_profile_ext` table (D1 100-column limit)
 
 Prod `users` sits at Cloudflare D1's hard 100-column-per-table limit, so the

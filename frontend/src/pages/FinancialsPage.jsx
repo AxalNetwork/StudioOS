@@ -47,7 +47,7 @@ function StatCard({ icon: Icon, label, value, sub, tone = 'violet' }) {
   );
 }
 
-export default function FinancialsPage() {
+export default function FinancialsPage({ embedded = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState(null);
@@ -182,13 +182,15 @@ export default function FinancialsPage() {
           citations so founders can audit what the advisor wrote. */}
       <AdvisorFilledBanner page="/build/financials" />
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Financial Model</h1>
-        <PageExplainer pageKey="financials" />
-          <p className="text-sm text-gray-500 mt-1">
-            3-statement-style drivers feed runway, breakeven, and the capital category of the scoring engine.
-          </p>
-        </div>
+        {!embedded && (
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Financial Model</h1>
+            <PageExplainer pageKey="financials" />
+            <p className="text-sm text-gray-500 mt-1">
+              3-statement-style drivers feed runway, breakeven, and the capital category of the scoring engine.
+            </p>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <select
             value={projectId || ''}
