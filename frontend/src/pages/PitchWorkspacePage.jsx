@@ -15,13 +15,13 @@ import DeckReviewerPage from './DeckReviewerPage';
 // single workspace title governs. Old founder deep links redirect here to the
 // right tab (see App.jsx). Frontend-only — no page logic, data, or API changes.
 //
-// The Edit Deck tab preserves the existing growth-tier gate (previously enforced
+// The Deck Builder tab preserves the existing growth-tier gate (previously enforced
 // on the "Pitch Deck" sidebar item): non-growth founders see an upgrade panel
 // instead of the builder. The Review tab stays free for everyone, exactly as the
 // standalone reviewer was.
 
 const TABS = [
-  { id: 'deck', to: '/raise/pitch', label: 'Edit Deck', icon: Sparkles },
+  { id: 'deck', to: '/raise/pitch', label: 'Deck Builder', icon: Sparkles },
   { id: 'review', to: '/raise/pitch/review', label: 'Review', icon: FileText },
 ];
 

@@ -79,7 +79,7 @@ has 3 workspaces that compose the *existing* pages via a new `embedded` prop —
 business logic, API, schema, or backend changes.
 
 - **New workspaces** (`frontend/src/pages/`):
-  - `PitchWorkspacePage.jsx` — `/raise/pitch` (Edit Deck, default) + `/raise/pitch/review`.
+  - `PitchWorkspacePage.jsx` — `/raise/pitch` (Deck Builder, default) + `/raise/pitch/review`.
     Wraps `PitchDeckPage` (growth gate preserved via `hasTier`/`LockedDeck`/`openPaywall`)
     and `DeckReviewerPage` (free) in `embedded` mode.
   - `CapitalWorkspacePage.jsx` — `/raise/capital` (Financial Model, default) +
