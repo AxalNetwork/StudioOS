@@ -3,7 +3,7 @@ export const BRAND = {
   short: "GVPN",
   parent: "Axal VC Management LLC",
   tagline: "Where venture builders meet capital, globally.",
-  subTagline: "One network. Five lanes — partners, capital, founders, mentors, coaches.",
+  subTagline: "One network. Four lanes — partners, capital, founders, advisors.",
   nicheProduct: { name: "Spin-Out Lab", duration: "30 days", parent: "GVPN" },
 } as const;
 
@@ -74,19 +74,11 @@ export const LANES = [
   },
   {
     id: "mentor",
-    label: "Become a Mentor",
-    short: "For Mentors",
+    label: "Become an Advisor",
+    short: "For Advisors",
     accent: "teal",
     blurb: "Operators sharing time. Office Hours, mentor sessions, advisor grants via the FAST template.",
     href: "/register?lane=mentor",
-  },
-  {
-    id: "coach",
-    label: "Join as Coach",
-    short: "For Coaches",
-    accent: "rose",
-    blurb: "Executive, performance, and wellbeing coaches. Founders match by category + rating + availability.",
-    href: "/register?lane=coach",
   },
 ] as const;
 
