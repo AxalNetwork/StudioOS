@@ -1462,6 +1462,11 @@ export const api = {
   // rail. 409 `no_method_id` means the deck was created before the new
   // fielded editor; client should direct the user to /apply-method first.
   deckAutofill: (id) => request(`/decks/${id}/autofill`, { method: 'POST', body: '{}' }),
+  // Task #10 — one-click positioning: pulls the project's team, traction and
+  // updates, returns { one_liner, elevator_pitch, positioning_lines[],
+  // sourced_from }. 503 `ai_unavailable` when no AI provider is configured
+  // (dev FastAPI has no such route → shows an explicit error, never fake lines).
+  deckPositioning: (projectId) => request('/decks/positioning', { method: 'POST', body: JSON.stringify({ project_id: projectId }) }),
   // Task #41 — assemble the NEW 10-slide Spin-Out deck DATA + NOTES + gaps[]
   // (the Worker remaps the live Lab data). The browser renders/downloads the
   // .pptx from this via frontend/src/decks/spinout/buildDeck.js. Returns

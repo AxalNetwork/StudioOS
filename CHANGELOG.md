@@ -10,6 +10,48 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #10 — Pitch Positioning Generator
+
+New **Positioning** tab in the Pitch workspace: a one-liner & elevator-pitch
+generator with "one-click positioning" — pick a startup and the system pulls its
+team, traction and updates, then the AI writes a one-liner, a short elevator
+pitch and 3-5 alternate positioning lines.
+
+- **Worker route**: `decks.post('/positioning', …)` in
+  `cloudflare-worker/src/routes/decks.ts` (registered after `/generate`, before
+  the `/:id` handlers). Growth-tier (`ensureTier(…, 'growth')`) + owner-scoped
+  (`projectOwned` → 404 `not found` / 403 `forbidden`). Grounding data is pulled
+  the same way as deck autofill: `projects.*`, cap-table founders
+  (`cap_table_holders`, `/founder/i` on `kind`, falls back to all holders),
+  `financial_models.computed_json`/`assumptions_json` (runway / burn / LTV:CAC),
+  the latest `score_snapshots.tier`, and the 5 most recent **submitted**
+  `portfolio_updates` (title + period). Calls OpenAI `gpt-4o-mini` with
+  `response_format: json_object` + `AbortSignal.timeout(45s)`. **Fails loud** —
+  no `OPENAI_API_KEY` → `503 {error:'ai_unavailable', code:'ai_unavailable'}`;
+  provider non-2xx / parse failure / empty output → `502 ai_failed`. NEVER
+  fabricates lines. Returns `{ project_id, project_name, one_liner,
+  elevator_pitch, positioning_lines[], sourced_from:{team,traction,updates,
+  financials} }`. All queries parameterised (`.bind`).
+- **Client** (`frontend/src/lib/api.js`): `api.deckPositioning(projectId)` →
+  `POST /decks/positioning`. Covered by the prefix-level api-drift guard (the
+  `/decks` mount already exists — no allowlist change).
+- **Frontend**: new `frontend/src/pages/PitchPositioningPage.jsx` (accepts
+  `embedded`) — startup picker (defaults to first project), one-click Generate/
+  Regenerate, "Grounded in" chips from `sourced_from`, per-line + copy-all
+  clipboard, and explicit loading / empty / error / `ai_unavailable` states
+  (amber for unavailable, red for failure; dev FastAPI 404 degrades to the same
+  explicit "not available in this preview" state — never fake output). Full
+  `dark:` variants throughout.
+- **Wiring**: `PitchWorkspacePage.jsx` gains a **Positioning** tab
+  (`/raise/pitch/positioning`) between Deck Builder and Review, sharing the
+  Deck Builder's Growth gate (`GROWTH_TABS`) so non-growth founders see the
+  existing `LockedDeck` upgrade panel. `App.jsx` adds the
+  `/raise/pitch/positioning` route (`guard(['admin','founder'])` →
+  `PitchWorkspacePage`).
+- **Scope**: Worker + SPA only; no schema/migration (generation is ephemeral).
+  Prod = Worker on D1; dev FastAPI has no `/decks/positioning`. Routes take
+  effect on `npm run deploy`.
+
 ## Task #9 — Admin-managed Communities & Circles
 
 Replaced the FAKE hardcoded circles with a real, admin-authored, D1-backed system,

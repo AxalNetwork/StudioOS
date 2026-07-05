@@ -1302,6 +1302,7 @@ function AppInner() {
           /incorporate, /incorporate/*, /compliance, /legal-capital) stay intact
           for the investor/partner personas that share them. */}
       <Route path="/raise/pitch" element={guard(['admin', 'founder'], <PitchWorkspacePage />)} />
+      <Route path="/raise/pitch/positioning" element={guard(['admin', 'founder'], <PitchWorkspacePage />)} />
       <Route path="/raise/pitch/review" element={guard(['admin', 'founder'], <PitchWorkspacePage />)} />
       <Route path="/raise/capital" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
       <Route path="/raise/capital/model" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />

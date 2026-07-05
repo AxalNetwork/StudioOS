@@ -1,11 +1,12 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles, FileText, Lock } from 'lucide-react';
+import { Sparkles, FileText, Lock, Megaphone } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { hasTier } from '../sidebarConfig';
 import { openPaywall } from '../components/PaywallModal';
 import PitchDeckPage from './PitchDeckPage';
 import DeckReviewerPage from './DeckReviewerPage';
+import PitchPositioningPage from './PitchPositioningPage';
 
 // RAISE Workspaces (Task #1) — Pitch workspace.
 //
@@ -22,15 +23,24 @@ import DeckReviewerPage from './DeckReviewerPage';
 
 const TABS = [
   { id: 'deck', to: '/raise/pitch', label: 'Deck Builder', icon: Sparkles },
+  { id: 'positioning', to: '/raise/pitch/positioning', label: 'Positioning', icon: Megaphone },
   { id: 'review', to: '/raise/pitch/review', label: 'Review', icon: FileText },
 ];
+
+// Task #10 — Positioning shares the Deck Builder's Growth gate (its
+// one-click generator hits a Growth-tier Worker endpoint).
+const GROWTH_TABS = new Set(['deck', 'positioning']);
 
 export default function PitchWorkspacePage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const active = location.pathname.startsWith('/raise/pitch/review') ? 'review' : 'deck';
+  const active = location.pathname.startsWith('/raise/pitch/review')
+    ? 'review'
+    : location.pathname.startsWith('/raise/pitch/positioning')
+      ? 'positioning'
+      : 'deck';
   const deckLocked = !hasTier(user, 'growth');
 
   return (
@@ -48,7 +58,7 @@ export default function PitchWorkspacePage() {
         {TABS.map((t) => {
           const Icon = t.icon;
           const isActive = active === t.id;
-          const locked = t.id === 'deck' && deckLocked;
+          const locked = GROWTH_TABS.has(t.id) && deckLocked;
           return (
             <button
               key={t.id}
@@ -69,6 +79,7 @@ export default function PitchWorkspacePage() {
       </div>
 
       {active === 'deck' && (deckLocked ? <LockedDeck /> : <PitchDeckPage embedded />)}
+      {active === 'positioning' && (deckLocked ? <LockedDeck /> : <PitchPositioningPage embedded />)}
       {active === 'review' && <DeckReviewerPage embedded />}
     </div>
   );

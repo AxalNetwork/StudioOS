@@ -524,6 +524,167 @@ decks.post('/generate', async (c) => {
   return c.json(rowToDeck(row));
 });
 
+// Task #10 — One-liner & Elevator pitch generator ("one-click positioning").
+// Pulls the selected project's TEAM (cap-table founders), TRACTION (project
+// columns + financial model + latest score) and recent UPDATES (submitted
+// portfolio updates), then asks the AI for a punchy one-liner, a short
+// elevator pitch and 3-5 alternate positioning lines. Growth-tier, owner-
+// scoped. Fails LOUDLY when the AI provider isn't configured — no silent
+// fallback and no fabricated lines (security-first / explicit-error prefs).
+decks.post('/positioning', async (c) => {
+  ensureTier(await requireAuth(c), 'growth');
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const pid = parseInt(body?.project_id);
+  if (!pid) return c.json({ error: 'project_id required' }, 400);
+
+  let p: any;
+  try {
+    await projectOwned(c.env, user, pid);
+    p = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(pid).first<any>();
+  } catch (e: any) {
+    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
+    return c.json({ error: 'forbidden' }, 403);
+  }
+  if (!p) return c.json({ error: 'not found' }, 404);
+
+  // AI provider is hard-required. Fail loud — never fabricate positioning.
+  const key = (c.env as any).OPENAI_API_KEY;
+  if (!key) {
+    return c.json({
+      error: 'ai_unavailable',
+      code: 'ai_unavailable',
+      message: 'Positioning generation requires an AI provider that is not configured in this environment.',
+    }, 503);
+  }
+
+  // --- Gather grounding data (each source degrades to empty on failure). ---
+  // Team = cap-table founders (fall back to all holders if none tagged).
+  let team: string[] = [];
+  try {
+    const hr = await c.env.DB.prepare(
+      'SELECT name, kind FROM cap_table_holders WHERE project_id = ?',
+    ).bind(pid).all<{ name: string; kind: string }>();
+    const rows = hr.results || [];
+    const founders = rows.filter((h) => /founder/i.test(h.kind || ''));
+    team = (founders.length ? founders : rows)
+      .map((h) => String(h.name || '').trim()).filter(Boolean).slice(0, 6);
+  } catch { /* table may not exist in dev */ }
+
+  // Financials — runway / burn / LTV:CAC add credible traction color.
+  let fin: any = null;
+  try {
+    const fmRow = await c.env.DB
+      .prepare('SELECT computed_json, assumptions_json FROM financial_models WHERE project_id = ?')
+      .bind(pid).first<any>();
+    if (fmRow?.computed_json) { try { fin = JSON.parse(fmRow.computed_json); } catch { fin = null; } }
+    if (!fin && fmRow?.assumptions_json) { try { fin = JSON.parse(fmRow.assumptions_json); } catch { fin = null; } }
+  } catch { /* table may not exist in dev */ }
+
+  // Recent submitted portfolio updates → the "updates" grounding.
+  let updates: Array<{ period: string | null; title: string }> = [];
+  try {
+    const ur = await c.env.DB.prepare(
+      `SELECT period, title FROM portfolio_updates
+       WHERE project_id = ? AND status = 'submitted'
+       ORDER BY COALESCE(submitted_at, updated_at) DESC LIMIT 5`,
+    ).bind(pid).all<{ period: string | null; title: string }>();
+    updates = (ur.results || []).filter((u) => String(u.title || '').trim());
+  } catch { /* table may not exist in dev */ }
+
+  const snap = await latestScore(c.env, pid);
+
+  const hasTraction = !!(
+    p.traction_summary || p.growth_signals || p.users_count || p.revenue
+  );
+  const sourced_from = {
+    team: team.length,
+    traction: hasTraction,
+    updates: updates.length,
+    financials: !!fin,
+  };
+
+  const ctx = {
+    name: p.name, sector: p.sector, stage: p.stage,
+    description: p.description, problem: p.problem_statement,
+    solution: p.solution, why_now: p.why_now,
+    tagline: p.tagline, vision: p.vision,
+    tam: p.tam, sam: p.sam, som: p.som,
+    users: p.users_count, revenue: p.revenue,
+    traction_summary: p.traction_summary,
+    growth_signals: p.growth_signals, funding_needed: p.funding_needed,
+    team,
+    runway_months: fin?.runway_months, ltv_cac_ratio: fin?.ltv_cac_ratio,
+    avg_monthly_burn: fin?.avg_monthly_burn,
+    score_tier: snap?.tier,
+    recent_updates: updates.map((u) => (u.period ? `${u.period}: ${u.title}` : u.title)),
+  };
+
+  const prompt = `You are a world-class startup positioning strategist.
+Using ONLY the startup data below, craft investor-ready positioning.
+
+Startup data (JSON):
+${JSON.stringify(ctx)}
+
+Return ONLY valid JSON of exactly this shape:
+{
+  "one_liner": "<one punchy sentence, <= 15 words, no buzzwords>",
+  "elevator_pitch": "<2-3 sentences a founder can say in ~20 seconds>",
+  "positioning_lines": ["<line 1>", "<line 2>", "<line 3>", "<line 4>"]
+}
+
+Rules:
+- 3 to 5 positioning_lines, each <= 18 words, each a DISTINCT angle
+  (customer value, market wedge, why-now, outcome).
+- Concrete and specific to THIS startup — never generic filler.
+- Never invent metrics, customers, or funding not present in the data.`;
+
+  let parsed: any;
+  try {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are a senior startup positioning strategist. Always return valid JSON.' },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.6,
+        max_tokens: 700,
+        response_format: { type: 'json_object' },
+      }),
+      signal: AbortSignal.timeout(45_000),
+    });
+    if (!r.ok) {
+      return c.json({ error: 'ai_failed', code: 'ai_failed', message: `The AI provider returned ${r.status}.` }, 502);
+    }
+    const j: any = await r.json();
+    parsed = JSON.parse(j?.choices?.[0]?.message?.content || '{}');
+  } catch {
+    return c.json({ error: 'ai_failed', code: 'ai_failed', message: 'The positioning generator could not complete. Please try again.' }, 502);
+  }
+
+  const one_liner = typeof parsed?.one_liner === 'string' ? parsed.one_liner.trim() : '';
+  const elevator_pitch = typeof parsed?.elevator_pitch === 'string' ? parsed.elevator_pitch.trim() : '';
+  const positioning_lines = Array.isArray(parsed?.positioning_lines)
+    ? parsed.positioning_lines.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 6)
+    : [];
+
+  if (!one_liner && !elevator_pitch && positioning_lines.length === 0) {
+    return c.json({ error: 'ai_failed', code: 'ai_failed', message: 'The positioning generator returned nothing usable. Please try again.' }, 502);
+  }
+
+  return c.json({
+    project_id: pid,
+    project_name: String(p.name || ''),
+    one_liner,
+    elevator_pitch,
+    positioning_lines,
+    sourced_from,
+  });
+});
+
 decks.get('/by-project/:pid', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
