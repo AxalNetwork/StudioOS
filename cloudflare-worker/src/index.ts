@@ -177,6 +177,8 @@ import comarketingRoutes from './routes/comarketing';
 import companyRoutes from './routes/company';
 import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 import insightsRoutes from './routes/insights';
+// Signals — founder decision-engine over public company data (not a trading UI).
+import signalsRoutes from './routes/signals';
 import founderRiskRoutes from './routes/founder_risk';
 // Task #9 — Venture Risk (10-layer hybrid auto+analyst rating, internal only).
 import ventureRiskRoutes from './routes/venture_risk';
@@ -849,6 +851,8 @@ app.route('/api/needs', needsRoutes);
 app.route('/api/quotes', quotesRouter);
 app.route('/api/engagements', engagementsRouter);
 app.route('/api/insights', insightsRoutes);
+// Signals — founder-actionable opportunity engine over public-market evidence.
+app.route('/api/signals', signalsRoutes);
 // T3 — Reserve allocation + waterfall simulator (admin/investor only).
 app.route('/api/fund-sim', fundSimulatorRoutes);
 app.route('/api/pipeline/votes', votesRoutes);
