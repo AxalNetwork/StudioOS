@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Identity verification now lives in the Trust Center
+
+Verifying your identity (KYC / AML) is now part of your **Trust Center** instead
+of a separate sidebar item. Open the Trust Center, go to the **Identity** tab,
+and you can fill in and submit the whole verification form right there — no more
+hopping over to Settings. Your verification status shows at the top, and it still
+feeds into your Trust score. If verification isn't required for your account type,
+the tab simply tells you so.
+
+---
+
 ## Removed the Referral Network page
 
 We removed the "Discover" item from the sidebar and the Referral Network page it opened (the interactive graph of your referral subtree). It added clutter without much value. Refer & Earn, your payouts, and everything else in your network stay exactly where they were.

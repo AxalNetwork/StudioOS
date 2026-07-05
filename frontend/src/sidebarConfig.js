@@ -157,10 +157,13 @@ export const SIDEBAR_GROUPS = {
   //     "Network" entry (/relationships) leads Validate; both routes stay live.
   //   • "My Profile" (/profile) — the full Profile editor lives inside Settings
   //     (/settings) as the first tab, so a separate sidebar item is redundant.
+  //   • standalone "Identity / KYC" (/kyc) — folded into "Trust Center" (/trust)
+  //     as a single nav entry; the Identity Verification form now renders on the
+  //     Trust Center "Identity" tab (Task #25). The /kyc route stays registered
+  //     and reachable (the onboarding KYC gate still redirects there).
   //
   // Newly surfaced (routes already existed and are founder-accessible, they just
-  // weren't in the founder nav): Co-Marketing (/comarketing, Launch), Identity /
-  // KYC (/kyc, Account).
+  // weren't in the founder nav): Co-Marketing (/comarketing, Launch).
   founder: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
@@ -214,7 +217,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust Center' },
-      { to: '/kyc', icon: ShieldCheck, label: 'Identity / KYC' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },

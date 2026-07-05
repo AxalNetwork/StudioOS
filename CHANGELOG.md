@@ -10,6 +10,39 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Fold Identity Verification (KYC / AML) into the Trust Center (Task #25)
+
+The KYC form is now reachable from a single **Trust Center** nav entry per
+persona — the standalone founder "Identity / KYC" sidebar item is gone, and the
+Trust Center **Identity** tab is a real entry point to the form (it previously
+only pointed users to Settings).
+- **Reusable component** — extracted the entire KYC form, status card, investor-
+  only gate, and the `Input`/`Select`/`CountrySelect` helpers out of
+  `frontend/src/pages/KYCPage.jsx` into `frontend/src/components/KycVerification.jsx`.
+  It takes an `embedded` prop: default (`false`) renders the full standalone page
+  chrome (icon + title + `PageExplainer` + max-width wrapper); `embedded` drops
+  the header/wrapper so it sits inside a Trust Center `Section`. `KYCPage` is now
+  a thin wrapper that renders `<KycVerification />`. No behaviour change on `/kyc`.
+- **Trust Center** (`frontend/src/pages/TrustCenterPage.jsx`) — the Identity tab
+  now renders `<KycVerification embedded />` instead of an `ObligationList` + a
+  dead-end "use the page in Settings" note. `tabsForRole` surfaces the Identity
+  tab for every KYC-eligible persona (`KYC_ELIGIBLE_ROLES = founder | partner |
+  investor | admin`, the same roles the `/trust` route is guarded to) rather than
+  only when the obligation matrix carries a `kyc_v1` row — so founders/partners
+  reach it too (they see the component's "not required" state). The component owns
+  its status (via `api.kycStatus`), so the redundant obligation pill was dropped.
+- **Sidebar** (`frontend/src/sidebarConfig.js`) — removed the founder `account`
+  group's `{ to: '/kyc', label: 'Identity / KYC' }` item; documented it under the
+  founder "Intentional removals" comment block and dropped it from the "Newly
+  surfaced" note. Investor already folded KYC into "Trust & Identity"; partner/
+  admin/mentor never carried a standalone `/kyc`. So founder is the only sidebar
+  edit.
+- **Route kept** — the `/kyc` route in `App.jsx` stays registered and reachable;
+  the onboarding KYC gate (`ALLOWED_BEFORE_KYC` / the investor redirect to `/kyc`)
+  is unchanged.
+- **Docs** — updated the `legal.js` KYC how-to step from "from your account menu"
+  to "from the Trust Center → Identity tab".
+
 ## Remove Discover sidebar item and Referral Network page (Task #26)
 
 Removed the low-value "Discover" nav item and the Referral Network graph page it
