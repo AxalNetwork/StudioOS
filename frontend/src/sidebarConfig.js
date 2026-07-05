@@ -72,6 +72,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/best-fit', icon: Sparkles, label: 'Best-Fit Console' },
       { to: '/admin/events', icon: Ticket, label: 'Event Admin' },
       { to: '/admin/jobs', icon: Briefcase, label: 'Job Board Admin' },
+      { to: '/admin/circles', icon: Network, label: 'Communities Admin' },
       { to: '/monitoring', icon: Activity, label: 'Monitoring' },
       { to: '/admin/telegram', icon: Send, label: 'Telegram Channels' },
       // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.

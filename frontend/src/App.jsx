@@ -53,6 +53,7 @@ const AdminPartnerInvitations = lazy(() => import('./pages/admin/PartnerInvitati
 const AdminPublications = lazy(() => import('./pages/admin/Publications'));
 const AdminEventsPage = lazy(() => import('./pages/admin/AdminEventsPage'));
 const AdminJobsPage = lazy(() => import('./pages/admin/AdminJobsPage'));
+const AdminCirclesPage = lazy(() => import('./pages/admin/AdminCirclesPage'));
 const AdminTeam = lazy(() => import('./pages/admin/AdminTeam'));
 const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
 const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'));
@@ -1278,6 +1279,7 @@ function AppInner() {
       <Route path="/articles/:slug" element={<ArticleReaderPage />} />
       <Route path="/admin/events" element={guard(['admin'], <AdminEventsPage />)} />
       <Route path="/admin/jobs" element={guard(['admin'], <AdminJobsPage />)} />
+      <Route path="/admin/circles" element={guard(['admin'], <AdminCirclesPage />)} />
       <Route path="/admin/publications" element={guard(['admin'], <AdminPublications />)} />
       <Route path="/admin/publications/new" element={guard(['admin'], <AdminPublicationNew />)} />
       <Route path="/admin/publications/:id" element={guard(['admin'], <AdminPublicationDetail />)} />

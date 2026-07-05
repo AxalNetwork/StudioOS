@@ -10,6 +10,35 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #9 — Admin-managed Communities & Circles
+
+Replaced the FAKE hardcoded circles with a real, admin-authored, D1-backed system,
+and fixed the incoherent `/circles#circles` URL. The public `/circles` page now
+starts EMPTY and only shows circles an admin has published.
+
+- **Migration**: `cloudflare-worker/sql/migrations/137_circles.sql` — new `circles`
+  table (additive + idempotent, seeds NO rows) with public-feed / type / access
+  indexes. Mirrored at runtime by `src/services/circlesSchema.ts::ensureCirclesSchema`
+  (lazy `CREATE … IF NOT EXISTS` bootstrap, same pattern as jobBoardSchema/eventsSchema)
+  so dev/preview D1 serves the routes pre-migration.
+- **Shared helpers**: `src/services/circlesCommon.ts` — `shapeCircle` (snake_case row →
+  camelCase card shape), `parseCircleBody` (validation; explicit `name_required` 400, no
+  silent fallback), `slugify` + `uniqueCircleSlug`, `normalizeTags`, controlled
+  vocabularies mirroring `frontend/src/data/network.js`.
+- **Worker routes**: `routes/admin_circles.ts` mounted at `/api/admin/circles` (BEFORE the
+  catch-all `/api/admin`) — full CRUD + `publish`/`unpublish`/`feature`/`delete`, every
+  handler `requireAdmin`, mutations audit-logged (`report_type='circles'`, tolerant of the
+  optional `actor` column). `routes/circles_public.ts` mounted at `/api/public` (BEFORE the
+  generic `publicRoutes`) — `GET /public/circles`, published only, featured-first ordering.
+- **Frontend**: `lib/api.js` gains `circlesPublic.list()` + `adminCircles` client.
+  `pages/CirclesPage.jsx` rewritten to fetch the public feed (distinct empty/loading
+  states, graceful degradation on the dev 404); the hero "Browse circles" anchor now
+  scrolls via ref instead of the `#circles` hash. New `pages/admin/AdminCirclesPage.jsx`
+  (create/edit modal + publish/feature/delete), routed at `/admin/circles`
+  (`guard(['admin'])`) in `App.jsx`, linked from `sidebarConfig.js`. Removed the hardcoded
+  `CIRCLES` array from `data/network.js` (taxonomy + PROGRAMS + DIRECTORY_* retained).
+- **Routing note**: `/circles` route unchanged. Worker routes take effect on `npm run deploy`.
+
 ## Task #3 — Signals: founder decision engine over public-market evidence
 
 New product module integrated from PR #131 (`claude/signals-decision-engine-jxf5pu`).

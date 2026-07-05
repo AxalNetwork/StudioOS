@@ -3012,6 +3012,30 @@ export const adminJobs = {
   unpublish: (id) => request(`/admin/jobs/${id}/unpublish`, { method: 'POST', body: '{}' }),
 };
 
+// Task #9 — Communities & Circles. `circlesPublic` is the no-auth public feed
+// (published circles only); `adminCircles` the admin CRUD surface. Each path
+// maps 1:1 to a /api/{public/circles,admin/circles} route on the worker
+// (api-drift guard verifies the prefixes).
+export const circlesPublic = {
+  list: () => request('/public/circles'),
+};
+
+export const adminCircles = {
+  list: ({ status } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    const suffix = qs.toString();
+    return request(`/admin/circles${suffix ? `?${suffix}` : ''}`);
+  },
+  get: (id) => request(`/admin/circles/${id}`),
+  create: (payload) => request('/admin/circles', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id, patch) => request(`/admin/circles/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  publish: (id) => request(`/admin/circles/${id}/publish`, { method: 'POST', body: '{}' }),
+  unpublish: (id) => request(`/admin/circles/${id}/unpublish`, { method: 'POST', body: '{}' }),
+  feature: (id, featured) => request(`/admin/circles/${id}/feature`, { method: 'POST', body: JSON.stringify({ featured }) }),
+  remove: (id) => request(`/admin/circles/${id}`, { method: 'DELETE' }),
+};
+
 // Assessment results — read-only client for archetype/skill display (Profile &
 // Fit section, archetype badges). The gamified "Play & Discover" player surface
 // was removed; only the results endpoints remain. Maps to /api/assessment on the

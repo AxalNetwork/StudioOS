@@ -193,6 +193,10 @@ import adminEventsRoutes from './routes/admin_events';
 import jobsRoutes from './routes/jobs';
 import jobsPublicRoutes from './routes/jobs_public';
 import adminJobsRoutes from './routes/admin_jobs';
+// Task #9 — Admin-managed Communities & Circles (Worker on D1): public feed on
+// /api/public/circles, admin CRUD on /api/admin/circles.
+import circlesPublicRoutes from './routes/circles_public';
+import adminCirclesRoutes from './routes/admin_circles';
 // Task #44 — Gamified Assessment engine (player + admin authoring).
 import assessmentRoutes from './routes/assessment';
 import adminAssessmentRoutes from './routes/admin_assessment';
@@ -657,6 +661,9 @@ app.route('/api/admin/events', adminEventsRoutes);
 // Task #68 — Job Board admin review queue. Mount BEFORE the catch-all
 // /api/admin so /api/admin/jobs/* resolves here, not in the generic admin router.
 app.route('/api/admin/jobs', adminJobsRoutes);
+// Task #9 — Communities & Circles admin. Mount BEFORE the catch-all /api/admin
+// so /api/admin/circles/* resolves here, not in the generic admin router.
+app.route('/api/admin/circles', adminCirclesRoutes);
 app.route('/api/admin/assessment', adminAssessmentRoutes);
 // Task #19 — Best-Fit admin surfaces. Mount BEFORE the catch-all /api/admin so
 // the specific prefixes resolve here, not in the generic admin router.
@@ -820,6 +827,9 @@ app.route('/api/public', eventsPublicRoutes);
 // Task #68 — Job Board public feed + apply. Mount BEFORE the generic
 // publicRoutes so /api/public/jobs* resolves to the job board.
 app.route('/api/public', jobsPublicRoutes);
+// Task #9 — Communities & Circles public feed. Mount BEFORE the generic
+// publicRoutes so /api/public/circles resolves to the circles feed.
+app.route('/api/public', circlesPublicRoutes);
 app.route('/api/public', publicRoutes);
 // Task #10 (LD) — Public team roster. Mounted under /api/public so it
 // sits OUTSIDE auth + the /api/admin/* CF Access perimeter; the Jekyll
