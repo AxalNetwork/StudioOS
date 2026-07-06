@@ -38,17 +38,6 @@ const JURISDICTIONS = [
   { id: 'ee_oy', label: 'Estonia — OÜ' },
 ];
 
-// Equity election types. Only US 83(b) is implemented today; the others are
-// structural placeholders so additional jurisdictions can plug in later without
-// reworking this workspace. TODO markers indicate where each would be wired.
-const ELECTION_TYPES = [
-  { id: 'us_83b', jurisdiction: 'US', label: 'US — 83(b) Election', implemented: true },
-  // TODO: UK — s.431 election (ITEPA 2003 s.431). Not implemented.
-  { id: 'uk_s431', jurisdiction: 'UK', label: 'UK — s.431 Election', implemented: false },
-  // TODO: AU — ESS (Employee Share Scheme) election. Not implemented.
-  { id: 'au_ess', jurisdiction: 'AU', label: 'AU — ESS Election', implemented: false },
-];
-
 const CARDS = [
   {
     id: 'incorporation',
