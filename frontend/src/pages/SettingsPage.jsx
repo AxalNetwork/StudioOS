@@ -24,6 +24,7 @@ const ReferralsPage = lazy(() => import('./ReferralsPage'));
 // Integrations section; lazy so its provider/OAuth deps stay out of the
 // settings chunk (mirrors the ReferralsPage embed above).
 const IntegrationsPage = lazy(() => import('./IntegrationsPage'));
+import AuthorCard from '../components/AuthorCard';
 
 // Task #4 (Y-2) — small reusable trust score on the profile surface so
 // the user can see their compliance posture without bouncing to the
@@ -967,15 +968,66 @@ function ProfileSection({ data, onSaved, flash, patch }) {
         </div>
       </Card>
 
-      <Card title="Social links" description="Optional. Public to other Axal VC members.">
+      <Card title="Social links" description="Optional. Shown on your public author profile.">
         <div className="grid sm:grid-cols-2 gap-3">
-          {['linkedin', 'twitter', 'website', 'github'].map(k => (
+          {['linkedin', 'twitter', 'website', 'github', 'instagram'].map(k => (
             <Field key={k} label={k[0].toUpperCase() + k.slice(1)}>
               <input value={socials[k] || ''} onChange={e => setSocials({ ...socials, [k]: e.target.value })}
                 onBlur={() => patch({ socials })} placeholder={`https://...`} className={inputCls} />
             </Field>
           ))}
         </div>
+      </Card>
+
+      <Card title="Public author profile" description="How you appear on article pages and your shareable author page. Headline is edited in the Personal Identity section above.">
+        <div className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 p-5">
+          <AuthorCard
+            author={{
+              name,
+              headline: data.profile?.headline || null,
+              bio,
+              headshot_url: headshotPreview,
+              role: data.role || null,
+              location: null,
+              socials: {
+                linkedin: socials.linkedin || null,
+                twitter: socials.twitter || null,
+                website: socials.website || null,
+                github: socials.github || null,
+                instagram: socials.instagram || null,
+              },
+            }}
+          />
+          {!name && !bio && !headshotPreview && Object.values(socials).every(v => !v) && (
+            <p className="mt-3 text-sm text-gray-400 dark:text-gray-500 italic">
+              Fill in your profile above to preview how you&apos;ll appear to readers.
+            </p>
+          )}
+        </div>
+        {data.id ? (
+          <div className="mt-4 flex flex-wrap items-center gap-4">
+            <a
+              href={`/authors/${data.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-violet-700 dark:text-violet-400 hover:underline"
+            >
+              View public profile ↗
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  navigator.clipboard.writeText(`${window.location.origin}/authors/${data.id}`);
+                  flash('Link copied!');
+                } catch { flash('Could not copy'); }
+              }}
+              className="text-sm text-gray-500 dark:text-gray-400 hover:text-violet-700 dark:hover:text-violet-400 transition"
+            >
+              Copy link
+            </button>
+          </div>
+        ) : null}
       </Card>
     </>
   );

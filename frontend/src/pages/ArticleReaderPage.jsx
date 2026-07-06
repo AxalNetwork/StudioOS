@@ -6,6 +6,7 @@ import { reportError } from '../lib/log';
 import { useAuth } from '../hooks/useAuthSync';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
+import AuthorCard from '../components/AuthorCard';
 
 // ── Brand glyphs ──────────────────────────────────────────────────
 function XIcon({ className }) {
@@ -362,41 +363,33 @@ export default function ArticleReaderPage() {
                       </p>
                     )}
                     {/* Metadata row */}
-                    <div className="mt-6 flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+                    <div className="mt-6 space-y-2">
                       {a.author && (
-                        <>
-                          <span className="font-medium text-slate-800 dark:text-slate-200">
-                            {a.author_user_id ? (
-                              <Link to={`/authors/${a.author_user_id}`} className="hover:text-violet-700 hover:underline">
-                                {a.author}
-                              </Link>
-                            ) : a.author_website ? (
-                              <a href={a.author_website} target="_blank" rel="noopener noreferrer" className="hover:text-violet-700 hover:underline">
-                                {a.author}
-                              </a>
-                            ) : (
-                              a.author
-                            )}
-                          </span>
-                        </>
+                        <AuthorCard
+                          compact
+                          author={{
+                            name: a.author,
+                            headline: a.author_headline || null,
+                            headshot_url: a.author_photo_url || null,
+                            role: a.author_role || null,
+                            socials: {},
+                          }}
+                          userId={a.author_user_id}
+                        />
                       )}
-                      {a.author_role && (
-                        <span className="px-2 py-0.5 text-xs rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                          {a.author_role}
-                        </span>
-                      )}
-                      <span className="text-slate-300 dark:text-slate-700">·</span>
-                      {a.published_at && (
-                        <time dateTime={a.published_at}>
-                          {new Date(a.published_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
-                        </time>
-                      )}
-                      {a.read_minutes && (
-                        <>
-                          <span className="text-slate-300 dark:text-slate-700">·</span>
-                          <span>{a.read_minutes} min read</span>
-                        </>
-                      )}
+                      <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+                        {a.published_at && (
+                          <time dateTime={a.published_at}>
+                            {new Date(a.published_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                          </time>
+                        )}
+                        {a.read_minutes && (
+                          <>
+                            <span className="text-slate-300 dark:text-slate-700">·</span>
+                            <span>{a.read_minutes} min read</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                     {/* Top share bar + Edit button */}
                     <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-3 justify-between">

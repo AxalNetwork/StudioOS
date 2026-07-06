@@ -2831,6 +2831,7 @@ export const articles = {
     qs.set('offset', String(offset));
     return request(`/articles/by-author/${userId}?${qs.toString()}`);
   },
+  authorProfile: (userId) => request(`/public/authors/${userId}`),
   read: (slug) => request(`/articles/${encodeURIComponent(slug)}`),
   // Author
   trustMe: () => request('/articles/trust/me'),

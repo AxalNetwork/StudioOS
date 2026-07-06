@@ -221,6 +221,14 @@ zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/articles/*"
 zone_name  = "axal.vc"
+# Task #5 — Public author profiles. /authors/:userId is the SPA author page;
+# both exact and wildcard are needed so hard-loads resolve on the apex.
+[[routes]]
+pattern    = "axal.vc/authors"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/authors/*"
+zone_name  = "axal.vc"
 # Task #37 — Refer & Earn. `/refer` (all roles, App.jsx) was missing from
 # BOTH route blocks entirely. `/admin/refer-earn` is already covered by
 # `axal.vc/admin/*` above, but is listed explicitly to match the exact+wildcard
@@ -804,6 +812,15 @@ pattern    = "axal.vc/articles"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/articles/*"
+zone_name  = "axal.vc"
+# Task #5 — Public author profiles mirrored into production routes block
+# (the live deploy binds the top-level [[routes]] block; this env block is
+# kept in lockstep per the apex routing invariant in replit.md).
+[[env.production.routes]]
+pattern    = "axal.vc/authors"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/authors/*"
 zone_name  = "axal.vc"
 # Task #33 — deck print/export/share routes served by the SPA on the apex.
 # The headless Browser Rendering session hits `/deck/print-export/<token>`
