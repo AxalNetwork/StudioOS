@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { EXPLAINERS } from '../lib/explainers';
@@ -7,7 +7,7 @@ import {
   User, ShieldCheck, Bell, Lock,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
   Plus, X, KeyRound, Palette, Plug, CreditCard, UserCog,
-  Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2,
+  Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2, Share2,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
@@ -17,6 +17,9 @@ import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
 import AxalCheckout from '../components/AxalCheckout';
 import BillingDashboard from '../components/BillingDashboard';
+// Task #4 — Referrals lives inside Settings as its own section; lazy-loaded so
+// its heavier deps (QR code, Stripe Connect panel) stay out of the settings chunk.
+const ReferralsPage = lazy(() => import('./ReferralsPage'));
 
 // Task #4 (Y-2) — small reusable trust score on the profile surface so
 // the user can see their compliance posture without bouncing to the
@@ -135,6 +138,10 @@ const SECTIONS = [
   { id: 'privacy', label: 'Privacy', icon: Lock },
   { id: 'integrations', label: 'Integrations', icon: Plug },
   { id: 'billing', label: 'Billing', icon: CreditCard },
+  // Task #4 — the merged Referrals workspace (Refer & Earn + Payouts) now lives
+  // here as a section. Gated to the roles that carried the standalone /refer
+  // item (admin/founder/partner/investor); hidden for mentor.
+  { id: 'referrals', label: 'Referrals', icon: Share2, roles: ['admin', 'founder', 'partner', 'investor'] },
   { id: 'appearance', label: 'Appearance', icon: Palette },
 ];
 
@@ -152,6 +159,7 @@ const PATH_TO_SECTION = {
   privacy: 'privacy',
   integrations: 'integrations',
   billing: 'billing',
+  referrals: 'referrals',
   appearance: 'appearance',
   // Back-compat: old deep links still resolve to a sensible new tab.
   jurisdictions: 'profile',
@@ -301,6 +309,11 @@ export default function SettingsPage() {
           {safeActive === 'onboarding' && <OnboardingSettingsTab />}
           {safeActive === 'integrations' && allowedIds.has('integrations') && <IntegrationsTab flash={flash} />}
           {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}
+          {safeActive === 'referrals' && allowedIds.has('referrals') && (
+            <Suspense fallback={<div className="text-gray-500 dark:text-gray-400 py-8 text-center">Loading…</div>}>
+              <ReferralsPage embedded />
+            </Suspense>
+          )}
           {safeActive === 'appearance' && <AppearanceTab flash={flash} />}
         </div>
       </div>

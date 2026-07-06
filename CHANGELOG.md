@@ -10,6 +10,37 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #4 — Move Referrals into Settings
+
+Frontend-only IA change. The merged **Referrals** workspace (Refer & Earn +
+Payouts) is no longer a standalone sidebar item at `/refer` — it now lives as a
+**Referrals** section inside **Settings**. No business logic, data-fetching, API,
+or schema changes.
+
+- **`embedded` prop** on `frontend/src/pages/ReferralsPage.jsx` — suppresses the
+  page-level icon/H1/`PageExplainer`/subtitle and drops the outer
+  `p-6 max-w-6xl mx-auto` padding when embedded; the internal Refer & Earn /
+  Payouts sub-tabs (driven by `?tab=`) are unchanged.
+- **Settings section** (`frontend/src/pages/SettingsPage.jsx`) — new `referrals`
+  entry in `SECTIONS` (icon `Share2`, `roles: ['admin','founder','partner',
+  'investor']` so mentor never sees it), a `referrals: 'referrals'` entry in
+  `PATH_TO_SECTION`, and a render block that mounts `<ReferralsPage embedded />`
+  behind a local `Suspense` (lazy import keeps the QR/Stripe-Connect deps out of
+  the settings chunk). `/settings/referrals` deep-links to it; the Payouts
+  sub-tab is reachable via `/settings/referrals?tab=payouts` (the URL-sync effect
+  keys off the section id, so it never strips `?tab=`).
+- **Routing** (`frontend/src/App.jsx`) — `/refer` now renders a `ReferRedirect`
+  that `Navigate`s to `/settings/referrals` preserving the incoming `?tab=`;
+  `/payouts` redirects to `/settings/referrals?tab=payouts`. Both keep the same
+  `guard(['admin','founder','partner','investor'])` role access.
+- **Sidebar** (`frontend/src/sidebarConfig.js`) — removed the standalone
+  "Referrals" (`/refer`) item from the admin (Network & Growth) and founder
+  (More) groups, and removed the partner **Earn** group entirely (it held only
+  Referrals). Investor and mentor navs untouched. Dropped the now-unused `Share2`
+  icon import; removals documented inline for the nav-integrity convention.
+- **Out of scope (unchanged)** — all referral/commission/payout business logic,
+  Stripe Connect, Worker endpoints, and the admin `/admin/refer-earn` console.
+
 ## Competitor Analysis folded into the startup page + Project→Startup rename completed
 
 Competitor Analysis is no longer a standalone tool with its own startup picker — it

@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Referrals now lives in Settings
+
+Your **Referrals** area — where you grab your referral link and share templates,
+and where you track your earnings and request payouts — has moved into
+**Settings**. Open **Settings**, choose **Referrals** from the list, and switch
+between the **Refer & Earn** and **Payouts** tabs just like before. Everything
+works exactly the same; it's simply tidied into your account settings. Old
+**Refer & Earn** and **Payouts** bookmarks take you straight to the right place.
+
+---
+
 ## Competitor Analysis is now built into each startup
 
 Competitor Analysis lives right on the startup's page now — there's no separate tool

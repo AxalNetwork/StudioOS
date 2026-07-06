@@ -114,8 +114,6 @@ const PortfolioHealthPage = lazy(() => import('./pages/PortfolioHealthPage'));
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
 const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
 const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
-// Task #15 — Refer & Earn + Payouts merged into one tabbed Referrals workspace.
-const ReferralsPage = lazy(() => import('./pages/ReferralsPage'));
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
 const MatchesPage = lazy(() => import('./pages/MatchesPage'));
 const StudioOpsPage = lazy(() => import('./pages/StudioOpsPage'));
@@ -241,6 +239,14 @@ const ROLE_DEFAULT_PATH = {
 function DashboardRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/studio', search: loc.search, hash: loc.hash }} replace />;
+}
+
+// Task #4 — Referrals moved into Settings. Legacy /refer (and /payouts) redirect
+// into the Settings "Referrals" section, preserving the ?tab= sub-tab so a
+// /refer?tab=payouts or /payouts bookmark still lands on the Payouts tab.
+function ReferRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/settings/referrals', search: loc.search }} replace />;
 }
 
 const ViewModeContext = createContext(null);
@@ -1396,10 +1402,12 @@ function AppInner() {
       {/* Task #1 — RAISE Workspaces: legacy /raise (Raise Pipeline) now lives in
           the Capital workspace pipeline tab. */}
       <Route path="/raise" element={<Navigate to="/raise/capital/pipeline" replace />} />
-      <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferralsPage />)} />
+      {/* Task #4 — Referrals now lives inside Settings; /refer redirects there
+          (preserving ?tab=), same role access as before. */}
+      <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferRedirect />)} />
       <Route path="/integrations" element={guard(['admin', 'partner', 'investor'], <IntegrationsPage />)} />
-      {/* Task #15 — /payouts is now the Payouts tab of the merged Referrals workspace. */}
-      <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/refer?tab=payouts" replace />)} />
+      {/* Task #4 — /payouts redirects to the Payouts sub-tab of the Settings Referrals section. */}
+      <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/settings/referrals?tab=payouts" replace />)} />
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
       <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=studio-ops" replace /> : <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />

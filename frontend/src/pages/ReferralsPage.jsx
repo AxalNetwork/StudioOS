@@ -40,7 +40,7 @@ const TABS = [
   },
 ];
 
-export default function ReferralsPage() {
+export default function ReferralsPage({ embedded = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Resolve the active tab from ?tab=, defaulting to Refer & Earn.
@@ -59,17 +59,25 @@ export default function ReferralsPage() {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6" data-testid="referrals-page">
-      <div className="flex items-center gap-3">
-        <Share2 className="text-violet-600" size={24} />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Referrals</h1>
-          <PageExplainer pageKey="refer_earn" />
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Refer founders, partners, and LPs — then collect the commissions you earn.
-          </p>
+    <div
+      className={embedded ? 'space-y-6' : 'p-6 max-w-6xl mx-auto space-y-6'}
+      data-testid="referrals-page"
+    >
+      {/* When embedded inside Settings the section rail already labels this
+          surface, so suppress the page-level heading/explainer and outer
+          padding — a single "Referrals" title governs. */}
+      {!embedded && (
+        <div className="flex items-center gap-3">
+          <Share2 className="text-violet-600" size={24} />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Referrals</h1>
+            <PageExplainer pageKey="refer_earn" />
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Refer founders, partners, and LPs — then collect the commissions you earn.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Segmented tab bar. Deep-linkable via ?tab= and highlighted with the
           same violet accent the primary sidebar uses. */}

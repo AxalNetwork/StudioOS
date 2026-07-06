@@ -18,7 +18,7 @@
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Zap, Handshake, Rocket, UserCircle,
-  Globe, Brain, Activity, Shield, ShieldCheck, Share2,
+  Globe, Brain, Activity, Shield, ShieldCheck,
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, LayoutGrid,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2, ShieldAlert,
@@ -108,7 +108,8 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'network', label: 'Network & Growth', items: [
       { to: '/partners', icon: Users, label: 'Partners' },
-      { to: '/refer', icon: Share2, label: 'Referrals' },
+      // Task #4 — "Referrals" moved into Settings (/settings/referrals); the
+      // /refer route redirects there. Removed from the admin nav.
       { to: '/relationships', icon: Handshake, label: 'Relationships' },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
@@ -215,7 +216,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
     ]},
     { key: 'more', label: 'More', items: [
-      { to: '/refer', icon: Share2, label: 'Referrals' },
+      // Task #4 — "Referrals" moved into Settings (/settings/referrals); the
+      // /refer route redirects there. Removed from the founder nav.
       { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits', requiredTier: 'studio' },
@@ -296,9 +298,9 @@ export const SIDEBAR_GROUPS = {
       { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
     ]},
-    { key: 'earn', label: 'Earn', items: [
-      { to: '/refer', icon: Share2, label: 'Referrals' },
-    ]},
+    // Task #4 — the former "Earn" group held only "Referrals" (/refer), which
+    // has moved into Settings (/settings/referrals); /refer redirects there.
+    // The whole single-item group is removed from the partner nav.
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust Center' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
