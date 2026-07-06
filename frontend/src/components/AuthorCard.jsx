@@ -147,6 +147,9 @@ export default function AuthorCard({ author, compact = false, userId = null }) {
             <span>{author.location}</span>
           </div>
         )}
+        {author.company && (
+          <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">{author.company}</div>
+        )}
         {author.bio && (
           <p className="mt-3 text-sm text-slate-600 dark:text-slate-400 leading-relaxed max-w-2xl">
             {author.bio}

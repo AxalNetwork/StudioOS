@@ -1016,6 +1016,14 @@ publicRoutes.get('/authors/:userId', async (c) => {
   } catch { /* older dev DB may be missing columns — fall through to 404 */ }
   if (!userRow) return c.json({ detail: 'Not found' }, 404);
 
+  let company: string | null = null;
+  try {
+    const companyRow: any = await c.env.DB.prepare(
+      `SELECT JSON_EXTRACT(experience, '$[0].company') AS company FROM user_profile_ext WHERE user_id = ? LIMIT 1`,
+    ).bind(userId).first<any>();
+    company = companyRow?.company || null;
+  } catch { /* user_profile_ext may not exist on older dev DBs */ }
+
   let items: any[] = [];
   try {
     const res = await c.env.DB.prepare(
@@ -1046,6 +1054,8 @@ publicRoutes.get('/authors/:userId', async (c) => {
     });
   } catch { /* articles table missing on older dev DB */ }
 
+  if (items.length === 0) return c.json({ detail: 'Not found' }, 404);
+
   const socials = safeJsonParse<Record<string, string>>(userRow.socials, {}) || {};
   const location = [userRow.city, userRow.country].filter(Boolean).join(', ') || null;
 
@@ -1059,6 +1069,7 @@ publicRoutes.get('/authors/:userId', async (c) => {
       bio: userRow.bio || null,
       headshot_url: userRow.headshot_r2_key ? `/api/settings/headshot/${userRow.uid}` : null,
       location,
+      company,
       socials: {
         linkedin: socials.linkedin || null,
         twitter: socials.twitter || null,

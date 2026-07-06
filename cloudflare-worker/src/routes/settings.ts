@@ -295,7 +295,7 @@ const patchRootSettings = async (c: Context<{ Bindings: Env }>) => {
   if (body.socials !== undefined) {
     const s = body.socials || {};
     const safe: Record<string, string> = {};
-    for (const k of ['linkedin', 'twitter', 'website', 'github']) {
+    for (const k of ['linkedin', 'twitter', 'website', 'github', 'instagram']) {
       if (typeof s[k] === 'string') {
         const v = clampStr(s[k], 300);
         if (v) safe[k] = v;

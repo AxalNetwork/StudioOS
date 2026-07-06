@@ -104,6 +104,9 @@ function publicArticleShape(row: any) {
     author_twitter: row.author_twitter ?? null,
     author_linkedin: row.author_linkedin ?? null,
     author_photo_url: row.author_photo_url ?? null,
+    author_socials: (() => {
+      try { return JSON.parse(row.author_socials_json || '{}'); } catch { return {}; }
+    })(),
   };
 }
 
@@ -209,6 +212,7 @@ articles.get('/', async (c) => {
                       a.author_user_id, a.excerpt, a.seo_title, a.canonical_url,
                       u.name AS author_name, u.uid AS author_uid, NULL AS author_handle, u.role AS author_role,
                       u.headline AS author_headline,
+                      u.socials AS author_socials_json,
                       aw.website_url AS author_website,
                       aw.bio AS author_bio, aw.twitter_url AS author_twitter,
                       aw.linkedin_url AS author_linkedin,
@@ -244,6 +248,7 @@ articles.get('/by-author/:user_id', async (c) => {
             a.author_user_id, a.excerpt, a.seo_title, a.canonical_url,
             u.name AS author_name, u.uid AS author_uid, NULL AS author_handle, u.role AS author_role,
             u.headline AS author_headline,
+            u.socials AS author_socials_json,
             aw.website_url AS author_website,
             aw.bio AS author_bio, aw.twitter_url AS author_twitter,
             aw.linkedin_url AS author_linkedin,
@@ -318,6 +323,7 @@ articles.get('/:slug', async (c, next) => {
   const row: any = await c.env.DB.prepare(
     `SELECT a.*, u.name AS author_name, u.uid AS author_uid, NULL AS author_handle, u.role AS author_role,
             u.headline AS author_headline,
+            u.socials AS author_socials_json,
             aw.website_url AS author_website,
             aw.bio AS author_bio, aw.twitter_url AS author_twitter,
             aw.linkedin_url AS author_linkedin,

@@ -372,7 +372,7 @@ export default function ArticleReaderPage() {
                             headline: a.author_headline || null,
                             headshot_url: a.author_photo_url || null,
                             role: a.author_role || null,
-                            socials: {},
+                            socials: a.author_socials || {},
                           }}
                           userId={a.author_user_id}
                         />
