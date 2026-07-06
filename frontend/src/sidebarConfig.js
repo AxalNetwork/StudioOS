@@ -378,7 +378,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/activity', icon: Activity, label: 'Activity' },
       { to: '/docs', icon: BookOpen, label: 'Docs' },
       { to: '/tickets', icon: MessageSquare, label: 'Support' },
-      { to: '/profile', icon: UserCircle, label: 'Profile' },
       { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
