@@ -185,7 +185,7 @@ function OfferingDetailModal({ offering, user, isFounder, onClose }) {
           <div className="border-t pt-4 space-y-3">
             <Field label="Charge to project">
               <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white dark:border-gray-700 dark:bg-gray-900">
-                {projects.length === 0 && <option value="">No projects</option>}
+                {projects.length === 0 && <option value="">No startups</option>}
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>

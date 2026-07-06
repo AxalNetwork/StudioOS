@@ -20,7 +20,7 @@ export default function SpinOutsPage({ embedded = false }) {
         if (e?.status === 404 || msg === 'not found') {
           setProjects([]);
         } else {
-          setErr(e.message || 'Failed to load projects');
+          setErr(e.message || 'Failed to load startups');
         }
       } finally { setLoading(false); }
     })();
@@ -41,7 +41,7 @@ export default function SpinOutsPage({ embedded = false }) {
       )}
 
       <div className="mb-4 text-xs text-gray-500">
-        Need to move a project to spin-out? Open it in the{' '}
+        Need to move a startup to spin-out? Open it in the{' '}
         <Link to="/pipeline" className="text-violet-600 hover:underline inline-flex items-center gap-1">
           Pipeline Board <ExternalLink size={11} />
         </Link>{' '}
@@ -56,7 +56,7 @@ export default function SpinOutsPage({ embedded = false }) {
         <div className="bg-white border border-gray-200 rounded-xl p-12 text-center dark:bg-gray-900 dark:border-gray-800">
           <Rocket className="mx-auto text-gray-300 mb-3" size={32} />
           <div className="text-sm font-medium text-gray-900 mb-1 dark:text-gray-100">No spin-outs yet</div>
-          <div className="text-xs text-gray-500">Projects that reach the Decision Gate with a "spin-out ready" recommendation will appear here.</div>
+          <div className="text-xs text-gray-500">Startups that reach the Decision Gate with a "spin-out ready" recommendation will appear here.</div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

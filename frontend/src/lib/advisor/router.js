@@ -114,7 +114,7 @@ export function pagesForBank(bankName) {
 export function pageLabel(path) {
   if (!path) return '';
   const map = {
-    '/projects': 'Projects',
+    '/projects': 'Startups',
     '/build/discovery': 'Discovery',
     '/build/roadmap': 'Roadmap',
     '/build/brand': 'Brand',

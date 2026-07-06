@@ -34,7 +34,7 @@ export default {
       howto: [
         'Open Customer Discovery and log at least 5 interviews (interviewee, role, pains, hypotheses tested).',
         'Watch the signals panel — it derives a confidence score from the interviews you log.',
-        'Capture the top 3 confirmed pain hypotheses in the project brief before unlocking Week 2.',
+        'Capture the top 3 confirmed pain hypotheses in the startup brief before unlocking Week 2.',
       ],
       tips: [
         'Quality of interviews matters more than count — short, real conversations beat long surveys.',
@@ -55,7 +55,7 @@ export default {
       overview:
         "Week 2 turns validated pain into a buildable solution. You’ll lock the value proposition, draft a 90-day roadmap with OKRs, and start the Brand Builder so the product has a real identity from day one.",
       howto: [
-        'Write the value proposition statement in the project brief.',
+        'Write the value proposition statement in the startup brief.',
         'Open Roadmap, set this quarter’s OKRs, and break them into key results.',
         'Run Brand Builder to generate a name shortlist, palette, and logo concepts.',
       ],
@@ -78,7 +78,7 @@ export default {
       overview:
         "Week 3 puts the solution in front of more buyers and (if you’re solo) finds you a co-founder. You’ll send a beta sign-up form, collect waitlist signal, and search the Co-founder Match pool for complementary skills.",
       howto: [
-        'Publish a Beta Signup link from the project page; share it with discovery contacts.',
+        'Publish a Beta Signup link from the startup page; share it with discovery contacts.',
         'Open Co-founder Match, set what you’re looking for (skills, time commitment, location), and review matches.',
         'Open conversations with up to 3 candidates; capture notes on each in the Decision Journal.',
       ],
@@ -99,7 +99,7 @@ export default {
       id: 'week-4',
       title: 'Week 4 — Incorporation & Capital',
       overview:
-        "Week 4 turns your project into a real company. You’ll incorporate, set up the cap table with founder vesting, file 83(b) elections, and prepare your fundraise materials for a first SAFE round.",
+        "Week 4 turns your startup into a real company. You’ll incorporate, set up the cap table with founder vesting, file 83(b) elections, and prepare your fundraise materials for a first SAFE round.",
       howto: [
         'Run the Incorporation wizard and pick a jurisdiction (Delaware C-Corp by default).',
         'Set the founder cap table with a 4-year vest and 1-year cliff.',
@@ -124,11 +124,11 @@ export default {
       id: 'graduating',
       title: 'Graduating from the lab',
       overview:
-        "Once Week 4 is complete, the lab marks you as incorporated and the standard Founder Portal returns. All the work you did in the lab — discovery, roadmap, brand, cap table, legal docs — stays attached to your project.",
+        "Once Week 4 is complete, the lab marks you as incorporated and the standard Founder Portal returns. All the work you did in the lab — discovery, roadmap, brand, cap table, legal docs — stays attached to your startup.",
       howto: [
         'Confirm incorporation completes successfully (check the cap table populates).',
         'The sidebar auto-restores to the full Founder view on next page load.',
-        'Your project moves to "Active" status in the studio pipeline.',
+        'Your startup moves to "Active" status in the studio pipeline.',
       ],
       tips: [
         'You retain access to all lab content — nothing gets archived.',

@@ -63,7 +63,7 @@ export default function SemanticSearch() {
           value={q}
           onChange={(e) => { setQ(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
-          placeholder="Search projects, partners, documents…"
+          placeholder="Search startups, partners, documents…"
           className="flex-1 outline-none text-sm bg-transparent"
         />
         {loading && <Loader2 size={14} className="animate-spin text-gray-400" />}

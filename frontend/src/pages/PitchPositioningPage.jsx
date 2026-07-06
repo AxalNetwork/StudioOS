@@ -139,7 +139,7 @@ export default function PitchPositioningPage({ embedded = false }) {
             {loadingProjects && <option>Loading…</option>}
             {!loadingProjects && projects.length === 0 && <option value="">No startups yet</option>}
             {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.name || `Project #${p.id}`}</option>
+              <option key={p.id} value={p.id}>{p.name || `Startup #${p.id}`}</option>
             ))}
           </select>
           <button

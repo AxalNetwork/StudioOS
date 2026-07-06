@@ -195,7 +195,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
       { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
       { to: '/services', icon: Package, label: 'Service Catalogue' },
-      { to: '/build/competitors', icon: Megaphone, label: 'Competitor Analysis' },
       { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
       { to: '/relationships', icon: Handshake, label: 'Network' },
     ]},

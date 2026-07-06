@@ -68,7 +68,7 @@ export default {
       ],
       pitfalls: [
         'Multi-role accounts default to a single primary role; switching roles can hide data you expect to see.',
-        'Investor accounts cannot create projects — only Founder and Admin roles can.',
+        'Investor accounts cannot create startups — only Founder and Admin roles can.',
       ],
       related: [
         { label: 'Settings → Profile', href: '#account/settings-overview' },
@@ -126,10 +126,10 @@ export default {
       id: 'invite-team',
       title: 'Inviting your team',
       overview:
-        "Bring co-founders, advisors, and team members into your project so they can collaborate on the cap table, roadmap, and customer discovery.",
+        "Bring co-founders, advisors, and team members into your startup so they can collaborate on the cap table, roadmap, and customer discovery.",
       howto: [
-        'Open Projects, choose your project, and go to the Members tab.',
-        'Click "Invite member", enter their email, and pick their role on the project.',
+        'Open Startups, choose your startup, and go to the Members tab.',
+        'Click "Invite member", enter their email, and pick their role on the startup.',
         'They receive an email invite valid for 7 days; accepting it creates their account if they don’t have one yet.',
       ],
       tips: [
@@ -149,7 +149,7 @@ export default {
       id: 'help-and-shortcuts',
       title: 'Getting help & keyboard shortcuts',
       overview:
-        "Need a hand? Open the Personal Advisor on the Studio page — it knows your projects and can answer questions or file a tracked support ticket for you right from the chat. Power users can press Ctrl/Cmd-K from anywhere to open a search bar that jumps to pages, recent activity, and documentation in one place.",
+        "Need a hand? Open the Personal Advisor on the Studio page — it knows your startups and can answer questions or file a tracked support ticket for you right from the chat. Power users can press Ctrl/Cmd-K from anywhere to open a search bar that jumps to pages, recent activity, and documentation in one place.",
       howto: [
         'Go to the Studio page and use the Personal Advisor to ask a question or get unstuck.',
         'Click "Open a ticket" in the Personal Advisor header to file a tracked support ticket — the advisor confirms it inline and links you to the Support Hub.',
@@ -209,7 +209,7 @@ export default {
       ],
       pitfalls: [
         'The Advisor is a guide, not a decision-maker — always cross-check legal and tax steps with the partner attorney or your accountant.',
-        'It does not see your private project data; it suggests features based on persona, not on your numbers.',
+        'It does not see your private startup data; it suggests features based on persona, not on your numbers.',
       ],
       related: [
         { label: 'Personas', href: '#getting-started/personas' },

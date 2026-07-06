@@ -125,7 +125,7 @@ function CreateModal({ open, onClose, projects: parentProjects, onCreated }) {
         </div>
         <div className="p-5 space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Project</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Startup</label>
             <select
               className="w-full border rounded px-3 py-2 text-sm"
               value={projectId}
@@ -134,7 +134,7 @@ function CreateModal({ open, onClose, projects: parentProjects, onCreated }) {
               <option value="">Select…</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name || p.title || `Project #${p.id}`}
+                  {p.name || p.title || `Startup #${p.id}`}
                 </option>
               ))}
             </select>
@@ -333,7 +333,7 @@ export default function CompliancePage({ embedded = false }) {
 
   const projectName = useMemo(() => {
     const m = new Map();
-    projects.forEach((p) => m.set(p.id, p.name || p.title || `Project #${p.id}`));
+    projects.forEach((p) => m.set(p.id, p.name || p.title || `Startup #${p.id}`));
     return m;
   }, [projects]);
 
@@ -471,10 +471,10 @@ export default function CompliancePage({ embedded = false }) {
           value={projectFilter}
           onChange={(e) => setProjectFilter(e.target.value)}
         >
-          <option value="">All projects</option>
+          <option value="">All startups</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.name || p.title || `Project #${p.id}`}
+              {p.name || p.title || `Startup #${p.id}`}
             </option>
           ))}
         </select>

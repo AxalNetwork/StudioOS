@@ -516,8 +516,8 @@ export default function PitchDeckPage({ embedded = false }) {
               </h1>
               <p className="text-sm text-gray-500 dark:text-slate-400">
                 {templateCount != null
-                  ? `${templateCount} templates, auto-filled from your project, financials, and cap table.`
-                  : 'Templates auto-fill from your project, financials, and cap table.'}
+                  ? `${templateCount} templates, auto-filled from your startup, financials, and cap table.`
+                  : 'Templates auto-fill from your startup, financials, and cap table.'}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -540,7 +540,7 @@ export default function PitchDeckPage({ embedded = false }) {
             value={projectId || ''}
             onChange={(e) => setProjectId(parseInt(e.target.value) || null)}
           >
-            <option value="">Pick a project…</option>
+            <option value="">Pick a startup…</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -569,7 +569,7 @@ export default function PitchDeckPage({ embedded = false }) {
             onClick={fillFromProject}
             disabled={!deck?.id || busy}
             className="px-3 py-2 border border-violet-300 dark:border-violet-800 text-violet-700 dark:text-violet-300 rounded hover:bg-violet-50 dark:hover:bg-violet-950/40 disabled:opacity-50 flex items-center gap-2"
-            title="Re-run autofill against this project's current data"
+            title="Re-run autofill against this startup's current data"
           >
             <Wand2 className="w-4 h-4" /> Fill from project
           </button>
@@ -636,8 +636,8 @@ export default function PitchDeckPage({ embedded = false }) {
             <h3 className="font-medium mb-1">Start your deck</h3>
             <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
               {projectId
-                ? 'No deck yet — pick a template to auto-fill from your project data.'
-                : 'Pick a project above, then choose a template.'}
+                ? 'No deck yet — pick a template to auto-fill from your startup data.'
+                : 'Pick a startup above, then choose a template.'}
             </p>
             {projectId && (
               <button
@@ -788,7 +788,7 @@ export default function PitchDeckPage({ embedded = false }) {
                       projectId={projectId}
                       onSaved={() => {
                         setDeckDataReload((k) => k + 1);
-                        addToast('Saved — deck refreshed from your project', 'success');
+                        addToast('Saved — deck refreshed from your startup', 'success');
                       }}
                     />
                   ) : (

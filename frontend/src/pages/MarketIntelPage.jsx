@@ -785,7 +785,7 @@ function CompetitorEnrichmentBlock({ projects }) {
           <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5 dark:text-gray-100">
             <Database size={14} className="text-violet-600" /> Portfolio funding (Crunchbase)
           </h3>
-          <p className="text-[11px] text-gray-500 mt-0.5">Cached snapshots from your enriched projects. Use Project → Crunchbase to refresh.</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">Cached snapshots from your enriched startups. Use Startup → Crunchbase to refresh.</p>
         </div>
         <span className="text-[10px] uppercase tracking-wider text-violet-600 font-semibold">{projects.length} enriched</span>
       </div>
@@ -884,7 +884,7 @@ function FocusProjectCompetitorsBlock({ projects }) {
           <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5 dark:text-gray-100">
             <Database size={14} className="text-violet-600" /> Focus project — possible competitors
           </h3>
-          <p className="text-[11px] text-gray-500 mt-0.5">Live Crunchbase lookup for the selected enriched project.</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">Live Crunchbase lookup for the selected enriched startup.</p>
         </div>
         <div className="flex items-center gap-2">
           <label className="text-[11px] text-gray-600">Focus</label>
@@ -906,7 +906,7 @@ function FocusProjectCompetitorsBlock({ projects }) {
           className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100"
         >
           <span className="text-xs">
-            Crunchbase competitor lookup is a growth-tier feature. Upgrade to surface peer companies for {focus?.name || 'your projects'}.
+            Crunchbase competitor lookup is a growth-tier feature. Upgrade to surface peer companies for {focus?.name || 'your startups'}.
           </span>
           <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-200 text-amber-900">UPGRADE</span>
         </button>
@@ -2091,7 +2091,7 @@ function FounderInvestorFitTab({ user }) {
   if (!isInvestor && !isFounder) {
     return (
       <div className="space-y-4">
-        <TabExplainer text="Founder–Investor Fit ranks the strongest cross-side matches based on thesis × discovery embeddings. Available to founders (top investor matches per project) and investors (top founder matches)." />
+        <TabExplainer text="Founder–Investor Fit ranks the strongest cross-side matches based on thesis × discovery embeddings. Available to founders (top investor matches per startup) and investors (top founder matches)." />
         <MICard title="Persona required">
           <p className="text-sm text-gray-600 dark:text-gray-400">Sign in as a founder or investor to view fit matches.</p>
         </MICard>
@@ -2103,10 +2103,10 @@ function FounderInvestorFitTab({ user }) {
     <div className="space-y-4">
       <TabExplainer text={isInvestor
         ? "Top founder matches for your investor thesis. Counter-party identifiers stay hashed until a pairwise NDA is active between you and the founder."
-        : "Top investor matches for this project's discovery answers. Counter-party identifiers stay hashed until a pairwise NDA is active between you and the investor."} />
+        : "Top investor matches for this startup's discovery answers. Counter-party identifiers stay hashed until a pairwise NDA is active between you and the investor."} />
       {isFounder && projects.length > 1 && (
         <div className="flex items-center gap-2 flex-wrap">
-          <label className="text-xs text-gray-600 dark:text-gray-400">Project:</label>
+          <label className="text-xs text-gray-600 dark:text-gray-400">Startup:</label>
           <select value={projectId || ''} onChange={(e) => setProjectId(Number(e.target.value))} className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900">
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
@@ -2238,7 +2238,7 @@ function PartnerMarketplacePulseTab() {
                       <th className="text-left py-2 pr-3 font-medium">Skill</th>
                       <th className="text-right py-2 pr-3 font-medium">Median /hr</th>
                       <th className="text-right py-2 pr-3 font-medium">IQR /hr</th>
-                      <th className="text-right py-2 pr-3 font-medium">Median /project</th>
+                      <th className="text-right py-2 pr-3 font-medium">Median /startup</th>
                       <th className="text-right py-2 pr-3 font-medium">n</th>
                     </tr>
                   </thead>

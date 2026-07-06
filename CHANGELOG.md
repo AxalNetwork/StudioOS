@@ -10,6 +10,41 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Competitor Analysis folded into the startup page + Project→Startup rename completed
+
+Competitor Analysis is no longer a standalone tool with its own startup picker — it
+is now an embedded, startup-scoped section inside each startup's ProjectDetail. No
+functional/data/API/schema changes; the standalone route is retained.
+
+- **Reusable component** — extracted the tool into
+  `frontend/src/components/CompetitorAnalysis.jsx` (default export
+  `CompetitorAnalysis({ project, embedded })`, all logic + helpers moved intact).
+  `frontend/src/pages/CompetitorAnalysisPage.jsx` is now a thin wrapper that renders
+  `<CompetitorAnalysis />`, preserving the `/build/competitors` route (kept for
+  `?id=` deep links and the custom-market mode).
+- **Embedded mode** — when `embedded` + `project` are passed the component skips
+  `listProjects`, locks to startup mode with `projectId = String(project.id)`, hides
+  the back link / H1 / intro / mode selector, prefills from `project`, filters saved
+  analyses by `Number(a.project_id) === Number(project.id)`, and `scrollIntoView`s
+  its section.
+- **ProjectDetail integration** (`frontend/src/pages/ProjectDetail.jsx`) — new
+  conditionally-rendered "Competitor Analysis" section toggled from the header; `?comp=1` opens
+  and scrolls to it, then strips the param.
+- **Restyle** — orange → violet throughout the component (badges, buttons, accents)
+  to match the app palette.
+- **Sidebar** — removed the standalone "Competitor Analysis" item from
+  `sidebarConfig.js` (route retained in `App.jsx`).
+- **Rename** — completed the user-visible **Project(s) → Startup(s)** rename across
+  the surfaces the Command Center pass didn't cover: sidebar/buttons/options/
+  empty-states/toasts/tooltips/field-labels, docs section prose
+  (`frontend/src/pages/docs/sections/*.js`), advisor question banks, pricing,
+  share/CTA modals, and misc explainers. Identifiers, `/projects` routes,
+  `project_id`/API fields, `data-testid`s, machine `value=`/`key=`/`src=` values,
+  AI-prompt & deck-export strings, and code comments were left untouched.
+
+Note: the custom-market (non-startup) mode is now reachable only via the standalone
+route URL, since the in-page section is startup-locked.
+
 ## Merge Build workspace — Command Center + Projects→Startups rename
 
 Frontend-only IA consolidation. The four founder **Build** sidebar destinations —

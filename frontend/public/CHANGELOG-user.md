@@ -5,6 +5,19 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Competitor Analysis is now built into each startup
+
+Competitor Analysis lives right on the startup's page now — there's no separate tool
+and no need to pick a startup first. Open any startup and expand **Competitor
+Analysis** to research and compare rivals in context, and any analyses you saved for
+that startup appear automatically.
+
+We've also finished renaming **Projects** to **Startups** everywhere in the app, so
+the wording is consistent from the menus all the way through buttons, forms, and the
+help pages.
+
+---
+
 ## Your Build tools are now one place: Command Center
 
 We've combined **Founder Portal**, **Execution**, **Studio Ops**, and **Spin-Outs**

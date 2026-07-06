@@ -7,7 +7,7 @@ export default {
       id: 'founder',
       title: 'Founder Portal',
       overview:
-        "The Founder Portal is the home base for active founders. It surfaces your project status, this week’s priorities, upcoming deadlines, mentor sessions, and quick actions tailored to where you are in the journey.",
+        "The Founder Portal is the home base for active founders. It surfaces your startup status, this week’s priorities, upcoming deadlines, mentor sessions, and quick actions tailored to where you are in the journey.",
       howto: [
         'Open Founder Portal from the sidebar (or it’s your default landing page).',
         'Review the "This week" card for your priorities.',

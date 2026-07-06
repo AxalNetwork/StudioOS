@@ -265,7 +265,7 @@ function NeedFormModal({ user, need, onClose, onSaved }) {
     <Modal title={isEdit ? 'Edit need' : 'Post a need'} onClose={onClose} wide>
       <div className="space-y-3">
         {!isEdit && (
-          <Field label="Project">
+          <Field label="Startup">
             <select value={draft.project_id} onChange={(e) => setDraft({ ...draft, project_id: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
               <option value="">— select —</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}

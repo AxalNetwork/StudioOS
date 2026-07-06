@@ -21,7 +21,7 @@ const FEATURE_CATALOGUE = {
     to: '/projects',
     icon: Zap,
     label: 'Startups',
-    blurb: 'Spin up your venture record. The whole platform hangs off this one project for the rest of the sprint.',
+    blurb: 'Spin up your venture record. The whole platform hangs off this one startup for the rest of the sprint.',
   },
   'customer-discovery': {
     to: '/build/discovery',
@@ -51,7 +51,7 @@ const FEATURE_CATALOGUE = {
     to: '/build/deck',
     icon: Sparkles,
     label: 'Pitch Deck',
-    blurb: 'Generate a working seed deck from your project + market intel; iterate before mentors see it.',
+    blurb: 'Generate a working seed deck from your startup + market intel; iterate before mentors see it.',
   },
   'cofounder-match': {
     to: '/cofounder',
@@ -75,7 +75,7 @@ const FEATURE_CATALOGUE = {
     to: '/scoring',
     icon: Target,
     label: 'AI Scoring',
-    blurb: 'Run the 100-point scoring engine on your project. Tier 1 (≥85) unlocks the cohort offer.',
+    blurb: 'Run the 100-point scoring engine on your startup. Tier 1 (≥85) unlocks the cohort offer.',
   },
   incorporate: {
     to: '/incorporate',

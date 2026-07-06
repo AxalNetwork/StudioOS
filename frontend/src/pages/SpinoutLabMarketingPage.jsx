@@ -49,9 +49,9 @@ const PLAYBOOK = [
     title: 'Idea & Customer',
     youDo:
       'Define the problem, ICP, market sizing seed, talk to ≥5 customers, log every interview.',
-    unlocks: ['Projects', 'Customer Discovery', 'Market Intelligence'],
+    unlocks: ['Startups', 'Customer Discovery', 'Market Intelligence'],
     unlocksTail: ' (read-only), Personal Advisor (spinout persona, week 1 question bank).',
-    leaveWith: '1 Project record, ≥5 logged interviews, sized TAM/SAM with citations.',
+    leaveWith: '1 Startup record, ≥5 logged interviews, sized TAM/SAM with citations.',
   },
   {
     n: 2,
@@ -192,7 +192,7 @@ const FAQ = [
     a: 'Only under a separately negotiated partnership / spin-out agreement. Never automatically.',
   },
   {
-    q: 'Can I bring an existing project?',
+    q: 'Can I bring an existing startup?',
     a: 'Yes — fast-forward through weeks you\u2019ve already completed.',
   },
   {

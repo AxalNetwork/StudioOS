@@ -44,6 +44,6 @@ export function spinoutPreviewMeta({ activeIdx, activeSlide, fields }) {
   }
   return {
     label: `Slide ${activeIdx + 1} preview — ${activeSlide?.title || 'Untitled'}`,
-    caption: 'Live preview of this slide — updates as you edit your project data.',
+    caption: 'Live preview of this slide — updates as you edit your startup data.',
   };
 }

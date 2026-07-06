@@ -99,7 +99,7 @@ function CreateModal({ open, onClose, projects: parentProjects, onCreated }) {
         </div>
         <div className="space-y-3">
           <label className="block">
-            <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Project</div>
+            <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Startup</div>
             <select value={projectId} onChange={(e) => setProjectId(e.target.value)}
               className="w-full border rounded-md px-3 py-2 text-sm">
               <option value="">Select…</option>

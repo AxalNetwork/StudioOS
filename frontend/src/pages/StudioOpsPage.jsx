@@ -133,7 +133,7 @@ function WorkflowCard({ wf, onOpen }) {
       </div>
       <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400 mb-2">
         <span>{tc.done || 0}/{total} done</span>
-        {wf.project_id && <span>• Project #{wf.project_id}</span>}
+        {wf.project_id && <span>• Startup #{wf.project_id}</span>}
       </div>
       <div className="bg-gray-100 dark:bg-gray-800 rounded-full h-1.5 overflow-hidden">
         <div className="h-full bg-violet-500" style={{ width: `${pct}%` }} />
@@ -184,7 +184,7 @@ function WorkflowDrawer({ id, onClose, onChanged }) {
             <div className="flex flex-wrap gap-2 text-xs">
               <span className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{wf.type}</span>
               <span className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{wf.status}</span>
-              {wf.project && <span className="bg-violet-100 text-violet-700 px-2 py-1 rounded">Project: {wf.project.name}</span>}
+              {wf.project && <span className="bg-violet-100 text-violet-700 px-2 py-1 rounded">Startup: {wf.project.name}</span>}
             </div>
 
             <div>
@@ -253,7 +253,7 @@ function StrategicReview() {
             onChange={e => setProjectId(e.target.value)}
             className="w-full appearance-none bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 pr-9 py-2 text-sm text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer dark:border-gray-700 dark:text-gray-100"
           >
-            <option value="">Select a project…</option>
+            <option value="">Select a startup…</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name} ({p.status})</option>)}
           </select>
           <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -347,7 +347,7 @@ function QuickActionsModal({ onClose, onCreated }) {
             </div>
           </div>
           <div>
-            <label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">Link to Project (optional)</label>
+            <label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">Link to Startup (optional)</label>
             <select value={projectId} onChange={e => setProjectId(e.target.value)}
               className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none dark:border-gray-700">
               <option value="">— None —</option>

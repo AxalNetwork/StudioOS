@@ -32,7 +32,7 @@ export const NEW_FOUNDER_BANK = [
     id: 'founder.project.name',
     label: 'What is your startup called?',
     type: 'short',
-    explainer: 'Your working name. You can rename it any time from the project page.',
+    explainer: 'Your working name. You can rename it any time from the startup page.',
     doc_anchor: 'build/projects',
     page_target: '/projects',
     validate: all(required, minChars(2), maxChars(80)),

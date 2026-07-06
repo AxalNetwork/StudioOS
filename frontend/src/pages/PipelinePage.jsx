@@ -206,7 +206,7 @@ export default function PipelinePage({ embedded = false }) {
         </div>
         {canEdit && (
           <button onClick={() => setCreating(true)} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 py-2 rounded-lg">
-            <Plus size={14} /> New Pipeline Project
+            <Plus size={14} /> New Pipeline Startup
           </button>
         )}
       </div>
@@ -712,7 +712,7 @@ function CreateModal({ onClose, onCreated }) {
   return (
     <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between dark:border-gray-800"><h2 className="text-lg font-semibold">New Pipeline Project</h2><button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100"><X size={18} /></button></div>
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between dark:border-gray-800"><h2 className="text-lg font-semibold">New Pipeline Startup</h2><button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100"><X size={18} /></button></div>
         <div className="p-6 space-y-3">
           <Field label="Name *"><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className={inputCls} /></Field>
           <Field label="Sector"><input value={form.sector} onChange={e => setForm({...form, sector: e.target.value})} className={inputCls} placeholder="fintech / saas / health / etc." /></Field>

@@ -93,7 +93,7 @@ const NOTIFICATION_EVENTS = [
   { key: 'mentions_and_comments', label: 'Mentions & comments' },
   { key: 'ticket_update', label: 'Ticket updates' },
   { key: 'deal_stage_change', label: 'Deal stage changes' },
-  { key: 'score_generated', label: 'New score generated for your project' },
+  { key: 'score_generated', label: 'New score generated for your startup' },
   { key: 'contract_signed', label: 'Contract fully signed' },
   { key: 'mentor_session_booked', label: 'Mentor session booked' },
   { key: 'dd_report_ready', label: 'Due-diligence report ready' },
@@ -2290,7 +2290,7 @@ const PUBLIC_PROFILE_FIELDS_COMMON = [
 ];
 const PUBLIC_PROFILE_FIELDS_BY_ROLE = {
   founder: [
-    { key: 'projects', label: 'Projects (names + stage)' },
+    { key: 'projects', label: 'Startups (names + stage)' },
     { key: 'traction', label: 'Traction summary (users + revenue)' },
   ],
   investor: [
@@ -2570,7 +2570,7 @@ function CofounderInvitesCard() {
 
   return (
     <Card title="Co-founder invites"
-      description={`Invite a co-founder, advisor, or operating partner to join your project on Axal VC. Up to ${cap} active invites at a time, each valid for 14 days.`}>
+      description={`Invite a co-founder, advisor, or operating partner to join your startup on Axal VC. Up to ${cap} active invites at a time, each valid for 14 days.`}>
       {err && <div className="text-sm text-red-600 mb-3">{err}</div>}
 
       <div className="grid sm:grid-cols-3 gap-2 mb-3">
@@ -3338,7 +3338,7 @@ function InvestorThesisEditorCard({ flash, role }) {
             <Ban size={14} className="text-red-500" />
             <h4 className="text-xs font-semibold text-gray-800 dark:text-gray-200">Anti-thesis (hard exclusions)</h4>
           </div>
-          <p className="text-xs text-gray-500 mb-2 dark:text-gray-400">We will NEVER match you with projects in these sectors or stages.</p>
+          <p className="text-xs text-gray-500 mb-2 dark:text-gray-400">We will NEVER match you with startups in these sectors or stages.</p>
           <div className="space-y-3">
             <div>
               <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Sectors you avoid</span>

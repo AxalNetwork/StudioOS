@@ -82,7 +82,7 @@ export default function FinancialsPage({ embedded = false }) {
         if (e?.status === 404 || msg.includes('not found')) {
           setProjects([]);
         } else {
-          setError(e.message || 'Failed to load projects.');
+          setError(e.message || 'Failed to load startups.');
         }
       }
     })();
@@ -109,7 +109,7 @@ export default function FinancialsPage({ embedded = false }) {
         if (e?.status === 404 || msg.includes('not found')) {
           setModel(null);
           setAssumptions(null);
-          setError(`Project #${projectId} is no longer available. Pick another project from the dropdown.`);
+          setError(`Startup #${projectId} is no longer available. Pick another startup from the dropdown.`);
         } else {
           setError(e.message || 'Failed to load financial model.');
         }
@@ -198,7 +198,7 @@ export default function FinancialsPage({ embedded = false }) {
             disabled={!hasProjects}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400 dark:border-gray-700 dark:bg-gray-900"
           >
-            {!hasProjects && <option value="">No projects available</option>}
+            {!hasProjects && <option value="">No startups available</option>}
             {projects.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -206,7 +206,7 @@ export default function FinancialsPage({ embedded = false }) {
           <button
             onClick={handleExport}
             disabled={!projectId || !model}
-            title={!model ? 'Load a project model first' : 'Download as XLSX'}
+            title={!model ? 'Load a startup model first' : 'Download as XLSX'}
             className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-gray-700"
           >
             <Download size={14} /> Export XLSX
@@ -223,15 +223,15 @@ export default function FinancialsPage({ embedded = false }) {
       {!hasProjects && (
         <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center dark:bg-gray-900 dark:border-gray-700">
           <FolderPlus size={32} className="mx-auto text-gray-400 mb-3" />
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">No projects yet</h2>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">No startups yet</h2>
           <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
-            The financial model is scoped to a project. Create or join one first, then come back here to set drivers and see runway, breakeven, and capital scoring.
+            The financial model is scoped to a startup. Create or join one first, then come back here to set drivers and see runway, breakeven, and capital scoring.
           </p>
           <Link
             to="/projects"
             className="inline-flex items-center gap-2 mt-4 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-4 py-2 text-sm font-medium"
           >
-            <Plus size={14} /> Go to Projects
+            <Plus size={14} /> Go to Startups
           </Link>
         </div>
       )}

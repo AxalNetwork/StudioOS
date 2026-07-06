@@ -14,7 +14,7 @@ export const EXPLAINERS = {
   },
   dashboard: {
     title: 'Your studio at a glance',
-    body: 'Quick stats across projects, capital, compliance and your network — pulled live so you can see what needs attention without opening every tab.',
+    body: 'Quick stats across startups, capital, compliance and your network — pulled live so you can see what needs attention without opening every tab.',
     docPath: 'getting-started/what-is-studioos',
   },
   my_events: {

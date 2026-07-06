@@ -220,7 +220,7 @@ export default function CapTablePage({ embedded = false }) {
       if (e?.status === 403) {
         setApiError("You don't have access to that project's cap table.");
       } else if (e?.status && e.status !== 404) {
-        setApiError("Couldn't load that project's cap table. Please retry.");
+        setApiError("Couldn't load that startup's cap table. Please retry.");
       }
     }
     if (scen) {
@@ -240,7 +240,7 @@ export default function CapTablePage({ embedded = false }) {
   async function saveScenario() {
     setSavedFlash(''); setApiError(null);
     if (!selectedProjectId) {
-      setApiError('Select a project first — each cap table belongs to a project.');
+      setApiError('Select a startup first — each cap table belongs to a startup.');
       return;
     }
     const projectId = Number(selectedProjectId);
@@ -306,7 +306,7 @@ export default function CapTablePage({ embedded = false }) {
   async function saveAsVariant() {
     setApiError(null); setErrors([]);
     if (!selectedProjectId) {
-      setApiError('Select a project first — variants belong to a project.');
+      setApiError('Select a startup first — variants belong to a startup.');
       return;
     }
     const projectId = Number(selectedProjectId);
@@ -321,7 +321,7 @@ export default function CapTablePage({ embedded = false }) {
     } catch (e) {
       const status = e?.status;
       if (status === 401 || status === 403) {
-        setApiError('You do not have access to add a variant to this project.');
+        setApiError('You do not have access to add a variant to this startup.');
       } else if ((status === 400 || status === 422) && Array.isArray(e?.data?.errors)) {
         setErrors(e.data.errors);
       } else {
@@ -333,7 +333,7 @@ export default function CapTablePage({ embedded = false }) {
   // Task #29 — load the read-only ownership/dilution comparison for a project.
   async function loadCompare(pid = selectedProjectId, open = false) {
     const id = pid ? String(pid) : '';
-    if (!id) { setApiError('Select a project to compare scenarios.'); return; }
+    if (!id) { setApiError('Select a startup to compare scenarios.'); return; }
     setCompareLoading(true); setCompareError(null);
     if (open) setCompareOpen(true);
     try {
@@ -402,9 +402,9 @@ export default function CapTablePage({ embedded = false }) {
             value={selectedProjectId}
             onChange={e => selectProject(e.target.value)}
             className="flex-1 min-w-0 sm:flex-none sm:w-56 px-3 py-1.5 text-sm border border-gray-300 rounded bg-white dark:bg-gray-900 dark:border-gray-700"
-            title="Pick a project to load or start its cap table"
+            title="Pick a startup to load or start its cap table"
           >
-            <option value="">Select a project…</option>
+            <option value="">Select a startup…</option>
             {projects.map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -772,7 +772,7 @@ function ScenarioComparePanel({ data, loading, error, activeUid, onClose, onRefr
 
       {!error && !loading && cols.length === 0 && (
         <div className="px-4 py-6 text-sm text-gray-500 text-center">
-          No cap table for this project yet. Save one, then use “Save as variant” to model alternatives.
+          No cap table for this startup yet. Save one, then use “Save as variant” to model alternatives.
         </div>
       )}
 

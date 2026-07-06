@@ -165,7 +165,7 @@ export default function LegalPage() {
                 className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:border-gray-700 dark:text-gray-100" />
             </div>
             <div>
-              <label className="block text-xs text-gray-600 mb-1 font-medium">Project</label>
+              <label className="block text-xs text-gray-600 mb-1 font-medium">Startup</label>
               <ModernSelect value={genForm.project_id} onChange={e => setGenForm(f => ({ ...f, project_id: e.target.value }))}>
                 <option value="">None (General)</option>
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -470,7 +470,7 @@ function TemplatePreviewModal({ template, onClose, onGenerate }) {
           </button>
         </div>
         <div className="p-6 overflow-y-auto flex-1">
-          <p className="text-xs text-gray-500 mb-3">Template preview — fields marked with ____ will be filled when generating for a specific project.</p>
+          <p className="text-xs text-gray-500 mb-3">Template preview — fields marked with ____ will be filled when generating for a specific startup.</p>
           {loadingContent ? (
             <div className="text-center text-gray-500 text-sm py-8">Loading template...</div>
           ) : (

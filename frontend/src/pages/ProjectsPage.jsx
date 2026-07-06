@@ -41,7 +41,7 @@ export default function ProjectsPage({ embedded = false }) {
     setLoadError('');
     api.listProjects()
       .then((rows) => setProjects(Array.isArray(rows) ? rows : []))
-      .catch((e) => setLoadError(e?.message || 'Failed to load projects'))
+      .catch((e) => setLoadError(e?.message || 'Failed to load startups'))
       .finally(() => setLoading(false));
   };
 
@@ -49,7 +49,7 @@ export default function ProjectsPage({ embedded = false }) {
 
   const submit = async () => {
     if (!form.name.trim()) {
-      showToast({ kind: 'error', msg: 'Project name is required' });
+      showToast({ kind: 'error', msg: 'Startup name is required' });
       return;
     }
     setSubmitting(true);
@@ -64,10 +64,10 @@ export default function ProjectsPage({ embedded = false }) {
       // founder can't see edit/delete on the project they just created.
       try { if (typeof refresh === 'function') await refresh({ force: true }); } catch {}
       load();
-      showToast({ kind: 'success', msg: 'Project created' });
+      showToast({ kind: 'success', msg: 'Startup created' });
       await markMilestone(currentUser, 'project_created');
     } catch (e) {
-      showToast({ kind: 'error', msg: e?.message || 'Failed to create project' });
+      showToast({ kind: 'error', msg: e?.message || 'Failed to create startup' });
     } finally {
       setSubmitting(false);
     }
@@ -80,9 +80,9 @@ export default function ProjectsPage({ embedded = false }) {
       await api.deleteProject(project.id);
       setProjects(prev => prev.filter(p => p.id !== project.id));
       // Task #7 (AM) — soft-delete UX: tell the user where to find it.
-      showToast({ kind: 'success', msg: isAdmin ? 'Project moved to trash — restore within 30 days from Admin > Trash' : 'Project moved to trash — contact an admin within 30 days to restore' });
+      showToast({ kind: 'success', msg: isAdmin ? 'Startup moved to trash — restore within 30 days from Admin > Trash' : 'Startup moved to trash — contact an admin within 30 days to restore' });
     } catch (e) {
-      showToast({ kind: 'error', msg: e?.message || 'Failed to delete project' });
+      showToast({ kind: 'error', msg: e?.message || 'Failed to delete startup' });
     }
   };
 
@@ -127,15 +127,15 @@ export default function ProjectsPage({ embedded = false }) {
           )}
         </div>
         <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-medium text-white transition-colors">
-          <Plus size={14} /> New Project
+          <Plus size={14} /> New Startup
         </button>
       </div>
 
       {showForm && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
-          <h2 className="font-semibold text-gray-900 text-sm mb-4 dark:text-gray-100">Add New Project</h2>
+          <h2 className="font-semibold text-gray-900 text-sm mb-4 dark:text-gray-100">Add New Startup</h2>
           <div className="grid md:grid-cols-2 gap-4">
-            <Input label="Project Name" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
+            <Input label="Startup Name" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
             <SectorSelect value={form.sector} onChange={v => setForm(f => ({ ...f, sector: v }))} />
             {canPickFounder && (
               <>
@@ -160,7 +160,7 @@ export default function ProjectsPage({ embedded = false }) {
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
-            type="text" placeholder="Filter projects..."
+            type="text" placeholder="Filter startups..."
             value={filter} onChange={e => setFilter(e.target.value)}
             className="w-full md:w-64 bg-white border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100"
           />
@@ -170,20 +170,20 @@ export default function ProjectsPage({ embedded = false }) {
       {loading ? (
         <Skeleton.Table rows={6} cols={5} />
       ) : loadError ? (
-        <ErrorState message={`Couldn't load projects — ${loadError}`} onRetry={load} supportTopic="projects" />
+        <ErrorState message={`Couldn't load startups — ${loadError}`} onRetry={load} supportTopic="projects" />
       ) : filtered.length === 0 && projects.length === 0 ? (
         <EmptyState
           icon={Rocket}
-          title="No projects yet"
-          body='Create your first venture project to start scoring, due-diligence, and pipeline tracking.'
-          cta={{ label: 'New project', onClick: () => setShowForm(true) }}
+          title="No startups yet"
+          body='Create your first startup to start scoring, due-diligence, and pipeline tracking.'
+          cta={{ label: 'New startup', onClick: () => setShowForm(true) }}
           secondary={{ label: 'Learn more', to: '/docs#core/projects' }}
         />
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
           {filtered.length === 0 ? (
             <div className="px-5 py-8 text-center text-gray-500 text-sm">
-              No projects match your filter
+              No startups match your filter
             </div>
           ) : (
             <VirtualList
@@ -227,7 +227,7 @@ export default function ProjectsPage({ embedded = false }) {
                           onClick={() => handleDelete(p)}
                           className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
                           aria-label={`Delete ${p.name}`}
-                          title="Delete project"
+                          title="Delete startup"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -266,7 +266,7 @@ export default function ProjectsPage({ embedded = false }) {
                               onClick={() => handleDelete(p)}
                               className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
                               aria-label={`Delete ${p.name}`}
-                              title="Delete project"
+                              title="Delete startup"
                             >
                               <Trash2 size={14} />
                             </button>

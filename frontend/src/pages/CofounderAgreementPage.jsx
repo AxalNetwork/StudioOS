@@ -196,7 +196,7 @@ export default function CofounderAgreementPage({ embedded = false }) {
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5 dark:bg-gray-900 dark:border-gray-800">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="block">
-              <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Project</div>
+              <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Startup</div>
               <select
                 value={projectId}
                 onChange={(e) => {
@@ -422,7 +422,7 @@ export default function CofounderAgreementPage({ embedded = false }) {
           </div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Agreement generated</h2>
           <p className="text-sm text-gray-600 mt-1">
-            <strong>{result.document.title}</strong> is now in your project's legal documents.
+            <strong>{result.document.title}</strong> is now in your startup's legal documents.
           </p>
           <div className="mt-4 flex items-center justify-center gap-3">
             <button onClick={() => navigate('/legal-capital')}

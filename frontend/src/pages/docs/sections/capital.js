@@ -55,7 +55,7 @@ export default {
       overview:
         "The Cap Table tracks every share, option, SAFE, and warrant your company has issued. Run dilution scenarios, simulate a priced round, and export a clean cap table for investors and your attorney.",
       howto: [
-        'Open Cap Table on your project.',
+        'Open Cap Table on your startup.',
         'Add founder shares with vesting (default: 4-year vest, 1-year cliff).',
         'Add SAFEs and option pool grants as they happen.',
         'Run scenarios with the simulator to see post-money dilution before agreeing to terms.',
@@ -124,7 +124,7 @@ export default {
       overview:
         "Metrics is the lightweight dashboard for the numbers that matter this month: revenue, active users, burn, runway, and any custom KPIs you’ve added. Investors and admins can view rolled-up versions.",
       howto: [
-        'Open Metrics on your project.',
+        'Open Metrics on your startup.',
         'Update the snapshot at the end of each month (revenue, users, burn, runway).',
         'Add custom KPIs as you discover what matters for your business.',
       ],

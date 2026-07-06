@@ -1536,7 +1536,7 @@ function WeekBanner({ week }) {
   // need to do to advance. Mirrors the MILESTONES catalog in
   // routes/spinout_lab.ts so the language stays in sync.
   const unlockCopy = {
-    1: 'Brand basics & landing page unlock once you create your project and log 3 customer interviews.',
+    1: 'Brand basics & landing page unlock once you create your startup and log 3 customer interviews.',
     2: 'Network features unlock once you fill in your brand basics.',
     3: 'Incorporation tools unlock once you complete your network milestones.',
     4: 'Finish incorporation to graduate from the Spin-Out Lab.',

@@ -171,10 +171,10 @@ function FounderBlock({ p }) {
       {p.projects && (
         <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
-            <Briefcase size={16} className="text-emerald-600" /> Projects
+            <Briefcase size={16} className="text-emerald-600" /> Startups
           </h2>
           {p.projects.length === 0 ? (
-            <p className="text-sm text-gray-500">No public projects yet.</p>
+            <p className="text-sm text-gray-500">No public startups yet.</p>
           ) : (
             <ul className="space-y-2">
               {p.projects.map((proj, i) => (
@@ -199,7 +199,7 @@ function FounderBlock({ p }) {
             <Target size={16} className="text-emerald-600" /> Traction
           </h2>
           <div className="grid grid-cols-3 gap-3">
-            <Stat label="Active projects" value={p.traction.active_projects ?? '—'} />
+            <Stat label="Active startups" value={p.traction.active_projects ?? '—'} />
             <Stat label="Users" value={p.traction.users != null ? p.traction.users.toLocaleString() : '—'} icon={<Users size={13} />} />
             <Stat label="Revenue" value={p.traction.revenue != null ? `$${Math.round(p.traction.revenue).toLocaleString()}` : '—'} icon={<DollarSign size={13} />} />
           </div>

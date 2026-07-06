@@ -16,7 +16,7 @@ export const EXISTING_FOUNDER_BANK = [
   // --- Company facts ---------------------------------------------------
   {
     id: 'founder.project.name',
-    label: 'Confirm your company / project name.',
+    label: 'Confirm your company / startup name.',
     type: 'short',
     explainer: 'We’ll use this on every dashboard, deck merge-field, and contract.',
     doc_anchor: 'build/projects',
@@ -27,7 +27,7 @@ export const EXISTING_FOUNDER_BANK = [
     id: 'founder.project.pitch',
     label: 'One-paragraph pitch — refresh how you position yourselves today.',
     type: 'long',
-    explainer: 'Replaces the project description on your portfolio card.',
+    explainer: 'Replaces the startup description on your portfolio card.',
     doc_anchor: 'build/projects',
     page_target: '/projects',
     validate: all(required, minChars(40)),
@@ -56,7 +56,7 @@ export const EXISTING_FOUNDER_BANK = [
     id: 'founder.project.traction',
     label: 'Latest traction — top 2-3 numbers (MRR, paid logos, growth).',
     type: 'long',
-    explainer: 'Saved as growth_signals on your project — feeds the metrics dashboard.',
+    explainer: 'Saved as growth_signals on your startup — feeds the metrics dashboard.',
     doc_anchor: 'capital/metrics',
     page_target: '/build/metrics',
     validate: maxChars(800),

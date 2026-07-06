@@ -1941,7 +1941,7 @@ export function LegalPanel() {
           <div className="relative flex-1 min-w-[240px]">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input value={q} onChange={e => setQ(e.target.value)}
-              placeholder="Search title, recipient, project, template…"
+              placeholder="Search title, recipient, startup, template…"
               className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-300 dark:border-gray-800" />
           </div>
           <select value={docType} onChange={e => setDocType(e.target.value)}
@@ -2370,7 +2370,7 @@ function ContractRow({ c, onOpen }) {
           <div className="font-semibold text-gray-900 truncate dark:text-gray-100">{c.title}</div>
           <div className="text-xs text-gray-600 mt-0.5">
             Recipient · <span className="text-gray-800 dark:text-gray-200">{c.recipient_email || '—'}</span>
-            {c.project_name && <> · Project · <span className="text-gray-800 dark:text-gray-200">{c.project_name}</span></>}
+            {c.project_name && <> · Startup · <span className="text-gray-800 dark:text-gray-200">{c.project_name}</span></>}
           </div>
           <div className="flex items-center gap-4 text-[11px] text-gray-500 mt-1.5">
             <span>Created: {fmtDate(c.created_at) || '—'}</span>
@@ -2504,7 +2504,7 @@ function TemplateUsageModal({ docType, fallback, onClose }) {
                   <thead className="bg-gray-50 text-gray-600">
                     <tr>
                       <th className="text-left px-3 py-2 font-medium">Recipient</th>
-                      <th className="text-left px-3 py-2 font-medium">Project</th>
+                      <th className="text-left px-3 py-2 font-medium">Startup</th>
                       <th className="text-left px-3 py-2 font-medium">Status</th>
                       <th className="text-left px-3 py-2 font-medium">Sent</th>
                       <th className="text-left px-3 py-2 font-medium">Signed</th>
@@ -2688,7 +2688,7 @@ function ContractDetailModal({ uid, onClose, onChanged }) {
               )}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Recipient"   value={doc.recipient_email} />
-                <Field label="Project"     value={doc.project_name} />
+                <Field label="Startup"     value={doc.project_name} />
                 <Field label="Signed by"   value={doc.signed_by} />
                 <Field label="Signed at"   value={fmtDate(doc.signed_at)} />
                 <Field label="Created"     value={fmtDate(doc.created_at)} />
@@ -2931,7 +2931,7 @@ function SignedDocLightbox({ uid, onClose, onChanged }) {
                     <Field label="Signed by" value={doc.signed_by} />
                     <Field label="Signed at" value={fmtDate(doc.signed_at)} />
                     <Field label="Days to sign" value={doc.days_to_sign != null ? String(doc.days_to_sign) : '—'} />
-                    <Field label="Project" value={doc.project_name} />
+                    <Field label="Startup" value={doc.project_name} />
                     <Field label="Created" value={fmtDate(doc.created_at)} />
                   </div>
 

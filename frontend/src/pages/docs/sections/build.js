@@ -8,21 +8,21 @@ export default {
   subsections: [
     {
       id: 'projects',
-      title: 'Projects',
+      title: 'Startups',
       overview:
-        "Projects are the home for everything about a single venture: brief, members, roadmap, discovery interviews, deck, financial model, cap table, and the activity log. Founders typically have one active project at a time; admins see all projects in the studio.",
+        "Startups are the home for everything about a single venture: brief, members, roadmap, discovery interviews, deck, financial model, cap table, and the activity log. Founders typically have one active startup at a time; admins see all startups in the studio.",
       howto: [
-        'Open Projects from the sidebar to see your list.',
-        'Click "New project" (founders) or open an existing card.',
-        'Use the project tabs to navigate between Brief, Members, Roadmap, Discovery, Deck, Financials, Cap Table, and Activity.',
+        'Open Startups from the sidebar to see your list.',
+        'Click "New startup" (founders) or open an existing card.',
+        'Use the startup tabs to navigate between Brief, Members, Roadmap, Discovery, Deck, Financials, Cap Table, and Activity.',
       ],
       tips: [
         'The Brief is the single-page summary investors and admins read first — keep it sharp.',
         'Activity is a read-only audit log; use it to catch up after a few days away.',
       ],
       pitfalls: [
-        'Creating multiple projects for variations of the same idea fragments your discovery data — use one project and pivot in place.',
-        'Removing yourself as a project member can lock you out; transfer ownership first.',
+        'Creating multiple startups for variations of the same idea fragments your discovery data — use one startup and pivot in place.',
+        'Removing yourself as a startup member can lock you out; transfer ownership first.',
       ],
       related: [
         { label: 'Roadmap', href: '#build/roadmap' },
@@ -35,7 +35,7 @@ export default {
       overview:
         "Customer Discovery is where you log interviews with potential users, capture pains and hypotheses, and watch a confidence signal evolve as evidence accumulates. It’s the Week 1 backbone of the Spin-Out Lab.",
       howto: [
-        'Open the Discovery tab on your project.',
+        'Open the Discovery tab on your startup.',
         'Click "Log interview", fill in interviewee name, role, date, notes, and tag pains and hypotheses.',
         'Repeat for every conversation — the signals panel updates automatically.',
       ],
@@ -65,7 +65,7 @@ export default {
       ],
       tips: [
         'Re-grade your KRs every Friday — green/yellow/red is enough; perfection is the enemy.',
-        'Tasks closed on the Kanban roll up into the project Activity log automatically.',
+        'Tasks closed on the Kanban roll up into the startup Activity log automatically.',
       ],
       pitfalls: [
         'Defining KRs as activities (“build feature X”) instead of outcomes (“X paying users”) makes them useless for grading.',
@@ -80,9 +80,9 @@ export default {
       id: 'brand-builder',
       title: 'Brand Builder',
       overview:
-        "Brand Builder generates a name shortlist, color palette, type pairings, and logo concepts based on your project brief. You can iterate on each piece independently and download the final kit as assets.",
+        "Brand Builder generates a name shortlist, color palette, type pairings, and logo concepts based on your startup brief. You can iterate on each piece independently and download the final kit as assets.",
       howto: [
-        'Open the Brand tab on your project.',
+        'Open the Brand tab on your startup.',
         'Confirm or refine the input prompt (industry, vibe, audience).',
         'Generate a round of name + palette + logo options; favorite the ones you like.',
         'Iterate on logos until you’re happy, then download the kit (PNG + SVG).',
@@ -103,9 +103,9 @@ export default {
       id: 'pitch-deck',
       title: 'Pitch Deck',
       overview:
-        "The Pitch Deck builder assembles a 10–12 slide investor deck from your project brief, financials, and discovery interviews. Each slide is editable; you can rearrange, hide, and re-style.",
+        "The Pitch Deck builder assembles a 10–12 slide investor deck from your startup brief, financials, and discovery interviews. Each slide is editable; you can rearrange, hide, and re-style.",
       howto: [
-        'Open Pitch Deck on your project.',
+        'Open Pitch Deck on your startup.',
         'Click "Generate" to seed a draft from your brief and financials.',
         'Edit slide-by-slide; rearrange via drag-and-drop.',
         'Use "Print preview" to check page breaks before exporting to PDF.',
@@ -129,7 +129,7 @@ export default {
       overview:
         "Generate a single-link share URL for your deck — no sign-in required for the recipient. The viewer renders the deck in a clean, distraction-free reading mode with keyboard navigation and fullscreen support, and you can revoke the link at any time.",
       howto: [
-        'Open Pitch Deck on your project and click "Share".',
+        'Open Pitch Deck on your startup and click "Share".',
         'Copy the generated link and send it to the investor or reviewer.',
         'They open the link in any browser — no account needed.',
         'Revoke the link from the same dialog when you no longer want it active.',
@@ -153,7 +153,7 @@ export default {
       overview:
         "The Financial Model Builder lets you assemble a 36-month projection (revenue lines, headcount, OpEx, runway) without spreadsheets. The model wires into your Pitch Deck and Metrics dashboards so investors see the same numbers you do.",
       howto: [
-        'Open Financials on your project.',
+        'Open Financials on your startup.',
         'Add revenue lines (subscription, transaction, services) and assumptions (price, conversion, churn).',
         'Add headcount roles with hire month and burdened cost.',
         'Review the cash, runway, and ARR charts; export to CSV for your accountant.',

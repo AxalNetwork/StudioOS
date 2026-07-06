@@ -415,7 +415,7 @@ export default function ReservesPage() {
                     <Building2 className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                     <div className="text-sm font-medium text-slate-700">No active portfolio companies</div>
                     <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
-                      Move projects into status <code className="text-[11px] px-1 py-0.5 bg-slate-100 rounded">active</code>,{' '}
+                      Move startups into status <code className="text-[11px] px-1 py-0.5 bg-slate-100 rounded">active</code>,{' '}
                       <code className="text-[11px] px-1 py-0.5 bg-slate-100 rounded">tier_1</code>,{' '}
                       <code className="text-[11px] px-1 py-0.5 bg-slate-100 rounded">tier_2</code>, or{' '}
                       <code className="text-[11px] px-1 py-0.5 bg-slate-100 rounded">spinout</code> to see them here.

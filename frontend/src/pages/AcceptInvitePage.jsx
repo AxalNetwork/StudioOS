@@ -56,7 +56,7 @@ export default function AcceptInvitePage() {
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900/40">
           <Users className="text-violet-600 dark:text-violet-300" size={22} />
         </div>
-        <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Project invitation</h1>
+        <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Startup invitation</h1>
 
         {!token && (
           <p className="mt-3 text-sm text-red-600 dark:text-red-400">
@@ -101,8 +101,8 @@ export default function AcceptInvitePage() {
             </div>
             <p className="mt-3 text-sm text-gray-700 dark:text-gray-300">
               {result?.already_owner
-                ? "You already own this project — you're all set."
-                : `You've joined the project as ${result?.role === 'advisor' ? 'an advisor' : 'a co-founder'}.`}
+                ? "You already own this startup — you're all set."
+                : `You've joined the startup as ${result?.role === 'advisor' ? 'an advisor' : 'a co-founder'}.`}
             </p>
             <button
               onClick={() => navigate(result?.project_id ? `/projects/${result.project_id}` : '/projects')}

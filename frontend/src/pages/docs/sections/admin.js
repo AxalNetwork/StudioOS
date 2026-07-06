@@ -10,7 +10,7 @@ export default {
       id: 'overview',
       title: 'Admin overview',
       overview:
-        "Admins are studio operators with full visibility and the ability to act on behalf of users for support. The Admin Console organizes everything into Users, Projects, Deals, Trust, Audit, and Settings.",
+        "Admins are studio operators with full visibility and the ability to act on behalf of users for support. The Admin Console organizes everything into Users, Startups, Deals, Trust, Audit, and Settings.",
       howto: [
         'Open Admin Console from the sidebar (admins only).',
         'Use the left rail to switch between sections.',
@@ -18,7 +18,7 @@ export default {
       ],
       tips: [
         'Bookmark the section you use most — Users, Trust, and Audit are the common entry points.',
-        'Use the global search at the top of the console to jump to any user, project, or deal.',
+        'Use the global search at the top of the console to jump to any user, startup, or deal.',
       ],
       pitfalls: [
         'Forgetting to exit "View as" before reading reports causes scoped data — exit first.',

@@ -95,7 +95,7 @@ function LockedDeck() {
         The Pitch Deck Builder is a Growth feature
       </h2>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
-        Upgrade to Growth to auto-fill investor-ready decks from your project, financials, and cap
+        Upgrade to Growth to auto-fill investor-ready decks from your startup, financials, and cap
         table. The Review tab stays free.
       </p>
       <button

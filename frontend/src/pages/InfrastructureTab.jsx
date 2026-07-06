@@ -137,7 +137,7 @@ export default function InfrastructureTab() {
         <MiniCard label="Processing" value={byStatus.processing} icon={Cpu} accent="blue" sub={`In flight: ${metrics?.in_flight ?? 0}`} />
         <MiniCard label="Completed" value={byStatus.completed} icon={Activity} accent="emerald" sub="all-time" />
         <MiniCard label="Failed" value={byStatus.failed} icon={AlertTriangle} accent="red" sub={`DLQ 7d: ${queue?.dlq_7d ?? 0}`} />
-        <MiniCard label="Active Projects" value={metrics?.projects_active ?? 0} accent="violet" sub={`AI calls 5m: ${metrics?.ai_calls_5m ?? 0}`} />
+        <MiniCard label="Active Startups" value={metrics?.projects_active ?? 0} accent="violet" sub={`AI calls 5m: ${metrics?.ai_calls_5m ?? 0}`} />
       </div>
 
       {/* Throughput chart */}
