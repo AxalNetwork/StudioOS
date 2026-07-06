@@ -1,10 +1,12 @@
 import os
+import json
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
 from sqlmodel import Session, select
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from backend.app.database import get_session
-from backend.app.models.entities import Project, ActivityLog, User
+from backend.app.models.entities import Project, ActivityLog, User, UserRole
 from backend.app.api.routes.auth import get_current_user
 from datetime import datetime
 
@@ -400,3 +402,253 @@ def run_diligence(req: DiligenceRequest, session: Session = Depends(get_session)
         ),
         "generated_at": datetime.utcnow().isoformat(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Task #75 — Advisory Suite advisor directory (dev mirror, DIRECTORY ONLY).
+# Founder-scoped CRUD over advisor_profiles / advisor_startups. The promote /
+# waitlist half lives in the Worker Contacts hub (no dev FastAPI counterpart),
+# so it is intentionally not mirrored. Non-owned ids return 404, never 403.
+# ---------------------------------------------------------------------------
+
+# Kept in lockstep with services/advisorProfilesSchema.ts::TRUSTED_ADVISOR_SOURCES.
+TRUSTED_ADVISOR_SOURCES = {"brand-landing", "referral", "staff-rec"}
+
+
+class AdvisorUpdate(BaseModel):
+    name: Optional[str] = None
+    bio: Optional[str] = None
+    sectors: Optional[List[str]] = None
+    expertise: Optional[List[str]] = None
+    linkedin_url: Optional[str] = None
+    hourly_rate: Optional[float] = None
+
+
+class AdvisorAssignments(BaseModel):
+    project_ids: List[int] = []
+
+
+def _advisor_email_visible(source) -> bool:
+    return bool(source) and source in TRUSTED_ADVISOR_SOURCES
+
+
+def _json_list(raw) -> list:
+    if not raw:
+        return []
+    try:
+        v = json.loads(raw)
+        return [str(x) for x in v] if isinstance(v, list) else []
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _iso(v):
+    if v is None:
+        return None
+    return v.isoformat() if isinstance(v, datetime) else str(v)
+
+
+def _shape_advisor(m, assignments) -> dict:
+    visible = _advisor_email_visible(m["source"])
+    return {
+        "id": m["id"],
+        "founder_id": m["founder_id"],
+        "name": m["name"],
+        "email": m["email"] if visible else None,
+        "email_hidden": bool(m["email"]) and not visible,
+        "bio": m["bio"],
+        "sectors": _json_list(m["sectors_json"]),
+        "expertise": _json_list(m["expertise_json"]),
+        "linkedin_url": m["linkedin_url"],
+        "hourly_rate": m["hourly_rate"],
+        "source": m["source"],
+        "status": m["status"] or "active",
+        "assignments": assignments,
+        "created_at": _iso(m["created_at"]),
+        "updated_at": _iso(m["updated_at"]),
+    }
+
+
+def _load_owned_advisor(session: Session, advisor_id: int, user: User):
+    row = session.exec(
+        text("SELECT * FROM advisor_profiles WHERE id = :id").bindparams(id=advisor_id)
+    ).first()
+    if row is None:
+        return None
+    m = row._mapping
+    if user.role == UserRole.ADMIN:
+        return m
+    if user.founder_id and int(m["founder_id"]) == int(user.founder_id):
+        return m
+    return None
+
+
+def _load_assignments(session: Session, profile_id: int) -> list:
+    rows = session.exec(
+        text(
+            "SELECT a.project_id AS project_id, p.name AS name "
+            "FROM advisor_startups a LEFT JOIN projects p ON p.id = a.project_id "
+            "WHERE a.advisor_profile_id = :pid"
+        ).bindparams(pid=profile_id)
+    ).all()
+    return [{"project_id": r._mapping["project_id"], "name": r._mapping["name"]} for r in rows]
+
+
+def _owned_project_ids(session: Session, user: User):
+    """Owned project ids, or None for admin (= all)."""
+    if user.role == UserRole.ADMIN:
+        return None
+    if not user.founder_id:
+        return []
+    rows = session.exec(
+        text("SELECT id FROM projects WHERE founder_id = :fid").bindparams(fid=user.founder_id)
+    ).all()
+    return [r._mapping["id"] for r in rows]
+
+
+@router.get("/advisors")
+def list_advisors(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+    if user.role == UserRole.ADMIN:
+        rows = session.exec(
+            text("SELECT * FROM advisor_profiles ORDER BY status ASC, updated_at DESC LIMIT 500")
+        ).all()
+    else:
+        if not user.founder_id:
+            return {"items": []}
+        rows = session.exec(
+            text(
+                "SELECT * FROM advisor_profiles WHERE founder_id = :fid "
+                "ORDER BY status ASC, updated_at DESC LIMIT 500"
+            ).bindparams(fid=user.founder_id)
+        ).all()
+    items = [_shape_advisor(r._mapping, _load_assignments(session, r._mapping["id"])) for r in rows]
+    return {"items": items}
+
+
+@router.put("/advisors/{advisor_id}")
+def update_advisor(
+    advisor_id: int,
+    payload: AdvisorUpdate,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    m = _load_owned_advisor(session, advisor_id, user)
+    if m is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    provided = payload.model_fields_set
+
+    name = payload.name if "name" in provided else m["name"]
+    if not name or not name.strip():
+        raise HTTPException(status_code=400, detail="name is required")
+    bio = payload.bio if "bio" in provided else m["bio"]
+    linkedin = payload.linkedin_url if "linkedin_url" in provided else m["linkedin_url"]
+
+    def _norm(items):
+        return json.dumps([str(x).strip() for x in (items or []) if str(x).strip()][:40])
+
+    sectors = _norm(payload.sectors) if "sectors" in provided else m["sectors_json"]
+    expertise = _norm(payload.expertise) if "expertise" in provided else m["expertise_json"]
+
+    hourly = m["hourly_rate"]
+    if "hourly_rate" in provided:
+        hourly = payload.hourly_rate
+        if hourly is not None and hourly < 0:
+            hourly = m["hourly_rate"]
+
+    session.exec(
+        text(
+            "UPDATE advisor_profiles SET name=:n, bio=:b, linkedin_url=:l, "
+            "sectors_json=:s, expertise_json=:e, hourly_rate=:h, updated_at=:u WHERE id=:id"
+        ).bindparams(
+            n=name.strip(), b=bio, l=linkedin, s=sectors, e=expertise,
+            h=hourly, u=datetime.utcnow(), id=advisor_id,
+        )
+    )
+    session.commit()
+    fresh = session.exec(
+        text("SELECT * FROM advisor_profiles WHERE id = :id").bindparams(id=advisor_id)
+    ).first()
+    return _shape_advisor(fresh._mapping, _load_assignments(session, advisor_id))
+
+
+@router.put("/advisors/{advisor_id}/assignments")
+def set_advisor_assignments(
+    advisor_id: int,
+    payload: AdvisorAssignments,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    m = _load_owned_advisor(session, advisor_id, user)
+    if m is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    requested = list({int(x) for x in payload.project_ids})
+
+    owned = _owned_project_ids(session, user)
+    if owned is not None:
+        owned_set = set(owned)
+        for pid in requested:
+            if pid not in owned_set:
+                raise HTTPException(status_code=403, detail="One or more startups are not yours to assign.")
+
+    existing = session.exec(
+        text("SELECT project_id FROM advisor_startups WHERE advisor_profile_id = :pid").bindparams(pid=advisor_id)
+    ).all()
+    have = {r._mapping["project_id"] for r in existing}
+    to_add = [p for p in requested if p not in have]
+    to_remove = [p for p in have if p not in requested]
+
+    for pid in to_add:
+        session.exec(
+            text(
+                "INSERT INTO advisor_startups (advisor_profile_id, project_id, created_at) "
+                "VALUES (:a, :p, :c) ON CONFLICT (advisor_profile_id, project_id) DO NOTHING"
+            ).bindparams(a=advisor_id, p=pid, c=datetime.utcnow())
+        )
+    for pid in to_remove:
+        session.exec(
+            text("DELETE FROM advisor_startups WHERE advisor_profile_id = :a AND project_id = :p").bindparams(
+                a=advisor_id, p=pid
+            )
+        )
+    session.exec(
+        text("UPDATE advisor_profiles SET updated_at = :u WHERE id = :id").bindparams(u=datetime.utcnow(), id=advisor_id)
+    )
+    session.commit()
+    fresh = session.exec(
+        text("SELECT * FROM advisor_profiles WHERE id = :id").bindparams(id=advisor_id)
+    ).first()
+    return _shape_advisor(fresh._mapping, _load_assignments(session, advisor_id))
+
+
+def _set_advisor_status(advisor_id: int, status_value: str, session: Session, user: User):
+    m = _load_owned_advisor(session, advisor_id, user)
+    if m is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    session.exec(
+        text("UPDATE advisor_profiles SET status = :st, updated_at = :u WHERE id = :id").bindparams(
+            st=status_value, u=datetime.utcnow(), id=advisor_id
+        )
+    )
+    session.commit()
+    fresh = session.exec(
+        text("SELECT * FROM advisor_profiles WHERE id = :id").bindparams(id=advisor_id)
+    ).first()
+    return _shape_advisor(fresh._mapping, _load_assignments(session, advisor_id))
+
+
+@router.post("/advisors/{advisor_id}/archive")
+def archive_advisor(
+    advisor_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    return _set_advisor_status(advisor_id, "archived", session, user)
+
+
+@router.post("/advisors/{advisor_id}/restore")
+def restore_advisor(
+    advisor_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    return _set_advisor_status(advisor_id, "active", session, user)

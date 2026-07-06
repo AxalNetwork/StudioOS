@@ -1,9 +1,50 @@
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 import { getSQL } from '../db';
-import { requireAuth } from '../auth';
+import { requireAuth, requireRole } from '../auth';
+import { isAdmin, mapError, nowIso } from './_t13t14t15_helpers';
+import {
+  ensureAdvisorProfilesSchema,
+  shapeAdvisorProfile,
+  type AdvisorProfileRow,
+  type AdvisorAssignment,
+} from '../services/advisorProfilesSchema';
 
 const advisory = new Hono<{ Bindings: Env }>();
+
+// --- Advisor directory (Task #75) helpers ------------------------------------
+
+/** Project ids owned by the founder (or 'all' for admin). Mirrors contacts.ts. */
+async function ownedProjectScope(env: Env, user: User): Promise<'all' | number[]> {
+  if (isAdmin(user)) return 'all';
+  if (!user.founder_id) return [];
+  const rows = await env.DB.prepare('SELECT id FROM projects WHERE founder_id = ? AND deleted_at IS NULL')
+    .bind(user.founder_id).all<{ id: number }>();
+  return (rows.results || []).map((x) => Number(x.id));
+}
+
+/** Load an advisor profile the caller owns; null → 404 (never 403, per IDOR rule). */
+async function loadOwnedAdvisor(env: Env, id: number, user: User): Promise<AdvisorProfileRow | null> {
+  const row = await env.DB.prepare('SELECT * FROM advisor_profiles WHERE id = ?').bind(id).first<AdvisorProfileRow>();
+  if (!row) return null;
+  if (isAdmin(user)) return row;
+  if (user.founder_id && Number(row.founder_id) === Number(user.founder_id)) return row;
+  return null;
+}
+
+async function loadAssignments(env: Env, profileId: number): Promise<AdvisorAssignment[]> {
+  const ars = await env.DB.prepare(
+    `SELECT a.project_id, p.name FROM advisor_startups a
+       LEFT JOIN projects p ON p.id = a.project_id
+      WHERE a.advisor_profile_id = ?`,
+  ).bind(profileId).all<{ project_id: number; name: string | null }>();
+  return (ars.results || []).map((a) => ({ project_id: Number(a.project_id), name: a.name }));
+}
+
+function normalizeStringList(v: any): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => String(x).trim()).filter(Boolean).slice(0, 40);
+}
 
 const TEMPLATES: Record<string, string> = {
   gtm: 'Based on the {sector} sector, consider: 1) Product-led growth targeting early adopters, 2) Partnership-driven distribution through complementary APIs, 3) Content marketing establishing thought leadership in {sector}.',
@@ -160,6 +201,151 @@ advisory.post('/diligence', async (c) => {
     recommendation: overallStatus === 'pass' ? 'Ready for spinout' : overallStatus === 'incomplete' ? 'Address missing items' : 'Conditional — review warnings',
     generated_at: new Date().toISOString(),
   });
+});
+
+// --- Advisor directory (Task #75) endpoints ----------------------------------
+// Founder-scoped advisor CRUD under the existing /api/advisory prefix. Admins see
+// every profile; founders see only their own. Non-owned ids return 404.
+
+// GET /api/advisory/advisors — the founder's advisor directory.
+advisory.get('/advisors', async (c) => {
+  try {
+    const user = await requireRole(c, 'founder');
+    await ensureAdvisorProfilesSchema(c.env);
+    let where = '1=1';
+    const params: any[] = [];
+    if (!isAdmin(user)) {
+      if (!user.founder_id) return c.json({ items: [] });
+      where += ' AND founder_id = ?';
+      params.push(user.founder_id);
+    }
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM advisor_profiles WHERE ${where} ORDER BY status ASC, updated_at DESC LIMIT 500`,
+    ).bind(...params).all<AdvisorProfileRow>();
+    const profiles = (rows.results || []) as AdvisorProfileRow[];
+
+    const byProfile = new Map<number, AdvisorAssignment[]>();
+    if (profiles.length) {
+      const ids = profiles.map((p) => p.id);
+      const ph = ids.map(() => '?').join(',');
+      const ars = await c.env.DB.prepare(
+        `SELECT a.advisor_profile_id AS pid, a.project_id, p.name
+           FROM advisor_startups a LEFT JOIN projects p ON p.id = a.project_id
+          WHERE a.advisor_profile_id IN (${ph})`,
+      ).bind(...ids).all<{ pid: number; project_id: number; name: string | null }>();
+      for (const a of (ars.results || [])) {
+        const list = byProfile.get(Number(a.pid)) || [];
+        list.push({ project_id: Number(a.project_id), name: a.name });
+        byProfile.set(Number(a.pid), list);
+      }
+    }
+    const items = profiles.map((p) => shapeAdvisorProfile(p, byProfile.get(p.id) || []));
+    return c.json({ items });
+  } catch (e) { return mapError(c, e); }
+});
+
+// PUT /api/advisory/advisors/:id — edit profile details.
+advisory.put('/advisors/:id', async (c) => {
+  try {
+    const user = await requireRole(c, 'founder');
+    await ensureAdvisorProfilesSchema(c.env);
+    const id = Number(c.req.param('id'));
+    const row = await loadOwnedAdvisor(c.env, id, user);
+    if (!row) return c.json({ detail: 'Not found' }, 404);
+    const body = await c.req.json().catch(() => ({} as any));
+
+    const name = body.name !== undefined ? String(body.name || '').slice(0, 200) : row.name;
+    if (!name.trim()) return c.json({ detail: 'name is required' }, 400);
+    const bio = body.bio !== undefined ? (body.bio ? String(body.bio).slice(0, 4000) : null) : row.bio;
+    const linkedin = body.linkedin_url !== undefined ? (body.linkedin_url ? String(body.linkedin_url).slice(0, 500) : null) : row.linkedin_url;
+    const sectors = body.sectors !== undefined ? JSON.stringify(normalizeStringList(body.sectors)) : row.sectors_json;
+    const expertise = body.expertise !== undefined ? JSON.stringify(normalizeStringList(body.expertise)) : row.expertise_json;
+    let hourly = row.hourly_rate;
+    if (body.hourly_rate !== undefined) {
+      if (body.hourly_rate === null || body.hourly_rate === '') hourly = null;
+      else { const n = Number(body.hourly_rate); hourly = Number.isFinite(n) && n >= 0 ? n : row.hourly_rate; }
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE advisor_profiles SET name=?, bio=?, linkedin_url=?, sectors_json=?, expertise_json=?, hourly_rate=?, updated_at=? WHERE id=?`,
+    ).bind(name.trim(), bio, linkedin, sectors, expertise, hourly, nowIso(), id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_profiles WHERE id = ?').bind(id).first<AdvisorProfileRow>();
+    return c.json(shapeAdvisorProfile(fresh as AdvisorProfileRow, await loadAssignments(c.env, id)));
+  } catch (e) { return mapError(c, e); }
+});
+
+// PUT /api/advisory/advisors/:id/assignments — replace the advisor↔startup set.
+advisory.put('/advisors/:id/assignments', async (c) => {
+  try {
+    const user = await requireRole(c, 'founder');
+    await ensureAdvisorProfilesSchema(c.env);
+    const id = Number(c.req.param('id'));
+    const row = await loadOwnedAdvisor(c.env, id, user);
+    if (!row) return c.json({ detail: 'Not found' }, 404);
+    const body = await c.req.json().catch(() => ({} as any));
+    const requested = Array.isArray(body.project_ids)
+      ? body.project_ids.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n))
+      : [];
+
+    // Every target startup must be owned by the caller.
+    const scope = await ownedProjectScope(c.env, user);
+    if (scope !== 'all') {
+      const owned = new Set(scope);
+      for (const pid of requested) {
+        if (!owned.has(pid)) return c.json({ detail: 'One or more startups are not yours to assign.' }, 403);
+      }
+    }
+
+    const want = Array.from(new Set<number>(requested));
+    const existing = await c.env.DB.prepare('SELECT project_id FROM advisor_startups WHERE advisor_profile_id = ?')
+      .bind(id).all<{ project_id: number }>();
+    const have = new Set((existing.results || []).map((x) => Number(x.project_id)));
+    const toAdd = want.filter((p) => !have.has(p));
+    const toRemove = [...have].filter((p) => !want.includes(p));
+
+    for (const pid of toAdd) {
+      await c.env.DB.prepare('INSERT OR IGNORE INTO advisor_startups (advisor_profile_id, project_id, created_at) VALUES (?, ?, ?)')
+        .bind(id, pid, nowIso()).run();
+    }
+    if (toRemove.length) {
+      const ph = toRemove.map(() => '?').join(',');
+      await c.env.DB.prepare(`DELETE FROM advisor_startups WHERE advisor_profile_id = ? AND project_id IN (${ph})`)
+        .bind(id, ...toRemove).run();
+    }
+    await c.env.DB.prepare('UPDATE advisor_profiles SET updated_at=? WHERE id=?').bind(nowIso(), id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_profiles WHERE id = ?').bind(id).first<AdvisorProfileRow>();
+    return c.json(shapeAdvisorProfile(fresh as AdvisorProfileRow, await loadAssignments(c.env, id)));
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/advisory/advisors/:id/archive — soft-remove from the active directory.
+advisory.post('/advisors/:id/archive', async (c) => {
+  try {
+    const user = await requireRole(c, 'founder');
+    await ensureAdvisorProfilesSchema(c.env);
+    const id = Number(c.req.param('id'));
+    const row = await loadOwnedAdvisor(c.env, id, user);
+    if (!row) return c.json({ detail: 'Not found' }, 404);
+    await c.env.DB.prepare('UPDATE advisor_profiles SET status=?, updated_at=? WHERE id=?')
+      .bind('archived', nowIso(), id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_profiles WHERE id = ?').bind(id).first<AdvisorProfileRow>();
+    return c.json(shapeAdvisorProfile(fresh as AdvisorProfileRow, await loadAssignments(c.env, id)));
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/advisory/advisors/:id/restore — return an archived advisor to active.
+advisory.post('/advisors/:id/restore', async (c) => {
+  try {
+    const user = await requireRole(c, 'founder');
+    await ensureAdvisorProfilesSchema(c.env);
+    const id = Number(c.req.param('id'));
+    const row = await loadOwnedAdvisor(c.env, id, user);
+    if (!row) return c.json({ detail: 'Not found' }, 404);
+    await c.env.DB.prepare('UPDATE advisor_profiles SET status=?, updated_at=? WHERE id=?')
+      .bind('active', nowIso(), id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_profiles WHERE id = ?').bind(id).first<AdvisorProfileRow>();
+    return c.json(shapeAdvisorProfile(fresh as AdvisorProfileRow, await loadAssignments(c.env, id)));
+  } catch (e) { return mapError(c, e); }
 });
 
 export default advisory;

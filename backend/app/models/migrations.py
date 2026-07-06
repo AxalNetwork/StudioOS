@@ -932,6 +932,59 @@ def ensure_cap_table_scenarios_table() -> None:
             session.rollback()
 
 
+def ensure_advisor_profiles_tables() -> None:
+    """Task #75 — Advisory Suite advisor directory (founder-scoped).
+
+    Dev mirror of Worker migration 138 + services/advisorProfilesSchema.ts.
+    DIRECTORY ONLY: the promote/waitlist half lives in the Worker Contacts hub,
+    which has no dev FastAPI counterpart, so it is intentionally not mirrored
+    here. Idempotent CREATE TABLE IF NOT EXISTS.
+    """
+    profiles_ddl = """
+    CREATE TABLE IF NOT EXISTS advisor_profiles (
+        id SERIAL PRIMARY KEY,
+        founder_id INTEGER NOT NULL REFERENCES founders(id),
+        name VARCHAR NOT NULL,
+        email VARCHAR,
+        bio TEXT,
+        sectors_json TEXT NOT NULL DEFAULT '[]',
+        expertise_json TEXT NOT NULL DEFAULT '[]',
+        linkedin_url VARCHAR,
+        hourly_rate DOUBLE PRECISION,
+        source VARCHAR,
+        status VARCHAR NOT NULL DEFAULT 'active',
+        source_contact_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )
+    """
+    startups_ddl = """
+    CREATE TABLE IF NOT EXISTS advisor_startups (
+        id SERIAL PRIMARY KEY,
+        advisor_profile_id INTEGER NOT NULL REFERENCES advisor_profiles(id),
+        project_id INTEGER NOT NULL REFERENCES projects(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        UNIQUE (advisor_profile_id, project_id)
+    )
+    """
+    with Session(engine) as session:
+        try:
+            session.exec(text(profiles_ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- static schema DDL, no user input, dev-only FastAPI
+            session.exec(text(startups_ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- static schema DDL, no user input, dev-only FastAPI
+            session.exec(text(
+                "CREATE INDEX IF NOT EXISTS ix_advisor_profiles_founder "
+                "ON advisor_profiles(founder_id, status)"
+            ))
+            session.exec(text(
+                "CREATE INDEX IF NOT EXISTS ix_advisor_startups_profile "
+                "ON advisor_startups(advisor_profile_id)"
+            ))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_advisor_profiles_tables failed: %s", exc)
+            session.rollback()
+
+
 def ensure_founder_risk_profiles_table() -> None:
     """Task #41 — Founder risk profile.
 

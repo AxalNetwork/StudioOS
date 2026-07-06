@@ -16,6 +16,7 @@ import type { Env, User } from '../types';
 import { requireRole } from '../auth';
 import { isAdmin, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { sendContactInviteEmail } from '../services/email';
+import { ensureAdvisorProfilesSchema } from '../services/advisorProfilesSchema';
 import { FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
 import {
   ensureDiscoveryInterviewFeaturedColumn,
@@ -25,7 +26,7 @@ import { hashEmail } from '../util/hashEmail';
 
 const r = new Hono<{ Bindings: Env }>();
 
-export const CONTACT_AUDIENCES = ['customer', 'investor', 'partner', 'advisor', 'advisor', 'cofounder'];
+export const CONTACT_AUDIENCES = ['customer', 'investor', 'partner', 'advisor', 'cofounder'];
 const CONTACT_STATUSES = ['new', 'invited', 'contacted', 'replied', 'qualified', 'active', 'passed'];
 
 /** Investor raise-pipeline stages a promoted investor prospect moves through. */
@@ -427,8 +428,9 @@ r.post('/:uid/tasks/:taskId/toggle', async (c) => {
 // promoted_to). Concurrency is guarded by only letting the request that flips
 // promoted_ref_id from NULL win; the loser deletes its just-created row and
 // returns the winner's — mirroring the waitlist→interview promote in
-// routes/progress.ts. Others (partner/advisor/cofounder) have no
-// downstream module and stay in Contacts.
+// routes/progress.ts. Advisors → an Advisory Suite directory profile (plus an
+// invitation email). Others (partner/cofounder) have no downstream module and
+// stay in Contacts.
 r.post('/:uid/promote', async (c) => {
   try {
     const user = await requireRole(c, 'founder');
@@ -536,6 +538,76 @@ r.post('/:uid/promote', async (c) => {
       const fresh = await db.prepare('SELECT * FROM contacts WHERE id = ?').bind(row.id).first<ContactRow>();
       const record = await db.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(newId).first<any>();
       return c.json({ ...fresh, record });
+    }
+
+    // ---- Advisor → Advisory Suite directory profile ----
+    if (row.audience === 'advisor') {
+      await ensureAdvisorProfilesSchema(c.env);
+
+      // Idempotent — return the existing profile unless the link dangles
+      // (profile since deleted → fall through and re-create).
+      if (row.promoted_to === 'advisory' && row.promoted_ref_id) {
+        const existing = await db.prepare('SELECT * FROM advisor_profiles WHERE id = ?')
+          .bind(row.promoted_ref_id).first<any>();
+        if (existing) {
+          const fresh = await db.prepare('SELECT * FROM contacts WHERE id = ?').bind(row.id).first<ContactRow>();
+          return c.json({ ...fresh, record: existing, already_promoted: true });
+        }
+      }
+
+      // Advisor profiles are founder-scoped. Derive the owner from the contact's
+      // project, falling back to the promoting founder — refuse rather than
+      // create an orphan invisible to every directory view.
+      const project = await db.prepare('SELECT name, founder_id FROM projects WHERE id = ?')
+        .bind(row.project_id).first<{ name: string | null; founder_id: number | null }>();
+      const founderId = project?.founder_id ?? user.founder_id ?? null;
+      if (!founderId) return c.json({ detail: 'Cannot resolve an owner for this advisor.' }, 400);
+
+      const advisorName = (row.name && row.name.trim()) ? row.name.trim() : row.email;
+      // Promotion from the Contacts waitlist is the Brand & Landing pipeline, a
+      // trusted source — the advisor's email stays visible in the directory.
+      const res = await db.prepare(
+        `INSERT INTO advisor_profiles
+           (founder_id, name, email, source, status, source_contact_id, created_at, updated_at)
+         VALUES (?, ?, ?, 'brand-landing', 'active', ?, ?, ?)`,
+      ).bind(founderId, advisorName, row.email, row.id, nowIso(), nowIso()).run();
+      const newId = lastInsertId(res);
+
+      const upd = await db.prepare(
+        `UPDATE contacts SET promoted_to='advisory', promoted_ref_id=?, status='qualified', last_activity_at=?, updated_at=?
+          WHERE id=? AND (promoted_ref_id IS NULL OR promoted_ref_id = ?)`,
+      ).bind(newId, nowIso(), nowIso(), row.id, row.promoted_ref_id).run();
+      if (changedRows(upd) === 0) {
+        // Lost the race — drop our profile and return the winner's link.
+        await db.prepare('DELETE FROM advisor_profiles WHERE id = ?').bind(newId).run();
+        const winner = await db.prepare('SELECT * FROM contacts WHERE id = ?').bind(row.id).first<ContactRow>();
+        const winnerRec = winner?.promoted_ref_id
+          ? await db.prepare('SELECT * FROM advisor_profiles WHERE id = ?').bind(winner.promoted_ref_id).first<any>()
+          : null;
+        return c.json({ ...winner, record: winnerRec, already_promoted: true });
+      }
+
+      // Invite the advisor to join (reuse the /contacts/invite email path). A
+      // send failure never rolls back the profile — surface email_sent /
+      // email_error so the founder can retry, mirroring POST /invite.
+      const link = c.env.APP_URL || c.env.PUBLIC_BASE_URL || 'https://axal.vc';
+      const inviteMsg = `You've been invited to join ${project?.name || 'the venture'} as an advisor.`;
+      let emailSent = false;
+      let emailError: string | null = null;
+      try {
+        emailSent = await sendContactInviteEmail(
+          c.env, row.email, advisorName, user.name || 'Axal StudioOS',
+          user.email || '', project?.name || '', link, inviteMsg,
+        );
+        if (!emailSent) emailError = 'Email provider is not configured or rejected the message';
+      } catch (e: any) {
+        emailError = e?.message || 'Unknown error sending invite email';
+      }
+
+      await logPromotion(c.env, user, row.project_id, `promoted ${row.email} to the advisory directory`);
+      const fresh = await db.prepare('SELECT * FROM contacts WHERE id = ?').bind(row.id).first<ContactRow>();
+      const record = await db.prepare('SELECT * FROM advisor_profiles WHERE id = ?').bind(newId).first<any>();
+      return c.json({ ...fresh, record, email_sent: emailSent, ...(emailError ? { email_error: emailError } : {}) });
     }
 
     return c.json({ detail: 'This audience has no promotion target; manage it here.' }, 400);

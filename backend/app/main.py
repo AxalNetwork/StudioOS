@@ -94,6 +94,7 @@ async def lifespan(app: FastAPI):
             ensure_references_table,
             ensure_founder_risk_profiles_table,
             ensure_cap_table_scenarios_table,
+            ensure_advisor_profiles_tables,
             ensure_trust_layer_columns,
             ensure_advisor_tables,
             ensure_calendar_tables,
@@ -151,6 +152,9 @@ async def lifespan(app: FastAPI):
         # Task #27 — cap-table simulator scenarios.
         ensure_cap_table_scenarios_table()
         logger.info("StudioOS migrations: cap_table_scenarios table ensured")
+        # Task #75 — Advisory Suite advisor directory (directory mirror only).
+        ensure_advisor_profiles_tables()
+        logger.info("StudioOS migrations: advisor_profiles tables ensured")
         # Task #58 — trust layer hardening.
         ensure_trust_layer_columns()
         logger.info("StudioOS migrations: trust layer columns ensured")

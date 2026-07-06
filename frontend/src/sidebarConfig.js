@@ -201,7 +201,7 @@ export const SIDEBAR_GROUPS = {
       // row active across every tab and when a founder deep-links (or is
       // redirected from) the legacy /needs and /services routes (see App.jsx).
       { to: '/build/marketplace', icon: Package, label: 'Marketplace', match: ['/build/marketplace', '/needs', '/services'] },
-      { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
+      { to: '/advisory', icon: Brain, label: 'Advisory' },
       { to: '/relationships', icon: Handshake, label: 'Network' },
     ]},
     // Task #1 — RAISE Workspaces. Ten items collapsed into three workspaces that
