@@ -93,7 +93,7 @@ function buildUpgradeRequest(c: any, user: { id: number; role: string }): Reques
 // ?token=. Admins are exempt — same policy as the HTTP gate.
 function kycOk(user: { role: string; kyc_status: string | null }): boolean {
   // Task #2 — KYC is investor-only. Admins always bypass; founders,
-  // partners, and mentors never need KYC and pass through. Only
+  // partners, and advisors never need KYC and pass through. Only
   // investors are required to be approved to subscribe to per-deal
   // realtime channels (the overview channel allows any authed user).
   if (user.role === 'admin') return true;

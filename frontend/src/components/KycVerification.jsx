@@ -124,7 +124,7 @@ export default function KycVerification({ embedded = false }) {
   }
 
   // Task #2 — KYC is only required for investor accounts. Founders,
-  // partners, and mentors who land here directly see a short explanatory
+  // partners, and advisors who land here directly see a short explanatory
   // state instead of the form. Admins keep the full form for support.
   const role = authUser?.role;
   if (role && role !== 'investor' && role !== 'admin') {

@@ -346,7 +346,7 @@ test('highestEarnedWeek walks the catalog and onAnswered advances on completion'
   // Week-3 needs requiredAll AND requiredAny.
   const week3Partial = new Set([...week2, 'scoring_run_completed']);
   assert.equal(SM.highestEarnedWeek(week3Partial), 3); // requiredAny not satisfied.
-  const week3Full = new Set([...week3Partial, 'mentor_meeting_booked']);
+  const week3Full = new Set([...week3Partial, 'advisor_meeting_booked']);
   assert.equal(SM.highestEarnedWeek(week3Full), 4);
 
   // Cap at 4 even when week-4 milestones are met.

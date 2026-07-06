@@ -47,7 +47,7 @@ def _is_admin(user: User) -> bool:
 
 def _can_use_cofounder(user: User) -> bool:
     """Founders + admins only. The brief frames this as a founder-on-
-    founder feature; partners/investors/mentors don't get a profile."""
+    founder feature; partners/investors/advisors don't get a profile."""
     return _role(user) in ("admin", "founder")
 
 

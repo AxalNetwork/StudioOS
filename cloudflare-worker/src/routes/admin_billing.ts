@@ -68,7 +68,7 @@ const INCORPORATION_FILED_STATUSES = new Set([
   'packet_processing', 'filed', 'submitted', 'in_review', 'completed', 'active',
 ]);
 
-// Session cancellation window — refunds for a mentorship/expert booking are
+// Session cancellation window — refunds for an advisorship/expert booking are
 // only allowed when the session is still at least this far in the future.
 const SESSION_CANCEL_WINDOW_MS = 24 * 60 * 60 * 1000;
 

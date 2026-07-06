@@ -81,7 +81,7 @@ const HOW_IT_WORKS = [
     bullets: [
       'Week 1: Customer discovery and market sizing',
       'Week 2: Solution scope, roadmap, and deck v1',
-      'Week 3: Venture-readiness score, mentor matching',
+      'Week 3: Venture-readiness score, advisor matching',
       'Week 4: Incorporate, vest, file 83(b), warm intros',
     ],
   },
@@ -102,7 +102,7 @@ const BENEFITS = [
   {
     icon: Brain,
     title: 'Expert Guidance',
-    desc: "AI advisor, mentor network, and weekly office hours. You're never building alone.",
+    desc: "AI advisor, advisor network, and weekly office hours. You're never building alone.",
   },
   {
     icon: Handshake,
@@ -155,7 +155,7 @@ const FAQS = [
   },
   {
     q: 'Is this an accelerator?',
-    a: 'No. Axal VC is a venture studio and operating platform. The Spin-Out Lab is a structured 30-day sprint with dedicated advisors, mentors, and capital access — not a cohort-based accelerator with demo days and mass batches.',
+    a: 'No. Axal VC is a venture studio and operating platform. The Spin-Out Lab is a structured 30-day sprint with dedicated advisors, advisors, and capital access — not a cohort-based accelerator with demo days and mass batches.',
   },
   {
     q: 'What does it cost?',

@@ -7,7 +7,7 @@
  * (slack_channel, slack_thread_ts) so replies from Slack can route back.
  *
  * Free / Growth users see HTTP 402 (paywall) — the frontend redirects them
- * to the Help widget instead. Admin / mentor bypass tier (mirrors the
+ * to the Help widget instead. Admin / advisor bypass tier (mirrors the
  * requireTier middleware pattern).
  *
  * Slack delivery uses an incoming-webhook posted to the
@@ -31,8 +31,8 @@ const ALLOWED_INVESTOR_TIERS = new Set(['institutional']);
 function isEligible(user: any): boolean {
   if (!user) return false;
   const role = String(user.role || '').toLowerCase();
-  // Admin / mentor bypass — same as requireTier
-  if (role === 'admin' || role === 'mentor') return true;
+  // Admin / advisor bypass — same as requireTier
+  if (role === 'admin' || role === 'advisor') return true;
   // Partners get chat regardless of subscription tier (they're paying via partner contract).
   if (role === 'partner') return true;
   if (role === 'investor') {

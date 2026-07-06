@@ -1,6 +1,6 @@
-/* Task #35 — Mentor admin: profile + office-hour slots + bookings.
+/* Task #35 — Advisor admin: profile + office-hour slots + bookings.
  *
- * For users with role=mentor only. Lets them edit their profile,
+ * For users with role=advisor only. Lets them edit their profile,
  * publish office-hour slots, manage incoming bookings, and review
  * mentees after a session.
  */
@@ -50,7 +50,7 @@ function ProfileCard({ profile, onSaved }) {
         specialties: draft.specialties.split(',').map((s) => s.trim()).filter(Boolean),
         sectors: draft.sectors.split(',').map((s) => s.trim()).filter(Boolean),
       };
-      const m = await api.upsertMyMentor(payload);
+      const m = await api.upsertMyAdvisor(payload);
       setInfo('Profile saved');
       onSaved?.(m);
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
@@ -59,7 +59,7 @@ function ProfileCard({ profile, onSaved }) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6 dark:bg-gray-900 dark:border-gray-800">
       <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2 dark:text-gray-100">
-        <UserCircle size={18} /> Mentor profile
+        <UserCircle size={18} /> Advisor profile
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
@@ -156,7 +156,7 @@ function NewSlotForm({ onCreated }) {
         duration_min: Number(draft.duration_min),
         capacity: Number(draft.capacity),
       };
-      await api.createMentorSlot(payload);
+      await api.createAdvisorSlot(payload);
       setDraft({ ...draft, start_at: '', notes: '' });
       onCreated();
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
@@ -207,7 +207,7 @@ function NewSlotForm({ onCreated }) {
   );
 }
 
-function MentorReviewModal({ booking, onClose, onSubmitted }) {
+function AdvisorReviewModal({ booking, onClose, onSubmitted }) {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
@@ -215,7 +215,7 @@ function MentorReviewModal({ booking, onClose, onSubmitted }) {
   async function submit() {
     setErr(null); setBusy(true);
     try {
-      await api.fileMentorReview(booking.id, { rating, comment });
+      await api.fileAdvisorReview(booking.id, { rating, comment });
       onSubmitted();
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   }
@@ -250,11 +250,11 @@ export default function OfficeHoursPage() {
 
   async function loadAll() {
     try {
-      const me = await api.getMyMentor();
+      const me = await api.getMyAdvisor();
       setProfile(me);
       const [sd, bd] = await Promise.all([
-        api.listMentorSlots(me.uid),
-        api.listMyMentorBookings(),
+        api.listAdvisorSlots(me.uid),
+        api.listMyAdvisorBookings(),
       ]);
       setSlots(sd.items || []);
       setBookings(bd.items || []);
@@ -268,10 +268,10 @@ export default function OfficeHoursPage() {
 
   async function transition(id, kind, reason) {
     try {
-      if (kind === 'confirm') await api.confirmMentorBooking(id);
-      else if (kind === 'cancel') await api.cancelMentorBooking(id, reason || 'Cancelled by mentor');
-      else if (kind === 'complete') await api.completeMentorBooking(id);
-      else if (kind === 'no_show') await api.noShowMentorBooking(id, reason || 'No-show');
+      if (kind === 'confirm') await api.confirmAdvisorBooking(id);
+      else if (kind === 'cancel') await api.cancelAdvisorBooking(id, reason || 'Cancelled by advisor');
+      else if (kind === 'complete') await api.completeAdvisorBooking(id);
+      else if (kind === 'no_show') await api.noShowAdvisorBooking(id, reason || 'No-show');
       loadAll();
     } catch (e) { alert(e.message); }
   }
@@ -313,7 +313,7 @@ export default function OfficeHoursPage() {
                 {s.status === 'open' && (
                   <button onClick={async () => {
                     if (!confirm('Cancel this slot? All its bookings will also be cancelled.')) return;
-                    try { await api.cancelMentorSlot(s.id); loadAll(); }
+                    try { await api.cancelAdvisorSlot(s.id); loadAll(); }
                     catch (e) { alert(e.message); }
                   }} className="text-red-600 hover:bg-red-50 p-2 rounded">
                     <Trash2 size={14} />
@@ -385,7 +385,7 @@ export default function OfficeHoursPage() {
       </div>
 
       {reviewing && (
-        <MentorReviewModal booking={reviewing}
+        <AdvisorReviewModal booking={reviewing}
           onClose={() => setReviewing(null)}
           onSubmitted={() => { setReviewing(null); loadAll(); }} />
       )}

@@ -8,7 +8,7 @@ import { adminTelegram as api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
-const AUDIENCES = ['public', 'founders', 'investors', 'mentors', 'partners', 'alumni'];
+const AUDIENCES = ['public', 'founders', 'investors', 'advisors', 'partners', 'alumni'];
 const TABS = [
   { id: 'channels', label: 'Channels' },
   { id: 'drafts', label: 'Drafts' },

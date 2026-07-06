@@ -39,10 +39,10 @@ export const MILESTONES: WeekDef[] = [
   {
     week: 3,
     requiredAll: ['scoring_run_completed'],
-    requiredAny: ['mentor_meeting_booked', 'cofounder_request_sent'],
+    requiredAny: ['advisor_meeting_booked', 'cofounder_request_sent'],
     unlockedFeatures: [
       'cofounder-match',
-      'mentors',
+      'advisors',
       'office-hours',
       'scoring',
     ],

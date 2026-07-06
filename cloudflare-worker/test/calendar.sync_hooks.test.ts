@@ -143,11 +143,11 @@ function googleTokenResponse() {
 }
 
 const FAKE_EVENT = {
-  id: 'mentor_booking:42',
-  kind: 'mentor_booking' as const,
+  id: 'advisor_booking:42',
+  kind: 'advisor_booking' as const,
   source_id: 42,
   source_uid: 'uid-42',
-  title: 'Mentor session — Alice',
+  title: 'Advisor session — Alice',
   start_at: '2030-01-01T10:00:00Z',
   end_at: '2030-01-01T11:00:00Z',
   status: 'confirmed',
@@ -155,7 +155,7 @@ const FAKE_EVENT = {
   location_uri: 'https://meet.example.com/x',
   organizer_email: 'organizer@axal.vc',
   attendees: [
-    { email: 'organizer@axal.vc', name: 'Org', role: 'mentor' },
+    { email: 'organizer@axal.vc', name: 'Org', role: 'advisor' },
     { email: 'mentee@axal.vc', name: 'Men', role: 'mentee' },
   ],
   notes: 'agenda',
@@ -185,7 +185,7 @@ test('onAxalSessionCancelled deletes external event + clears sync row', async ()
   fetchCalls.length = 0;
   const env = makeStubEnv();
   env.__tables.calendar_sync_records.push({
-    user_id: 1, provider: 'google', source_kind: 'mentor_booking',
+    user_id: 1, provider: 'google', source_kind: 'advisor_booking',
     source_id: 42, external_event_id: 'gcal-evt-9',
     last_synced_at: new Date().toISOString(),
   });
@@ -197,7 +197,7 @@ test('onAxalSessionCancelled deletes external event + clears sync row', async ()
     return new Response('{}', { status: 200 });
   };
   const { onAxalSessionCancelled } = await import('../src/services/calendar/sync.ts');
-  await onAxalSessionCancelled(env, 'mentor_booking', 42);
+  await onAxalSessionCancelled(env, 'advisor_booking', 42);
   const deletes = fetchCalls.filter(c => c.method === 'DELETE');
   assert.equal(deletes.length, 1, 'expected DELETE call to Google');
   assert.equal(env.__tables.calendar_sync_records.length, 0, 'sync row should be cleared');

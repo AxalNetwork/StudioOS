@@ -44,7 +44,7 @@ const STATUS_PILL = {
   disconnected: 'bg-gray-100 text-gray-600',
 };
 
-const BYPASS_ROLES = new Set(['admin', 'partner', 'investor', 'mentor']);
+const BYPASS_ROLES = new Set(['admin', 'partner', 'investor', 'advisor']);
 
 function ProviderIcon({ name, size = 18 }) {
   const Icon = ICON_MAP[name] || Plug;
@@ -96,7 +96,7 @@ export default function IntegrationsPage({ embedded = false }) {
   const { toast, showToast } = useToast(2500);
   const navigate = useNavigate();
 
-  // Task #18 — `bypassesTier` lets admin/partner/investor/mentor unlock
+  // Task #18 — `bypassesTier` lets admin/partner/investor/advisor unlock
   // tier-gated providers, so we MUST read the live AuthProvider role
   // (re-fetched from /api/auth/me on every navigation) instead of the
   // cached localStorage user. Otherwise a former admin who was just

@@ -839,7 +839,7 @@ function CompetitorEnrichmentBlock({ projects }) {
 function FocusProjectCompetitorsBlock({ projects }) {
   const { user } = useAuth();
   const tier = (user?.tier || user?.subscription_plan || 'free').toLowerCase();
-  const isElevated = ['admin', 'partner', 'investor', 'mentor'].includes((user?.role || '').toLowerCase());
+  const isElevated = ['admin', 'partner', 'investor', 'advisor'].includes((user?.role || '').toLowerCase());
   const tierLocked = !isElevated && tier !== 'growth' && tier !== 'studio';
 
   const [focusId, setFocusId] = useState(projects[0]?.id || null);
@@ -965,7 +965,7 @@ function tierForUser(user) {
 }
 function isFullLensCaller(user) {
   if (!user) return false;
-  if (['admin', 'partner', 'mentor'].includes(user.role)) return true;
+  if (['admin', 'partner', 'advisor'].includes(user.role)) return true;
   const t = tierForUser(user);
   if (user.role === 'investor') return t === 'professional' || t === 'institutional';
   return t === 'growth' || t === 'studio';
@@ -1998,7 +1998,7 @@ function DemandSupplyAtlasTab() {
 
   return (
     <div className="space-y-4">
-      <TabExplainer text="Per-sector heatmap of which topics founders are asking about (demand) vs which mentors/partners are offering (supply). Shortage chips flag where founders are blocked; surplus chips flag where the studio has spare capacity." />
+      <TabExplainer text="Per-sector heatmap of which topics founders are asking about (demand) vs which advisors/partners are offering (supply). Shortage chips flag where founders are blocked; surplus chips flag where the studio has spare capacity." />
       <div className="flex items-center gap-3 flex-wrap">
         <label className="text-xs text-gray-600 dark:text-gray-400">Sector:</label>
         <select value={sectorFilter} onChange={(e) => setSectorFilter(e.target.value)} className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900">
@@ -2192,7 +2192,7 @@ function PartnerMarketplacePulseTab() {
 
   return (
     <div className="space-y-4">
-      <TabExplainer text="What capacity the mentor + partner network is offering. Topics ranked by aggregate supply across sectors; the donut shows the top-6 skill mix. Rate-card averages and comp-model breakdowns surface here as more partners answer comp questions." />
+      <TabExplainer text="What capacity the advisor + partner network is offering. Topics ranked by aggregate supply across sectors; the donut shows the top-6 skill mix. Rate-card averages and comp-model breakdowns surface here as more partners answer comp questions." />
       <MIErr err={err} />
       {!err && !data && <MILoading label="Loading partner pulse…" />}
       {data && capacity.length === 0 && <MIInsufficientData section="Partner pulse" kMin={data.k_min} />}
@@ -2597,7 +2597,7 @@ function CapitalVelocityTab() {
 // ── Platform Personas (Task #4 CF) ─────────────────────────────────────────
 // Single endpoint → 8 charts. Free callers see the donut + sector heatmap;
 // remaining 6 charts surface a paywall teaser. Studio / Institutional /
-// admin / partner / mentor see CSV + PDF export buttons.
+// admin / partner / advisor see CSV + PDF export buttons.
 const ROLE_COLORS = ['#7c3aed', '#2563eb', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#a78bfa', '#fb7185'];
 
 // Blurred teaser per spec: synthesized fake data rendered with a heavy
@@ -2790,7 +2790,7 @@ function PlatformPersonasTab() {
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip contentStyle={{ fontSize: 11 }} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    {['founder', 'investor', 'partner', 'mentor', 'admin'].map((role, i) => (
+                    {['founder', 'investor', 'partner', 'advisor', 'admin'].map((role, i) => (
                       <Bar key={role} dataKey={role} stackId="s" fill={ROLE_COLORS[i % ROLE_COLORS.length]} />
                     ))}
                   </BarChart>
@@ -2906,7 +2906,7 @@ function PlatformPersonasTab() {
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip contentStyle={{ fontSize: 11 }} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    {['founder', 'investor', 'partner', 'mentor', 'admin'].map((role, i) => (
+                    {['founder', 'investor', 'partner', 'advisor', 'admin'].map((role, i) => (
                       <Line key={role} type="monotone" dataKey={role} stroke={ROLE_COLORS[i % ROLE_COLORS.length]} strokeWidth={2} dot={false} />
                     ))}
                   </LineChart>

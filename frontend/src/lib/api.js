@@ -942,7 +942,7 @@ export const api = {
   insightsNewsletterPreview: () => request('/insights/newsletter/preview'),
 
   // Signals — founder decision engine over public-market evidence. Worker-only
-  // (dev FastAPI has no /api/signals). Shared by Founder + Advisor/Mentor modes;
+  // (dev FastAPI has no /api/signals). Shared by Founder + Advisor modes;
   // `mode` only changes ordering + copy, never the underlying data.
   signals: {
     list: (params = {}) => {
@@ -1875,7 +1875,7 @@ export const api = {
     request('/billing/tier/checkout', { method: 'POST', body: JSON.stringify({ tier }) }),
   tierPortal: () => request('/billing/tier/portal', { method: 'POST' }),
 
-  // ---------- Persona (account-plan) billing — partner, advisor/mentor, … ----------
+  // ---------- Persona (account-plan) billing — partner, advisor, … ----------
   // Generic subscription pipeline for every signed-in role that isn't a founder
   // or investor. planStatus returns the caller's current plan/trial/renewal;
   // planCheckout creates an incomplete subscription and returns a client_secret
@@ -2075,8 +2075,8 @@ export const api = {
   summarizeReference: (id) =>
     request(`/references/${id}/summarize`, { method: 'POST' }),
 
-  // ---------- Mentor matching + office hours (Task #35) ----------
-  listMentors: (opts = {}) => {
+  // ---------- Advisor matching + office hours (Task #35) ----------
+  listAdvisors: (opts = {}) => {
     const qs = new URLSearchParams();
     if (opts.specialty) qs.set('specialty', opts.specialty);
     if (opts.sector) qs.set('sector', opts.sector);
@@ -2085,30 +2085,30 @@ export const api = {
     if (opts.max_rate != null) qs.set('max_rate', opts.max_rate);
     if (opts.accepting_only === false) qs.set('accepting_only', 'false');
     const s = qs.toString();
-    return request(`/mentors/${s ? `?${s}` : ''}`);
+    return request(`/advisors/${s ? `?${s}` : ''}`);
   },
-  getMentor: (uid) => request(`/mentors/${uid}`),
-  upsertMyMentor: (data) => request('/mentors/me', { method: 'POST', body: JSON.stringify(data) }),
-  getMyMentor: () => request('/mentors/me'),
-  listMentorSlots: (uid, upcomingOnly = true) =>
-    request(`/mentors/${uid}/slots?upcoming_only=${upcomingOnly ? 'true' : 'false'}`),
-  createMentorSlot: (data) => request('/mentors/me/slots', { method: 'POST', body: JSON.stringify(data) }),
-  cancelMentorSlot: (slotId) => request(`/mentors/me/slots/${slotId}`, { method: 'DELETE' }),
-  bookMentorSlot: (slotId, data) =>
-    request(`/mentors/slots/${slotId}/book`, { method: 'POST', body: JSON.stringify(data) }),
-  listMyMentorBookings: (status) =>
-    request(`/mentors/me/bookings${status ? `?status=${status}` : ''}`),
+  getAdvisor: (uid) => request(`/advisors/${uid}`),
+  upsertMyAdvisor: (data) => request('/advisors/me', { method: 'POST', body: JSON.stringify(data) }),
+  getMyAdvisor: () => request('/advisors/me'),
+  listAdvisorSlots: (uid, upcomingOnly = true) =>
+    request(`/advisors/${uid}/slots?upcoming_only=${upcomingOnly ? 'true' : 'false'}`),
+  createAdvisorSlot: (data) => request('/advisors/me/slots', { method: 'POST', body: JSON.stringify(data) }),
+  cancelAdvisorSlot: (slotId) => request(`/advisors/me/slots/${slotId}`, { method: 'DELETE' }),
+  bookAdvisorSlot: (slotId, data) =>
+    request(`/advisors/slots/${slotId}/book`, { method: 'POST', body: JSON.stringify(data) }),
+  listMyAdvisorBookings: (status) =>
+    request(`/advisors/me/bookings${status ? `?status=${status}` : ''}`),
   listMyMenteeBookings: (status) =>
-    request(`/mentors/bookings/me${status ? `?status=${status}` : ''}`),
-  confirmMentorBooking: (id) => request(`/mentors/bookings/${id}/confirm`, { method: 'POST' }),
-  cancelMentorBooking: (id, reason) =>
-    request(`/mentors/bookings/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  completeMentorBooking: (id) => request(`/mentors/bookings/${id}/complete`, { method: 'POST' }),
-  noShowMentorBooking: (id, reason) =>
-    request(`/mentors/bookings/${id}/no-show`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  fileMentorReview: (bookingId, data) =>
-    request(`/mentors/bookings/${bookingId}/review`, { method: 'POST', body: JSON.stringify(data) }),
-  listBookingReviews: (bookingId) => request(`/mentors/bookings/${bookingId}/reviews`),
+    request(`/advisors/bookings/me${status ? `?status=${status}` : ''}`),
+  confirmAdvisorBooking: (id) => request(`/advisors/bookings/${id}/confirm`, { method: 'POST' }),
+  cancelAdvisorBooking: (id, reason) =>
+    request(`/advisors/bookings/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  completeAdvisorBooking: (id) => request(`/advisors/bookings/${id}/complete`, { method: 'POST' }),
+  noShowAdvisorBooking: (id, reason) =>
+    request(`/advisors/bookings/${id}/no-show`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  fileAdvisorReview: (bookingId, data) =>
+    request(`/advisors/bookings/${bookingId}/review`, { method: 'POST', body: JSON.stringify(data) }),
+  listBookingReviews: (bookingId) => request(`/advisors/bookings/${bookingId}/reviews`),
 
   // ---------- Unified calendar (Task #56) ----------
   listCalendarEvents: (opts = {}) => {
@@ -2208,7 +2208,7 @@ export const api = {
   pushOneToExternal: (kind, sourceId) =>
     request(`/calendar/push/${kind}/${sourceId}`, { method: 'POST' }),
 
-  // Per-user Cal.com key (mentor-only)
+  // Per-user Cal.com key (advisor-only)
   attachMyCalcomKey: (data) =>
     request('/calendar/me/calcom', { method: 'POST', body: JSON.stringify(data) }),
 
@@ -2523,7 +2523,7 @@ export const api = {
   },
 };
 
-// Task #3 — Due Diligence module. Admin/partner/investor/mentor only;
+// Task #3 — Due Diligence module. Admin/partner/investor/advisor only;
 // founders are blocked at the worker level (any 403 surfaces directly).
 export const dd = {
   catalog: () => request('/dd/catalog'),
@@ -2618,8 +2618,8 @@ export const adminTeam = {
   reorder: (order) => request('/admin/team/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
 };
 
-// Task #1 — Admin mentor & partner network profiles (drives Spin-Out
-// Demo Day deck's Mentors & Network slide).
+// Task #1 — Admin advisor & partner network profiles (drives Spin-Out
+// Demo Day deck's Advisors & Network slide).
 export const adminNetworkProfiles = {
   list: () => request('/admin/network-profiles'),
   create: (payload) => request('/admin/network-profiles', { method: 'POST', body: JSON.stringify(payload) }),

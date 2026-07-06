@@ -194,7 +194,7 @@ export const REGISTRY: ProviderDescriptor[] = [
     key: 'calendly',
     display_name: 'Calendly',
     integration_type: 'scheduling',
-    description: 'Embed your Calendly availability across mentor matching and partner office hours; bookings flow into your StudioOS calendar.',
+    description: 'Embed your Calendly availability across advisor matching and partner office hours; bookings flow into your StudioOS calendar.',
     // Task #3 — flipped to 'live' on 2026-05-10. Provider module is
     // side-effect imported from index.ts so the registerProvider() call
     // runs at boot.

@@ -18,7 +18,7 @@
  *   GET    /angellist/template.csv — AngelList CSV template download.
  *
  * Tier limits: Free=1/mo, Growth=10/mo, Studio=unlimited. Admin/partner/
- * mentor/investor roles bypass the founder counter (investor tier still
+ * advisor/investor roles bypass the founder counter (investor tier still
  * enforced separately for the portfolio importer).
  */
 
@@ -38,7 +38,7 @@ const TIER_MONTHLY_CAP: Record<string, number> = {
 };
 
 // Only admin bypasses the per-tier cap — Free/Growth/Studio caps apply to
-// every other role (founder, investor, partner, mentor). Per-tier caps are
+// every other role (founder, investor, partner, advisor). Per-tier caps are
 // keyed off `subscription_tier`; investor/partner tiers without one of the
 // three canonical values default to Free (1/mo).
 const BYPASS_ROLES = new Set(['admin']);

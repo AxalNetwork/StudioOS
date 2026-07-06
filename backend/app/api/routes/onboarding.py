@@ -252,7 +252,7 @@ _CHECKLIST_CATALOG: Dict[str, list] = {
         {"key": "nf.brand", "label": "Upload or generate brand basics", "route": "/build/brand"},
         {"key": "nf.deck", "label": "Draft pitch deck (5+ slides)", "route": "/build/deck"},
         {"key": "nf.scoring", "label": "Run your first scoring", "route": "/projects"},
-        {"key": "nf.mentor", "label": "Book a mentor session", "route": "/mentors"},
+        {"key": "nf.advisor", "label": "Book an advisor session", "route": "/advisors"},
         {"key": "nf.team", "label": "Invite a team member", "route": "/settings/account"},
     ],
     "existingFounder": [
@@ -291,13 +291,13 @@ _CHECKLIST_CATALOG: Dict[str, list] = {
         {"key": "op.intro", "label": "Make first qualified intro", "route": "/pipeline"},
         {"key": "op.notifs", "label": "Configure notifications", "route": "/settings/notifications"},
     ],
-    "mentor": [
+    "advisor": [
         {"key": "mt.persona", "label": "Complete profiling chatbot", "route": "/settings/profile"},
         {"key": "mt.tags", "label": "Add expertise tags + sectors + stages", "route": "/settings/profile"},
-        {"key": "mt.comp", "label": "Pick comp model", "route": "/mentors"},
+        {"key": "mt.comp", "label": "Pick comp model", "route": "/advisors"},
         {"key": "mt.calendar", "label": "Connect Calendly or Google Calendar", "route": "/calendar"},
         {"key": "mt.refs", "label": "Provide 2 references", "route": "/settings/profile"},
-        {"key": "mt.nda", "label": "Sign Mentor NDA + disclaimer", "route": "/settings/security"},
+        {"key": "mt.nda", "label": "Sign Advisor NDA + disclaimer", "route": "/settings/security"},
         {"key": "mt.capacity", "label": "Set weekly capacity", "route": "/office-hours"},
         {"key": "mt.slots", "label": "Surface availability slots", "route": "/office-hours"},
         {"key": "mt.booking", "label": "Accept first session booking", "route": "/office-hours"},
@@ -371,8 +371,8 @@ def _resolve_checklist_role(user: User, primary_persona_id: Optional[str]) -> st
         return "investor"
     if role_str == "partner":
         return "operatingPartner"
-    if role_str == "mentor":
-        return "mentor"
+    if role_str == "advisor":
+        return "advisor"
     if role_str in ("founder", "admin"):
         p = str(primary_persona_id or "").lower()
         if (

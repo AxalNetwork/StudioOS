@@ -21,7 +21,7 @@
  *     so the bank registry imports work out of the box.
  *   - Mocks D1 with the minimum surface routeAnswer + writeRouter touch:
  *     SELECT/INSERT/UPDATE on users, founders, projects,
- *     investor_profiles, mentors, partner_profiles,
+ *     investor_profiles, advisors, partner_profiles,
  *     advisor_answers (for cross-conversation no-repeat),
  *     spinout_lab_milestones (for week gating).
  *   - Bank questions whose route is "merge into advisor_extras_json"
@@ -65,7 +65,7 @@ function makeDb(seed: { user_id: number; user_role: Persona; project_id?: number
     users: [{
       id: seed.user_id, role: seed.user_role,
       founder_id: seed.founder_id ?? null,
-      mentor_id: null,
+      advisor_id: null,
       investor_subscription_status: null,
       subscription_status: null,
       spinout_lab_active: 0,
@@ -74,7 +74,7 @@ function makeDb(seed: { user_id: number; user_role: Persona; project_id?: number
     projects: seed.project_id ? [{ id: seed.project_id, founder_id: seed.founder_id, name: 'seed', advisor_extras_json: null } as any] : [],
     founders: seed.founder_id ? [{ id: seed.founder_id, name: 'F', email: 'f@e' } as any] : [],
     investor_profiles: [] as any[],
-    mentors: [] as any[],
+    advisors: [] as any[],
     partner_profiles: [] as any[],
     partner_invitations: [] as any[],
     advisor_answers: [] as any[],
@@ -102,8 +102,8 @@ function makeDb(seed: { user_id: number; user_role: Persona; project_id?: number
           const p = tables.projects.find((r) => r.id === params[0]);
           return p ? { advisor_extras_json: p.advisor_extras_json ?? null } as any : null;
         }
-        if (/FROM mentors WHERE/.test(sql)) {
-          const m = tables.mentors.find((r) => r.user_id === params[0] || r.id === params[0]);
+        if (/FROM advisors WHERE/.test(sql)) {
+          const m = tables.advisors.find((r) => r.user_id === params[0] || r.id === params[0]);
           return m ? { id: m.id } as any : null;
         }
         if (/FROM partner_profiles WHERE user_id = \?/.test(sql)) {
@@ -180,16 +180,16 @@ function makeDb(seed: { user_id: number; user_role: Persona; project_id?: number
           }
           return { meta: {} } as any;
         }
-        if (/INSERT INTO mentors/.test(sql)) {
-          const id = tables.mentors.length + 1;
-          tables.mentors.push({ id, user_id: params[1] });
+        if (/INSERT INTO advisors/.test(sql)) {
+          const id = tables.advisors.length + 1;
+          tables.advisors.push({ id, user_id: params[1] });
           return { meta: { last_row_id: id } } as any;
         }
-        if (/UPDATE mentors/.test(sql)) {
+        if (/UPDATE advisors/.test(sql)) {
           const setMatch = sql.match(/SET ([^W]+)WHERE/);
           if (setMatch) {
             const cols = setMatch[1].split(',').map((s) => s.trim().split('=')[0].trim()).filter((c) => c && !c.startsWith('updated_at'));
-            cols.forEach((col, i) => writes.push({ table: 'mentors', column: col, value: params[i], row_id: params[params.length - 1] }));
+            cols.forEach((col, i) => writes.push({ table: 'advisors', column: col, value: params[i], row_id: params[params.length - 1] }));
           }
           return { meta: {} } as any;
         }
@@ -367,7 +367,7 @@ async function runScenario(
   //     `expects_saved_writes` must produce ≥1 routeAnswer with
   //     status='saved' and a populated saved_to.{table,column}. AND
   //     every saved write must land in a table allowed for that
-  //     persona — a founder answer must NOT end up in `mentors` or
+  //     persona — a founder answer must NOT end up in `advisors` or
   //     `partner_profiles`, an investor answer must NOT end up in
   //     `projects`, etc. This is the "correct tables" half of the spec
   //     contract that the previous version of this assertion missed.
@@ -386,8 +386,8 @@ async function runScenario(
       'partner_profiles', 'users', 'partner_extras',
       'advisor_extras_json',
     ]),
-    mentor: new Set([
-      'mentors', 'mentor_profiles', 'users', 'mentor_extras',
+    advisor: new Set([
+      'advisors', 'advisor_profiles', 'users', 'advisor_extras',
       'advisor_extras_json',
     ]),
     unknown: new Set(['advisor_extras_json']),

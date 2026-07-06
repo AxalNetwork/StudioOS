@@ -813,7 +813,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
     // Review the deal. The product-demo media renders on the Solution slide
     // (no standalone Product Demo slide), but its fields stay an editable
     // editor group below. The former Brand, Venture readiness, Team,
-    // Mentors & network and Axal signal slides were dropped/merged;
+    // Advisors & network and Axal signal slides were dropped/merged;
     // `incorporated` moved onto Cap table.
     // Field keys mirror buildAxalSpinoutDemoDaySlides() so the editor
     // renders real text/bullet/metric-grid inputs (not raw JSON).
@@ -885,7 +885,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
         f.bullets('roadmap_next', 'Next', []),
         f.bullets('roadmap_later', 'Later', []),
       ] },
-      // Task #1 — Team & venture readiness + Mentors & network collapsed
+      // Task #1 — Team & venture readiness + Advisors & network collapsed
       // into one people slide. Founders carry an editable company /
       // affiliation alongside name + role.
       { id: 'team_network', title: 'Team & network', fields: [
@@ -918,7 +918,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
         f.para('mn_eyebrow', 'Network — eyebrow', []),
         f.title('mn_headline', []),
         f.para('mn_body', 'Network — body', []),
-        f.bullets('mn_mentors', 'Mentors', []),
+        f.bullets('mn_advisors', 'Advisors', []),
         f.bullets('mn_network_signals', 'Network signals', []),
       ] },
       { id: 'cap_table', title: 'Cap table', fields: [

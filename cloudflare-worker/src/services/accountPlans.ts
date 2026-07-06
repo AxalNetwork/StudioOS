@@ -4,7 +4,7 @@
  *
  * Founder (`metadata.tier`) and Investor (`metadata.investor_tier`) each have a
  * bespoke pipeline (checkout / status / webhook / columns). Every OTHER role —
- * partner, advisor/mentor, and anything added later — shares this one, keyed by
+ * partner, advisor, and anything added later — shares this one, keyed by
  * a `plan_group` derived from the role. Catalog products opt a persona in by
  * carrying `metadata.plan_group === <group>` (e.g. 'partner', 'advisor'); the
  * `/api/billing/plan/*` routes resolve, subscribe, and sync against that.
@@ -48,9 +48,9 @@ export async function ensureAccountPlanSchema(env: Env): Promise<void> {
 const DEDICATED_ROLES = new Set(['founder', 'investor']);
 
 // Explicit role → plan_group overrides. The "advisor" product surface is the
-// `mentor` role internally (advisor == mentor, per the pricing pages). Every
+// `advisor` role internally (advisor == advisor, per the pricing pages). Every
 // other non-dedicated role maps to its own name.
-const ROLE_PLAN_GROUP: Record<string, string> = { mentor: 'advisor' };
+const ROLE_PLAN_GROUP: Record<string, string> = { advisor: 'advisor' };
 
 /**
  * The plan_group a role subscribes under, or null when the role has a dedicated

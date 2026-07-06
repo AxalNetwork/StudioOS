@@ -85,9 +85,9 @@
     "expects_saved_writes": true
   },
   {
-    "name": "mentor",
-    "persona": "mentor",
-    "user": { "id": 401, "role": "mentor" },
+    "name": "advisor",
+    "persona": "advisor",
+    "user": { "id": 401, "role": "advisor" },
     "gate": { "spinoutLabActive": false, "week": 1, "completed": [], "tiers": [] },
     "turns": 8,
     "expects_saved_writes": true

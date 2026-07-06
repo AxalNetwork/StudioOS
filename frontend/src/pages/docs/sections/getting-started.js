@@ -9,7 +9,7 @@ export default {
       overview:
         "StudioOS is the operating system Axal VC uses to take a startup from a rough idea to an incorporated, funded company. You'll find every tool you need — discovery, roadmap, brand, deck, cap table, capital, legal, and the network — under one roof, organized by what you're trying to do this week.",
       howto: [
-        'Sign in and pick the role that fits you (Founder, Investor, Partner, or Mentor).',
+        'Sign in and pick the role that fits you (Founder, Investor, Partner, or Advisor).',
         'Use the left sidebar groups to find features by phase: Build, Validate & Grow, Capital & Finance, Legal, Network.',
         'Open the Quick Search at the top of the sidebar (or press Ctrl/Cmd-K) to jump anywhere in the app.',
       ],
@@ -30,7 +30,7 @@ export default {
       id: 'choosing-path',
       title: 'Choosing your path: Spin-Out Lab vs. Existing Company',
       overview:
-        "If you're starting from a hypothesis or a partner-supplied idea, the 30-day Spin-Out Lab walks you through validation, design, and incorporation in four guided weeks. If you already have a company and just want to use the tooling (cap table, fundraising, partner network, mentors), pick the Existing Company path instead.",
+        "If you're starting from a hypothesis or a partner-supplied idea, the 30-day Spin-Out Lab walks you through validation, design, and incorporation in four guided weeks. If you already have a company and just want to use the tooling (cap table, fundraising, partner network, advisors), pick the Existing Company path instead.",
       howto: [
         'On first sign-in, the Onboarding wizard asks where you are in your journey.',
         'Pick "Spin-Out Lab" to enter the 4-week sprint with a locked, week-by-week feature tree.',
@@ -54,12 +54,12 @@ export default {
       id: 'roles',
       title: 'Account roles explained',
       overview:
-        "Every account has one of five roles: Founder, Investor, Partner (service provider), Mentor, or Admin. Your role decides which sidebar groups you see, which dashboards open by default, and which features are gated to you.",
+        "Every account has one of five roles: Founder, Investor, Partner (service provider), Advisor, or Admin. Your role decides which sidebar groups you see, which dashboards open by default, and which features are gated to you.",
       howto: [
         'Founder — applying or running a startup; full access to Build, Validate & Grow, and Capital tools.',
         'Investor — limited partner or co-investor; sees the Investor Portal, Pipeline, and Portfolio Health.',
         'Partner — service provider; lists services in the Marketplace, responds to Needs Board RFPs, runs Office Hours.',
-        'Mentor — domain expert; books office-hour slots, takes mentee engagements, writes reflections.',
+        'Advisor — domain expert; books office-hour slots, takes mentee engagements, writes reflections.',
         'Admin — studio operator; sees everything plus the Admin Console and a “View as” role switcher.',
       ],
       tips: [
@@ -77,9 +77,9 @@ export default {
     },
     {
       id: 'personas',
-      title: 'Personas (New Founder, Existing Company, Investor, Mentor)',
+      title: 'Personas (New Founder, Existing Company, Investor, Advisor)',
       overview:
-        "Personas are tighter slices of a role that tune your dashboard, the Personal Advisor’s opening questions, and which “quick action” cards appear first. Founders pick between New Founder (idea stage) and Existing Company; Investors and Mentors each have one persona today.",
+        "Personas are tighter slices of a role that tune your dashboard, the Personal Advisor’s opening questions, and which “quick action” cards appear first. Founders pick between New Founder (idea stage) and Existing Company; Investors and Advisors each have one persona today.",
       howto: [
         'During onboarding, pick the persona that matches what you’re doing this quarter.',
         'Re-open Settings → Profile → Re-run onboarding to switch personas later.',
@@ -111,7 +111,7 @@ export default {
       ],
       tips: [
         'You can re-run onboarding any time from Settings → Profile → Re-run onboarding.',
-        'Onboarding answers also drive the Mentor Match and Partner Match algorithms.',
+        'Onboarding answers also drive the Advisor Match and Partner Match algorithms.',
       ],
       pitfalls: [
         'Skipping the timezone step makes calendar invites land in UTC — set it before booking your first session.',

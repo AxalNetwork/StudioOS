@@ -15,9 +15,9 @@
  *   GET  /:id              → single signal detail (evidence, companies, sources)
  *   POST /refresh          → trigger background ingestion refresh (admin only)
  *
- * Access: any authenticated Axal member (founder / mentor / advisor / partner /
+ * Access: any authenticated Axal member (founder / advisor / partner /
  * investor / admin) can read signals — the same engine powers Founder and
- * Advisor/Mentor modes. Refresh is admin-gated.
+ * Advisor modes. Refresh is admin-gated.
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';

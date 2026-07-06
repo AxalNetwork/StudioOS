@@ -381,12 +381,12 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 
 // ===========================================================================
 // Aggregator — IC meetings + founder check-ins. The worker D1 has no
-// mentor_bookings or partner_bookings tables, so those kinds are skipped
+// advisor_bookings or partner_bookings tables, so those kinds are skipped
 // (the FastAPI version reads them when present).
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'mentor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking';
   source_id: number;
   source_uid: string;
   title: string;
@@ -489,7 +489,7 @@ async function checkinEvents(env: Env, userId: number, isAdmin: boolean,
   return out;
 }
 
-// Mentor + partner office-hour bookings live in tables that may not yet
+// Advisor + partner office-hour bookings live in tables that may not yet
 // exist in worker D1 (the FastAPI backend owns them). Wrap each query in
 // a try/catch so a missing table degrades to an empty list instead of a
 // 500. Any *other* error is rethrown so genuine bugs are still surfaced.
@@ -498,7 +498,7 @@ function isMissingTableError(e: any): boolean {
   return msg.includes('no such table') || msg.includes('does not exist');
 }
 
-// Some D1 deployments have `mentor_bookings`/`partner_bookings` from an
+// Some D1 deployments have `advisor_bookings`/`partner_bookings` from an
 // older schema variant (migration 034) that does NOT include the
 // scheduled_start/scheduled_end/requester_user_id/meeting_uri columns this
 // service expects (those live on a related slots table in that variant).
@@ -511,39 +511,39 @@ function isMissingColumnError(e: any): boolean {
   return msg.includes('no such column');
 }
 
-async function mentorBookingEvents(env: Env, userId: number, isAdmin: boolean,
+async function advisorBookingEvents(env: Env, userId: number, isAdmin: boolean,
                                    fromIso: string, toIso: string): Promise<CalendarEvent[]> {
   const sql = getSQL(env);
   try {
-    // Visibility: requester, mentor (via users.mentor_id), or admin.
-    const me = (await sql`SELECT mentor_id FROM users WHERE id = ${userId}` as any[])[0];
-    const myMentorId = me?.mentor_id || null;
+    // Visibility: requester, advisor (via users.advisor_id), or admin.
+    const me = (await sql`SELECT advisor_id FROM users WHERE id = ${userId}` as any[])[0];
+    const myAdvisorId = me?.advisor_id || null;
     const rows = await sql`
-      SELECT b.* FROM mentor_bookings b
+      SELECT b.* FROM advisor_bookings b
       WHERE b.scheduled_start >= ${fromIso} AND b.scheduled_start <= ${toIso}
         AND b.status IN ('requested', 'confirmed', 'completed')
     ` as any[];
     const out: CalendarEvent[] = [];
     for (const b of rows) {
       const isRequester = b.requester_user_id === userId;
-      const isMentor = !!(myMentorId && b.mentor_id === myMentorId);
-      if (!(isAdmin || isRequester || isMentor)) continue;
-      const mentor = (await sql`SELECT email, name FROM mentors WHERE id = ${b.mentor_id}` as any[])[0];
+      const isAdvisor = !!(myAdvisorId && b.advisor_id === myAdvisorId);
+      if (!(isAdmin || isRequester || isAdvisor)) continue;
+      const advisor = (await sql`SELECT email, name FROM advisors WHERE id = ${b.advisor_id}` as any[])[0];
       const requester = (await sql`SELECT email, name FROM users WHERE id = ${b.requester_user_id}` as any[])[0];
       out.push({
-        id: `mentor_booking:${b.id}`,
-        kind: 'mentor_booking',
+        id: `advisor_booking:${b.id}`,
+        kind: 'advisor_booking',
         source_id: b.id,
         source_uid: b.uid,
-        title: `Mentor session — ${b.topic || ''}`.trim(),
+        title: `Advisor session — ${b.topic || ''}`.trim(),
         start_at: b.scheduled_start,
         end_at: b.scheduled_end,
         status: b.status,
         location_kind: 'video',
         location_uri: b.meeting_uri || null,
-        organizer_email: mentor?.email || null,
+        organizer_email: advisor?.email || null,
         attendees: [
-          { email: mentor?.email || null, name: mentor?.name || null, role: 'mentor' },
+          { email: advisor?.email || null, name: advisor?.name || null, role: 'advisor' },
           { email: requester?.email || null, name: requester?.name || null, role: 'mentee' },
         ],
         notes: b.questions || null,
@@ -654,10 +654,10 @@ export async function fetchUserEvents(
   const wanted = new Set(
     kinds && kinds.length
       ? kinds
-      : ['mentor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour', 'calendly_event'],
+      : ['advisor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour', 'calendly_event'],
   );
   const out: CalendarEvent[] = [];
-  if (wanted.has('mentor_booking')) out.push(...await mentorBookingEvents(env, userId, isAdmin, fromIso, toIso));
+  if (wanted.has('advisor_booking')) out.push(...await advisorBookingEvents(env, userId, isAdmin, fromIso, toIso));
   if (wanted.has('ic_meeting')) out.push(...await icEvents(env, userId, isAdmin, fromIso, toIso));
   if (wanted.has('founder_checkin')) out.push(...await checkinEvents(env, userId, isAdmin, fromIso, toIso));
   if (wanted.has('partner_office_hour')) out.push(...await partnerOfficeHourEvents(env, userId, isAdmin, fromIso, toIso));

@@ -18,7 +18,7 @@
  * it. Falls back to 'general' if the partner hasn't answered the
  * services question yet (so the cell still bucketizes coherently).
  *
- * Persona gate: only `partner` answers contribute. Mentor/founder/
+ * Persona gate: only `partner` answers contribute. Advisor/founder/
  * investor answers on these question_ids would noop.
  */
 import { writeSignal, type ExtractorContext } from './shared';

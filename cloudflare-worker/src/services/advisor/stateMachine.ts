@@ -353,8 +353,8 @@ const DYNAMIC_PROMPTS: Record<Persona, string[]> = {
     'What capability is the portfolio missing that you keep wishing you could offer?',
     'Which relationship in your network is most underused relative to its potential?',
   ],
-  mentor: [
-    'Across the founders you mentor, what mistake do you find yourself flagging over and over?',
+  advisor: [
+    'Across the founders you advisor, what mistake do you find yourself flagging over and over?',
     'What advice do you give that founders most often resist — and are usually wrong to?',
     'Where do you feel least confident giving guidance right now?',
   ],

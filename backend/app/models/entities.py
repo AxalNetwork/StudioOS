@@ -100,7 +100,7 @@ class UserRole(str, Enum):
     FOUNDER = "founder"
     PARTNER = "partner"      # service providers (legal, accounting, design, recruiting, GTM, etc.)
     INVESTOR = "investor"    # capital allocators (LP / VC / Angel / Scout). Phase 0.1 split.
-    MENTOR = "mentor"        # Task #35 — operator-mentors offering office hours / 1:1 guidance.
+    ADVISOR = "advisor"        # Task #35 — operator-advisors offering office hours / 1:1 guidance.
 
 
 class User(SQLModel, table=True):
@@ -115,8 +115,8 @@ class User(SQLModel, table=True):
     partner_id: Optional[int] = Field(default=None, foreign_key="partners.id")
     # Phase 0.1 — link to investor profile when role == 'investor'.
     investor_id: Optional[int] = Field(default=None, foreign_key="investors.id")
-    # Task #35 — link to the mentor profile when role == 'mentor'.
-    mentor_id: Optional[int] = Field(default=None, foreign_key="mentors.id")
+    # Task #35 — link to the advisor profile when role == 'advisor'.
+    advisor_id: Optional[int] = Field(default=None, foreign_key="advisors.id")
     is_active: bool = True
     email_verified: bool = False
     verification_token: Optional[str] = None
@@ -1313,14 +1313,14 @@ class MetricsSnapshot(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
-# Task #35 — Mentor matching + office hours
+# Task #35 — Advisor matching + office hours
 # ---------------------------------------------------------------------------
-class Mentor(SQLModel, table=True):
-    """Operator-mentor profile. Distinct from Partner (service providers) and
-    Investor (capital allocators) — mentors offer 1:1 guidance, sometimes
+class Advisor(SQLModel, table=True):
+    """Operator-advisor profile. Distinct from Partner (service providers) and
+    Investor (capital allocators) — advisors offer 1:1 guidance, sometimes
     free, sometimes for an hourly rate. Linked 1:1 to a User via
-    ``users.mentor_id`` once the user role is 'mentor'."""
-    __tablename__ = "mentors"
+    ``users.advisor_id`` once the user role is 'advisor'."""
+    __tablename__ = "advisors"
     id: Optional[int] = Field(default=None, primary_key=True)
     uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
     name: str
@@ -1335,7 +1335,7 @@ class Mentor(SQLModel, table=True):
     currency: str = "USD"
     accepting_bookings: bool = Field(default=True, index=True)
     listed: bool = Field(default=True, index=True)  # opt-in to public directory
-    rating_avg: Optional[float] = None         # cached over MentorReview rows
+    rating_avg: Optional[float] = None         # cached over AdvisorReview rows
     rating_count: int = 0
     # Cal.com integration — when set, slot/booking creation is mirrored to
     # the configured Cal.com event type. When null we are the source of truth.
@@ -1347,7 +1347,7 @@ class Mentor(SQLModel, table=True):
 
 
 class OfficeHourSlot(SQLModel, table=True):
-    """A bookable office-hour window published by a mentor.
+    """A bookable office-hour window published by an advisor.
 
     A slot may have ``capacity > 1`` for group office hours. Once
     ``capacity`` accepted (confirmed/completed) bookings exist the slot
@@ -1357,31 +1357,31 @@ class OfficeHourSlot(SQLModel, table=True):
     __tablename__ = "office_hours_slots"
     id: Optional[int] = Field(default=None, primary_key=True)
     uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
-    mentor_id: int = Field(foreign_key="mentors.id", index=True)
+    advisor_id: int = Field(foreign_key="advisors.id", index=True)
     start_at: datetime = Field(index=True)
     duration_min: int = 30
     capacity: int = 1                          # > 1 ⇒ group office hours
     location_kind: str = "video"               # video | phone | in_person
-    location_uri: Optional[str] = None         # zoom/meet link (filled by mentor or Cal.com mirror)
-    notes: Optional[str] = None                # mentor-facing prep notes
+    location_uri: Optional[str] = None         # zoom/meet link (filled by advisor or Cal.com mirror)
+    notes: Optional[str] = None                # advisor-facing prep notes
     status: str = Field(default="open", index=True)  # open | cancelled
     calcom_event_id: Optional[str] = None      # mirror id when Cal.com is wired
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-class MentorBooking(SQLModel, table=True):
+class AdvisorBooking(SQLModel, table=True):
     """A confirmed (or pending) office-hours booking against a slot.
 
     Lifecycle: ``requested`` → ``confirmed`` → ``completed``
                                       ↘ ``cancelled`` (either side, any time before completed)
-                                      ↘ ``no_show`` (mentor stamps after the fact)
+                                      ↘ ``no_show`` (advisor stamps after the fact)
     """
-    __tablename__ = "mentor_bookings"
+    __tablename__ = "advisor_bookings"
     id: Optional[int] = Field(default=None, primary_key=True)
     uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
     slot_id: int = Field(foreign_key="office_hours_slots.id", index=True)
-    mentor_id: int = Field(foreign_key="mentors.id", index=True)
+    advisor_id: int = Field(foreign_key="advisors.id", index=True)
     requester_user_id: int = Field(foreign_key="users.id", index=True)
     project_id: Optional[int] = Field(default=None, foreign_key="projects.id", index=True)
     topic: str
@@ -1400,26 +1400,26 @@ class MentorBooking(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-class MentorReview(SQLModel, table=True):
+class AdvisorReview(SQLModel, table=True):
     """Two-sided review: after a booking moves to ``completed`` either party
     may file exactly one review describing the other. Direction is encoded by
-    ``reviewer_role`` ∈ {mentor, mentee}: a mentor-authored review describes
-    the mentee, a mentee-authored review describes the mentor. Mentor's
-    public ``rating_avg`` aggregates only mentee→mentor rows.
+    ``reviewer_role`` ∈ {advisor, mentee}: an advisor-authored review describes
+    the mentee, a mentee-authored review describes the advisor. Advisor's
+    public ``rating_avg`` aggregates only mentee→advisor rows.
     """
-    __tablename__ = "mentor_reviews"
+    __tablename__ = "advisor_reviews"
     id: Optional[int] = Field(default=None, primary_key=True)
     uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
-    booking_id: int = Field(foreign_key="mentor_bookings.id", index=True)
-    mentor_id: int = Field(foreign_key="mentors.id", index=True)
+    booking_id: int = Field(foreign_key="advisor_bookings.id", index=True)
+    advisor_id: int = Field(foreign_key="advisors.id", index=True)
     reviewer_user_id: int = Field(foreign_key="users.id", index=True)
-    reviewer_role: str = Field(index=True)     # 'mentor' (about mentee) | 'mentee' (about mentor)
+    reviewer_role: str = Field(index=True)     # 'advisor' (about mentee) | 'mentee' (about advisor)
     rating: int = Field(ge=1, le=5)
     comment: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     __table_args__ = (
-        UniqueConstraint("booking_id", "reviewer_role", name="uq_mentor_reviews_booking_role"),
+        UniqueConstraint("booking_id", "reviewer_role", name="uq_advisor_reviews_booking_role"),
     )
 
 
@@ -1512,7 +1512,7 @@ class CalendarSyncRecord(SQLModel, table=True):
     __tablename__ = "calendar_sync_records"
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", index=True)
-    source_kind: str = Field(index=True)        # mentor_booking | ic_meeting | founder_checkin
+    source_kind: str = Field(index=True)        # advisor_booking | ic_meeting | founder_checkin
     source_id: int = Field(index=True)
     google_event_id: str
     last_synced_at: datetime = Field(default_factory=datetime.utcnow)
@@ -1543,7 +1543,7 @@ class CofounderProfile(SQLModel, table=True):
     # (engineering, product, design, sales, gtm, ops, finance, ai_ml,
     # data, hardware) but we don't enforce — operators may add new
     # categories without a migration.
-    # Stored as JSON-encoded strings to mirror the Mentor pattern (avoids
+    # Stored as JSON-encoded strings to mirror the Advisor pattern (avoids
     # taking on a postgres ARRAY/JSON dialect dependency for one feature).
     # Helpers in services/cofounder.py round-trip these via json.loads/dumps.
     skills_json: str = Field(default="[]")
@@ -1725,7 +1725,7 @@ class DecisionJournalEntry(SQLModel, table=True):
 class PartnerOfficeHourSlot(SQLModel, table=True):
     """A bookable office-hour slot published by a Partner.
 
-    Mirrors the Mentor `OfficeHourSlot` shape but is partner-owned. Surfaces
+    Mirrors the Advisor `OfficeHourSlot` shape but is partner-owned. Surfaces
     on the unified calendar feed as `partner_office_hour` for both the
     publishing partner (their bookings + the slot itself) and any user
     holding a confirmed booking.
@@ -1747,7 +1747,7 @@ class PartnerOfficeHourSlot(SQLModel, table=True):
 
 
 class PartnerBooking(SQLModel, table=True):
-    """A booking against a `PartnerOfficeHourSlot`. Mirrors `MentorBooking`
+    """A booking against a `PartnerOfficeHourSlot`. Mirrors `AdvisorBooking`
     semantics: requested → confirmed → completed (or cancelled / no_show)."""
     __tablename__ = "partner_bookings"
     id: Optional[int] = Field(default=None, primary_key=True)

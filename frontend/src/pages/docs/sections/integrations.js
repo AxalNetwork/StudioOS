@@ -15,7 +15,7 @@ export default {
         'Disconnect any provider any time; in-flight syncs will stop.',
       ],
       tips: [
-        'Connect calendar first — bookings (mentors, office hours, deal calls) all rely on it.',
+        'Connect calendar first — bookings (advisors, office hours, deal calls) all rely on it.',
         'You can connect multiple providers for the same category (e.g. both Google and Microsoft) but only one is "active" per category.',
       ],
       pitfalls: [
@@ -49,7 +49,7 @@ export default {
         'Tenant policies may block external invites from being accepted automatically — accept manually if needed.',
       ],
       related: [
-        { label: 'Mentors', href: '#validate-grow/mentors' },
+        { label: 'Advisors', href: '#validate-grow/advisors' },
         { label: 'Office Hours', href: '#validate-grow/office-hours' },
         { label: 'Calendar not syncing', href: '#troubleshooting/calendar-not-syncing' },
       ],

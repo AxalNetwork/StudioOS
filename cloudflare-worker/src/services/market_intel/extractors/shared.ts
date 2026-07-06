@@ -71,9 +71,9 @@ export async function resolveUserSector(env: Env, userId: number, persona: strin
       ).bind(userId).first<{ sectors_json: string | null }>();
       const arr = r?.sectors_json ? safeParseArray(r.sectors_json) : [];
       if (arr[0]) return canonicalSector(arr[0]);
-    } else if (persona === 'mentor') {
+    } else if (persona === 'advisor') {
       const r = await env.DB.prepare(
-        `SELECT sectors_json FROM mentors WHERE user_id = ?`,
+        `SELECT sectors_json FROM advisors WHERE user_id = ?`,
       ).bind(userId).first<{ sectors_json: string | null }>();
       const arr = r?.sectors_json ? safeParseArray(r.sectors_json) : [];
       if (arr[0]) return canonicalSector(arr[0]);

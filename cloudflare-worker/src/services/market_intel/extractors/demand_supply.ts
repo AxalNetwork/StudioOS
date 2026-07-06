@@ -1,6 +1,6 @@
 /**
  * Demand / Supply tagger: founders contribute "demand" rows,
- * mentors/partners contribute "supply" rows. Output schema:
+ * advisors/partners contribute "supply" rows. Output schema:
  *   { side: 'demand'|'supply', topics: string[] }
  */
 import { writeSignal, type ExtractorContext } from './shared';
@@ -19,7 +19,7 @@ export function tagTopics(text: string): string[] {
 }
 
 export async function extractDemandSupply(ctx: ExtractorContext): Promise<number> {
-  if (ctx.persona !== 'founder' && ctx.persona !== 'mentor' && ctx.persona !== 'partner') return 0;
+  if (ctx.persona !== 'founder' && ctx.persona !== 'advisor' && ctx.persona !== 'partner') return 0;
   const tags = tagTopics(ctx.rawValue);
   if (!tags.length) return 0;
   const side = ctx.persona === 'founder' ? 'demand' : 'supply';

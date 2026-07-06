@@ -5,7 +5,7 @@
  * and bankFor() fit-bank inclusion against an in-memory SQLite database wrapped
  * in a minimal D1 adapter. Asserts the structured fan-out the spec requires:
  *
- *   1. bankFor appends each persona's fit bank (mentor carries mentor + coach).
+ *   1. bankFor appends each persona's fit bank (advisor carries advisor + coach).
  *   2. axal_value  → axal_values   (score = raw/5, confidence = 1).
  *   3. skill_axis  → user_skills   (self_level = raw on the rep skill); a 0
  *      writes no phantom skill row.
@@ -104,16 +104,16 @@ function founderEntry(pick: (m: FitMeasureEntry['measures']) => boolean): FitMea
 }
 
 // ── bankFor inclusion ──────────────────────────────────────────────────────
-test('bankFor appends each persona fit bank; mentor carries mentor + coach', () => {
+test('bankFor appends each persona fit bank; advisor carries advisor + coach', () => {
   const ids = (p: Parameters<typeof bankFor>[0]) => bankFor(p).map((q) => q.id);
 
   assert.ok(ids('founder').some((id) => id.startsWith('fit.founder.')));
   assert.ok(ids('investor').some((id) => id.startsWith('fit.investor.')));
   assert.ok(ids('partner').some((id) => id.startsWith('fit.partner.')));
 
-  const mentorIds = ids('mentor');
-  assert.ok(mentorIds.some((id) => id.startsWith('fit.mentor.')));
-  assert.ok(mentorIds.some((id) => id.startsWith('fit.coach.')));
+  const advisorIds = ids('advisor');
+  assert.ok(advisorIds.some((id) => id.startsWith('fit.advisor.')));
+  assert.ok(advisorIds.some((id) => id.startsWith('fit.coach.')));
 
   // Admin carries no fit bank.
   assert.ok(!ids('admin').some((id) => id.startsWith('fit.')));

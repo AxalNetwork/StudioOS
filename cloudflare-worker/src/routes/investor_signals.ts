@@ -340,7 +340,7 @@ investorProfile.post('/me/opt-out', async (c) => {
 // TIER GATE: the spec requires Free callers to see only the
 // sector-compass overview. Investors below 'professional' tier and
 // founders without growth/studio entitlement get 402; admin / partner /
-// mentor bypass via the same `callerHasFullLens` predicate that the
+// advisor bypass via the same `callerHasFullLens` predicate that the
 // Market-Intel lens routes use, so behaviour is symmetric across the
 // seven sub-tabs. `/latest` below is gated with the same predicate so
 // the alias mount under /api/market-intel/investor-signals/* stays
@@ -417,7 +417,7 @@ investorSignals.get('/latest', async (c) => {
   // Task #5 (AK) — Investor Signals is a paid sub-tab. Gated with the
   // same predicate as GET /, so the alias mount under
   // /api/market-intel/investor-signals/* stays symmetric. Free callers
-  // see the sector-compass overview only; admin/partner/mentor bypass.
+  // see the sector-compass overview only; admin/partner/advisor bypass.
   if (!callerHasFullLens(user)) {
     return c.json({ error: 'tier_required', required: 'growth' }, 402);
   }

@@ -10,7 +10,7 @@ signal is credible".
 The same engine powers two modes that share one dataset:
 
 - **Founder mode** → "What should I build next?"
-- **Advisor / Mentor mode** → "What opportunities should I point founders toward?"
+- **Advisor mode** → "What opportunities should I point founders toward?"
 
 Mode changes ordering and framing copy only — never the underlying data.
 

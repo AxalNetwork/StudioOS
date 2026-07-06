@@ -14,7 +14,7 @@ const AUDIENCE_COLOR = {
   founder:  'bg-blue-100 text-blue-700',
   investor: 'bg-purple-100 text-purple-700',
   partner:  'bg-emerald-100 text-emerald-700',
-  mentor:   'bg-amber-100 text-amber-700',
+  advisor:   'bg-amber-100 text-amber-700',
   all:      'bg-gray-100 text-gray-700',
 };
 

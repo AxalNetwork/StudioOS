@@ -12,7 +12,7 @@
  *   (B) Pure-logic checks of the predicates the routes use:
  *         * `callerHasFullLens` — Free / no-tier callers rejected,
  *           growth+ / professional / institutional accepted, admin /
- *           partner / mentor bypass.
+ *           partner / advisor bypass.
  *         * MIN_CELL_SIZE k-anonymity — cells with n < 5 mask to
  *           `{n: null, reason: 'insufficient_data'}` with the n=5
  *           boundary surfaced.
@@ -137,7 +137,7 @@ test('GET /citations honours `since` param + returns ingest timestamp', async ()
 // Mirror of `callerHasFullLens` from routes/market_intel.ts +
 // routes/investor_signals.ts. Re-extracted here so the test fails if the
 // predicate ever drifts between the two routes.
-const FULL_LENS_BYPASS_ROLES = ['admin', 'partner', 'mentor'];
+const FULL_LENS_BYPASS_ROLES = ['admin', 'partner', 'advisor'];
 function callerHasFullLens(user) {
   if (!user) return false;
   if (FULL_LENS_BYPASS_ROLES.includes(user.role)) return true;
@@ -172,10 +172,10 @@ test('growth founders + professional/institutional investors see full lens', () 
   assert.equal(callerHasFullLens({ role: 'investor', investor_tier: 'institutional' }), true);
 });
 
-test('admin / partner / mentor bypass tier gating', () => {
+test('admin / partner / advisor bypass tier gating', () => {
   assert.equal(callerHasFullLens({ role: 'admin' }), true);
   assert.equal(callerHasFullLens({ role: 'partner' }), true);
-  assert.equal(callerHasFullLens({ role: 'mentor' }), true);
+  assert.equal(callerHasFullLens({ role: 'advisor' }), true);
 });
 
 test('k-anonymity masks cells with n < 5', () => {

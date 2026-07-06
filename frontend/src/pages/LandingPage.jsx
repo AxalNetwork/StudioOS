@@ -18,7 +18,7 @@ const LANES = [
     bullets: [
       'Idea to incorporated company in the 30-day Spin-Out Lab',
       'Pitch deck → cap table → fundraise for existing companies',
-      'Personal Advisor, mentor track, and investor exposure',
+      'Personal Advisor, advisor track, and investor exposure',
     ],
     cta: 'Apply as Founder',
     href: '/register?lane=founder',
@@ -52,15 +52,15 @@ const LANES = [
     icon: Handshake,
   },
   {
-    id: 'mentor',
+    id: 'advisor',
     title: 'For Advisors',
     bullets: [
       'Share time on your own schedule',
-      'Office Hours and one-off mentor sessions',
+      'Office Hours and one-off advisor sessions',
       'Pick the sectors and stages you care about',
     ],
     cta: 'Become an Advisor',
-    href: '/register?lane=mentor',
+    href: '/register?lane=advisor',
     color: '#926dc0',
     icon: GraduationCap,
   },
@@ -71,7 +71,7 @@ const HOW_IT_WORKS = [
     week: 'Step 1',
     title: 'Join the lane that fits',
     icon: UserPlus,
-    desc: 'Founder, investor, partner, mentor, or coach — pick the door that matches what you do.',
+    desc: 'Founder, investor, partner, advisor, or coach — pick the door that matches what you do.',
   },
   {
     week: 'Step 2',
@@ -439,7 +439,7 @@ export default function LandingPage() {
                 </h3>
                 <p className="text-sm text-gray-700 leading-relaxed dark:text-gray-300">
                   A high-touch spin-out program with advisor support, warm intros,
-                  mentor matching, and the tooling founders need to move fast.{' '}
+                  advisor matching, and the tooling founders need to move fast.{' '}
                   <Link
                     to="/spinout-lab#what-you-get"
                     className="inline-flex items-center gap-1 text-violet-700 hover:text-violet-900 font-medium"
@@ -482,7 +482,7 @@ export default function LandingPage() {
                 {[
                   { n: 1, title: 'Idea & Customer', desc: 'Frame the problem, size the market, log ≥5 customer interviews.' },
                   { n: 2, title: 'Solution & Roadmap', desc: 'Scope the MVP, set 90-day OKRs, draft brand v1 + deck v1.' },
-                  { n: 3, title: 'Validate & Team', desc: 'First venture-readiness score, mentor cadence, co-founder track.' },
+                  { n: 3, title: 'Validate & Team', desc: 'First venture-readiness score, advisor cadence, co-founder track.' },
                   { n: 4, title: 'Incorporate & Capital', desc: 'Incorporate, vest, file 83(b), lock the ask, three warm intros.' },
                 ].map((w) => (
                   <li key={w.n} className="flex gap-3">

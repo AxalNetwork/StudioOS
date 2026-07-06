@@ -3,7 +3,7 @@
  *
  * Access:
  *   - Founders are NEVER allowed: any DD endpoint that doesn't require
- *     `admin` requires `partner|investor|mentor` AND a matching reviewer
+ *     `admin` requires `partner|investor|advisor` AND a matching reviewer
  *     row on the section being acted on.
  *   - Admins have full read+write across every case.
  *   - Founders ARE notified once when the final report is shared (via
@@ -53,11 +53,11 @@ async function requireDdReader(c: AppContext): Promise<AppUser> {
   // Founders are explicitly blocked from every DD endpoint. They are
   // notified once when the report is shared (via /report/share) but
   // never read DD data themselves. The User.role union doesn't currently
-  // include 'mentor' (see types.ts) so we widen here — mentors are stored
-  // in the DB with role='mentor' even though the type literal doesn't
-  // list it (legacy from before the mentor role split).
+  // include 'advisor' (see types.ts) so we widen here — advisors are stored
+  // in the DB with role='advisor' even though the type literal doesn't
+  // list it (legacy from before the advisor role split).
   const role = String(user.role);
-  if (role !== 'admin' && role !== 'partner' && role !== 'investor' && role !== 'mentor') {
+  if (role !== 'admin' && role !== 'partner' && role !== 'investor' && role !== 'advisor') {
     throw new Error('Forbidden');
   }
   return user as unknown as AppUser;
@@ -134,7 +134,7 @@ dd.get('/cases', async (c) => {
     if (status) { conds.push('status = ?'); params.push(status); }
     if (band) { conds.push('risk_band = ?'); params.push(band); }
     if (ownerOnly || user.role !== 'admin') {
-      // Partners/investors/mentors only see cases they own OR are a reviewer on.
+      // Partners/investors/advisors only see cases they own OR are a reviewer on.
       conds.push(`(owner_user_id = ? OR id IN (SELECT case_id FROM dd_reviewers WHERE user_id = ?))`);
       params.push(user.id, user.id);
     }
@@ -159,7 +159,7 @@ dd.post('/cases', async (c) => {
   const subjectType = String(body.subject_type || '') as DDSubjectType;
   const subjectId = Number(body.subject_id);
   const subjectLabel = String(body.subject_label || '').trim();
-  if (!['project','founder','mentor','investor','partner'].includes(subjectType)) {
+  if (!['project','founder','advisor','investor','partner'].includes(subjectType)) {
     return c.json({ error: 'Invalid subject_type' }, 400);
   }
   if (!subjectId || !subjectLabel) {
@@ -211,7 +211,7 @@ dd.get('/cases/:uid', async (c) => {
   //                             only the findings on those sections, only
   //                             the reviewers/attachments for those
   //                             sections, and case PII fields redacted.
-  // Anyone else (admin/partner/investor/mentor without an assignment on
+  // Anyone else (admin/partner/investor/advisor without an assignment on
   // this case) is rejected with 403.
   let scopedSectionIds: Set<number> | null = null; // null = unrestricted
   if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
@@ -404,12 +404,12 @@ dd.post('/cases/:uid/sections/:sectionId/assign', async (c) => {
     const u: any[] = await sql`SELECT id, name, email, role FROM users WHERE id = ${assigneeId}`;
     if (u.length === 0) return c.json({ error: 'Assignee user not found' }, 404);
     // Only roles permitted to read DD data may be assigned a section.
-    // Anything outside admin/partner/investor/mentor (notably founder)
+    // Anything outside admin/partner/investor/advisor (notably founder)
     // would be unable to open the case anyway and would just create a
     // dangling reviewer row.
-    const allowed = new Set(['admin', 'partner', 'investor', 'mentor']);
+    const allowed = new Set(['admin', 'partner', 'investor', 'advisor']);
     if (!allowed.has(String(u[0].role))) {
-      return c.json({ error: 'Assignee role cannot review DD sections (must be admin/partner/investor/mentor)' }, 403);
+      return c.json({ error: 'Assignee role cannot review DD sections (must be admin/partner/investor/advisor)' }, 403);
     }
 
     await sql`UPDATE dd_sections SET assignee_user_id = ${assigneeId}, status = 'assigned', updated_at = CURRENT_TIMESTAMP WHERE id = ${sectionId}`;
@@ -718,7 +718,7 @@ dd.get('/cases/:uid/audit', async (c) => {
 //
 // Routes assign-modal lookups for "who has reviewed this section_key
 // before?". Suggested experts = users whose role is admin/partner/
-// mentor/investor and who either (a) have completed prior verdicts on
+// advisor/investor and who either (a) have completed prior verdicts on
 // the same section_key (ranked by count desc, most-recent tiebreaker)
 // or (b) match the section's domain via a hand-curated mapping in
 // `users.expertise_tags`-style columns. Falls back to all eligible
@@ -742,14 +742,14 @@ dd.get('/experts', async (c) => {
           JOIN users u ON u.id = s.assignee_user_id
          WHERE s.section_key = ${sectionKey}
            AND s.verdict IS NOT NULL
-           AND u.role IN ('admin','partner','mentor','investor')
+           AND u.role IN ('admin','partner','advisor','investor')
          GROUP BY u.id, u.name, u.email, u.role
          ORDER BY prior_reviews DESC, last_reviewed_at DESC
          LIMIT 10`;
     }
     const eligible: any[] = await sql`
       SELECT id, name, email, role FROM users
-       WHERE role IN ('admin','partner','mentor','investor')
+       WHERE role IN ('admin','partner','advisor','investor')
        ORDER BY name LIMIT 100`;
     return c.json({ suggestions, eligible });
   } finally { await sql.end(); }

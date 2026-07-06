@@ -1,7 +1,7 @@
 /**
  * T13 — Partner office hours.
- * Mounted at /api/partner-office-hours. Mirrors mentors.ts but keyed on
- * `partner_id` instead of `mentor_id`. Booking semantics are identical.
+ * Mounted at /api/partner-office-hours. Mirrors advisors.ts but keyed on
+ * `partner_id` instead of `advisor_id`. Booking semantics are identical.
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';

@@ -23,7 +23,7 @@ import {
   PROFILING_MODULES,
 } from '../src/services/advisor/profilingModules.ts';
 
-const PERSONAS: Persona[] = ['founder', 'investor', 'partner', 'mentor'] as Persona[];
+const PERSONAS: Persona[] = ['founder', 'investor', 'partner', 'advisor'] as Persona[];
 
 test('empty answers → all modules present, 0%, honest reachable denominators', () => {
   for (const persona of PERSONAS) {
@@ -72,7 +72,7 @@ test('answering every module to its floor → complete', () => {
 });
 
 test('overall answered/required never double-counts over-answering', () => {
-  const bank = profilingBankFor('mentor' as Persona);
+  const bank = profilingBankFor('advisor' as Persona);
   // Answer ALL questions.
   const answered = new Set(bank.map((q) => q.id));
   const c = computeProfilingCompletion(bank, answered);

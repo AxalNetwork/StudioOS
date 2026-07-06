@@ -704,7 +704,7 @@ const SlideTeamNetwork: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
     founderBottom = TOP + founders.length * rowH;
   }
 
-  // ── roster (advisors / mentors / partners) ──────────────────────────────
+  // ── roster (advisors / advisors / partners) ──────────────────────────────
   const labelY = founderBottom + 0.16;
   const rosterTop = labelY + 0.36;
   const avail = Math.max(0, BOTTOM - rosterTop);

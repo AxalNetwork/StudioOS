@@ -28,7 +28,7 @@ const BANK_FILES = {
   existingFounder:   { rel: 'banks/existingFounder.ts',   persona: 'founder' },
   investor:          { rel: 'banks/investor.ts',          persona: 'investor' },
   operatingPartner:  { rel: 'banks/operatingPartner.ts',  persona: 'partner' },
-  mentor:            { rel: 'banks/mentor.ts',            persona: 'mentor' },
+  advisor:            { rel: 'banks/advisor.ts',            persona: 'advisor' },
   admin:             { rel: 'banks/admin.ts',             persona: 'admin' },
 };
 

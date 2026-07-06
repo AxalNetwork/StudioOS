@@ -8,7 +8,7 @@ const REL_TYPES = [
   { id: 'advisor_founder', label: 'Advisor ↔ Founder', color: 'bg-blue-100 text-blue-700' },
   { id: 'operator_partner', label: 'Operator ↔ Partner', color: 'bg-violet-100 text-violet-700' },
   { id: 'strategic_alliance', label: 'Strategic Alliance', color: 'bg-amber-100 text-amber-700' },
-  { id: 'mentor_mentee', label: 'Mentor ↔ Mentee', color: 'bg-pink-100 text-pink-700' },
+  { id: 'advisor_mentee', label: 'Advisor ↔ Mentee', color: 'bg-pink-100 text-pink-700' },
 ];
 const ACTION_LABELS = {
   dashboard_view: '👀 Viewed Dashboard', deal_review: '📂 Reviewed Deal', syndicate_join: '🤝 Joined Syndicate',

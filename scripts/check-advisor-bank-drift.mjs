@@ -31,7 +31,7 @@ const SIZE_TARGETS = {
   newFounderSpinout: 80,
   existingFounder: 120,
   investor: 60,
-  mentor: 30,
+  advisor: 30,
   admin: 10,
   operatingPartnerPerSubtype: 50, // ×4 sub-types
 };
@@ -50,7 +50,7 @@ const BANK_FILES = {
   existingFounder:   'banks/existingFounder.ts',
   investor:          'banks/investor.ts',
   operatingPartner:  'banks/operatingPartner.ts',
-  mentor:            'banks/mentor.ts',
+  advisor:            'banks/advisor.ts',
   admin:             'banks/admin.ts',
 };
 

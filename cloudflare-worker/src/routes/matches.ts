@@ -747,7 +747,7 @@ matches.get('/admin/all', async (c) => {
 // Top matches for the current user across all five counterparty types.
 //   free      → counts + ONE anonymized teaser per type
 //   studio    → full ranked matches with identity (names/contact)
-//   bypass    → admin/partner/investor/mentor see full (via userMeetsTier)
+//   bypass    → admin/partner/investor/advisor see full (via userMeetsTier)
 //   ?detail=full → free callers get a 402 PaywallModal trigger; unlocked get full.
 // The default (no `detail`) ALWAYS returns 200 so the summary card never 402s.
 matches.get('/summary', async (c) => {

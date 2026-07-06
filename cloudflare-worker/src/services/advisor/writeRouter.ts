@@ -4,7 +4,7 @@
  * Maps `question_id` → the canonical place that answer should land in
  * D1. Every write goes through the *same* per-resource auth check the
  * normal route would enforce (founders can only write their own
- * project, investors their own profile, mentors their own mentor row,
+ * project, investors their own profile, advisors their own advisor row,
  * etc.). The router never trusts the LLM — only the routes/advisor.ts
  * caller passes a verified `User` here.
  *
@@ -43,12 +43,12 @@ export interface WriteResult {
 interface UserSubscriptionFields {
   investor_subscription_status?: string | null;
   subscription_status?: string | null;
-  mentor_id?: number | null;
+  advisor_id?: number | null;
 }
 
 async function loadSubscriptionFields(env: Env, userId: number): Promise<UserSubscriptionFields> {
   const row = await env.DB.prepare(
-    `SELECT investor_subscription_status, subscription_status, mentor_id
+    `SELECT investor_subscription_status, subscription_status, advisor_id
        FROM users WHERE id = ?`,
   ).bind(userId).first<UserSubscriptionFields>().catch(() => null);
   return row || {};
@@ -108,20 +108,20 @@ async function ensureInvestorProfile(env: Env, user: User): Promise<boolean> {
 }
 
 /**
- * Resolve (or lazy-create) the mentor row owned by `user`. Uses the
- * same lookup order as routes/mentors.ts:myMentor — users.mentor_id
- * first, then fall back to mentors.user_id. Column names match the
+ * Resolve (or lazy-create) the advisor row owned by `user`. Uses the
+ * same lookup order as routes/advisors.ts:myAdvisor — users.advisor_id
+ * first, then fall back to advisors.user_id. Column names match the
  * live D1 schema (display_name, email, is_active).
  */
-async function ensureMentorRow(env: Env, user: User): Promise<{ id: number } | null> {
+async function ensureAdvisorRow(env: Env, user: User): Promise<{ id: number } | null> {
   try {
     const subs = await loadSubscriptionFields(env, user.id);
-    if (subs.mentor_id) {
-      const byId = await env.DB.prepare(`SELECT id FROM mentors WHERE id = ?`)
-        .bind(subs.mentor_id).first<{ id: number }>().catch(() => null);
+    if (subs.advisor_id) {
+      const byId = await env.DB.prepare(`SELECT id FROM advisors WHERE id = ?`)
+        .bind(subs.advisor_id).first<{ id: number }>().catch(() => null);
       if (byId?.id) return { id: Number(byId.id) };
     }
-    const byUser = await env.DB.prepare(`SELECT id FROM mentors WHERE user_id = ?`)
+    const byUser = await env.DB.prepare(`SELECT id FROM advisors WHERE user_id = ?`)
       .bind(user.id).first<{ id: number }>().catch(() => null);
     if (byUser?.id) return { id: Number(byUser.id) };
 
@@ -131,15 +131,15 @@ async function ensureMentorRow(env: Env, user: User): Promise<{ id: number } | n
     const uid = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
     const now = new Date().toISOString();
     const r = await env.DB.prepare(
-      `INSERT INTO mentors (uid, user_id, display_name, email, is_active, created_at, updated_at)
+      `INSERT INTO advisors (uid, user_id, display_name, email, is_active, created_at, updated_at)
          VALUES (?, ?, ?, ?, 1, ?, ?)`,
-    ).bind(uid, user.id, user.name || 'Mentor', user.email, now, now).run();
+    ).bind(uid, user.id, user.name || 'Advisor', user.email, now, now).run();
     const newId = Number((r as { meta?: { last_row_id?: number } }).meta?.last_row_id || 0);
     if (!newId) return null;
     try {
-      await env.DB.prepare(`UPDATE users SET mentor_id = ? WHERE id = ?`)
+      await env.DB.prepare(`UPDATE users SET advisor_id = ? WHERE id = ?`)
         .bind(newId, user.id).run();
-    } catch { /* mentor_id column may not be migrated yet */ }
+    } catch { /* advisor_id column may not be migrated yet */ }
     return { id: newId };
   } catch {
     return null;
@@ -152,7 +152,7 @@ function parseList(s: string): string[] {
 
 /**
  * Task #3 (AS) — resolve (or lazy-create) the partner_profiles row
- * owned by `user`. Mirrors ensureMentorRow's defensive pattern:
+ * owned by `user`. Mirrors ensureAdvisorRow's defensive pattern:
  *   1. Look up by user_id (claimed-invitation case).
  *   2. Look up by email match against partner_invitations.recipient_email
  *      and bind the user_id (admin invited the partner directly).
@@ -949,11 +949,11 @@ export async function routeAnswer(
     // Task #3 (AS) — free-form founder fields that don't have a
     // canonical column land in projects.advisor_extras_json keyed by
     // question_id. Covers compliance.status, captable.ownership,
-    // mentors.needs, team.cofounders, pipeline.top_deals.
+    // advisors.needs, team.cofounders, pipeline.top_deals.
     const FOUNDER_EXTRAS = new Set<string>([
       'founder.captable.ownership',
       'founder.compliance.status',
-      'founder.mentors.needs',
+      'founder.advisors.needs',
       'founder.team.cofounders',
       'founder.pipeline.top_deals',
     ]);
@@ -1062,41 +1062,41 @@ export async function routeAnswer(
     }
   }
 
-  // ---- Mentor bank ----------------------------------------------------
-  if (q.persona === 'mentor') {
+  // ---- Advisor bank ----------------------------------------------------
+  if (q.persona === 'advisor') {
     // The User.role enum in types.ts only lists the four core roles
-    // (admin/founder/partner/investor) — `mentor` is a runtime-only
-    // value populated by the mentor-onboarding flow and the role
+    // (admin/founder/partner/investor) — `advisor` is a runtime-only
+    // value populated by the advisor-onboarding flow and the role
     // detector. Compare via string cast so TS doesn't complain about
     // the unreachable-looking branch.
     const role = String(user.role || '');
-    if (role !== 'mentor' && role !== 'admin') {
-      return { status: 'failed', error: 'mentor questions require mentor role' };
+    if (role !== 'advisor' && role !== 'admin') {
+      return { status: 'failed', error: 'advisor questions require advisor role' };
     }
-    const mentor = await ensureMentorRow(env, user);
-    if (!mentor) return { status: 'failed', error: 'could not initialise mentor row' };
+    const advisor = await ensureAdvisorRow(env, user);
+    if (!advisor) return { status: 'failed', error: 'could not initialise advisor row' };
     const map: Record<string, { col: string; coerce?: (v: string) => number | string }> = {
-      'mentor.profile.display_name':    { col: 'display_name' },
-      'mentor.profile.bio':             { col: 'bio' },
-      'mentor.profile.sectors':         { col: 'sectors_json',   coerce: (v) => JSON.stringify(parseList(v)) },
-      'mentor.profile.expertise':       { col: 'expertise_json', coerce: (v) => JSON.stringify(parseList(v)) },
-      'mentor.profile.hourly_rate_usd': { col: 'hourly_rate_usd', coerce: (v) => Math.max(0, parseFloat(v) || 0) },
-      'mentor.profile.linkedin_url':    { col: 'linkedin_url' },
+      'advisor.profile.display_name':    { col: 'display_name' },
+      'advisor.profile.bio':             { col: 'bio' },
+      'advisor.profile.sectors':         { col: 'sectors_json',   coerce: (v) => JSON.stringify(parseList(v)) },
+      'advisor.profile.expertise':       { col: 'expertise_json', coerce: (v) => JSON.stringify(parseList(v)) },
+      'advisor.profile.hourly_rate_usd': { col: 'hourly_rate_usd', coerce: (v) => Math.max(0, parseFloat(v) || 0) },
+      'advisor.profile.linkedin_url':    { col: 'linkedin_url' },
       // Task #3 (AS) — topics + calendar columns added by migration 042.
-      'mentor.topics.willing':          { col: 'topics_willing_json',   coerce: (v) => JSON.stringify(parseList(v)) },
-      'mentor.topics.unwilling':        { col: 'topics_unwilling_json', coerce: (v) => JSON.stringify(parseList(v)) },
-      'mentor.calendar.weekly_hours':   { col: 'weekly_hours_band' },
+      'advisor.topics.willing':          { col: 'topics_willing_json',   coerce: (v) => JSON.stringify(parseList(v)) },
+      'advisor.topics.unwilling':        { col: 'topics_unwilling_json', coerce: (v) => JSON.stringify(parseList(v)) },
+      'advisor.calendar.weekly_hours':   { col: 'weekly_hours_band' },
     };
     const m = map[questionId];
     if (!m) return { status: 'noop' };
     const dbValue = m.coerce ? m.coerce(value) : value;
     try {
       await env.DB.prepare(
-        `UPDATE mentors SET ${m.col} = ?, updated_at = ? WHERE id = ?`,
-      ).bind(dbValue, new Date().toISOString(), mentor.id).run();
+        `UPDATE advisors SET ${m.col} = ?, updated_at = ? WHERE id = ?`,
+      ).bind(dbValue, new Date().toISOString(), advisor.id).run();
       return {
         status: 'saved',
-        saved_to: { table: 'mentors', column: m.col, id: mentor.id, page_url: '/mentors/me' },
+        saved_to: { table: 'advisors', column: m.col, id: advisor.id, page_url: '/advisors/me' },
       };
     } catch (e) {
       // Column may not be migrated yet on legacy dev DBs — fall back
@@ -1105,7 +1105,7 @@ export async function routeAnswer(
       if (ok) {
         return {
           status: 'saved',
-          saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id, page_url: '/mentors/me' },
+          saved_to: { table: 'users', column: 'advisor_extras_json', id: user.id, page_url: '/advisors/me' },
           hint: 'Saved as a chat note (column not yet migrated).',
         };
       }
@@ -1353,21 +1353,21 @@ export async function hydrateAlreadyAnswered(env: Env, user: User): Promise<Set<
     }
   }
 
-  if (role === 'mentor' || role === 'admin') {
+  if (role === 'advisor' || role === 'admin') {
     const m = await env.DB.prepare(
-      `SELECT * FROM mentors WHERE user_id = ?`,
+      `SELECT * FROM advisors WHERE user_id = ?`,
     ).bind(user.id).first<Record<string, unknown>>().catch(() => null);
     if (m) {
-      if (m.display_name && m.display_name !== (user.name || user.email)) answered.add('mentor.profile.display_name');
-      if (m.bio) answered.add('mentor.profile.bio');
-      if (m.sectors_json && m.sectors_json !== '[]')   answered.add('mentor.profile.sectors');
-      if (m.expertise_json && m.expertise_json !== '[]') answered.add('mentor.profile.expertise');
-      if (m.hourly_rate_usd != null) answered.add('mentor.profile.hourly_rate_usd');
-      if (m.linkedin_url)  answered.add('mentor.profile.linkedin_url');
+      if (m.display_name && m.display_name !== (user.name || user.email)) answered.add('advisor.profile.display_name');
+      if (m.bio) answered.add('advisor.profile.bio');
+      if (m.sectors_json && m.sectors_json !== '[]')   answered.add('advisor.profile.sectors');
+      if (m.expertise_json && m.expertise_json !== '[]') answered.add('advisor.profile.expertise');
+      if (m.hourly_rate_usd != null) answered.add('advisor.profile.hourly_rate_usd');
+      if (m.linkedin_url)  answered.add('advisor.profile.linkedin_url');
       // Task #3 (AS) — topics / calendar.
-      if (m.topics_willing_json && m.topics_willing_json !== '[]')     answered.add('mentor.topics.willing');
-      if (m.topics_unwilling_json && m.topics_unwilling_json !== '[]') answered.add('mentor.topics.unwilling');
-      if (m.weekly_hours_band) answered.add('mentor.calendar.weekly_hours');
+      if (m.topics_willing_json && m.topics_willing_json !== '[]')     answered.add('advisor.topics.willing');
+      if (m.topics_unwilling_json && m.topics_unwilling_json !== '[]') answered.add('advisor.topics.unwilling');
+      if (m.weekly_hours_band) answered.add('advisor.calendar.weekly_hours');
     }
   }
 

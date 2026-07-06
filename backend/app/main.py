@@ -95,7 +95,7 @@ async def lifespan(app: FastAPI):
             ensure_founder_risk_profiles_table,
             ensure_cap_table_scenarios_table,
             ensure_trust_layer_columns,
-            ensure_mentor_tables,
+            ensure_advisor_tables,
             ensure_calendar_tables,
             ensure_market_intel_tables,
             ensure_matching_tables,
@@ -154,9 +154,9 @@ async def lifespan(app: FastAPI):
         # Task #58 — trust layer hardening.
         ensure_trust_layer_columns()
         logger.info("StudioOS migrations: trust layer columns ensured")
-        # Task #35 — mentor matching + office hours.
-        ensure_mentor_tables()
-        logger.info("StudioOS migrations: mentor tables ensured")
+        # Task #35 — advisor matching + office hours.
+        ensure_advisor_tables()
+        logger.info("StudioOS migrations: advisor tables ensured")
         # Task #56 — unified calendar layer.
         ensure_calendar_tables()
         logger.info("StudioOS migrations: calendar tables ensured")
@@ -451,8 +451,8 @@ from backend.app.api.routes import captable as _captable
 app.include_router(_captable.router, prefix="/api")
 from backend.app.api.routes import trust as _trust
 app.include_router(_trust.router, prefix="/api")
-from backend.app.api.routes import mentors as _mentors
-app.include_router(_mentors.router, prefix="/api")
+from backend.app.api.routes import advisors as _advisors
+app.include_router(_advisors.router, prefix="/api")
 from backend.app.api.routes import calendar as _calendar
 app.include_router(_calendar.router, prefix="/api")
 from backend.app.api.routes import compliance as _compliance

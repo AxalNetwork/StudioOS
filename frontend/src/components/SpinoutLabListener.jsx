@@ -18,7 +18,7 @@ const MILESTONE_WEEK = {
   brand_basics_filled: 2,
   pitch_deck_drafted: 2,
   scoring_run_completed: 3,
-  mentor_meeting_booked: 3,
+  advisor_meeting_booked: 3,
   cofounder_request_sent: 3,
   incorporation_completed: 4,
 };
@@ -47,7 +47,7 @@ const WEEK_TITLES = {
 
 const WEEK_BLURB = {
   2: 'Customer discovery is locked in. Time to build — OKRs, brand, and your first pitch deck.',
-  3: 'Build week shipped. Now validate: run the scoring engine and start the cofounder + mentor conversations.',
+  3: 'Build week shipped. Now validate: run the scoring engine and start the cofounder + advisor conversations.',
   4: 'You\'re in the home stretch. One milestone left: incorporate.',
 };
 

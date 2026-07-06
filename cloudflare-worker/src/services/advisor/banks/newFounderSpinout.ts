@@ -208,18 +208,18 @@ export const NEW_FOUNDER_SPINOUT_BANK: Question[] = [
     page_target: '/projects', doc_anchor: 'build/projects',
     validate: 'long', skip_allowed: true },
 
-  // ---- WEEK 3 — Network (mentors / co-founders / scoring) ------------
+  // ---- WEEK 3 — Network (advisors / co-founders / scoring) ------------
   { id: 'founder.team.cofounders', persona: 'founder', section: 'NETWORK',
     prompt: 'Are you solo, or do you have co-founders? (comma-separated names; type "solo" if none)',
     input_kind: 'short', importance: 'normal',
     unlock_required: { week: 3 },
     page_target: '/cofounder-match', doc_anchor: 'getting-started/invite-team',
     validate: 'short', skip_allowed: true },
-  { id: 'founder.mentors.needs', persona: 'founder', section: 'NETWORK',
-    prompt: 'What expertise do you most need from a mentor right now? (comma-separated)',
+  { id: 'founder.advisors.needs', persona: 'founder', section: 'NETWORK',
+    prompt: 'What expertise do you most need from an advisor right now? (comma-separated)',
     input_kind: 'short', importance: 'high',
     unlock_required: { week: 3 },
-    page_target: '/mentors', doc_anchor: 'portals/mentor',
+    page_target: '/advisors', doc_anchor: 'portals/advisor',
     validate: 'csv' },
 
   // ---- WEEK 4 — Incorporation + Capital ------------------------------
@@ -272,13 +272,13 @@ export const NEW_FOUNDER_SPINOUT_BANK: Question[] = [
     { id: 'founder.lab.roadmap.weekly_cadence', prompt: 'What weekly ritual will you use to track progress? (standup, written update, etc.)' },
   ]),
 
-  // ---- Week 3 deep dives — Network, mentor matching, co-founder fit -
-  ...lab(3, 'NETWORK', '/mentors', 'portals/mentor', [
-    { id: 'founder.lab.mentors.priority1', prompt: 'Of all the mentor needs you listed, which ONE would unblock you most this month?', imp: 'high' },
-    { id: 'founder.lab.mentors.intro_target', prompt: 'Name one specific person whose intro you want — even if they feel out of reach.', mi: 'partner_pulse' },
-    { id: 'founder.lab.mentors.warm_path', prompt: 'Who in your network might be able to make that intro? (name + 1 line of context)' },
-    { id: 'founder.lab.mentors.cadence', prompt: 'How often do you want to meet with mentors once matched? (weekly / biweekly / monthly / ad-hoc)', kind: 'select', opts: ['Weekly','Biweekly','Monthly','Ad-hoc'], mi: 'partner_pulse' },
-    { id: 'founder.lab.mentors.style', prompt: 'Tactical operator vs strategic counsellor — which mentor style do you need most right now?', kind: 'select', opts: ['Tactical operator','Strategic counsellor','Mix'] },
+  // ---- Week 3 deep dives — Network, advisor matching, co-founder fit -
+  ...lab(3, 'NETWORK', '/advisors', 'portals/advisor', [
+    { id: 'founder.lab.advisors.priority1', prompt: 'Of all the advisor needs you listed, which ONE would unblock you most this month?', imp: 'high' },
+    { id: 'founder.lab.advisors.intro_target', prompt: 'Name one specific person whose intro you want — even if they feel out of reach.', mi: 'partner_pulse' },
+    { id: 'founder.lab.advisors.warm_path', prompt: 'Who in your network might be able to make that intro? (name + 1 line of context)' },
+    { id: 'founder.lab.advisors.cadence', prompt: 'How often do you want to meet with advisors once matched? (weekly / biweekly / monthly / ad-hoc)', kind: 'select', opts: ['Weekly','Biweekly','Monthly','Ad-hoc'], mi: 'partner_pulse' },
+    { id: 'founder.lab.advisors.style', prompt: 'Tactical operator vs strategic counsellor — which advisor style do you need most right now?', kind: 'select', opts: ['Tactical operator','Strategic counsellor','Mix'] },
   ]),
   ...lab(3, 'NETWORK', '/cofounder-match', 'getting-started/invite-team', [
     { id: 'founder.lab.team.cofounder_gap', prompt: 'If you could clone yourself with one different skill set, what would it be? (e.g. "I am product, I need GTM")', imp: 'high', mi: 'fit' },

@@ -169,8 +169,8 @@ test('userMeetsInvestorTier: partner bypasses investor tier gate', () => {
   assert.equal(userMeetsInvestorTier(mkUser(1, 'partner'), 'professional'), true);
 });
 
-test('userMeetsInvestorTier: mentor bypasses investor tier gate', () => {
-  assert.equal(userMeetsInvestorTier(mkUser(1, 'mentor'), 'professional'), true);
+test('userMeetsInvestorTier: advisor bypasses investor tier gate', () => {
+  assert.equal(userMeetsInvestorTier(mkUser(1, 'advisor'), 'professional'), true);
 });
 
 test('userMeetsInvestorTier: founder passes through (non-investor, blocked by in-route guard)', () => {
@@ -199,7 +199,7 @@ test('canViewLpData: admin and investor allowed; others denied', () => {
   assert.equal(canViewLpData(mkUser(1, 'investor')), true);
   assert.equal(canViewLpData(mkUser(1, 'founder')), false);
   assert.equal(canViewLpData(mkUser(1, 'partner')), false);
-  assert.equal(canViewLpData(mkUser(1, 'mentor')), false);
+  assert.equal(canViewLpData(mkUser(1, 'advisor')), false);
   assert.equal(canViewLpData(null), false);
 });
 

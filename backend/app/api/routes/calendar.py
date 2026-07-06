@@ -2,7 +2,7 @@
 
 All under ``/api/calendar``. Six surfaces:
 
-* ``GET /events`` — unified feed across mentor bookings + IC meetings +
+* ``GET /events`` — unified feed across advisor bookings + IC meetings +
   founder check-ins, scoped to the caller.
 * ``GET /events.ics`` — same feed rendered as an RFC 5545 iCalendar
   document for one-click subscription in Google/Outlook/Apple.
@@ -13,7 +13,7 @@ All under ``/api/calendar``. Six surfaces:
 * ``POST /google/connect``, ``GET /google/callback``,
   ``DELETE /google``, ``POST /google/sync``, ``GET /google/status`` —
   per-user Google Calendar OAuth + push-sync.
-* ``POST /me/calcom`` — per-user Cal.com API key (mentor-only). Stored
+* ``POST /me/calcom`` — per-user Cal.com API key (advisor-only). Stored
   alongside the existing system-level ``CALCOM_API_KEY`` mirror.
 
 The Google + Cal.com integrations are env-gated. Without
@@ -37,7 +37,7 @@ from backend.app.api.routes.auth import get_current_user
 from backend.app.database import get_session
 from backend.app.models.entities import (
     FounderCheckin, GoogleOAuthToken, IcMeeting, IcMeetingAttendee,
-    Mentor, User,
+    Advisor, User,
 )
 from backend.app.services import calendar_unified as svc
 
@@ -272,7 +272,7 @@ def create_checkin(
     is_self = user.id == body.founder_user_id
     is_counter = body.counterpart_user_id == user.id
     if not (_is_admin(user) or is_self or is_counter or
-            _role(user) in ("partner", "investor", "mentor")):
+            _role(user) in ("partner", "investor", "advisor")):
         raise HTTPException(status_code=403, detail="Not allowed to schedule this check-in")
     # If counterpart wasn't set explicitly and the caller is not the founder,
     # default to the caller — that's the natural pairing.
@@ -534,7 +534,7 @@ def microsoft_disconnect(user: User = Depends(get_current_user)):
     return {"ok": True}
 
 
-_PUSHABLE_KINDS = {"mentor_booking", "ic_meeting", "founder_checkin", "partner_office_hour"}
+_PUSHABLE_KINDS = {"advisor_booking", "ic_meeting", "founder_checkin", "partner_office_hour"}
 
 
 @router.post("/push/{kind}/{source_id}")
@@ -548,7 +548,7 @@ def push_one_to_external(kind: str, source_id: int, user: User = Depends(get_cur
 
 
 # ===========================================================================
-# Per-user Cal.com API key (mentor-only)
+# Per-user Cal.com API key (advisor-only)
 # ===========================================================================
 class CalcomKeyBody(BaseModel):
     api_key: str = PField(min_length=8, max_length=200)
@@ -562,33 +562,33 @@ def attach_calcom_key(
     session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ):
-    """Mentors can connect their own Cal.com account so bookings are
+    """Advisors can connect their own Cal.com account so bookings are
     mirrored to their personal calendar instead of the shared system
-    integration. We persist the api_key on the Mentor row (column added
+    integration. We persist the api_key on the Advisor row (column added
     if missing) so service helpers can prefer it over the env-level key.
 
     NOTE: this is a personal access token, not OAuth. Cal.com offers
     OAuth via their managed-users platform but it requires platform
     billing — out of scope for this task.
     """
-    if _role(user) != "mentor" and not _is_admin(user):
-        raise HTTPException(status_code=403, detail="Mentor or admin only")
-    if not user.mentor_id:
-        raise HTTPException(status_code=400, detail="No mentor profile yet — create one first")
-    m = session.get(Mentor, user.mentor_id)
+    if _role(user) != "advisor" and not _is_admin(user):
+        raise HTTPException(status_code=403, detail="Advisor or admin only")
+    if not user.advisor_id:
+        raise HTTPException(status_code=400, detail="No advisor profile yet — create one first")
+    m = session.get(Advisor, user.advisor_id)
     if not m:
-        raise HTTPException(status_code=404, detail="Mentor profile not found")
+        raise HTTPException(status_code=404, detail="Advisor profile not found")
     # Lazy column add so we don't need a separate migration round-trip
     # for what is otherwise a single-field optional setting.
     from sqlalchemy import text
     try:
-        session.exec(text("ALTER TABLE mentors ADD COLUMN IF NOT EXISTS calcom_api_key VARCHAR"))
+        session.exec(text("ALTER TABLE advisors ADD COLUMN IF NOT EXISTS calcom_api_key VARCHAR"))
         session.commit()
     except Exception:
         session.rollback()
     try:
         session.exec(text(
-            "UPDATE mentors SET calcom_api_key = :k, calcom_event_type_id = :e, "
+            "UPDATE advisors SET calcom_api_key = :k, calcom_event_type_id = :e, "
             "calcom_username = COALESCE(:u, calcom_username), updated_at = :now "
             "WHERE id = :id"
         ).bindparams(k=body.api_key, e=body.event_type_id,
@@ -597,4 +597,4 @@ def attach_calcom_key(
     except Exception as exc:
         session.rollback()
         raise HTTPException(status_code=500, detail=f"Could not persist key: {exc}")
-    return {"ok": True, "mentor_id": m.id, "calcom_event_type_id": body.event_type_id}
+    return {"ok": True, "advisor_id": m.id, "calcom_event_type_id": body.event_type_id}

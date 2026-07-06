@@ -3,7 +3,7 @@ import { api } from '../lib/api';
 import TrustScoreBadge from './TrustScoreBadge';
 
 // Task #39 — fetch + render a user's trust score (size=sm) inline on
-// directory rows (partner marketplace, mentor list) for admin/investor/
+// directory rows (partner marketplace, advisor list) for admin/investor/
 // partner viewers. Mirrors DealTrustBadge from DealsPage.jsx: silently
 // no-ops on missing userId, on a backend 403 (e.g. founder viewer), or
 // when the listing row has no resolved user_id (legacy unlinked rows).

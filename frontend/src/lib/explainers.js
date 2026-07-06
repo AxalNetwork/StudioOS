@@ -62,14 +62,14 @@ export const EXPLAINERS = {
     body: 'A diligence engine that turns the data you’ve already entered — discovery, market, team, traction — into a ranked readiness score with explanations.',
     docPath: 'validate-grow/scoring',
   },
-  mentors: {
+  advisors: {
     title: 'Operators who’ve done this before',
-    body: 'Browse the mentor directory by expertise, request an intro, and track how each engagement is moving the needle.',
-    docPath: 'validate-grow/mentors',
+    body: 'Browse the advisor directory by expertise, request an intro, and track how each engagement is moving the needle.',
+    docPath: 'validate-grow/advisors',
   },
   office_hours: {
     title: 'Drop into a working session',
-    body: 'Book recurring office hours with mentors and partners. Slots auto-sync to your connected calendar with a private agenda doc.',
+    body: 'Book recurring office hours with advisors and partners. Slots auto-sync to your connected calendar with a private agenda doc.',
     docPath: 'validate-grow/office-hours',
   },
   cofounder_match: {
@@ -79,7 +79,7 @@ export const EXPLAINERS = {
   },
   team_building: {
     title: 'Build the team around your company',
-    body: 'One workspace to recruit advice from mentors, find a co-founder, and hire for open roles — advisors, founders, and talent in one place.',
+    body: 'One workspace to recruit advice from advisors, find a co-founder, and hire for open roles — advisors, founders, and talent in one place.',
     docPath: 'validate-grow/team-building',
   },
   command_center: {

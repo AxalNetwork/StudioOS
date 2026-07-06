@@ -16,7 +16,7 @@
  */
 import type { Question, PartnerSubtype } from '../questionBank';
 
-const ROLES = ['Investor', 'Service Provider', 'Mentor / Advisor', 'Strategic Partner', 'Other'];
+const ROLES = ['Investor', 'Service Provider', 'Advisor / Mentor', 'Strategic Partner', 'Other'];
 
 type RowSpec = {
   id: string; prompt: string;
@@ -147,9 +147,9 @@ const MA = (rows: RowSpec[], section: string, page = '/partner-portal',
             anchor = 'network/partners') =>
   block('mentor_advisor', section, page, anchor, rows);
 
-const MENTOR_ADVISOR: Question[] = [
+const ADVISOR_ADVISOR: Question[] = [
   ...MA([
-    { id: 'partner.ma.role_type', prompt: 'Are you a formal advisor, EIR, fractional executive, or mentor?', kind: 'select', opts: ['Formal advisor','EIR','Fractional exec','Mentor','Mix'], imp: 'critical' },
+    { id: 'partner.ma.role_type', prompt: 'Are you a formal advisor, EIR, fractional executive, or advisor?', kind: 'select', opts: ['Formal advisor','EIR','Fractional exec','Advisor','Mix'], imp: 'critical' },
     { id: 'partner.ma.years_operating', prompt: 'Years of operating experience (founder/exec/IC).', kind: 'number' },
     { id: 'partner.ma.notable_outcomes', prompt: 'Notable exits or outcomes (1-2 lines).', skip: true },
     { id: 'partner.ma.current_advisor_seats', prompt: 'How many active formal advisor seats do you currently hold?', kind: 'number' },
@@ -184,7 +184,7 @@ const MENTOR_ADVISOR: Question[] = [
   ...MA([
     { id: 'partner.ma.quarter_focus', prompt: 'What is your biggest focus this quarter as an advisor?', imp: 'high' },
     { id: 'partner.ma.success_metric', prompt: 'How do you measure success of an advisor engagement?' },
-    { id: 'partner.ma.case_studies_open', prompt: 'May we feature you in studio mentor-spotlight content?', kind: 'select', opts: ['Yes','Anonymised','No'] },
+    { id: 'partner.ma.case_studies_open', prompt: 'May we feature you in studio advisor-spotlight content?', kind: 'select', opts: ['Yes','Anonymised','No'] },
     { id: 'partner.ma.community_participation', prompt: 'Open to facilitating cohort-based learning sessions for the studio?', kind: 'select', opts: ['Yes','Sometimes','No'] },
   ], 'FOCUS'),
   ...MA([
@@ -194,7 +194,7 @@ const MENTOR_ADVISOR: Question[] = [
     { id: 'partner.ma.satisfaction_score', prompt: 'On a 1-10, how satisfied are you with current advisor engagements?', kind: 'select', opts: ['1','2','3','4','5','6','7','8','9','10'], mi: 'sentiment', sent: true },
     { id: 'partner.ma.referral_nps', prompt: 'NPS — likelihood to refer another advisor (0-10).', kind: 'select', opts: ['0','1','2','3','4','5','6','7','8','9','10'], mi: 'sentiment', sent: true },
     { id: 'partner.ma.biggest_friction', prompt: 'Biggest friction in your current studio engagements?', mi: 'sentiment', sent: true },
-    { id: 'partner.ma.suggestion_for_studio', prompt: 'One concrete improvement that would help you mentor better here?', mi: 'partner_pulse' },
+    { id: 'partner.ma.suggestion_for_studio', prompt: 'One concrete improvement that would help you advisor better here?', mi: 'partner_pulse' },
   ], 'COMMS'),
   ...MA([
     { id: 'partner.ma.dd.go_to_market', prompt: 'GTM expertise — outbound, PLG, channels, enterprise sales? (comma-separated)', kind: 'short', skip: true },
@@ -369,7 +369,7 @@ const CORPORATE_VENTURE: Question[] = [
 export const OPERATING_PARTNER_BANK: Question[] = [
   ...SHARED,
   ...SERVICE_PROVIDER,
-  ...MENTOR_ADVISOR,
+  ...ADVISOR_ADVISOR,
   ...STRATEGIC,
   ...CORPORATE_VENTURE,
 ];

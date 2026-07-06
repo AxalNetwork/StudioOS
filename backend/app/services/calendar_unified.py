@@ -3,7 +3,7 @@
 Two responsibilities:
 
 1. **Aggregator** — `fetch_user_events(user, from_dt, to_dt)` walks every
-   bookable surface (mentor bookings, IC meetings the user is invited to or
+   bookable surface (advisor bookings, IC meetings the user is invited to or
    organising, founder check-ins where the user is founder or counterpart)
    and returns a normalised list of ``CalendarEvent`` dicts. Used by the
    `/api/calendar/events` route + ICS export + Google sync.
@@ -17,7 +17,7 @@ Two responsibilities:
    ``available=False`` and the unified calendar still works (it just
    stops mirroring outwards).
 
-Cal.com integration: the `/api/mentors` flow already mirrors mentor
+Cal.com integration: the `/api/advisors` flow already mirrors advisor
 slots+bookings to a system-level Cal.com account when ``CALCOM_API_KEY``
 is set. Per-user OAuth would mean Cal.com's "managed users" platform
 billing — out of scope. The in-app scheduler IS the self-hosted
@@ -41,8 +41,8 @@ from backend.app.models.entities import (
     GoogleOAuthToken,
     IcMeeting,
     IcMeetingAttendee,
-    Mentor,
-    MentorBooking,
+    Advisor,
+    AdvisorBooking,
     Partner,
     PartnerBooking,
     User,
@@ -177,41 +177,41 @@ def _to_dict(*, kind: str, source_id: int, source_uid: str, title: str,
     }
 
 
-def _mentor_events(session: Session, user: User,
+def _advisor_events(session: Session, user: User,
                    from_dt: datetime, to_dt: datetime) -> list[dict]:
-    """Return mentor-booking events the user is involved in.
+    """Return advisor-booking events the user is involved in.
 
-    A user sees a mentor booking row when (a) they're the mentee
-    (``requester_user_id``) or (b) they own the mentor profile attached
-    to that booking (``mentor.id == user.mentor_id``).
+    A user sees an advisor booking row when (a) they're the mentee
+    (``requester_user_id``) or (b) they own the advisor profile attached
+    to that booking (``advisor.id == user.advisor_id``).
     """
     bookings = session.exec(
-        select(MentorBooking).where(
-            MentorBooking.scheduled_start >= from_dt,
-            MentorBooking.scheduled_start <= to_dt,
-            MentorBooking.status.in_(("requested", "confirmed", "completed")),
+        select(AdvisorBooking).where(
+            AdvisorBooking.scheduled_start >= from_dt,
+            AdvisorBooking.scheduled_start <= to_dt,
+            AdvisorBooking.status.in_(("requested", "confirmed", "completed")),
         )
     ).all()
     out: list[dict] = []
     for b in bookings:
         is_mentee = b.requester_user_id == user.id
-        is_mentor = bool(user.mentor_id and b.mentor_id == user.mentor_id)
-        if not (is_mentee or is_mentor):
+        is_advisor = bool(user.advisor_id and b.advisor_id == user.advisor_id)
+        if not (is_mentee or is_advisor):
             continue
-        mentor_row = session.get(Mentor, b.mentor_id)
+        advisor_row = session.get(Advisor, b.advisor_id)
         mentee = session.get(User, b.requester_user_id)
         out.append(_to_dict(
-            kind="mentor_booking",
+            kind="advisor_booking",
             source_id=b.id, source_uid=b.uid,
-            title=f"Mentor session — {b.topic}",
+            title=f"Advisor session — {b.topic}",
             start_at=b.scheduled_start, end_at=b.scheduled_end,
             status=b.status,
             location_kind="video",
             location_uri=b.meeting_uri,
-            organizer_email=(mentor_row.email if mentor_row else None),
+            organizer_email=(advisor_row.email if advisor_row else None),
             attendees=[
-                {"email": mentor_row.email if mentor_row else None,
-                 "name": mentor_row.name if mentor_row else None, "role": "mentor"},
+                {"email": advisor_row.email if advisor_row else None,
+                 "name": advisor_row.name if advisor_row else None, "role": "advisor"},
                 {"email": mentee.email if mentee else None,
                  "name": mentee.name if mentee else None, "role": "mentee"},
             ],
@@ -362,11 +362,11 @@ def fetch_user_events(session: Session, user: User, *,
                       kinds: Optional[Iterable[str]] = None) -> list[dict]:
     """Unified feed across all bookable surfaces, sorted by start_at."""
     wanted = set(kinds) if kinds else {
-        "mentor_booking", "ic_meeting", "founder_checkin", "partner_office_hour",
+        "advisor_booking", "ic_meeting", "founder_checkin", "partner_office_hour",
     }
     out: list[dict] = []
-    if "mentor_booking" in wanted:
-        out.extend(_mentor_events(session, user, from_dt, to_dt))
+    if "advisor_booking" in wanted:
+        out.extend(_advisor_events(session, user, from_dt, to_dt))
     if "ic_meeting" in wanted:
         out.extend(_ic_events(session, user, from_dt, to_dt))
     if "founder_checkin" in wanted:

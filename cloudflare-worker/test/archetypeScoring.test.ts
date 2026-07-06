@@ -34,16 +34,16 @@ test('classifyArchetype lands a process-led, visionary investor on the Thesis-Dr
   assert.equal(c!.slug, 'inv_thesis_backer');
 });
 
-test('classifyArchetype lands a people-first mentor on the Hands-On Coach', () => {
-  const c = classifyArchetype('mentor', { connector: 5, builder: 4, visionary: 2, operator: 3 });
+test('classifyArchetype lands a people-first advisor on the Hands-On Coach', () => {
+  const c = classifyArchetype('advisor', { connector: 5, builder: 4, visionary: 2, operator: 3 });
   assert.ok(c);
   assert.equal(c!.slug, 'mt_hands_on_coach');
 });
 
-test('coach shares the mentor archetype set', () => {
+test('coach shares the advisor archetype set', () => {
   assert.deepEqual(
     archetypesForPersona('coach').map((a) => a.slug),
-    archetypesForPersona('mentor').map((a) => a.slug),
+    archetypesForPersona('advisor').map((a) => a.slug),
   );
 });
 

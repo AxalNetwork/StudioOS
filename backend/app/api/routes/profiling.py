@@ -69,8 +69,8 @@ def _persona_key(answer: str) -> str:
         return "technical"
     if any(k in a for k in ["liquidity", "secondary", "m&a", "acquisition"]):
         return "liquidity"
-    if any(k in a for k in ["mentor", "coach"]):
-        return "mentor"
+    if any(k in a for k in ["advisor", "coach"]):
+        return "advisor"
     if "service" in a:
         return "service"
     return "unknown"
@@ -192,7 +192,7 @@ def _next_reply(answers: List[str]) -> str:
     if persona == "service":
         qs = [
             "Which service partner type fits best — Legal Counsel, Technical Partner, " +
-            "Liquidity Provider, or Mentor?",
+            "Liquidity Provider, or Advisor?",
             "Briefly describe your offering and typical engagement model.",
             "Share your legal entity name, type and jurisdiction, plus your signatory " +
             "name and title.",
@@ -200,7 +200,7 @@ def _next_reply(answers: List[str]) -> str:
         idx = n - 1
         return qs[idx] if idx < len(qs) else CLOSING
 
-    if persona in ("legal", "technical", "liquidity", "mentor"):
+    if persona in ("legal", "technical", "liquidity", "advisor"):
         qs = [
             "Briefly describe your offering and typical engagement model.",
             "Share your legal entity name, type and jurisdiction, plus your signatory " +
@@ -251,8 +251,8 @@ def _classify(messages: List[Dict[str, Any]]) -> Dict[str, Optional[str]]:
         persona = "Technical Partner"
     elif key == "liquidity":
         persona = "Liquidity Provider"
-    elif key == "mentor":
-        persona = "Mentor"
+    elif key == "advisor":
+        persona = "Advisor"
     elif key == "service":
         if "legal" in sub or "counsel" in sub:
             persona = "Legal Counsel"
@@ -260,8 +260,8 @@ def _classify(messages: List[Dict[str, Any]]) -> Dict[str, Optional[str]]:
             persona = "Technical Partner"
         elif "liquid" in sub:
             persona = "Liquidity Provider"
-        elif "mentor" in sub:
-            persona = "Mentor"
+        elif "advisor" in sub:
+            persona = "Advisor"
         else:
             persona = "Operator / Advisor"
 

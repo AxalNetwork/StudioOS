@@ -136,7 +136,7 @@ def _ensure_onboarding_complete(session: Session, *users: User) -> None:
     NOTE: investors remain subject to the client-side /kyc gate — the dev
     schema has no `kyc_status` column, so `/api/auth/me` always reports
     'not_started'. That gate is exercised as the investor's core onboarding
-    flow; founders/partners/mentors/admins are unaffected by it.
+    flow; founders/partners/advisors/admins are unaffected by it.
     """
     # `onboarding_progress` is normally bootstrapped lazily by
     # routes/onboarding.py on first request. Create it here so the seed runs

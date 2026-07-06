@@ -27,7 +27,7 @@ export type ChecklistRole =
   | 'existingFounder'
   | 'investor'
   | 'operatingPartner'
-  | 'mentor';
+  | 'advisor';
 
 export interface ChecklistItem {
   key: string;
@@ -54,7 +54,7 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     // /scoring is gated to admin/partner/investor — founders run scoring
     // from the project detail page, so the row links to the project list.
     { key: 'nf.scoring',    label: 'Run your first scoring',             route: '/projects',                   autoDetect: true },
-    { key: 'nf.mentor',     label: 'Book a mentor session',              route: '/mentors',                    autoDetect: true },
+    { key: 'nf.advisor',     label: 'Book an advisor session',              route: '/advisors',                    autoDetect: true },
     { key: 'nf.team',       label: 'Invite a team member',               route: '/settings/account',           autoDetect: true },
   ],
   existingFounder: [
@@ -99,16 +99,16 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     { key: 'op.intro',      label: 'Make first qualified intro',         route: '/pipeline',                   autoDetect: true },
     { key: 'op.notifs',     label: 'Configure notifications',            route: '/settings/notifications',     autoDetect: true },
   ],
-  // Mentors are NOT allowed on /onboarding/persona, /trust, or
-  // /integrations per App.jsx guards — mentor onboarding stays inside
+  // Advisors are NOT allowed on /onboarding/persona, /trust, or
+  // /integrations per App.jsx guards — advisor onboarding stays inside
   // Settings + Office Hours.
-  mentor: [
+  advisor: [
     { key: 'mt.persona',    label: 'Complete profiling chatbot',         route: '/settings/profile',           autoDetect: true },
     { key: 'mt.tags',       label: 'Add expertise tags + sectors + stages', route: '/settings/profile',        autoDetect: true },
-    { key: 'mt.comp',       label: 'Pick comp model',                    route: '/mentors',                    autoDetect: true },
+    { key: 'mt.comp',       label: 'Pick comp model',                    route: '/advisors',                    autoDetect: true },
     { key: 'mt.calendar',   label: 'Connect Calendly or Google Calendar',route: '/calendar',                   autoDetect: true },
     { key: 'mt.refs',       label: 'Provide 2 references',               route: '/settings/profile',           autoDetect: true },
-    { key: 'mt.nda',        label: 'Sign Mentor NDA + disclaimer',       route: '/settings/security',          autoDetect: true },
+    { key: 'mt.nda',        label: 'Sign Advisor NDA + disclaimer',       route: '/settings/security',          autoDetect: true },
     { key: 'mt.capacity',   label: 'Set weekly capacity',                route: '/office-hours',               autoDetect: true },
     { key: 'mt.slots',      label: 'Surface availability slots',         route: '/office-hours',               autoDetect: true },
     { key: 'mt.booking',    label: 'Accept first session booking',       route: '/office-hours',               autoDetect: true },
@@ -129,7 +129,7 @@ export function resolveRole(user: { role?: string | null }, primaryPersonaId?: s
   const role = String(user?.role || '').toLowerCase();
   if (role === 'investor') return 'investor';
   if (role === 'partner') return 'operatingPartner';
-  if (role === 'mentor') return 'mentor';
+  if (role === 'advisor') return 'advisor';
   if (role === 'founder' || role === 'admin') {
     // Canonical persona IDs are `founder_new` / `founder_existing`
     // (see cloudflare-worker/src/personas.ts + frontend/src/lib/personas.js).
@@ -255,7 +255,7 @@ async function detect(env: Env, userId: number, key: string, primaryPersonaId?: 
            JOIN founders f ON f.id = p.founder_id
            JOIN users u ON u.founder_id = f.id
           WHERE u.id = ?`, userId)) > 0;
-    case 'nf.mentor':
+    case 'nf.advisor':
       return (await num(env, `SELECT COUNT(*) FROM expert_bookings WHERE founder_user_id = ?`, userId)) > 0;
     case 'nf.team':
       return (await num(env, `SELECT COUNT(*) FROM founder_invites WHERE inviter_user_id = ?`, userId)) > 0;
@@ -362,7 +362,7 @@ async function detect(env: Env, userId: number, key: string, primaryPersonaId?: 
         `SELECT COUNT(*) FROM investor_introductions WHERE source_user_id = ? OR introducer_user_id = ?`,
         userId, userId)) > 0;
 
-    // ----- mentor side-effects -----
+    // ----- advisor side-effects -----
     case 'mt.tags':
       return (await num(env,
         `SELECT COUNT(*) FROM experts WHERE user_id = ? AND tags IS NOT NULL AND tags <> '' AND tags <> '[]'`,
@@ -378,7 +378,7 @@ async function detect(env: Env, userId: number, key: string, primaryPersonaId?: 
         `SELECT COUNT(*) FROM experts WHERE user_id = ? AND weekly_capacity > 0`,
         userId)) > 0;
     case 'mt.slots':
-      return (await num(env, `SELECT COUNT(*) FROM mentor_slots WHERE user_id = ?`, userId)) > 0;
+      return (await num(env, `SELECT COUNT(*) FROM advisor_slots WHERE user_id = ?`, userId)) > 0;
     case 'mt.booking':
       return (await num(env,
         `SELECT COUNT(*) FROM expert_bookings WHERE expert_user_id = ? AND LOWER(status) IN ('confirmed','completed')`,

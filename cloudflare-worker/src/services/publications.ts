@@ -138,7 +138,7 @@ function buildSystemPrompt(): string {
   return [
     'You are the Axal Venture Studio analyst editor producing concise, board-ready',
     'publication briefs distilled from anonymous, k-anonymised market-intelligence',
-    'aggregates contributed by founders, investors, partners, and mentors across',
+    'aggregates contributed by founders, investors, partners, and advisors across',
     'the Axal portfolio and observation set.',
     '',
     'OPERATING PRINCIPLES',

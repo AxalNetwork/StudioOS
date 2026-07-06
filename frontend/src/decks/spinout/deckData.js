@@ -235,14 +235,14 @@ export const SAMPLE_DATA = {
         photo: _avatar('#1F9D6B', '#FFFFFF'),
       },
     ],
-    advisorsLabel: 'ADVISORS & MENTORS',
+    advisorsLabel: 'ADVISORS & ADVISORS',
     // [initials, name, role, photo?] — some carry headshots, others fall back
     // to the initials monogram.
     advisors: [
       ['DK', 'Daniel Kerr', 'Former CRO, regional bank', _avatar('#8A93A0', '#FFFFFF')],
       ['RP', 'Rina Patel', 'Fintech GTM, 2 exits'],
       ['AV', 'Alex Voss', 'ML lead, risk modeling', _avatar('#D98A2B', '#FFFFFF')],
-      ['JL', 'Jordan Lee', 'Mentor · credit markets'],
+      ['JL', 'Jordan Lee', 'Advisor · credit markets'],
       ['NC', 'Nadia Cho', 'Partner · design partner intros', _avatar('#6E86FF', '#FFFFFF')],
       ['TM', 'Tomas Mraz', 'Advisor · compliance & legal'],
     ],

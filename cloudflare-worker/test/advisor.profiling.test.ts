@@ -27,14 +27,14 @@ import {
 // Expected fit.* PROFILING-CARD bank sizes per persona. Each persona's card
 // measures ONE fit bank — its rubric + Axal values PLUS (Task #45) Skills,
 // Work-values, and Archetype-trait questions so the four profiling modules have
-// enough signal. The mentor ALSO carries the coach bank in the conversation (for
+// enough signal. The advisor ALSO carries the coach bank in the conversation (for
 // axalFit/bestFit signal), but the completion card is scoped to the primary
-// mentor bank so a mentor's effort is comparable to other personas (Task #41).
+// advisor bank so a advisor's effort is comparable to other personas (Task #41).
 const EXPECTED: Record<string, number> = {
   founder: 32,
   investor: 28,
   partner: 27,
-  mentor: 29, // mentor primary bank — coach bank excluded from the completion card
+  advisor: 29, // advisor primary bank — coach bank excluded from the completion card
 };
 
 // Every persona's profiling bank must offer all four modules with enough
@@ -43,7 +43,7 @@ const EXPECTED_SECTIONS: Record<string, Record<string, number>> = {
   founder:  { skills: 7, work_values: 5, archetype: 4, axal_fit: 16 },
   investor: { skills: 5, work_values: 5, archetype: 4, axal_fit: 14 },
   partner:  { skills: 5, work_values: 4, archetype: 4, axal_fit: 14 },
-  mentor:   { skills: 5, work_values: 4, archetype: 4, axal_fit: 16 },
+  advisor:   { skills: 5, work_values: 4, archetype: 4, axal_fit: 16 },
 };
 
 test('profilingBankFor returns the fit.* bank sized per persona', () => {
@@ -117,19 +117,19 @@ test('every persona offers all four modules at their expected sizes (Task #45)',
   }
 });
 
-test('mentor completion card is scoped to the primary bank, but coach is still delivered in-conversation (Task #41)', () => {
-  // The card counts ONLY the mentor's primary fit bank — no coach questions —
-  // so a mentor reaches "Profiling complete" with the same effort as other
+test('advisor completion card is scoped to the primary bank, but coach is still delivered in-conversation (Task #41)', () => {
+  // The card counts ONLY the advisor's primary fit bank — no coach questions —
+  // so a advisor reaches "Profiling complete" with the same effort as other
   // personas (17, == partner) instead of ~double (was 34).
-  const card = profilingBankFor('mentor' as Persona);
+  const card = profilingBankFor('advisor' as Persona);
   assert.equal(card.length, 29);
-  assert.ok(card.some((q) => q.id.startsWith('fit.mentor.')), 'card must contain the mentor fit bank');
-  assert.ok(card.every((q) => !q.id.startsWith('fit.coach.')), 'coach questions must NOT count toward the mentor card');
+  assert.ok(card.some((q) => q.id.startsWith('fit.advisor.')), 'card must contain the advisor fit bank');
+  assert.ok(card.every((q) => !q.id.startsWith('fit.coach.')), 'coach questions must NOT count toward the advisor card');
 
-  // ...but the coach bank is STILL delivered in the mentor conversation, so the
+  // ...but the coach bank is STILL delivered in the advisor conversation, so the
   // axalFit/bestFit coach-rubric signal is not lost. Guards against "fixing" the
   // card by dropping coach from the conversation.
-  const convo = bankFor('mentor' as Persona);
-  assert.ok(convo.some((q) => q.id.startsWith('fit.coach.')), 'coach bank must still ride inside the mentor conversation');
-  assert.ok(convo.some((q) => q.id.startsWith('fit.mentor.')), 'mentor bank must still be delivered in the mentor conversation');
+  const convo = bankFor('advisor' as Persona);
+  assert.ok(convo.some((q) => q.id.startsWith('fit.coach.')), 'coach bank must still ride inside the advisor conversation');
+  assert.ok(convo.some((q) => q.id.startsWith('fit.advisor.')), 'advisor bank must still be delivered in the advisor conversation');
 });

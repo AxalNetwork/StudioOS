@@ -55,7 +55,7 @@ const KNOWN_DRIFT_ALLOWLIST = new Set([
   '/wellbeing/resources',
   '/wellbeing/aggregates',
   '/compliance/events',
-  // T13 — captable port pending (mentors/partner-office-hours/cofounder shipped)
+  // T13 — captable port pending (advisors/partner-office-hours/cofounder shipped)
   '/captable/scenarios',
   '/captable/waterfall',
   // T14 — references audio recording / transcribe / summarize stubbed (501)

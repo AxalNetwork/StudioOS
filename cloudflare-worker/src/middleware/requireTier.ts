@@ -3,13 +3,13 @@
  *
  * Three-tier ladder for founder accounts:
  *   free    — 1 project, 5 interviews, 3 OKRs, read-only across most surfaces
- *   growth  — pitch deck save+export, captable mutations, mentor booking,
+ *   growth  — pitch deck save+export, captable mutations, advisor booking,
  *             scoring runs, co-marketing, compliance event create
  *   studio  — capital, funds, reserves, waterfall, liquidity, legalcap,
  *             cofounder, 83(b), KYC, network-effects, partner insights,
  *             watchlist + decision journal, partner office hours
  *
- * Bypass roles: admin, partner, investor, mentor — these never hit the gate.
+ * Bypass roles: admin, partner, investor, advisor — these never hit the gate.
  * Mirrors the `requireMiPro` pattern in middleware/miAccess.ts: throws a
  * 402 Response (the global error handler returns it as-is).
  */
@@ -21,7 +21,7 @@ export type Tier = 'free' | 'growth' | 'studio';
 
 const TIER_RANK: Record<Tier, number> = { free: 0, growth: 1, studio: 2 };
 
-const BYPASS_ROLES = new Set<string>(['admin', 'partner', 'investor', 'mentor']);
+const BYPASS_ROLES = new Set<string>(['admin', 'partner', 'investor', 'advisor']);
 
 const TIER_COPY: Record<Exclude<Tier, 'free'>, string> = {
   growth: 'This is a Growth feature. Upgrade to keep iterating with the full toolkit.',

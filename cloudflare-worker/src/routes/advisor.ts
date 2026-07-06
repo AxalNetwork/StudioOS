@@ -155,7 +155,7 @@ function newUid(): string {
 
 function personaFor(user: User): Persona {
   const role = (user.role || '').toLowerCase();
-  if (role === 'founder' || role === 'investor' || role === 'mentor' || role === 'partner' || role === 'admin') {
+  if (role === 'founder' || role === 'investor' || role === 'advisor' || role === 'partner' || role === 'admin') {
     return role as Persona;
   }
   return 'unknown';
@@ -290,7 +290,7 @@ function selectBank(
   });
   // Authored bank order is the canonical sequencing for each
   // persona (investor: identity → sectors/stages → ticket → thesis →
-  // pipeline; operating partner: demand → supply; mentor onboarding;
+  // pipeline; operating partner: demand → supply; advisor onboarding;
   // new-founder weekly flow). We only re-rank critical-first INSIDE
   // a single focused section — when the user pins one section we
   // want their critical questions for that section to surface first.

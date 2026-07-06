@@ -4,7 +4,7 @@
  * The Profile & Fit page draws five surfaces from the conversational profiling
  * bank: a Skills radar, a Work-values profile, an Archetype, an Axal Fit score,
  * and Best-Fit matches. Before this task the "Profiling completion" card counted
- * the whole fit.* bank as one flat denominator (e.g. mentor 2 + 1 + 14 = 17) and
+ * the whole fit.* bank as one flat denominator (e.g. advisor 2 + 1 + 14 = 17) and
  * had no Archetype module at all — so the card read "0 / 17 answered" and the
  * Archetype card read "missing" no matter how far the conversation went.
  *

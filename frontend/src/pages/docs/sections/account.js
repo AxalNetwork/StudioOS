@@ -13,7 +13,7 @@ export default {
         'Account — email change, account deletion request, data export.',
         'Security — TOTP setup, recovery codes, active sessions, password-less login configuration.',
         'Notifications — per-channel email and in-app toggles plus quiet hours and digest cadence.',
-        'Privacy — visibility (public / network / private), Public Directory opt-in, mentor discoverability.',
+        'Privacy — visibility (public / network / private), Public Directory opt-in, advisor discoverability.',
         'Integrations — connected accounts (LinkedIn, Google, Microsoft, Slack, HubSpot, Salesforce, DocuSign) with disconnect controls.',
         'Billing — current plan, payment method, and invoices.',
         'Appearance — theme (light / dark / system), density, and sidebar default state.',
@@ -131,11 +131,11 @@ export default {
       id: 'privacy',
       title: 'Privacy & data export',
       overview:
-        "You control who can see your profile, whether you appear in the Public Directory, and whether mentors can discover you. You can export everything we hold about you as a JSON file at any time and request account deletion.",
+        "You control who can see your profile, whether you appear in the Public Directory, and whether advisors can discover you. You can export everything we hold about you as a JSON file at any time and request account deletion.",
       howto: [
         'Open Settings → Privacy.',
         'Pick visibility: Public (anyone with the link) / Network only / Private (admins only).',
-        'Toggle Public Directory and mentor discoverability independently.',
+        'Toggle Public Directory and advisor discoverability independently.',
         'Open Settings → Account → Download my data to export.',
         'Request account deletion from the same tab — there’s a 30-day grace period before hard delete.',
       ],

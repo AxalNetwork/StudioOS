@@ -585,7 +585,7 @@ billing.all('/investor/dev-upgrade', async (c) => {
 
 // ---------------------------------------------------------------------------
 // Persona (account-plan) billing — the generic subscription pipeline for every
-// signed-in role that isn't a founder or investor (partner, advisor/mentor, and
+// signed-in role that isn't a founder or investor (partner, advisor, and
 // any future persona). Catalog products opt a persona in via
 // `metadata.plan_group === <group>`; state lives in the account_subscriptions
 // side table. Subscriptions are created INLINE (Payment Element in the SPA), so
@@ -1437,7 +1437,7 @@ async function handleStripeEvent(
     || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('expert_booking:'));
   const isIncorporation = meta.kind === 'incorporation'
     || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('incorporation:'));
-  // Persona account-plan subscription (partner, advisor/mentor, …). Stamped with
+  // Persona account-plan subscription (partner, advisor, …). Stamped with
   // kind='plan' + plan_group + user_id at /plan/checkout. Routed into the
   // account_subscriptions side table, never the founder/investor/MI columns.
   const isPlan = meta.kind === 'plan';

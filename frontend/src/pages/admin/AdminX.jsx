@@ -16,7 +16,7 @@ import { adminX as api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
-const AUDIENCES = ['public', 'founders', 'investors', 'mentors', 'partners', 'alumni'];
+const AUDIENCES = ['public', 'founders', 'investors', 'advisors', 'partners', 'alumni'];
 const TABS = [
   { id: 'accounts', label: 'Accounts' },
   { id: 'compose', label: 'Compose' },

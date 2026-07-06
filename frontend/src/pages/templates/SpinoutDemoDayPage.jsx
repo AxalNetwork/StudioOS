@@ -45,7 +45,7 @@ const WHY_ATTEND = [
   {
     icon: Users,
     title: 'Meet the Network',
-    desc: 'Investors, advisors, mentors, and future co-founders in one room. Every attendee is vetted before the event.',
+    desc: 'Investors, advisors, advisors, and future co-founders in one room. Every attendee is vetted before the event.',
   },
   {
     icon: Rocket,
@@ -102,10 +102,10 @@ const THIRTY_DAY_PROCESS = [
     n: 3,
     label: 'Week 3',
     title: 'Validate and Team',
-    desc: 'Complete your first venture-readiness score, start the mentor cadence, and open co-founder track.',
+    desc: 'Complete your first venture-readiness score, start the advisor cadence, and open co-founder track.',
     bullets: [
       'Venture-readiness score v1 calculated',
-      'Mentor matched and first session completed',
+      'Advisor matched and first session completed',
       'Co-founder track opened if needed',
       'Customer interviews extended (target: 10+)',
     ],
@@ -152,7 +152,7 @@ const WHO_SHOULD_ATTEND = [
   },
   {
     icon: Users,
-    title: 'Mentors and Advisors',
+    title: 'Advisors and Advisors',
     desc: 'Each cohort cycle brings new companies that need domain expertise. Demo Day is how you see the quality of the cohort before engaging.',
   },
 ];

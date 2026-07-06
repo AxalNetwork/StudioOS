@@ -77,7 +77,7 @@ const ROLE_MATRIX: Record<string, ObligationDef[]> = {
     // settings PUT can flip it to `required:1` later.
     { key: 'kyb_v1',           required: 0, ttlMs: TTL_24_MO },
   ],
-  mentor: [
+  advisor: [
     { key: 'tos_v1',              required: 1, ttlMs: null },
     { key: 'privacy_v1',          required: 1, ttlMs: null },
     { key: 'mentor_nda_v1',       required: 1, ttlMs: TTL_24_MO },

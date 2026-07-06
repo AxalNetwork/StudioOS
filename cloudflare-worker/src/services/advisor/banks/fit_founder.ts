@@ -21,7 +21,7 @@ export const FIT_FOUNDER_BANK: Question[] = buildFitBank('founder', [
   { key: 'domain_customer_proximity', prompt: 'How close are you to the people who feel this problem most acutely?', measures: { rubric_category: 'domain_insight', skill_axis: 'gtm_sales' } },
   // ---- coachability ---------------------------------------------------
   { key: 'coach_feedback', prompt: 'When someone challenges your plan with a strong argument, how readily do you change course?', measures: { rubric_category: 'coachability', red_flag: { key: 'overconfidence', at_or_below: 1 } } },
-  { key: 'coach_seek_help', prompt: 'How proactively do you seek out mentors and advisors for the things you are weakest at?', measures: { rubric_category: 'coachability' } },
+  { key: 'coach_seek_help', prompt: 'How proactively do you seek out advisors and advisors for the things you are weakest at?', measures: { rubric_category: 'coachability' } },
   // ---- resilience -----------------------------------------------------
   { key: 'resilience_setbacks', prompt: 'How well do you keep the team steady and moving when a launch or a raise falls through?', measures: { rubric_category: 'resilience' } },
   { key: 'resilience_stamina', prompt: 'How sustainable is your pace — could you hold this intensity for years, not just months?', measures: { rubric_category: 'resilience' } },

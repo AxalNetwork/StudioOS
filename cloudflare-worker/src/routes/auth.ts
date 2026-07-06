@@ -834,7 +834,7 @@ auth.get('/me', async (c) => {
       return ((user as any).assistant_enabled ?? 0) ? 1 : 0;
     })(),
     // Task #6 — founder subscription tier (FREE / GROWTH / STUDIO).
-    // Bypass roles (admin/partner/investor/mentor) still receive these
+    // Bypass roles (admin/partner/investor/advisor) still receive these
     // fields so the frontend can display them, but tier gates are no-ops.
     subscription_tier: (user as any).subscription_tier || 'free',
     subscription_status: (user as any).subscription_status || 'active',

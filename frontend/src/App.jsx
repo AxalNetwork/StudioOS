@@ -88,7 +88,7 @@ const RecoverPage = lazy(() => import('./pages/RecoverPage'));
 const ESignPage = lazy(() => import('./pages/ESignPage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
-const MentorsPage = lazy(() => import('./pages/MentorsPage'));
+const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
 const OfficeHoursPage = lazy(() => import('./pages/OfficeHoursPage'));
 const PartnerOfficeHoursPage = lazy(() => import('./pages/PartnerOfficeHoursPage'));
 const CoMarketingPage = lazy(() => import('./pages/CoMarketingPage'));
@@ -102,7 +102,7 @@ const JobEditorPage = lazy(() => import('./pages/jobs/JobEditorPage'));
 const JobManagePage = lazy(() => import('./pages/jobs/JobManagePage'));
 const MyApplicationsPage = lazy(() => import('./pages/jobs/MyApplicationsPage'));
 const CofounderPage = lazy(() => import('./pages/CofounderPage'));
-// Team Building — founder workspace consolidating Mentor/Advisor, Co-Founder
+// Team Building — founder workspace consolidating Advisor, Co-Founder
 // and Jobs into one tabbed page at /build/team.
 const TeamBuildingPage = lazy(() => import('./pages/TeamBuildingPage'));
 const CommandCenterPage = lazy(() => import('./pages/CommandCenterPage'));
@@ -206,7 +206,7 @@ const ROLE_LABELS = {
   founder: 'Founder',
   partner: 'Partner',
   investor: 'Investor',
-  mentor: 'Mentor',
+  advisor: 'Advisor',
 };
 
 const ROLE_COLORS = {
@@ -214,7 +214,7 @@ const ROLE_COLORS = {
   founder: 'bg-blue-100 text-blue-700',
   partner: 'bg-emerald-100 text-emerald-700',
   investor: 'bg-purple-100 text-purple-700',
-  mentor: 'bg-amber-100 text-amber-700',
+  advisor: 'bg-amber-100 text-amber-700',
 };
 
 const ROLE_DEFAULT_PATH = {
@@ -225,7 +225,7 @@ const ROLE_DEFAULT_PATH = {
   founder: '/studio',
   partner: '/partner-portal',
   investor: '/studio',
-  mentor: '/office-hours',
+  advisor: '/office-hours',
   // Task #51 follow-up — fresh Google signups land with role='pending' until
   // the onboarding chatbot classifies them. The pending-gate in RequireAuth
   // pins them to /onboarding/chat, but this default keeps any stray
@@ -942,7 +942,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   //   • returning user with a saved-but-incomplete row for their role
   // Cross-role rows (e.g. role-changed mid-flow) are ignored — those
   // users keep their default landing path until they re-enter onboarding.
-  // Partners (including Mentor / Operator / Counsel / Technical / Liquidity
+  // Partners (including Advisor / Operator / Counsel / Technical / Liquidity
   // sub-personas that fold into role='partner' for the CHECK constraint)
   // onboard via the AI chatbot at /onboarding/chat — not the legacy
   // /onboarding/partner "Your firm" form. The chatbot saves the persona
@@ -965,7 +965,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   }
 
   // Onboarding gate: only investors must complete KYC before accessing other
-  // pages. Founders, partners, and mentors do not require KYC at all — and
+  // pages. Founders, partners, and advisors do not require KYC at all — and
   // admins (or impersonation sessions) always bypass for support purposes.
   // Investor signing endpoints (capital actions, deal-flow gating) still
   // enforce KYC server-side regardless of this client-side gate.
@@ -1209,6 +1209,7 @@ function AppInner() {
       <Route path="/for-founders" element={<ProductAudiencePage slug="founders" />} />
       <Route path="/for-investors" element={<ProductAudiencePage slug="investors" />} />
       <Route path="/for-service-partners" element={<ProductAudiencePage slug="service-partners" />} />
+      <Route path="/for-mentors" element={<Navigate to="/for-advisors" replace />} />
       <Route path="/for-advisors" element={<ProductAudiencePage slug="advisors" />} />
       <Route path="/pricing/investor" element={<InvestorPricingPage />} />
       <Route path="/register" element={<AuthScreen user={user} clearSession={clearSession}><RegisterPage /></AuthScreen>} />
@@ -1230,15 +1231,15 @@ function AppInner() {
       <Route path="/partners/onboard" element={<PartnerOnboardPage />} />
       <Route path="/settings/email/confirm" element={<EmailChangeConfirmPage />} />
       <Route path="/settings/email/revoke" element={<EmailChangeRevokePage />} />
-      <Route path="/settings/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SettingsPage />)} />
+      <Route path="/settings/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SettingsPage />)} />
 
       {/* Phase 0.1 — investor role added to every guard a partner currently
           passes. Investor-only nav is curated above (NAV_BY_ROLE.investor)
           so we get a tighter capital-allocator surface; per-route guards
           stay permissive so deep links keep working during the split. */}
-      <Route path="/studio" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <Dashboard />)} />
+      <Route path="/studio" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Dashboard />)} />
       <Route path="/dashboard" element={<DashboardRedirect />} />
-      <Route path="/onboarding/chat" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor', 'pending'], <OnboardingChatPage />)} />
+      <Route path="/onboarding/chat" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'pending'], <OnboardingChatPage />)} />
       <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor'], <OnboardingPersonaPage />)} />
       <Route path="/onboarding/founder" element={guard(['admin', 'founder'], <OnboardingFounderPage />)} />
       <Route path="/onboarding/investor" element={guard(['admin', 'investor'], <OnboardingInvestorPage />)} />
@@ -1255,8 +1256,8 @@ function AppInner() {
       <Route path="/build/roadmap" element={guard(['admin', 'founder', 'partner', 'investor'], <RoadmapPage />)} />
       <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], <MetricsPage />)} />
       {/* Signals — founder decision engine over public-market evidence. Shared
-          by Founder + Advisor/Mentor modes (mode changes ordering + copy only). */}
-      <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SignalsPage user={user} />)} />
+          by Founder + Advisor modes (mode changes ordering + copy only). */}
+      <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SignalsPage user={user} />)} />
       <Route path="/build/captable" element={guard(['admin', 'founder', 'partner', 'investor'], <CapTablePage />)} />
       <Route path="/marketplace" element={guard(['admin', 'founder', 'partner', 'investor'], <MarketplacePage user={user} />)} />
       {/* Task #2 — Founder Marketplace merges the Service Catalogue (/services) and
@@ -1309,8 +1310,8 @@ function AppInner() {
       <Route path="/admin/publications/:id" element={guard(['admin'], <AdminPublicationDetail />)} />
       <Route path="/insights" element={<InsightsPage />} />
       <Route path="/insights/public/:slug" element={<PublicInsight />} />
-      <Route path="/admin/due-diligence" element={guard(['admin', 'partner', 'investor', 'mentor'], <AdminDueDiligencePage />)} />
-      <Route path="/admin/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'mentor'], <AdminDueDiligenceCasePage />)} />
+      <Route path="/admin/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
+      <Route path="/admin/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
       <Route path="/scoring" element={guard(['admin', 'partner', 'investor'], <ScoringPage />)} />
       <Route path="/projects" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectsPage />)} />
       <Route path="/projects/:id" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectDetail />)} />
@@ -1344,36 +1345,38 @@ function AppInner() {
       <Route path="/incorporate/83b" element={guard(['admin', 'founder', 'partner'], <Section83bPage />)} />
       <Route path="/compliance" element={guard(['admin', 'founder', 'partner'], <CompliancePage />)} />
       <Route path="/wellbeing" element={guard(['admin', 'founder'], <WellbeingPage />)} />
-      <Route path="/wellbeing/expert-dashboard" element={guard(['admin', 'founder', 'partner', 'mentor'], <ExpertEditorPage />)} />
-      <Route path="/wellbeing/expert/:uid" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ExpertProfilePage />)} />
+      <Route path="/wellbeing/expert-dashboard" element={guard(['admin', 'founder', 'partner', 'advisor'], <ExpertEditorPage />)} />
+      <Route path="/wellbeing/expert/:uid" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ExpertProfilePage />)} />
       <Route path="/partners" element={guard(['admin', 'partner', 'investor'], <PartnersPage />)} />
       <Route path="/capital" element={guard(['admin', 'investor'], <CapitalPage />)} />
-      <Route path="/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <TicketsPage />)} />
+      <Route path="/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <TicketsPage />)} />
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'], <DealsPage />)} />
       <Route path="/market-intel" element={guard(['admin', 'partner', 'investor'], <MarketIntelPage />)} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <AdvisoryPage />)} />
-      {/* Team Building consolidation (Build › Team). Founders reach Mentor/
+      {/* Team Building consolidation (Build › Team). Founders reach Advisor/
           Advisor, Co-Founder and Jobs through the unified /build/team
           workspace; the legacy standalone routes stay live for every other
           role but redirect a founder into the matching tab so old deep links
           keep resolving. */}
       <Route path="/build/team" element={guard(['admin', 'founder'], <TeamBuildingPage />)} />
       <Route path="/build/command-center" element={guard(['admin', 'founder'], <CommandCenterPage />)} />
-      <Route path="/mentors" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], user?.role === 'founder' ? <Navigate to="/build/team?tab=mentor" replace /> : <MentorsPage />)} />
-      <Route path="/office-hours" element={guard(['admin', 'mentor'], <OfficeHoursPage />)} />
+      {/* Task #74 — back-compat redirect from the pre-rename /mentors path. */}
+      <Route path="/mentors" element={<Navigate to="/advisors" replace />} />
+      <Route path="/advisors" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], user?.role === 'founder' ? <Navigate to="/build/team?tab=advisor" replace /> : <AdvisorsPage />)} />
+      <Route path="/office-hours" element={guard(['admin', 'advisor'], <OfficeHoursPage />)} />
       <Route path="/partner/office-hours" element={guard(['admin', 'partner'], <PartnerOfficeHoursPage />)} />
       <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], <CoMarketingPage user={user} />)} />
-      <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <CalendarPage />)} />
+      <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CalendarPage />)} />
       {/* Task #40 (E2) — Event host/attendee surface. */}
-      <Route path="/my/events" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <MyEventsPage />)} />
-      <Route path="/events/new" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <EventEditorPage />)} />
-      <Route path="/events/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <EventEditorPage />)} />
-      <Route path="/events/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <EventManagePage />)} />
-      <Route path="/my/jobs" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], user?.role === 'founder' ? <Navigate to="/build/team?tab=jobs" replace /> : <MyJobsPage />)} />
-      <Route path="/my/applications" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <MyApplicationsPage />)} />
-      <Route path="/jobs/new" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <JobEditorPage />)} />
-      <Route path="/jobs/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <JobEditorPage />)} />
-      <Route path="/jobs/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <JobManagePage />)} />
+      <Route path="/my/events" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <MyEventsPage />)} />
+      <Route path="/events/new" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventEditorPage />)} />
+      <Route path="/events/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventEditorPage />)} />
+      <Route path="/events/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventManagePage />)} />
+      <Route path="/my/jobs" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], user?.role === 'founder' ? <Navigate to="/build/team?tab=jobs" replace /> : <MyJobsPage />)} />
+      <Route path="/my/applications" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <MyApplicationsPage />)} />
+      <Route path="/jobs/new" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobEditorPage />)} />
+      <Route path="/jobs/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobEditorPage />)} />
+      <Route path="/jobs/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobManagePage />)} />
       <Route path="/cofounder" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/team?tab=cofounder" replace /> : <CofounderPage />)} />
       {/* Task #20 — Consolidated profile/advisor flow. The advisor conversation
           now builds the skill + values profile; the legacy /skills and /values
@@ -1386,7 +1389,7 @@ function AppInner() {
       {/* Task #10 — portfolio Venture Risk matrix (internal deal team). */}
       <Route path="/portfolio/risk-matrix" element={guard(['admin', 'partner', 'investor'], <RiskMatrixPage />)} />
       <Route path="/watchlist" element={guard(['admin', 'partner', 'investor'], <WatchlistJournalPage />)} />
-      <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <ActivityPage />)} />
+      <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor'], <TrustCenterPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
@@ -1444,12 +1447,12 @@ function AppInner() {
           screen so the page literally pretends not to exist; admins are
           redirected into the hash-anchored docs surface. */}
       <Route path="/docs/admin/*" element={<AdminDocsPathGuard />} />
-      <Route path="/docs" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <DocsPage />)} />
+      <Route path="/docs" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <DocsPage />)} />
       {/* Task #17 — investor "Profile" nav lands on the self-profile surface
           (the Settings profile section rendered at its own path so the sidebar
           item highlights independently of Settings). */}
-      <Route path="/profile" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SettingsPage />)} />
-      <Route path="/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SettingsPage />)} />
+      <Route path="/profile" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SettingsPage />)} />
+      <Route path="/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SettingsPage />)} />
 
       {/* Task #53 — Public partner directory + profiles (no auth). The
           static /partners route below takes precedence over /partners/:slug

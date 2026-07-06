@@ -9,7 +9,7 @@
  *
  *  We do NOT re-query D1 here: we remap the EXISTING `fillAxalSpinoutDemoDay`
  *  output (which already reads every Lab module — Customer Discovery, Market
- *  Intel, Roadmap, Scoring, Mentors/Network, Team, Incorporate/Cap Table,
+ *  Intel, Roadmap, Scoring, Advisors/Network, Team, Incorporate/Cap Table,
  *  Capital/Compliance) into the new 10-slide contract.
  *
  *  `mapToSpinoutDeckData` is PURE (SpinoutDemoDayData -> bundle) so it can be
@@ -225,7 +225,7 @@ const NOTES: SpinoutDeckNotes = {
   solution: 'SOLUTION. Message: data \u2192 live score, four steps.\nAUTO: step copy from capabilities.\nMANUAL: confirm target outcome metrics vs. latest pilot.',
   productDemo: 'PRODUCT DEMO. Message: show the product, don\u2019t just describe it.\nAUTO: walkthrough copy.\nMANUAL: paste a live demo URL + short loop video link or screenshot from the project.',
   roadmap: 'ROADMAP. Message: operating plan on the 30-day cadence.\nAUTO: Now/Next/Later from OKRs + status flags.\nMANUAL: none if tracker is current.',
-  team: 'TEAM & NETWORK. Message: founder inside a structured operating network.\nAUTO: founder profile, advisor/mentor roster, network nodes.\nMANUAL: advisor consent; swap initials for headshots.',
+  team: 'TEAM & NETWORK. Message: founder inside a structured operating network.\nAUTO: founder profile, advisor roster, network nodes.\nMANUAL: advisor consent; swap initials for headshots.',
   captable: 'CAP TABLE & INCORPORATION. Message: legal + equity setup is investor-ready.\nAUTO: readiness checklist statuses, cap-table splits.\nMANUAL: none if module current.',
   ask: 'THE ASK. Message: specific raise tied to a milestone.\nAUTO: raise, runway, allocations, milestone.\nMANUAL: confirm instrument/cap + close with counsel.',
   deal: 'DEAL READINESS. Message: diligence-ready now, frictionless next step.\nAUTO: document statuses, contact.\nMANUAL: confirm live data-room link.',
@@ -508,8 +508,8 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     gap('Team: add your founder profile in the Cofounder/Team module.');
   }
 
-  const mentorNames = (src.mentor_network?.mentors || []).filter(has);
-  // Roster (advisors / mentors / partners). The renderer's vertical-fit logic
+  const advisorNames = (src.mentor_network?.mentors || []).filter(has);
+  // Roster (advisors / partners). The renderer's vertical-fit logic
   // decides how many actually render, so we pass through a generous slice
   // rather than hard-capping at the old 4.
   let advisors: SpinoutDeckData['team']['advisors'];
@@ -518,11 +518,11 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
       const photo = has(p.photo_url || '') ? String(p.photo_url) : undefined;
       return [initialsOf(p.name), p.name, has(p.role) ? p.role : 'Advisor', photo] as [string, string, string, string?];
     });
-  } else if (mentorNames.length) {
-    advisors = mentorNames.slice(0, 8).map((n) => [initialsOf(n), n, 'Mentor'] as [string, string, string, string?]);
+  } else if (advisorNames.length) {
+    advisors = advisorNames.slice(0, 8).map((n) => [initialsOf(n), n, 'Advisor'] as [string, string, string, string?]);
   } else {
     advisors = [];
-    gap('Team: connect mentors/advisors in the Mentors & Network module.');
+    gap('Team: connect advisors in the Advisors & Network module.');
   }
 
   const team: SpinoutDeckData['team'] = {
@@ -530,7 +530,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     title: has(src.team?.headline) ? src.team.headline : 'A founder backed by an operating network.',
     founder,
     founders,
-    advisorsLabel: 'ADVISORS & MENTORS',
+    advisorsLabel: 'ADVISORS & ADVISORS',
     advisors,
     centerName: projectName,
     nodes: [

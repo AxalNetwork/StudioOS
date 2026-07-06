@@ -1,7 +1,7 @@
 /**
  * Task #52 — Two-way sync hooks for Axal-booked sessions.
  *
- * Sessions booked on the platform (mentor sessions, IC meetings, founder
+ * Sessions booked on the platform (advisor sessions, IC meetings, founder
  * check-ins) need to appear on the Axal /calendar feed AND on the user's
  * connected external calendars (Google / Outlook) within ~30 seconds.
  *

@@ -450,7 +450,7 @@ async function team(pres, data, notes) {
     founderBottom = TOP + founders.length * rowH;
   }
 
-  // ── roster (advisors / mentors / partners) ──────────────────────────────
+  // ── roster (advisors / advisors / partners) ──────────────────────────────
   // Single founder keeps today's fixed geometry exactly; with co-founders the
   // roster adopts the in-app vertical-fit so the last row never crosses BOTTOM.
   let labelY, rosterTop, rowH, visibleCount, avD, nameSize, roleSize;

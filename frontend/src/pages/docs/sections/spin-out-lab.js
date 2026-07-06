@@ -132,7 +132,7 @@ export default {
       ],
       tips: [
         'You retain access to all lab content — nothing gets archived.',
-        'Schedule a Demo Day session via Mentor Match to pressure-test your pitch before going to investors.',
+        'Schedule a Demo Day session via Advisor Match to pressure-test your pitch before going to investors.',
       ],
       pitfalls: [
         'Graduation does not start fundraising for you — head to Capital and assemble the round when you’re ready.',

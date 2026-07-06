@@ -123,7 +123,7 @@ export default function ProjectDetail() {
   const canEdit = isAdmin || isOwner || !!perm?.can_edit;
   const canDelete = isAdmin || isOwner;
   const tier = (user?.tier || user?.subscription_plan || 'free').toLowerCase();
-  const isElevated = ['admin','partner','investor','mentor'].includes((user?.role || '').toLowerCase());
+  const isElevated = ['admin','partner','investor','advisor'].includes((user?.role || '').toLowerCase());
   const cbTierLocked = !isElevated && tier !== 'growth' && tier !== 'studio';
   // Task #10 — Venture Risk panel: read gates to admin/partner/investor;
   // analyst writes (override/recompute) gate to admin/partner.

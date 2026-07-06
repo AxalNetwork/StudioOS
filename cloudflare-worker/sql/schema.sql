@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS users (
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     email TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'founder' CHECK (role IN ('admin', 'founder', 'partner', 'investor')),
+    role TEXT NOT NULL DEFAULT 'founder' CHECK (role IN ('admin', 'founder', 'partner', 'investor', 'advisor')),
     investor_id INTEGER REFERENCES investors(id),
     password_hash TEXT,
     founder_id INTEGER REFERENCES founders(id),
@@ -834,7 +834,7 @@ CREATE TABLE IF NOT EXISTS calendar_google_tokens (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(user_id)
 );
-CREATE TABLE IF NOT EXISTS mentor_slots (
+CREATE TABLE IF NOT EXISTS advisor_slots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     mentor_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     start_at TEXT NOT NULL,
@@ -897,7 +897,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     thesis TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE TABLE IF NOT EXISTS mentor_bookings (
+CREATE TABLE IF NOT EXISTS advisor_bookings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     slot_id INTEGER,

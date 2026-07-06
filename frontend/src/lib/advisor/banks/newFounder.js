@@ -51,7 +51,7 @@ export const NEW_FOUNDER_BANK = [
     label: 'Which sector are you in?',
     type: 'select',
     options: SECTORS,
-    explainer: 'Used to match you with sector-relevant investors and mentors.',
+    explainer: 'Used to match you with sector-relevant investors and advisors.',
     doc_anchor: 'build/projects',
     page_target: '/projects',
     validate: all(required, oneOf(SECTORS)),

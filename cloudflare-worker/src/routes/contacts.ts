@@ -5,7 +5,7 @@
  * CTA (or founder-initiated invite) becomes a `contacts` row tagged by audience,
  * with a status pipeline, reply log, and follow-up tasks. Routing on ingest
  * sends customers toward Customer Discovery, investors toward the raise pipeline,
- * and everyone else (partner/advisor/mentor/cofounder) into the network pipeline.
+ * and everyone else (partner/advisor/cofounder) into the network pipeline.
  *
  * Mounted at /api/contacts. Founder-owned (admin bypasses). The table is created
  * lazily (mirroring brand.ts) so it exists at runtime before the 120 migration
@@ -25,7 +25,7 @@ import { hashEmail } from '../util/hashEmail';
 
 const r = new Hono<{ Bindings: Env }>();
 
-export const CONTACT_AUDIENCES = ['customer', 'investor', 'partner', 'advisor', 'mentor', 'cofounder'];
+export const CONTACT_AUDIENCES = ['customer', 'investor', 'partner', 'advisor', 'advisor', 'cofounder'];
 const CONTACT_STATUSES = ['new', 'invited', 'contacted', 'replied', 'qualified', 'active', 'passed'];
 
 /** Investor raise-pipeline stages a promoted investor prospect moves through. */
@@ -427,7 +427,7 @@ r.post('/:uid/tasks/:taskId/toggle', async (c) => {
 // promoted_to). Concurrency is guarded by only letting the request that flips
 // promoted_ref_id from NULL win; the loser deletes its just-created row and
 // returns the winner's — mirroring the waitlist→interview promote in
-// routes/progress.ts. Others (partner/advisor/mentor/cofounder) have no
+// routes/progress.ts. Others (partner/advisor/cofounder) have no
 // downstream module and stay in Contacts.
 r.post('/:uid/promote', async (c) => {
   try {

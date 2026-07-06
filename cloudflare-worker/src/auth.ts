@@ -585,7 +585,7 @@ export async function bumpJwtMinIat(env: Env, userId: number): Promise<number> {
 export async function requireApprovedKyc(c: Context<{ Bindings: Env }>): Promise<User> {
   const user = await requireAuth(c);
   // Task #2 — KYC is investor-only. Admins always bypass (for support);
-  // founders, partners, and mentors are never required to complete KYC
+  // founders, partners, and advisors are never required to complete KYC
   // and pass through. Only investors must be approved before reaching
   // gated capital / deal-flow / signing endpoints.
   if (user.role === 'admin') return user;

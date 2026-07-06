@@ -146,7 +146,7 @@ function getCoverage(env: any, token: string, query = ''): Promise<Response> {
 }
 
 test('coverage: non-admin/partner roles are forbidden (403)', async () => {
-  for (const role of ['founder', 'investor', 'mentor', 'guest']) {
+  for (const role of ['founder', 'investor', 'advisor', 'guest']) {
     const token = await mintToken(1, role);
     const env = makeEnv({ user: { id: 1, role, is_active: 1 } });
     const res = await getCoverage(env, token);

@@ -21,7 +21,7 @@ const FEATURE_LINK = {
   'Pitch Deck Builder': '/build/deck',
   'Brand Builder': '/build/brand',
   'Diligence & Scoring Engine': '/scoring',
-  Mentors: '/mentors',
+  Advisors: '/advisors',
   'Office Hours': '/office-hours',
   'Co-founder Match': '/cofounder',
   Incorporate: '/incorporate',
@@ -65,11 +65,11 @@ const PLAYBOOK = [
     n: 3,
     title: 'Validate & Team',
     youDo:
-      'Run your first venture-readiness score, match with mentors, decide co-founder track, pressure-test scoring weak points.',
-    unlocks: ['Diligence & Scoring Engine', 'Mentors', 'Office Hours', 'Co-founder Match'],
+      'Run your first venture-readiness score, match with advisors, decide co-founder track, pressure-test scoring weak points.',
+    unlocks: ['Diligence & Scoring Engine', 'Advisors', 'Office Hours', 'Co-founder Match'],
     unlocksTail: ', MI investor signals.',
     leaveWith:
-      'A score with evidence-confidence %, a mentor cadence, a co-founder lead or a clear "going solo" plan.',
+      'A score with evidence-confidence %, an advisor cadence, a co-founder lead or a clear "going solo" plan.',
   },
   {
     n: 4,
@@ -96,7 +96,7 @@ const WHAT_YOU_GET = [
       'Gated by a three-way NDA (Founder + Investor + Axal VC). Three warm intros minimum in Week 4 for qualified founders.',
   },
   {
-    title: 'Mentor track',
+    title: 'Advisor track',
     body:
       'Operators in your sector matched by expertise, availability, language, time zone, and rating.',
   },
@@ -156,7 +156,7 @@ const REASONS_WE_SAY_NO = [
 const NETWORK = [
   'Operating partners — legal, GTM, design, recruiting, data, technical DD, finance.',
   'Investor signals from Axal VC\u2019s investor pipeline (anonymised until pairwise NDA signed).',
-  'Mentor pool with expertise tags and availability calendars.',
+  'Advisor pool with expertise tags and availability calendars.',
   'Co-marketing partners across the network for distribution.',
   'Alumni founders who graduated previous cohorts.',
 ];

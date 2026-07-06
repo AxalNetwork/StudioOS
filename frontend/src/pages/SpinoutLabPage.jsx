@@ -33,9 +33,9 @@ const EXPLAINER_CARDS = [
         </p>
         <p>
           <span className="font-semibold text-gray-900 dark:text-gray-100">Week 3 — Validate & Team.</span> Run your
-          first venture-readiness score, match with mentors, decide co-founder track. Unlocks{' '}
+          first venture-readiness score, match with advisors, decide co-founder track. Unlocks{' '}
           <Link to="/scoring" className="text-violet-700 hover:underline">Scoring</Link>,{' '}
-          <Link to="/mentors" className="text-violet-700 hover:underline">Mentors</Link>,{' '}
+          <Link to="/advisors" className="text-violet-700 hover:underline">Advisors</Link>,{' '}
           <Link to="/office-hours" className="text-violet-700 hover:underline">Office Hours</Link>,{' '}
           <Link to="/cofounder" className="text-violet-700 hover:underline">Co-founder Match</Link>.
         </p>
@@ -60,7 +60,7 @@ const EXPLAINER_CARDS = [
       <ul className="space-y-2 text-sm text-gray-700 leading-relaxed dark:text-gray-300">
         <li>Personal Advisor on every page — Workers AI Llama 3.3 70B FP8.</li>
         <li>Three warm investor introductions in Week 4 for qualified founders (three-way NDA gated).</li>
-        <li>Mentor track matched by expertise, availability, language, time zone, rating.</li>
+        <li>Advisor track matched by expertise, availability, language, time zone, rating.</li>
         <li>Services partners (legal, design, recruiting, technical DD) at Axal VC network rates.</li>
         <li>Sector + investor + sentiment + TALC + atlas + capital-velocity intelligence.</li>
         <li>Document automation: incorporation, 83(b), cofounder agreement, SAFE, NDAs.</li>
@@ -112,7 +112,7 @@ const EXPLAINER_CARDS = [
       <ul className="space-y-2 text-sm text-gray-700 leading-relaxed dark:text-gray-300">
         <li>Operating partners — legal, GTM, design, recruiting, data, technical DD, finance.</li>
         <li>Investor signals from Axal VC's pipeline (anonymised until pairwise NDA signed).</li>
-        <li>Mentor pool with expertise tags and availability calendars.</li>
+        <li>Advisor pool with expertise tags and availability calendars.</li>
         <li>Co-marketing partners across the network for distribution.</li>
         <li>Alumni founders from previous cohorts.</li>
       </ul>
@@ -233,7 +233,7 @@ const MILESTONE_LABELS = {
   brand_basics_filled: 'Fill in brand basics (name, tagline, colours)',
   pitch_deck_drafted: 'Draft your pitch deck',
   scoring_run_completed: 'Run the AI scoring engine',
-  mentor_meeting_booked: 'Book a mentor meeting',
+  advisor_meeting_booked: 'Book an advisor meeting',
   cofounder_request_sent: 'Send a co-founder request',
   incorporation_completed: 'Complete incorporation',
 };
@@ -243,7 +243,7 @@ const MILESTONE_LABELS = {
 const WEEK_MILESTONES = {
   1: ['project_created', 'customer_interview_logged_1', 'customer_interview_logged_2', 'customer_interview_logged_3'],
   2: ['okrs_created', 'brand_basics_filled', 'pitch_deck_drafted'],
-  3: ['scoring_run_completed', 'mentor_meeting_booked', 'cofounder_request_sent'],
+  3: ['scoring_run_completed', 'advisor_meeting_booked', 'cofounder_request_sent'],
   4: ['incorporation_completed'],
 };
 
@@ -276,19 +276,19 @@ const FEATURE_EXPLAINERS = {
   },
   'pitch-deck': {
     label: 'Pitch Deck',
-    blurb: 'Generate a working seed deck from your startup + market intel; iterate before mentors see it.',
+    blurb: 'Generate a working seed deck from your startup + market intel; iterate before advisors see it.',
   },
   'cofounder-match': {
     label: 'Co-founder Match',
     blurb: 'Search the cofounder pool and send your first intro requests — single-founder companies fundraise harder.',
   },
-  mentors: {
-    label: 'Mentors',
-    blurb: 'Browse the mentor directory and request your first session.',
+  advisors: {
+    label: 'Advisors',
+    blurb: 'Browse the advisor directory and request your first session.',
   },
   'office-hours': {
     label: 'Office Hours',
-    blurb: 'Book recurring office hours with mentors and partners across the network.',
+    blurb: 'Book recurring office hours with advisors and partners across the network.',
   },
   scoring: {
     label: 'AI Scoring',
@@ -711,7 +711,7 @@ export default function SpinoutLabPage() {
   // Task #15 — Refresh the dashboard whenever a milestone is marked
   // anywhere in the app (markMilestone in spinoutLabHooks.js dispatches
   // this). Local "Mark complete" clicks already update state inline; this
-  // covers cross-page completions (pitch deck, mentor booking, etc.) that
+  // covers cross-page completions (pitch deck, advisor booking, etc.) that
   // happen while the user is sitting on the Lab page in another tab/route.
   useEffect(() => {
     const onAdvanced = () => { load(); };

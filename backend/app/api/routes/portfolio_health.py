@@ -10,7 +10,7 @@ Visibility model:
   * Investor/Partner — every project (the dashboard is a portfolio overview;
     deal-level filtering happens in the Deals page).
   * Founder         — only projects they own.
-  * Mentor          — 403.
+  * Advisor          — 403.
 """
 from __future__ import annotations
 

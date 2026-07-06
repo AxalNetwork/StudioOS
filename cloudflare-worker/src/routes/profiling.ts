@@ -70,8 +70,8 @@ PROFILE CATEGORIES (one of):
 - "Operating Partner" (MSA + equity-for-services)
 - "Legal Counsel" (Preferred legal partner, fixed-fee spin-out packages)
 - "Technical Partner" (White-label MVP / product integration)
-- "Liquidity Provider" (Secondary purchases, M&A advisory)
-- "Mentor" (Office-hours coach for founders — no equity, capped sessions per month)
+- "Liquidity Provider" (Secondary purchases, M&An advisory)
+- "Advisor" (Office-hours coach for founders — no equity, capped sessions per month)
 
 WORKFLOW:
 1. Greet briefly (1 sentence) and ask which best describes their interest in Axal.
@@ -219,7 +219,7 @@ profiling.post('/save', async (c) => {
 
     const extractionPrompt = `From the following onboarding conversation with a prospective Axal VC partner, extract a strict JSON object with these keys (use null when unknown):
 {
-  "persona": one of "Investor — LP" | "Investor — Syndicate" | "Investor — Co-Investor" | "Founder" | "Mentor" | "Operator / Advisor" | "Operating Partner" | "Legal Counsel" | "Technical Partner" | "Liquidity Provider" | null,
+  "persona": one of "Investor — LP" | "Investor — Syndicate" | "Investor — Co-Investor" | "Founder" | "Advisor" | "Operator / Advisor" | "Operating Partner" | "Legal Counsel" | "Technical Partner" | "Liquidity Provider" | null,
   "founder_track": for Founders only — "Spin-Out (New)" if starting a brand new venture for the 30-day engine, "Strategic Scale (Existing)" if they have an existing company seeking partnership/capital/scale, null otherwise,
   "legal_entity_name": string|null,
   "entity_type": string|null,
@@ -327,7 +327,7 @@ ${transcript}`;
   // Task #51-followup — auto-assign role from chatbot classification so
   // the user can access basic features immediately (paywall gates the
   // premium surface). Admin handles agreement + final role tweaks
-  // (e.g. promoting a partner to mentor-specific permissions) from
+  // (e.g. promoting a partner to advisor-specific permissions) from
   // /api/profiling/admin/list.
   //
   // users.role has a CHECK constraint (admin/founder/partner/investor
@@ -337,7 +337,7 @@ ${transcript}`;
   let inferredRole: string | null = null;
   if (persona === 'Founder') inferredRole = 'founder';
   else if (typeof persona === 'string' && persona.startsWith('Investor')) inferredRole = 'investor';
-  else if (persona) inferredRole = 'partner'; // Mentor / Operator / Counsel / Technical / Liquidity
+  else if (persona) inferredRole = 'partner'; // Advisor / Operator / Counsel / Technical / Liquidity
   if (inferredRole) {
     const currentRole = String(user.role || '').toLowerCase();
     // Never demote: admin/founder/investor stay put. Only promote from

@@ -82,9 +82,9 @@ async function buildPublicDraft(env: Env, w: AggInput): Promise<DraftPayload> {
 }
 
 async function buildFoundersDraft(env: Env, w: AggInput): Promise<DraftPayload> {
-  const mentorSessions = await safeCount(
+  const advisorSessions = await safeCount(
     env,
-    `SELECT COUNT(*) AS n FROM mentor_sessions WHERE created_at >= ? AND created_at <= ?`,
+    `SELECT COUNT(*) AS n FROM advisor_sessions WHERE created_at >= ? AND created_at <= ?`,
     w.periodStart, w.periodEnd,
   );
   const intros = await safeCount(
@@ -100,7 +100,7 @@ async function buildFoundersDraft(env: Env, w: AggInput): Promise<DraftPayload> 
   const lines: string[] = [
     `*Founders digest — last ${w.periodDays}d*`,
     ``,
-    `• ${mentorSessions} mentor sessions booked`,
+    `• ${advisorSessions} advisor sessions booked`,
     `• ${intros} deal\\-room intros opened`,
     `• ${matches} new founder↔partner matches`,
     ``,
@@ -111,7 +111,7 @@ async function buildFoundersDraft(env: Env, w: AggInput): Promise<DraftPayload> 
     kind: 'founders_digest',
     title: 'Founders digest',
     body_md: lines.join('\n'),
-    payload: { mentor_sessions: mentorSessions, intros, matches, period_days: w.periodDays },
+    payload: { advisor_sessions: advisorSessions, intros, matches, period_days: w.periodDays },
   };
 }
 
@@ -143,10 +143,10 @@ async function buildInvestorsDraft(env: Env, w: AggInput): Promise<DraftPayload>
   };
 }
 
-async function buildMentorsDraft(env: Env, w: AggInput): Promise<DraftPayload> {
+async function buildAdvisorsDraft(env: Env, w: AggInput): Promise<DraftPayload> {
   const newMatches = await safeCount(
     env,
-    `SELECT COUNT(*) AS n FROM mentor_sessions WHERE created_at >= ? AND created_at <= ?`,
+    `SELECT COUNT(*) AS n FROM advisor_sessions WHERE created_at >= ? AND created_at <= ?`,
     w.periodStart, w.periodEnd,
   );
   const requests = await safeCount(
@@ -155,7 +155,7 @@ async function buildMentorsDraft(env: Env, w: AggInput): Promise<DraftPayload> {
     w.periodStart, w.periodEnd,
   );
   const lines: string[] = [
-    `*Mentors brief — last ${w.periodDays}d*`,
+    `*Advisors brief — last ${w.periodDays}d*`,
     ``,
     `• ${newMatches} sessions booked`,
     `• ${requests} office\\-hours requests`,
@@ -163,9 +163,9 @@ async function buildMentorsDraft(env: Env, w: AggInput): Promise<DraftPayload> {
     `Thank you for the time you give\\.`,
   ];
   return {
-    audience: 'mentors',
-    kind: 'mentors_brief',
-    title: 'Mentors brief',
+    audience: 'advisors',
+    kind: 'advisors_brief',
+    title: 'Advisors brief',
     body_md: lines.join('\n'),
     payload: { sessions: newMatches, requests, period_days: w.periodDays },
   };
@@ -219,7 +219,7 @@ const BUILDERS: Record<TelegramAudience, (env: Env, w: AggInput) => Promise<Draf
   public: buildPublicDraft,
   founders: buildFoundersDraft,
   investors: buildInvestorsDraft,
-  mentors: buildMentorsDraft,
+  advisors: buildAdvisorsDraft,
   partners: buildPartnersDraft,
   alumni: buildAlumniDraft,
 };

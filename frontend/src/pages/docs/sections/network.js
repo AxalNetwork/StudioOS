@@ -54,7 +54,7 @@ export default {
       id: 'directory',
       title: 'Public Directory',
       overview:
-        "The Public Directory is the opt-in, public-facing list of founders, partners, and mentors. Each entry has a public profile page (/u/<slug>) you can share. You control whether you appear in Settings → Privacy.",
+        "The Public Directory is the opt-in, public-facing list of founders, partners, and advisors. Each entry has a public profile page (/u/<slug>) you can share. You control whether you appear in Settings → Privacy.",
       howto: [
         'Open Settings → Privacy and toggle "Show me in the Public Directory".',
         'Set your public profile slug in Settings → Profile.',
@@ -77,7 +77,7 @@ export default {
       id: 'articles',
       title: 'Articles (write, submit, read)',
       overview:
-        "Trusted members — founders, investors, partners, mentors — can write industry insights and how-tos for the public news feed. Drafts auto-save as you type, submissions go through a quick review by the studio team, and you get notified at every step.",
+        "Trusted members — founders, investors, partners, advisors — can write industry insights and how-tos for the public news feed. Drafts auto-save as you type, submissions go through a quick review by the studio team, and you get notified at every step.",
       howto: [
         'Open the Articles page from the sidebar.',
         'Click "New draft", give it a title and subtitle, pick a sector, and write in the markdown editor with live preview.',
@@ -124,14 +124,14 @@ export default {
     },
     {
       id: 'matches',
-      title: 'Matches (co-founders & mentors)',
+      title: 'Matches (co-founders & advisors)',
       overview:
-        "Matches is one page that surfaces the platform's suggestions across co-founders, mentors, and partner introductions. The algorithm uses your persona, sector, time commitment, and recent activity — you stay in control of who you reach out to.",
+        "Matches is one page that surfaces the platform's suggestions across co-founders, advisors, and partner introductions. The algorithm uses your persona, sector, time commitment, and recent activity — you stay in control of who you reach out to.",
       howto: [
         'Open Matches from the Network sidebar.',
-        'Browse the three tabs — Co-founders, Mentors, and Partners — each shows ranked suggestions.',
+        'Browse the three tabs — Co-founders, Advisors, and Partners — each shows ranked suggestions.',
         'Like, pass, or open a profile from the card.',
-        'A chat unlocks when both sides like each other (co-founders) or when a mentor accepts (mentors).',
+        'A chat unlocks when both sides like each other (co-founders) or when an advisor accepts (advisors).',
       ],
       tips: [
         'Update your profile and persona regularly — matches improve with every change.',
@@ -143,7 +143,7 @@ export default {
       ],
       related: [
         { label: 'Co-founder Match', href: '#validate-grow/cofounder-match' },
-        { label: 'Mentors & booking sessions', href: '#validate-grow/mentors' },
+        { label: 'Advisors & booking sessions', href: '#validate-grow/advisors' },
       ],
     },
     {

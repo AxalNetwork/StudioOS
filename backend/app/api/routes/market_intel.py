@@ -786,8 +786,8 @@ def mi_fit_investor(user: User = Depends(get_current_user)):
 # ── Platform personas (8 charts) ─────────────────────────────────────────────
 @router.get("/platform-personas")
 def mi_platform_personas():
-    roles = ["founder", "investor", "partner", "mentor"]
-    role_labels = {"founder": "Founders", "investor": "Investors", "partner": "Partners", "mentor": "Mentors"}
+    roles = ["founder", "investor", "partner", "advisor"]
+    role_labels = {"founder": "Founders", "investor": "Investors", "partner": "Partners", "advisor": "Advisors"}
     stages = ["Idea", "Pre-seed", "Seed", "Series A", "Growth"]
 
     role_buckets = [{"group": "role", "label": role_labels[r], "n": int(_rand(8, 120, "pd_role", r))} for r in roles]
@@ -805,7 +805,7 @@ def mi_platform_personas():
     activity_rows = [{"role": r, "active_users": int(_rand(10, 200, "act", r)),
                       "events_per_user": round(_rand(3, 40, "epu", r), 1)} for r in roles]
     feature_actions = {"founder": "Submitted scoring run", "investor": "Viewed deal room",
-                       "partner": "Updated service listing", "mentor": "Booked office hours"}
+                       "partner": "Updated service listing", "advisor": "Booked office hours"}
     top_features = [{"role": r, "action": feature_actions[r]} for r in roles]
 
     funnel_rows = [{"week": w + 1, "n": int(_rand(5, 60, "funnel", w))} for w in range(6)]

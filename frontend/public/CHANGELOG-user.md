@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## "Mentors" are now "Advisors"
+
+We've renamed the **Mentors** area to **Advisors** so it matches how we talk
+about the people who guide founders everywhere else in the platform. Everything
+works exactly as before — the same profiles, office hours, bookings, and
+reviews — it's just under a clearer name. Any old **Mentors** links and
+bookmarks take you straight to the new **Advisors** pages.
+
+---
+
 ## Integrations now lives in Settings
 
 Connecting your tools now lives in **Settings**. Open **Settings**, choose

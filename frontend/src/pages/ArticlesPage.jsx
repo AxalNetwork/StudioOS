@@ -14,7 +14,7 @@ const ROLE_FILTERS = [
   { id: 'founder', label: 'Founders' },
   { id: 'investor', label: 'Investors' },
   { id: 'partner', label: 'Partners' },
-  { id: 'mentor', label: 'Mentors' },
+  { id: 'advisor', label: 'Advisors' },
   { id: 'coach', label: 'Coaches' },
   { id: 'admin', label: 'Axal VC team' },
 ];
@@ -243,7 +243,7 @@ export default function ArticlesPage() {
             <FileText className="w-7 h-7 text-violet-600" /> Articles
           </h1>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-            Long-form writing from the Axal VC network — founders, investors, partners, mentors, and the studio.
+            Long-form writing from the Axal VC network — founders, investors, partners, advisors, and the studio.
           </p>
         </div>
       </header>

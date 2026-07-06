@@ -122,7 +122,7 @@ export function pageLabel(path) {
     '/onboarding/persona': 'Persona',
     '/matches': 'AI Matches',
     '/portfolio': 'Portfolio',
-    '/mentorship': 'Mentorship',
+    '/advisorship': 'Advisorship',
     '/partners': 'Partners',
   };
   if (map[path]) return map[path];
