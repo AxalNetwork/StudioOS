@@ -19,7 +19,7 @@ import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, Shield, ShieldCheck,
-  Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, LayoutGrid,
+  Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, LayoutGrid,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2, ShieldAlert,
   Gavel, Inbox, FileBarChart, Radar,
@@ -115,7 +115,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
-      { to: '/integrations', icon: Plug, label: 'Integrations' },
+      // "Integrations" merged into Settings (/settings/integrations); the
+      // /integrations route redirects there. Removed from the admin nav.
       { to: '/marketplace', icon: Briefcase, label: 'Marketplace' },
       { to: '/services', icon: Package, label: 'Service Catalogue' },
       { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
@@ -373,7 +374,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
-      { to: '/integrations', icon: Plug, label: 'Integrations' },
+      // "Integrations" merged into Settings (/settings/integrations); the
+      // /integrations route redirects there. Removed from the investor nav.
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/activity', icon: Activity, label: 'Activity' },
       { to: '/docs', icon: BookOpen, label: 'Docs' },

@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Integrations now lives in Settings
+
+Connecting your tools now lives in **Settings**. Open **Settings**, choose
+**Integrations**, and you'll find the full marketplace right there: browse and
+connect your CRM, calendar, legal providers, and data feeds, sign in with Google,
+LinkedIn, or Outlook, disconnect anything, trigger a sync, check logs, and join
+waitlists — exactly as before. It's now available to everyone, not just some
+roles. Old **Integrations** links, and the trip back after you connect an
+account, take you straight to the right place.
+
+---
+
 ## Services and needs are now one place: Marketplace
 
 We've combined **Needs Board** and **Service Catalogue** into a single

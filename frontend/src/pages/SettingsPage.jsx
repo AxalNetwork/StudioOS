@@ -20,6 +20,10 @@ import BillingDashboard from '../components/BillingDashboard';
 // Task #4 — Referrals lives inside Settings as its own section; lazy-loaded so
 // its heavier deps (QR code, Stripe Connect panel) stay out of the settings chunk.
 const ReferralsPage = lazy(() => import('./ReferralsPage'));
+// Task — the full Integrations marketplace is embedded into the Settings
+// Integrations section; lazy so its provider/OAuth deps stay out of the
+// settings chunk (mirrors the ReferralsPage embed above).
+const IntegrationsPage = lazy(() => import('./IntegrationsPage'));
 
 // Task #4 (Y-2) — small reusable trust score on the profile surface so
 // the user can see their compliance posture without bouncing to the
@@ -307,7 +311,7 @@ export default function SettingsPage() {
             </>
           )}
           {safeActive === 'onboarding' && <OnboardingSettingsTab />}
-          {safeActive === 'integrations' && allowedIds.has('integrations') && <IntegrationsTab flash={flash} />}
+          {safeActive === 'integrations' && allowedIds.has('integrations') && <IntegrationsTab />}
           {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}
           {safeActive === 'referrals' && allowedIds.has('referrals') && (
             <Suspense fallback={<div className="text-gray-500 dark:text-gray-400 py-8 text-center">Loading…</div>}>
@@ -3486,77 +3490,28 @@ function MarketIntelContributionCard({ flash }) {
   );
 }
 
-const PROVIDER_LABELS = {
-  linkedin: 'LinkedIn',
-  google: 'Google (Calendar & Mail)',
-  outlook: 'Microsoft 365 / Outlook',
-  slack: 'Slack',
-};
+function IntegrationsTab() {
+  // Task — the full Integrations marketplace now lives here (embedded), so it
+  // supersedes the old thin "Connected accounts" summary. We still fetch the
+  // integration settings, but ONLY for the server-flag-gated API-keys card;
+  // the marketplace owns its own connected-account state. Best-effort: a failed
+  // settings fetch just hides the optional API-keys card, it never blanks the tab.
+  const [apiKeysEnabled, setApiKeysEnabled] = useState(false);
 
-function IntegrationsTab({ flash }) {
-  const [row, setRow] = useState(null);
-  const [err, setErr] = useState(null);
-  const [busyProvider, setBusyProvider] = useState(null);
-
-  const load = async () => {
-    try {
-      const r = await api.getIntegrationSettings();
-      setRow(r);
-    } catch (e) {
-      setErr(e.message || 'Failed to load integrations');
-    }
-  };
-  useEffect(() => { load(); }, []);
-
-  const disconnect = async (provider, url) => {
-    if (!url) return;
-    if (!window.confirm(`Disconnect ${PROVIDER_LABELS[provider] || provider}?`)) return;
-    setBusyProvider(provider);
-    try {
-      // Disconnect endpoints live outside /settings; call them via fetch with cookie auth.
-      const res = await fetch(url, { method: 'POST', credentials: 'include' });
-      if (!res.ok) throw new Error(`Disconnect failed (${res.status})`);
-      flash(`${PROVIDER_LABELS[provider] || provider} disconnected`);
-      await load();
-    } catch (e) {
-      flash(e.message || 'Disconnect failed', 'error');
-    } finally {
-      setBusyProvider(null);
-    }
-  };
-
-  if (err) return <Card title="Integrations"><div className="text-sm text-red-600">{err}</div></Card>;
-  if (!row) return <Card title="Integrations"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
+  useEffect(() => {
+    let cancelled = false;
+    api.getIntegrationSettings()
+      .then((r) => { if (!cancelled) setApiKeysEnabled(!!r?.api_keys_enabled); })
+      .catch(() => { if (!cancelled) setApiKeysEnabled(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <>
-      <Card title="Connected accounts"
-        description="OAuth links to third-party services. Disconnecting revokes the stored refresh token; the provider may still show Axal VC as authorized until you remove it from their account settings.">
-        <div className="divide-y divide-gray-100 dark:divide-gray-800">
-          {(row.accounts || []).map(acct => (
-            <div key={acct.provider} className="flex items-center justify-between py-3">
-              <div>
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{PROVIDER_LABELS[acct.provider] || acct.provider}</div>
-                <div className={`text-xs ${acct.connected ? 'text-emerald-700' : 'text-gray-500 dark:text-gray-400'}`}>
-                  {acct.connected ? 'Connected' : 'Not connected'}
-                </div>
-              </div>
-              {acct.connected && acct.disconnect_url ? (
-                <button onClick={() => disconnect(acct.provider, acct.disconnect_url)}
-                  disabled={busyProvider === acct.provider}
-                  className="text-xs text-red-600 hover:text-red-800 disabled:text-gray-400">
-                  {busyProvider === acct.provider ? 'Disconnecting…' : 'Disconnect'}
-                </button>
-              ) : !acct.connected ? (
-                <span className="text-xs text-gray-400">
-                  {acct.provider === 'slack' ? 'Connect from the Integrations marketplace' : 'Connect from the relevant page'}
-                </span>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      </Card>
-      {row.api_keys_enabled && (
+      <Suspense fallback={<div className="text-gray-500 dark:text-gray-400 py-8 text-center">Loading…</div>}>
+        <IntegrationsPage embedded />
+      </Suspense>
+      {apiKeysEnabled && (
         <Card title="API keys"
           description="Personal access tokens for programmatic access. Each key is shown exactly once.">
           <div className="text-sm text-gray-500 dark:text-gray-400">No keys yet.</div>
