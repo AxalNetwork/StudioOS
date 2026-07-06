@@ -962,6 +962,12 @@ export const api = {
   askAdvisory: (data) => request('/advisory/ask', { method: 'POST', body: JSON.stringify(data) }),
   financialPlan: (data) => request('/advisory/financial-plan', { method: 'POST', body: JSON.stringify(data) }),
   runDiligence: (data) => request('/advisory/diligence', { method: 'POST', body: JSON.stringify(data) }),
+  // Task #75 — Advisory Suite advisor directory (founder-scoped).
+  advisorProfilesList: () => request('/advisory/advisors'),
+  advisorProfileUpdate: (id, data) => request(`/advisory/advisors/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  advisorProfileAssign: (id, projectIds) => request(`/advisory/advisors/${id}/assignments`, { method: 'PUT', body: JSON.stringify({ project_ids: projectIds }) }),
+  advisorProfileArchive: (id) => request(`/advisory/advisors/${id}/archive`, { method: 'POST' }),
+  advisorProfileRestore: (id) => request(`/advisory/advisors/${id}/restore`, { method: 'POST' }),
 
   activityLog: (params) => request(`/activity${params ? `?${new URLSearchParams(params)}` : ''}`),
   activitySummary: () => request('/activity/summary'),

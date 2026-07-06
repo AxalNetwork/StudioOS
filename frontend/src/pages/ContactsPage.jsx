@@ -4,7 +4,7 @@ import { Users, Plus, RefreshCw, X, Send, ArrowUpRight, CheckSquare, Square } fr
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
 
-const AUDIENCES = ['customer', 'investor', 'partner', 'advisor', 'mentor', 'cofounder'];
+const AUDIENCES = ['customer', 'investor', 'partner', 'advisor', 'cofounder'];
 const STATUSES = ['new', 'invited', 'contacted', 'replied', 'qualified', 'active', 'passed'];
 const ROUTED_LABEL = { discovery: 'Customer Discovery', raise: 'Raise pipeline', network: 'Network' };
 const STATUS_BADGE = {
@@ -171,7 +171,8 @@ export default function ContactsPage() {
 function ContactDrawer({ contact, busy, onClose, onStatus, onPromote, onChanged, setErr }) {
   const [reply, setReply] = useState('');
   const [task, setTask] = useState('');
-  const canPromote = contact.audience === 'customer' || contact.audience === 'investor';
+  const canPromote = contact.audience === 'customer' || contact.audience === 'investor' || contact.audience === 'advisor';
+  const promoteTarget = contact.audience === 'customer' ? 'Customer Discovery' : contact.audience === 'investor' ? 'Raise pipeline' : 'Advisory';
 
   const sendReply = async () => {
     if (!reply.trim()) return;
@@ -212,16 +213,21 @@ function ContactDrawer({ contact, busy, onClose, onStatus, onPromote, onChanged,
         {canPromote && !contact.promoted_ref_id && (
           <button onClick={() => onPromote(contact.uid)} disabled={busy}
             className="mb-4 inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm">
-            <ArrowUpRight size={14} /> Promote to {contact.audience === 'customer' ? 'Customer Discovery' : 'Raise pipeline'}
+            <ArrowUpRight size={14} /> Promote to {promoteTarget}
           </button>
         )}
 
-        {contact.promoted_ref_id && (
-          <Link to={contact.promoted_to === 'discovery' ? '/build/discovery' : '/raise'}
-            className="mb-4 inline-flex items-center gap-2 px-4 py-2 border border-emerald-600 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg text-sm">
-            <ArrowUpRight size={14} /> View in {contact.promoted_to === 'discovery' ? 'Customer Discovery' : 'Raise pipeline'}
-          </Link>
-        )}
+        {contact.promoted_ref_id && (() => {
+          const dest = contact.promoted_to === 'discovery' ? { to: '/build/discovery', label: 'Customer Discovery' }
+            : contact.promoted_to === 'advisory' ? { to: '/advisory', label: 'Advisory Suite' }
+              : { to: '/raise', label: 'Raise pipeline' };
+          return (
+            <Link to={dest.to}
+              className="mb-4 inline-flex items-center gap-2 px-4 py-2 border border-emerald-600 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg text-sm">
+              <ArrowUpRight size={14} /> View in {dest.label}
+            </Link>
+          );
+        })()}
 
         {contact.message && <p className="mb-4 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap border-l-2 border-gray-200 dark:border-gray-700 pl-3">{contact.message}</p>}
 

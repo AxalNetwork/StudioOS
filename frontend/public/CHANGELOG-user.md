@@ -5,6 +5,20 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Manage your advisors in the Advisory Suite
+
+The **Advisory Suite** (renamed from "AI Advisory Suite" — it does more than AI
+now) has a new **Advisors** tab where you can build and manage your own advisor
+directory. Advisors who sign up through your landing pages show up in a waitlist
+you can promote with one click — which adds them to your directory and emails
+them an invite. For each advisor you can record their expertise, sectors,
+hourly rate, and LinkedIn, choose which of your startups they advise, and
+archive or restore them at any time. You can also promote an advisor straight
+from your Contacts. To keep people's privacy, an advisor's email is only shown
+when they came in through a trusted source.
+
+---
+
 ## "Mentors" are now "Advisors"
 
 We've renamed the **Mentors** area to **Advisors** so it matches how we talk

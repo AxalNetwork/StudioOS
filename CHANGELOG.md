@@ -10,6 +10,50 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #75 — Advisory Suite advisor management
+
+Founders can now build and manage a directory of human advisors inside the
+Advisory Suite. The founder sidebar entry is renamed `AI Advisory Suite` →
+**Advisory** and the page heading `AI Advisory Suite` → **Advisory Suite** to
+reflect that the page is no longer AI-only.
+
+- **Schema** — new Worker migration
+  `cloudflare-worker/sql/migrations/138_advisor_directory.sql`: `advisor_profiles`
+  (founder-scoped: `founder_id`, `name`, `email`, `bio`, `sectors_json`,
+  `expertise_json`, `linkedin_url`, `hourly_rate`, `source`, `status`,
+  `source_contact_id`) + `advisor_startups` join table
+  (`advisor_profile_id` × `project_id`, unique). Lazy ensure/shape helpers live
+  in `cloudflare-worker/src/services/advisorProfilesSchema.ts`
+  (`ensureAdvisorProfilesSchema`, `shapeAdvisorProfile`, `TRUSTED_ADVISOR_SOURCES`).
+- **Email visibility** — `shapeAdvisorProfile` only returns an advisor's email
+  when `source ∈ {brand-landing, referral, staff-rec}` (trusted pipelines);
+  otherwise `email` is nulled and `email_hidden: true` is set. Redaction is
+  server-side, not a UI concern.
+- **Promote-to-Advisory** — `routes/contacts.ts` promote gains an `advisor`
+  branch: promoting an `audience='advisor'` contact upserts an
+  `advisor_profiles` row (`source='brand-landing'`, idempotent, founder_id
+  resolved project → user → 400, flip-from-NULL race guard) and sends the
+  invite via `sendContactInviteEmail` without rolling back the promotion on
+  email failure (returns `email_sent` / `email_error`).
+- **Directory API** — founder-scoped endpoints under the existing
+  `/api/advisory` mount in `routes/advisory.ts`: `GET /advisors`,
+  `PUT /advisors/:id`, `PUT /advisors/:id/assignments` (double-scoped — every
+  target startup must be owned by the caller, else 403),
+  `POST /advisors/:id/archive`, `POST /advisors/:id/restore`. Non-owned ids
+  return 404, never 403 (IDOR rule).
+- **Frontend** — new **Advisors** tab in `AdvisoryPage.jsx` (waitlist promote
+  list + directory cards + edit drawer with expertise/sectors/rate/LinkedIn and
+  a startup-assignment multi-select); `api.js` gains
+  `advisorProfilesList/Update/Assign/Archive/Restore`. `ContactsPage.jsx` drops
+  the stale `mentor` audience and adds an `advisor` promote branch so the
+  Contacts drawer can promote advisors into the directory too.
+- **Dev FastAPI mirror (directory only)** —
+  `ensure_advisor_profiles_tables()` in `backend/app/models/migrations.py`
+  (wired into `main.py` lifespan) plus the same five directory endpoints in
+  `backend/app/api/routes/advisory.py`. **Deviation:** the promote/waitlist half
+  is Worker-only (the dev backend has no Contacts hub), so it is intentionally
+  not mirrored.
+
 ## Task #74 — Rename the `mentor` role to `advisor`
 
 Atomic cross-layer rename of the **mentor** role → **advisor** across the
