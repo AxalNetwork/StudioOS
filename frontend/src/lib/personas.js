@@ -101,7 +101,7 @@ export const PERSONAS = [
     label: 'Founder — New Venture',
     short_description: 'Founder spinning out a brand-new venture through the 30-day engine.',
     role_alignment: 'founder',
-    nav_extras: [{ to: '/founder', label: 'Founder Portal' }, { to: '/spinouts', label: 'Spin-Outs' }],
+    nav_extras: [],
     follow_up_questions: [
       { key: 'venture_idea', prompt: 'One-line description of the venture?', type: 'text' },
       { key: 'sector', prompt: 'Sector / industry?', type: 'text' },
