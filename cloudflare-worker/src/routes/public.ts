@@ -33,7 +33,7 @@ async function countOrZero(env: Env, label: string, sql: string, params: any[] =
     const row = await env.DB.prepare(sql).bind(...params).first<{ n: number }>();
     return Number(row?.n || 0);
   } catch (e: any) {
-    console.error(`[public/stats:${label}]`, String(e?.message || e));
+    console.error(`[public/stats:${label}] ${String(e?.message || e)}`);
     return 0;
   }
 }

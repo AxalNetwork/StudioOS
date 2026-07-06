@@ -989,7 +989,7 @@ async function ensureAdvisorSchema(env: Env): Promise<void> {
       for (const [oldName, newName] of RENAMES) {
         if (names.has(oldName) && !names.has(newName)) {
           try { await env.DB.exec(`ALTER TABLE ${oldName} RENAME TO ${newName}`); }
-          catch (e) { console.warn(`[boot] rename ${oldName}→${newName} skipped:`, (e as Error).message); }
+          catch (e) { console.warn(`[boot] rename ${oldName}→${newName} skipped: ${(e as Error).message}`); }
         }
       }
     } catch (e) { console.warn('[boot] advisor table-rename scan skipped:', (e as Error).message); }
