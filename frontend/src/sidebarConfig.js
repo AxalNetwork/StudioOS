@@ -231,7 +231,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/trust', icon: Lock, label: 'Trust Center' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
-      { to: '/docs', icon: BookOpen, label: 'Documentation' },
+      { to: '/docs', icon: BookOpen, label: 'Docs' },
       { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
