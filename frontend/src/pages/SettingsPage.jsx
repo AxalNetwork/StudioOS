@@ -1007,7 +1007,7 @@ function ProfileSection({ data, onSaved, flash, patch }) {
         {data.id ? (
           <div className="mt-4 flex flex-wrap items-center gap-4">
             <a
-              href={`/authors/${data.id}`}
+              href={`https://axal.vc/authors/${data.id}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-violet-700 dark:text-violet-400 hover:underline"
@@ -1018,7 +1018,7 @@ function ProfileSection({ data, onSaved, flash, patch }) {
               type="button"
               onClick={() => {
                 try {
-                  navigator.clipboard.writeText(`${window.location.origin}/authors/${data.id}`);
+                  navigator.clipboard.writeText(`https://axal.vc/authors/${data.id}`);
                   flash('Link copied!');
                 } catch { flash('Could not copy'); }
               }}

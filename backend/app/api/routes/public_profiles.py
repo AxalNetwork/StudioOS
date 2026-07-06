@@ -506,6 +506,20 @@ def author_profile(user_id: int, session: Session = Depends(get_session)) -> dic
     location_parts = [p for p in [getattr(user, "city", None), getattr(user, "country", None)] if p]
     location = ", ".join(location_parts) or None
 
+    company: Any = None
+    try:
+        ext_row = session.execute(
+            text(
+                "SELECT JSON_EXTRACT(experience, '$[0].company') AS company "
+                "FROM user_profile_ext WHERE user_id = :uid LIMIT 1"
+            ),
+            {"uid": user_id},
+        ).mappings().fetchone()
+        if ext_row:
+            company = ext_row["company"] or None
+    except Exception:
+        pass
+
     author_obj: dict[str, Any] = {
         "id": user.id,
         "uid": getattr(user, "uid", None),
@@ -515,7 +529,7 @@ def author_profile(user_id: int, session: Session = Depends(get_session)) -> dic
         "bio": getattr(user, "bio", None),
         "headshot_url": f"/api/settings/headshot/{user.uid}" if getattr(user, "headshot_r2_key", None) else None,
         "location": location,
-        "company": None,
+        "company": company,
         "socials": {
             "linkedin": socials_raw.get("linkedin") or None,
             "twitter": socials_raw.get("twitter") or None,

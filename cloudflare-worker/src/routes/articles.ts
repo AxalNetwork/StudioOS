@@ -210,7 +210,7 @@ articles.get('/', async (c) => {
   const sql = `SELECT a.id, a.slug, a.title, a.subtitle, a.sector, a.tags,
                       a.cover_r2_key, a.published_at, a.word_count, a.read_minutes,
                       a.author_user_id, a.excerpt, a.seo_title, a.canonical_url,
-                      u.name AS author_name, u.uid AS author_uid, NULL AS author_handle, u.role AS author_role,
+                      COALESCE(u.display_name, u.name) AS author_name, u.uid AS author_uid, NULL AS author_handle, u.role AS author_role,
                       u.headline AS author_headline,
                       u.socials AS author_socials_json,
                       aw.website_url AS author_website,
@@ -246,7 +246,7 @@ articles.get('/by-author/:user_id', async (c) => {
     `SELECT a.id, a.slug, a.title, a.subtitle, a.sector, a.tags,
             a.cover_r2_key, a.published_at, a.word_count, a.read_minutes,
             a.author_user_id, a.excerpt, a.seo_title, a.canonical_url,
-            u.name AS author_name, u.uid AS author_uid, NULL AS author_handle, u.role AS author_role,
+            COALESCE(u.display_name, u.name) AS author_name, u.uid AS author_uid, NULL AS author_handle, u.role AS author_role,
             u.headline AS author_headline,
             u.socials AS author_socials_json,
             aw.website_url AS author_website,
@@ -321,7 +321,7 @@ articles.get('/:slug', async (c, next) => {
   const cached = seededCover ? null : await cacheLookup(c);
   if (cached) return cached;
   const row: any = await c.env.DB.prepare(
-    `SELECT a.*, u.name AS author_name, u.uid AS author_uid, NULL AS author_handle, u.role AS author_role,
+    `SELECT a.*, COALESCE(u.display_name, u.name) AS author_name, u.uid AS author_uid, NULL AS author_handle, u.role AS author_role,
             u.headline AS author_headline,
             u.socials AS author_socials_json,
             aw.website_url AS author_website,
