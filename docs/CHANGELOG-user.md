@@ -5,6 +5,60 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Services and needs are now one place: Marketplace
+
+We've combined **Needs Board** and **Service Catalogue** into a single
+**Marketplace** in your sidebar. Open it and switch between tabs to either browse
+ready-made partner services — with fixed price, scope, and turnaround — and book
+them, or post a need and collect quotes from partners. Your posted needs and the
+shared engagements that come out of both live right there too. Everything works
+exactly as before — it's just grouped so it's faster to find the right partner and
+get work moving. Old **Needs Board** and **Service Catalogue** bookmarks send you
+straight to the matching tab.
+
+---
+
+## Referrals now lives in Settings
+
+Your **Referrals** area — where you grab your referral link and share templates,
+and where you track your earnings and request payouts — has moved into
+**Settings**. Open **Settings**, choose **Referrals** from the list, and switch
+between the **Refer & Earn** and **Payouts** tabs just like before. Everything
+works exactly the same; it's simply tidied into your account settings. Old
+**Refer & Earn** and **Payouts** bookmarks take you straight to the right place.
+
+---
+
+## Competitor Analysis is now built into each startup
+
+Competitor Analysis lives right on the startup's page now — there's no separate tool
+and no need to pick a startup first. Open any startup and expand **Competitor
+Analysis** to research and compare rivals in context, and any analyses you saved for
+that startup appear automatically.
+
+We've also finished renaming **Projects** to **Startups** everywhere in the app, so
+the wording is consistent from the menus all the way through buttons, forms, and the
+help pages.
+
+---
+
+## Your Build tools are now one place: Command Center
+
+We've combined **Founder Portal**, **Execution**, **Studio Ops**, and **Spin-Outs**
+into a single **Command Center** in the sidebar. Open it and switch between four
+tabs that follow your venture's journey: **Founder Portal** (submit and instantly
+score a new startup), **Execution** (your startups, pipeline board, and roadmap),
+**Studio Ops** (finance, HR, legal, and compliance), and **Spin-Outs** (ventures
+past the Decision Gate). Everything works exactly as before — it's just grouped so
+it's faster to move through your whole workflow in one place. Each tab has its own
+web address, so you can bookmark or share a specific one, and your old links still
+take you straight to the right tab.
+
+We've also renamed **Projects** to **Startups** in the navigation and page titles,
+so the wording matches how you think about the companies you're building.
+
+---
+
 ## Refer & Earn and Payouts are now one place: Referrals
 
 We've combined **Refer & Earn** and **Payouts** into a single **Referrals** area

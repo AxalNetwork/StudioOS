@@ -179,6 +179,7 @@ const MetricsPage = lazy(() => import('./pages/MetricsPage'));
 const SignalsPage = lazy(() => import('./pages/SignalsPage'));
 const CapTablePage = lazy(() => import('./pages/CapTablePage'));
 const MarketplacePage = lazy(() => import('./pages/MarketplacePage'));
+const FounderMarketplacePage = lazy(() => import('./pages/FounderMarketplacePage'));
 const NeedsBoardPage = lazy(() => import('./pages/NeedsBoardPage'));
 const ServiceCatalogPage = lazy(() => import('./pages/ServiceCatalogPage'));
 const PartnerInsightsPage = lazy(() => import('./pages/PartnerInsightsPage'));
@@ -1250,9 +1251,14 @@ function AppInner() {
       <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], <SignalsPage user={user} />)} />
       <Route path="/build/captable" element={guard(['admin', 'founder', 'partner', 'investor'], <CapTablePage />)} />
       <Route path="/marketplace" element={guard(['admin', 'founder', 'partner', 'investor'], <MarketplacePage user={user} />)} />
-      <Route path="/needs" element={guard(['admin', 'founder', 'partner', 'investor'], <NeedsBoardPage user={user} />)} />
-      <Route path="/services" element={guard(['admin', 'founder', 'partner', 'investor'], <ServiceCatalogPage user={user} />)} />
-      <Route path="/founder/post-need" element={guard(['admin', 'founder'], <NeedsBoardPage user={user} />)} />
+      {/* Task #2 — Founder Marketplace merges the Service Catalogue (/services) and
+          Needs Board (/needs) into one tabbed page at /build/marketplace. The
+          standalone routes below stay registered for the partner/investor/admin
+          personas; founders are redirected into the matching ?tab= here. */}
+      <Route path="/build/marketplace" element={guard(['admin', 'founder'], <FounderMarketplacePage user={user} />)} />
+      <Route path="/needs" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=needs" replace /> : <NeedsBoardPage user={user} />)} />
+      <Route path="/services" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=services" replace /> : <ServiceCatalogPage user={user} />)} />
+      <Route path="/founder/post-need" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=mine" replace /> : <NeedsBoardPage user={user} />)} />
       <Route path="/partner/needs" element={guard(['admin', 'partner'], <NeedsBoardPage user={user} />)} />
       <Route path="/partner/insights" element={guard(['admin', 'partner', 'investor'], <PartnerInsightsPage />)} />
       <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />

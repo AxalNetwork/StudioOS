@@ -10,6 +10,36 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #2 — Merge Marketplace (Founder)
+
+Frontend-only IA consolidation. The founder **Validate** group's two
+partner-services marketplace destinations — **Needs Board** (`/needs`, the demand
+side) and **Service Catalogue** (`/services`, the supply side) — now live in a
+single tabbed **Marketplace** page. No business logic, data-fetching, API, or
+schema changes; mirrors the `/execution` and `/build/*` merges.
+
+- **New page** (`frontend/src/pages/FounderMarketplacePage.jsx`) — one governing
+  "Marketplace" H1 + a role-aware tab bar composing the *exact* tab bodies of the
+  two source pages (reused via named exports, not re-implemented): **Services**
+  (ServiceCatalog `BrowseTab`), **Needs** (NeedsBoard `BrowseTab`), **My needs**
+  (founder), **My offerings** (partner/admin), **My quotes** (partner),
+  **Engagements** (deduped to one tab), **Stripe Connect** (partner). Active tab
+  driven by `?tab=` (deep-linkable, `replace`d). Guarded `admin`/`founder`.
+- **Exports** — `NeedsBoardPage` now exports `BrowseTab`, `MyNeedsTab`,
+  `MyQuotesTab`, `EngagementsTab`; `ServiceCatalogPage` exports `BrowseTab`,
+  `MineTab`, `StripeTab`. Each keeps its own module-local helpers (Modal/Field/
+  ErrorBox/Empty) via closure, so every action carries over unchanged. Both
+  pages' own default exports (title + tab bar) are untouched for the other roles.
+- **Routing** (`frontend/src/App.jsx`) — new `/build/marketplace` route (lazy).
+  `/needs`, `/services` and `/founder/post-need` stay registered but now redirect
+  founders into the matching tab (`?tab=needs` / `?tab=services` / `?tab=mine`);
+  admin/partner/investor keep the standalone pages. `/partner/needs` untouched.
+- **Sidebar** (`frontend/src/sidebarConfig.js`) — the founder Validate group's two
+  items collapse to one **Marketplace** entry (`Package`) whose `match` array
+  keeps the row active on `/build/marketplace`, `/needs` and `/services`. Removals
+  documented inline. Partner/investor/admin sidebars untouched.
+- **Out of scope (unchanged)** — the separate `/marketplace` (`MarketplacePage`)
+  route, all needs/quotes/offerings/engagements/Stripe endpoints.
 ## Task #4 — Move Referrals into Settings
 
 Frontend-only IA change. The merged **Referrals** workspace (Refer & Earn +

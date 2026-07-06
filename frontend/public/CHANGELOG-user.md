@@ -5,6 +5,19 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Services and needs are now one place: Marketplace
+
+We've combined **Needs Board** and **Service Catalogue** into a single
+**Marketplace** in your sidebar. Open it and switch between tabs to either browse
+ready-made partner services — with fixed price, scope, and turnaround — and book
+them, or post a need and collect quotes from partners. Your posted needs and the
+shared engagements that come out of both live right there too. Everything works
+exactly as before — it's just grouped so it's faster to find the right partner and
+get work moving. Old **Needs Board** and **Service Catalogue** bookmarks send you
+straight to the matching tab.
+
+---
+
 ## Referrals now lives in Settings
 
 Your **Referrals** area — where you grab your referral link and share templates,

@@ -194,8 +194,12 @@ export const SIDEBAR_GROUPS = {
     { key: 'validate', label: 'Validate', items: [
       { to: '/contacts', icon: Inbox, label: 'Contacts' },
       { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
-      { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
-      { to: '/services', icon: Package, label: 'Service Catalogue' },
+      // Marketplace merges the two halves of the partner-services marketplace —
+      // "Needs Board" (/needs, demand) and "Service Catalogue" (/services,
+      // supply) — into one tabbed page at /build/marketplace. `match` keeps this
+      // row active across every tab and when a founder deep-links (or is
+      // redirected from) the legacy /needs and /services routes (see App.jsx).
+      { to: '/build/marketplace', icon: Package, label: 'Marketplace', match: ['/build/marketplace', '/needs', '/services'] },
       { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
       { to: '/relationships', icon: Handshake, label: 'Network' },
     ]},

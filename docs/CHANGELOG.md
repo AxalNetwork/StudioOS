@@ -10,6 +10,147 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #2 — Merge Marketplace (Founder)
+
+Frontend-only IA consolidation. The founder **Validate** group's two
+partner-services marketplace destinations — **Needs Board** (`/needs`, the demand
+side) and **Service Catalogue** (`/services`, the supply side) — now live in a
+single tabbed **Marketplace** page. No business logic, data-fetching, API, or
+schema changes; mirrors the `/execution` and `/build/*` merges.
+
+- **New page** (`frontend/src/pages/FounderMarketplacePage.jsx`) — one governing
+  "Marketplace" H1 + a role-aware tab bar composing the *exact* tab bodies of the
+  two source pages (reused via named exports, not re-implemented): **Services**
+  (ServiceCatalog `BrowseTab`), **Needs** (NeedsBoard `BrowseTab`), **My needs**
+  (founder), **My offerings** (partner/admin), **My quotes** (partner),
+  **Engagements** (deduped to one tab), **Stripe Connect** (partner). Active tab
+  driven by `?tab=` (deep-linkable, `replace`d). Guarded `admin`/`founder`.
+- **Exports** — `NeedsBoardPage` now exports `BrowseTab`, `MyNeedsTab`,
+  `MyQuotesTab`, `EngagementsTab`; `ServiceCatalogPage` exports `BrowseTab`,
+  `MineTab`, `StripeTab`. Each keeps its own module-local helpers (Modal/Field/
+  ErrorBox/Empty) via closure, so every action carries over unchanged. Both
+  pages' own default exports (title + tab bar) are untouched for the other roles.
+- **Routing** (`frontend/src/App.jsx`) — new `/build/marketplace` route (lazy).
+  `/needs`, `/services` and `/founder/post-need` stay registered but now redirect
+  founders into the matching tab (`?tab=needs` / `?tab=services` / `?tab=mine`);
+  admin/partner/investor keep the standalone pages. `/partner/needs` untouched.
+- **Sidebar** (`frontend/src/sidebarConfig.js`) — the founder Validate group's two
+  items collapse to one **Marketplace** entry (`Package`) whose `match` array
+  keeps the row active on `/build/marketplace`, `/needs` and `/services`. Removals
+  documented inline. Partner/investor/admin sidebars untouched.
+- **Out of scope (unchanged)** — the separate `/marketplace` (`MarketplacePage`)
+  route, all needs/quotes/offerings/engagements/Stripe endpoints.
+## Task #4 — Move Referrals into Settings
+
+Frontend-only IA change. The merged **Referrals** workspace (Refer & Earn +
+Payouts) is no longer a standalone sidebar item at `/refer` — it now lives as a
+**Referrals** section inside **Settings**. No business logic, data-fetching, API,
+or schema changes.
+
+- **`embedded` prop** on `frontend/src/pages/ReferralsPage.jsx` — suppresses the
+  page-level icon/H1/`PageExplainer`/subtitle and drops the outer
+  `p-6 max-w-6xl mx-auto` padding when embedded; the internal Refer & Earn /
+  Payouts sub-tabs (driven by `?tab=`) are unchanged.
+- **Settings section** (`frontend/src/pages/SettingsPage.jsx`) — new `referrals`
+  entry in `SECTIONS` (icon `Share2`, `roles: ['admin','founder','partner',
+  'investor']` so mentor never sees it), a `referrals: 'referrals'` entry in
+  `PATH_TO_SECTION`, and a render block that mounts `<ReferralsPage embedded />`
+  behind a local `Suspense` (lazy import keeps the QR/Stripe-Connect deps out of
+  the settings chunk). `/settings/referrals` deep-links to it; the Payouts
+  sub-tab is reachable via `/settings/referrals?tab=payouts` (the URL-sync effect
+  keys off the section id, so it never strips `?tab=`).
+- **Routing** (`frontend/src/App.jsx`) — `/refer` now renders a `ReferRedirect`
+  that `Navigate`s to `/settings/referrals` preserving the incoming `?tab=`;
+  `/payouts` redirects to `/settings/referrals?tab=payouts`. Both keep the same
+  `guard(['admin','founder','partner','investor'])` role access.
+- **Sidebar** (`frontend/src/sidebarConfig.js`) — removed the standalone
+  "Referrals" (`/refer`) item from the admin (Network & Growth) and founder
+  (More) groups, and removed the partner **Earn** group entirely (it held only
+  Referrals). Investor and mentor navs untouched. Dropped the now-unused `Share2`
+  icon import; removals documented inline for the nav-integrity convention.
+- **Out of scope (unchanged)** — all referral/commission/payout business logic,
+  Stripe Connect, Worker endpoints, and the admin `/admin/refer-earn` console.
+
+## Competitor Analysis folded into the startup page + Project→Startup rename completed
+
+Competitor Analysis is no longer a standalone tool with its own startup picker — it
+is now an embedded, startup-scoped section inside each startup's ProjectDetail. No
+functional/data/API/schema changes; the standalone route is retained.
+
+- **Reusable component** — extracted the tool into
+  `frontend/src/components/CompetitorAnalysis.jsx` (default export
+  `CompetitorAnalysis({ project, embedded })`, all logic + helpers moved intact).
+  `frontend/src/pages/CompetitorAnalysisPage.jsx` is now a thin wrapper that renders
+  `<CompetitorAnalysis />`, preserving the `/build/competitors` route (kept for
+  `?id=` deep links and the custom-market mode).
+- **Embedded mode** — when `embedded` + `project` are passed the component skips
+  `listProjects`, locks to startup mode with `projectId = String(project.id)`, hides
+  the back link / H1 / intro / mode selector, prefills from `project`, filters saved
+  analyses by `Number(a.project_id) === Number(project.id)`, and `scrollIntoView`s
+  its section.
+- **ProjectDetail integration** (`frontend/src/pages/ProjectDetail.jsx`) — new
+  conditionally-rendered "Competitor Analysis" section toggled from the header; `?comp=1` opens
+  and scrolls to it, then strips the param.
+- **Restyle** — orange → violet throughout the component (badges, buttons, accents)
+  to match the app palette.
+- **Sidebar** — removed the standalone "Competitor Analysis" item from
+  `sidebarConfig.js` (route retained in `App.jsx`).
+- **Rename** — completed the user-visible **Project(s) → Startup(s)** rename across
+  the surfaces the Command Center pass didn't cover: sidebar/buttons/options/
+  empty-states/toasts/tooltips/field-labels, docs section prose
+  (`frontend/src/pages/docs/sections/*.js`), advisor question banks, pricing,
+  share/CTA modals, and misc explainers. Identifiers, `/projects` routes,
+  `project_id`/API fields, `data-testid`s, machine `value=`/`key=`/`src=` values,
+  AI-prompt & deck-export strings, and code comments were left untouched.
+
+Note: the custom-market (non-startup) mode is now reachable only via the standalone
+route URL, since the in-page section is startup-locked.
+
+## Merge Build workspace — Command Center + Projects→Startups rename
+
+Frontend-only IA consolidation. The four founder **Build** sidebar destinations —
+Founder Portal (`/founder`), Execution (`/execution` + `/execution/board` +
+`/execution/roadmap`), Studio Ops (`/studio-ops`) and Spin-Outs (`/spinouts`, +
+the `/spin-outs` alias) — now live in a single tabbed **Command Center**
+workspace at `/build/command-center`. Mirrors the `/build/team` (Team Building)
+and RAISE consolidations: deep-linkable `?tab=`, one governing H1, embedded child
+pages that suppress their own heading. No business logic, data-fetching, API, or
+schema changes.
+
+- **New workspace** (`frontend/src/pages/CommandCenterPage.jsx`) — four
+  deep-linkable tabs in lifecycle order: Founder Portal → Execution → Studio Ops
+  → Spin-Outs. Active tab driven by `?tab=` (deep-linkable, survives refresh,
+  `replace`d so it doesn't stack history). Unlike TeamBuildingPage there is no
+  tier gate — none of the four pages is gated. `data-testid="command-center-page"`.
+- **`embedded` prop** added to `FounderPortal`, `StudioOpsPage`, `SpinOutsPage`
+  and `ExecutionPage` (the last did **not** previously accept it — it rendered its
+  "Execution" H1 unconditionally and force-scrolled on mount; both are now guarded
+  by `embedded`). Each suppresses its own icon/title/subtitle header and drops the
+  outer `p-6` padding when embedded. `ProjectsPage`/`PipelinePage`/`RoadmapPage`
+  already supported `embedded` (reused unchanged via ExecutionPage).
+- **Routing** (`frontend/src/App.jsx`) — new `/build/command-center` route
+  (`guard(['admin','founder'])`, lazy). Legacy routes are **persona-conditional**:
+  founders are `Navigate`d into the matching tab (`/founder`→`?tab=founder-portal`;
+  `/execution`+board+roadmap→`?tab=execution`; `/studio-ops`→`?tab=studio-ops`;
+  `/spinouts`→`?tab=spin-outs`), while admin/partner/investor keep the standalone
+  pages. `/spin-outs` still aliases to `/spinouts` (which then applies the persona
+  redirect). `/projects`, `/pipeline`, `/build/roadmap` unchanged.
+- **Sidebar** (`frontend/src/sidebarConfig.js`) — the founder Build group's four
+  items collapse to one **Command Center** entry (icon `LayoutGrid`) whose `match`
+  array keeps the row active across every tab and every legacy route; Signals,
+  Team, Metrics, Brand & Landing untouched. Removals documented in the founder
+  nav comment block so the nav-integrity guard treats them as intentional.
+- **Projects → Startups rename** (user-facing nav labels/titles only; `/projects`
+  URL, route keys, filter keys and backend fields unchanged) — founder Execution
+  "Startups" section header + `aria-label`, `ProjectsPage` H1 + list `aria-label`,
+  the admin sidebar nav label, plus the secondary nav labels that point at the same
+  feature: `SemanticSearch` type filter, the operator/advisor persona `nav_extras`
+  (`lib/personas.js`), the Spin-Out Lab feature-catalogue label (`SpinoutLabSidebar`
+  + `SpinoutLabPage`) and the `G P` keyboard-shortcut label. Descriptive body copy
+  (docs prose, marketing/product pages, deck-template mockups) still reads
+  "Projects" and is out of scope for this label pass.
+- **Explainer** — new `command_center` entry in `frontend/src/lib/explainers.js`.
+
 ## Task #15 — Merge Refer & Earn + Payouts into one Referrals workspace
 
 Frontend-only IA consolidation. The two separate founder/partner/investor/admin
