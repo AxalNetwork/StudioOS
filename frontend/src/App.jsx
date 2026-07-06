@@ -114,7 +114,6 @@ const PortfolioHealthPage = lazy(() => import('./pages/PortfolioHealthPage'));
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
 const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
 const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
-const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
 const MatchesPage = lazy(() => import('./pages/MatchesPage'));
 const StudioOpsPage = lazy(() => import('./pages/StudioOpsPage'));
 const NetworkEffectsPage = lazy(() => import('./pages/NetworkEffectsPage'));
@@ -248,6 +247,15 @@ function DashboardRedirect() {
 function ReferRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/settings/referrals', search: loc.search }} replace />;
+}
+
+// Integrations merged into Settings. Legacy /integrations (and
+// /integrations?... from OAuth callbacks / existing links) redirects into the
+// Settings "Integrations" section, preserving the query string so post-connect
+// success/error states still render on the tile that owns them.
+function IntegrationsRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/settings/integrations', search: loc.search }} replace />;
 }
 
 const ViewModeContext = createContext(null);
@@ -1411,7 +1419,10 @@ function AppInner() {
       {/* Task #4 — Referrals now lives inside Settings; /refer redirects there
           (preserving ?tab=), same role access as before. */}
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferRedirect />)} />
-      <Route path="/integrations" element={guard(['admin', 'partner', 'investor'], <IntegrationsPage />)} />
+      {/* Integrations now lives inside Settings; /integrations redirects there
+          (preserving any ?query= so OAuth-return states still show). Available
+          to every authenticated profile, matching the all-roles Settings tab. */}
+      <Route path="/integrations" element={authOnly(<IntegrationsRedirect />)} />
       {/* Task #4 — /payouts redirects to the Payouts sub-tab of the Settings Referrals section. */}
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/settings/referrals?tab=payouts" replace />)} />
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />

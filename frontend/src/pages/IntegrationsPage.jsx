@@ -51,7 +51,7 @@ function ProviderIcon({ name, size = 18 }) {
   return <Icon size={size} />;
 }
 
-export default function IntegrationsPage() {
+export default function IntegrationsPage({ embedded = false }) {
   const [providers, setProviders] = useState([]);     // registry, includes tier_locked
   const [items, setItems] = useState([]);             // user's connections
   const [waitlist, setWaitlist] = useState([]);       // user's waitlist entries
@@ -395,8 +395,8 @@ export default function IntegrationsPage() {
 
   if (loading) {
     return (
-      <div className="p-6 max-w-6xl mx-auto" data-density-target>
-        <Skeleton h={28} w="33%" className="mb-6" />
+      <div className={embedded ? '' : 'p-6 max-w-6xl mx-auto'} data-density-target>
+        {!embedded && <Skeleton h={28} w="33%" className="mb-6" />}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton.Card key={i} />)}
         </div>
@@ -406,13 +406,15 @@ export default function IntegrationsPage() {
 
   if (loadError) {
     return (
-      <div className="p-6 max-w-6xl mx-auto" data-density-target>
-        <header className="flex items-start gap-3 mb-6">
-          <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center"><Plug size={20} /></div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 leading-snug">
-            Integrations <span className="text-gray-500 dark:text-gray-400 font-normal">— Connect your CRM, legal providers, and data feeds. Push deals out, receive webhooks back.</span>
-          </h1>
-        </header>
+      <div className={embedded ? '' : 'p-6 max-w-6xl mx-auto'} data-density-target>
+        {!embedded && (
+          <header className="flex items-start gap-3 mb-6">
+            <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center"><Plug size={20} /></div>
+            <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 leading-snug">
+              Integrations <span className="text-gray-500 dark:text-gray-400 font-normal">— Connect your CRM, legal providers, and data feeds. Push deals out, receive webhooks back.</span>
+            </h1>
+          </header>
+        )}
         <ErrorState
           message={`Couldn't load integrations — ${loadError}`}
           onRetry={() => { setLoading(true); refresh(); }}
@@ -423,13 +425,15 @@ export default function IntegrationsPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto" data-density-target data-testid="integrations-page">
-      <header className="flex items-start gap-3 mb-6">
-        <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center"><Plug size={20} /></div>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 leading-snug">
-          Integrations <span className="text-gray-500 dark:text-gray-400 font-normal">— Connect your CRM, legal providers, and data feeds. Push deals out, receive webhooks back.</span>
-        </h1>
-      </header>
+    <div className={embedded ? '' : 'p-6 max-w-6xl mx-auto'} data-density-target data-testid="integrations-page">
+      {!embedded && (
+        <header className="flex items-start gap-3 mb-6">
+          <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center"><Plug size={20} /></div>
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 leading-snug">
+            Integrations <span className="text-gray-500 dark:text-gray-400 font-normal">— Connect your CRM, legal providers, and data feeds. Push deals out, receive webhooks back.</span>
+          </h1>
+        </header>
+      )}
 
       {error && (
         <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-2 flex items-center gap-2">

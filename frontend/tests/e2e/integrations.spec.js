@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { requirePreview, loginAs } from './_helpers.js';
 
-// /integrations is admin/partner/investor only — founders are denied,
-// so we authenticate as admin for this surface.
+// /integrations now redirects into Settings → Integrations (available to every
+// authenticated role); the marketplace renders embedded there and still exposes
+// the same integrations-page + provider-card testids. We log in as admin so the
+// full marketplace renders for this verification.
 test.describe('Integrations marketplace (post-AO verification)', () => {
   test.beforeEach(() => requirePreview(test));
 
