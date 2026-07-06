@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Contacts and Relationships are now one "Network" page
+
+We've combined **Contacts** and **Relationships** into a single **Network** page,
+so everything about the people in your network lives in one place. Open
+**Network** from the sidebar and switch between the **Contacts** tab — your
+inbound sign-ups and invites — and the **Relationships** tab — your partner graph
+and connection strength. Your old bookmarks still work: they take you straight to
+the right tab. The old Activity Feed and Leaderboard have been retired.
+
+---
+
 ## Manage your advisors in the Advisory Suite
 
 The **Advisory Suite** (renamed from "AI Advisory Suite" — it does more than AI

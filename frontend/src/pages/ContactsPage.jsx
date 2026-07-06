@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Plus, RefreshCw, X, Send, ArrowUpRight, CheckSquare, Square } from 'lucide-react';
+import { Plus, RefreshCw, X, Send, ArrowUpRight, CheckSquare, Square } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
 
@@ -17,7 +17,11 @@ const STATUS_BADGE = {
   passed: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 };
 
-export default function ContactsPage() {
+// Contacts tab body for the unified Network page. Self-contained: owns its own
+// data, filters, create/invite form, and detail drawer. Rendered by NetworkPage
+// as the primary "Contacts" tab (admin/founder only). The page-level title lives
+// in the NetworkPage container.
+export function ContactsPanel() {
   useAuth();
   const [items, setItems] = useState([]);
   const [counts, setCounts] = useState({});
@@ -81,26 +85,30 @@ export default function ContactsPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <Users size={22} /> Contacts
-          </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Every landing-page signup and invite in one inbox — routed to the right workflow, with status and follow-ups.
-          </p>
+    <div>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        Every landing-page signup and invite in one inbox — routed to the right workflow, with status and follow-ups.
+      </p>
+
+      {err && <div className="mb-4 px-4 py-2 bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 rounded-lg text-sm">{err}</div>}
+      {notice && <div className="mb-4 px-4 py-2 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 rounded-lg text-sm">{notice}</div>}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setAudience('')} className={`px-3 py-1 rounded-full text-xs ${audience === '' ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}>All</button>
+          {AUDIENCES.map((a) => (
+            <button key={a} onClick={() => setAudience(a)} className={`px-3 py-1 rounded-full text-xs capitalize ${audience === a ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}>
+              {a}{counts[a] ? ` (${counts[a]})` : ''}
+            </button>
+          ))}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={load} className="p-2 text-gray-500 hover:text-gray-800" title="Refresh"><RefreshCw size={16} /></button>
+          <button onClick={load} className="p-2 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" title="Refresh"><RefreshCw size={16} /></button>
           <button onClick={() => setCreating((v) => !v)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm">
             {creating ? <X size={14} /> : <Plus size={14} />} {creating ? 'Cancel' : 'Add / Invite'}
           </button>
         </div>
       </div>
-
-      {err && <div className="mb-4 px-4 py-2 bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 rounded-lg text-sm">{err}</div>}
-      {notice && <div className="mb-4 px-4 py-2 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 rounded-lg text-sm">{notice}</div>}
 
       {creating && (
         <form onSubmit={onCreate} className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
@@ -130,15 +138,6 @@ export default function ContactsPage() {
           </button>
         </form>
       )}
-
-      <div className="flex flex-wrap gap-2 mb-4">
-        <button onClick={() => setAudience('')} className={`px-3 py-1 rounded-full text-xs ${audience === '' ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}>All</button>
-        {AUDIENCES.map((a) => (
-          <button key={a} onClick={() => setAudience(a)} className={`px-3 py-1 rounded-full text-xs capitalize ${audience === a ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}>
-            {a}{counts[a] ? ` (${counts[a]})` : ''}
-          </button>
-        ))}
-      </div>
 
       {loading ? (
         <div className="text-gray-500 text-center py-16">Loading…</div>
@@ -194,7 +193,7 @@ function ContactDrawer({ contact, busy, onClose, onStatus, onPromote, onChanged,
       <div className="w-full max-w-md bg-white dark:bg-gray-900 h-full p-6 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{contact.name || contact.email}</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-800"><X size={18} /></button>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"><X size={18} /></button>
         </div>
         <div className="text-sm text-gray-500 mb-4">
           {contact.email} · <span className="capitalize">{contact.audience}</span> · → {ROUTED_LABEL[contact.routed_to] || contact.routed_to}
@@ -241,7 +240,7 @@ function ContactDrawer({ contact, busy, onClose, onStatus, onPromote, onChanged,
         <ul className="mb-6">
           {(contact.tasks || []).map((t) => (
             <li key={t.id} className="flex items-center gap-2 py-1 text-sm">
-              <button onClick={() => toggle(t.id)} className="text-gray-500 hover:text-gray-800">
+              <button onClick={() => toggle(t.id)} className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">
                 {t.done ? <CheckSquare size={16} /> : <Square size={16} />}
               </button>
               <span className={t.done ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-300'}>{t.title}</span>

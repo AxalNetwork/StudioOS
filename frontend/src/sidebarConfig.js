@@ -110,7 +110,9 @@ export const SIDEBAR_GROUPS = {
       { to: '/partners', icon: Users, label: 'Partners' },
       // Task #4 — "Referrals" moved into Settings (/settings/referrals); the
       // /refer route redirects there. Removed from the admin nav.
-      { to: '/relationships', icon: Handshake, label: 'Relationships' },
+      // Task #1 — "Contacts" merged into this "Network" page (Contacts +
+      // Relationships tabs); /contacts and /relationships redirect to /network.
+      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
@@ -161,7 +163,10 @@ export const SIDEBAR_GROUPS = {
   //     (/build/metrics) as the founder's own company-health view; the
   //     /portfolio/health route stays registered and reachable for other roles.
   //   • "Network Effects" (/network-effects) is demoted to More while a single
-  //     "Network" entry (/relationships) leads Validate; both routes stay live.
+  //     "Network" entry (/network) leads Validate; both routes stay live.
+  //   • Task #1 — "Contacts" (/contacts) is merged into the Network page as its
+  //     default "Contacts" tab; /contacts redirects to /network?tab=contacts and
+  //     /relationships redirects to /network?tab=relationships.
   //   • "My Profile" (/profile) — the full Profile editor lives inside Settings
   //     (/settings) as the first tab, so a separate sidebar item is redundant.
   //   • standalone "Identity / KYC" (/kyc) — folded into "Trust Center" (/trust)
@@ -193,7 +198,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
     ]},
     { key: 'validate', label: 'Validate', items: [
-      { to: '/contacts', icon: Inbox, label: 'Contacts' },
       { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
       // Marketplace merges the two halves of the partner-services marketplace —
       // "Needs Board" (/needs, demand) and "Service Catalogue" (/services,
@@ -202,7 +206,7 @@ export const SIDEBAR_GROUPS = {
       // redirected from) the legacy /needs and /services routes (see App.jsx).
       { to: '/build/marketplace', icon: Package, label: 'Marketplace', match: ['/build/marketplace', '/needs', '/services'] },
       { to: '/advisory', icon: Brain, label: 'Advisory' },
-      { to: '/relationships', icon: Handshake, label: 'Network' },
+      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
     ]},
     // Task #1 — RAISE Workspaces. Ten items collapsed into three workspaces that
     // compose the existing pages (Pitch/Capital/Legal Engine). The Pitch item is
@@ -254,8 +258,8 @@ export const SIDEBAR_GROUPS = {
   // founder (Task #19) reorgs.
   //
   // Merges (each feature has exactly one home):
-  //   • Partners → Relationships (Engage); match keeps the item active on the
-  //     legacy /partners route, which stays registered.
+  //   • Partners → Network (Engage); match keeps the item active on the legacy
+  //     /partners and /relationships routes, which stay registered.
   //   • "My Service Catalogue" → "My Services" (Sourcing).
   //   • Demand Insights folds into Sourcing (the one partner-native signal)
   //     so the standalone Insights section is gone.
@@ -298,7 +302,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'engage', label: 'Engage', items: [
       { to: '/partner/office-hours', icon: Calendar, label: 'My Office Hours' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
-      { to: '/relationships', icon: Handshake, label: 'Relationships', match: ['/relationships', '/partners'] },
+      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/partners'] },
       { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },

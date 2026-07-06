@@ -10,6 +10,41 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #1 — Merge Contacts & Relationships into a unified Network page
+
+Information-architecture + routing refactor: the standalone **Contacts** and
+**Network/Relationships** pages are merged into one **Network** feature. Product
+logic, data fetching, and card/empty-state UI are reused, not rewritten.
+
+- **New container** — `frontend/src/pages/NetworkPage.jsx` (lazy-loaded, default
+  export). Title "Network & Relationships"; a Contacts tab (primary) and a
+  Relationships tab, driven by a `?tab=contacts|relationships` query param.
+  Contacts is admin/founder-only; partner/investor see Relationships alone (the
+  tab bar hides when only one tab is available). `useSearchParams` selects the
+  active tab; an unknown/inaccessible `?tab=` falls back to the first allowed tab.
+- **Panels** — `ContactsPage.jsx` now exports a self-contained `ContactsPanel`
+  (named; default export removed) and `RelationshipsPage.jsx` exports
+  `RelationshipsPanel`. Each panel owns its own data, filters, and create/invite
+  action; the container only owns the title + tabs.
+- **Deleted** — the Relationships **Activity Feed** and **Leaderboard** tabs are
+  gone from the UI. Their client wrappers (`api.activityLogs`,
+  `api.partnerLeaderboard`) and the underlying Worker endpoints are left in place
+  — no longer called by the frontend — to keep the API-drift guard satisfied and
+  avoid any Worker changes (per the task's "endpoints can remain" scope).
+- **Routing** — `App.jsx` mounts `/network` (guard: admin/founder/partner/
+  investor) and redirects `/contacts` → `/network?tab=contacts` and
+  `/relationships` → `/network?tab=relationships`. Dead `ContactsPage`/
+  `RelationshipsPage` lazy imports removed.
+- **Sidebar** — every role now has a single **Network** entry (`/network`); the
+  founder "Contacts" item is removed and the relationships/network items across
+  admin, founder, and partner now point at `/network` with legacy routes kept in
+  `match` for active-state. The command palette derives from the sidebar, so it
+  reflects the single entry automatically.
+- **Tests** — `frontend/test/network_nav.test.mjs` (`node --test`) asserts the
+  single sidebar entry, the redirects, the `/network` mount, both tabs +
+  Contacts role-gating, the absence of Activity Feed/Leaderboard, and the named
+  panel exports.
+
 ## Task #75 — Advisory Suite advisor management
 
 Founders can now build and manage a directory of human advisors inside the
