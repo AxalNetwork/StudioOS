@@ -24,8 +24,8 @@ Hard rules independent of flags:
   opted in), and role-specific shape.
 * Handle resolution is case-insensitive; the canonical handle is
   always echoed back.
-* Mentor users are deliberately excluded for now (the mentor surface
-  has its own listing in /mentors); they 404 here to avoid leaking
+* Advisor users are deliberately excluded for now (the advisor surface
+  has its own listing in /advisors); they 404 here to avoid leaking
   rosters before owner-side privacy is wired.
 
 Out of scope per the task brief: public-facing project pages.
@@ -289,8 +289,8 @@ def get_public_profile(handle: str, session: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail="Profile not found")
 
     role = _role(user)
-    # Mentors are out of scope for public profiles in this iteration.
-    if role == "mentor":
+    # Advisors are out of scope for public profiles in this iteration.
+    if role == "advisor":
         raise HTTPException(status_code=404, detail="Profile not found")
 
     extras = _load_extras(session, user.id)

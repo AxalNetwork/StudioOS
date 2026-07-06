@@ -22,7 +22,7 @@ const r = new Hono<{ Bindings: Env }>();
 const ROLE_TO_CHANNEL_SLUG: Record<string, string> = {
   founder: 'axal-founders',
   investor: 'axal-investors',
-  mentor: 'axal-mentors',
+  advisor: 'axal-advisors',
   partner: 'axal-partners',
   alumni: 'axal-alumni',
   admin: 'axal-founders', // admins can request any; default to founders, override via body.channel_slug

@@ -487,7 +487,7 @@ export const PRODUCT_PAGES = {
       headlineHi: 'you were built to help',
       headlinePost: '.',
       sub:
-        'Build a credible advisor profile, get matched to founders who need your exact expertise, and run sessions through structured office hours. Great mentors compound their reputation here.',
+        'Build a credible advisor profile, get matched to founders who need your exact expertise, and run sessions through structured office hours. Great advisors compound their reputation here.',
     },
     forWho:
       'Operators, domain experts and seasoned founders who want to advise — whether you think of yourself as an advisor, a mentor, or a fractional expert.',

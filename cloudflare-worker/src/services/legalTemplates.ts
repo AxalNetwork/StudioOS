@@ -20,8 +20,8 @@ import tos                            from '../templates/legal/tos_v1.md?raw';
 import privacy                        from '../templates/legal/privacy_v1.md?raw';
 import founderNda                     from '../templates/legal/founder_nda_v1.md?raw';
 import investorNda                    from '../templates/legal/investor_nda_v1.md?raw';
-import mentorNda                      from '../templates/legal/mentor_nda_v1.md?raw';
-import mentorDisclaimer               from '../templates/legal/mentor_disclaimer_v1.md?raw';
+import advisorNda                      from '../templates/legal/mentor_nda_v1.md?raw';
+import advisorDisclaimer               from '../templates/legal/mentor_disclaimer_v1.md?raw';
 import partnerMsa                     from '../templates/legal/partner_msa_v1.md?raw';
 import accreditation                  from '../templates/legal/accreditation_v1.md?raw';
 import nda3Way                        from '../templates/legal/nda_3way_founder_investor_axal_v1.md?raw';
@@ -38,8 +38,8 @@ const TEMPLATES: Record<LegalTemplateKey, string> = {
   privacy_v1: privacy as unknown as string,
   founder_nda_v1: founderNda as unknown as string,
   investor_nda_v1: investorNda as unknown as string,
-  mentor_nda_v1: mentorNda as unknown as string,
-  mentor_disclaimer_v1: mentorDisclaimer as unknown as string,
+  mentor_nda_v1: advisorNda as unknown as string,
+  mentor_disclaimer_v1: advisorDisclaimer as unknown as string,
   partner_msa_v1: partnerMsa as unknown as string,
   accreditation_v1: accreditation as unknown as string,
   nda_3way_founder_investor_axal_v1: nda3Way as unknown as string,

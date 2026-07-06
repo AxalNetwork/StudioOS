@@ -5,7 +5,7 @@ import { requireAuth } from '../auth';
 
 const partnernet = new Hono<{ Bindings: Env }>();
 
-const REL_TYPES = new Set(['co_investor', 'advisor_founder', 'operator_partner', 'strategic_alliance', 'mentor_mentee']);
+const REL_TYPES = new Set(['co_investor', 'advisor_founder', 'operator_partner', 'strategic_alliance', 'advisor_mentee']);
 const ACTION_TYPES = new Set([
   'dashboard_view', 'deal_review', 'syndicate_join', 'syndicate_create', 'referral_convert',
   'studio_ops_task', 'ai_scoring', 'payout_request', 'pipeline_advance', 'metric_snapshot',

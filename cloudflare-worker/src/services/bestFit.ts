@@ -1,7 +1,7 @@
 /**
  * Task #19 — Best-Fit matching service.
  *
- * Generalizes the per-surface matching in routes/cofounder.ts + routes/mentors.ts
+ * Generalizes the per-surface matching in routes/cofounder.ts + routes/advisors.ts
  * into a single "match the current user against every counterparty type" engine,
  * built purely on the reusable primitives in services/matchingVectors.ts.
  *
@@ -10,18 +10,18 @@
  *   - the admin best-fit report builder (Task #19 WS5)
  *
  * Counterparty taxonomy (5 types). The users.role CHECK only permits
- * admin|founder|partner|investor, and mentors live in a separate `mentors`
+ * admin|founder|partner|investor, and advisors live in a separate `advisors`
  * directory (no role). There is no distinct "coach" role or table, so we split
- * the mentor directory by price — a data-backed distinction rather than a
+ * the advisor directory by price — a data-backed distinction rather than a
  * fabricated pool:
  *   cofounder → users.role = 'founder'
  *   investor  → users.role = 'investor'
  *   partner   → users.role = 'partner'
- *   mentor    → mentors.is_active = 1 AND COALESCE(hourly_rate_usd,0) = 0  (free office hours)
- *   coach     → mentors.is_active = 1 AND hourly_rate_usd > 0              (paid coaching)
+ *   advisor    → advisors.is_active = 1 AND COALESCE(hourly_rate_usd,0) = 0  (free office hours)
+ *   coach     → advisors.is_active = 1 AND hourly_rate_usd > 0              (paid coaching)
  *
  * Role-based pools are gated by matching consent (user_settings.matching_opt_in);
- * the mentor directory is itself an opt-in listing, so being is_active = 1 is the
+ * the advisor directory is itself an opt-in listing, so being is_active = 1 is the
  * consent signal there.
  */
 import type { Env } from '../types';
@@ -43,18 +43,18 @@ import {
 } from './axalFit';
 import { buildAssessment, type Assessment } from './ventureRisk';
 
-export type CounterpartyType = 'cofounder' | 'investor' | 'partner' | 'mentor' | 'coach';
+export type CounterpartyType = 'cofounder' | 'investor' | 'partner' | 'advisor' | 'coach';
 export type MatchBand = 'strong' | 'good' | 'fair' | 'low';
 
 export const COUNTERPARTY_TYPES: readonly CounterpartyType[] = [
-  'cofounder', 'investor', 'partner', 'mentor', 'coach',
+  'cofounder', 'investor', 'partner', 'advisor', 'coach',
 ] as const;
 
 const TYPE_LABEL: Record<CounterpartyType, string> = {
   cofounder: 'Co-founder',
   investor: 'Investor',
   partner: 'Operating Partner',
-  mentor: 'Mentor',
+  advisor: 'Advisor',
   coach: 'Coach',
 };
 
@@ -106,14 +106,14 @@ async function loadCandidates(
   type: CounterpartyType,
   viewerId: number,
 ): Promise<CandRow[]> {
-  if (type === 'mentor' || type === 'coach') {
+  if (type === 'advisor' || type === 'coach') {
     const rateCond = type === 'coach'
       ? 'COALESCE(m.hourly_rate_usd, 0) > 0'
       : 'COALESCE(m.hourly_rate_usd, 0) = 0';
     try {
       const res = await env.DB.prepare(
         `SELECT m.user_id AS user_id, u.uid AS uid, COALESCE(u.name, m.display_name) AS name
-           FROM mentors m
+           FROM advisors m
            JOIN users u ON u.id = m.user_id
           WHERE m.is_active = 1 AND m.user_id IS NOT NULL AND m.user_id != ? AND ${rateCond}`,
       ).bind(viewerId).all<CandRow>();

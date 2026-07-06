@@ -189,7 +189,7 @@ interface AgreementTemplate {
 // these are placeholders that capture the intent and parties so the audit
 // trail is meaningful from day one.
 function buildTemplateBody(agreementType: string, recipientName: string, recipientEmail: string): AgreementTemplate {
-  // Operating contracts (platform terms, partner, vendor, mentor, etc.) are
+  // Operating contracts (platform terms, partner, vendor, advisor, etc.) are
   // signed by Axal VC Management LLC. Fund subscription documents (LPA,
   // subscription booklets, side letters) substitute "Axal VC GP LLC, the
   // general partner of Axal VC Fund I, LP" below — see the Subscription
@@ -215,7 +215,7 @@ function buildTemplateBody(agreementType: string, recipientName: string, recipie
     'Strategic Scale Partnership Agreement': { title: 'Strategic Scale Partnership Agreement', body: intro + 'Counterparty engages Axal to provide strategic scaling services, including go-to-market acceleration, follow-on financing support, and operational resources, in exchange for the consideration described herein.' + closer },
     'Technology Integration / JV Agreement': { title: 'Technology Integration / Joint Venture Agreement', body: intro + 'Counterparty and Axal agree to integrate StudioOS AI technology into Counterparty\'s product suite under a joint venture structure, with shared IP rights and revenue allocation as specified.' + closer },
     'Referral / Agency Agreement': { title: 'Referral & Agency Agreement', body: intro + 'Counterparty agrees to refer qualified opportunities to Axal in exchange for the referral fees and revenue share defined herein, subject to non-circumvention and confidentiality obligations.' + closer },
-    'M&A Advisory Mandate':        { title: 'M&A Advisory Mandate', body: intro + 'Counterparty engages Axal as M&A advisor on an exclusive basis for the engagement period defined herein, with success fees calculated as a percentage of transaction value.' + closer },
+    'M&A Advisory Mandate':        { title: 'M&A Advisory Mandate', body: intro + 'Counterparty engages Axal as M&An advisor on an exclusive basis for the engagement period defined herein, with success fees calculated as a percentage of transaction value.' + closer },
     'Venture Share Agreement (FAST)': { title: 'Venture Share Agreement (FAST)', body: intro + 'Counterparty agrees to advise the Axal portfolio company on a Founder/Advisor Standard Template (FAST) basis, with equity compensation vesting over the engagement period.' + closer },
     'MSA + Equity-for-Services':   { title: 'Master Services Agreement + Equity-for-Services', body: intro + 'Counterparty agrees to provide operating partner services under a Master Services Agreement, with compensation paid partially in equity of designated portfolio companies.' + closer },
     'Engagement Letter (Spin-Out Package)': { title: 'Engagement Letter — Spin-Out Legal Package', body: intro + 'Counterparty (legal counsel) is engaged to provide the standard spin-out legal package, including entity formation, IP assignment, founder agreements, and initial financing documents.' + closer },

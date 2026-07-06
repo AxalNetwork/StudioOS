@@ -5,7 +5,7 @@
  * the Personal Advisor (human tone, "no wrong answers"). Question ids follow
  * `fit.<FitPersona>.<key>`; `fitMeasuresIndex()` parses the persona from that
  * prefix (NOT from `Question.persona`) so the coach bank can ride inside the
- * mentor conversation. Each question is tagged with a `measures` map consumed by
+ * advisor conversation. Each question is tagged with a `measures` map consumed by
  * services/axalFit.ts (rubric_category / axal_value / red_flag) and the
  * write-router (skill_axis → user_skills, value_dim → user_values,
  * axal_value → axal_values).
@@ -30,11 +30,11 @@ export interface FitRowSpec {
 
 /**
  * Build a persona fit bank. `Question.persona` is the advisor persona enum, so
- * the coach bank (no advisor role) is delivered as `mentor`; the FitPersona is
+ * the coach bank (no advisor role) is delivered as `advisor`; the FitPersona is
  * preserved in the `fit.<persona>.` id prefix.
  */
 export function buildFitBank(persona: FitPersona, rows: FitRowSpec[]): Question[] {
-  const qPersona: Question['persona'] = persona === 'coach' ? 'mentor' : persona;
+  const qPersona: Question['persona'] = persona === 'coach' ? 'advisor' : persona;
   return rows.map((r) => ({
     id: `fit.${persona}.${r.key}`,
     persona: qPersona,

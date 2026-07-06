@@ -102,7 +102,7 @@ const NOTIFICATION_EVENTS = [
   { key: 'deal_stage_change', label: 'Deal stage changes' },
   { key: 'score_generated', label: 'New score generated for your startup' },
   { key: 'contract_signed', label: 'Contract fully signed' },
-  { key: 'mentor_session_booked', label: 'Mentor session booked' },
+  { key: 'advisor_session_booked', label: 'Advisor session booked' },
   { key: 'dd_report_ready', label: 'Due-diligence report ready' },
   { key: 'vote_threshold_reached', label: 'Pipeline vote threshold reached' },
   { key: 'followed_entity_news', label: 'News from people & startups I follow' },
@@ -144,7 +144,7 @@ const SECTIONS = [
   { id: 'billing', label: 'Billing', icon: CreditCard },
   // Task #4 — the merged Referrals workspace (Refer & Earn + Payouts) now lives
   // here as a section. Gated to the roles that carried the standalone /refer
-  // item (admin/founder/partner/investor); hidden for mentor.
+  // item (admin/founder/partner/investor); hidden for advisor.
   { id: 'referrals', label: 'Referrals', icon: Share2, roles: ['admin', 'founder', 'partner', 'investor'] },
   { id: 'appearance', label: 'Appearance', icon: Palette },
 ];
@@ -2328,7 +2328,7 @@ const PUBLIC_PROFILE_DEFAULTS = {
   investor: { name: true, bio: true, headshot: true, socials: false, thesis: true, portfolio_summary: false },
   partner:  { name: true, bio: true, headshot: true, socials: false, services: true, reviews: true, pricing: false },
   admin:    { name: true, bio: true, headshot: true, socials: false },
-  mentor:   { name: true, bio: true, headshot: true, socials: false },
+  advisor:   { name: true, bio: true, headshot: true, socials: false },
 };
 
 function PrivacySection({ data, patch, flash, reload, hideAccountDelete }) {
@@ -3177,7 +3177,7 @@ function PrivacyCoreCard({ flash }) {
           <input type="checkbox" checked={!!row.discoverable} disabled={busy}
             onChange={e => save({ discoverable: e.target.checked })}
             className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500" />
-          Allow mentors and founders to discover me for matching
+          Allow advisors and founders to discover me for matching
         </label>
         {/* Task #19 — explicit matching consent, gated on profile completeness. */}
         <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
@@ -3536,7 +3536,7 @@ function BillingTab({ data, flash }) {
   if (role === 'founder') {
     return <FounderBillingPanel data={data} flash={flash} />;
   }
-  // Every other signed-in role (partner, advisor/mentor, …) gets the generic
+  // Every other signed-in role (partner, advisor, …) gets the generic
   // account-plan pipeline: a persona plan ladder + native subscription
   // management. Roles with no plan_group / no persona plans fall back inside
   // PersonaBillingPanel to the saved-cards-and-receipts view — no regression.
@@ -3565,7 +3565,7 @@ function GenericBillingPanel({ flash }) {
 // marketing pricing pages; the paid "Pro" tier resolves its real Stripe price
 // server-side at checkout (or a keyless dev-upgrade), so this stays display-only
 // and never hardcodes a price id. Keyed by the plan_group the backend derives
-// from the role (partner → 'partner', mentor → 'advisor').
+// from the role (partner → 'partner', advisor → 'advisor').
 const PERSONA_PLANS = {
   partner: {
     label: 'Partner',
@@ -3588,7 +3588,7 @@ const PERSONA_PLANS = {
 };
 
 // Native billing for personas without a bespoke pipeline (partner, advisor/
-// mentor, …). Drives the generic /api/billing/plan/* endpoints: current plan +
+// advisor, …). Drives the generic /api/billing/plan/* endpoints: current plan +
 // trial status, a persona plan ladder with inline (no-redirect) checkout, and
 // the shared BillingDashboard for cancel/resume, payment methods, and invoices
 // (the persona subscription lives on the general Stripe customer, which
@@ -3938,7 +3938,7 @@ function FounderBillingPanel({ data, flash }) {
                     <div className="font-semibold text-gray-900 dark:text-gray-100 capitalize">{t}</div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       {t === 'free' && '1 project · 5 interviews · 3 OKRs'}
-                      {t === 'growth' && '$79/mo · Unlimited builds, deck, scoring, mentors'}
+                      {t === 'growth' && '$79/mo · Unlimited builds, deck, scoring, advisors'}
                       {t === 'studio' && '$249/mo · + Capital, legal, partner tools'}
                     </div>
                     <div className="mt-3">

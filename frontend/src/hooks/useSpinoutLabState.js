@@ -17,7 +17,7 @@ const MILESTONE_ROUTE_PREFIXES = [
   '/build/deck',
   '/build/captable',
   '/scoring',
-  '/mentors',
+  '/advisors',
   '/office-hours',
   '/cofounder',
   '/incorporate',

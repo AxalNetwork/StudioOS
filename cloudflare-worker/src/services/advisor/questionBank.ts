@@ -24,7 +24,7 @@
  *   - validate?       — client-side validator name
  */
 
-export type Persona = 'founder' | 'investor' | 'mentor' | 'partner' | 'admin' | 'unknown';
+export type Persona = 'founder' | 'investor' | 'advisor' | 'partner' | 'admin' | 'unknown';
 export type Importance = 'critical' | 'high' | 'normal' | 'low';
 export type ValidateKind =
   | 'short' | 'long' | 'number' | 'select' | 'multi'
@@ -63,8 +63,8 @@ export type PartnerSubtype =
 // `Persona` enum: it adds 'coach' (no advisor role) and drops admin/unknown.
 // Fit questions carry id `fit.<FitPersona>.<key>`; fitMeasuresIndex() derives
 // the persona from that id prefix (NOT from Question.persona) so a coach fit
-// bank can ride inside the mentor conversation without touching `Persona`.
-export type FitPersona = 'founder' | 'investor' | 'partner' | 'mentor' | 'coach';
+// bank can ride inside the advisor conversation without touching `Persona`.
+export type FitPersona = 'founder' | 'investor' | 'partner' | 'advisor' | 'coach';
 
 // Task #19 — what a fit question measures. Tagged on each `fit.*` question and
 // consumed by services/axalFit.ts (rubric_category → RUBRICS) + the write-router
@@ -127,7 +127,7 @@ export const BANK_SIZE_TARGETS = {
   newFounderSpinout: 80,
   existingFounder: 120,
   investor: 60,
-  mentor: 30,
+  advisor: 30,
   admin: 10,
   operatingPartnerPerSubtype: 50, // ×4 sub-types = 200 total
   // Task #19 / #45 — Best-Fit conversational banks. Documentation-only minimums
@@ -139,9 +139,9 @@ export const BANK_SIZE_TARGETS = {
   fitFounder: 32,
   fitInvestor: 28,
   fitPartner: 27,
-  fitMentor: 29,
-  fitCoach: 17, // coach rides in the mentor conversation; skills/values/archetype
-                // stay on the mentor bank so they're never asked twice.
+  fitAdvisor: 29,
+  fitCoach: 17, // coach rides in the advisor conversation; skills/values/archetype
+                // stay on the advisor bank so they're never asked twice.
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -155,7 +155,7 @@ export const ROLE_DETECTOR: Question[] = [
     prompt: "Welcome to Axal. Which best describes how you'll use StudioOS?",
     hint: 'You can change this any time in Settings.',
     input_kind: 'select',
-    options: ['I am building a startup', 'I invest in startups', 'I mentor founders', 'I partner with the studio'],
+    options: ['I am building a startup', 'I invest in startups', 'I advisor founders', 'I partner with the studio'],
     skip_allowed: false,
     importance: 'critical',
     page_target: '/onboarding/persona',
@@ -186,7 +186,7 @@ export function mapRoleAnswer(answerText: string): Persona | null {
   const t = answerText.toLowerCase();
   if (t.includes('build')) return 'founder';
   if (t.includes('invest')) return 'investor';
-  if (t.includes('mentor')) return 'mentor';
+  if (t.includes('advisor')) return 'advisor';
   if (t.includes('partner')) return 'partner';
   return null;
 }
@@ -198,7 +198,7 @@ import { NEW_FOUNDER_SPINOUT_BANK } from './banks/newFounderSpinout.ts';
 import { EXISTING_FOUNDER_BANK } from './banks/existingFounder.ts';
 import { INVESTOR_BANK } from './banks/investor.ts';
 import { OPERATING_PARTNER_BANK } from './banks/operatingPartner.ts';
-import { MENTOR_BANK } from './banks/mentor.ts';
+import { ADVISOR_BANK } from './banks/advisor.ts';
 import { ADMIN_BANK } from './banks/admin.ts';
 // Task #19 — Best-Fit fit banks. Registered here so bankFor/questionById/
 // fitMeasuresIndex see them, but kept OUT of banks.manifest.json (fit answers
@@ -206,25 +206,25 @@ import { ADMIN_BANK } from './banks/admin.ts';
 import { FIT_FOUNDER_BANK } from './banks/fit_founder.ts';
 import { FIT_INVESTOR_BANK } from './banks/fit_investor.ts';
 import { FIT_PARTNER_BANK } from './banks/fit_partner.ts';
-import { FIT_MENTOR_BANK } from './banks/fit_mentor.ts';
+import { FIT_ADVISOR_BANK } from './banks/fit_advisor.ts';
 import { FIT_COACH_BANK } from './banks/fit_coach.ts';
 
 export type BankName =
   | 'newFounderSpinout' | 'existingFounder'
-  | 'investor' | 'operatingPartner' | 'mentor' | 'admin'
-  | 'fitFounder' | 'fitInvestor' | 'fitPartner' | 'fitMentor' | 'fitCoach';
+  | 'investor' | 'operatingPartner' | 'advisor' | 'admin'
+  | 'fitFounder' | 'fitInvestor' | 'fitPartner' | 'fitAdvisor' | 'fitCoach';
 
 export const BANKS: Record<BankName, Question[]> = {
   newFounderSpinout: NEW_FOUNDER_SPINOUT_BANK,
   existingFounder:   EXISTING_FOUNDER_BANK,
   investor:          INVESTOR_BANK,
   operatingPartner:  OPERATING_PARTNER_BANK,
-  mentor:            MENTOR_BANK,
+  advisor:            ADVISOR_BANK,
   admin:             ADMIN_BANK,
   fitFounder:        FIT_FOUNDER_BANK,
   fitInvestor:       FIT_INVESTOR_BANK,
   fitPartner:        FIT_PARTNER_BANK,
-  fitMentor:         FIT_MENTOR_BANK,
+  fitAdvisor:         FIT_ADVISOR_BANK,
   fitCoach:          FIT_COACH_BANK,
 };
 
@@ -241,11 +241,11 @@ export function bankFor(persona: Persona, ctx?: { spinoutLabActive?: boolean }):
   switch (persona) {
     // Task #19 — append the persona's Best-Fit bank so the conversational
     // profiling questions are delivered inline (importance:'low' → trailing).
-    // Mentor carries both mentor + coach fit banks (coach has no advisor role).
+    // Advisor carries both advisor + coach fit banks (coach has no advisor role).
     case 'founder':  return [...(ctx?.spinoutLabActive ? BANKS.newFounderSpinout : BANKS.existingFounder), ...BANKS.fitFounder];
     case 'investor': return [...BANKS.investor, ...BANKS.fitInvestor];
     case 'partner':  return [...BANKS.operatingPartner, ...BANKS.fitPartner];
-    case 'mentor':   return [...BANKS.mentor, ...BANKS.fitMentor, ...BANKS.fitCoach];
+    case 'advisor':   return [...BANKS.advisor, ...BANKS.fitAdvisor, ...BANKS.fitCoach];
     case 'admin':    return BANKS.admin;
     default:         return [];
   }
@@ -258,7 +258,7 @@ export function bankFor(persona: Persona, ctx?: { spinoutLabActive?: boolean }):
 // probes; the write-router consumes per-question measures to route answers.
 // Returns [] until the fit_* banks are registered in BANKS (WS2).
 // ---------------------------------------------------------------------------
-export const FIT_ID_RE = /^fit\.(founder|investor|partner|mentor|coach)\./;
+export const FIT_ID_RE = /^fit\.(founder|investor|partner|advisor|coach)\./;
 
 export interface FitMeasureEntry {
   question_id: string;
@@ -286,7 +286,7 @@ export function fitMeasuresIndex(): FitMeasureEntry[] {
 // conversational `fit.*` questions (the Best-Fit profiling bank), NOT the full
 // persona dashboard bank that `bankFor` returns. Counting the whole working
 // bank made the card show absurd denominators (partner ~217, founder ~145,
-// investor ~78, mentor ~64). These helpers give the card an honest denominator
+// investor ~78, advisor ~64). These helpers give the card an honest denominator
 // and a per-section breakdown, while the advisor's own progress rails keep
 // using the full working bank.
 // ---------------------------------------------------------------------------
@@ -313,17 +313,17 @@ export const PROFILING_SECTION_ORDER: ProfilingSectionKey[] = [
 /**
  * The profiling (Best-Fit) bank for a persona: the `fit.*` questions only.
  *
- * Task #41 — the mentor persona ALSO carries the coach fit bank in the
+ * Task #41 — the advisor persona ALSO carries the coach fit bank in the
  * conversation (`bankFor` appends fitCoach because coach has no advisor role of
  * its own) and those coach answers still feed axalFit/bestFit. But the
- * "Profiling completion" CARD measures only the mentor's PRIMARY fit bank
- * (fitMentor). The coach bank is a second lens over the SAME rubric categories +
- * the identical five Axal values, so counting both would make a mentor answer
+ * "Profiling completion" CARD measures only the advisor's PRIMARY fit bank
+ * (fitAdvisor). The coach bank is a second lens over the SAME rubric categories +
+ * the identical five Axal values, so counting both would make an advisor answer
  * roughly double every other persona. Scoping the card to the primary bank keeps
  * the completion effort comparable without dropping any conversational coverage
  * or axalFit/bestFit signal. Task #45 keeps Skills/Work-values/Archetype trait
- * questions ONLY on the mentor bank (not coach) for the same "never asked twice"
- * reason, so the mentor completion card measures them exactly once.
+ * questions ONLY on the advisor bank (not coach) for the same "never asked twice"
+ * reason, so the advisor completion card measures them exactly once.
  *
  * Admin / unknown have no fit bank, so profiling is "not applicable".
  */
@@ -332,7 +332,7 @@ export function profilingBankFor(persona: Persona): Question[] {
     case 'founder':  return [...BANKS.fitFounder];
     case 'investor': return [...BANKS.fitInvestor];
     case 'partner':  return [...BANKS.fitPartner];
-    case 'mentor':   return [...BANKS.fitMentor];
+    case 'advisor':   return [...BANKS.fitAdvisor];
     default:         return [];
   }
 }

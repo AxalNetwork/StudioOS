@@ -180,8 +180,8 @@ DOC_TYPE_PARTY_ROLES: dict[str, list[str]] = {
     "investor_subscription_pro": ["investor", "axal"],
     "investor_subscription_inst": ["investor", "axal"],
     "investor_nda_axal": ["investor", "axal"],
-    "mentor_nda_axal": ["mentor", "axal"],
-    "mentor_engagement_disclaimer": ["mentor", "axal"],
+    "mentor_nda_axal": ["advisor", "axal"],
+    "mentor_engagement_disclaimer": ["advisor", "axal"],
     "partner_nda_nonsolicit": ["partner", "axal"],
     "partner_equity": ["partner", "axal"],
     "partner_services": ["partner", "axal"],
@@ -229,7 +229,7 @@ def list_contracts(
     status: Optional[str] = Query(None, description="draft|generated|sent|signed|void"),
     doc_type: Optional[str] = None,
     party_role: Optional[str] = Query(
-        None, description="founder|investor|mentor|partner|axal — mirrors worker filter"
+        None, description="founder|investor|advisor|partner|axal — mirrors worker filter"
     ),
     provider: Optional[str] = Query(
         None, description="native|docusign — accepted for parity with worker (dev backend has no DocuSign envelopes)"
@@ -344,8 +344,8 @@ LEGAL_TEMPLATE_CATALOG: list[dict] = [
     {"key": "privacy_v1",                        "doc_type": "privacy_v1",                        "title": "Privacy Policy v1"},
     {"key": "founder_nda_v1",                    "doc_type": "founder_nda_v1",                    "title": "Founder Mutual NDA v1"},
     {"key": "investor_nda_v1",                   "doc_type": "investor_nda_axal",                 "title": "Investor NDA (Axal) v1"},
-    {"key": "mentor_nda_v1",                     "doc_type": "mentor_nda_axal",                   "title": "Mentor NDA (Axal) v1"},
-    {"key": "mentor_disclaimer_v1",              "doc_type": "mentor_engagement_disclaimer",      "title": "Mentor Engagement Disclaimer v1"},
+    {"key": "mentor_nda_v1",                     "doc_type": "mentor_nda_axal",                   "title": "Advisor NDA (Axal) v1"},
+    {"key": "mentor_disclaimer_v1",              "doc_type": "mentor_engagement_disclaimer",      "title": "Advisor Engagement Disclaimer v1"},
     {"key": "accreditation_v1",                  "doc_type": "accreditation_v1",                  "title": "Accreditation Attestation v1"},
     {"key": "partner_msa_v1",                    "doc_type": "partner_services",                  "title": "Partner Services / MSA v1"},
     {"key": "nda_3way_founder_investor_axal_v1", "doc_type": "nda_3way_founder_investor_axal",    "title": "3-Way NDA (Founder ↔ Investor ↔ Axal) v1"},

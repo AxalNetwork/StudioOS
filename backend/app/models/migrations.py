@@ -744,14 +744,14 @@ def ensure_trust_layer_columns() -> None:
             session.rollback()
 
 
-def ensure_mentor_tables() -> None:
-    """Task #35 — Mentor matching + office hours. Idempotent.
+def ensure_advisor_tables() -> None:
+    """Task #35 — Advisor matching + office hours. Idempotent.
 
-    Creates four tables (``mentors``, ``office_hours_slots``,
-    ``mentor_bookings``, ``mentor_reviews``) and adds ``users.mentor_id``.
+    Creates four tables (``advisors``, ``office_hours_slots``,
+    ``advisor_bookings``, ``advisor_reviews``) and adds ``users.advisor_id``.
     All DDL is wrapped in IF NOT EXISTS so we can safely run on every boot.
-    Also extends the Postgres ``userrole`` enum to include ``MENTOR`` so
-    new mentor-role users can be inserted.
+    Also extends the Postgres ``userrole`` enum to include ``ADVISOR`` so
+    new advisor-role users can be inserted.
     """
     with Session(engine) as session:
         # Extend the userrole enum first. Postgres requires ``ALTER TYPE
@@ -760,13 +760,13 @@ def ensure_mentor_tables() -> None:
         # enum at all and silently no-ops on the exception path.
         try:
             with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-                conn.exec_driver_sql("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'MENTOR'")
+                conn.exec_driver_sql("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'ADVISOR'")
         except Exception as exc:  # noqa: BLE001
-            logger.warning("ensure_mentor_tables: ALTER TYPE userrole: %s", exc)
+            logger.warning("ensure_advisor_tables: ALTER TYPE userrole: %s", exc)
 
         try:
             session.exec(text("""
-                CREATE TABLE IF NOT EXISTS mentors (
+                CREATE TABLE IF NOT EXISTS advisors (
                     id SERIAL PRIMARY KEY,
                     uid VARCHAR NOT NULL UNIQUE,
                     name VARCHAR NOT NULL,
@@ -790,20 +790,34 @@ def ensure_mentor_tables() -> None:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
                 )
             """))
-            session.exec(text("CREATE INDEX IF NOT EXISTS ix_mentors_listed ON mentors(listed)"))
-            session.exec(text("CREATE INDEX IF NOT EXISTS ix_mentors_status ON mentors(status)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_advisors_listed ON advisors(listed)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_advisors_status ON advisors(status)"))
             session.commit()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("ensure_mentor_tables: mentors: %s", exc)
+            logger.warning("ensure_advisor_tables: advisors: %s", exc)
             session.rollback()
 
         try:
             session.exec(text(
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS mentor_id INTEGER REFERENCES mentors(id)"
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS advisor_id INTEGER REFERENCES advisors(id)"
             ))
             session.commit()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("ensure_mentor_tables: users.mentor_id: %s", exc)
+            logger.warning("ensure_advisor_tables: users.advisor_id: %s", exc)
+            session.rollback()
+
+        # Task #74 — office_hours_slots is a pre-existing shared table (its
+        # name did not change in the mentor→advisor rename), so CREATE TABLE
+        # IF NOT EXISTS is a no-op on an existing dev DB and its legacy
+        # mentor_id column never becomes advisor_id. Idempotent RENAME: on a
+        # fresh DB (no table/column yet) it fails and is swallowed; on an
+        # existing DB it converts the column in place. Dev DB is disposable.
+        try:
+            session.exec(text(
+                "ALTER TABLE office_hours_slots RENAME COLUMN mentor_id TO advisor_id"
+            ))
+            session.commit()
+        except Exception:  # noqa: BLE001
             session.rollback()
 
         try:
@@ -811,7 +825,7 @@ def ensure_mentor_tables() -> None:
                 CREATE TABLE IF NOT EXISTS office_hours_slots (
                     id SERIAL PRIMARY KEY,
                     uid VARCHAR NOT NULL UNIQUE,
-                    mentor_id INTEGER NOT NULL REFERENCES mentors(id),
+                    advisor_id INTEGER NOT NULL REFERENCES advisors(id),
                     start_at TIMESTAMP NOT NULL,
                     duration_min INTEGER DEFAULT 30 NOT NULL,
                     capacity INTEGER DEFAULT 1 NOT NULL,
@@ -824,21 +838,21 @@ def ensure_mentor_tables() -> None:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
                 )
             """))
-            session.exec(text("CREATE INDEX IF NOT EXISTS ix_slots_mentor ON office_hours_slots(mentor_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_slots_advisor ON office_hours_slots(advisor_id)"))
             session.exec(text("CREATE INDEX IF NOT EXISTS ix_slots_start ON office_hours_slots(start_at)"))
             session.exec(text("CREATE INDEX IF NOT EXISTS ix_slots_status ON office_hours_slots(status)"))
             session.commit()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("ensure_mentor_tables: office_hours_slots: %s", exc)
+            logger.warning("ensure_advisor_tables: office_hours_slots: %s", exc)
             session.rollback()
 
         try:
             session.exec(text("""
-                CREATE TABLE IF NOT EXISTS mentor_bookings (
+                CREATE TABLE IF NOT EXISTS advisor_bookings (
                     id SERIAL PRIMARY KEY,
                     uid VARCHAR NOT NULL UNIQUE,
                     slot_id INTEGER NOT NULL REFERENCES office_hours_slots(id),
-                    mentor_id INTEGER NOT NULL REFERENCES mentors(id),
+                    advisor_id INTEGER NOT NULL REFERENCES advisors(id),
                     requester_user_id INTEGER NOT NULL REFERENCES users(id),
                     project_id INTEGER REFERENCES projects(id),
                     topic VARCHAR NOT NULL,
@@ -857,22 +871,22 @@ def ensure_mentor_tables() -> None:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
                 )
             """))
-            session.exec(text("CREATE INDEX IF NOT EXISTS ix_bookings_slot ON mentor_bookings(slot_id)"))
-            session.exec(text("CREATE INDEX IF NOT EXISTS ix_bookings_mentor ON mentor_bookings(mentor_id)"))
-            session.exec(text("CREATE INDEX IF NOT EXISTS ix_bookings_requester ON mentor_bookings(requester_user_id)"))
-            session.exec(text("CREATE INDEX IF NOT EXISTS ix_bookings_status ON mentor_bookings(status)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_bookings_slot ON advisor_bookings(slot_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_bookings_advisor ON advisor_bookings(advisor_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_bookings_requester ON advisor_bookings(requester_user_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_bookings_status ON advisor_bookings(status)"))
             session.commit()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("ensure_mentor_tables: mentor_bookings: %s", exc)
+            logger.warning("ensure_advisor_tables: advisor_bookings: %s", exc)
             session.rollback()
 
         try:
             session.exec(text("""
-                CREATE TABLE IF NOT EXISTS mentor_reviews (
+                CREATE TABLE IF NOT EXISTS advisor_reviews (
                     id SERIAL PRIMARY KEY,
                     uid VARCHAR NOT NULL UNIQUE,
-                    booking_id INTEGER NOT NULL REFERENCES mentor_bookings(id),
-                    mentor_id INTEGER NOT NULL REFERENCES mentors(id),
+                    booking_id INTEGER NOT NULL REFERENCES advisor_bookings(id),
+                    advisor_id INTEGER NOT NULL REFERENCES advisors(id),
                     reviewer_user_id INTEGER NOT NULL REFERENCES users(id),
                     reviewer_role VARCHAR NOT NULL,
                     rating INTEGER NOT NULL,
@@ -881,11 +895,11 @@ def ensure_mentor_tables() -> None:
                     UNIQUE(booking_id, reviewer_role)
                 )
             """))
-            session.exec(text("CREATE INDEX IF NOT EXISTS ix_reviews_mentor ON mentor_reviews(mentor_id)"))
-            session.exec(text("CREATE INDEX IF NOT EXISTS ix_reviews_booking ON mentor_reviews(booking_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_reviews_advisor ON advisor_reviews(advisor_id)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS ix_reviews_booking ON advisor_reviews(booking_id)"))
             session.commit()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("ensure_mentor_tables: mentor_reviews: %s", exc)
+            logger.warning("ensure_advisor_tables: advisor_reviews: %s", exc)
             session.rollback()
 
 

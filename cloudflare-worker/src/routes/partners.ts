@@ -30,7 +30,7 @@ function cosineSimilarity(a: Record<number, number>, b: Record<number, number>):
 // Listing returns each partner row. Admins additionally get linked-user
 // metadata (email, KYC, active, verified) so they can open the full
 // user-profile modal from a partner row. Non-admin authenticated users
-// (founder/partner/investor/mentor) only get the public partner directory
+// (founder/partner/investor/advisor) only get the public partner directory
 // fields PLUS the linked user_id (Task #39 — needed by the partner-row
 // trust-score badge for admin/investor/partner viewers; the trust-score
 // endpoint itself enforces viewer-role access). No other users'

@@ -27,7 +27,7 @@ export const TIER_PLANS = {
       'Unlimited customer interviews + OKRs',
       'Pitch deck builder + share links',
       'Cap-table scenarios + simulator',
-      'Mentor booking & office hours',
+      'Advisor booking & office hours',
       'AI scoring + co-marketing',
     ],
   },

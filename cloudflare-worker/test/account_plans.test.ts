@@ -25,10 +25,10 @@ test('planGroupForRole: founder/investor have dedicated pipelines → null', () 
   assert.equal(planGroupForRole('INVESTOR'), null); // case-insensitive
 });
 
-test('planGroupForRole: partner maps to its own group; mentor maps to advisor', () => {
+test('planGroupForRole: partner maps to its own group; advisor maps to advisor', () => {
   assert.equal(planGroupForRole('partner'), 'partner');
-  assert.equal(planGroupForRole('mentor'), 'advisor');
-  assert.equal(planGroupForRole('Mentor'), 'advisor');
+  assert.equal(planGroupForRole('advisor'), 'advisor');
+  assert.equal(planGroupForRole('Advisor'), 'advisor');
 });
 
 test('planGroupForRole: any other role defaults to its own name (generic)', () => {

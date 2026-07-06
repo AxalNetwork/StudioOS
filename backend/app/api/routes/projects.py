@@ -157,7 +157,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
             "title": "A founder backed by an operating network.",
             "founder": {"initials": "—", "name": "Founder", "role": "Founder & CEO",
                         "bio": "[draft — add your founder profile in the Team module]"},
-            "advisorsLabel": "ADVISORS & MENTORS",
+            "advisorsLabel": "ADVISORS & ADVISORS",
             "advisors": [["DK", "Daniel Kerr", "Former CRO"], ["RP", "Rina Patel", "Fintech GTM"]],
             "centerName": name,
             "nodes": [
@@ -232,7 +232,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
         "market": "MARKET. Message: credible bottom-up serviceable market.\nAUTO: TAM/SAM/SOM figures, why-now lines.\nMANUAL: sizing assumptions + citation basis.",
         "solution": "SOLUTION. Message: data \u2192 live score, four steps.\nAUTO: step copy from capabilities.\nMANUAL: confirm target outcome metrics vs. latest pilot.",
         "roadmap": "ROADMAP. Message: operating plan on the 30-day cadence.\nAUTO: Now/Next/Later from OKRs + status flags.\nMANUAL: none if tracker is current.",
-        "team": "TEAM & NETWORK. Message: founder inside a structured operating network.\nAUTO: founder profile, advisor/mentor roster, network nodes.\nMANUAL: advisor consent; swap initials for headshots.",
+        "team": "TEAM & NETWORK. Message: founder inside a structured operating network.\nAUTO: founder profile, advisor roster, network nodes.\nMANUAL: advisor consent; swap initials for headshots.",
         "captable": "CAP TABLE & INCORPORATION. Message: legal + equity setup is investor-ready.\nAUTO: readiness checklist statuses, cap-table splits.\nMANUAL: none if module current.",
         "ask": "THE ASK. Message: specific raise tied to a milestone.\nAUTO: raise, runway, allocations, milestone.\nMANUAL: confirm instrument/cap + close with counsel.",
         "deal": "DEAL READINESS. Message: diligence-ready now, frictionless next step.\nAUTO: document statuses, contact.\nMANUAL: confirm live data-room link.",

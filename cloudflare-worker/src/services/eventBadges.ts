@@ -87,7 +87,7 @@ export async function awardCheckinBadges(env: Env, userId: number | null | undef
 /**
  * Award the Demo Day Presenter badge to an agenda speaker — gated to demo_day
  * events whose speaker is a founder (the badge's intent; awarding any speaker
- * would dilute it across mentors/admins). Skips silently if the role lookup or
+ * would dilute it across advisors/admins). Skips silently if the role lookup or
  * schema isn't available. Best-effort.
  */
 export async function awardAgendaSpeakerBadge(

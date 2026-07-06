@@ -145,7 +145,7 @@ test('target_is_not_a_founder: looked-up user.role !== "founder" → 400', async
   const requestIntroLogic = await loadLogic();
   const { deps, calls } = makeDeps({
     lookupFounder: async (env, id) => ({
-      id, email: 'mentor@axal.vc', name: 'Mentor Bob', role: 'mentor',
+      id, email: 'advisor@axal.vc', name: 'Advisor Bob', role: 'advisor',
     }),
   });
   const r = await requestIntroLogic(ENV, INVESTOR, { founder_user_id: 200 }, deps);

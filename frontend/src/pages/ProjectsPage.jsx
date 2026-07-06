@@ -94,7 +94,7 @@ export default function ProjectsPage({ embedded = false }) {
   // else navigates straight to ProjectDetail with `?cb=1` so the slide-over
   // opens automatically.
   const tier = (currentUser?.tier || currentUser?.subscription_plan || 'free').toLowerCase();
-  const isElevated = ['admin','partner','investor','mentor'].includes((currentUser?.role || '').toLowerCase());
+  const isElevated = ['admin','partner','investor','advisor'].includes((currentUser?.role || '').toLowerCase());
   const cbTierLocked = !isElevated && tier !== 'growth' && tier !== 'studio';
   const onCbClick = (p, ev) => {
     ev?.preventDefault?.();

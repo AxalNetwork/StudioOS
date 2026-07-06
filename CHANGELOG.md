@@ -10,6 +10,41 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #74 — Rename the `mentor` role to `advisor`
+
+Atomic cross-layer rename of the **mentor** role → **advisor** across the
+frontend, the Cloudflare Worker, and the dev FastAPI backend. This touches
+identifiers, routes, DB tables/columns, personas, question-bank ids, and all
+user-facing copy — mentor and advisor were the same concept under two names, and
+the split caused drift between the persona bank, the UI, and the docs.
+
+- **Frontend** — `MentorsPage.jsx` → `AdvisorsPage.jsx`; the route is now
+  `/advisors` (with back-compat redirects `/mentors` → `/advisors` and
+  `/for-mentors` → `/for-advisors` in `App.jsx`). All role labels, persona
+  strings, and doc copy renamed.
+- **Worker** — persona/bank ids, route internals, and the `users.role` CHECK
+  now list `'advisor'`. `rebuildUsersRoleCheckForAdvisor` (in
+  `src/util/usersRoleRebuild.ts`, invoked from `index.ts`) relaxes the legacy
+  CHECK in place, loss-free (mirrors the investor rebuild). New coverage in
+  `test/users_role_rebuild.test.ts` (advisor rebuild + advisor/investor
+  compose), already wired into `test:drift`.
+- **FastAPI (dev only)** — `routes/mentors.py` → `advisors.py`,
+  `services/mentors.py` → `advisors.py`; `ensure_mentor_tables` →
+  `ensure_advisor_tables` creates `advisors` / `advisor_bookings` /
+  `advisor_reviews` and `users.advisor_id`. The pre-existing shared
+  `office_hours_slots` table gets an idempotent `mentor_id` → `advisor_id`
+  column rename on boot (dev DB is disposable). No prod SQL migration file —
+  all schema changes run through boot hooks.
+- **Deliberately kept as-is** (distinct concepts that merely share the word
+  "mentor", renaming them would collide or break external contracts): the
+  **"Personal Advisor"** AI feature and `services/advisor/` dir; **Office
+  Hours**; the `coach`/`fit_coach` persona; the `mentor_advisor` partner subtype
+  (label **"Advisor / Mentor"**); the landing-page **`mentor` audience** and its
+  `audience_mentor_*` columns + `mentor-connect` template keys; the
+  network-profiles `kind` taxonomy (`mentor`/`partner`/`advisor`/`investor`);
+  and the legal template files/keys (`mentor_nda`/`mentor_disclaimer`/
+  `mentor_engagement`).
+
 ## Task #72 — Merge Integrations into Settings
 
 Frontend-only IA consolidation. The standalone Integrations marketplace

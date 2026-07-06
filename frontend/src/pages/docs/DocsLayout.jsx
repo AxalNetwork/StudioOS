@@ -443,7 +443,7 @@ export default function DocsLayout() {
               </div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2 dark:text-gray-100">StudioOS Documentation</h1>
               <p className="text-sm text-gray-500">
-                Guides for founders, investors, partners, and mentors using the StudioOS platform.
+                Guides for founders, investors, partners, and advisors using the StudioOS platform.
               </p>
             </header>
 

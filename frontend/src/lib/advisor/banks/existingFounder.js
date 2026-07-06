@@ -3,7 +3,7 @@
  *
  * For founders past the Spin-Out Lab phase: company facts, cap
  * table, financials, pipeline, compliance, capital, roadmap, and
- * mentor needs. Re-uses the AC-1 write-router for the project
+ * advisor needs. Re-uses the AC-1 write-router for the project
  * fields; the rest are recorded by the router and deep-link to the
  * dedicated pages where the structured data lives.
  */
@@ -184,14 +184,14 @@ export const EXISTING_FOUNDER_BANK = [
     validate: all(required, minChars(10)),
   },
 
-  // --- Mentors needed --------------------------------------------------
+  // --- Advisors needed --------------------------------------------------
   {
-    id: 'founder.mentors.needs',
-    label: 'What expertise do you most need from a mentor right now? (comma-separated)',
+    id: 'founder.advisors.needs',
+    label: 'What expertise do you most need from an advisor right now? (comma-separated)',
     type: 'short',
-    explainer: 'We’ll use this for mentor matching on the Network page.',
-    doc_anchor: 'portals/mentor',
-    page_target: '/network/mentors',
+    explainer: 'We’ll use this for advisor matching on the Network page.',
+    doc_anchor: 'portals/advisor',
+    page_target: '/network/advisors',
     validate: all(required, csvNonEmpty(1)),
   },
 ];

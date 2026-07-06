@@ -26,7 +26,7 @@ export const CIRCLE_TYPES = [
   { id: 'partner', label: 'Service partner circles', short: 'Partners', icon: 'Handshake', accent: 'sky',
     blurb: 'Vetted operators — legal, finance, GTM, design, engineering.' },
   { id: 'advisor', label: 'Advisor circles', short: 'Advisors', icon: 'GraduationCap', accent: 'amber',
-    blurb: 'Mentors and domain experts offering office hours and guidance.' },
+    blurb: 'Advisors and domain experts offering office hours and guidance.' },
   { id: 'city', label: 'City / region circles', short: 'City & region', icon: 'MapPin', accent: 'rose',
     blurb: 'Local hubs for in-person meetups and regional dealflow.' },
   { id: 'topic', label: 'Topic circles', short: 'Topics', icon: 'Sparkles', accent: 'indigo',
@@ -95,7 +95,7 @@ export const PROGRAMS = [
     cadence: 'Weekly',
     format: 'online',
     audience: ['founders'],
-    description: '30-minute slots with Axal VC partners and mentors on fundraising, product, and GTM.',
+    description: '30-minute slots with Axal VC partners and advisors on fundraising, product, and GTM.',
     nextSession: 'Every Tuesday · 10:00 PT',
     status: 'open',
   },
@@ -169,7 +169,7 @@ export const DIRECTORY_CATEGORIES = [
   { id: 'investors', label: 'Investors & LPs', icon: 'TrendingUp', live: false,
     blurb: 'Angels, funds, and limited partners active in the network.' },
   { id: 'advisors', label: 'Advisors', icon: 'GraduationCap', live: false,
-    blurb: 'Mentors and domain experts offering office hours and guidance.' },
+    blurb: 'Advisors and domain experts offering office hours and guidance.' },
 ];
 
 // Small curated preview sets for the not-yet-live Directory tabs. Clearly

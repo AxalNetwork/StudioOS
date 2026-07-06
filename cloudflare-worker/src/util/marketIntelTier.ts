@@ -6,7 +6,7 @@
  *
  * Free / Starter callers see only the sector-compass overview; this
  * predicate returns true for the entitled cohort:
- *   - admin / partner / mentor       → bypass (operations roles)
+ *   - admin / partner / advisor       → bypass (operations roles)
  *   - investor with professional+    → full lens
  *   - founder with growth/studio     → full lens
  */
@@ -16,7 +16,7 @@ import type { TierUser } from '../middleware/requireTier';
 
 export type MIUser = User & Partial<TierUser> & Partial<InvestorUser>;
 
-const FULL_LENS_BYPASS_ROLES = ['admin', 'partner', 'mentor'] as const;
+const FULL_LENS_BYPASS_ROLES = ['admin', 'partner', 'advisor'] as const;
 
 export function callerHasFullLens(user: MIUser | null | undefined): boolean {
   if (!user) return false;

@@ -150,7 +150,7 @@ function resolveChannels(prefs: Record<string, any>, type: string, requested: No
 
 /**
  * Task #1 (Slack, 2026-05-10) — Block Kit renderer for the 5 spec'd
- * trigger events (contract_signed, deal_stage_change, mentor_session_booked,
+ * trigger events (contract_signed, deal_stage_change, advisor_session_booked,
  * score_generated, dd_report_ready). Unknown event types fall through to a
  * plain section block so any future notify() call still delivers something
  * useful instead of silently dropping the Slack channel.
@@ -163,7 +163,7 @@ function buildSlackBlocks(args: NotifyArgs, appUrl: string): Record<string, unkn
   const HEADERS: Record<string, string> = {
     contract_signed: ':inbox_tray: Contract signed',
     deal_stage_change: ':twisted_rightwards_arrows: Deal stage updated',
-    mentor_session_booked: ':calendar: Mentor session booked',
+    advisor_session_booked: ':calendar: Advisor session booked',
     score_generated: ':bar_chart: New score generated',
     dd_report_ready: ':page_facing_up: Due diligence report ready',
   };

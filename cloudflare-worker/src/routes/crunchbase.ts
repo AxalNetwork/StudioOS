@@ -7,7 +7,7 @@
  *   POST /api/crunchbase/projects/:id/apply      — persist snapshot to project
  *   GET  /api/crunchbase/projects/:id/competitors — sector-heuristic peers
  *
- * Tier-gated to growth (founders); admin/partner/investor/mentor bypass.
+ * Tier-gated to growth (founders); admin/partner/investor/advisor bypass.
  * Mutating routes additionally require admin OR the owning founder.
  */
 import { Hono, type Context } from 'hono';
@@ -31,7 +31,7 @@ import {
 const crunchbase = new Hono<{ Bindings: Env }>();
 
 function gateTier(user: User): void {
-  // ensureTier short-circuits non-founder roles (admin/partner/investor/mentor).
+  // ensureTier short-circuits non-founder roles (admin/partner/investor/advisor).
   ensureTier(user, 'growth');
 }
 
@@ -154,7 +154,7 @@ crunchbase.get('/projects/:id/competitors', async (c) => {
   gateTier(user);
   const projectId = c.req.param('id') || '';
   // Authz parity with /apply: admin OR owning founder only. Admin/partner/
-  // investor/mentor roles get blanket read here only via admin; the rest
+  // investor/advisor roles get blanket read here only via admin; the rest
   // of the elevated roles do NOT get to enumerate arbitrary projects'
   // enrichment context (IDOR guard).
   const owned = await loadProjectForWrite(c, user, projectId);

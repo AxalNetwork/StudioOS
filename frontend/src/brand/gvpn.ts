@@ -41,7 +41,7 @@ export const LEGAL_ENTITIES = {
 export const NETWORK_LAYERS = [
   { id: "trust",          name: "Trust",            blurb: "KYC, KYB, accreditation, NDAs, sanctions." },
   { id: "build",          name: "Build",            blurb: "Projects, Pipeline, Studio Ops, Brand, Pitch Deck, Roadmap, Customer Discovery." },
-  { id: "validate_grow",  name: "Validate & Grow",  blurb: "Scoring, Mentors, Office Hours, Co-founder Match, Market Intelligence." },
+  { id: "validate_grow",  name: "Validate & Grow",  blurb: "Scoring, Advisors, Office Hours, Co-founder Match, Market Intelligence." },
   { id: "capital",        name: "Capital",          blurb: "Capital, Investors, Cap Table, Funds, Reserves, Waterfall, Liquidity." },
   { id: "legal",          name: "Legal",            blurb: "Incorporation, 83(b), Cofounder Agreement, Compliance, E-Sign." },
   { id: "network",        name: "Network",          blurb: "Marketplace, Partners, Co-marketing, Public Directory, Refer & Earn." },
@@ -73,12 +73,12 @@ export const LANES = [
     href: "/register?lane=founder",
   },
   {
-    id: "mentor",
+    id: "advisor",
     label: "Become an Advisor",
     short: "For Advisors",
     accent: "teal",
-    blurb: "Operators sharing time. Office Hours, mentor sessions, advisor grants via the FAST template.",
-    href: "/register?lane=mentor",
+    blurb: "Operators sharing time. Office Hours, advisor sessions, advisor grants via the FAST template.",
+    href: "/register?lane=advisor",
   },
 ] as const;
 

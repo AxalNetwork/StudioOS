@@ -147,13 +147,13 @@ marketIntel.get('/competitive-intelligence', (c) => {
 });
 
 // Task #6 (W-1) — Market Intelligence export. Free investors get a paywall;
-// Professional+ (and admin/partner/mentor bypass) can pull a CSV of the
+// Professional+ (and admin/partner/advisor bypass) can pull a CSV of the
 // current Market Pulse + private rounds. Founders see this surface but
 // behind the founder-tier gate (Studio); they never hit this gate because
 // the route is only mounted under investor auth in practice.
 marketIntel.get('/export', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
-  // Investors must hold Professional+. Other roles (admin/partner/mentor)
+  // Investors must hold Professional+. Other roles (admin/partner/advisor)
   // bypass the gate inside ensureInvestorTier; founders aren't expected here.
   if (user.role === 'investor') {
     ensureInvestorTier(user, 'professional');
@@ -195,11 +195,11 @@ marketIntel.get('/export', async (c) => {
 //   • Growth/Pro      → full lens + watchlist read.
 //   • Studio/Pro      → exports + alerts (watchlist write).
 //   • Institutional   → quarterly Axal-VC PDF queue.
-// Bypass roles (admin/partner/mentor) always see the full surface.
+// Bypass roles (admin/partner/advisor) always see the full surface.
 // ─────────────────────────────────────────────────────────────────────────
 
-type Role = 'admin' | 'founder' | 'partner' | 'investor' | 'mentor';
-const FULL_LENS_BYPASS: Role[] = ['admin', 'partner', 'mentor'];
+type Role = 'admin' | 'founder' | 'partner' | 'investor' | 'advisor';
+const FULL_LENS_BYPASS: Role[] = ['admin', 'partner', 'advisor'];
 
 interface IndexRow {
   sector: string; geo: string; period_key: string;
@@ -313,7 +313,7 @@ marketIntel.get('/founder-lens', async (c) => {
 /** Investor lens — capital + sentiment ordering. Investor Pro+/bypass only. */
 marketIntel.get('/investor-lens', async (c) => {
   const user = await requireAuth(c);
-  // Strict gate: investors must hold Pro+; admin/partner/mentor bypass;
+  // Strict gate: investors must hold Pro+; admin/partner/advisor bypass;
   // founders/other roles never see the investor lens (use /founder-lens).
   if (FULL_LENS_BYPASS.includes(user.role as Role)) {
     /* bypass */
@@ -661,7 +661,7 @@ marketIntel.get('/capital-velocity', async (c) => {
   return c.json({ items, k_min: K_MIN, source: 'advisor' });
 });
 
-// 7. /partner-pulse — rolling supply-side topics aggregated across mentors+partners.
+// 7. /partner-pulse — rolling supply-side topics aggregated across advisors+partners.
 marketIntel.get('/partner-pulse', async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT dimension_key, period_key, n, value FROM market_intel_aggregates
@@ -856,7 +856,7 @@ async function disclosedIdentities(env: Env, viewerId: number, targetUserIds: nu
 // Task #4 (CF) — Platform Personas tab.
 //
 // Single endpoint returns 8 chart payloads describing the anonymised
-// composition of platform users (founders, investors, mentors, partners).
+// composition of platform users (founders, investors, advisors, partners).
 // Every cell enforces k ≥ 5; sub-K cells are suppressed (returned as
 // `null` or omitted from the payload entirely).
 //
@@ -935,7 +935,7 @@ function suppressBelowK<T extends { n: number }>(rows: T[]): T[] {
 
 function tierKind(user: MIUser): 'free' | 'full' | 'export' {
   const role = String(user.role || '').toLowerCase();
-  if (role === 'admin' || role === 'partner' || role === 'mentor') return 'export';
+  if (role === 'admin' || role === 'partner' || role === 'advisor') return 'export';
   if (role === 'investor') {
     const t = effectiveInvestorTier(user as InvestorUser);
     if (t === 'institutional') return 'export';
@@ -1457,7 +1457,7 @@ export async function sendPlatformPersonasDigest(env: Env): Promise<{ scanned: n
         WHERE is_active = 1
           AND (
             LOWER(COALESCE(subscription_tier,'')) IN ('studio','institutional')
-            OR LOWER(role) IN ('admin','partner','mentor')
+            OR LOWER(role) IN ('admin','partner','advisor')
           )`,
     ).all<{ id: number; tier: string; role: string }>()).results || [];
     scanned = rows.length;

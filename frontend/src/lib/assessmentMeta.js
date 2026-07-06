@@ -110,7 +110,7 @@ export const ARCHETYPES = {
     description: 'Installs process and systems that outlast any single engagement.',
     icon: 'ruler', accent: '#10b981',
   },
-  // Mentor / coach.
+  // Advisor / coach.
   mt_sage_guide: {
     label: 'Sage Guide', tagline: 'Wisdom and perspective when it counts.',
     description: 'Leads with long-range perspective, judgement, and empathy.',

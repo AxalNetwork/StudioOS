@@ -15,7 +15,7 @@
  */
 import { all, required, minChars, maxChars, csvNonEmpty, oneOf, nonNegativeNumber } from '../validators';
 
-const ROLES = ['Investor', 'Service Provider', 'Mentor / Advisor', 'Strategic Partner', 'Other'];
+const ROLES = ['Investor', 'Service Provider', 'Advisor / Mentor', 'Strategic Partner', 'Other'];
 const SERVICES = ['Capital', 'Engineering', 'Design', 'Legal', 'Sales / GTM', 'Marketing', 'Recruiting', 'Operations', 'Other'];
 // Cash / Equity / Hybrid are the three core comp models from the
 // task spec; `Pro Bono` is an intentional fourth bucket so partners

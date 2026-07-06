@@ -20,7 +20,7 @@
  *
  *   (B) Pure-logic checks of the shared predicates:
  *       - `tierKind(user)` mirror — Free / Growth / Studio / Investor /
- *         Admin/Partner/Mentor bypass.
+ *         Admin/Partner/Advisor bypass.
  *       - `suppressBelowK` k-anonymity — n<5 dropped, n=5 kept (boundary).
  *
  *   (C) Hono runtime test that proves the tier gating + k-anonymity
@@ -143,7 +143,7 @@ test('SLO contract is documented in the route header comment', async () => {
 // Mirror of `tierKind` from routes/market_intel.ts.
 function tierKind(user) {
   const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'partner' || role === 'mentor') return 'export';
+  if (role === 'admin' || role === 'partner' || role === 'advisor') return 'export';
   if (role === 'investor') {
     const t = String(user?.investor_tier ?? user?.subscription_tier ?? 'free').toLowerCase();
     if (t === 'institutional') return 'export';
@@ -172,7 +172,7 @@ test('tierKind: free / growth / studio / investor / admin bypass', () => {
   assert.equal(tierKind({ role: 'investor', investor_tier: 'free' }), 'free');
   assert.equal(tierKind({ role: 'admin' }), 'export');
   assert.equal(tierKind({ role: 'partner' }), 'export');
-  assert.equal(tierKind({ role: 'mentor' }), 'export');
+  assert.equal(tierKind({ role: 'advisor' }), 'export');
 });
 
 test('k-anonymity: rows with n<5 are suppressed; n=5 boundary kept', () => {

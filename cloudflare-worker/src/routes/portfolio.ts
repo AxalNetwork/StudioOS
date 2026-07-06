@@ -5,7 +5,7 @@
  * Visibility:
  *   admin/investor/partner   -> every project
  *   founder                  -> only projects they own
- *   mentor                   -> 403
+ *   advisor                   -> 403
  *
  * The recompute endpoints write a fresh snapshot using a lightweight scoring
  * model: traction (deals + tickets + recent activity) + score_snapshots

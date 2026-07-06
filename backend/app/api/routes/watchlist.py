@@ -16,7 +16,7 @@
 
   GET    /antiportfolio                 — aggregate roll-up of pass-decisions
 
-Role gate (admin/investor/partner only — founders + mentors get 403):
+Role gate (admin/investor/partner only — founders + advisors get 403):
 the watchlist + journal is a capital-side DD instrument, not a founder
 self-service tool.
 """

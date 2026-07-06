@@ -9,7 +9,7 @@
  *   - Persona / tier / rate / cost / arg-shape gating is delegated to AW's
  *     `gateToolCall` (see guardrails.ts). The /api/advisor/tool route runs
  *     the gate before invoking executeTool() here.
- *   - Search-flavoured tools (findMentor / findInvestor / findPartner /
+ *   - Search-flavoured tools (findAdvisor / findInvestor / findPartner /
  *     findDeal) are backed by the `axal-search` Vectorize index via
  *     services/vectorize.searchSemantic.
  *   - Tier-gated tools (findInvestor, startContract,
@@ -24,7 +24,7 @@
  *   }
  *
  * The `route` field is always a relative app-router path (e.g.
- * `/mentorship?mentor=42`); never an external URL. The chat row component
+ * `/advisorship?advisor=42`); never an external URL. The chat row component
  * renders `cta.primary` as the highlighted button and `cta.secondary` as a
  * ghost button beneath it.
  */
@@ -66,7 +66,7 @@ export interface ToolContext {
 }
 
 export type ToolName =
-  | 'findMentor'
+  | 'findAdvisor'
   | 'findInvestor'
   | 'findPartner'
   | 'findDeal'
@@ -80,7 +80,7 @@ export type ToolName =
   | 'surfacePaywall';
 
 export const ALL_TOOL_NAMES: ToolName[] = [
-  'findMentor', 'findInvestor', 'findPartner', 'findDeal',
+  'findAdvisor', 'findInvestor', 'findPartner', 'findDeal',
   'openPage', 'startContract', 'bookOfficeHours', 'exploreDocs',
   'draftCofounderAgreement', 'scheduleMeeting', 'listMyTasks',
   'surfacePaywall',
@@ -116,7 +116,7 @@ const PAGE_ALLOWLIST: Record<string, string> = {
   '/onboarding/persona': 'Persona',
   '/matches': 'AI Matches',
   '/portfolio': 'Portfolio',
-  '/mentors': 'Mentors',
+  '/advisors': 'Advisors',
   '/partners': 'Partners',
   '/marketplace': 'Marketplace',
   '/incorporate': 'Incorporate',
@@ -166,26 +166,26 @@ function hitsToResult(hits: SearchHit[]) {
   }));
 }
 
-async function findMentor(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
+async function findAdvisor(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const query = asString(args?.query || args?.q || args?.expertise || '');
   const limit = asPositiveInt(args?.limit) || 5;
-  const hits = await searchByType(ctx.env, query, 'mentor', limit);
-  const result = { query, count: hits.length, mentors: hitsToResult(hits) };
+  const hits = await searchByType(ctx.env, query, 'advisor', limit);
+  const result = { query, count: hits.length, advisors: hitsToResult(hits) };
   const top = hits[0];
-  // Frontend route is `/mentors` (App.jsx) — not `/mentorship`.
-  const browseRoute = '/mentors';
-  const topRoute = top?.url && top.url.startsWith('/mentors') ? top.url : browseRoute;
+  // Frontend route is `/advisors` (App.jsx) — not `/advisorship`.
+  const browseRoute = '/advisors';
+  const topRoute = top?.url && top.url.startsWith('/advisors') ? top.url : browseRoute;
   const cta: ToolCta = top
     ? {
         label: `Open ${top.title}`,
         route: topRoute,
         primary: { label: `Open ${top.title}`, route: topRoute },
-        secondary: { label: 'Browse all mentors', route: browseRoute },
+        secondary: { label: 'Browse all advisors', route: browseRoute },
       }
     : {
-        label: 'Browse mentors',
+        label: 'Browse advisors',
         route: browseRoute,
-        primary: { label: 'Browse mentors', route: browseRoute },
+        primary: { label: 'Browse advisors', route: browseRoute },
       };
   return { result, cta };
 }
@@ -300,21 +300,21 @@ async function startContract(ctx: ToolContext, args: ToolArgs): Promise<ToolEnve
 }
 
 async function bookOfficeHours(_ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
-  const mentorId = asPositiveInt(args?.mentor_id || args?.id);
+  const advisorId = asPositiveInt(args?.advisor_id || args?.id);
   const slotId = asPositiveInt(args?.slot_id);
   const params = new URLSearchParams();
-  if (mentorId) params.set('mentor', String(mentorId));
+  if (advisorId) params.set('advisor', String(advisorId));
   if (slotId) params.set('slot', String(slotId));
   params.set('book', '1');
-  // Frontend route is `/mentors` (App.jsx); MentorsPage reads ?mentor=&book=
-  const route = `/mentors?${params.toString()}`;
-  const label = mentorId ? `Book mentor #${mentorId}` : 'Book office hours';
+  // Frontend route is `/advisors` (App.jsx); AdvisorsPage reads ?advisor=&book=
+  const route = `/advisors?${params.toString()}`;
+  const label = advisorId ? `Book advisor #${advisorId}` : 'Book office hours';
   return {
-    result: { mentor_id: mentorId, slot_id: slotId },
+    result: { advisor_id: advisorId, slot_id: slotId },
     cta: {
       label, route,
       primary: { label, route },
-      secondary: { label: 'Find a different mentor', route: '/mentors' },
+      secondary: { label: 'Find a different advisor', route: '/advisors' },
     },
   };
 }
@@ -440,7 +440,7 @@ export type ToolArgs = Record<string, unknown>;
 type ToolFn = (ctx: ToolContext, args: ToolArgs) => Promise<ToolEnvelope>;
 
 export const TOOL_REGISTRY: Record<ToolName, ToolFn> = {
-  findMentor,
+  findAdvisor,
   findInvestor,
   findPartner,
   findDeal,
@@ -471,8 +471,8 @@ export interface ToolJsonSchema {
 }
 export const TOOL_SCHEMAS: Array<{ name: ToolName; description: string; parameters: ToolJsonSchema }> = [
   {
-    name: 'findMentor',
-    description: 'Find a mentor by topic or expertise (e.g. "fundraising", "B2B GTM").',
+    name: 'findAdvisor',
+    description: 'Find an advisor by topic or expertise (e.g. "fundraising", "B2B GTM").',
     parameters: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'number' } }, required: ['query'] },
   },
   {
@@ -502,8 +502,8 @@ export const TOOL_SCHEMAS: Array<{ name: ToolName; description: string; paramete
   },
   {
     name: 'bookOfficeHours',
-    description: 'Open the office-hours booking flow for a specific mentor.',
-    parameters: { type: 'object', properties: { mentor_id: { type: 'number' }, slot_id: { type: 'number' } } },
+    description: 'Open the office-hours booking flow for a specific advisor.',
+    parameters: { type: 'object', properties: { advisor_id: { type: 'number' }, slot_id: { type: 'number' } } },
   },
   {
     name: 'exploreDocs',

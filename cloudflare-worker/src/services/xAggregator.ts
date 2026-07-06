@@ -18,7 +18,7 @@ const AUDIENCE_HASHTAGS: Record<string, string[]> = {
   public:    ['#VentureStudio', '#Startups', '#AxalNetwork'],
   founders:  ['#Founders', '#BuildInPublic'],
   investors: ['#VC', '#DealFlow'],
-  mentors:   ['#StartupMentor'],
+  advisors:   ['#StartupAdvisor'],
   partners:  ['#OperatingPartner'],
   alumni:    ['#AxalAlumni'],
 };
@@ -125,7 +125,7 @@ async function buildPublicDraft(env: Env, w: BuildInput): Promise<XDraft> {
 async function buildFoundersDraft(env: Env, w: BuildInput): Promise<XDraft> {
   const sessions = await safeCount(
     env,
-    `SELECT COUNT(*) AS n FROM mentor_sessions WHERE created_at >= ? AND created_at <= ?`,
+    `SELECT COUNT(*) AS n FROM advisor_sessions WHERE created_at >= ? AND created_at <= ?`,
     w.periodStart, w.periodEnd,
   );
   const intros = await safeCount(
@@ -134,7 +134,7 @@ async function buildFoundersDraft(env: Env, w: BuildInput): Promise<XDraft> {
     w.periodStart, w.periodEnd,
   );
   const body = append(
-    `Founders, this week at Axal:\n• ${sessions} mentor sessions booked\n• ${intros} deal-room intros opened\n\nIf you're building, we want to meet you.`,
+    `Founders, this week at Axal:\n• ${sessions} advisor sessions booked\n• ${intros} deal-room intros opened\n\nIf you're building, we want to meet you.`,
     AUDIENCE_HASHTAGS.founders,
   );
   return {
@@ -168,20 +168,20 @@ async function buildInvestorsDraft(env: Env, w: BuildInput): Promise<XDraft> {
   };
 }
 
-async function buildMentorsDraft(env: Env, w: BuildInput): Promise<XDraft> {
+async function buildAdvisorsDraft(env: Env, w: BuildInput): Promise<XDraft> {
   const requests = await safeCount(
     env,
     `SELECT COUNT(*) AS n FROM partner_office_hours WHERE created_at >= ? AND created_at <= ?`,
     w.periodStart, w.periodEnd,
   );
   const body = append(
-    `Shout-out to the Axal mentor bench — ${requests} office-hours requests fielded this week. Thank you.`,
-    AUDIENCE_HASHTAGS.mentors,
+    `Shout-out to the Axal advisor bench — ${requests} office-hours requests fielded this week. Thank you.`,
+    AUDIENCE_HASHTAGS.advisors,
   );
   return {
-    audience: 'mentors', kind: 'mentors_brief', title: 'Mentors brief',
+    audience: 'advisors', kind: 'advisors_brief', title: 'Advisors brief',
     body, thread: splitIntoThread(body),
-    hashtags: AUDIENCE_HASHTAGS.mentors,
+    hashtags: AUDIENCE_HASHTAGS.advisors,
     needs_media: false,
     payload: { requests, period_days: w.periodDays },
   };
@@ -224,12 +224,12 @@ const BUILDERS: Record<XAudience, (env: Env, w: BuildInput) => Promise<XDraft>> 
   public: buildPublicDraft,
   founders: buildFoundersDraft,
   investors: buildInvestorsDraft,
-  mentors: buildMentorsDraft,
+  advisors: buildAdvisorsDraft,
   partners: buildPartnersDraft,
   alumni: buildAlumniDraft,
 };
 
-export const X_AUDIENCES: XAudience[] = ['public', 'founders', 'investors', 'mentors', 'partners', 'alumni'];
+export const X_AUDIENCES: XAudience[] = ['public', 'founders', 'investors', 'advisors', 'partners', 'alumni'];
 
 export async function previewXAll(env: Env, periodDays: number): Promise<XDraft[]> {
   const periodEnd = new Date().toISOString();

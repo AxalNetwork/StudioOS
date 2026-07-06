@@ -19,7 +19,7 @@ import SignalEvidencePanel from '../components/signals/SignalEvidencePanel';
  */
 export default function SignalsPage({ user }) {
   const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
-  const mode = String(user?.role || '').toLowerCase() === 'mentor' ? 'advisor' : 'founder';
+  const mode = String(user?.role || '').toLowerCase() === 'advisor' ? 'advisor' : 'founder';
 
   const [filters, setFilters] = useState({});
   const [facets, setFacets] = useState(null);

@@ -79,7 +79,7 @@ export default {
       id: 'due-diligence',
       title: 'Due Diligence',
       overview:
-        "Due Diligence (DD) is the structured workflow investors, partners, mentors, and admins use to review a deal before committing. Founders never read a DD report on themselves; they upload requested documents and respond to questions raised in the DD checklist.",
+        "Due Diligence (DD) is the structured workflow investors, partners, advisors, and admins use to review a deal before committing. Founders never read a DD report on themselves; they upload requested documents and respond to questions raised in the DD checklist.",
       howto: [
         'Founders — open Due Diligence on your startup to see open requests and upload requested docs.',
         'Reviewers — open Due Diligence from the deal record; sign the NDA, then walk the checklist (financials, legal, team, IP, market).',
@@ -100,19 +100,19 @@ export default {
       ],
     },
     {
-      id: 'mentors',
-      title: 'Mentors & booking sessions',
+      id: 'advisors',
+      title: 'Advisors & booking sessions',
       overview:
-        "Mentors are domain experts (operators, ex-founders, functional leaders) you can book time with. Browse the directory, filter by expertise, and book a 30- or 60-minute session that lands on both calendars.",
+        "Advisors are domain experts (operators, ex-founders, functional leaders) you can book time with. Browse the directory, filter by expertise, and book a 30- or 60-minute session that lands on both calendars.",
       howto: [
-        'Open Mentors from the Network sidebar group.',
+        'Open Advisors from the Network sidebar group.',
         'Filter by expertise, sector, or availability.',
-        'Click a mentor to view their bio and open slots, then pick a time and book.',
-        'You’ll get a calendar invite with a join link; the mentor gets the same.',
+        'Click an advisor to view their bio and open slots, then pick a time and book.',
+        'You’ll get a calendar invite with a join link; the advisor gets the same.',
       ],
       tips: [
-        'Send a one-paragraph context note when you book — mentors prepare better with a clear ask.',
-        'Capture the mentor’s feedback in your Decision Journal so you don’t lose it.',
+        'Send a one-paragraph context note when you book — advisors prepare better with a clear ask.',
+        'Capture the advisor’s feedback in your Decision Journal so you don’t lose it.',
       ],
       pitfalls: [
         'Booking without a calendar connected forces a manual ICS download — connect a calendar first.',
@@ -127,7 +127,7 @@ export default {
       id: 'office-hours',
       title: 'Office Hours',
       overview:
-        "Office Hours are recurring open slots that mentors and partners publish. Drop in for a 15-minute conversation without the formality of a full mentor booking — great for quick questions or a second opinion.",
+        "Office Hours are recurring open slots that advisors and partners publish. Drop in for a 15-minute conversation without the formality of a full advisor booking — great for quick questions or a second opinion.",
       howto: [
         'Open Office Hours and pick a host with availability this week.',
         'Choose a 15-minute slot and confirm.',
@@ -135,14 +135,14 @@ export default {
       ],
       tips: [
         'Slots fill fast on Mondays — book on Friday for the following week.',
-        'Recurring problems? Convert to a full mentor booking instead.',
+        'Recurring problems? Convert to a full advisor booking instead.',
       ],
       pitfalls: [
         'Showing up with five questions in a 15-minute slot wastes everyone’s time — book a full session if you need depth.',
         'Booking back-to-back slots with the same host is rate-limited; spread them across hosts.',
       ],
       related: [
-        { label: 'Mentors', href: '#validate-grow/mentors' },
+        { label: 'Advisors', href: '#validate-grow/advisors' },
         { label: 'Partners & Co-marketing', href: '#network/partners' },
       ],
     },
@@ -173,9 +173,9 @@ export default {
       id: 'expert-profiles',
       title: 'Expert profiles',
       overview:
-        "Every mentor and operating expert has a public profile page showing their background, areas of expertise, languages, time zone, and open booking slots. Profiles are the entry point for booking sessions and for partner introductions.",
+        "Every advisor and operating expert has a public profile page showing their background, areas of expertise, languages, time zone, and open booking slots. Profiles are the entry point for booking sessions and for partner introductions.",
       howto: [
-        'Open Mentors from the Network sidebar and click any name to land on the expert\'s profile.',
+        'Open Advisors from the Network sidebar and click any name to land on the expert\'s profile.',
         'Read the bio, expertise tags, and recent engagement signals (sessions completed, average rating).',
         'Pick an open slot from the calendar on the right to book directly.',
         'Use the "Share profile" link to send the page to a co-founder for a second opinion before booking.',
@@ -189,7 +189,7 @@ export default {
         'A blank availability calendar usually means the expert is fully booked this week — check back later or open Office Hours instead.',
       ],
       related: [
-        { label: 'Mentors & booking sessions', href: '#validate-grow/mentors' },
+        { label: 'Advisors & booking sessions', href: '#validate-grow/advisors' },
         { label: 'Office Hours', href: '#validate-grow/office-hours' },
       ],
     },
@@ -206,14 +206,14 @@ export default {
       ],
       tips: [
         'Set a weekly reminder — the value comes from a continuous trend, not single entries.',
-        'Use the “share with mentor” option only with people you trust to hold the data.',
+        'Use the “share with advisor” option only with people you trust to hold the data.',
       ],
       pitfalls: [
         'Treating the check-in as a performance metric defeats it; honest entries beat optimistic ones.',
         'The mental-health partner is the right resource for crisis support — don’t rely on chat or community channels.',
       ],
       related: [
-        { label: 'Mentors', href: '#validate-grow/mentors' },
+        { label: 'Advisors', href: '#validate-grow/advisors' },
       ],
     },
     {

@@ -26,10 +26,10 @@ import {
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
-// (admin/partner/investor/mentor) always pass; founders are gated by their
+// (admin/partner/investor/advisor) always pass; founders are gated by their
 // `subscription_tier` column. Mirrors the worker's `userMeetsTier` helper.
 const TIER_RANK = { free: 0, growth: 1, studio: 2 };
-const BYPASS_ROLES = new Set(['admin', 'partner', 'investor', 'mentor']);
+const BYPASS_ROLES = new Set(['admin', 'partner', 'investor', 'advisor']);
 export function hasTier(user, requiredTier) {
   if (!requiredTier || requiredTier === 'free') return true;
   if (!user) return false;
@@ -39,11 +39,11 @@ export function hasTier(user, requiredTier) {
 }
 
 // Task #7 (W-2) — Investor tier ladder mirrors the worker's
-// `userMeetsInvestorTier`. Bypass roles (admin/partner/mentor) always pass.
+// `userMeetsInvestorTier`. Bypass roles (admin/partner/advisor) always pass.
 // Trialing/active are honoured via the `investor_subscription_status` column;
 // past_due/unpaid/cancelled drop the user to free.
 const INVESTOR_RANK = { free: 0, professional: 1, institutional: 2 };
-const INVESTOR_BYPASS_ROLES = new Set(['admin', 'partner', 'mentor']);
+const INVESTOR_BYPASS_ROLES = new Set(['admin', 'partner', 'advisor']);
 export function hasInvestorTier(user, required) {
   if (!required || required === 'free') return true;
   if (!user) return false;
@@ -58,7 +58,7 @@ export function hasInvestorTier(user, required) {
 // Phase D · sidebar slim-down — fewer, broader groups per role plus a
 // collapsed "More" bucket for advanced/occasional destinations. No routes
 // were removed: every item that used to live here still does, so the
-// learning curve drops without losing reachability. Mentor is already lean
+// learning curve drops without losing reachability. Advisor is already lean
 // and is left unchanged.
 export const SIDEBAR_GROUPS = {
   admin: [
@@ -184,11 +184,11 @@ export const SIDEBAR_GROUPS = {
       // redirected from those routes into the matching ?tab= in App.jsx).
       { to: '/build/command-center', icon: LayoutGrid, label: 'Command Center', match: ['/build/command-center', '/founder', '/execution', '/studio-ops', '/spinouts', '/spin-outs', '/projects', '/pipeline', '/build/roadmap'] },
       { to: '/signals', icon: Radar, label: 'Signals' },
-      // Team Building — consolidates the former "Find a Mentor" (Validate),
+      // Team Building — consolidates the former "Find a Advisor" (Validate),
       // "Find a Co-founder" (Validate) and "Jobs" (Launch) items into one
       // workspace at /build/team. `match` keeps this row active when a founder
       // deep-links (or is redirected from) the legacy standalone routes.
-      { to: '/build/team', icon: Users, label: 'Team', match: ['/build/team', '/mentors', '/cofounder', '/my/jobs', '/jobs', '/my/applications'] },
+      { to: '/build/team', icon: Users, label: 'Team', match: ['/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications'] },
       { to: '/build/metrics', icon: TrendingUp, label: 'Metrics' },
       { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
     ]},
@@ -279,7 +279,7 @@ export const SIDEBAR_GROUPS = {
   //     /liquidity "Liquidity & Exits", /legal-capital "Legal & Capital" —
   //     investor/founder capital surfaces; conditional for equity-holding
   //     partners only.
-  //   • /mentors "Find a Mentor" — founder-oriented (a service partner is the
+  //   • /advisors "Find a Advisor" — founder-oriented (a service partner is the
   //     expert, not the mentee); conditional.
   //   • /network-effects "Network Effects" — too abstract to earn a nav slot.
   //   • /articles/draft "Articles" — low-frequency authoring; conditional for
@@ -369,7 +369,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust & Identity' },
-      { to: '/mentors', icon: Users, label: 'Mentors' },
+      { to: '/advisors', icon: Users, label: 'Advisors' },
       { to: '/partners', icon: Network, label: 'Partners' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
@@ -384,7 +384,7 @@ export const SIDEBAR_GROUPS = {
     ]},
   ],
 
-  mentor: [
+  advisor: [
     { key: 'home', label: 'Home', items: [
       { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
     ]},
@@ -392,7 +392,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
-      { to: '/mentors', icon: UserCircle, label: 'Mentor Directory' },
+      { to: '/advisors', icon: UserCircle, label: 'Advisor Directory' },
       { to: '/signals', icon: Radar, label: 'Signals' },
       { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/tickets', icon: Ticket, label: 'Support' },

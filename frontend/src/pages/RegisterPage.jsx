@@ -287,7 +287,7 @@ export default function RegisterPage() {
         localStorage.setItem('token', loginRes.token);
         localStorage.setItem('user', JSON.stringify(loginRes.user));
         // All new users land on the AI onboarding chatbot, which classifies
-        // their persona (Founder / Investor / Mentor / Operator / Counsel /
+        // their persona (Founder / Investor / Advisor / Operator / Counsel /
         // Technical / Liquidity) and promotes role from the 'partner'
         // default to 'founder'/'investor' when appropriate. Existing inline
         // chat step in RegisterPage is best-effort capture; this guarantees

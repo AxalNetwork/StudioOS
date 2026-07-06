@@ -31,7 +31,7 @@ test('investor is denied — no blanket bypass (masked paths gate separately)', 
 
 test('guest and unknown roles are denied', () => {
   assert.equal(canAccessFounderResource(mk('guest'), 42), false);
-  assert.equal(canAccessFounderResource(mk('mentor'), 42), false);
+  assert.equal(canAccessFounderResource(mk('advisor'), 42), false);
 });
 
 test('null ownerFounderId denies all non-staff roles', () => {

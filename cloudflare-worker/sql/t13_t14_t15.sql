@@ -1,4 +1,4 @@
--- T13/T14/T15 — Mentors, Partner Office Hours, Watchlist, Decision Journal,
+-- T13/T14/T15 — Advisors, Partner Office Hours, Watchlist, Decision Journal,
 -- Portfolio Health, Reference Checks, Co-marketing, Company Profiles,
 -- Founder Needs / RFPs / Quotes / Engagements, Insights.
 --
@@ -10,9 +10,9 @@
 -- no `SELECT ... FOR UPDATE`.
 
 -- ---------------------------------------------------------------------------
--- T13.1 — Mentors + office-hour slots + bookings + reviews
+-- T13.1 — Advisors + office-hour slots + bookings + reviews
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS mentors (
+CREATE TABLE IF NOT EXISTS advisors (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uid TEXT NOT NULL UNIQUE,
   user_id INTEGER UNIQUE,
@@ -27,18 +27,18 @@ CREATE TABLE IF NOT EXISTS mentors (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_mentors_active ON mentors(is_active);
+CREATE INDEX IF NOT EXISTS idx_advisors_active ON advisors(is_active);
 
--- Augment users so a user row knows about its mentor profile.
+-- Augment users so a user row knows about its advisor profile.
 -- D1/SQLite: ALTER TABLE ADD COLUMN is fine; this errors if already present
 -- on re-run, so we wrap in a no-op TRY pattern via separate file convention.
 -- (Operators applying twice should ignore the "duplicate column" error.)
-ALTER TABLE users ADD COLUMN mentor_id INTEGER;
+ALTER TABLE users ADD COLUMN advisor_id INTEGER;
 
-CREATE TABLE IF NOT EXISTS mentor_office_hour_slots (
+CREATE TABLE IF NOT EXISTS advisor_office_hour_slots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uid TEXT NOT NULL UNIQUE,
-  mentor_id INTEGER NOT NULL,
+  advisor_id INTEGER NOT NULL,
   starts_at TEXT NOT NULL,
   ends_at TEXT NOT NULL,
   capacity INTEGER NOT NULL DEFAULT 1,
@@ -47,13 +47,13 @@ CREATE TABLE IF NOT EXISTS mentor_office_hour_slots (
   is_cancelled INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_mentor_slots_mentor ON mentor_office_hour_slots(mentor_id, starts_at);
+CREATE INDEX IF NOT EXISTS idx_advisor_slots_advisor ON advisor_office_hour_slots(advisor_id, starts_at);
 
-CREATE TABLE IF NOT EXISTS mentor_bookings (
+CREATE TABLE IF NOT EXISTS advisor_bookings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uid TEXT NOT NULL UNIQUE,
   slot_id INTEGER NOT NULL,
-  mentor_id INTEGER NOT NULL,
+  advisor_id INTEGER NOT NULL,
   founder_user_id INTEGER NOT NULL,
   topic TEXT,
   notes TEXT,
@@ -63,15 +63,15 @@ CREATE TABLE IF NOT EXISTS mentor_bookings (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (slot_id, founder_user_id)
 );
-CREATE INDEX IF NOT EXISTS idx_mentor_bookings_mentor ON mentor_bookings(mentor_id, status);
-CREATE INDEX IF NOT EXISTS idx_mentor_bookings_founder ON mentor_bookings(founder_user_id, status);
+CREATE INDEX IF NOT EXISTS idx_advisor_bookings_advisor ON advisor_bookings(advisor_id, status);
+CREATE INDEX IF NOT EXISTS idx_advisor_bookings_founder ON advisor_bookings(founder_user_id, status);
 
-CREATE TABLE IF NOT EXISTS mentor_reviews (
+CREATE TABLE IF NOT EXISTS advisor_reviews (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uid TEXT NOT NULL UNIQUE,
   booking_id INTEGER NOT NULL,
   reviewer_user_id INTEGER NOT NULL,
-  reviewer_role TEXT NOT NULL, -- 'founder' | 'mentor'
+  reviewer_role TEXT NOT NULL, -- 'founder' | 'advisor'
   rating INTEGER NOT NULL,     -- 1..5
   comment TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS mentor_reviews (
 );
 
 -- ---------------------------------------------------------------------------
--- T13.2 — Partner office hours (separate tables; same shape as mentor)
+-- T13.2 — Partner office hours (separate tables; same shape as advisor)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS partner_office_hour_slots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

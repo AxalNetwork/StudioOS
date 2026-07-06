@@ -51,7 +51,7 @@ def is_admin(user: User) -> bool:
 
 
 def can_use(user: User) -> bool:
-    """Founder + mentor are blocked. Watchlist/journal is a capital-side
+    """Founder + advisor are blocked. Watchlist/journal is a capital-side
     DD instrument."""
     return role(user) in {"admin", "investor", "partner"}
 

@@ -57,9 +57,9 @@ test('RED_FLAGS: exactly the 7 named flags, each with a spec', () => {
 // ---------------------------------------------------------------------------
 // Rubrics — exact categories + weights from the spec.
 // ---------------------------------------------------------------------------
-test('RUBRICS: five fit personas; mentor and coach share one rubric', () => {
-  assert.deepEqual(FIT_PERSONAS.sort(), ['coach', 'founder', 'investor', 'mentor', 'partner']);
-  assert.deepEqual(RUBRICS.mentor, RUBRICS.coach);
+test('RUBRICS: five fit personas; advisor and coach share one rubric', () => {
+  assert.deepEqual(FIT_PERSONAS.sort(), ['advisor', 'coach', 'founder', 'investor', 'partner']);
+  assert.deepEqual(RUBRICS.advisor, RUBRICS.coach);
   for (const p of FIT_PERSONAS) assert.ok(isFitPersona(p));
   assert.equal(isFitPersona('admin'), false);
 });
@@ -71,7 +71,7 @@ test('RUBRICS: founder rubric matches the spec weights exactly', () => {
   });
 });
 
-test('RUBRICS: investor / partner / mentor rubrics match the spec weights', () => {
+test('RUBRICS: investor / partner / advisor rubrics match the spec weights', () => {
   assert.deepEqual(RUBRICS.investor, {
     thesis_fit: 20, capital_quality: 15, governance_style: 15,
     reputation: 20, decision_quality: 15, values_fit: 15,
@@ -80,15 +80,15 @@ test('RUBRICS: investor / partner / mentor rubrics match the spec weights', () =
     strategic_alignment: 20, trustworthiness: 20, network_quality: 15,
     execution_support: 15, collaboration_style: 15, reputation: 15,
   });
-  assert.deepEqual(RUBRICS.mentor, {
+  assert.deepEqual(RUBRICS.advisor, {
     domain_expertise: 25, teaching_ability: 20, listening: 15,
     founder_empathy: 15, reliability: 15, values_alignment: 10,
   });
-  // Investor/partner/mentor sum to 100; founder is relative (110) → normalized at score time.
+  // Investor/partner/advisor sum to 100; founder is relative (110) → normalized at score time.
   const sum = (r: Record<string, number>) => Object.values(r).reduce((a, b) => a + b, 0);
   assert.equal(sum(RUBRICS.investor), 100);
   assert.equal(sum(RUBRICS.partner), 100);
-  assert.equal(sum(RUBRICS.mentor), 100);
+  assert.equal(sum(RUBRICS.advisor), 100);
 });
 
 // ---------------------------------------------------------------------------
@@ -141,7 +141,7 @@ test('scoreRubric: no answers → 0 score, 0 coverage (no NaN)', () => {
 });
 
 test('scoreRubric: out-of-range raw scores are clamped to 0..5', () => {
-  const r = scoreRubric('mentor', { domain_expertise: 9, teaching_ability: -3 });
+  const r = scoreRubric('advisor', { domain_expertise: 9, teaching_ability: -3 });
   assert.equal(r.per_category.domain_expertise.score, 5);
   assert.equal(r.per_category.teaching_ability.score, 0);
 });

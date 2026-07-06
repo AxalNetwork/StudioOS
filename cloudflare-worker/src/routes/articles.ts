@@ -5,7 +5,7 @@
  * tables with the (legacy) /api/news surface — same lazy schema bootstrap
  * via `ensureNewsSchema`. The differences vs /api/news:
  *
- *   - Role-aware listing: `?role=founder|investor|mentor|partner|admin`
+ *   - Role-aware listing: `?role=founder|investor|advisor|partner|admin`
  *   - Per-author endpoint for profile tabs: `GET /by-author/:user_id`
  *   - Sector taxonomy endpoint: `GET /sectors` (single source of truth)
  *   - Cover served at `/api/articles/cover/:id` (alongside legacy
@@ -65,7 +65,7 @@ const IMAGE_MIME: Record<string, string> = {
 // because we purge those exactly by key in bustArticleEdgeCache.
 const CACHE_TTL_SECONDS = 60 * 24 * 60 * 60; // 60 days (slug + cover only)
 const LIST_CACHE_TTL_SECONDS = 5 * 60;       // 5 minutes
-const VALID_AUTHOR_ROLES = new Set(['admin', 'founder', 'investor', 'partner', 'mentor', 'coach']);
+const VALID_AUTHOR_ROLES = new Set(['admin', 'founder', 'investor', 'partner', 'advisor', 'coach']);
 
 function bytesFromBase64(b64: string): Uint8Array {
   const bin = atob(b64);

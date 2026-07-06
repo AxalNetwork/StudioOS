@@ -65,7 +65,7 @@ export async function ensureTelegramSchema(env: Env): Promise<void> {
         "('axalvc-public', '@axalvc Public', 'public', 0)," +
         "('axal-founders', 'Axal Founders', 'founders', 1)," +
         "('axal-investors', 'Axal Investors', 'investors', 1)," +
-        "('axal-mentors', 'Axal Mentors', 'mentors', 1)," +
+        "('axal-advisors', 'Axal Advisors', 'advisors', 1)," +
         "('axal-partners', 'Axal Operating Partners', 'partners', 1)," +
         "('axal-alumni', 'Axal Alumni', 'alumni', 1)",
     );
@@ -79,7 +79,7 @@ export const TELEGRAM_AUDIENCES = [
   'public',
   'founders',
   'investors',
-  'mentors',
+  'advisors',
   'partners',
   'alumni',
 ] as const;

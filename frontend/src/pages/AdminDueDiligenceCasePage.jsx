@@ -393,7 +393,7 @@ function VerdictModal({ section, attachments, onClose, onSave, onUploadNda }) {
 // Expertise-driven reviewer picker. Backend /dd/experts returns
 // `suggestions` (users who have completed prior verdicts on this same
 // section_key, ranked by review count) and `eligible` (all admin/
-// partner/mentor/investor users) as a fallback. Admins can still type
+// partner/advisor/investor users) as a fallback. Admins can still type
 // any user id manually if the dropdown doesn't surface the right
 // person.
 function AssignModal({ section, onClose, onSave }) {

@@ -197,8 +197,8 @@ export function ensureMethodAllowed(user: User | null, methodId: string, premium
   if (!premiumIds.includes(methodId)) return;
   const tier = String((user as any)?.subscription_tier || 'free').toLowerCase();
   if (tierCovers(tier, 'growth')) return;
-  // Bypass roles (admin, partner, investor, mentor) — these never hit a paywall.
-  if (user && ['admin', 'partner', 'investor', 'mentor'].includes(String(user.role))) return;
+  // Bypass roles (admin, partner, investor, advisor) — these never hit a paywall.
+  if (user && ['admin', 'partner', 'investor', 'advisor'].includes(String(user.role))) return;
   const err: any = new Error('PAYWALL_PREMIUM_METHOD');
   err.method_id = methodId;
   err.required_tier = 'growth';

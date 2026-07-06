@@ -91,7 +91,7 @@ def _record_resend(email: str):
 class RegisterRequest(BaseModel):
     email: str
     name: str
-    role: str = Field("partner", pattern="^(founder|partner|investor|mentor)$")
+    role: str = Field("partner", pattern="^(founder|partner|investor|advisor)$")
     ref_code: Optional[str] = None
     # Phase C4 — honeypot. Real users never see/fill this field; bots that
     # autofill every input will set it. Non-empty value = bot, drop request.

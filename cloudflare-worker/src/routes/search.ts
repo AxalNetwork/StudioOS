@@ -149,7 +149,7 @@ const TABLE_BY_TYPE: Record<EntityType, string> = {
   partner: 'users',
   document: 'legal_documents',
   academy_lesson: 'academy_lessons',
-  mentor: 'mentors',
+  advisor: 'advisors',
   investor: 'users',
 };
 

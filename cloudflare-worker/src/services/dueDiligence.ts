@@ -29,7 +29,7 @@ export interface SectionDef {
   applies_to: ReadonlyArray<DDSubjectType>;
 }
 
-export type DDSubjectType = 'project' | 'founder' | 'mentor' | 'investor' | 'partner';
+export type DDSubjectType = 'project' | 'founder' | 'advisor' | 'investor' | 'partner';
 
 // Weights tuned so the heaviest sections (legal, financial, founder
 // integrity) dominate the composite. Sum doesn't have to equal 1 — the
@@ -37,12 +37,12 @@ export type DDSubjectType = 'project' | 'founder' | 'mentor' | 'investor' | 'par
 export const SECTION_CATALOG: ReadonlyArray<SectionDef> = [
   { key: 'corporate_legal',  title: 'Corporate & Legal Structure',     weight: 1.5, applies_to: ['project','founder','partner'] },
   { key: 'financial_health', title: 'Financial Health & Runway',       weight: 1.5, applies_to: ['project','founder','investor'] },
-  { key: 'founder_integrity',title: 'Founder Background & Integrity',  weight: 1.5, applies_to: ['founder','mentor','investor'] },
+  { key: 'founder_integrity',title: 'Founder Background & Integrity',  weight: 1.5, applies_to: ['founder','advisor','investor'] },
   { key: 'product_tech',     title: 'Product & Technology Risk',       weight: 1.0, applies_to: ['project'] },
   { key: 'market_traction',  title: 'Market & Traction',               weight: 1.0, applies_to: ['project','founder'] },
   { key: 'market_position',  title: 'Market Position & Competitors',   weight: 1.0, applies_to: ['project','founder'] },
-  { key: 'compliance_aml',   title: 'Compliance / AML / Sanctions',    weight: 1.5, applies_to: ['project','founder','mentor','investor','partner'] },
-  { key: 'reputation_press', title: 'Reputation & Press Signals',      weight: 0.75,applies_to: ['project','founder','mentor','investor','partner'] },
+  { key: 'compliance_aml',   title: 'Compliance / AML / Sanctions',    weight: 1.5, applies_to: ['project','founder','advisor','investor','partner'] },
+  { key: 'reputation_press', title: 'Reputation & Press Signals',      weight: 0.75,applies_to: ['project','founder','advisor','investor','partner'] },
   { key: 'cyber_posture',    title: 'Cyber & Data Posture',            weight: 1.0, applies_to: ['project','partner'] },
   // Task #8 (X-1) — Partner-specific KYB / KYC / Accreditation. KYB is
   // ALWAYS seeded by activatePartnerDealOnSignature; KYC + Accreditation

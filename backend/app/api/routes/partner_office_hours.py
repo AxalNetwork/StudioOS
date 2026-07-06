@@ -1,6 +1,6 @@
 """Task #54 — Partner office hours.
 
-Mirrors the mentor office-hour flow but for service-provider Partners.
+Mirrors the advisor office-hour flow but for service-provider Partners.
 
 Surfaces:
   * Partner-side: publish bookable slots, list / cancel my slots,
@@ -9,7 +9,7 @@ Surfaces:
     cancel my own booking.
   * The unified calendar layer (`/api/calendar/events`) ingests
     confirmed/requested partner bookings as a new source kind
-    (`partner_office_hour`) so they appear alongside mentor bookings,
+    (`partner_office_hour`) so they appear alongside advisor bookings,
     IC meetings, and founder check-ins.
 """
 from __future__ import annotations

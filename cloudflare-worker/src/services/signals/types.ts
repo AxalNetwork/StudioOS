@@ -221,7 +221,7 @@ export interface Signal {
   evidence_items: EvidenceItem[];
 
   founder_opportunity: string; // founder-mode call to action
-  advisor_note: string; // advisor/mentor-mode framing
+  advisor_note: string; // advisor-mode framing
   build: BuildOpportunity;
   market?: MarketContext;
 

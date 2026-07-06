@@ -9,7 +9,7 @@
  *                   LP reporting, peer benchmarks, 100 intros / quarter,
  *                   up to 4 seat colleagues
  *
- * Bypass roles: admin, partner, mentor — never hit the gate. Founders
+ * Bypass roles: admin, partner, advisor — never hit the gate. Founders
  * never see investor surfaces so they're not in the bypass list (they'll
  * just 401 on /api/introductions etc).
  *
@@ -28,7 +28,7 @@ const TIER_RANK: Record<InvestorTier, number> = {
   institutional: 2,
 };
 
-const BYPASS_ROLES = new Set<string>(['admin', 'partner', 'mentor']);
+const BYPASS_ROLES = new Set<string>(['admin', 'partner', 'advisor']);
 
 const TIER_COPY: Record<Exclude<InvestorTier, 'free'>, string> = {
   professional:

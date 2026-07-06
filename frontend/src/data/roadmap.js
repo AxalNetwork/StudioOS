@@ -6,7 +6,7 @@
  * `/api/public/roadmap/votes` endpoint persists votes against — keep
  * ids stable across releases so vote counts aren't reset.
  *
- * Audience tags: founder | investor | partner | mentor | all
+ * Audience tags: founder | investor | partner | advisor | all
  */
 export const ROADMAP_ITEMS = [
   // Soon — this quarter
@@ -44,12 +44,12 @@ export const ROADMAP_ITEMS = [
     body: 'Natural-language prompts ("model a $2M SAFE at $10M cap") that produce a fully dilutive scenario.',
   },
   {
-    id: 'mentor-quality-score',
+    id: 'advisor-quality-score',
     column: 'next',
-    title: 'Mentor quality score',
-    audience: 'mentor',
+    title: 'Advisor quality score',
+    audience: 'advisor',
     status: 'Planned',
-    body: 'Founder-rated and outcome-tracked score to surface top mentors in the matching algorithm.',
+    body: 'Founder-rated and outcome-tracked score to surface top advisors in the matching algorithm.',
   },
   {
     id: 'multi-language-fr-ca',
@@ -88,6 +88,6 @@ export const AUDIENCE_LABELS = {
   founder: { label: 'Founder', color: 'bg-blue-100 text-blue-700' },
   investor: { label: 'Investor', color: 'bg-purple-100 text-purple-700' },
   partner: { label: 'Partner', color: 'bg-emerald-100 text-emerald-700' },
-  mentor: { label: 'Mentor', color: 'bg-amber-100 text-amber-700' },
+  advisor: { label: 'Advisor', color: 'bg-amber-100 text-amber-700' },
   all: { label: 'Everyone', color: 'bg-gray-100 text-gray-700' },
 };

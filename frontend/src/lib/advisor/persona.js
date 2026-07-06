@@ -12,14 +12,14 @@
  *   - role 'founder' + spinout_lab_active        → NEW_FOUNDER_BANK
  *   - role 'founder' + !spinout_lab_active       → EXISTING_FOUNDER_BANK
  *   - role 'investor'                            → INVESTOR_BANK
- *   - role 'mentor'                              → MENTOR_BANK
+ *   - role 'advisor'                              → ADVISOR_BANK
  *   - role 'partner'                             → PARTNER_BANK
  *   - role 'admin' / null / 'unknown' / other    → null (let backend handle)
  */
 import NEW_FOUNDER_BANK from './banks/newFounder';
 import EXISTING_FOUNDER_BANK from './banks/existingFounder';
 import INVESTOR_BANK from './banks/investor';
-import MENTOR_BANK from './banks/mentor';
+import ADVISOR_BANK from './banks/advisor';
 import PARTNER_BANK from './banks/partner';
 
 /**
@@ -47,7 +47,7 @@ export function pickPersonaBank(user, spinoutLabActiveOverride) {
       return active ? NEW_FOUNDER_BANK : EXISTING_FOUNDER_BANK;
     }
     case 'investor': return INVESTOR_BANK;
-    case 'mentor':   return MENTOR_BANK;
+    case 'advisor':   return ADVISOR_BANK;
     case 'partner':  return PARTNER_BANK;
     default:         return null;
   }
@@ -56,14 +56,14 @@ export function pickPersonaBank(user, spinoutLabActiveOverride) {
 /**
  * Persona key getter used by Market Intelligence (Task #1 AT-2) for
  * routing decisions like founder vs investor fit lookups. Returns one
- * of: 'founder' | 'investor' | 'mentor' | 'partner' | 'admin' | null.
+ * of: 'founder' | 'investor' | 'advisor' | 'partner' | 'admin' | null.
  *
  * Centralised here so callers don't re-derive persona from `user.role`
  * inline (which would drift from the bank-picking rules above).
  */
 export function getPersonaKey(user) {
   const role = String(user?.role || '').toLowerCase();
-  if (role === 'founder' || role === 'investor' || role === 'mentor' ||
+  if (role === 'founder' || role === 'investor' || role === 'advisor' ||
       role === 'partner' || role === 'admin') return role;
   return null;
 }
@@ -72,7 +72,7 @@ export const BANKS = {
   newFounder: NEW_FOUNDER_BANK,
   existingFounder: EXISTING_FOUNDER_BANK,
   investor: INVESTOR_BANK,
-  mentor: MENTOR_BANK,
+  advisor: ADVISOR_BANK,
   partner: PARTNER_BANK,
 };
 

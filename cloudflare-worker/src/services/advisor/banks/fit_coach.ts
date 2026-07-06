@@ -2,9 +2,9 @@
  * Task #19 — Best-Fit. Coach fit bank.
  *
  * Coach has no advisor role of its own, so these questions are delivered inside
- * the mentor conversation (Question.persona = 'mentor') but keep the
+ * the advisor conversation (Question.persona = 'advisor') but keep the
  * `fit.coach.*` id prefix so axalFit.ts scores them against the coach rubric
- * (shared with mentor). Behavioral self-ratings (0–5) + the 5 Axal values.
+ * (shared with advisor). Behavioral self-ratings (0–5) + the 5 Axal values.
  */
 import type { Question } from '../questionBank.ts';
 import { buildFitBank, axalValueRows } from './fitShared.ts';

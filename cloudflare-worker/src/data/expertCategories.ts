@@ -6,7 +6,7 @@
  *   - routes/wellbeing.ts          (returns the catalogue to the FE)
  *   - frontend/src/pages/WellbeingPage.jsx (filter dropdown labels)
  *
- * Categories are grouped into seven families (advisory, mentorship, three
+ * Categories are grouped into seven families (advisory, advisorship, three
  * wellness families, lifestyle, cross-cutting). An expert can belong to
  * multiple categories across families.
  */
@@ -18,7 +18,7 @@ export interface ExpertCategoryDef {
 
 export type ExpertCategoryFamily =
   | 'advisory'
-  | 'mentorship'
+  | 'advisorship'
   | 'wellness_mental'
   | 'wellness_physical'
   | 'wellness_clinical'
@@ -27,7 +27,7 @@ export type ExpertCategoryFamily =
 
 export const EXPERT_CATEGORY_FAMILIES: Record<ExpertCategoryFamily, string> = {
   advisory: 'Advisory',
-  mentorship: 'Mentorship',
+  advisorship: 'Advisorship',
   wellness_mental: 'Wellness — Mental & Emotional',
   wellness_physical: 'Wellness — Physical',
   wellness_clinical: 'Wellness — Clinical / Functional',
@@ -52,13 +52,13 @@ export const EXPERT_CATEGORIES: ExpertCategoryDef[] = [
   { key: 'operations_advisor', label: 'Operations advisor', family: 'advisory' },
   { key: 'international_expansion_advisor', label: 'International expansion advisor', family: 'advisory' },
 
-  // Mentorship
-  { key: 'peer_founder_mentor', label: 'Peer founder mentor', family: 'mentorship' },
-  { key: 'second_time_founder_mentor', label: 'Second-time founder mentor', family: 'mentorship' },
-  { key: 'exited_founder_mentor', label: 'Exited founder mentor', family: 'mentorship' },
-  { key: 'industry_mentor', label: 'Industry-vertical mentor', family: 'mentorship' },
-  { key: 'first_time_founder_mentor', label: 'First-time founder mentor', family: 'mentorship' },
-  { key: 'minority_founder_mentor', label: 'Underrepresented founder mentor', family: 'mentorship' },
+  // Advisorship
+  { key: 'peer_founder_advisor', label: 'Peer founder advisor', family: 'advisorship' },
+  { key: 'second_time_founder_advisor', label: 'Second-time founder advisor', family: 'advisorship' },
+  { key: 'exited_founder_advisor', label: 'Exited founder advisor', family: 'advisorship' },
+  { key: 'industry_advisor', label: 'Industry-vertical advisor', family: 'advisorship' },
+  { key: 'first_time_founder_advisor', label: 'First-time founder advisor', family: 'advisorship' },
+  { key: 'minority_founder_advisor', label: 'Underrepresented founder advisor', family: 'advisorship' },
 
   // Wellness — Mental & Emotional
   { key: 'executive_coach', label: 'Executive coach', family: 'wellness_mental' },

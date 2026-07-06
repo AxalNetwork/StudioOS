@@ -7,11 +7,11 @@
  *
  *   1. Five counterparty types are always returned, in canonical order.
  *   2. Role pools: cofounder=role 'founder', investor='investor', partner='partner'.
- *   3. mentors directory splits by price: free office-hours → mentor,
+ *   3. advisors directory splits by price: free office-hours → advisor,
  *      paid (hourly_rate_usd > 0) → coach (mutually exclusive).
  *   4. The viewer is never matched against themselves.
  *   5. Role pools are consent-gated (user_settings.matching_opt_in); an opted-out
- *      founder is excluded. The mentor directory is its own opt-in (is_active).
+ *      founder is excluded. The advisor directory is its own opt-in (is_active).
  *   6. Candidates with no values/skills signal are skipped.
  *   7. Each match carries identity + a 0..100 score + band.
  *
@@ -36,7 +36,7 @@ function makeEnv(): { env: Env; raw: DatabaseSync } {
       id INTEGER PRIMARY KEY, uid TEXT, name TEXT, email TEXT,
       role TEXT NOT NULL DEFAULT 'founder', is_active INTEGER DEFAULT 1);
     CREATE TABLE user_settings (user_id INTEGER PRIMARY KEY, matching_opt_in INTEGER DEFAULT 0);
-    CREATE TABLE mentors (
+    CREATE TABLE advisors (
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, display_name TEXT,
       hourly_rate_usd INTEGER, is_active INTEGER DEFAULT 1);
     CREATE TABLE skill_categories (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE);
@@ -109,14 +109,14 @@ async function buildWorld() {
   seedVectors(db, 3, 2, 1);
   seedUser(db, 4, 'partner', 'Partner Cand', true);
   seedVectors(db, 4, 3, 1);
-  // Mentor directory: free office-hours mentor (id 5) + paid coach (id 6).
-  seedUser(db, 5, 'founder', 'Free Mentor', false);
+  // Advisor directory: free office-hours advisor (id 5) + paid coach (id 6).
+  seedUser(db, 5, 'founder', 'Free Advisor', false);
   seedVectors(db, 5, 5, 1);
-  db.prepare(`INSERT INTO mentors (user_id, display_name, hourly_rate_usd, is_active) VALUES (?, ?, ?, 1)`)
-    .run(5, 'Free Mentor', 0);
+  db.prepare(`INSERT INTO advisors (user_id, display_name, hourly_rate_usd, is_active) VALUES (?, ?, ?, 1)`)
+    .run(5, 'Free Advisor', 0);
   seedUser(db, 6, 'founder', 'Paid Coach', false);
   seedVectors(db, 6, 5, 1);
-  db.prepare(`INSERT INTO mentors (user_id, display_name, hourly_rate_usd, is_active) VALUES (?, ?, ?, 1)`)
+  db.prepare(`INSERT INTO advisors (user_id, display_name, hourly_rate_usd, is_active) VALUES (?, ?, ?, 1)`)
     .run(6, 'Paid Coach', 250);
 
   const viewerVectors = await loadUserVectors(env, 1);
@@ -141,10 +141,10 @@ test('role pools resolve by users.role and exclude opted-out + self', async () =
   assert.equal(byType.partner.matches[0].user_id, 4);
 });
 
-test('mentor directory splits by price into mentor vs coach (mutually exclusive)', async () => {
+test('advisor directory splits by price into advisor vs coach (mutually exclusive)', async () => {
   const { byType } = await buildWorld();
-  assert.equal(byType.mentor.count, 1);
-  assert.equal(byType.mentor.matches[0].user_id, 5);
+  assert.equal(byType.advisor.count, 1);
+  assert.equal(byType.advisor.matches[0].user_id, 5);
   assert.equal(byType.coach.count, 1);
   assert.equal(byType.coach.matches[0].user_id, 6);
 });

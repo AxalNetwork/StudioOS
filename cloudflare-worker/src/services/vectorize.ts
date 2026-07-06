@@ -17,9 +17,9 @@ import type { Env } from '../types';
 const EMBED_MODEL = '@cf/baai/bge-base-en-v1.5';
 const MAX_INPUT_CHARS = 4000; // bge models cap around 512 tokens; ~4k chars is safe.
 
-export type EntityType = 'project' | 'deal' | 'founder' | 'partner' | 'document' | 'academy_lesson' | 'mentor' | 'investor';
+export type EntityType = 'project' | 'deal' | 'founder' | 'partner' | 'document' | 'academy_lesson' | 'advisor' | 'investor';
 
-export const ALL_ENTITY_TYPES: EntityType[] = ['project', 'deal', 'founder', 'partner', 'document', 'academy_lesson', 'mentor', 'investor'];
+export const ALL_ENTITY_TYPES: EntityType[] = ['project', 'deal', 'founder', 'partner', 'document', 'academy_lesson', 'advisor', 'investor'];
 
 export interface SearchHit {
   id: string;
@@ -224,11 +224,11 @@ export async function embedAndUpsertById(env: Env, type: EntityType, id: number)
       snippet: (row.summary || '').slice(0, 200),
     });
   }
-  if (type === 'mentor') {
-    // Task #5 (AV) — mentor index for findMentor.
+  if (type === 'advisor') {
+    // Task #5 (AV) — advisor index for findAdvisor.
     const row = await env.DB.prepare(
       `SELECT id, display_name, bio, expertise_json, sectors_json, hourly_rate_usd, is_active
-         FROM mentors WHERE id = ?`
+         FROM advisors WHERE id = ?`
     ).bind(id).first<any>();
     if (!row) { await deleteEntity(env, type, id); return false; }
     let expertise: string[] = []; let sectors: string[] = [];
@@ -245,9 +245,9 @@ export async function embedAndUpsertById(env: Env, type: EntityType, id: number)
         values: vector,
         metadata: {
           type, entity_id: id,
-          title: String(row.display_name || `Mentor #${id}`).slice(0, 200),
-          url: `/mentorship?mentor=${id}`,
-          snippet: `${expertise.slice(0, 3).join(', ') || 'Mentor'} • ${sectorTag || 'multi-sector'}`,
+          title: String(row.display_name || `Advisor #${id}`).slice(0, 200),
+          url: `/advisorship?advisor=${id}`,
+          snippet: `${expertise.slice(0, 3).join(', ') || 'Advisor'} • ${sectorTag || 'multi-sector'}`,
           sector: sectorTag,
           expertise: expertise.slice(0, 5).join(','),
           active: row.is_active ? 1 : 0,
@@ -256,7 +256,7 @@ export async function embedAndUpsertById(env: Env, type: EntityType, id: number)
       }]);
       return true;
     } catch (e: any) {
-      console.error('vectorize.upsert mentor failed:', e?.message);
+      console.error('vectorize.upsert advisor failed:', e?.message);
       return false;
     }
   }

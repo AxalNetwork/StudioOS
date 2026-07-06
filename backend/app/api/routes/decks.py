@@ -474,7 +474,7 @@ def list_methods(user: User = Depends(get_current_user)):
     role = str(getattr(raw_role, "value", raw_role)).lower()
     raw_tier = getattr(user, "subscription_tier", "free") or "free"
     tier = str(getattr(raw_tier, "value", raw_tier)).lower()
-    bypass = role in {"admin", "partner", "investor", "mentor"}
+    bypass = role in {"admin", "partner", "investor", "advisor"}
     tier_ok = tier in {"growth", "studio", "enterprise"}
     methods = [
         {**m, "locked": bool(m["premium"]) and not bypass and not tier_ok}

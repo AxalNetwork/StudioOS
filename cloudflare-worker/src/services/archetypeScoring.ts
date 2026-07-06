@@ -79,7 +79,7 @@ const PARTNER_ARCHETYPES: ArchetypeDefinition[] = [
   { slug: 'pt_systems_builder', label: 'Systems Builder', tagline: 'Puts durable machinery in place.', centroid: C(4, 2, 2, 5) },
 ];
 
-const MENTOR_ARCHETYPES: ArchetypeDefinition[] = [
+const ADVISOR_ARCHETYPES: ArchetypeDefinition[] = [
   { slug: 'mt_sage_guide', label: 'Sage Guide', tagline: 'Wisdom and perspective when it counts.', centroid: C(2, 5, 4, 3) },
   { slug: 'mt_hands_on_coach', label: 'Hands-On Coach', tagline: 'Beside you, session by session.', centroid: C(4, 2, 5, 3) },
   { slug: 'mt_accountability_anchor', label: 'Accountability Anchor', tagline: 'Keeps commitments honest.', centroid: C(3, 2, 4, 5) },
@@ -90,8 +90,8 @@ export const ARCHETYPES: Record<FitPersona, ArchetypeDefinition[]> = {
   founder: FOUNDER_ARCHETYPES,
   investor: INVESTOR_ARCHETYPES,
   partner: PARTNER_ARCHETYPES,
-  mentor: MENTOR_ARCHETYPES,
-  coach: MENTOR_ARCHETYPES, // coach shares the mentor archetype set (as with the rubric)
+  advisor: ADVISOR_ARCHETYPES,
+  coach: ADVISOR_ARCHETYPES, // coach shares the advisor archetype set (as with the rubric)
 };
 
 export function archetypesForPersona(persona: FitPersona): ArchetypeDefinition[] {

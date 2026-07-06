@@ -7,7 +7,7 @@
  * on the user's history. Polls /thread every 20s while open.
  *
  * The Support Hub help panel enforces tier eligibility and only mounts this
- * for Studio / Institutional / Partner / admin / mentor.
+ * for Studio / Institutional / Partner / admin / advisor.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Send, X, Loader2, MessageSquare } from 'lucide-react';

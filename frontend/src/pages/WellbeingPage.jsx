@@ -75,7 +75,7 @@ function Slider({ value, onChange, lowLabel, highLabel, invert }) {
 const QUICK_TAGS = [
   { tag: 'therapist_clinical',     label: 'Therapy' },
   { tag: 'executive_coach',        label: 'Executive coaching' },
-  { tag: 'peer_founder_mentor',    label: 'Peer support' },
+  { tag: 'peer_founder_advisor',    label: 'Peer support' },
   { tag: 'sleep_specialist_physician', label: 'Sleep' },
   { tag: 'burnout_specialist',     label: 'Burnout' },
   { tag: 'psychiatrist',           label: 'Anxiety' },

@@ -188,9 +188,9 @@
       },
       {
         "persona": "founder",
-        "id": "founder.mentors.needs",
-        "page_target": "/mentors",
-        "doc_anchor": "portals/mentor",
+        "id": "founder.advisors.needs",
+        "page_target": "/advisors",
+        "doc_anchor": "portals/advisor",
         "section": "NETWORK"
       },
       {
@@ -305,25 +305,25 @@
       },
       {
         "persona": "founder",
-        "id": "founder.lab.mentors.priority1"
+        "id": "founder.lab.advisors.priority1"
       },
       {
         "persona": "founder",
-        "id": "founder.lab.mentors.intro_target",
+        "id": "founder.lab.advisors.intro_target",
         "mi_section": "partner_pulse"
       },
       {
         "persona": "founder",
-        "id": "founder.lab.mentors.warm_path"
+        "id": "founder.lab.advisors.warm_path"
       },
       {
         "persona": "founder",
-        "id": "founder.lab.mentors.cadence",
+        "id": "founder.lab.advisors.cadence",
         "mi_section": "partner_pulse"
       },
       {
         "persona": "founder",
-        "id": "founder.lab.mentors.style"
+        "id": "founder.lab.advisors.style"
       },
       {
         "persona": "founder",
@@ -1291,61 +1291,61 @@
       {
         "persona": "founder",
         "section": "NETWORK",
-        "page_target": "/mentors",
-        "doc_anchor": "portals/mentor",
-        "id": "founder.mentors.needs"
+        "page_target": "/advisors",
+        "doc_anchor": "portals/advisor",
+        "id": "founder.advisors.needs"
       },
       {
         "persona": "founder",
         "section": "NETWORK",
-        "page_target": "/mentors",
-        "doc_anchor": "portals/mentor",
-        "id": "founder.mentors.current_advisors",
+        "page_target": "/advisors",
+        "doc_anchor": "portals/advisor",
+        "id": "founder.advisors.current_advisors",
         "mi_section": "partner_pulse"
       },
       {
         "persona": "founder",
         "section": "NETWORK",
-        "page_target": "/mentors",
-        "doc_anchor": "portals/mentor",
-        "id": "founder.mentors.most_valuable",
+        "page_target": "/advisors",
+        "doc_anchor": "portals/advisor",
+        "id": "founder.advisors.most_valuable",
         "mi_section": "partner_pulse"
       },
       {
         "persona": "founder",
         "section": "NETWORK",
-        "page_target": "/mentors",
-        "doc_anchor": "portals/mentor",
-        "id": "founder.mentors.gap_areas"
+        "page_target": "/advisors",
+        "doc_anchor": "portals/advisor",
+        "id": "founder.advisors.gap_areas"
       },
       {
         "persona": "founder",
         "section": "NETWORK",
-        "page_target": "/mentors",
-        "doc_anchor": "portals/mentor",
-        "id": "founder.mentors.intro_priority"
+        "page_target": "/advisors",
+        "doc_anchor": "portals/advisor",
+        "id": "founder.advisors.intro_priority"
       },
       {
         "persona": "founder",
         "section": "NETWORK",
-        "page_target": "/mentors",
-        "doc_anchor": "portals/mentor",
+        "page_target": "/advisors",
+        "doc_anchor": "portals/advisor",
         "id": "founder.partners.active_count",
         "mi_section": "partner_pulse"
       },
       {
         "persona": "founder",
         "section": "NETWORK",
-        "page_target": "/mentors",
-        "doc_anchor": "portals/mentor",
+        "page_target": "/advisors",
+        "doc_anchor": "portals/advisor",
         "id": "founder.partners.health_score",
         "mi_section": "partner_pulse"
       },
       {
         "persona": "founder",
         "section": "NETWORK",
-        "page_target": "/mentors",
-        "doc_anchor": "portals/mentor",
+        "page_target": "/advisors",
+        "doc_anchor": "portals/advisor",
         "id": "founder.partners.biggest_friction",
         "mi_section": "partner_pulse"
       },
@@ -3707,226 +3707,226 @@
         "id": "partner.cv.dd.product_roadmap_input"
       }
     ],
-    "mentor": [
+    "advisor": [
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "PROFILE",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.profile.display_name"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.profile.display_name"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "PROFILE",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.profile.bio"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.profile.bio"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "PROFILE",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.profile.linkedin_url"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.profile.linkedin_url"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "PROFILE",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.profile.years_operating"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.profile.years_operating"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "PROFILE",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.profile.exits_or_outcomes"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.profile.exits_or_outcomes"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "PROFILE",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.profile.public_writing"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.profile.public_writing"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "EXPERTISE",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.profile.sectors",
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.profile.sectors",
         "mi_section": "sector_heat"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "EXPERTISE",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.profile.expertise"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.profile.expertise"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "EXPERTISE",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.expertise.stages",
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.expertise.stages",
         "mi_section": "capital_velocity"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "EXPERTISE",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.expertise.geographies",
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.expertise.geographies",
         "mi_section": "sentiment_geo"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "EXPERTISE",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.expertise.adoption_curve",
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.expertise.adoption_curve",
         "mi_section": "talc"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "EXPERTISE",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.expertise.depth_or_breadth"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.expertise.depth_or_breadth"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "TOPICS",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.topics.willing"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.topics.willing"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "TOPICS",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.topics.unwilling"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.topics.unwilling"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "TOPICS",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.topics.signature_session"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.topics.signature_session"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "TOPICS",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.topics.recent_wins",
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.topics.recent_wins",
         "mi_section": "partner_pulse"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "TOPICS",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.topics.preferred_session_length_min"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.topics.preferred_session_length_min"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "TOPICS",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.topics.async_vs_sync"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.topics.async_vs_sync"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "COMP",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.profile.hourly_rate_usd"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.profile.hourly_rate_usd"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "COMP",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.comp.equity_open"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.comp.equity_open"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "COMP",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.comp.minimum_engagement_hours"
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.comp.minimum_engagement_hours"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "CALENDAR",
         "page_target": "/calendar",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.calendar.weekly_hours"
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.calendar.weekly_hours"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "CALENDAR",
         "page_target": "/calendar",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.calendar.timezones_covered",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.calendar.timezones_covered",
         "mi_section": "sentiment_geo"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "CALENDAR",
         "page_target": "/calendar",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.calendar.notice_required_hours"
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.calendar.notice_required_hours"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "CALENDAR",
         "page_target": "/calendar",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.calendar.office_hours_window"
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.calendar.office_hours_window"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "ENGAGEMENT",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.engagement.active_founders",
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.engagement.active_founders",
         "mi_section": "partner_pulse"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "ENGAGEMENT",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.engagement.satisfaction",
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.engagement.satisfaction",
         "mi_section": "sentiment"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "ENGAGEMENT",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.engagement.intros_made_qtr",
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.engagement.intros_made_qtr",
         "mi_section": "partner_pulse"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "ENGAGEMENT",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.engagement.biggest_friction",
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.engagement.biggest_friction",
         "mi_section": "sentiment"
       },
       {
-        "persona": "mentor",
+        "persona": "advisor",
         "section": "ENGAGEMENT",
-        "page_target": "/mentors/me",
-        "doc_anchor": "portals/mentor",
-        "id": "mentor.engagement.referral_likely",
+        "page_target": "/advisors/me",
+        "doc_anchor": "portals/advisor",
+        "id": "advisor.engagement.referral_likely",
         "mi_section": "sentiment"
       }
     ],

@@ -1,6 +1,6 @@
 /* Task #54 — Partner office hours admin.
  *
- * Partner-only page mirroring the mentor OfficeHoursPage flow but for
+ * Partner-only page mirroring the advisor OfficeHoursPage flow but for
  * Partner records. Lets a partner publish bookable slots, manage incoming
  * bookings (confirm / complete / cancel / no-show) and see who booked.
  */

@@ -711,7 +711,7 @@ projects.post('/:projectId/spinout-deck', async (c) => {
   //   - Studio staff (admin/partner) may generate on a founder's behalf →
   //     source = the founder's user account, resolved from projects.founder_id
   //     (same pattern as GET /:id).
-  //   - Investors and mentors are deliberately EXCLUDED here (tighter than the
+  //   - Investors and advisors are deliberately EXCLUDED here (tighter than the
   //     generic canAccessFounderResource bypass): investor project views are
   //     masked via maskFounderForInvestor, and a full demo-day deck would leak
   //     unmasked founder data.
@@ -732,7 +732,7 @@ projects.post('/:projectId/spinout-deck', async (c) => {
   const isStaff = user.role === 'admin' || user.role === 'partner';
   const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
   // Task #1 — accepted co-founders may also generate the deck (advisors are
-  // read-only on data; investors/mentors stay excluded). The deck is ALWAYS
+  // read-only on data; investors/advisors stay excluded). The deck is ALWAYS
   // sourced from the OWNER's Lab data, never the co-founder's.
   let isCofounderMember = false;
   if (!isStaff && !isOwner && user.role !== 'investor') {

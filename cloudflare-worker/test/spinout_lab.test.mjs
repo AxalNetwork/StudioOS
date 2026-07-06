@@ -242,9 +242,9 @@ test('weekMet: week 1 needs project + 3 interviews', async () => {
 
 test('weekMet: week 3 enforces requiredAll AND at least one of requiredAny', async () => {
   const { weekMet } = await loadModule();
-  assert.equal(weekMet(3, new Set(['mentor_meeting_booked'])), false);
+  assert.equal(weekMet(3, new Set(['advisor_meeting_booked'])), false);
   assert.equal(weekMet(3, new Set(['scoring_run_completed'])), false);
-  assert.equal(weekMet(3, new Set(['scoring_run_completed', 'mentor_meeting_booked'])), true);
+  assert.equal(weekMet(3, new Set(['scoring_run_completed', 'advisor_meeting_booked'])), true);
   assert.equal(weekMet(3, new Set(['scoring_run_completed', 'cofounder_request_sent'])), true);
 });
 
@@ -309,7 +309,7 @@ test('happy path: start → 4 weeks of milestones → auto-exit on week 4', asyn
   // ---- Week 3: scoring alone is NOT enough ---------------------------
   r = await recordMilestone(sql, 1, 'scoring_run_completed');
   assert.equal(r.state.week, 3, 'scoring alone does not advance week 3');
-  r = await recordMilestone(sql, 1, 'mentor_meeting_booked');
+  r = await recordMilestone(sql, 1, 'advisor_meeting_booked');
   assert.equal(r.state.week, 4, 'scoring + mentor meets week 3');
 
   // Sanity: lab still on, not yet incorporated.

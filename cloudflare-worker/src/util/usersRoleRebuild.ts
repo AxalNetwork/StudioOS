@@ -69,3 +69,46 @@ export async function rebuildUsersRoleCheckForInvestor(env: Env): Promise<UsersR
   ]);
   return { rebuilt: true };
 }
+
+/**
+ * Task #74 — relax the `users.role` CHECK constraint so it accepts 'advisor'
+ * (the Mentor→Advisor role rename). Identical mechanics to the investor rebuild
+ * above: the new table DDL is derived from the LIVE definition (sqlite_master),
+ * rewriting ONLY (a) the table name → users_new and (b) the role CHECK to also
+ * accept 'advisor'. Every column, default, FK, UNIQUE/CHECK and (replayed) index
+ * is preserved — nothing is hardcoded, so no data or index is lost. Idempotent:
+ * a no-op once the live CHECK already lists 'advisor' (or has no CHECK at all).
+ */
+export async function rebuildUsersRoleCheckForAdvisor(env: Env): Promise<UsersRoleRebuildResult> {
+  const tbl = await env.DB.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
+  ).first<{ sql: string }>();
+  const ddl = (tbl?.sql || '');
+  const needsRebuild = ddl.includes("CHECK") && ddl.includes("'partner'") && !ddl.includes("'advisor'");
+  if (!needsRebuild) return { rebuilt: false };
+
+  // The quoted token 'partner' appears solely in the role CHECK, so this single
+  // replace is targeted and safe. If 'investor' was already inserted after
+  // 'partner' by the investor rebuild, this yields "'partner', 'advisor', 'investor'".
+  const newTableDdl = ddl
+    .replace(/^(\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?)("?)users\2/i, '$1$2users_new$2')
+    .replace("'partner'", "'partner', 'advisor'");
+  const freshCols = await env.DB.prepare("PRAGMA table_info(users)").all<{ name: string }>();
+  const colList = (freshCols.results || []).map(r => r.name).join(', ');
+  const idxRows = await env.DB.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='users' AND sql IS NOT NULL"
+  ).all<{ sql: string }>();
+  const idxStmts = (idxRows.results || [])
+    .map(r => r.sql)
+    .filter((s): s is string => typeof s === 'string' && s.length > 0)
+    .map(s => env.DB.prepare(s));
+  await env.DB.batch([
+    env.DB.prepare("PRAGMA defer_foreign_keys = TRUE"),
+    env.DB.prepare(newTableDdl),
+    env.DB.prepare(`INSERT INTO users_new (${colList}) SELECT ${colList} FROM users`),
+    env.DB.prepare("DROP TABLE users"),
+    env.DB.prepare("ALTER TABLE users_new RENAME TO users"),
+    ...idxStmts,
+  ]);
+  return { rebuilt: true };
+}

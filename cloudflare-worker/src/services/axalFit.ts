@@ -131,11 +131,11 @@ export const RED_FLAG_SPECS: Record<RedFlagKey, RedFlagSpec> = {
 // ---------------------------------------------------------------------------
 // Per-persona weighted rubrics. Weights are RELATIVE — normalized by the sum
 // of ANSWERED weights at score time, so a partially-answered rubric still
-// produces a calibrated 0..100. Mentor and Coach share one rubric.
+// produces a calibrated 0..100. Advisor and Coach share one rubric.
 // ---------------------------------------------------------------------------
 export type RubricCategoryScores = Record<string, number>; // category -> 0..5
 
-const MENTOR_COACH_RUBRIC: Record<string, number> = {
+const ADVISOR_COACH_RUBRIC: Record<string, number> = {
   domain_expertise: 25,
   teaching_ability: 20,
   listening: 15,
@@ -171,8 +171,8 @@ export const RUBRICS: Record<FitPersona, Record<string, number>> = {
     collaboration_style: 15,
     reputation: 15,
   },
-  mentor: MENTOR_COACH_RUBRIC,
-  coach: MENTOR_COACH_RUBRIC,
+  advisor: ADVISOR_COACH_RUBRIC,
+  coach: ADVISOR_COACH_RUBRIC,
 };
 
 export const FIT_PERSONAS = Object.keys(RUBRICS) as FitPersona[];

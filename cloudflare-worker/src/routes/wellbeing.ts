@@ -27,7 +27,7 @@
  *   • Free founders: unlimited check-ins, but max 3 distinct expert profile
  *     views per calendar month.
  *   • Growth/Studio founders: unlimited matches/views.
- *   • Admin/partner/investor/mentor bypass the cap.
+ *   • Admin/partner/investor/advisor bypass the cap.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';

@@ -34,7 +34,7 @@ import * as aiRouter from '../aiRouter';
 // ---------------------------------------------------------------------------
 export const REFUSAL = {
   jailbreak:
-    "I can only help with Axal StudioOS tasks (founder/investor/mentor/partner workflows). I can't follow instructions that try to override my role or reveal my system prompt.",
+    "I can only help with Axal StudioOS tasks (founder/investor/advisor/partner workflows). I can't follow instructions that try to override my role or reveal my system prompt.",
   off_topic:
     "I'm scoped to Axal StudioOS — profile Q&A, deal scoring, portfolio, compliance, etc. For general chat, code, or homework, I'm not the right tool.",
   destructive:
@@ -168,28 +168,28 @@ export interface GateResult {
 // Allowlist by persona — extending here is the only way a new tool reaches
 // the LLM. Tool names mirror the AC-3 chat client's tool registry.
 const TOOL_PERSONA_ALLOWLIST: Record<string, string[]> = {
-  writeAnswer:  ['founder', 'investor', 'mentor', 'partner', 'admin'],
-  openPage:     ['founder', 'investor', 'mentor', 'partner', 'admin'],
-  explainTopic: ['founder', 'investor', 'mentor', 'partner', 'admin'],
+  writeAnswer:  ['founder', 'investor', 'advisor', 'partner', 'admin'],
+  openPage:     ['founder', 'investor', 'advisor', 'partner', 'admin'],
+  explainTopic: ['founder', 'investor', 'advisor', 'partner', 'admin'],
   scoreDeal:    ['investor', 'admin'],
   draftMemo:    ['investor', 'admin'],
   // Task #5 (AV) — Find & deep-link tool registry. Each tool returns
   // {result, cta} so the chatbot can render a one-click route button.
-  findMentor:              ['founder', 'admin'],
+  findAdvisor:              ['founder', 'admin'],
   findInvestor:            ['founder', 'admin'],
   findPartner:             ['founder', 'investor', 'admin'],
   findDeal:                ['investor', 'partner', 'admin'],
   startContract:           ['founder', 'admin'],
   bookOfficeHours:         ['founder', 'admin'],
-  exploreDocs:             ['founder', 'investor', 'mentor', 'partner', 'admin'],
+  exploreDocs:             ['founder', 'investor', 'advisor', 'partner', 'admin'],
   draftCofounderAgreement: ['founder', 'admin'],
-  scheduleMeeting:         ['founder', 'investor', 'mentor', 'partner', 'admin'],
+  scheduleMeeting:         ['founder', 'investor', 'advisor', 'partner', 'admin'],
   // /compliance route is gated to admin/founder/partner only — keep
   // listMyTasks aligned so the CTA always lands on a page the caller
-  // can actually open. Investors/mentors hit a persona_mismatch and
+  // can actually open. Investors/advisors hit a persona_mismatch and
   // get a graceful refusal instead of a dead deep-link.
   listMyTasks:             ['founder', 'partner', 'admin'],
-  surfacePaywall:          ['founder', 'investor', 'mentor', 'partner', 'admin'],
+  surfacePaywall:          ['founder', 'investor', 'advisor', 'partner', 'admin'],
 };
 
 const TOOL_TIER_REQUIRED: Record<string, string | undefined> = {

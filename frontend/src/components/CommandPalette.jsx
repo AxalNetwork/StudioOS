@@ -61,14 +61,14 @@ const QUICK_ACTIONS = [
     id: 'qa.open-advisor',
     label: 'Open Personal Advisor',
     hint: 'Ask the AI advisor',
-    roles: ['admin', 'founder', 'partner', 'investor', 'mentor'],
+    roles: ['admin', 'founder', 'partner', 'investor', 'advisor'],
     run: (nav) => nav('/studio?advisor=1'),
   },
   {
     id: 'qa.open-help',
     label: 'Open Help',
     hint: 'Docs, ticket, contact options',
-    roles: ['admin', 'founder', 'partner', 'investor', 'mentor'],
+    roles: ['admin', 'founder', 'partner', 'investor', 'advisor'],
     run: (nav) => nav('/tickets'),
   },
 ];

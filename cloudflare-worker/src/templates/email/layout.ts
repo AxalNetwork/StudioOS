@@ -16,7 +16,7 @@ import { stripTrailingSlashes } from '../../util/url';
 
 export type TemplateCategory =
   | 'security' | 'billing' | 'contract' | 'deal'
-  | 'mentor' | 'calendar' | 'system' | 'marketing'
+  | 'advisor' | 'calendar' | 'system' | 'marketing'
   | 'partner' | 'spinout' | 'dd' | 'account';
 
 export type TemplateSeverity = 'info' | 'warning' | 'critical';

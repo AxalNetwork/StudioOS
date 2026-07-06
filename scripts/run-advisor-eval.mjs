@@ -10,7 +10,7 @@
  * Usage:
  *   ADVISOR_EVAL_BASE_URL=https://studioos-preview.example.workers.dev \
  *   ADVISOR_EVAL_JWT=eyJhbGciOi… \
- *   node scripts/run-advisor-eval.mjs [--persona=founder|investor|mentor|partner|all]
+ *   node scripts/run-advisor-eval.mjs [--persona=founder|investor|advisor|partner|all]
  *
  * The 50-prompt bank is curated to span every persona × every major
  * section. The script does NOT fail CI — it produces a report we eyeball
@@ -75,17 +75,17 @@ const PROMPTS = [
   { persona: 'investor', prompt: 'How do you think about TAM floors?',                       expected_section: 'THESIS' },
   { persona: 'investor', prompt: 'What is your contrarian take?',                            expected_section: 'THESIS',  mi_section: 'investor_signals' },
   { persona: 'investor', prompt: 'How big is your current fund?',                            expected_section: 'PROFILE', mi_section: 'capital_velocity' },
-  // mentor × 10
-  { persona: 'mentor',  prompt: 'What stages do you mentor?',                                expected_section: 'PROFILE' },
-  { persona: 'mentor',  prompt: 'How many hours per month can you commit?',                   expected_section: 'PROFILE' },
-  { persona: 'mentor',  prompt: 'What sectors are you strongest in?',                         expected_section: 'PROFILE' },
-  { persona: 'mentor',  prompt: 'Do you offer office hours?',                                expected_section: 'AVAILABILITY' },
-  { persona: 'mentor',  prompt: 'How do you prefer founders reach you?',                     expected_section: 'AVAILABILITY' },
-  { persona: 'mentor',  prompt: 'What does a successful mentor relationship look like?',     expected_section: 'EXPERIENCE' },
-  { persona: 'mentor',  prompt: 'What was your most useful piece of mentor advice?',          expected_section: 'EXPERIENCE' },
-  { persona: 'mentor',  prompt: 'Do you take board observer seats?',                         expected_section: 'EXPERIENCE' },
-  { persona: 'mentor',  prompt: 'What kind of founder do you decline to mentor?',             expected_section: 'EXPERIENCE' },
-  { persona: 'mentor',  prompt: 'How do you measure mentee progress?',                       expected_section: 'EXPERIENCE' },
+  // advisor × 10
+  { persona: 'advisor',  prompt: 'What stages do you advisor?',                                expected_section: 'PROFILE' },
+  { persona: 'advisor',  prompt: 'How many hours per month can you commit?',                   expected_section: 'PROFILE' },
+  { persona: 'advisor',  prompt: 'What sectors are you strongest in?',                         expected_section: 'PROFILE' },
+  { persona: 'advisor',  prompt: 'Do you offer office hours?',                                expected_section: 'AVAILABILITY' },
+  { persona: 'advisor',  prompt: 'How do you prefer founders reach you?',                     expected_section: 'AVAILABILITY' },
+  { persona: 'advisor',  prompt: 'What does a successful advisor relationship look like?',     expected_section: 'EXPERIENCE' },
+  { persona: 'advisor',  prompt: 'What was your most useful piece of advisor advice?',          expected_section: 'EXPERIENCE' },
+  { persona: 'advisor',  prompt: 'Do you take board observer seats?',                         expected_section: 'EXPERIENCE' },
+  { persona: 'advisor',  prompt: 'What kind of founder do you decline to advisor?',             expected_section: 'EXPERIENCE' },
+  { persona: 'advisor',  prompt: 'How do you measure mentee progress?',                       expected_section: 'EXPERIENCE' },
   // operating partner × 10 (mixed sub-types)
   { persona: 'partner', prompt: 'What services does your firm provide to startups?',         expected_section: 'OFFERING'  },
   { persona: 'partner', prompt: 'What is your typical pricing model?',                       expected_section: 'PRICING'   },
@@ -100,7 +100,7 @@ const PROMPTS = [
   // role detector × 10 (cold-start)
   { persona: 'unknown', prompt: 'I am a founder building a fintech app.',                    expected_section: 'ROLE' },
   { persona: 'unknown', prompt: 'I invest in early-stage AI companies.',                     expected_section: 'ROLE' },
-  { persona: 'unknown', prompt: 'I mentor first-time founders on go-to-market.',              expected_section: 'ROLE' },
+  { persona: 'unknown', prompt: 'I advisor first-time founders on go-to-market.',              expected_section: 'ROLE' },
   { persona: 'unknown', prompt: 'I represent an operating-partner firm.',                    expected_section: 'ROLE' },
   { persona: 'unknown', prompt: 'I run a corporate venture arm.',                            expected_section: 'ROLE' },
   { persona: 'unknown', prompt: 'I am an angel checking out the platform.',                   expected_section: 'ROLE' },

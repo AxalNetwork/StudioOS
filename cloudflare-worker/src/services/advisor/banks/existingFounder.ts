@@ -192,12 +192,12 @@ export const EXISTING_FOUNDER_BANK: Question[] = [
   ]),
 
   // ---- NETWORK --------------------------------------------------------
-  ...block('NETWORK', '/mentors', 'portals/mentor', [
-    { id: 'founder.mentors.needs', prompt: 'What expertise do you most need from a mentor right now? (comma-separated)', kind: 'short', imp: 'high' },
-    { id: 'founder.mentors.current_advisors', prompt: 'How many active formal advisors do you have today?', kind: 'number', skip: true, mi: 'partner_pulse' },
-    { id: 'founder.mentors.most_valuable', prompt: 'Of your current mentors, who has been most valuable in the last 90 days, and what did they do?', skip: true, mi: 'partner_pulse', sent: true },
-    { id: 'founder.mentors.gap_areas', prompt: "What domain expertise is MISSING from your current network?" },
-    { id: 'founder.mentors.intro_priority', prompt: "Name one specific intro you want this quarter — even an aspirational one." },
+  ...block('NETWORK', '/advisors', 'portals/advisor', [
+    { id: 'founder.advisors.needs', prompt: 'What expertise do you most need from an advisor right now? (comma-separated)', kind: 'short', imp: 'high' },
+    { id: 'founder.advisors.current_advisors', prompt: 'How many active formal advisors do you have today?', kind: 'number', skip: true, mi: 'partner_pulse' },
+    { id: 'founder.advisors.most_valuable', prompt: 'Of your current advisors, who has been most valuable in the last 90 days, and what did they do?', skip: true, mi: 'partner_pulse', sent: true },
+    { id: 'founder.advisors.gap_areas', prompt: "What domain expertise is MISSING from your current network?" },
+    { id: 'founder.advisors.intro_priority', prompt: "Name one specific intro you want this quarter — even an aspirational one." },
     { id: 'founder.partners.active_count', prompt: 'How many active strategic / channel partners do you have?', kind: 'number', skip: true, mi: 'partner_pulse' },
     { id: 'founder.partners.health_score', prompt: 'On a 1-10, how healthy is your partner ecosystem today?', kind: 'select', opts: ['1','2','3','4','5','6','7','8','9','10'], mi: 'partner_pulse', sent: true },
     { id: 'founder.partners.biggest_friction', prompt: 'Biggest friction with your existing partners? (1-2 sentences)', mi: 'partner_pulse', sent: true },

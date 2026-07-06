@@ -11,7 +11,7 @@
  *   - per-connection log feed (`/:uid/logs`)
  *
  * Tier gating: founders are gated by `subscription_tier`; admin/partner/
- * investor/mentor roles bypass via middleware/requireTier.ts.
+ * investor/advisor roles bypass via middleware/requireTier.ts.
  *
  * Credentials are encrypted at rest via integrations/secrets.ts (built on
  * services/columnCipher.ts). NEVER write a raw api_key/access_token/
@@ -44,7 +44,7 @@ import { buildPkce, issueOauthState, consumeOauthState } from '../integrations/o
 
 const integrations = new Hono<{ Bindings: Env }>();
 
-const ALLOWED_ROLES = new Set(['admin', 'founder', 'partner', 'investor', 'mentor', 'operator', 'service_provider']);
+const ALLOWED_ROLES = new Set(['admin', 'founder', 'partner', 'investor', 'advisor', 'operator', 'service_provider']);
 
 function ensureRole(c: Context<{ Bindings: Env }>, user: User) {
   if (!ALLOWED_ROLES.has((user.role || '').toLowerCase())) {
@@ -148,7 +148,7 @@ function rowToPublic(row: IntegrationRow, credPreview: string | null) {
 // Task #3 — read-only Calendly booking URL lookup for any user. No auth:
 // Calendly scheduling URLs are inherently public (the user generates them
 // for sharing). Returns 404 if the user hasn't connected Calendly or hasn't
-// configured a `booking_url`. Used by Mentor cards + Partner profile pages
+// configured a `booking_url`. Used by Advisor cards + Partner profile pages
 // to render a "Book via Calendly" CTA that opens their availability page.
 integrations.get('/public/calendly/:userId', async (c) => {
   await ensureIntegrationsSchema(c.env);
@@ -306,7 +306,7 @@ integrations.post('/connect', async (c) => {
     }, 503, { 'Retry-After': '86400' });
   }
 
-  // Tier gate (founders only; admin/partner/investor/mentor bypass).
+  // Tier gate (founders only; admin/partner/investor/advisor bypass).
   if (desc.tier !== 'free') {
     if (!userMeetsTier(user, desc.tier as 'growth' | 'studio')) {
       return c.json(tierUpsell(desc.tier as 'growth' | 'studio'), 402);

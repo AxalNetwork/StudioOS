@@ -89,7 +89,7 @@ function useFlipMove(rootRef, depKey) {
 const SPINOUT_WEEKS = [
   { week: 1, label: 'Customer Discovery', requiredAll: ['project_created', 'customer_interview_logged_1', 'customer_interview_logged_2', 'customer_interview_logged_3'], requiredAny: [] },
   { week: 2, label: 'Build', requiredAll: ['okrs_created', 'brand_basics_filled', 'pitch_deck_drafted'], requiredAny: [] },
-  { week: 3, label: 'Network', requiredAll: ['scoring_run_completed'], requiredAny: ['mentor_meeting_booked', 'cofounder_request_sent'] },
+  { week: 3, label: 'Network', requiredAll: ['scoring_run_completed'], requiredAny: ['advisor_meeting_booked', 'cofounder_request_sent'] },
   { week: 4, label: 'Incorporate', requiredAll: ['incorporation_completed'], requiredAny: [] },
 ];
 
@@ -102,7 +102,7 @@ const MILESTONE_LABELS = {
   brand_basics_filled: 'Brand basics',
   pitch_deck_drafted: 'Draft pitch deck',
   scoring_run_completed: 'Run an AI score',
-  mentor_meeting_booked: 'Book a mentor meeting',
+  advisor_meeting_booked: 'Book an advisor meeting',
   cofounder_request_sent: 'Send a cofounder request',
   incorporation_completed: 'Complete incorporation',
 };

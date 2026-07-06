@@ -1028,7 +1028,7 @@ function ToolPreview({ preview }) {
   // Render the most common result shapes compactly. Falls back to a
   // truncated JSON dump for shapes we don't know about.
   const list =
-    preview.mentors || preview.investors || preview.partners || preview.deals || preview.tasks;
+    preview.advisors || preview.investors || preview.partners || preview.deals || preview.tasks;
   if (Array.isArray(list)) {
     if (list.length === 0) {
       return <div className="text-xs text-gray-500 dark:text-gray-400 italic">No matches yet.</div>;

@@ -7,7 +7,7 @@ export default {
       id: 'founder',
       title: 'Founder Portal',
       overview:
-        "The Founder Portal is the home base for active founders. It surfaces your startup status, this week’s priorities, upcoming deadlines, mentor sessions, and quick actions tailored to where you are in the journey.",
+        "The Founder Portal is the home base for active founders. It surfaces your startup status, this week’s priorities, upcoming deadlines, advisor sessions, and quick actions tailored to where you are in the journey.",
       howto: [
         'Open Founder Portal from the sidebar (or it’s your default landing page).',
         'Review the "This week" card for your priorities.',
@@ -75,12 +75,12 @@ export default {
       ],
     },
     {
-      id: 'mentor',
-      title: 'Mentor Engagements',
+      id: 'advisor',
+      title: 'Advisor Engagements',
       overview:
-        "Mentors get a focused portal for booked sessions, mentee notes, and feedback after each meeting. Reflections are private to you and the studio team unless you share them.",
+        "Advisors get a focused portal for booked sessions, mentee notes, and feedback after each meeting. Reflections are private to you and the studio team unless you share them.",
       howto: [
-        'Open Mentors → My Engagements.',
+        'Open Advisors → My Engagements.',
         'See upcoming sessions with prep notes from each mentee.',
         'After each session, capture a short reflection.',
       ],

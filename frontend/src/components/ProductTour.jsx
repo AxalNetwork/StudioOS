@@ -34,7 +34,7 @@ const STEPS = [
   {
     anchor: 'search',
     title: 'Search anything',
-    body: "Type to find founders, deals, documents, mentors, or partners. Cmd+K from anywhere works too.",
+    body: "Type to find founders, deals, documents, advisors, or partners. Cmd+K from anywhere works too.",
   },
   {
     anchor: 'notifications',

@@ -316,7 +316,7 @@ def run_diligence(req: DiligenceRequest, session: Session = Depends(get_session)
                 "category": "Team",
                 "item": "Founder Experience",
                 "status": "warning",
-                "detail": "Low experience. Consider assigning a mentor or operating partner.",
+                "detail": "Low experience. Consider assigning an advisor or operating partner.",
             })
     else:
         checks.append({

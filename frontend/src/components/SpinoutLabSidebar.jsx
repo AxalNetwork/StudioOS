@@ -51,7 +51,7 @@ const FEATURE_CATALOGUE = {
     to: '/build/deck',
     icon: Sparkles,
     label: 'Pitch Deck',
-    blurb: 'Generate a working seed deck from your startup + market intel; iterate before mentors see it.',
+    blurb: 'Generate a working seed deck from your startup + market intel; iterate before advisors see it.',
   },
   'cofounder-match': {
     to: '/cofounder',
@@ -59,17 +59,17 @@ const FEATURE_CATALOGUE = {
     label: 'Co-founder Match',
     blurb: 'Search the cofounder pool and send your first intro requests — single-founder companies fundraise harder.',
   },
-  mentors: {
-    to: '/mentors',
+  advisors: {
+    to: '/advisors',
     icon: UserCircle,
-    label: 'Mentors',
-    blurb: 'Browse the mentor directory and request your first session.',
+    label: 'Advisors',
+    blurb: 'Browse the advisor directory and request your first session.',
   },
   'office-hours': {
     to: '/office-hours',
     icon: Calendar,
     label: 'Office Hours',
-    blurb: 'Book recurring office hours with mentors and partners across the network.',
+    blurb: 'Book recurring office hours with advisors and partners across the network.',
   },
   scoring: {
     to: '/scoring',
@@ -123,7 +123,7 @@ const FEATURE_CATALOGUE = {
 const WEEK_ORDER = {
   1: ['spinout-lab', 'projects', 'customer-discovery', 'market-intelligence'],
   2: ['roadmap', 'brand-builder', 'pitch-deck'],
-  3: ['cofounder-match', 'mentors', 'office-hours', 'scoring'],
+  3: ['cofounder-match', 'advisors', 'office-hours', 'scoring'],
   4: ['incorporate', 'captable', 'section-83b', 'cofounder-agreement', 'capital', 'compliance'],
 };
 

@@ -156,8 +156,8 @@ import {
 } from '../middleware/requireInvestorTier';
 
 // Bypass roles can join any number of dealrooms — they're acting in an
-// admin/partner/mentor capacity and never count against an investor cap.
-const DEALROOM_BYPASS_ROLES = new Set<string>(['admin', 'partner', 'mentor']);
+// admin/partner/advisor capacity and never count against an investor cap.
+const DEALROOM_BYPASS_ROLES = new Set<string>(['admin', 'partner', 'advisor']);
 
 deals.post('/:id/dealroom/join', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
@@ -225,7 +225,7 @@ deals.post('/:id/dealroom/join', async (c) => {
 
 deals.delete('/:id/dealroom/leave', async (c) => {
   const user = await requireAuth(c);
-  // Mirror the bypass list from the join endpoint — admin/partner/mentor
+  // Mirror the bypass list from the join endpoint — admin/partner/advisor
   // who joined a dealroom must also be able to leave it.
   if (user.role !== 'investor' && !DEALROOM_BYPASS_ROLES.has(String(user.role))) {
     return c.json({ error: 'investor_only' }, 403);

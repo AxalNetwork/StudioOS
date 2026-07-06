@@ -40,7 +40,7 @@ const ROLE_BADGES = {
   founder: 'bg-blue-100 text-blue-700',
   partner: 'bg-emerald-100 text-emerald-700',
   investor: 'bg-amber-100 text-amber-700',
-  mentor: 'bg-sky-100 text-sky-700',
+  advisor: 'bg-sky-100 text-sky-700',
 };
 
 function RoleDropdown({ user, onRoleChange }) {
@@ -176,7 +176,7 @@ const ADMIN_SECTIONS = [
   { value: 'payments', label: 'Payments', Icon: Package },
   { value: 'billing', label: 'Billing', Icon: CreditCard },
   { value: 'wellbeing', label: 'Wellbeing', Icon: Heart },
-  { value: 'network-profiles', label: 'Mentors & Partners', Icon: Users },
+  { value: 'network-profiles', label: 'Advisors & Partners', Icon: Users },
 ];
 const ADMIN_SECTION_VALUES = new Set(ADMIN_SECTIONS.map(s => s.value));
 
@@ -1809,8 +1809,8 @@ function fmtDate(iso) {
 // in sync with `TEMPLATES` in cloudflare-worker/src/routes/admin_contracts.ts.
 const NEW_DOC_TYPE_LABELS = {
   investor_nda_axal: 'Investor NDA (Axal VC)',
-  mentor_nda_axal: 'Mentor NDA (Axal VC)',
-  mentor_engagement_disclaimer: 'Mentor Engagement Disclaimer',
+  mentor_nda_axal: 'Advisor NDA (Axal VC)',
+  mentor_engagement_disclaimer: 'Advisor Engagement Disclaimer',
   partner_nda_nonsolicit: 'Partner NDA + Non-Solicit',
   partner_equity: 'Partner Equity Deal',
   partner_services: 'Partner Services Agreement',
@@ -1828,7 +1828,7 @@ const PARTY_ROLE_OPTIONS = [
   ['', 'All parties'],
   ['founder', 'Founder'],
   ['investor', 'Investor'],
-  ['mentor', 'Mentor'],
+  ['advisor', 'Advisor'],
   ['partner', 'Partner'],
   ['axal', 'Axal VC'],
 ];
@@ -1844,7 +1844,7 @@ export function LegalPanel() {
   const [q, setQ] = useState('');
   const [docType, setDocType] = useState('');
   const [providerFilter, setProviderFilter] = useState(''); // '' | 'native' | 'docusign'
-  const [partyRole, setPartyRole] = useState(''); // '' | founder | investor | mentor | partner | axal
+  const [partyRole, setPartyRole] = useState(''); // '' | founder | investor | advisor | partner | axal
   const [pwStatus, setPwStatus] = useState(''); // pairwise NDA status filter
   const [pwIntermediary, setPwIntermediary] = useState(''); // pairwise NDA relation/intermediary filter
   const [pdDealType, setPdDealType] = useState(''); // partner deal_type filter

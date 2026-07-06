@@ -394,7 +394,7 @@ calendar.post('/founder-checkins', safe('ck_create', 'Could not create check-in'
   const requestedCounterId = body.counterpart_user_id ? parseInt(body.counterpart_user_id, 10) : null;
   const isCounter = requestedCounterId === user.id;
   const role = lc(user.role);
-  if (!(isAdmin(role) || isSelf || isCounter || ['partner', 'investor', 'mentor'].includes(role))) {
+  if (!(isAdmin(role) || isSelf || isCounter || ['partner', 'investor', 'advisor'].includes(role))) {
     return c.json({ detail: 'Not allowed to schedule this check-in' }, 403);
   }
   // Default counterpart to caller if not the founder themselves.
@@ -490,7 +490,7 @@ calendar.delete('/founder-checkins/:id', safe('ck_cancel', 'Could not cancel che
 // one specific Axal session to whichever providers the caller has connected.
 // ===========================================================================
 const PUSHABLE_KINDS = new Set([
-  'mentor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour',
+  'advisor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour',
 ]);
 calendar.post('/push/:kind/:source_id', safe('push_one', 'Could not push event', async (c) => {
   const user = await requireAuth(c);

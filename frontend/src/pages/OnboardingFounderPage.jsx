@@ -85,7 +85,7 @@ export default function OnboardingFounderPage() {
         <div className="space-y-4">
           <ChoiceField
             label="Primary need"
-            options={['Capital', 'Co-founders', 'GTM help', 'Legal & ops', 'Mentorship']}
+            options={['Capital', 'Co-founders', 'GTM help', 'Legal & ops', 'Advisorship']}
             value={values.primary_need}
             onChange={(x) => set('primary_need', x)}
           />

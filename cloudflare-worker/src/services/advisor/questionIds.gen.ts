@@ -18,6 +18,41 @@ export type AdvisorQuestionId =
   | 'admin.preferences.alert_channel'
   | 'admin.preferences.digest_freq'
   | 'admin.preferences.timezone'
+  | 'advisor.calendar.notice_required_hours'
+  | 'advisor.calendar.office_hours_window'
+  | 'advisor.calendar.timezones_covered'
+  | 'advisor.calendar.weekly_hours'
+  | 'advisor.comp.equity_open'
+  | 'advisor.comp.minimum_engagement_hours'
+  | 'advisor.engagement.active_founders'
+  | 'advisor.engagement.biggest_friction'
+  | 'advisor.engagement.intros_made_qtr'
+  | 'advisor.engagement.referral_likely'
+  | 'advisor.engagement.satisfaction'
+  | 'advisor.expertise.adoption_curve'
+  | 'advisor.expertise.depth_or_breadth'
+  | 'advisor.expertise.geographies'
+  | 'advisor.expertise.stages'
+  | 'advisor.profile.bio'
+  | 'advisor.profile.display_name'
+  | 'advisor.profile.exits_or_outcomes'
+  | 'advisor.profile.expertise'
+  | 'advisor.profile.hourly_rate_usd'
+  | 'advisor.profile.linkedin_url'
+  | 'advisor.profile.public_writing'
+  | 'advisor.profile.sectors'
+  | 'advisor.profile.years_operating'
+  | 'advisor.topics.async_vs_sync'
+  | 'advisor.topics.preferred_session_length_min'
+  | 'advisor.topics.recent_wins'
+  | 'advisor.topics.signature_session'
+  | 'advisor.topics.unwilling'
+  | 'advisor.topics.willing'
+  | 'founder.advisors.current_advisors'
+  | 'founder.advisors.gap_areas'
+  | 'founder.advisors.intro_priority'
+  | 'founder.advisors.most_valuable'
+  | 'founder.advisors.needs'
   | 'founder.brand.tagline'
   | 'founder.brand.theme_color'
   | 'founder.capital.bridge_likely'
@@ -99,6 +134,11 @@ export type AdvisorQuestionId =
   | 'founder.gtm.pricing_changes_planned'
   | 'founder.gtm.pricing_model'
   | 'founder.gtm.primary_channel'
+  | 'founder.lab.advisors.cadence'
+  | 'founder.lab.advisors.intro_target'
+  | 'founder.lab.advisors.priority1'
+  | 'founder.lab.advisors.style'
+  | 'founder.lab.advisors.warm_path'
   | 'founder.lab.capital.first_raise_target'
   | 'founder.lab.capital.instrument'
   | 'founder.lab.capital.lead_investor'
@@ -127,11 +167,6 @@ export type AdvisorQuestionId =
   | 'founder.lab.legal.ip_assignment'
   | 'founder.lab.legal.prior_employer_ip'
   | 'founder.lab.legal.state'
-  | 'founder.lab.mentors.cadence'
-  | 'founder.lab.mentors.intro_target'
-  | 'founder.lab.mentors.priority1'
-  | 'founder.lab.mentors.style'
-  | 'founder.lab.mentors.warm_path'
   | 'founder.lab.metrics.first_north_star'
   | 'founder.lab.metrics.signal_v_noise'
   | 'founder.lab.metrics.tracking_tool'
@@ -172,11 +207,6 @@ export type AdvisorQuestionId =
   | 'founder.legal.security_certs'
   | 'founder.legal.terms_of_service_current'
   | 'founder.legal.trademarks_filed'
-  | 'founder.mentors.current_advisors'
-  | 'founder.mentors.gap_areas'
-  | 'founder.mentors.intro_priority'
-  | 'founder.mentors.most_valuable'
-  | 'founder.mentors.needs'
   | 'founder.okrs.q1_objective1'
   | 'founder.okrs.q1_objective2'
   | 'founder.okrs.q1_objective3'
@@ -296,36 +326,6 @@ export type AdvisorQuestionId =
   | 'investor.watchlist.seed_companies'
   | 'investor.watchlist.shadow_companies'
   | 'investor.watchlist.signals_of_interest'
-  | 'mentor.calendar.notice_required_hours'
-  | 'mentor.calendar.office_hours_window'
-  | 'mentor.calendar.timezones_covered'
-  | 'mentor.calendar.weekly_hours'
-  | 'mentor.comp.equity_open'
-  | 'mentor.comp.minimum_engagement_hours'
-  | 'mentor.engagement.active_founders'
-  | 'mentor.engagement.biggest_friction'
-  | 'mentor.engagement.intros_made_qtr'
-  | 'mentor.engagement.referral_likely'
-  | 'mentor.engagement.satisfaction'
-  | 'mentor.expertise.adoption_curve'
-  | 'mentor.expertise.depth_or_breadth'
-  | 'mentor.expertise.geographies'
-  | 'mentor.expertise.stages'
-  | 'mentor.profile.bio'
-  | 'mentor.profile.display_name'
-  | 'mentor.profile.exits_or_outcomes'
-  | 'mentor.profile.expertise'
-  | 'mentor.profile.hourly_rate_usd'
-  | 'mentor.profile.linkedin_url'
-  | 'mentor.profile.public_writing'
-  | 'mentor.profile.sectors'
-  | 'mentor.profile.years_operating'
-  | 'mentor.topics.async_vs_sync'
-  | 'mentor.topics.preferred_session_length_min'
-  | 'mentor.topics.recent_wins'
-  | 'mentor.topics.signature_session'
-  | 'mentor.topics.unwilling'
-  | 'mentor.topics.willing'
   | 'partner.comp.model'
   | 'partner.conflicts.list'
   | 'partner.cv.average_dd_days'
@@ -552,6 +552,41 @@ export const ADVISOR_QUESTION_IDS: readonly AdvisorQuestionId[] = [
   "admin.preferences.alert_channel",
   "admin.preferences.digest_freq",
   "admin.preferences.timezone",
+  "advisor.calendar.notice_required_hours",
+  "advisor.calendar.office_hours_window",
+  "advisor.calendar.timezones_covered",
+  "advisor.calendar.weekly_hours",
+  "advisor.comp.equity_open",
+  "advisor.comp.minimum_engagement_hours",
+  "advisor.engagement.active_founders",
+  "advisor.engagement.biggest_friction",
+  "advisor.engagement.intros_made_qtr",
+  "advisor.engagement.referral_likely",
+  "advisor.engagement.satisfaction",
+  "advisor.expertise.adoption_curve",
+  "advisor.expertise.depth_or_breadth",
+  "advisor.expertise.geographies",
+  "advisor.expertise.stages",
+  "advisor.profile.bio",
+  "advisor.profile.display_name",
+  "advisor.profile.exits_or_outcomes",
+  "advisor.profile.expertise",
+  "advisor.profile.hourly_rate_usd",
+  "advisor.profile.linkedin_url",
+  "advisor.profile.public_writing",
+  "advisor.profile.sectors",
+  "advisor.profile.years_operating",
+  "advisor.topics.async_vs_sync",
+  "advisor.topics.preferred_session_length_min",
+  "advisor.topics.recent_wins",
+  "advisor.topics.signature_session",
+  "advisor.topics.unwilling",
+  "advisor.topics.willing",
+  "founder.advisors.current_advisors",
+  "founder.advisors.gap_areas",
+  "founder.advisors.intro_priority",
+  "founder.advisors.most_valuable",
+  "founder.advisors.needs",
   "founder.brand.tagline",
   "founder.brand.theme_color",
   "founder.capital.bridge_likely",
@@ -633,6 +668,11 @@ export const ADVISOR_QUESTION_IDS: readonly AdvisorQuestionId[] = [
   "founder.gtm.pricing_changes_planned",
   "founder.gtm.pricing_model",
   "founder.gtm.primary_channel",
+  "founder.lab.advisors.cadence",
+  "founder.lab.advisors.intro_target",
+  "founder.lab.advisors.priority1",
+  "founder.lab.advisors.style",
+  "founder.lab.advisors.warm_path",
   "founder.lab.capital.first_raise_target",
   "founder.lab.capital.instrument",
   "founder.lab.capital.lead_investor",
@@ -661,11 +701,6 @@ export const ADVISOR_QUESTION_IDS: readonly AdvisorQuestionId[] = [
   "founder.lab.legal.ip_assignment",
   "founder.lab.legal.prior_employer_ip",
   "founder.lab.legal.state",
-  "founder.lab.mentors.cadence",
-  "founder.lab.mentors.intro_target",
-  "founder.lab.mentors.priority1",
-  "founder.lab.mentors.style",
-  "founder.lab.mentors.warm_path",
   "founder.lab.metrics.first_north_star",
   "founder.lab.metrics.signal_v_noise",
   "founder.lab.metrics.tracking_tool",
@@ -706,11 +741,6 @@ export const ADVISOR_QUESTION_IDS: readonly AdvisorQuestionId[] = [
   "founder.legal.security_certs",
   "founder.legal.terms_of_service_current",
   "founder.legal.trademarks_filed",
-  "founder.mentors.current_advisors",
-  "founder.mentors.gap_areas",
-  "founder.mentors.intro_priority",
-  "founder.mentors.most_valuable",
-  "founder.mentors.needs",
   "founder.okrs.q1_objective1",
   "founder.okrs.q1_objective2",
   "founder.okrs.q1_objective3",
@@ -830,36 +860,6 @@ export const ADVISOR_QUESTION_IDS: readonly AdvisorQuestionId[] = [
   "investor.watchlist.seed_companies",
   "investor.watchlist.shadow_companies",
   "investor.watchlist.signals_of_interest",
-  "mentor.calendar.notice_required_hours",
-  "mentor.calendar.office_hours_window",
-  "mentor.calendar.timezones_covered",
-  "mentor.calendar.weekly_hours",
-  "mentor.comp.equity_open",
-  "mentor.comp.minimum_engagement_hours",
-  "mentor.engagement.active_founders",
-  "mentor.engagement.biggest_friction",
-  "mentor.engagement.intros_made_qtr",
-  "mentor.engagement.referral_likely",
-  "mentor.engagement.satisfaction",
-  "mentor.expertise.adoption_curve",
-  "mentor.expertise.depth_or_breadth",
-  "mentor.expertise.geographies",
-  "mentor.expertise.stages",
-  "mentor.profile.bio",
-  "mentor.profile.display_name",
-  "mentor.profile.exits_or_outcomes",
-  "mentor.profile.expertise",
-  "mentor.profile.hourly_rate_usd",
-  "mentor.profile.linkedin_url",
-  "mentor.profile.public_writing",
-  "mentor.profile.sectors",
-  "mentor.profile.years_operating",
-  "mentor.topics.async_vs_sync",
-  "mentor.topics.preferred_session_length_min",
-  "mentor.topics.recent_wins",
-  "mentor.topics.signature_session",
-  "mentor.topics.unwilling",
-  "mentor.topics.willing",
   "partner.comp.model",
   "partner.conflicts.list",
   "partner.cv.average_dd_days",

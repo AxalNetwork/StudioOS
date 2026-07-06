@@ -9,7 +9,7 @@ export default {
       overview:
         "If your startup list is empty, the most common causes are: you’re viewing the wrong workspace, your role doesn’t have startup access, or your account is impersonating another user.",
       howto: [
-        'Check the role badge in the bottom-left of the sidebar — Investors and Mentors don’t own startups, only Founders and Admins do.',
+        'Check the role badge in the bottom-left of the sidebar — Investors and Advisors don’t own startups, only Founders and Admins do.',
         'If you’re an admin, exit any "View as" mode from the violet bar at the top of the screen.',
         'Refresh the page. If it’s still empty, try signing out and back in.',
         'If the startup should be there, contact support with the startup name.',
@@ -33,7 +33,7 @@ export default {
       howto: [
         'Open Settings → Integrations and check that the calendar provider shows "Connected".',
         'If it shows disconnected, click "Connect" and re-authorize.',
-        'Open the source booking page (Mentors / Office Hours) and click "Re-sync" on the booking.',
+        'Open the source booking page (Advisors / Office Hours) and click "Re-sync" on the booking.',
         'On Google or Outlook, confirm there isn’t a calendar-level rule rejecting external invites.',
       ],
       tips: [

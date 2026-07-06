@@ -162,7 +162,7 @@ import radarRoutes from './routes/radar';
 import spinoutLabRoutes from './routes/spinout_lab';
 // T13/T14/T15 — port of FastAPI mentors/partner_office_hours/watchlist/journal/
 // portfolio_health/references/comarketing/company/needs/insights routers.
-import mentorsRoutes from './routes/mentors';
+import advisorsRoutes from './routes/advisors';
 import partnerOfficeHoursRoutes from './routes/partner_office_hours';
 // Task #6 (W-1) — investor paywall surfaces.
 import introductionsRoutes from './routes/introductions';
@@ -220,7 +220,7 @@ import payments from './routes/payments';
 import { Jobs } from './models/jobs';
 import { writeCronRunHistory } from './util/cronHistory';
 import { enqueueReembedChunks } from './util/reembedSweep';
-import { rebuildUsersRoleCheckForInvestor } from './util/usersRoleRebuild';
+import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
@@ -801,8 +801,10 @@ app.route('/api/values', valuesRoutes);
 app.route('/api/radar', radarRoutes);
 // Spin-Out Lab — guided 4-week sprint for pre-incorporation founders.
 app.route('/api/spinout-lab', spinoutLabRoutes);
-// T13 — Mentors + Partner Office Hours.
-app.route('/api/mentors', mentorsRoutes);
+// T13 — Advisors (formerly Mentors) + Partner Office Hours.
+// `/api/mentors` is kept as a permanent alias so old clients/bookmarks keep working.
+app.route('/api/advisors', advisorsRoutes);
+app.route('/api/mentors', advisorsRoutes);
 app.route('/api/partner-office-hours', partnerOfficeHoursRoutes);
 
 // Task #6 (W-1) — investor paywall: introductions (quota-gated) + seats
@@ -957,6 +959,65 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
   }
 }
 
+// Task #74 — Mentor→Advisor rename. Idempotent, runs at most once per isolate.
+// Mirrors ensureInvestorSchema: the mentor tables/columns live OUTSIDE the
+// migrations chain (sql/t13_t14_t15.sql is applied manually), and a role-CHECK
+// relax needs a live-DDL-derived table rebuild, so a plain forward SQL migration
+// cannot do this safely (it would abort on any chain-only DB). Every step is
+// existence-checked + try/catch so a partially-migrated prod DB can never abort
+// the boot path.
+let _advisorSchemaReady = false;
+async function ensureAdvisorSchema(env: Env): Promise<void> {
+  if (_advisorSchemaReady) return;
+  try {
+    // (a) relax the users.role CHECK so 'advisor' is accepted before any flip.
+    try { await rebuildUsersRoleCheckForAdvisor(env); }
+    catch (e) { console.warn('[boot] users role-CHECK advisor rebuild skipped:', (e as Error).message); }
+    // (b) structural renames — only when the old table exists and the new does not.
+    const RENAMES: [string, string][] = [
+      ['mentors', 'advisors'],
+      ['mentor_office_hour_slots', 'advisor_office_hour_slots'],
+      ['mentor_bookings', 'advisor_bookings'],
+      ['mentor_reviews', 'advisor_reviews'],
+      ['mentor_slots', 'advisor_slots'],
+    ];
+    try {
+      const rows = await env.DB.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+      ).all<{ name: string }>();
+      const names = new Set((rows.results || []).map(r => r.name));
+      for (const [oldName, newName] of RENAMES) {
+        if (names.has(oldName) && !names.has(newName)) {
+          try { await env.DB.exec(`ALTER TABLE ${oldName} RENAME TO ${newName}`); }
+          catch (e) { console.warn(`[boot] rename ${oldName}→${newName} skipped:`, (e as Error).message); }
+        }
+      }
+    } catch (e) { console.warn('[boot] advisor table-rename scan skipped:', (e as Error).message); }
+    // (c) rename users.mentor_id → advisor_id when present.
+    try {
+      const cols = await env.DB.prepare("PRAGMA table_info(users)").all<{ name: string }>();
+      const colNames = (cols.results || []).map(r => r.name);
+      if (colNames.includes('mentor_id') && !colNames.includes('advisor_id')) {
+        try { await env.DB.exec("ALTER TABLE users RENAME COLUMN mentor_id TO advisor_id"); }
+        catch (e) { console.warn('[boot] users.mentor_id rename skipped:', (e as Error).message); }
+      }
+    } catch (e) { console.warn('[boot] users column scan skipped:', (e as Error).message); }
+    // (d) flip stored role data mentor→advisor.
+    try { await env.DB.exec("UPDATE users SET role = 'advisor' WHERE role = 'mentor'"); }
+    catch (e) { console.warn('[boot] advisor role flip skipped:', (e as Error).message); }
+    // (e) reviewer_role stored data (table freshly renamed above).
+    try { await env.DB.exec("UPDATE advisor_reviews SET reviewer_role = 'advisor' WHERE reviewer_role = 'mentor'"); } catch {}
+    // (f) remap advisor question-id prefixes so existing answers/sources are not orphaned.
+    try { await env.DB.exec("UPDATE OR IGNORE advisor_answers SET question_id = 'advisor.' || substr(question_id, 8) WHERE question_id LIKE 'mentor.%'"); } catch {}
+    try { await env.DB.exec("UPDATE OR IGNORE field_sources SET question_id = 'advisor.' || substr(question_id, 8) WHERE question_id LIKE 'mentor.%'"); } catch {}
+    // (g) rename the spinout-lab milestone key so existing week-3 progress is preserved.
+    try { await env.DB.exec("UPDATE OR IGNORE spinout_lab_milestones SET milestone_key = 'advisor_meeting_booked' WHERE milestone_key = 'mentor_meeting_booked'"); } catch {}
+    _advisorSchemaReady = true;
+  } catch (e) {
+    console.error('[boot] ensureAdvisorSchema failed:', (e as Error).message);
+  }
+}
+
 export default {
   fetch: async (request: Request, env: Env, ctx: ExecutionContext) => {
     // Task #37 — hardened static-asset serving. wrangler.toml lists
@@ -1006,6 +1067,9 @@ export default {
     // hit the in-memory `_investorSchemaReady` short-circuit (zero cost).
     if (!_investorSchemaReady && env.DB) {
       await ensureInvestorSchema(env);
+    }
+    if (!_advisorSchemaReady && env.DB) {
+      await ensureAdvisorSchema(env);
     }
     return app.fetch(request, env, ctx);
   },
@@ -1275,7 +1339,7 @@ export default {
             const TABLE_BY_TYPE: Record<string, string> = {
               project: 'projects', deal: 'deals', founder: 'founders',
               partner: 'users', document: 'legal_documents',
-              academy_lesson: 'academy_lessons', mentor: 'mentors',
+              academy_lesson: 'academy_lessons', advisor: 'advisors',
               investor: 'users',
             };
             // Lowered from 200 → 100 and batched: at most 2 batched INSERTs

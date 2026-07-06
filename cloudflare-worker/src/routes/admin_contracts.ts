@@ -60,7 +60,7 @@ export const CONTRACT_DOC_TYPES: ReadonlySet<string> = new Set([
 // "by party role" filter in the Admin > Contracts list. A doc may belong
 // to multiple roles (e.g. a 3-way NDA touches founder + investor + axal);
 // the filter matches if the doc's role set CONTAINS the requested role.
-type PartyRole = 'founder' | 'investor' | 'mentor' | 'partner' | 'axal';
+type PartyRole = 'founder' | 'investor' | 'advisor' | 'partner' | 'axal';
 export const DOC_TYPE_PARTY_ROLES: Record<string, ReadonlyArray<PartyRole>> = {
   // founder-only (incorporation, IP, equity)
   bylaws: ['founder', 'axal'],
@@ -77,9 +77,9 @@ export const DOC_TYPE_PARTY_ROLES: Record<string, ReadonlyArray<PartyRole>> = {
   investor_subscription_pro: ['investor', 'axal'],
   investor_subscription_inst: ['investor', 'axal'],
   investor_nda_axal: ['investor', 'axal'],
-  // mentor
-  mentor_nda_axal: ['mentor', 'axal'],
-  mentor_engagement_disclaimer: ['mentor', 'axal'],
+  // advisor
+  mentor_nda_axal: ['advisor', 'axal'],
+  mentor_engagement_disclaimer: ['advisor', 'axal'],
   // partner
   partner_nda_nonsolicit: ['partner', 'axal'],
   partner_equity: ['partner', 'axal'],
@@ -130,8 +130,8 @@ const TEMPLATES: Record<string, { title: string; layer: string }> = {
   // Task #5 (Z) — friendly labels for the 15 new doc types. Layer
   // mirrors the natural grouping in Admin > Contracts > Templates.
   investor_nda_axal: { title: 'Investor NDA (Axal)', layer: 'fund' },
-  mentor_nda_axal: { title: 'Mentor NDA (Axal)', layer: 'gp' },
-  mentor_engagement_disclaimer: { title: 'Mentor Engagement Disclaimer', layer: 'gp' },
+  mentor_nda_axal: { title: 'Advisor NDA (Axal)', layer: 'gp' },
+  mentor_engagement_disclaimer: { title: 'Advisor Engagement Disclaimer', layer: 'gp' },
   partner_nda_nonsolicit: { title: 'Partner NDA + Non-Solicit', layer: 'gp' },
   partner_equity: { title: 'Partner Equity Deal', layer: 'gp' },
   partner_services: { title: 'Partner Services Agreement', layer: 'gp' },
@@ -534,7 +534,7 @@ adminContracts.get('/', async (c) => {
   // selected.
   const provider = (c.req.query('provider') || '').toLowerCase();
   // Task #5 (Z) — `party_role` filter chip
-  // (founder|investor|mentor|partner|axal). Matches if the doc's
+  // (founder|investor|advisor|partner|axal). Matches if the doc's
   // role set contains the requested role.
   const partyRole = (c.req.query('party_role') || '').toLowerCase() as PartyRole | '';
   const limit = Math.min(parseInt(c.req.query('limit') || '50', 10) || 50, 500);
@@ -550,7 +550,7 @@ adminContracts.get('/', async (c) => {
     if (provider === 'native' || provider === 'docusign') {
       rows = rows.filter(r => (r.provider || 'native') === provider);
     }
-    if (partyRole && ['founder', 'investor', 'mentor', 'partner', 'axal'].includes(partyRole)) {
+    if (partyRole && ['founder', 'investor', 'advisor', 'partner', 'axal'].includes(partyRole)) {
       rows = rows.filter(r => (r.party_roles || []).includes(partyRole as PartyRole));
     }
     if (q) {
@@ -1240,8 +1240,8 @@ const LEGAL_TEMPLATE_CATALOG: ReadonlyArray<{
   { key: 'privacy_v1',                        doc_type: 'privacy_v1',                        title: 'Privacy Policy v1' },
   { key: 'founder_nda_v1',                    doc_type: 'founder_nda_v1',                    title: 'Founder Mutual NDA v1' },
   { key: 'investor_nda_v1',                   doc_type: 'investor_nda_axal',                 title: 'Investor NDA (Axal) v1' },
-  { key: 'mentor_nda_v1',                     doc_type: 'mentor_nda_axal',                   title: 'Mentor NDA (Axal) v1' },
-  { key: 'mentor_disclaimer_v1',              doc_type: 'mentor_engagement_disclaimer',     title: 'Mentor Engagement Disclaimer v1' },
+  { key: 'mentor_nda_v1',                     doc_type: 'mentor_nda_axal',                   title: 'Advisor NDA (Axal) v1' },
+  { key: 'mentor_disclaimer_v1',              doc_type: 'mentor_engagement_disclaimer',     title: 'Advisor Engagement Disclaimer v1' },
   { key: 'accreditation_v1',                  doc_type: 'accreditation_v1',                  title: 'Accreditation Attestation v1' },
   { key: 'partner_msa_v1',                    doc_type: 'partner_services',                  title: 'Partner Services / MSA v1' },
   { key: 'nda_3way_founder_investor_axal_v1', doc_type: 'nda_3way_founder_investor_axal',   title: '3-Way NDA (Founder ↔ Investor ↔ Axal) v1' },

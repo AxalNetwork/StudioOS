@@ -1,7 +1,7 @@
 /**
  * Task #56 — Unified calendar layer.
  *
- * Single page that fans-in every bookable surface (mentor bookings, IC
+ * Single page that fans-in every bookable surface (advisor bookings, IC
  * meetings, founder check-ins) into one agenda for the signed-in user,
  * plus a "Connect Google Calendar" panel that pushes those events to
  * the user's personal calendar via OAuth refresh-token sync.
@@ -14,7 +14,7 @@ import PageExplainer from '../components/PageExplainer';
 
 const KIND_LABEL = {
   calendly_event: 'Calendly',
-  mentor_booking: 'Mentor session',
+  advisor_booking: 'Advisor session',
   ic_meeting: 'IC meeting',
   founder_checkin: 'Founder check-in',
   partner_office_hour: 'Partner OH',
@@ -23,7 +23,7 @@ const KIND_LABEL = {
 };
 const KIND_COLOR = {
   calendly_event: 'bg-sky-100 text-sky-700 border-sky-200',
-  mentor_booking: 'bg-amber-100 text-amber-700 border-amber-200',
+  advisor_booking: 'bg-amber-100 text-amber-700 border-amber-200',
   ic_meeting: 'bg-purple-100 text-purple-700 border-purple-200',
   founder_checkin: 'bg-blue-100 text-blue-700 border-blue-200',
   partner_office_hour: 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -253,7 +253,7 @@ export default function CalendarPage() {
           </h1>
         <PageExplainer pageKey="calendar" />
           <p className="text-sm text-slate-600 mt-1">
-            Mentor sessions, IC meetings, and founder check-ins in one feed. Connect Google to sync to your personal calendar.
+            Advisor sessions, IC meetings, and founder check-ins in one feed. Connect Google to sync to your personal calendar.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -367,7 +367,7 @@ export default function CalendarPage() {
         <span className="text-sm text-slate-600 mr-1">Filter:</span>
         {[
           ['all', 'All'],
-          ['mentor_booking', 'Mentor sessions'],
+          ['advisor_booking', 'Advisor sessions'],
           ['ic_meeting', 'IC meetings'],
           ['founder_checkin', 'Check-ins'],
           ['calendly_event', 'Calendly'],

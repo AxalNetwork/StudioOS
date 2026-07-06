@@ -30,7 +30,7 @@ export const ASSESSMENT_TRACKS = [
   'operators_path_v1',
   'thesis_lab_v1',
   'partner_playbook_v1',
-  'mentor_compass_v1',
+  'advisor_compass_v1',
   'coachs_lens_v1',
 ] as const;
 export type AssessmentTrack = (typeof ASSESSMENT_TRACKS)[number];

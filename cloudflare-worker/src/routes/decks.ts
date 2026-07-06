@@ -1211,7 +1211,7 @@ async function sha256Hex(s: string): Promise<string> {
 decks.get('/methods', async (c) => {
   const user = await requireAuth(c);
   const tier = String((user as any).subscription_tier || 'free').toLowerCase();
-  const isBypass = ['admin', 'partner', 'investor', 'mentor'].includes(String(user.role));
+  const isBypass = ['admin', 'partner', 'investor', 'advisor'].includes(String(user.role));
   const items = DECK_METHODS.map((m) => ({
     id: m.id, key: m.key, label: m.label, prompt_hint: m.prompt_hint,
     best_for: m.best_for, slide_count: m.slide_count, premium: !!m.premium,

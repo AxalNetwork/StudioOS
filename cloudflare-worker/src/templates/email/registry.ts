@@ -14,7 +14,7 @@
  * Reply-To routing per spec:
  *   - `security@axal.vc` — auth_*, account_email_change_*, account_deleted
  *   - `billing@axal.vc`  — billing_*
- *   - `support@axal.vc`  — everything else (contracts, mentor, partner, …)
+ *   - `support@axal.vc`  — everything else (contracts, advisor, partner, …)
  */
 import type { EmailTemplate } from './layout';
 
@@ -107,12 +107,12 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
     html: `<p>Welcome, {{name}}.</p><p>Your Axal investor account is live. Browse curated pipeline, place watchlist tags, and request intros.</p><p><a href="{{{dashboard_url}}}" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Open investor dashboard</a></p>`,
   }),
   // vars: name, dashboard_url
-  account_welcome_mentor: t({
-    key: 'account_welcome_mentor', category: 'account', severity: 'info',
+  account_welcome_advisor: t({
+    key: 'account_welcome_advisor', category: 'account', severity: 'info',
     replyTo: 'support@axal.vc',
-    subject: 'Welcome to Axal — mentor access',
-    text: `Welcome, {{name}}.\n\nThanks for joining the Axal mentor network. Set your availability and topics from {{dashboard_url}}/mentor.`,
-    html: `<p>Welcome, {{name}}.</p><p>Thanks for joining the Axal mentor network. Set your availability and topic tags so founders can book office hours with you.</p><p><a href="{{{dashboard_url}}}/mentor" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Open mentor dashboard</a></p>`,
+    subject: 'Welcome to Axal — advisor access',
+    text: `Welcome, {{name}}.\n\nThanks for joining the Axal advisor network. Set your availability and topics from {{dashboard_url}}/advisor.`,
+    html: `<p>Welcome, {{name}}.</p><p>Thanks for joining the Axal advisor network. Set your availability and topic tags so founders can book office hours with you.</p><p><a href="{{{dashboard_url}}}/advisor" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Open advisor dashboard</a></p>`,
   }),
   // vars: name, dashboard_url
   account_welcome_partner: t({
@@ -289,7 +289,7 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
     html: `<p>Hi {{name}},</p><p>The full due-diligence report for <strong>{{project_name}}</strong> is ready.</p><p><a href="{{{report_url}}}" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Download report</a></p>`,
   }),
 
-  // ────────────────────────────────────────────────────────── PARTNER / REFERRAL / MENTOR
+  // ────────────────────────────────────────────────────────── PARTNER / REFERRAL / ADVISOR
   // vars: name, inviter_name, accept_url
   partner_invitation: t({
     key: 'partner_invitation', category: 'partner', severity: 'info',
@@ -322,19 +322,19 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
     text: `Hi {{name}},\n\nA referral payout of {{amount}} {{currency}} was sent to your connected Stripe account on {{paid_at}}. Reference: {{payout_id}}`,
     html: `<p>Hi {{name}},</p><p>A referral payout of <strong>{{amount}} {{currency}}</strong> was sent to your connected Stripe account on {{paid_at}}.</p><p style="font-family:ui-monospace,monospace;font-size:12px;color:#6b7280;">Reference: {{payout_id}}</p>`,
   }),
-  // vars: name, mentor_name, start_time, join_url
-  mentor_session_booked: t({
-    key: 'mentor_session_booked', category: 'mentor', severity: 'info',
+  // vars: name, advisor_name, start_time, join_url
+  advisor_session_booked: t({
+    key: 'advisor_session_booked', category: 'advisor', severity: 'info',
     replyTo: 'support@axal.vc',
-    subject: 'Booking with {{mentor_name}}',
-    text: `Hi {{name}},\n\nYour session with {{mentor_name}} is booked.\n\nWhen: {{start_time}}\n\nJoin / manage: {{join_url}}\n\nAdd to your calendar from the scheduler page — we'll send a reminder before the session.`,
+    subject: 'Booking with {{advisor_name}}',
+    text: `Hi {{name}},\n\nYour session with {{advisor_name}} is booked.\n\nWhen: {{start_time}}\n\nJoin / manage: {{join_url}}\n\nAdd to your calendar from the scheduler page — we'll send a reminder before the session.`,
     html: `<h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">Session confirmed</h1>
-<p style="font-size:14px;color:#6b7280;margin:0 0 20px;line-height:1.6;">Hi {{name}}, your session with <strong style="color:#111827;">{{mentor_name}}</strong> is booked.</p>
+<p style="font-size:14px;color:#6b7280;margin:0 0 20px;line-height:1.6;">Hi {{name}}, your session with <strong style="color:#111827;">{{advisor_name}}</strong> is booked.</p>
 <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:14px;padding:18px 20px;margin:0 0 24px;">
   <table cellpadding="0" cellspacing="0" style="width:100%;">
     <tr><td style="padding:0 0 10px;vertical-align:top;">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#7c3aed;font-weight:600;margin:0 0 4px;">With</div>
-      <div style="font-size:15px;color:#111827;font-weight:600;">{{mentor_name}}</div>
+      <div style="font-size:15px;color:#111827;font-weight:600;">{{advisor_name}}</div>
     </td></tr>
     <tr><td style="padding:6px 0 0;vertical-align:top;">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#7c3aed;font-weight:600;margin:0 0 4px;">When</div>
@@ -347,14 +347,14 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
 </td></tr></table>
 <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.6;">You can add this session to your calendar from the scheduler page. We'll send a reminder before it starts.</p>`,
   }),
-  // vars: name, mentor_name, start_time, reason
-  mentor_session_canceled: t({
-    key: 'mentor_session_canceled', category: 'mentor', severity: 'warning',
+  // vars: name, advisor_name, start_time, reason
+  advisor_session_canceled: t({
+    key: 'advisor_session_canceled', category: 'advisor', severity: 'warning',
     replyTo: 'support@axal.vc',
-    subject: 'Mentor session with {{mentor_name}} canceled',
-    text: `Hi {{name}},\n\nThe session with {{mentor_name}} scheduled for {{start_time}} was canceled.\n\nReason: {{reason}}`,
+    subject: 'Advisor session with {{advisor_name}} canceled',
+    text: `Hi {{name}},\n\nThe session with {{advisor_name}} scheduled for {{start_time}} was canceled.\n\nReason: {{reason}}`,
     html: `<h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">Session canceled</h1>
-<p style="font-size:14px;color:#6b7280;margin:0 0 20px;line-height:1.6;">Hi {{name}}, the session with <strong style="color:#111827;">{{mentor_name}}</strong> scheduled for <strong style="color:#111827;">{{start_time}}</strong> was canceled.</p>
+<p style="font-size:14px;color:#6b7280;margin:0 0 20px;line-height:1.6;">Hi {{name}}, the session with <strong style="color:#111827;">{{advisor_name}}</strong> scheduled for <strong style="color:#111827;">{{start_time}}</strong> was canceled.</p>
 <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:14px;padding:14px 18px;color:#991b1b;font-size:14px;line-height:1.55;">
   <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;font-weight:600;margin:0 0 4px;">Reason</div>
   {{reason}}

@@ -22,7 +22,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { rebuildUsersRoleCheckForInvestor } from '../src/util/usersRoleRebuild.ts';
+import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from '../src/util/usersRoleRebuild.ts';
 
 function coerce(args: any[]): any[] {
   return args.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
@@ -202,4 +202,100 @@ test('rebuild is a no-op on a DB whose role CHECK already accepts investor', asy
   assert.equal(second.rebuilt, false, 'second run must be a no-op once investor is accepted');
   const afterUsers = db.prepare('SELECT * FROM users ORDER BY id').all();
   assert.deepEqual(afterUsers, beforeUsers, 'a no-op run must not touch any data');
+});
+
+test('rebuild relaxes the role CHECK to accept advisor WITHOUT losing any data, column, index, or FK', async () => {
+  const db = seedLegacy();
+  const env: any = { DB: makeD1(db) };
+
+  const beforeCols = colNames(db, 'users').sort();
+  const beforeIdx = indexNames(db).sort();
+  const beforeUsers = db.prepare('SELECT * FROM users ORDER BY id').all();
+
+  const r = await rebuildUsersRoleCheckForAdvisor(env);
+  assert.equal(r.rebuilt, true, 'a legacy CHECK without advisor must trigger a rebuild');
+
+  // Every column survives.
+  assert.deepEqual(colNames(db, 'users').sort(), beforeCols, 'no column may be dropped');
+  // Every user-defined index survives.
+  assert.deepEqual(indexNames(db).sort(), beforeIdx, 'every user index must be replayed');
+
+  // Every row + every value survives, ids unchanged.
+  const afterUsers = db.prepare('SELECT * FROM users ORDER BY id').all();
+  assert.deepEqual(afterUsers, beforeUsers, 'all rows, ids and PII/billing values must be identical');
+
+  // Child FK references still resolve (founders + limited_partners join cleanly).
+  const founderJoin = db.prepare(
+    'SELECT u.email FROM founders f JOIN users u ON u.id = f.user_id WHERE f.id = 10'
+  ).get() as { email: string };
+  assert.equal(founderJoin.email, 'founder@x.com', 'founder FK must still resolve to the same user');
+  const lpJoin = db.prepare(
+    'SELECT u.name FROM limited_partners lp JOIN users u ON u.id = lp.user_id WHERE lp.id = 20'
+  ).get() as { name: string };
+  assert.equal(lpJoin.name, 'Pat Partner', 'limited_partner FK must still resolve to the same user');
+
+  // The rebuilt table DDL itself must carry the relaxed CHECK — lock the exact
+  // migration intent so a future change can't make the outcome pass by accident.
+  const rebuiltDdl = (db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
+  ).get() as { sql: string }).sql;
+  assert.match(rebuiltDdl, /CHECK/i, 'the role CHECK constraint must be preserved');
+  assert.match(rebuiltDdl, /'advisor'/, "the rebuilt CHECK must now include 'advisor'");
+  assert.match(rebuiltDdl, /'partner'/, "the rebuilt CHECK must still include the prior roles");
+
+  // 'advisor' is now an accepted role value (the whole point of the rebuild).
+  db.prepare("UPDATE users SET role = 'advisor' WHERE id = 2").run();
+  const promoted = db.prepare('SELECT role FROM users WHERE id = 2').get() as { role: string };
+  assert.equal(promoted.role, 'advisor');
+
+  // ...and the OLD invalid values are still rejected by the (preserved) CHECK.
+  assert.throws(
+    () => db.prepare("UPDATE users SET role = 'banana' WHERE id = 1").run(),
+    /CHECK|constraint/i,
+    'the CHECK must still reject roles outside the allowed set',
+  );
+});
+
+test('advisor rebuild is a no-op on a DB whose role CHECK already accepts advisor', async () => {
+  const db = seedLegacy();
+  const env: any = { DB: makeD1(db) };
+
+  // First run rebuilds.
+  const first = await rebuildUsersRoleCheckForAdvisor(env);
+  assert.equal(first.rebuilt, true);
+
+  // Second run must detect needsRebuild=false and do nothing.
+  const beforeUsers = db.prepare('SELECT * FROM users ORDER BY id').all();
+  const second = await rebuildUsersRoleCheckForAdvisor(env);
+  assert.equal(second.rebuilt, false, 'second run must be a no-op once advisor is accepted');
+  const afterUsers = db.prepare('SELECT * FROM users ORDER BY id').all();
+  assert.deepEqual(afterUsers, beforeUsers, 'a no-op run must not touch any data');
+});
+
+test('advisor and investor rebuilds compose — both roles accepted, still loss-free', async () => {
+  const db = seedLegacy();
+  const env: any = { DB: makeD1(db) };
+
+  const beforeUsers = db.prepare('SELECT * FROM users ORDER BY id').all();
+
+  // Apply the investor rebuild first, then the advisor rebuild on top.
+  assert.equal((await rebuildUsersRoleCheckForInvestor(env)).rebuilt, true);
+  assert.equal((await rebuildUsersRoleCheckForAdvisor(env)).rebuilt, true);
+
+  const rebuiltDdl = (db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
+  ).get() as { sql: string }).sql;
+  assert.match(rebuiltDdl, /'advisor'/, "composed CHECK must include 'advisor'");
+  assert.match(rebuiltDdl, /'investor'/, "composed CHECK must still include 'investor'");
+  assert.match(rebuiltDdl, /'partner'/, "composed CHECK must still include 'partner'");
+
+  // No data lost across two consecutive rebuilds.
+  const afterUsers = db.prepare('SELECT * FROM users ORDER BY id').all();
+  assert.deepEqual(afterUsers, beforeUsers, 'two consecutive rebuilds must not touch any data');
+
+  // Both new role values are now accepted.
+  db.prepare("UPDATE users SET role = 'advisor' WHERE id = 1").run();
+  db.prepare("UPDATE users SET role = 'investor' WHERE id = 2").run();
+  const roles = db.prepare('SELECT role FROM users WHERE id IN (1,2) ORDER BY id').all() as { role: string }[];
+  assert.deepEqual(roles.map(r => r.role), ['advisor', 'investor']);
 });

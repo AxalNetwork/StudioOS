@@ -10,6 +10,80 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #74 — Rename the `mentor` role to `advisor`
+
+Atomic cross-layer rename of the **mentor** role → **advisor** across the
+frontend, the Cloudflare Worker, and the dev FastAPI backend. This touches
+identifiers, routes, DB tables/columns, personas, question-bank ids, and all
+user-facing copy — mentor and advisor were the same concept under two names, and
+the split caused drift between the persona bank, the UI, and the docs.
+
+- **Frontend** — `MentorsPage.jsx` → `AdvisorsPage.jsx`; the route is now
+  `/advisors` (with back-compat redirects `/mentors` → `/advisors` and
+  `/for-mentors` → `/for-advisors` in `App.jsx`). All role labels, persona
+  strings, and doc copy renamed.
+- **Worker** — persona/bank ids, route internals, and the `users.role` CHECK
+  now list `'advisor'`. `rebuildUsersRoleCheckForAdvisor` (in
+  `src/util/usersRoleRebuild.ts`, invoked from `index.ts`) relaxes the legacy
+  CHECK in place, loss-free (mirrors the investor rebuild). New coverage in
+  `test/users_role_rebuild.test.ts` (advisor rebuild + advisor/investor
+  compose), already wired into `test:drift`.
+- **FastAPI (dev only)** — `routes/mentors.py` → `advisors.py`,
+  `services/mentors.py` → `advisors.py`; `ensure_mentor_tables` →
+  `ensure_advisor_tables` creates `advisors` / `advisor_bookings` /
+  `advisor_reviews` and `users.advisor_id`. The pre-existing shared
+  `office_hours_slots` table gets an idempotent `mentor_id` → `advisor_id`
+  column rename on boot (dev DB is disposable). No prod SQL migration file —
+  all schema changes run through boot hooks.
+- **Deliberately kept as-is** (distinct concepts that merely share the word
+  "mentor", renaming them would collide or break external contracts): the
+  **"Personal Advisor"** AI feature and `services/advisor/` dir; **Office
+  Hours**; the `coach`/`fit_coach` persona; the `mentor_advisor` partner subtype
+  (label **"Advisor / Mentor"**); the landing-page **`mentor` audience** and its
+  `audience_mentor_*` columns + `mentor-connect` template keys; the
+  network-profiles `kind` taxonomy (`mentor`/`partner`/`advisor`/`investor`);
+  and the legal template files/keys (`mentor_nda`/`mentor_disclaimer`/
+  `mentor_engagement`).
+
+## Task #72 — Merge Integrations into Settings
+
+Frontend-only IA consolidation. The standalone Integrations marketplace
+(`/integrations`, an admin + investor sidebar item route-guarded to
+admin/partner/investor) is folded into the existing **Integrations** section of
+**Settings** — the thin "Connected accounts" summary is replaced by the full
+marketplace. No business logic, data-fetching, API, or schema changes; mirrors
+the Referrals-into-Settings merge.
+
+- **`embedded` prop** on `frontend/src/pages/IntegrationsPage.jsx` — drops the
+  outer `p-6 max-w-6xl mx-auto` wrapper and suppresses the page-level icon/H1
+  header across the loading, load-error, and main render branches when embedded.
+  The OAuth return-flash handling reads `window.location.search` and cleans it
+  via `history.replaceState(window.location.pathname …)`, so it keeps working
+  when mounted under `/settings/integrations`.
+- **Settings section** (`frontend/src/pages/SettingsPage.jsx`) — `IntegrationsTab`
+  now renders `<IntegrationsPage embedded />` behind a local `Suspense` (lazy
+  import keeps the provider/OAuth deps out of the settings chunk) instead of the
+  old connected-accounts list. The server-flag-gated **API keys** card is
+  preserved: the tab still calls `getIntegrationSettings()` best-effort, but only
+  to read `api_keys_enabled` (a failed fetch just hides that optional card, it
+  never blanks the tab). The `integrations` section stays visible to all roles
+  (no `roles` key). Removed the now-dead `PROVIDER_LABELS` map + disconnect
+  handler; the `IntegrationsTab flash` prop is dropped.
+- **Routing** (`frontend/src/App.jsx`) — `/integrations` now renders an
+  `IntegrationsRedirect` that `Navigate`s to `/settings/integrations` preserving
+  the incoming query string (so OAuth-callback returns like `?google=connected`
+  still surface on the tile that owns them). Wrapped in `authOnly` (all
+  authenticated profiles) to match the all-roles Settings tab. Removed the
+  standalone `IntegrationsPage` lazy import/mount.
+- **Sidebar** (`frontend/src/sidebarConfig.js`) — removed the standalone
+  **Integrations** item from the admin (Network & Growth) and investor (Account)
+  groups, with inline "intentional removal" comments; dropped the now-unused
+  `Plug` icon import. Internal `/integrations` links (cap-table upsell, admin
+  DocuSign "connect") keep working via the redirect.
+- **Out of scope (unchanged)** — all integrations Worker endpoints (registry,
+  OAuth handlers, tier gating), the marketplace UI itself, and every per-provider
+  connect flow.
+
 ## Task #2 — Merge Marketplace (Founder)
 
 Frontend-only IA consolidation. The founder **Validate** group's two

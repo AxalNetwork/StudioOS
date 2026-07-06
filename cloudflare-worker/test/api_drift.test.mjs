@@ -113,7 +113,7 @@ test('alias forwarders never concatenate url.search into url.pathname', () => {
     'cloudflare-worker/src/routes/comarketing.ts',
     'cloudflare-worker/src/routes/company.ts',
     'cloudflare-worker/src/routes/needs.ts',
-    'cloudflare-worker/src/routes/mentors.ts',
+    'cloudflare-worker/src/routes/advisors.ts',
     'cloudflare-worker/src/routes/partner_office_hours.ts',
   ];
   const bad = /url\.pathname\s*=\s*[^;]*\+\s*url\.search/;

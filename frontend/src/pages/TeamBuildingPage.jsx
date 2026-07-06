@@ -6,12 +6,12 @@
  * composed here as tabs and reused as-is via an `embedded` prop that suppresses
  * each one's own page-level heading so a single "Team Building" title governs:
  *
- *   - Mentor / Advisor  → MentorsPage   (discovery + office-hours booking)
+ *   - Advisor  → AdvisorsPage   (discovery + office-hours booking)
  *   - Co-Founder        → CofounderPage (mutual-interest matching + auto-NDA)
  *   - Jobs              → MyJobsPage     (post roles / open positions, hiring)
  *
  * The active tab is stored in the `?tab=` query string so every sub-surface is
- * deep-linkable and the legacy /mentors, /cofounder and /my/jobs routes can
+ * deep-linkable and the legacy /advisors, /cofounder and /my/jobs routes can
  * redirect founders straight into the matching tab (see App.jsx).
  *
  * Tier gating that previously lived on the individual sidebar entries is
@@ -26,22 +26,22 @@ import { useAuth } from '../hooks/useAuthSync';
 import { hasTier } from '../sidebarConfig';
 import { openPaywall } from '../components/PaywallModal';
 import PageExplainer from '../components/PageExplainer';
-import MentorsPage from './MentorsPage';
+import AdvisorsPage from './AdvisorsPage';
 import CofounderPage from './CofounderPage';
 import MyJobsPage from './jobs/MyJobsPage';
 
 // Tab registry. `requiredTier` mirrors the gate the standalone sidebar items
-// carried before the merge (mentors → growth, cofounder → studio); Jobs is
+// carried before the merge (advisors → growth, cofounder → studio); Jobs is
 // ungated. `blurb` sets the tone the brief asks for per section: discovery /
 // matchmaking for advisors, founder-matching for co-founders, a real hiring
 // surface for jobs.
 const TABS = [
   {
-    id: 'mentor',
-    label: 'Mentor / Advisor',
+    id: 'advisor',
+    label: 'Advisor',
     icon: UserCircle,
     requiredTier: 'growth',
-    blurb: 'Discover operator-mentors and advisors, then book office hours to pressure-test the plan.',
+    blurb: 'Discover operator-advisors and advisors, then book office hours to pressure-test the plan.',
   },
   {
     id: 'cofounder',
@@ -116,7 +116,7 @@ export default function TeamBuildingPage() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Team Building</h1>
         <PageExplainer pageKey="team_building" />
         <p className="mt-1 max-w-3xl text-sm text-gray-600 dark:text-gray-400">
-          One place to build the team around your company — recruit advice from mentors,
+          One place to build the team around your company — recruit advice from advisors,
           find a co-founder, and hire for open roles.
         </p>
       </div>
@@ -158,8 +158,8 @@ export default function TeamBuildingPage() {
       <div>
         {!tabAllowed(activeTab, user) ? (
           <LockedTab tab={activeTab} />
-        ) : activeId === 'mentor' ? (
-          <MentorsPage embedded />
+        ) : activeId === 'advisor' ? (
+          <AdvisorsPage embedded />
         ) : activeId === 'cofounder' ? (
           <CofounderPage embedded />
         ) : (
