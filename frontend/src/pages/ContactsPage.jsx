@@ -105,7 +105,7 @@ export default function ContactsPage() {
       {creating && (
         <form onSubmit={onCreate} className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-            <input value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} placeholder="Project ID" inputMode="numeric" required
+            <input value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} placeholder="Startup ID" inputMode="numeric" required
               className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
             <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email" type="email" required
               className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />

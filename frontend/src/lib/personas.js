@@ -127,7 +127,7 @@ export const PERSONAS = [
     label: 'Operator / Advisor',
     short_description: 'Operating partner or advisor offering sweat-equity expertise to spin-outs.',
     role_alignment: 'partner',
-    nav_extras: [{ to: '/matches', label: 'AI Matches' }, { to: '/projects', label: 'Projects' }],
+    nav_extras: [{ to: '/matches', label: 'AI Matches' }, { to: '/projects', label: 'Startups' }],
     follow_up_questions: [
       { key: 'expertise', prompt: 'Primary expertise area (e.g. GTM, eng, finance, product)?', type: 'text' },
       { key: 'years_experience', prompt: 'Years of senior operating experience?', type: 'number' },

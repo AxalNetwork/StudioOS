@@ -86,7 +86,7 @@ function NumberField({ label, value, onChange, min = 0, max = 100, step = 1, suf
   );
 }
 
-export default function CofounderAgreementPage() {
+export default function CofounderAgreementPage({ embedded = false }) {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [projects, setProjects] = useState([]);
@@ -175,18 +175,20 @@ export default function CofounderAgreementPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <div className="mb-6">
-        <div className="flex items-center gap-2 text-violet-700 mb-1">
-          <Briefcase size={18} />
-          <span className="text-xs font-semibold uppercase tracking-wide">Incorporate</span>
+    <div className={embedded ? 'max-w-5xl mx-auto' : 'max-w-5xl mx-auto p-6'}>
+      {!embedded && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 text-violet-700 mb-1">
+            <Briefcase size={18} />
+            <span className="text-xs font-semibold uppercase tracking-wide">Incorporate</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Co-Founder Agreement</h1>
+          <PageExplainer pageKey="cofounder_agreement" />
+          <p className="text-sm text-gray-600 mt-1">
+            Standardise the founder paperwork: vesting cliffs, IP assignment, decision rights, and exit/buyout.
+          </p>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Co-Founder Agreement</h1>
-        <PageExplainer pageKey="cofounder_agreement" />
-        <p className="text-sm text-gray-600 mt-1">
-          Standardise the founder paperwork: vesting cliffs, IP assignment, decision rights, and exit/buyout.
-        </p>
-      </div>
+      )}
 
       {step < STEPS.length && <Stepper current={step} />}
 
@@ -194,7 +196,7 @@ export default function CofounderAgreementPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5 dark:bg-gray-900 dark:border-gray-800">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="block">
-              <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Project</div>
+              <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Startup</div>
               <select
                 value={projectId}
                 onChange={(e) => {
@@ -420,7 +422,7 @@ export default function CofounderAgreementPage() {
           </div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Agreement generated</h2>
           <p className="text-sm text-gray-600 mt-1">
-            <strong>{result.document.title}</strong> is now in your project's legal documents.
+            <strong>{result.document.title}</strong> is now in your startup's legal documents.
           </p>
           <div className="mt-4 flex items-center justify-center gap-3">
             <button onClick={() => navigate('/legal-capital')}

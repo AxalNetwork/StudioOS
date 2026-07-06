@@ -252,7 +252,7 @@ function WatchlistForm({ onSubmit, busy }) {
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSubmit(form); }} className="space-y-3 text-sm">
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">Project UID (in-system)</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1">Startup UID (in-system)</label>
         <input value={form.project_uid} onChange={(e) => upd('project_uid', e.target.value)}
                className="w-full border border-slate-300 rounded px-2 py-1.5" placeholder="optional — leave blank for external" />
       </div>
@@ -490,7 +490,7 @@ function JournalForm({ onSubmit, busy }) {
     }} className="space-y-3 text-sm">
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Project UID</label>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Startup UID</label>
           <input value={form.project_uid} onChange={(e) => upd('project_uid', e.target.value)} className="w-full border border-slate-300 rounded px-2 py-1.5" />
         </div>
         <div>

@@ -133,11 +133,11 @@ export default function CapitalPage() {
       <div className="grid lg:grid-cols-2 gap-6 mb-6">
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
           <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
-            <h3 className="font-semibold text-gray-900 text-sm dark:text-gray-100">Portfolio Projects</h3>
+            <h3 className="font-semibold text-gray-900 text-sm dark:text-gray-100">Portfolio Startups</h3>
           </div>
           <div className="divide-y divide-gray-800">
             {portfolio?.projects?.length === 0 && (
-              <div className="p-6 text-center text-gray-500 text-sm">No portfolio projects yet</div>
+              <div className="p-6 text-center text-gray-500 text-sm">No portfolio startups yet</div>
             )}
             {portfolio?.projects?.map(p => (
               <div key={p.id} className="px-5 py-3 flex items-center justify-between">

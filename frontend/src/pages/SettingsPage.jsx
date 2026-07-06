@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { EXPLAINERS } from '../lib/explainers';
@@ -7,7 +7,7 @@ import {
   User, ShieldCheck, Bell, Lock,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
   Plus, X, KeyRound, Palette, Plug, CreditCard, UserCog,
-  Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2,
+  Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2, Share2,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
@@ -17,6 +17,9 @@ import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
 import AxalCheckout from '../components/AxalCheckout';
 import BillingDashboard from '../components/BillingDashboard';
+// Task #4 — Referrals lives inside Settings as its own section; lazy-loaded so
+// its heavier deps (QR code, Stripe Connect panel) stay out of the settings chunk.
+const ReferralsPage = lazy(() => import('./ReferralsPage'));
 
 // Task #4 (Y-2) — small reusable trust score on the profile surface so
 // the user can see their compliance posture without bouncing to the
@@ -93,7 +96,7 @@ const NOTIFICATION_EVENTS = [
   { key: 'mentions_and_comments', label: 'Mentions & comments' },
   { key: 'ticket_update', label: 'Ticket updates' },
   { key: 'deal_stage_change', label: 'Deal stage changes' },
-  { key: 'score_generated', label: 'New score generated for your project' },
+  { key: 'score_generated', label: 'New score generated for your startup' },
   { key: 'contract_signed', label: 'Contract fully signed' },
   { key: 'mentor_session_booked', label: 'Mentor session booked' },
   { key: 'dd_report_ready', label: 'Due-diligence report ready' },
@@ -135,6 +138,10 @@ const SECTIONS = [
   { id: 'privacy', label: 'Privacy', icon: Lock },
   { id: 'integrations', label: 'Integrations', icon: Plug },
   { id: 'billing', label: 'Billing', icon: CreditCard },
+  // Task #4 — the merged Referrals workspace (Refer & Earn + Payouts) now lives
+  // here as a section. Gated to the roles that carried the standalone /refer
+  // item (admin/founder/partner/investor); hidden for mentor.
+  { id: 'referrals', label: 'Referrals', icon: Share2, roles: ['admin', 'founder', 'partner', 'investor'] },
   { id: 'appearance', label: 'Appearance', icon: Palette },
 ];
 
@@ -152,6 +159,7 @@ const PATH_TO_SECTION = {
   privacy: 'privacy',
   integrations: 'integrations',
   billing: 'billing',
+  referrals: 'referrals',
   appearance: 'appearance',
   // Back-compat: old deep links still resolve to a sensible new tab.
   jurisdictions: 'profile',
@@ -301,6 +309,11 @@ export default function SettingsPage() {
           {safeActive === 'onboarding' && <OnboardingSettingsTab />}
           {safeActive === 'integrations' && allowedIds.has('integrations') && <IntegrationsTab flash={flash} />}
           {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}
+          {safeActive === 'referrals' && allowedIds.has('referrals') && (
+            <Suspense fallback={<div className="text-gray-500 dark:text-gray-400 py-8 text-center">Loading…</div>}>
+              <ReferralsPage embedded />
+            </Suspense>
+          )}
           {safeActive === 'appearance' && <AppearanceTab flash={flash} />}
         </div>
       </div>
@@ -2290,7 +2303,7 @@ const PUBLIC_PROFILE_FIELDS_COMMON = [
 ];
 const PUBLIC_PROFILE_FIELDS_BY_ROLE = {
   founder: [
-    { key: 'projects', label: 'Projects (names + stage)' },
+    { key: 'projects', label: 'Startups (names + stage)' },
     { key: 'traction', label: 'Traction summary (users + revenue)' },
   ],
   investor: [
@@ -2570,7 +2583,7 @@ function CofounderInvitesCard() {
 
   return (
     <Card title="Co-founder invites"
-      description={`Invite a co-founder, advisor, or operating partner to join your project on Axal VC. Up to ${cap} active invites at a time, each valid for 14 days.`}>
+      description={`Invite a co-founder, advisor, or operating partner to join your startup on Axal VC. Up to ${cap} active invites at a time, each valid for 14 days.`}>
       {err && <div className="text-sm text-red-600 mb-3">{err}</div>}
 
       <div className="grid sm:grid-cols-3 gap-2 mb-3">
@@ -3338,7 +3351,7 @@ function InvestorThesisEditorCard({ flash, role }) {
             <Ban size={14} className="text-red-500" />
             <h4 className="text-xs font-semibold text-gray-800 dark:text-gray-200">Anti-thesis (hard exclusions)</h4>
           </div>
-          <p className="text-xs text-gray-500 mb-2 dark:text-gray-400">We will NEVER match you with projects in these sectors or stages.</p>
+          <p className="text-xs text-gray-500 mb-2 dark:text-gray-400">We will NEVER match you with startups in these sectors or stages.</p>
           <div className="space-y-3">
             <div>
               <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Sectors you avoid</span>

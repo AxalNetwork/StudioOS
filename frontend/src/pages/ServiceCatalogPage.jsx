@@ -55,7 +55,7 @@ export default function ServiceCatalogPage({ user }) {
 // ---------------------------------------------------------------------------
 // Browse — public listings (founders, investors, admins, other partners)
 // ---------------------------------------------------------------------------
-function BrowseTab({ user, isFounder }) {
+export function BrowseTab({ user, isFounder }) {
   const [filters, setFilters] = useState({ category: '', q: '' });
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -185,7 +185,7 @@ function OfferingDetailModal({ offering, user, isFounder, onClose }) {
           <div className="border-t pt-4 space-y-3">
             <Field label="Charge to project">
               <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white dark:border-gray-700 dark:bg-gray-900">
-                {projects.length === 0 && <option value="">No projects</option>}
+                {projects.length === 0 && <option value="">No startups</option>}
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>
@@ -217,7 +217,7 @@ function OfferingDetailModal({ offering, user, isFounder, onClose }) {
 // ---------------------------------------------------------------------------
 // Mine — partner manages their own offerings
 // ---------------------------------------------------------------------------
-function MineTab({ user }) {
+export function MineTab({ user }) {
   const [rows, setRows] = useState([]);
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -377,7 +377,7 @@ function OfferingFormModal({ offering, onClose }) {
 // ---------------------------------------------------------------------------
 // Stripe Connect onboarding tab
 // ---------------------------------------------------------------------------
-function StripeTab() {
+export function StripeTab() {
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);

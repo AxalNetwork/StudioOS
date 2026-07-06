@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Search, Users, MapPin, CalendarDays, MessageSquare, Lock, Globe,
@@ -9,8 +9,10 @@ import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
 import NetworkSubNav from '../components/NetworkSubNav';
 import {
-  CIRCLES, CIRCLE_TYPES, CIRCLE_TYPE_LABEL, ACTIVITY_LEVELS, ACCESS_TYPES,
+  CIRCLE_TYPES, CIRCLE_TYPE_LABEL, ACTIVITY_LEVELS, ACCESS_TYPES,
 } from '../data/network';
+import { circlesPublic } from '../lib/api';
+import { reportError } from '../lib/log';
 
 // lucide icons referenced by name in the circle-type config.
 const TYPE_ICONS = {
@@ -75,13 +77,15 @@ function CircleCard({ c, featured }) {
 
       <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{c.name}</h3>
       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-        <span className={`rounded px-1.5 py-0.5 font-medium ${accent.chip}`}>{CIRCLE_TYPE_LABEL[c.type]}</span>
+        <span className={`rounded px-1.5 py-0.5 font-medium ${accent.chip}`}>{CIRCLE_TYPE_LABEL[c.type] || c.type}</span>
         {c.region && (
           <span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3" />{c.region}</span>
         )}
       </div>
 
-      <p className="mt-3 flex-1 text-sm text-slate-600 dark:text-slate-400 line-clamp-3">{c.tagline}</p>
+      {c.tagline && (
+        <p className="mt-3 flex-1 text-sm text-slate-600 dark:text-slate-400 line-clamp-3">{c.tagline}</p>
+      )}
 
       {c.tags?.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -117,7 +121,7 @@ function CircleCard({ c, featured }) {
       <div className="mt-4 flex items-center justify-between">
         <ActivityDot activity={c.activity} />
         <Link
-          to={`/register?intent=circle&circle=${encodeURIComponent(c.id)}`}
+          to={`/register?intent=circle&circle=${encodeURIComponent(c.slug || c.id)}`}
           className="inline-flex items-center gap-1 text-sm font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-200"
         >
           {c.access === 'private' ? 'Request access' : 'Join'}
@@ -131,38 +135,63 @@ function CircleCard({ c, featured }) {
 const ACCESS_FILTERS = [{ id: '', label: 'All access' }, ...ACCESS_TYPES];
 
 export default function CirclesPage() {
+  const [circles, setCircles] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [type, setType] = useState('');
   const [access, setAccess] = useState('');
+  const [region, setRegion] = useState('');
+  const circlesRef = useRef(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await circlesPublic.list();
+        if (alive) setCircles(Array.isArray(res?.circles) ? res.circles : []);
+      } catch (e) {
+        // Worker-only route: 404s in local dev (FastAPI doesn't implement it).
+        // Public marketing surface — degrade to the empty state, never a crash.
+        reportError('CirclesPage:load', e);
+        if (alive) setCircles([]);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const regions = useMemo(() => {
-    const set = new Set(CIRCLES.map((c) => c.region).filter(Boolean));
+    const set = new Set(circles.map((c) => c.region).filter(Boolean));
     return Array.from(set).sort();
-  }, []);
-  const [region, setRegion] = useState('');
+  }, [circles]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return CIRCLES.filter((c) => {
+    return circles.filter((c) => {
       if (type && c.type !== type) return false;
       if (access && c.access !== access) return false;
       if (region && c.region !== region) return false;
       if (q) {
-        const hay = `${c.name} ${c.tagline} ${c.theme} ${(c.tags || []).join(' ')}`.toLowerCase();
+        const hay = `${c.name} ${c.tagline || ''} ${c.theme || ''} ${(c.tags || []).join(' ')}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [search, type, access, region]);
+  }, [circles, search, type, access, region]);
 
   const featured = useMemo(() => filtered.filter((c) => c.featured), [filtered]);
   const rest = useMemo(() => filtered.filter((c) => !c.featured), [filtered]);
   const hasFilters = search || type || access || region;
 
   const totalMembers = useMemo(
-    () => CIRCLES.reduce((n, c) => n + (c.members || 0), 0),
-    [],
+    () => circles.reduce((n, c) => n + (c.members || 0), 0),
+    [circles],
   );
+
+  const scrollToCircles = () => {
+    circlesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col pt-16">
@@ -191,17 +220,18 @@ export default function CirclesPage() {
               >
                 Join the network <ArrowRight className="w-4 h-4" />
               </Link>
-              <a
-                href="#circles"
+              <button
+                type="button"
+                onClick={scrollToCircles}
                 className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:border-slate-400 transition-colors"
               >
                 Browse circles
-              </a>
+              </button>
             </div>
             <div className="mt-8 flex flex-wrap gap-x-8 gap-y-2 text-sm text-slate-500 dark:text-slate-400">
-              <span><strong className="text-slate-900 dark:text-slate-100">{CIRCLES.length}</strong> circles</span>
-              <span><strong className="text-slate-900 dark:text-slate-100">{totalMembers.toLocaleString()}</strong> members</span>
-              <span><strong className="text-slate-900 dark:text-slate-100">6</strong> circle types</span>
+              <span><strong className="text-slate-900 dark:text-slate-100">{loading ? '—' : circles.length}</strong> circles</span>
+              <span><strong className="text-slate-900 dark:text-slate-100">{loading ? '—' : totalMembers.toLocaleString()}</strong> members</span>
+              <span><strong className="text-slate-900 dark:text-slate-100">{CIRCLE_TYPES.length}</strong> circle types</span>
             </div>
           </div>
         </div>
@@ -223,7 +253,7 @@ export default function CirclesPage() {
                   <button
                     key={t.id}
                     type="button"
-                    onClick={() => setType(active ? '' : t.id)}
+                    onClick={() => { setType(active ? '' : t.id); scrollToCircles(); }}
                     className={`flex flex-col items-start gap-2 rounded-xl border p-3 text-left transition ${
                       active
                         ? 'border-violet-400 dark:border-violet-600 ring-1 ring-violet-200 dark:ring-violet-800 bg-white dark:bg-slate-900'
@@ -240,74 +270,99 @@ export default function CirclesPage() {
             </div>
           </section>
 
-          {/* Filters */}
-          <section id="circles" className="scroll-mt-24">
-            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search circles by name, theme, or tag"
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                />
+          {/* Filters + results */}
+          <section ref={circlesRef} className="scroll-mt-24">
+            {loading ? (
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-12 text-center">
+                <p className="text-sm text-slate-500 dark:text-slate-400">Loading circles…</p>
               </div>
-              <select
-                value={access}
-                onChange={(e) => setAccess(e.target.value)}
-                className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                aria-label="Filter by access"
-              >
-                {ACCESS_FILTERS.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
-              </select>
-              <select
-                value={region}
-                onChange={(e) => setRegion(e.target.value)}
-                className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                aria-label="Filter by region"
-              >
-                <option value="">All regions</option>
-                {regions.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-
-            {hasFilters && (
-              <div className="mb-4 flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-                <span>{filtered.length} circle{filtered.length === 1 ? '' : 's'}</span>
-                <button
-                  type="button"
-                  onClick={() => { setSearch(''); setType(''); setAccess(''); setRegion(''); }}
-                  className="text-violet-700 dark:text-violet-300 hover:underline"
-                >
-                  Clear filters
-                </button>
-              </div>
-            )}
-
-            {filtered.length === 0 ? (
+            ) : circles.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-12 text-center">
-                <p className="text-sm text-slate-500 dark:text-slate-400">No circles match your filters yet.</p>
+                <div className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">
+                  <Users className="h-6 w-6" />
+                </div>
+                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">No circles yet</h3>
+                <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+                  The network is just getting started — circles will appear here as soon as they launch.
+                  Join now and we&apos;ll let you know when one fits.
+                </p>
+                <Link
+                  to="/register?intent=circle"
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors"
+                >
+                  Join the network <ArrowRight className="w-4 h-4" />
+                </Link>
               </div>
             ) : (
               <>
-                {featured.length > 0 && !hasFilters && (
-                  <div className="mb-8">
-                    <h2 className="mb-3 inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
-                      <Sparkles className="w-4 h-4" /> Featured circles
-                    </h2>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {featured.map((c) => <CircleCard key={c.id} c={c} featured />)}
-                    </div>
+                <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="relative flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="search"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search circles by name, theme, or tag"
+                      className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    />
+                  </div>
+                  <select
+                    value={access}
+                    onChange={(e) => setAccess(e.target.value)}
+                    className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    aria-label="Filter by access"
+                  >
+                    {ACCESS_FILTERS.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+                  </select>
+                  <select
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                    className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    aria-label="Filter by region"
+                  >
+                    <option value="">All regions</option>
+                    {regions.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+
+                {hasFilters && (
+                  <div className="mb-4 flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+                    <span>{filtered.length} circle{filtered.length === 1 ? '' : 's'}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setSearch(''); setType(''); setAccess(''); setRegion(''); }}
+                      className="text-violet-700 dark:text-violet-300 hover:underline"
+                    >
+                      Clear filters
+                    </button>
                   </div>
                 )}
 
-                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                  {hasFilters ? 'Results' : 'All circles'}
-                </h2>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {(hasFilters ? filtered : rest).map((c) => <CircleCard key={c.id} c={c} />)}
-                </div>
+                {filtered.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-12 text-center">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">No circles match your filters yet.</p>
+                  </div>
+                ) : (
+                  <>
+                    {featured.length > 0 && !hasFilters && (
+                      <div className="mb-8">
+                        <h2 className="mb-3 inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
+                          <Sparkles className="w-4 h-4" /> Featured circles
+                        </h2>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                          {featured.map((c) => <CircleCard key={c.id} c={c} featured />)}
+                        </div>
+                      </div>
+                    )}
+
+                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                      {hasFilters ? 'Results' : 'All circles'}
+                    </h2>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {(hasFilters ? filtered : rest).map((c) => <CircleCard key={c.id} c={c} />)}
+                    </div>
+                  </>
+                )}
               </>
             )}
           </section>

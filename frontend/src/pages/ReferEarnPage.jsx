@@ -65,7 +65,7 @@ function fillTemplate(tpl, link, code) {
   return (tpl || '').replaceAll('{{link}}', link).replaceAll('{{code}}', code);
 }
 
-export default function ReferEarnPage() {
+export default function ReferEarnPage({ embedded = false }) {
   const [data, setData] = useState(null);
   const [referrals, setReferrals] = useState([]);
   const [commissions, setCommissions] = useState({ balance_cents: 0, lifetime_cents: 0, commissions: [] });
@@ -588,15 +588,17 @@ export default function ReferEarnPage() {
   if (error) return <div className="p-6 text-sm text-red-600">{error}</div>;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <Share2 className="text-violet-600" size={24} />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Refer & Earn</h1>
-        <PageExplainer pageKey="refer_earn" />
-          <p className="text-sm text-gray-600 dark:text-gray-400">Invite founders, partners, and LPs. Earn commissions when they reach milestones.</p>
+    <div className={embedded ? '' : 'p-6 max-w-6xl mx-auto'}>
+      {!embedded && (
+        <div className="flex items-center gap-3 mb-6">
+          <Share2 className="text-violet-600" size={24} />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Refer & Earn</h1>
+            <PageExplainer pageKey="refer_earn" />
+            <p className="text-sm text-gray-600 dark:text-gray-400">Invite founders, partners, and LPs. Earn commissions when they reach milestones.</p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <StatCard icon={Users} label="Total Referred" value={referrals.length} />

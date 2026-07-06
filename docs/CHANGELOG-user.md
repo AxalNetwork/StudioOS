@@ -5,6 +5,129 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Services and needs are now one place: Marketplace
+
+We've combined **Needs Board** and **Service Catalogue** into a single
+**Marketplace** in your sidebar. Open it and switch between tabs to either browse
+ready-made partner services — with fixed price, scope, and turnaround — and book
+them, or post a need and collect quotes from partners. Your posted needs and the
+shared engagements that come out of both live right there too. Everything works
+exactly as before — it's just grouped so it's faster to find the right partner and
+get work moving. Old **Needs Board** and **Service Catalogue** bookmarks send you
+straight to the matching tab.
+
+---
+
+## Referrals now lives in Settings
+
+Your **Referrals** area — where you grab your referral link and share templates,
+and where you track your earnings and request payouts — has moved into
+**Settings**. Open **Settings**, choose **Referrals** from the list, and switch
+between the **Refer & Earn** and **Payouts** tabs just like before. Everything
+works exactly the same; it's simply tidied into your account settings. Old
+**Refer & Earn** and **Payouts** bookmarks take you straight to the right place.
+
+---
+
+## Competitor Analysis is now built into each startup
+
+Competitor Analysis lives right on the startup's page now — there's no separate tool
+and no need to pick a startup first. Open any startup and expand **Competitor
+Analysis** to research and compare rivals in context, and any analyses you saved for
+that startup appear automatically.
+
+We've also finished renaming **Projects** to **Startups** everywhere in the app, so
+the wording is consistent from the menus all the way through buttons, forms, and the
+help pages.
+
+---
+
+## Your Build tools are now one place: Command Center
+
+We've combined **Founder Portal**, **Execution**, **Studio Ops**, and **Spin-Outs**
+into a single **Command Center** in the sidebar. Open it and switch between four
+tabs that follow your venture's journey: **Founder Portal** (submit and instantly
+score a new startup), **Execution** (your startups, pipeline board, and roadmap),
+**Studio Ops** (finance, HR, legal, and compliance), and **Spin-Outs** (ventures
+past the Decision Gate). Everything works exactly as before — it's just grouped so
+it's faster to move through your whole workflow in one place. Each tab has its own
+web address, so you can bookmark or share a specific one, and your old links still
+take you straight to the right tab.
+
+We've also renamed **Projects** to **Startups** in the navigation and page titles,
+so the wording matches how you think about the companies you're building.
+
+---
+
+## Refer & Earn and Payouts are now one place: Referrals
+
+We've combined **Refer & Earn** and **Payouts** into a single **Referrals** area
+in the sidebar. Open it and switch between two tabs: **Refer & Earn** (your
+referral link, share templates, LinkedIn import, and Stripe Connect setup) and
+**Payouts** (your available and lifetime earnings, commissions, and payout
+requests). Everything works exactly as before — it's just grouped so it's faster
+to find, since you refer people to earn and then collect your earnings in the same
+spot. Old **Payouts** bookmarks send you straight to the Payouts tab.
+
+---
+
+## Nail your pitch in one click
+
+There's a new **Positioning** tab under **Raise → Pitch**. Pick one of your
+startups and, in a click, we write you a punchy **one-liner**, a **20-second
+elevator pitch**, and a handful of **alternate positioning lines** to try out.
+It's built from your own startup's details — your team, traction, and recent
+updates — so it sounds like you, not a template. Copy any line (or all of them)
+straight into your deck or emails. If AI isn't available in your environment,
+we tell you plainly rather than making anything up.
+
+---
+
+## Communities & Circles — now curated by the team
+
+The **Circles** page is now managed by the Axal team. Instead of a fixed, made-up
+list, you'll see real communities as soon as they're launched — organised by stage,
+city, and topic. Admins can publish, feature, edit, and remove circles from a new
+management console, so what you see is always current.
+
+If no circles have launched yet, the page shows a friendly "no circles yet" message
+with a way to join the network, rather than placeholder content. We also fixed an
+odd link on the page so browsing now scrolls smoothly to the list.
+
+---
+
+## Signals — public-market evidence for what to build next
+
+A new **Signals** dashboard helps you decide what to build next. It scans public
+company and market data and surfaces founder-ready opportunities as ranked cards —
+each with a plain-English thesis, a "why now", the kinds of customers it points to,
+and the public evidence behind it. Open any card to see the full evidence trail.
+
+It's not a stock or trading screen — there are no price charts. Instead it answers
+two questions from one place: **Founder mode** ("what should I build next?") and
+**Advisor mode** ("what should I point founders toward?"). Switch modes to reorder
+the list and change the framing. Filter by region, sector, company size, customer
+type and more, or search across signals.
+
+You'll find **Signals** in the sidebar — available to founders, mentors and admins.
+
+---
+
+## A simpler "Raise" menu — three focused workspaces
+
+The **Raise** section of the sidebar used to have ten separate links. It's now
+three tidy workspaces:
+
+- **Pitch** — build your investor deck and get an AI review, side by side in tabs.
+- **Capital** — your financial model, cap table, and investor raise pipeline in one place.
+- **Legal Engine** — incorporation, founder agreements, compliance, and equity elections (like 83(b)), all from one hub.
+
+Everything you had before is still here — just grouped so it's faster to find. Your
+plan's features work exactly as before, and old bookmarks automatically send you to
+the right workspace.
+
+---
+
 ## Identity verification now lives in the Trust Center
 
 Verifying your identity (KYC / AML) is now part of your **Trust Center** instead

@@ -20,7 +20,7 @@ const EXPLAINER_CARDS = [
         <p>
           <span className="font-semibold text-gray-900 dark:text-gray-100">Week 1 — Idea & Customer.</span> Define the
           problem, ICP, market sizing seed, talk to ≥5 customers, log every interview. Unlocks{' '}
-          <Link to="/projects" className="text-violet-700 hover:underline">Projects</Link>,{' '}
+          <Link to="/projects" className="text-violet-700 hover:underline">Startups</Link>,{' '}
           <Link to="/customer-discovery" className="text-violet-700 hover:underline">Customer Discovery</Link>,{' '}
           <Link to="/market-intel" className="text-violet-700 hover:underline">Market Intelligence</Link>.
         </p>
@@ -164,7 +164,7 @@ const EXPLAINER_CARDS = [
           separately negotiated partnership / spin-out agreement. Never automatically.
         </li>
         <li>
-          <span className="font-semibold text-gray-900 dark:text-gray-100">Can I bring an existing project?</span>{' '}
+          <span className="font-semibold text-gray-900 dark:text-gray-100">Can I bring an existing startup?</span>{' '}
           Yes — fast-forward through weeks you've already completed.
         </li>
         <li>
@@ -225,7 +225,7 @@ const WEEK_TITLES = {
 };
 
 const MILESTONE_LABELS = {
-  project_created: 'Create your first project',
+  project_created: 'Create your first startup',
   customer_interview_logged_1: 'Log customer interview #1',
   customer_interview_logged_2: 'Log customer interview #2',
   customer_interview_logged_3: 'Log customer interview #3',
@@ -255,8 +255,8 @@ const FEATURE_EXPLAINERS = {
     blurb: "Your home base for the 4-week sprint — track milestones, days remaining, and what unlocks next.",
   },
   projects: {
-    label: 'Projects',
-    blurb: 'Spin up your venture record. The whole platform hangs off this one project for the rest of the sprint.',
+    label: 'Startups',
+    blurb: 'Spin up your venture record. The whole platform hangs off this one startup for the rest of the sprint.',
   },
   'customer-discovery': {
     label: 'Customer Discovery',
@@ -276,7 +276,7 @@ const FEATURE_EXPLAINERS = {
   },
   'pitch-deck': {
     label: 'Pitch Deck',
-    blurb: 'Generate a working seed deck from your project + market intel; iterate before mentors see it.',
+    blurb: 'Generate a working seed deck from your startup + market intel; iterate before mentors see it.',
   },
   'cofounder-match': {
     label: 'Co-founder Match',
@@ -292,7 +292,7 @@ const FEATURE_EXPLAINERS = {
   },
   scoring: {
     label: 'AI Scoring',
-    blurb: 'Run the 100-point scoring engine on your project. Tier 1 (≥85) unlocks the cohort offer.',
+    blurb: 'Run the 100-point scoring engine on your startup. Tier 1 (≥85) unlocks the cohort offer.',
   },
   incorporate: {
     label: 'Incorporate',

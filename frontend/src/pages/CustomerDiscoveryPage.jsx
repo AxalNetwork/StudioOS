@@ -224,7 +224,7 @@ export default function CustomerDiscoveryPage() {
 
       {!loading && !projectId ? (
         <div className="bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-600 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-400">
-          You need a project before you can log interviews. Create one from
+          You need a startup before you can log interviews. Create one from
           Studio, then come back here.
         </div>
       ) : (

@@ -29,7 +29,7 @@ const COMMITMENT_LABEL = {
 
 function asArray(x) { return Array.isArray(x) ? x : []; }
 
-export default function CofounderPage() {
+export default function CofounderPage({ embedded = false }) {
   const [tab, setTab] = useState('browse');
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -50,18 +50,22 @@ export default function CofounderPage() {
   useEffect(() => { loadProfile(); }, []);
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
-      <header>
-        <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
-          <Users className="w-7 h-7 text-blue-600" /> Co-founder matching
-        </h1>
-        <PageExplainer pageKey="cofounder_match" />
-        <p className="text-sm text-slate-600 mt-1">
-          Find a co-founder using mutual-interest reveal. Identities stay hidden until
-          both sides express interest — at which point an NDA is auto-generated for
-          each of you to countersign.
-        </p>
-      </header>
+    <div className={embedded ? 'space-y-6' : 'max-w-6xl mx-auto p-6 space-y-6'}>
+      {/* Suppress the page-level header when embedded in Team Building so the
+          workspace's single title governs the surface. */}
+      {!embedded && (
+        <header>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Users className="w-7 h-7 text-blue-600" /> Co-founder matching
+          </h1>
+          <PageExplainer pageKey="cofounder_match" />
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+            Find a co-founder using mutual-interest reveal. Identities stay hidden until
+            both sides express interest — at which point an NDA is auto-generated for
+            each of you to countersign.
+          </p>
+        </header>
+      )}
 
       <nav className="flex gap-2 border-b border-slate-200">
         {[

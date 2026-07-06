@@ -72,7 +72,7 @@ export default function PortfolioUpdatesPage() {
       {isFounder && creating && (
         <form className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
-            <input value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} placeholder="Project ID" inputMode="numeric" required
+            <input value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} placeholder="Startup ID" inputMode="numeric" required
               className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
             <input value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })} placeholder="Period (e.g. 2026-06)"
               className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
@@ -109,7 +109,7 @@ export default function PortfolioUpdatesPage() {
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="font-medium text-gray-900 dark:text-gray-100 truncate">{u.title}</div>
-                  <div className="text-xs text-gray-500 truncate">{u.project?.name || `Project ${u.project_id}`}{u.period ? ` · ${u.period}` : ''}</div>
+                  <div className="text-xs text-gray-500 truncate">{u.project?.name || `Startup ${u.project_id}`}{u.period ? ` · ${u.period}` : ''}</div>
                 </div>
                 <div className="hidden md:flex gap-3 text-xs text-gray-500 shrink-0">
                   {KPI_KEYS.slice(0, 4).map(([k, label]) => (u.kpis?.[k] != null ? <span key={k}>{label}: {u.kpis[k]}</span> : null))}
@@ -127,7 +127,7 @@ export default function PortfolioUpdatesPage() {
               <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{open.title}</h2>
               <button onClick={() => setOpen(null)} className="text-gray-500 hover:text-gray-800"><X size={18} /></button>
             </div>
-            <div className="text-sm text-gray-500 mb-4">{open.project?.name || `Project ${open.project_id}`}{open.period ? ` · ${open.period}` : ''}</div>
+            <div className="text-sm text-gray-500 mb-4">{open.project?.name || `Startup ${open.project_id}`}{open.period ? ` · ${open.period}` : ''}</div>
             <div className="grid grid-cols-3 gap-3 mb-4">
               {KPI_KEYS.map(([k, label]) => (
                 <div key={k}>

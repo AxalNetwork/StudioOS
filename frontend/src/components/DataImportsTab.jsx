@@ -394,11 +394,11 @@ function DeckWizard({ flash, onDone }) {
     <div>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Pitch deck import</h3>
       <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-        Upload a PDF or PPTX deck. Per-slide text is extracted and pre-fills the Pitch Deck Builder for the selected project. Image-only PDFs (scanned decks) cannot be extracted without OCR.
+        Upload a PDF or PPTX deck. Per-slide text is extracted and pre-fills the Pitch Deck Builder for the selected startup. Image-only PDFs (scanned decks) cannot be extracted without OCR.
       </p>
       {projects.length > 0 && (
         <>
-          <label className="block text-sm mb-1">Target project (pre-fills Pitch Deck Builder)</label>
+          <label className="block text-sm mb-1">Target startup (pre-fills Pitch Deck Builder)</label>
           <select value={projectId} onChange={e => setProjectId(e.target.value)}
             className="w-full mb-3 px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded text-sm">
             <option value="">— extract only, do not save —</option>

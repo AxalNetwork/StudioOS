@@ -66,7 +66,7 @@ export const PRODUCT_PAGES = {
       {
         icon: 'Rocket',
         title: 'One startup workspace',
-        body: 'Projects, roadmap, brand and cap table in a single place — no more tab sprawl across half a dozen tools.',
+        body: 'Startups, roadmap, brand and cap table in a single place — no more tab sprawl across half a dozen tools.',
       },
       {
         icon: 'FileText',
@@ -85,7 +85,7 @@ export const PRODUCT_PAGES = {
       },
     ],
     liveFeatures: [
-      'Startup workspace — Projects, 90-day roadmap, brand builder and cap table',
+      'Startup workspace — Startups, 90-day roadmap, brand builder and cap table',
       'Pitch deck builder with shareable links and export',
       'Venture-readiness scoring with evidence-confidence',
       'Customer discovery + Market Intelligence dashboards',

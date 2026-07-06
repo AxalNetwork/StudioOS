@@ -18,11 +18,11 @@
 import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Zap, Handshake, Rocket, UserCircle,
-  Globe, Brain, Activity, Shield, ShieldCheck, Share2, Wallet,
-  Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug,
+  Globe, Brain, Activity, Shield, ShieldCheck,
+  Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, LayoutGrid,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2, ShieldAlert,
-  Gavel, Inbox, FileBarChart,
+  Gavel, Inbox, FileBarChart, Radar,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -72,6 +72,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/best-fit', icon: Sparkles, label: 'Best-Fit Console' },
       { to: '/admin/events', icon: Ticket, label: 'Event Admin' },
       { to: '/admin/jobs', icon: Briefcase, label: 'Job Board Admin' },
+      { to: '/admin/circles', icon: Network, label: 'Communities Admin' },
       { to: '/monitoring', icon: Activity, label: 'Monitoring' },
       { to: '/admin/telegram', icon: Send, label: 'Telegram Channels' },
       // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
@@ -80,13 +81,14 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/articles', icon: FileText, label: 'Content Queue' },
     ]},
     { key: 'studio', label: 'Studio', items: [
-      { to: '/projects', icon: Zap, label: 'Projects' },
+      { to: '/projects', icon: Zap, label: 'Startups' },
       { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
       { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
       { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
       { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
+      { to: '/signals', icon: Radar, label: 'Signals' },
       { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
       { to: '/deals', icon: Handshake, label: 'Deal Flow' },
@@ -94,7 +96,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'capital', label: 'Capital & Legal', items: [
       { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
-      { to: '/payouts', icon: Wallet, label: 'Payouts' },
       { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
       { to: '/portfolio/coverage', icon: Network, label: 'Portfolio Coverage' },
       { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
@@ -107,7 +108,8 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'network', label: 'Network & Growth', items: [
       { to: '/partners', icon: Users, label: 'Partners' },
-      { to: '/refer', icon: Share2, label: 'Refer & Earn' },
+      // Task #4 — "Referrals" moved into Settings (/settings/referrals); the
+      // /refer route redirects there. Removed from the admin nav.
       { to: '/relationships', icon: Handshake, label: 'Relationships' },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
@@ -147,9 +149,13 @@ export const SIDEBAR_GROUPS = {
   //
   // Intentional removals (documented so a nav-integrity guard treats them as
   // deliberate, not silent drops):
-  //   • "Founder Portal" (/founder) — redundant with Studio/Home; founders
-  //     hitting /founder are redirected to /studio in App.jsx. The route stays
-  //     registered for admin.
+  //   • "Founder Portal" (/founder), "Execution" (/execution + board/roadmap),
+  //     "Studio Ops" (/studio-ops) and "Spin-Outs" (/spinouts) are merged into
+  //     one "Command Center" workspace (/build/command-center). Each is now a
+  //     deep-linkable tab (?tab=founder-portal|execution|studio-ops|spin-outs);
+  //     founders hitting the legacy routes are redirected into the matching tab
+  //     in App.jsx. Every route stays registered and reachable for admin/other
+  //     personas.
   //   • "Portfolio Health" (/portfolio/health) — folded into Metrics
   //     (/build/metrics) as the founder's own company-health view; the
   //     /portfolio/health route stays registered and reachable for other roles.
@@ -169,57 +175,63 @@ export const SIDEBAR_GROUPS = {
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
     ]},
     { key: 'build', label: 'Build', items: [
-      // Task #12/#14 — Projects, Pipeline Board and Roadmap are merged into one
-      // Execution area (founder persona only). `match` keeps the item active
-      // across every Execution view and its legacy deep-linked routes.
-      { to: '/execution', icon: Zap, label: 'Execution', match: ['/execution', '/projects', '/pipeline', '/build/roadmap'] },
-      { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
+      // Command Center merges four founder Build destinations — Founder Portal
+      // (/founder), Execution (/execution + board/roadmap), Studio Ops
+      // (/studio-ops) and Spin-Outs (/spinouts, + the /spin-outs alias) — into
+      // one tabbed page at /build/command-center. `match` keeps the row active
+      // across every tab and every legacy deep-linked route (founders are
+      // redirected from those routes into the matching ?tab= in App.jsx).
+      { to: '/build/command-center', icon: LayoutGrid, label: 'Command Center', match: ['/build/command-center', '/founder', '/execution', '/studio-ops', '/spinouts', '/spin-outs', '/projects', '/pipeline', '/build/roadmap'] },
+      { to: '/signals', icon: Radar, label: 'Signals' },
+      // Team Building — consolidates the former "Find a Mentor" (Validate),
+      // "Find a Co-founder" (Validate) and "Jobs" (Launch) items into one
+      // workspace at /build/team. `match` keeps this row active when a founder
+      // deep-links (or is redirected from) the legacy standalone routes.
+      { to: '/build/team', icon: Users, label: 'Team', match: ['/build/team', '/mentors', '/cofounder', '/my/jobs', '/jobs', '/my/applications'] },
       { to: '/build/metrics', icon: TrendingUp, label: 'Metrics' },
       { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
-      { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
     ]},
     { key: 'validate', label: 'Validate', items: [
       { to: '/contacts', icon: Inbox, label: 'Contacts' },
       { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
-      { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
-      { to: '/services', icon: Package, label: 'Service Catalogue' },
-      { to: '/build/competitors', icon: Megaphone, label: 'Competitor Analysis' },
+      // Marketplace merges the two halves of the partner-services marketplace —
+      // "Needs Board" (/needs, demand) and "Service Catalogue" (/services,
+      // supply) — into one tabbed page at /build/marketplace. `match` keeps this
+      // row active across every tab and when a founder deep-links (or is
+      // redirected from) the legacy /needs and /services routes (see App.jsx).
+      { to: '/build/marketplace', icon: Package, label: 'Marketplace', match: ['/build/marketplace', '/needs', '/services'] },
       { to: '/advisory', icon: Brain, label: 'AI Advisory Suite' },
-      { to: '/mentors', icon: UserCircle, label: 'Find a Mentor', requiredTier: 'growth' },
-      { to: '/cofounder', icon: Users, label: 'Find a Co-founder', requiredTier: 'studio' },
       { to: '/relationships', icon: Handshake, label: 'Network' },
     ]},
+    // Task #1 — RAISE Workspaces. Ten items collapsed into three workspaces that
+    // compose the existing pages (Pitch/Capital/Legal Engine). The Pitch item is
+    // ungated so the free reviewer stays reachable — the growth gate on the deck
+    // editor and the studio gates on founder agreements / equity elections are
+    // preserved inside their workspaces.
     { key: 'raise', label: 'Raise', items: [
-      { to: '/build/deck', icon: Sparkles, label: 'Pitch Deck', requiredTier: 'growth' },
-      { to: '/build/deck-reviewer', icon: FileText, label: 'Pitch Deck Reviewer' },
-      { to: '/build/financials', icon: DollarSign, label: 'Financial Model' },
-      { to: '/build/captable', icon: PieIcon, label: 'Cap Table' },
-      { to: '/raise', icon: TrendingUp, label: 'Raise Pipeline' },
-      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital', requiredTier: 'studio' },
-      { to: '/incorporate', icon: Scale, label: 'Incorporate' },
-      { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement', requiredTier: 'studio' },
-      { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
-      { to: '/incorporate/83b', icon: Calendar, label: '83(b) Tracker', requiredTier: 'studio' },
+      { to: '/raise/pitch', icon: Sparkles, label: 'Pitch' },
+      { to: '/raise/capital', icon: DollarSign, label: 'Capital' },
+      { to: '/raise/legal-engine', icon: Scale, label: 'Legal Engine' },
     ]},
     { key: 'launch', label: 'Launch', items: [
       { to: '/my/events', icon: Ticket, label: 'Events' },
-      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
+      // "Jobs" moved into the Build › Team workspace (/build/team?tab=jobs).
       { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
     ]},
     { key: 'more', label: 'More', items: [
-      { to: '/refer', icon: Share2, label: 'Refer & Earn' },
+      // Task #4 — "Referrals" moved into Settings (/settings/referrals); the
+      // /refer route redirects there. Removed from the founder nav.
       { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits', requiredTier: 'studio' },
-      { to: '/payouts', icon: Wallet, label: 'Payouts' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust Center' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
-      { to: '/docs', icon: BookOpen, label: 'Documentation' },
+      { to: '/docs', icon: BookOpen, label: 'Docs' },
       { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
@@ -290,13 +302,11 @@ export const SIDEBAR_GROUPS = {
       { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
     ]},
-    { key: 'earn', label: 'Earn', items: [
-      { to: '/payouts', icon: Wallet, label: 'Payouts' },
-      { to: '/refer', icon: Share2, label: 'Refer & Earn' },
-    ]},
+    // Task #4 — the former "Earn" group held only "Referrals" (/refer), which
+    // has moved into Settings (/settings/referrals); /refer redirects there.
+    // The whole single-item group is removed from the partner nav.
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust Center' },
-      { to: '/profile', icon: UserCircle, label: 'My Profile' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -368,7 +378,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/activity', icon: Activity, label: 'Activity' },
       { to: '/docs', icon: BookOpen, label: 'Docs' },
       { to: '/tickets', icon: MessageSquare, label: 'Support' },
-      { to: '/profile', icon: UserCircle, label: 'Profile' },
       { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
@@ -382,6 +391,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/mentors', icon: UserCircle, label: 'Mentor Directory' },
+      { to: '/signals', icon: Radar, label: 'Signals' },
       { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
     ]},

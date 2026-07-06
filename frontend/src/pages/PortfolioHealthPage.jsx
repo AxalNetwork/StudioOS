@@ -69,7 +69,7 @@ function DetailDrawer({ projectUid, onClose }) {
       <div className="bg-white w-full max-w-xl h-full overflow-y-auto shadow-xl dark:bg-gray-900" onClick={e => e.stopPropagation()}>
         <div className="sticky top-0 bg-white border-b border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between dark:bg-gray-900">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{data?.project?.name || 'Project health'}</h2>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{data?.project?.name || 'Startup health'}</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">{data?.project?.sector || ''} · {data?.project?.stage || ''}</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-slate-400 text-2xl leading-none">×</button>
@@ -138,7 +138,7 @@ function DetailDrawer({ projectUid, onClose }) {
           </div>
         )}
         {data && !data.latest && (
-          <div className="p-6 text-slate-500 dark:text-slate-400 text-sm">No health snapshot for this project yet. Run a recompute to generate one.</div>
+          <div className="p-6 text-slate-500 dark:text-slate-400 text-sm">No health snapshot for this startup yet. Run a recompute to generate one.</div>
         )}
       </div>
     </div>
@@ -351,7 +351,7 @@ export default function PortfolioHealthPage() {
             {sorted.map(it => (
               <tr key={it.uid} className={it.intervention ? 'bg-rose-50/30' : ''}>
                 <td className="px-4 py-3">
-                  <div className="font-medium text-slate-900 dark:text-slate-100">{it.project?.name || `Project #${it.project_id}`}</div>
+                  <div className="font-medium text-slate-900 dark:text-slate-100">{it.project?.name || `Startup #${it.project_id}`}</div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">{it.project?.sector || ''} · {it.project?.stage || ''}</div>
                 </td>
                 <td className="px-4 py-3"><BadgePill badge={it.badge} /></td>

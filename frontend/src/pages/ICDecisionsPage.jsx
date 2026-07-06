@@ -83,7 +83,7 @@ export default function ICDecisionsPage() {
           />
           <input
             value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })}
-            placeholder="Project ID (optional)" inputMode="numeric"
+            placeholder="Startup ID (optional)" inputMode="numeric"
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm"
           />
           <textarea

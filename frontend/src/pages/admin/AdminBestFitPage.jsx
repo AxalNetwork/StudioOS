@@ -340,7 +340,7 @@ function VentureBlock({ venture }) {
     <div className={CARD}>
       <SectionTitle icon={Rocket} right={
         <span className={`text-sm font-bold ${RISK_TEXT_CLS[venture.overall_color] || ''}`}>{Math.round(Number(venture.overall_score) || 0)}/100 · {humanize(venture.overall_band)}</span>
-      }>Spin-out assessment — {venture.project_name || `Project #${venture.project_id}`}</SectionTitle>
+      }>Spin-out assessment — {venture.project_name || `Startup #${venture.project_id}`}</SectionTitle>
       <ul className="space-y-2.5">
         {layers.map((l) => (
           <li key={l.key}>

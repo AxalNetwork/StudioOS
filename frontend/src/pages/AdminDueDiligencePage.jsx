@@ -68,7 +68,7 @@ export default function AdminDueDiligencePage() {
         <ShieldAlert size={24} className="text-violet-600" />
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Due Diligence</h1>
       </div>
-      <p className="text-gray-600 dark:text-gray-400 mb-6">Open and track DD cases on projects, founders, mentors, investors, and partners.</p>
+      <p className="text-gray-600 dark:text-gray-400 mb-6">Open and track DD cases on startups, founders, mentors, investors, and partners.</p>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {[
@@ -93,7 +93,7 @@ export default function AdminDueDiligencePage() {
         <select value={filter.subject_type} onChange={(e) => setFilter(f => ({ ...f, subject_type: e.target.value }))}
           className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
           <option value="">All subject types</option>
-          <option value="project">Project</option>
+          <option value="project">Startup</option>
           <option value="founder">Founder</option>
           <option value="mentor">Mentor</option>
           <option value="investor">Investor</option>
@@ -218,7 +218,7 @@ function NewCaseModal({ onClose, onCreated }) {
             <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Subject type</div>
             <select value={form.subject_type} onChange={(e) => setForm(f => ({ ...f, subject_type: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900">
-              <option value="project">Project</option><option value="founder">Founder</option>
+              <option value="project">Startup</option><option value="founder">Founder</option>
               <option value="mentor">Mentor</option><option value="investor">Investor</option>
               <option value="partner">Partner</option>
             </select>

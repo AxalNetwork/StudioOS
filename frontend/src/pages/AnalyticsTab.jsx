@@ -342,7 +342,7 @@ function UsersSub({ anonymized, onExport, busy, onFiltersChange }) {
               <SortHeader sort={sorter.sort} toggle={sorter.toggle} k="role">Role</SortHeader>
               <SortHeader sort={sorter.sort} toggle={sorter.toggle} k="sub_plan">Tier</SortHeader>
               <SortHeader sort={sorter.sort} toggle={sorter.toggle} k="sessions_30d" align="right">Sessions 30d</SortHeader>
-              <SortHeader sort={sorter.sort} toggle={sorter.toggle} k="project_count" align="right">Projects</SortHeader>
+              <SortHeader sort={sorter.sort} toggle={sorter.toggle} k="project_count" align="right">Startups</SortHeader>
               <SortHeader sort={sorter.sort} toggle={sorter.toggle} k="lifetime_value_usd" align="right">LTV</SortHeader>
               <SortHeader sort={sorter.sort} toggle={sorter.toggle} k="last_seen_at">Last seen</SortHeader>
               <th></th>

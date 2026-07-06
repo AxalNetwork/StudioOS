@@ -1,0 +1,93 @@
+#5 - Rename Mentor Role to Advisor
+What & Why
+Rename the "Mentor" user role and every "Mentor"/"Mentors"/"Mentorship" surface across the entire platform to "Advisor"/"Advisors" — user-facing labels AND internal identifiers, backend models/tables, personas, email templates, and stored data. This is the deep, full rename (not a label-only swap).
+Because the role value mentor is shared across frontend, the prod Worker, the dev backend, and the database, this MUST be done as one atomic change — if any layer disagrees on the role value, auth and routing break. Do not split it.
+Naming-collision guardrail: there is an existing, unrelated AI feature called the Personal Advisor (frontend/src/components/advisor/PersonalAdvisor.jsx, frontend/src/lib/advisor/engine.js, cloudflare-worker/src/services/advisor/). Keep it named "Personal Advisor" everywhere so users can still tell the AI assistant apart from the new Advisor role. Do NOT merge or rename the Personal Advisor feature itself — only the former Mentor concept becomes Advisor. Note that the advisor question-bank system (services/advisor/, lib/advisor/) already exists and hosts a mentor persona; that persona is what gets renamed to advisor (no naming clash inside the bank, since advisor is not currently a persona value there).
+Done looks like
+* The "View as" portal switcher lists Advisor instead of Mentor; the role badge reads "Advisor".
+* Every sidebar entry, page title, directory, and doc that said "Mentor / Mentors / Mentor Directory / Find a Mentor" now says "Advisor / Advisors / Advisor Directory".
+* A user who previously had role mentor is now role advisor and lands on the same dashboard with identical permissions and data (their profile, office-hour slots, bookings, and reviews are all preserved).
+* Booking/office-hours flows, the directory, matching, reviews, emails ("session booked/canceled"), and the advisor-persona onboarding all work end-to-end under the new name.
+* npm run test:drift (tsc + API drift + advisor-bank drift) passes; the app builds.
+* Both changelogs updated: a plain-English line in frontend/public/CHANGELOG-user.md and a technical line in CHANGELOG.md.
+Out of scope
+* The AI Personal Advisor feature keeps its name — no behavior or naming changes to it beyond renaming the former mentor persona to advisor inside the question bank.
+* No new features, no redesign of the office-hours/booking UX — this is a rename only.
+* The "Office Hours" feature name stays (it does not contain "mentor"); the advisor's home page remains office-hours.
+* "Coach" persona/entity stays as-is (it is a distinct concept from mentor).
+Steps
+1. Role identifier + shared enums. Rename the mentor role value to advisor everywhere it is a role: route guards, role label/color/default-path maps, bypass-role sets, command-palette gates, onboarding classification, trust/obligations matrix, market-intel tier bypass, and the FastAPI UserRole enum plus every bare "mentor" role string. Keep the display label "Advisor".
+2. Frontend UI + navigation. Update the portal switcher, sidebarConfig.js (Mentors / Mentor Directory / Find-a-Mentor entries and the mentor role sidebar array), route paths (/mentors → /advisors, with a redirect from the old path), MentorsPage.jsx (rename component/route + copy), and all remaining user-facing "Mentor" copy in pages/components (Spin-Out Lab sidebar + listener, Brand Builder audiences, Articles filter, Admin role tags/contract labels, Office Hours page copy).
+3. Frontend API layer + advisor question bank. Rename the mentor API helpers in lib/api.js to advisor equivalents (point them at the renamed endpoints), and rename the mentor persona bank (lib/advisor/banks/mentor.js → advisor, its mentor.profile.* field keys, and the persona/router mappings in lib/advisor/persona.js / router.js).
+4. Prod Worker API + services. Rename the /api/mentors route module to /api/advisors (keep a thin backward-compat alias mount to avoid breaking in-flight sessions/bookmarks), and rename mentor terminology in services: bestFit (CounterpartyType), vectorize (EntityType), axalFit (MENTOR_COACH_RUBRIC), archetypeScoring (MENTOR_ARCHETYPES), calendar (mentor_booking kind/event generators), legalTemplates registry keys, notify keys.
+5. Worker advisor question bank + drift manifests. Rename the mentor persona across services/advisor/ (banks/mentor.ts, fit_mentor.ts, fit_coach.ts, questionBank.ts Persona/FitPersona enums, stateMachine.ts prompts, guardrails.ts, writeRouter.ts, no_write_allowlist.json) and regenerate/update banks.manifest.json so scripts/check-advisor-bank-drift.mjs passes. Mirror the same persona/field renames on the frontend bank (step 3) so both sides stay in lockstep.
+6. Email templates. Rename mentor_session_booked / mentor_session_canceled template keys and their notify triggers to advisor equivalents; update template copy from "mentor" to "advisor".
+7. Dev backend (FastAPI/SQLite). Rename the Mentor / MentorBooking / MentorReview models and their tables/columns, users.mentor_id → advisor_id, the services/mentors.py module + functions, the api/routes/mentors.py endpoints, ensure_mentor_tables in migrations.py, and all watchlist/public-profile/calendar-unified references. The dev SQLite DB is disposable, so recreate it on boot rather than data-migrating it.
+8. Prod D1 schema + data migration. Add a new forward-only migration cloudflare-worker/sql/migrations/138_rename_mentor_to_advisor.sql (recorded in the schema_migrations ledger) that: renames tables (mentors→advisors, mentor_slots/mentor_office_hour_slots→advisor_slots, mentor_bookings→advisor_bookings, mentor_reviews→advisor_reviews), renames users.mentor_id→advisor_id, renames landing_pages.audience_mentor_*→audience_advisor_*, and updates stored data: UPDATE users SET role='advisor' WHERE role='mentor', persona/audience/subject_type string values (market_intel extractors, axal_fit, contacts audience, telegram cohort axal-mentors, due-diligence subject_type CHECK — rebuild the table since SQLite can't alter a CHECK), assessment-track slug mentor_compass_v1→advisor_compass_v1 (+ its chapter/item/archetype/badge/event-criteria rows), and legal-template keys mentor_nda_axal/mentor_engagement_disclaimer (+ body copy). Also update schema.sql to reflect the new names for fresh DBs. Verify the plan first with node scripts/migrate-d1.mjs --remote --dry-run. This is the highest-risk step — it renames physical tables/columns and rewrites role rows; call it out for review before deploy.
+9. Docs, changelogs, and verification. Update the docs sections (validate-grow.js, network.js, portals.js) and any admin doc copy. Add a plain-English line to frontend/public/CHANGELOG-user.md and a technical line to CHANGELOG.md (per repo convention, both must change for a user-facing change). Run npm run test:drift and a build, and smoke-test login-as-advisor, the directory, and a booking round-trip.
+Relevant files
+* frontend/src/App.jsx:206-236
+* frontend/src/App.jsx:495-530,1218-1427
+* frontend/src/sidebarConfig.js:29-46,180-200,360-400
+* frontend/src/pages/MentorsPage.jsx
+* frontend/src/pages/OfficeHoursPage.jsx
+* frontend/src/lib/api.js:2080-2120,2205-2215
+* frontend/src/lib/advisor/banks/mentor.js
+* frontend/src/lib/advisor/persona.js
+* frontend/src/lib/advisor/router.js
+* frontend/src/components/SpinoutLabSidebar.jsx
+* frontend/src/components/SpinoutLabListener.jsx
+* frontend/src/components/CommandPalette.jsx
+* frontend/src/pages/BrandBuilderPage.jsx
+* frontend/src/pages/AdminPage.jsx
+* frontend/src/pages/ArticlesPage.jsx
+* frontend/src/pages/docs/sections/validate-grow.js
+* frontend/src/pages/docs/sections/network.js
+* frontend/src/pages/docs/sections/portals.js
+* cloudflare-worker/src/routes/mentors.ts
+* cloudflare-worker/src/services/onboardingChecklist.ts
+* cloudflare-worker/src/services/trust.ts
+* cloudflare-worker/src/services/bestFit.ts
+* cloudflare-worker/src/services/vectorize.ts
+* cloudflare-worker/src/services/axalFit.ts
+* cloudflare-worker/src/services/archetypeScoring.ts
+* cloudflare-worker/src/services/calendar.ts
+* cloudflare-worker/src/services/legalTemplates.ts
+* cloudflare-worker/src/services/notify.ts
+* cloudflare-worker/src/util/marketIntelTier.ts
+* cloudflare-worker/src/services/accountPlans.ts:51
+* cloudflare-worker/src/services/advisor/questionBank.ts
+* cloudflare-worker/src/services/advisor/writeRouter.ts
+* cloudflare-worker/src/services/advisor/stateMachine.ts
+* cloudflare-worker/src/services/advisor/guardrails.ts
+* cloudflare-worker/src/services/advisor/banks/mentor.ts
+* cloudflare-worker/src/services/advisor/banks/fit_mentor.ts
+* cloudflare-worker/src/services/advisor/banks/fit_coach.ts
+* cloudflare-worker/src/services/advisor/banks.manifest.json
+* cloudflare-worker/src/services/advisor/no_write_allowlist.json
+* cloudflare-worker/src/templates/email/registry.ts:320-355
+* cloudflare-worker/src/index.ts
+* cloudflare-worker/sql/schema.sql:837-905
+* cloudflare-worker/sql/t13_t14_t15.sql
+* cloudflare-worker/sql/migrations/117_landing_audience_advisor_mentor_cofounder.sql
+* cloudflare-worker/sql/migrations/110_assessment_tracks.sql
+* cloudflare-worker/sql/migrations/113_refresh_legal_template_bodies.sql
+* backend/app/models/entities.py:103,112,119,1318-1423
+* backend/app/services/mentors.py
+* backend/app/api/routes/mentors.py
+* backend/app/models/migrations.py:747
+* backend/app/services/watchlist.py:54
+* backend/app/services/calendar_unified.py:180
+* backend/app/api/routes/public_profiles.py:28
+* scripts/check-advisor-bank-drift.mjs
+* scripts/check-api-drift.mjs
+* scripts/gen-legal-templates-seed.py
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md
+Dependencies
+Merge Build Workspace
+
+Open task
+Merge Marketplace (Founder)
+
+Open task

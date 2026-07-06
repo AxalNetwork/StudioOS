@@ -941,6 +941,24 @@ export const api = {
   insightsNewsletterUnsubscribe: () => request('/insights/newsletter/unsubscribe', { method: 'POST' }),
   insightsNewsletterPreview: () => request('/insights/newsletter/preview'),
 
+  // Signals — founder decision engine over public-market evidence. Worker-only
+  // (dev FastAPI has no /api/signals). Shared by Founder + Advisor/Mentor modes;
+  // `mode` only changes ordering + copy, never the underlying data.
+  signals: {
+    list: (params = {}) => {
+      const qs = new URLSearchParams(
+        Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''),
+      ).toString();
+      return request('/signals' + (qs ? `?${qs}` : ''));
+    },
+    get: (id, mode = 'founder') => request(`/signals/${encodeURIComponent(id)}?mode=${mode}`),
+    filters: () => request('/signals/filters'),
+    kpis: (mode = 'founder') => request(`/signals/kpis?mode=${mode}`),
+    sources: () => request('/signals/sources'),
+    meta: () => request('/signals/meta'),
+    refresh: () => request('/signals/refresh', { method: 'POST' }),
+  },
+
   askAdvisory: (data) => request('/advisory/ask', { method: 'POST', body: JSON.stringify(data) }),
   financialPlan: (data) => request('/advisory/financial-plan', { method: 'POST', body: JSON.stringify(data) }),
   runDiligence: (data) => request('/advisory/diligence', { method: 'POST', body: JSON.stringify(data) }),
@@ -1444,6 +1462,11 @@ export const api = {
   // rail. 409 `no_method_id` means the deck was created before the new
   // fielded editor; client should direct the user to /apply-method first.
   deckAutofill: (id) => request(`/decks/${id}/autofill`, { method: 'POST', body: '{}' }),
+  // Task #10 — one-click positioning: pulls the project's team, traction and
+  // updates, returns { one_liner, elevator_pitch, positioning_lines[],
+  // sourced_from }. 503 `ai_unavailable` when no AI provider is configured
+  // (dev FastAPI has no such route → shows an explicit error, never fake lines).
+  deckPositioning: (projectId) => request('/decks/positioning', { method: 'POST', body: JSON.stringify({ project_id: projectId }) }),
   // Task #41 — assemble the NEW 10-slide Spin-Out deck DATA + NOTES + gaps[]
   // (the Worker remaps the live Lab data). The browser renders/downloads the
   // .pptx from this via frontend/src/decks/spinout/buildDeck.js. Returns
@@ -2992,6 +3015,30 @@ export const adminJobs = {
   approve: (id) => request(`/admin/jobs/${id}/approve`, { method: 'POST', body: '{}' }),
   reject: (id, reason) => request(`/admin/jobs/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
   unpublish: (id) => request(`/admin/jobs/${id}/unpublish`, { method: 'POST', body: '{}' }),
+};
+
+// Task #9 — Communities & Circles. `circlesPublic` is the no-auth public feed
+// (published circles only); `adminCircles` the admin CRUD surface. Each path
+// maps 1:1 to a /api/{public/circles,admin/circles} route on the worker
+// (api-drift guard verifies the prefixes).
+export const circlesPublic = {
+  list: () => request('/public/circles'),
+};
+
+export const adminCircles = {
+  list: ({ status } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    const suffix = qs.toString();
+    return request(`/admin/circles${suffix ? `?${suffix}` : ''}`);
+  },
+  get: (id) => request(`/admin/circles/${id}`),
+  create: (payload) => request('/admin/circles', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id, patch) => request(`/admin/circles/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  publish: (id) => request(`/admin/circles/${id}/publish`, { method: 'POST', body: '{}' }),
+  unpublish: (id) => request(`/admin/circles/${id}/unpublish`, { method: 'POST', body: '{}' }),
+  feature: (id, featured) => request(`/admin/circles/${id}/feature`, { method: 'POST', body: JSON.stringify({ featured }) }),
+  remove: (id) => request(`/admin/circles/${id}`, { method: 'DELETE' }),
 };
 
 // Assessment results — read-only client for archetype/skill display (Profile &

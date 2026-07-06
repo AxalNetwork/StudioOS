@@ -227,7 +227,7 @@ export default {
       id: 'activity',
       title: 'Activity & audit log',
       overview:
-        "Every meaningful action you take is recorded in your Activity log: logins, document signings, settings changes, project edits, KYC events. The log is read-only and forms part of the studio’s audit trail.",
+        "Every meaningful action you take is recorded in your Activity log: logins, document signings, settings changes, startup edits, KYC events. The log is read-only and forms part of the studio’s audit trail.",
       howto: [
         'Open Activity from the sidebar (or your account menu).',
         'Filter by event type or date range.',

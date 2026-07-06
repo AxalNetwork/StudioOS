@@ -210,10 +210,10 @@ export default function ShareViewerSignupModal({
           {step === STEPS.NDA && (
             <div className="space-y-4">
               <p className="text-sm text-gray-600 dark:text-slate-400">
-                Welcome, {user?.name}. Review and accept the project NDA before proceeding.
+                Welcome, {user?.name}. Review and accept the startup NDA before proceeding.
               </p>
               <div className="border dark:border-slate-700 rounded-lg p-4 bg-gray-50 dark:bg-slate-950 text-xs leading-relaxed max-h-64 overflow-y-auto">
-                <p className="font-semibold mb-2">{projectName || 'Project'} — Non-Disclosure Agreement</p>
+                <p className="font-semibold mb-2">{projectName || 'Startup'} — Non-Disclosure Agreement</p>
                 <p className="text-gray-600 dark:text-slate-400">
                   You agree to keep all information disclosed in this deck and any subsequent
                   materials confidential. The full template will be sent to your email for your
@@ -313,7 +313,7 @@ export default function ShareViewerSignupModal({
           {step === STEPS.POST_NDA && category === 'fundraising' && (
             <div className="space-y-3">
               <p className="text-sm text-gray-600 dark:text-slate-400">
-                Generated deal pack for {projectName || 'this project'}. Review each document, then sign all to record your commitment.
+                Generated deal pack for {projectName || 'this startup'}. Review each document, then sign all to record your commitment.
               </p>
               {dealPack.length === 0 && (
                 <p className="text-xs text-gray-500">Generating documents…</p>

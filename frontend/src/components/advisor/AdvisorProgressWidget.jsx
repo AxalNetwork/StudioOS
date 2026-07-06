@@ -94,7 +94,7 @@ const SPINOUT_WEEKS = [
 ];
 
 const MILESTONE_LABELS = {
-  project_created: 'Create your project',
+  project_created: 'Create your startup',
   customer_interview_logged_1: 'Log interview #1',
   customer_interview_logged_2: 'Log interview #2',
   customer_interview_logged_3: 'Log interview #3',

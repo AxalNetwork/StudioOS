@@ -38,7 +38,7 @@ const KIND_ORDER = ['page', 'action', 'article', 'activity', 'doc'];
 const QUICK_ACTIONS = [
   {
     id: 'qa.create-project',
-    label: 'Create project',
+    label: 'Create startup',
     hint: 'New venture-studio project',
     roles: ['admin', 'founder', 'partner'],
     run: (nav) => nav('/projects?new=1'),

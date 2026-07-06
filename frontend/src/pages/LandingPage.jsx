@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Zap, Banknote, Globe, Handshake, Rocket, ArrowRight, ChevronRight,
-  Sparkles, GraduationCap, HeartHandshake, BadgeCheck, LockKeyhole,
+  Sparkles, GraduationCap, BadgeCheck, LockKeyhole,
   UserPlus, Calendar,
 } from 'lucide-react';
 import PublicNav from '../components/PublicNav';
@@ -53,29 +53,16 @@ const LANES = [
   },
   {
     id: 'mentor',
-    title: 'For Mentors',
+    title: 'For Advisors',
     bullets: [
       'Share time on your own schedule',
       'Office Hours and one-off mentor sessions',
       'Pick the sectors and stages you care about',
     ],
-    cta: 'Become a Mentor',
+    cta: 'Become an Advisor',
     href: '/register?lane=mentor',
     color: '#926dc0',
     icon: GraduationCap,
-  },
-  {
-    id: 'coach',
-    title: 'For Coaches',
-    bullets: [
-      'Executive, performance, and wellbeing coaching',
-      'Match with founders by category, rating, and availability',
-      'Booking, scheduling, and payments handled',
-    ],
-    cta: 'Join as Coach',
-    href: '/register?lane=coach',
-    color: '#7596b5',
-    icon: HeartHandshake,
   },
 ];
 
@@ -368,7 +355,7 @@ export default function LandingPage() {
               Pick the door that fits — every lane is a first-class citizen.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {LANES.map((lane) => {
               const Icon = lane.icon;
               return (

@@ -141,7 +141,7 @@ export default function OnboardingInvestorPage() {
     {
       key: 'anti-thesis',
       title: 'Anti-thesis (hard exclusions)',
-      description: 'We will NEVER match you with projects that fall in these sectors or stages.',
+      description: 'We will NEVER match you with startups that fall in these sectors or stages.',
       render: ({ values, set }) => (
         <div className="space-y-4">
           <MultiChoiceField

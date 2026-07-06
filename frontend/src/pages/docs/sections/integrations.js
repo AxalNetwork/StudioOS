@@ -104,7 +104,7 @@ export default {
       id: 'docusign',
       title: 'DocuSign',
       overview:
-        "DocuSign is supported as an alternative signature provider for organisations that already standardise on it. The platform routes the document, captures the signed copy, and stores it alongside the project documents.",
+        "DocuSign is supported as an alternative signature provider for organisations that already standardise on it. The platform routes the document, captures the signed copy, and stores it alongside the startup documents.",
       howto: [
         'Open Settings → Integrations and click "Connect" on DocuSign.',
         'Sign in with the account that has the right signing credit.',

@@ -10,6 +10,359 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #2 — Merge Marketplace (Founder)
+
+Frontend-only IA consolidation. The founder **Validate** group's two
+partner-services marketplace destinations — **Needs Board** (`/needs`, the demand
+side) and **Service Catalogue** (`/services`, the supply side) — now live in a
+single tabbed **Marketplace** page. No business logic, data-fetching, API, or
+schema changes; mirrors the `/execution` and `/build/*` merges.
+
+- **New page** (`frontend/src/pages/FounderMarketplacePage.jsx`) — one governing
+  "Marketplace" H1 + a role-aware tab bar composing the *exact* tab bodies of the
+  two source pages (reused via named exports, not re-implemented): **Services**
+  (ServiceCatalog `BrowseTab`), **Needs** (NeedsBoard `BrowseTab`), **My needs**
+  (founder), **My offerings** (partner/admin), **My quotes** (partner),
+  **Engagements** (deduped to one tab), **Stripe Connect** (partner). Active tab
+  driven by `?tab=` (deep-linkable, `replace`d). Guarded `admin`/`founder`.
+- **Exports** — `NeedsBoardPage` now exports `BrowseTab`, `MyNeedsTab`,
+  `MyQuotesTab`, `EngagementsTab`; `ServiceCatalogPage` exports `BrowseTab`,
+  `MineTab`, `StripeTab`. Each keeps its own module-local helpers (Modal/Field/
+  ErrorBox/Empty) via closure, so every action carries over unchanged. Both
+  pages' own default exports (title + tab bar) are untouched for the other roles.
+- **Routing** (`frontend/src/App.jsx`) — new `/build/marketplace` route (lazy).
+  `/needs`, `/services` and `/founder/post-need` stay registered but now redirect
+  founders into the matching tab (`?tab=needs` / `?tab=services` / `?tab=mine`);
+  admin/partner/investor keep the standalone pages. `/partner/needs` untouched.
+- **Sidebar** (`frontend/src/sidebarConfig.js`) — the founder Validate group's two
+  items collapse to one **Marketplace** entry (`Package`) whose `match` array
+  keeps the row active on `/build/marketplace`, `/needs` and `/services`. Removals
+  documented inline. Partner/investor/admin sidebars untouched.
+- **Out of scope (unchanged)** — the separate `/marketplace` (`MarketplacePage`)
+  route, all needs/quotes/offerings/engagements/Stripe endpoints.
+## Task #4 — Move Referrals into Settings
+
+Frontend-only IA change. The merged **Referrals** workspace (Refer & Earn +
+Payouts) is no longer a standalone sidebar item at `/refer` — it now lives as a
+**Referrals** section inside **Settings**. No business logic, data-fetching, API,
+or schema changes.
+
+- **`embedded` prop** on `frontend/src/pages/ReferralsPage.jsx` — suppresses the
+  page-level icon/H1/`PageExplainer`/subtitle and drops the outer
+  `p-6 max-w-6xl mx-auto` padding when embedded; the internal Refer & Earn /
+  Payouts sub-tabs (driven by `?tab=`) are unchanged.
+- **Settings section** (`frontend/src/pages/SettingsPage.jsx`) — new `referrals`
+  entry in `SECTIONS` (icon `Share2`, `roles: ['admin','founder','partner',
+  'investor']` so mentor never sees it), a `referrals: 'referrals'` entry in
+  `PATH_TO_SECTION`, and a render block that mounts `<ReferralsPage embedded />`
+  behind a local `Suspense` (lazy import keeps the QR/Stripe-Connect deps out of
+  the settings chunk). `/settings/referrals` deep-links to it; the Payouts
+  sub-tab is reachable via `/settings/referrals?tab=payouts` (the URL-sync effect
+  keys off the section id, so it never strips `?tab=`).
+- **Routing** (`frontend/src/App.jsx`) — `/refer` now renders a `ReferRedirect`
+  that `Navigate`s to `/settings/referrals` preserving the incoming `?tab=`;
+  `/payouts` redirects to `/settings/referrals?tab=payouts`. Both keep the same
+  `guard(['admin','founder','partner','investor'])` role access.
+- **Sidebar** (`frontend/src/sidebarConfig.js`) — removed the standalone
+  "Referrals" (`/refer`) item from the admin (Network & Growth) and founder
+  (More) groups, and removed the partner **Earn** group entirely (it held only
+  Referrals). Investor and mentor navs untouched. Dropped the now-unused `Share2`
+  icon import; removals documented inline for the nav-integrity convention.
+- **Out of scope (unchanged)** — all referral/commission/payout business logic,
+  Stripe Connect, Worker endpoints, and the admin `/admin/refer-earn` console.
+
+## Competitor Analysis folded into the startup page + Project→Startup rename completed
+
+Competitor Analysis is no longer a standalone tool with its own startup picker — it
+is now an embedded, startup-scoped section inside each startup's ProjectDetail. No
+functional/data/API/schema changes; the standalone route is retained.
+
+- **Reusable component** — extracted the tool into
+  `frontend/src/components/CompetitorAnalysis.jsx` (default export
+  `CompetitorAnalysis({ project, embedded })`, all logic + helpers moved intact).
+  `frontend/src/pages/CompetitorAnalysisPage.jsx` is now a thin wrapper that renders
+  `<CompetitorAnalysis />`, preserving the `/build/competitors` route (kept for
+  `?id=` deep links and the custom-market mode).
+- **Embedded mode** — when `embedded` + `project` are passed the component skips
+  `listProjects`, locks to startup mode with `projectId = String(project.id)`, hides
+  the back link / H1 / intro / mode selector, prefills from `project`, filters saved
+  analyses by `Number(a.project_id) === Number(project.id)`, and `scrollIntoView`s
+  its section.
+- **ProjectDetail integration** (`frontend/src/pages/ProjectDetail.jsx`) — new
+  conditionally-rendered "Competitor Analysis" section toggled from the header; `?comp=1` opens
+  and scrolls to it, then strips the param.
+- **Restyle** — orange → violet throughout the component (badges, buttons, accents)
+  to match the app palette.
+- **Sidebar** — removed the standalone "Competitor Analysis" item from
+  `sidebarConfig.js` (route retained in `App.jsx`).
+- **Rename** — completed the user-visible **Project(s) → Startup(s)** rename across
+  the surfaces the Command Center pass didn't cover: sidebar/buttons/options/
+  empty-states/toasts/tooltips/field-labels, docs section prose
+  (`frontend/src/pages/docs/sections/*.js`), advisor question banks, pricing,
+  share/CTA modals, and misc explainers. Identifiers, `/projects` routes,
+  `project_id`/API fields, `data-testid`s, machine `value=`/`key=`/`src=` values,
+  AI-prompt & deck-export strings, and code comments were left untouched.
+
+Note: the custom-market (non-startup) mode is now reachable only via the standalone
+route URL, since the in-page section is startup-locked.
+
+## Merge Build workspace — Command Center + Projects→Startups rename
+
+Frontend-only IA consolidation. The four founder **Build** sidebar destinations —
+Founder Portal (`/founder`), Execution (`/execution` + `/execution/board` +
+`/execution/roadmap`), Studio Ops (`/studio-ops`) and Spin-Outs (`/spinouts`, +
+the `/spin-outs` alias) — now live in a single tabbed **Command Center**
+workspace at `/build/command-center`. Mirrors the `/build/team` (Team Building)
+and RAISE consolidations: deep-linkable `?tab=`, one governing H1, embedded child
+pages that suppress their own heading. No business logic, data-fetching, API, or
+schema changes.
+
+- **New workspace** (`frontend/src/pages/CommandCenterPage.jsx`) — four
+  deep-linkable tabs in lifecycle order: Founder Portal → Execution → Studio Ops
+  → Spin-Outs. Active tab driven by `?tab=` (deep-linkable, survives refresh,
+  `replace`d so it doesn't stack history). Unlike TeamBuildingPage there is no
+  tier gate — none of the four pages is gated. `data-testid="command-center-page"`.
+- **`embedded` prop** added to `FounderPortal`, `StudioOpsPage`, `SpinOutsPage`
+  and `ExecutionPage` (the last did **not** previously accept it — it rendered its
+  "Execution" H1 unconditionally and force-scrolled on mount; both are now guarded
+  by `embedded`). Each suppresses its own icon/title/subtitle header and drops the
+  outer `p-6` padding when embedded. `ProjectsPage`/`PipelinePage`/`RoadmapPage`
+  already supported `embedded` (reused unchanged via ExecutionPage).
+- **Routing** (`frontend/src/App.jsx`) — new `/build/command-center` route
+  (`guard(['admin','founder'])`, lazy). Legacy routes are **persona-conditional**:
+  founders are `Navigate`d into the matching tab (`/founder`→`?tab=founder-portal`;
+  `/execution`+board+roadmap→`?tab=execution`; `/studio-ops`→`?tab=studio-ops`;
+  `/spinouts`→`?tab=spin-outs`), while admin/partner/investor keep the standalone
+  pages. `/spin-outs` still aliases to `/spinouts` (which then applies the persona
+  redirect). `/projects`, `/pipeline`, `/build/roadmap` unchanged.
+- **Sidebar** (`frontend/src/sidebarConfig.js`) — the founder Build group's four
+  items collapse to one **Command Center** entry (icon `LayoutGrid`) whose `match`
+  array keeps the row active across every tab and every legacy route; Signals,
+  Team, Metrics, Brand & Landing untouched. Removals documented in the founder
+  nav comment block so the nav-integrity guard treats them as intentional.
+- **Projects → Startups rename** (user-facing nav labels/titles only; `/projects`
+  URL, route keys, filter keys and backend fields unchanged) — founder Execution
+  "Startups" section header + `aria-label`, `ProjectsPage` H1 + list `aria-label`,
+  the admin sidebar nav label, plus the secondary nav labels that point at the same
+  feature: `SemanticSearch` type filter, the operator/advisor persona `nav_extras`
+  (`lib/personas.js`), the Spin-Out Lab feature-catalogue label (`SpinoutLabSidebar`
+  + `SpinoutLabPage`) and the `G P` keyboard-shortcut label. Descriptive body copy
+  (docs prose, marketing/product pages, deck-template mockups) still reads
+  "Projects" and is out of scope for this label pass.
+- **Explainer** — new `command_center` entry in `frontend/src/lib/explainers.js`.
+
+## Task #15 — Merge Refer & Earn + Payouts into one Referrals workspace
+
+Frontend-only IA consolidation. The two separate founder/partner/investor/admin
+sidebar items and pages — Refer & Earn (`/refer`) and Payouts (`/payouts`) — now
+live in a single tabbed **Referrals** workspace. No business logic, data fetching,
+API, or schema changes; mirrors the `/build/team?tab=…` and RAISE consolidations.
+
+- **New workspace** (`frontend/src/pages/ReferralsPage.jsx`) — a two-tab page
+  ("Refer & Earn" default + "Payouts") composing the existing `ReferEarnPage` and
+  `PayoutsPage` via a new `embedded` prop; the active tab is driven by `?tab=`
+  (deep-linkable, survives refresh). Both children keep their own loading/empty/
+  results states and unchanged API calls.
+- **`embedded` prop** added to `ReferEarnPage` (suppresses its own icon/title/
+  `PageExplainer`/blurb header and drops the outer `p-6 max-w-6xl mx-auto` padding
+  when embedded) and `PayoutsPage` (drops the loading-state page padding when
+  embedded; it has no header of its own).
+- **Routing** (`frontend/src/App.jsx`) — `/refer` now renders `ReferralsPage`
+  (lazy import renamed from `ReferEarnPage`); `/payouts` redirects to
+  `/refer?tab=payouts`; the standalone `PayoutsPage` lazy import was removed
+  (the component is composed into the tab, not lazy-loaded).
+- **Sidebar** (`frontend/src/sidebarConfig.js`) — the two entries collapse to one
+  **Referrals** entry (`/refer`, `Share2`) in every persona that carried them:
+  admin (Network & Growth; `/payouts` dropped from Capital & Legal), founder
+  (More), partner (Earn). Investor never had either entry, so it's untouched.
+  Removed the now-unused `Wallet` icon import.
+- **Copy** — `lib/explainers.js` `refer_earn` retitled "Referrals" and reworded
+  for the merged workspace; Docs → Network "Refer & Earn" overview/howto/tips
+  (`pages/docs/sections/network.js`) now reference the Referrals workspace and its
+  Payouts tab instead of a separate sidebar item.
+- **Out of scope (unchanged)** — the admin management screen `/admin/refer-earn`
+  (`ReferEarnPayouts.jsx`), the canonical `/refer` route name, and all referral/
+  commission/payout business logic and Worker endpoints.
+
+## Task #10 — Pitch Positioning Generator
+
+New **Positioning** tab in the Pitch workspace: a one-liner & elevator-pitch
+generator with "one-click positioning" — pick a startup and the system pulls its
+team, traction and updates, then the AI writes a one-liner, a short elevator
+pitch and 3-5 alternate positioning lines.
+
+- **Worker route**: `decks.post('/positioning', …)` in
+  `cloudflare-worker/src/routes/decks.ts` (registered after `/generate`, before
+  the `/:id` handlers). Growth-tier (`ensureTier(…, 'growth')`) + owner-scoped
+  (`projectOwned` → 404 `not found` / 403 `forbidden`). Grounding data is pulled
+  the same way as deck autofill: `projects.*`, cap-table founders
+  (`cap_table_holders`, `/founder/i` on `kind`, falls back to all holders),
+  `financial_models.computed_json`/`assumptions_json` (runway / burn / LTV:CAC),
+  the latest `score_snapshots.tier`, and the 5 most recent **submitted**
+  `portfolio_updates` (title + period). Calls OpenAI `gpt-4o-mini` with
+  `response_format: json_object` + `AbortSignal.timeout(45s)`. **Fails loud** —
+  no `OPENAI_API_KEY` → `503 {error:'ai_unavailable', code:'ai_unavailable'}`;
+  provider non-2xx / parse failure / empty output → `502 ai_failed`. NEVER
+  fabricates lines. Returns `{ project_id, project_name, one_liner,
+  elevator_pitch, positioning_lines[], sourced_from:{team,traction,updates,
+  financials} }`. All queries parameterised (`.bind`).
+- **Client** (`frontend/src/lib/api.js`): `api.deckPositioning(projectId)` →
+  `POST /decks/positioning`. Covered by the prefix-level api-drift guard (the
+  `/decks` mount already exists — no allowlist change).
+- **Frontend**: new `frontend/src/pages/PitchPositioningPage.jsx` (accepts
+  `embedded`) — startup picker (defaults to first project), one-click Generate/
+  Regenerate, "Grounded in" chips from `sourced_from`, per-line + copy-all
+  clipboard, and explicit loading / empty / error / `ai_unavailable` states
+  (amber for unavailable, red for failure; dev FastAPI 404 degrades to the same
+  explicit "not available in this preview" state — never fake output). Full
+  `dark:` variants throughout.
+- **Wiring**: `PitchWorkspacePage.jsx` gains a **Positioning** tab
+  (`/raise/pitch/positioning`) between Deck Builder and Review, sharing the
+  Deck Builder's Growth gate (`GROWTH_TABS`) so non-growth founders see the
+  existing `LockedDeck` upgrade panel. `App.jsx` adds the
+  `/raise/pitch/positioning` route (`guard(['admin','founder'])` →
+  `PitchWorkspacePage`).
+- **Scope**: Worker + SPA only; no schema/migration (generation is ephemeral).
+  Prod = Worker on D1; dev FastAPI has no `/decks/positioning`. Routes take
+  effect on `npm run deploy`.
+
+## Task #9 — Admin-managed Communities & Circles
+
+Replaced the FAKE hardcoded circles with a real, admin-authored, D1-backed system,
+and fixed the incoherent `/circles#circles` URL. The public `/circles` page now
+starts EMPTY and only shows circles an admin has published.
+
+- **Migration**: `cloudflare-worker/sql/migrations/137_circles.sql` — new `circles`
+  table (additive + idempotent, seeds NO rows) with public-feed / type / access
+  indexes. Mirrored at runtime by `src/services/circlesSchema.ts::ensureCirclesSchema`
+  (lazy `CREATE … IF NOT EXISTS` bootstrap, same pattern as jobBoardSchema/eventsSchema)
+  so dev/preview D1 serves the routes pre-migration.
+- **Shared helpers**: `src/services/circlesCommon.ts` — `shapeCircle` (snake_case row →
+  camelCase card shape), `parseCircleBody` (validation; explicit `name_required` 400, no
+  silent fallback), `slugify` + `uniqueCircleSlug`, `normalizeTags`, controlled
+  vocabularies mirroring `frontend/src/data/network.js`.
+- **Worker routes**: `routes/admin_circles.ts` mounted at `/api/admin/circles` (BEFORE the
+  catch-all `/api/admin`) — full CRUD + `publish`/`unpublish`/`feature`/`delete`, every
+  handler `requireAdmin`, mutations audit-logged (`report_type='circles'`, tolerant of the
+  optional `actor` column). `routes/circles_public.ts` mounted at `/api/public` (BEFORE the
+  generic `publicRoutes`) — `GET /public/circles`, published only, featured-first ordering.
+- **Frontend**: `lib/api.js` gains `circlesPublic.list()` + `adminCircles` client.
+  `pages/CirclesPage.jsx` rewritten to fetch the public feed (distinct empty/loading
+  states, graceful degradation on the dev 404); the hero "Browse circles" anchor now
+  scrolls via ref instead of the `#circles` hash. New `pages/admin/AdminCirclesPage.jsx`
+  (create/edit modal + publish/feature/delete), routed at `/admin/circles`
+  (`guard(['admin'])`) in `App.jsx`, linked from `sidebarConfig.js`. Removed the hardcoded
+  `CIRCLES` array from `data/network.js` (taxonomy + PROGRAMS + DIRECTORY_* retained).
+- **Routing note**: `/circles` route unchanged. Worker routes take effect on `npm run deploy`.
+
+## Task #3 — Signals: founder decision engine over public-market evidence
+
+New product module integrated from PR #131 (`claude/signals-decision-engine-jxf5pu`).
+A decision-support engine that surfaces founder-actionable startup opportunities from
+**public** company data — deliberately not a trading/markets UI (no price/quote/OHLC).
+One engine powers two modes (Founder "what to build next" / Advisor "what to point
+founders toward"); the mode toggle changes ordering + framing copy only.
+
+- **Worker API** (`cloudflare-worker/`): new `routes/signals.ts` mounted at
+  `app.route('/api/signals', signalsRoutes)` in `src/index.ts` (after `/api/insights`).
+  Endpoints: `GET /` (ranked+filtered list), `/filters`, `/kpis`, `/sources`, `/meta`,
+  `GET /:id` (registered last so the static sub-paths win), `POST /refresh` (admin-only).
+  Every endpoint gates on `requireAuth`. Engine/ranking/sources/types/seed live under
+  `src/services/signals/*`. The engine falls back to an in-code seed corpus when the D1
+  tables are empty or not yet migrated, so the UI works pre-migration.
+- **Migration**: `sql/migrations/136_signals.sql` (renumbered from the PR's colliding
+  `134_signals.sql`; 134/135 were already taken). Additive + idempotent (all
+  `CREATE TABLE/INDEX IF NOT EXISTS`), seeds no rows. Tables: `signal_sources`,
+  `signal_companies`, `signals`, `signal_company_map`, `signal_evidence`,
+  `signal_ingest_runs`.
+- **Frontend** (`frontend/`): new `pages/SignalsPage.jsx` (KPI strip, filter bar,
+  ranked cards, evidence slide-over, loading/empty/error states — reuses `EmptyState`/
+  `ErrorState`, full `dark:` variants), `components/signals/*`, `lib/signalsMeta.js`.
+  Routed at `/signals` in `App.jsx` (guard `admin/founder/partner/investor/mentor`).
+  `lib/api.js` adds `api.signals.{list,get,filters,kpis,sources,meta,refresh}` → `/signals/*`.
+  `sidebarConfig.js` adds a `Radar` "Signals" item to the admin (studio), founder
+  (build) and mentor (engagements) groups.
+- Prod = Worker only; dev FastAPI has no `/api/signals` (Signals shows an error state in
+  the dev preview by design). `npm run test:drift` (incl `tsc --noEmit`) and `npm run build` pass.
+- **Integration note**: main-agent git writes are blocked in this environment, so the PR's
+  20 files were ported directly onto `main` rather than pushed to the branch — PR #131
+  should be closed as superseded once these changes land on `main`.
+
+## Task #1 — RAISE Workspaces: collapse the founder "Raise" nav into 3 workspaces
+
+Frontend-only IA change. The founder sidebar's "Raise" group had 10 items; it now
+has 3 workspaces that compose the *existing* pages via a new `embedded` prop — no
+business logic, API, schema, or backend changes.
+
+- **New workspaces** (`frontend/src/pages/`):
+  - `PitchWorkspacePage.jsx` — `/raise/pitch` (Deck Builder, default) + `/raise/pitch/review`.
+    Wraps `PitchDeckPage` (growth gate preserved via `hasTier`/`LockedDeck`/`openPaywall`)
+    and `DeckReviewerPage` (free) in `embedded` mode.
+  - `CapitalWorkspacePage.jsx` — `/raise/capital` (Financial Model, default) +
+    `/raise/capital/cap-table` + `/raise/capital/pipeline`. Wraps `FinancialsPage`,
+    `CapTablePage`, `RaisePipelinePage`.
+  - `LegalEnginePage.jsx` — `/raise/legal-engine` master-detail hub with 4 cards
+    (Incorporation, Founders & Agreements [studio], Compliance & Filings, Equity
+    Elections [studio]) → sub-routes `/raise/legal-engine/{incorporation,founders,compliance,equity}`.
+    Wraps `IncorporatePage`, `CofounderAgreementPage`, `CompliancePage`, `Section83bPage`.
+    Studio gates preserved via `hasTier`/`LockedCard`/`openPaywall`. Includes a
+    presentational-only jurisdiction selector and generic status pill (both TODO-marked
+    for backend wiring); `ELECTION_TYPES` has structural TODO placeholders for UK s.431
+    and AU ESS.
+- **`embedded` prop** added to the 9 reused pages (`PitchDeckPage`, `DeckReviewerPage`,
+  `Financials`, `CapTablePage`, `RaisePipelinePage`, `IncorporatePage`,
+  `CofounderAgreementPage`, `CompliancePage`, `Section83bPage`): each page's own
+  title/explainer/back-button is wrapped in `{!embedded && …}` and its outer page
+  padding dropped when embedded, keeping max-width centering. Pattern mirrors
+  `ExecutionPage.jsx`.
+- **Routing** (`frontend/src/App.jsx`): 11 new workspace routes (pitch ×2 / capital ×4 /
+  legal-engine ×5) added after `/execution/roadmap`, guarded for the roles of the pages
+  they wrap (pitch & capital: admin/founder; legal-engine: admin/founder/partner).
+  Legacy redirects: `/build/deck` → `/raise/pitch`, `/build/deck-reviewer` →
+  `/raise/pitch/review`, `/raise` → `/raise/capital/pipeline`. Removed the now-unused
+  `PitchDeckPage`/`DeckReviewerPage`/`RaisePipelinePage` lazy imports. Shared standalone
+  routes (`/build/financials`, `/build/captable`, `/incorporate`, `/incorporate/*`,
+  `/compliance`, `/legal-capital`) kept intact for the investor/partner personas.
+- **Sidebar** (`frontend/src/sidebarConfig.js`): founder "Raise" group slimmed to Pitch
+  (`/raise/pitch`), Capital (`/raise/capital`), Legal Engine (`/raise/legal-engine`).
+  Pitch item ungated so the free reviewer stays reachable; gates live inside the
+  workspaces. Investor/partner "Capital & Legal" group and other roles untouched.
+- **Tests**: `frontend/tests/e2e/raise_workspaces.spec.js` — renders, URL-driven tab/card
+  nav, and legacy redirects (tier-independent assertions).
+
+## Keep profile-background fields off `users` — companion `user_profile_ext` table (D1 100-column limit)
+
+Prod `users` sits at Cloudflare D1's hard 100-column-per-table limit, so the
+profile-background feature (experience / education / certifications / website +
+LinkedIn picture) could not add its columns via `ALTER TABLE users` — the deploy
+was blocked. Moved that state into a 1:1 companion side table
+`user_profile_ext(user_id PK, experience, education, certifications, website,
+linkedin_picture_url, created_at, updated_at)`, following the existing
+`corporate_profiles` / author-websites side-table pattern.
+
+- **Migrations** — `131_profiles_follows.sql` rewritten → `CREATE TABLE IF NOT
+  EXISTS user_profile_ext` + `follows` + indexes (dropped all `users` ALTERs, and
+  the `projects.website` ALTER since that column already exists on prod via the
+  runtime ensure in `routes/projects.ts`). `133_linkedin_picture_url.sql` rewritten
+  → `ALTER TABLE user_profile_ext ADD COLUMN linkedin_picture_url TEXT` (was an
+  ALTER on `users`).
+- **Worker** — `services/profileExpansion.ts`: `ensureProfileBackgroundSchema`
+  creates `user_profile_ext` (+ guarded ALTERs for self-heal); `getProfileBackground`
+  SELECTs from it by `user_id`; `updateProfileBackground` UPSERTs with
+  `ON CONFLICT(user_id)`. `routes/public.ts` LEFT JOINs `user_profile_ext` (u.-prefixed
+  columns). `routes/settings.ts` drops `linkedin_picture_url` from
+  `SETTINGS_USER_COLUMNS` and JOINs the side table for the profile preview.
+  `routes/linkedin.ts` writes/clears `linkedin_picture_url` via best-effort
+  UPSERT/UPDATE on the side table (OAuth callback + disconnect).
+- **Schema** — `sql/schema.sql` drops `users.linkedin_picture_url`, adds the
+  `user_profile_ext` table. Dev FastAPI (`backend/`) left unchanged: SQLite has no
+  column cap and the API contract is identical.
+- **Deploy** — migrations 131–135 applied via `scripts/migrate-d1.mjs --remote`
+  (prod ledger was at 130; 132 job-board / 134 account-subscriptions / 135
+  seed-article rode along, all pending & idempotent), then `npm run deploy` shipped
+  the Worker. Verified `user_profile_ext` present with all 8 columns and `users`
+  still at 100.
+
 ## Fold Identity Verification (KYC / AML) into the Trust Center (Task #25)
 
 The KYC form is now reachable from a single **Trust Center** nav entry per

@@ -375,19 +375,19 @@ function ConfirmStep({ jurisdiction, projects, form, setForm, nameCheck, nameChe
       </div>
 
       <div>
-        <label className="block text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Link to project</label>
+        <label className="block text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Link to startup</label>
         <select
           value={form.project_id || ''}
           onChange={(e) => setForm({ ...form, project_id: e.target.value ? Number(e.target.value) : null })}
           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 dark:border-gray-700"
         >
-          <option value="">Select a project…</option>
+          <option value="">Select a startup…</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
         <div className="text-[11px] text-gray-500 mt-1">
-          Generated documents will appear under this project on the Legal page.
+          Generated documents will appear under this startup on the Legal page.
         </div>
       </div>
 
@@ -616,7 +616,7 @@ function DoneStep({ jurisdiction, order, raOffer, complianceProducts, navigate }
             <div className="text-xs text-emerald-800 mt-0.5 dark:text-emerald-300">
               {isReady
                 ? 'Your founder document set is ready. Open Legal to view your documents.'
-                : "We're preparing your founder document set now. It'll appear under your project in Legal shortly, and your receipt is in Billing."}
+                : "We're preparing your founder document set now. It'll appear under your startup in Legal shortly, and your receipt is in Billing."}
             </div>
           </div>
         </div>
@@ -654,7 +654,7 @@ function DoneStep({ jurisdiction, order, raOffer, complianceProducts, navigate }
   );
 }
 
-export default function IncorporatePage() {
+export default function IncorporatePage({ embedded = false }) {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [jurisdictions, setJurisdictions] = useState([]);
@@ -732,7 +732,7 @@ export default function IncorporatePage() {
         // (otherwise the user can still browse jurisdictions and a banner
         // about projects would be confusing context).
         if (jRes.status !== 'fulfilled') {
-          setErr(pRes.reason?.message || 'Failed to load projects.');
+          setErr(pRes.reason?.message || 'Failed to load startups.');
         }
       } // 404 → leave projects empty; submit step shows a clear reason.
 
@@ -848,7 +848,7 @@ export default function IncorporatePage() {
       if (status === 404 || code.includes('not found')) {
         setErr("The selected project or jurisdiction is no longer available. Please refresh and try again.");
       } else if (status === 401 || status === 403) {
-        setErr('Your session expired or you do not have access to this project. Please sign in again.');
+        setErr('Your session expired or you do not have access to this startup. Please sign in again.');
       } else if (code.includes('stripe_not_configured') || code.includes('catalog_price_missing')) {
         setErr(`Online incorporation filing isn't set up for ${jLabel} yet — contact the studio team at support@axal.vc to file your company manually.`);
       } else if (code.includes('order_failed') || (typeof status === 'number' && status >= 500)) {
@@ -878,17 +878,19 @@ export default function IncorporatePage() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="mb-6">
-        <div className="text-xs uppercase tracking-wide text-violet-600 font-semibold flex items-center gap-1.5 mb-1">
-          <Scale size={14} /> Jurisdiction Wizard
+      {!embedded && (
+        <div className="mb-6">
+          <div className="text-xs uppercase tracking-wide text-violet-600 font-semibold flex items-center gap-1.5 mb-1">
+            <Scale size={14} /> Jurisdiction Wizard
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Incorporate your company</h1>
+          <PageExplainer pageKey="incorporate" />
+          <p className="text-sm text-gray-600 mt-1">
+            Pick the right jurisdiction in five questions. We'll prep the founder document set and
+            hand you off to a filing partner where one is supported.
+          </p>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Incorporate your company</h1>
-        <PageExplainer pageKey="incorporate" />
-        <p className="text-sm text-gray-600 mt-1">
-          Pick the right jurisdiction in five questions. We'll prep the founder document set and
-          hand you off to a filing partner where one is supported.
-        </p>
-      </div>
+      )}
 
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 dark:bg-gray-900 dark:border-gray-800">
         <Stepper current={step} />

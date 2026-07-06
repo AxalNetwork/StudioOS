@@ -1,0 +1,30 @@
+#25 - Fold KYC into Trust Center
+What & Why
+Across every persona's sidebar there should be a single Trust Center entry instead of a separate Trust Center + Identity / KYC pair. The Identity Verification (KYC / AML) experience should live inside Trust Center, on its Identity tab, so members verify their identity from one predictable place.
+Today only the founder sidebar still shows a standalone "Identity / KYC" item (/kyc). The investor sidebar already folded KYC into "Trust & Identity"; partner/admin never had a standalone item; mentor has neither. But even where the item was removed, the Trust Center Identity tab only prints "Use the Identity Verification page in Settings to submit ID" — it doesn't actually let you verify from within Trust Center. This task makes the Identity tab a real entry point to the verification form and removes the leftover standalone sidebar item so all personas are consistent.
+Done looks like
+* No persona's sidebar shows a separate "Identity / KYC" (or "Identity Verification") item — every persona has just one Trust Center entry.
+* Opening Trust Center and selecting the Identity tab shows the actual Identity Verification (KYC / AML) form (legal identity, residential address, government ID, PEP/sanctions acknowledgements) with its live status, not a pointer that sends you elsewhere.
+* Submitting the form from inside Trust Center behaves exactly as submitting it on the current standalone page (status updates, trust score reflects it).
+* The Identity entry point is reachable for every persona that needs KYC (founder, partner, investor, admin); mentor is unaffected.
+* The existing /kyc page still loads (onboarding still redirects new users there before they finish verification; deep links keep working).
+Out of scope
+* No change to the KYC/AML backend, provider integration, or the fields collected on the form.
+* No change to KYB (entity), accreditation, agreements, or sanctions tabs.
+* No change to the Settings → Verification sub-tab (it can keep pointing at the same underlying flow).
+* Mentor sidebar and any role that already has neither item.
+Steps
+1. Make the KYC form reusable — Extract the Identity Verification form body from the standalone KYC page into a shared component so the same form can render both on the existing /kyc route and embedded inside Trust Center, without duplicating page-level chrome (avoid a doubled title/explainer when embedded).
+2. Embed it in the Trust Center Identity tab — Replace the "use the page in Settings" pointer on the Identity tab with the embedded form + its status, so verification happens in place. Ensure the Identity tab (or an equivalent entry point) is present for every KYC-eligible persona, not only when the obligation matrix happens to surface it.
+3. Collapse the sidebar — Remove the standalone "Identity / KYC" item from the founder sidebar and confirm no other persona still carries a standalone Identity/KYC item. Keep a single "Trust Center" entry per persona. Update the documented "Intentional removals" / "Newly surfaced" comment blocks so the nav-integrity guard treats the removal as deliberate. Keep the /kyc route registered and reachable.
+4. Docs + changelog — Update any docs sections that reference a separate Identity/KYC nav item, and add a line to BOTH CHANGELOG.md and frontend/public/CHANGELOG-user.md.
+Relevant files
+* frontend/src/sidebarConfig.js
+* frontend/src/pages/TrustCenterPage.jsx:618-737
+* frontend/src/pages/KYCPage.jsx
+* frontend/src/App.jsx:952-975,1335-1336
+* frontend/src/pages/SettingsPage.jsx
+* frontend/src/pages/docs/sections/account.js
+* frontend/src/pages/docs/sections/partnerships.js
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md

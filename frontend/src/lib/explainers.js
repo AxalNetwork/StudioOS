@@ -14,7 +14,7 @@ export const EXPLAINERS = {
   },
   dashboard: {
     title: 'Your studio at a glance',
-    body: 'Quick stats across projects, capital, compliance and your network — pulled live so you can see what needs attention without opening every tab.',
+    body: 'Quick stats across startups, capital, compliance and your network — pulled live so you can see what needs attention without opening every tab.',
     docPath: 'getting-started/what-is-studioos',
   },
   my_events: {
@@ -76,6 +76,16 @@ export const EXPLAINERS = {
     title: 'Find a complementary co-founder',
     body: 'Opt into the match pool, signal what you need, and we surface vetted candidates with overlapping conviction and complementary skills.',
     docPath: 'validate-grow/cofounder-match',
+  },
+  team_building: {
+    title: 'Build the team around your company',
+    body: 'One workspace to recruit advice from mentors, find a co-founder, and hire for open roles — advisors, founders, and talent in one place.',
+    docPath: 'validate-grow/team-building',
+  },
+  command_center: {
+    title: 'Run your venture from one place',
+    body: 'Your founder home for the whole lifecycle — submit and score a new startup, run execution, operate the studio, and manage spin-outs, all in one tabbed workspace.',
+    docPath: 'build/command-center',
   },
   market_intel: {
     title: 'Market signal, on demand',
@@ -193,8 +203,8 @@ export const EXPLAINERS = {
     docPath: 'portals/portfolio-health',
   },
   refer_earn: {
-    title: 'Refer & earn',
-    body: 'Share your referral link and earn for every founder, partner or investor who joins and converts. Payouts are tracked automatically.',
+    title: 'Referrals',
+    body: 'Share your referral link and earn for every founder, partner or investor who joins and converts, then collect what you earn from the Payouts tab.',
     docPath: 'network/refer-earn',
   },
   spinout_lab: {

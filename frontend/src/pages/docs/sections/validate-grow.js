@@ -7,9 +7,9 @@ export default {
       id: 'scoring',
       title: 'Scoring',
       overview:
-        "Scoring runs your project through a 100-point algorithm covering Market, Team, Product, Capital, Strategic Fit, and Distribution. Tier 1 (≥85) is fast-tracked, Tier 2 (70–84) gets conditional next steps, and below 70 means more validation is needed before re-submitting.",
+        "Scoring runs your startup through a 100-point algorithm covering Market, Team, Product, Capital, Strategic Fit, and Distribution. Tier 1 (≥85) is fast-tracked, Tier 2 (70–84) gets conditional next steps, and below 70 means more validation is needed before re-submitting.",
       howto: [
-        'Open Scoring from your project menu.',
+        'Open Scoring from your startup menu.',
         'Confirm or update the inputs (TAM, team experience, MVP cost, etc.).',
         'Click "Run scoring" — results appear in seconds with per-dimension breakdowns.',
         'Review the lowest-scoring dimensions and use them to focus your next iteration.',
@@ -32,7 +32,7 @@ export default {
       id: 'scoring-integrity',
       title: 'Scoring integrity & anti-cheat',
       overview:
-        "Every score is signed and time-stamped. The studio team can see when you re-scored, which inputs changed, and whether the change reflects real-world progress. Repeated input flips without supporting evidence flag the project for manual review.",
+        "Every score is signed and time-stamped. The studio team can see when you re-scored, which inputs changed, and whether the change reflects real-world progress. Repeated input flips without supporting evidence flag the startup for manual review.",
       howto: [
         'Re-score after a milestone, not before — back up changes with discovery notes, metrics, or signed contracts.',
         'Use the Decision Journal to record why an input changed; it shows up next to the score history.',
@@ -43,7 +43,7 @@ export default {
         'Scoring is one of many studio signals — milestones and metrics matter more for tier upgrades.',
       ],
       pitfalls: [
-        'Coordinating multiple accounts to inflate one project breaches the terms of service and is detectable.',
+        'Coordinating multiple accounts to inflate one startup breaches the terms of service and is detectable.',
         'Backdating inputs (“we had this all along”) without supporting evidence is treated as a re-score, not a correction.',
       ],
       related: [
@@ -63,7 +63,7 @@ export default {
         'Admins — approve or revoke badges and resolve disputes.',
       ],
       tips: [
-        'Trust badges follow you across projects — you only have to verify once.',
+        'Trust badges follow you across startups — you only have to verify once.',
         'A higher trust score speeds up dealroom invites and reduces the diligence ask.',
       ],
       pitfalls: [
@@ -81,7 +81,7 @@ export default {
       overview:
         "Due Diligence (DD) is the structured workflow investors, partners, mentors, and admins use to review a deal before committing. Founders never read a DD report on themselves; they upload requested documents and respond to questions raised in the DD checklist.",
       howto: [
-        'Founders — open Due Diligence on your project to see open requests and upload requested docs.',
+        'Founders — open Due Diligence on your startup to see open requests and upload requested docs.',
         'Reviewers — open Due Diligence from the deal record; sign the NDA, then walk the checklist (financials, legal, team, IP, market).',
         'Mark each checklist item with a verdict (pass / conditional / fail / not applicable) and notes.',
         'Generate the DD report when the checklist is complete; it downloads as an encrypted PDF.',
@@ -159,11 +159,11 @@ export default {
       ],
       tips: [
         'Be honest about time commitment — mismatch here causes more breakups than equity.',
-        'Try a paid trial project together before signing the agreement.',
+        'Try a paid trial startup together before signing the agreement.',
       ],
       pitfalls: [
         'Picking a co-founder for technical skills you can hire is a common, expensive mistake.',
-        'Skipping the trial-project step locks two people into vesting that’s hard to unwind.',
+        'Skipping the trial-startup step locks two people into vesting that’s hard to unwind.',
       ],
       related: [
         { label: 'Cofounder Agreement', href: '#legal/cofounder-agreement' },

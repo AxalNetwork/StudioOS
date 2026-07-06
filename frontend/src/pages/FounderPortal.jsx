@@ -23,7 +23,7 @@ function ModernSelect({ value, onChange, children, ...props }) {
 }
 
 
-export default function FounderPortal() {
+export default function FounderPortal({ embedded = false }) {
   const [form, setForm] = useState({
     name: '', description: '', sector: '', founder_name: '', founder_email: '',
     problem_statement: '', solution: '', why_now: '', tam: '', sam: '',
@@ -82,8 +82,12 @@ export default function FounderPortal() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1 dark:text-gray-100">Founder Portal</h1>
-      <p className="text-gray-600 mb-6">Submit your startup for evaluation — get scored instantly</p>
+      {!embedded && (
+        <>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1 dark:text-gray-100">Founder Portal</h1>
+          <p className="text-gray-600 mb-6">Submit your startup for evaluation — get scored instantly</p>
+        </>
+      )}
 
 
       <div className="flex gap-2 mb-8">

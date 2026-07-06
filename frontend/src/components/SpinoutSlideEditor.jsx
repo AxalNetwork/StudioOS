@@ -25,7 +25,7 @@ import { reportError } from '../lib/log';
 
 /* ----------------------------------------------------------------- sources -- */
 const sources = (projectId) => ({
-  project: { label: 'Project', href: `/projects/${projectId}` },
+  project: { label: 'Startup', href: `/projects/${projectId}` },
   account: { label: 'Account', href: '/settings' },
   discovery: { label: 'Customer Discovery', href: '/customer-discovery' },
   roadmap: { label: 'Roadmap', href: '/build/roadmap' },
@@ -65,7 +65,7 @@ const CONFIG = {
   cover: {
     title: 'Cover',
     auto: [
-      { label: 'Project', src: 'project', get: (f, p) => orDash(p?.name || f['cover.company']) },
+      { label: 'Startup', src: 'project', get: (f, p) => orDash(p?.name || f['cover.company']) },
       { label: 'Founder(s)', src: 'account', get: (f) => orDash(metaVal(f, 'FOUNDER')) },
       { label: 'Description', src: 'project', get: (f, p) => orDash(p?.description) },
       { label: 'Sector', src: 'project', get: (f, p) => orDash(p?.sector || metaVal(f, 'SECTOR')) },
@@ -236,7 +236,7 @@ const CONFIG = {
   },
   ask: {
     title: 'The ask',
-    note: 'Edit the use-of-funds allocation in the “THE ASK — Use of Funds” panel on the right. The raise and milestone are pulled from your project.',
+    note: 'Edit the use-of-funds allocation in the “THE ASK — Use of Funds” panel on the right. The raise and milestone are pulled from your startup.',
     auto: [
       {
         label: 'Raise & runway',
@@ -355,7 +355,7 @@ export default function SpinoutSlideEditor({ slide, fields, projectId, onSaved }
       .then((p) => { if (alive) setProject(p); })
       .catch((e) => {
         if (!alive) return;
-        setError(e?.message || 'Failed to load project');
+        setError(e?.message || 'Failed to load startup');
         reportError('SpinoutSlideEditor:load', e);
       })
       .finally(() => { if (alive) setLoading(false); });

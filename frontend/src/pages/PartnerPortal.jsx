@@ -119,7 +119,7 @@ export default function PartnerPortal() {
               <div key={deal.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-4 dark:bg-gray-900 dark:border-gray-800">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
-                    <span className="text-gray-900 font-medium dark:text-gray-100">{deal.project_name || `Project #${deal.project_id}`}</span>
+                    <span className="text-gray-900 font-medium dark:text-gray-100">{deal.project_name || `Startup #${deal.project_id}`}</span>
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[deal.status] || 'bg-gray-200 text-gray-600'}`}>
                       {deal.status?.toUpperCase()}
                     </span>

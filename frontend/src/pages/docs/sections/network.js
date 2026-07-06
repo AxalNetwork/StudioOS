@@ -150,16 +150,16 @@ export default {
       id: 'refer-earn',
       title: 'Refer & Earn',
       overview:
-        "Refer & Earn rewards you for bringing new founders, investors, and partners into the platform. Each successful referral earns commission (varies by tier and role) tracked in your account.",
+        "Refer & Earn rewards you for bringing new founders, investors, and partners into the platform. Each successful referral earns commission (varies by tier and role) tracked in your account. It lives in the Referrals workspace, alongside the Payouts tab where you collect what you earn.",
       howto: [
-        'Open Refer & Earn from the sidebar.',
+        'Open Referrals from the sidebar (the Refer & Earn tab is shown by default).',
         'Copy your unique referral link.',
         'Share via LinkedIn, email, or any other channel.',
-        'Earnings appear in your Payouts tab once the referral converts.',
+        'Earnings appear in the Payouts tab of the same workspace once the referral converts.',
       ],
       tips: [
         'Personal intros convert ~10x better than generic share links — write a sentence or two.',
-        'Earnings vest based on the referred user staying active; check the terms in Refer & Earn for the schedule.',
+        'Earnings vest based on the referred user staying active; check the terms in the Refer & Earn tab for the schedule.',
       ],
       pitfalls: [
         'Referring yourself with an alternate email is detected and forfeits earnings.',

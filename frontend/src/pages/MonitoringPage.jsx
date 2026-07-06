@@ -648,7 +648,7 @@ function ScoreIntegrityTab({ focusSnapshotId = null }) {
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div>
                   <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                    {it.project_name || `Project #${it.project_id}`} · snapshot #{it.id}
+                    {it.project_name || `Startup #${it.project_id}`} · snapshot #{it.id}
                   </div>
                   <div className="text-xs text-gray-500 mt-0.5">
                     Score <strong className="text-gray-800 dark:text-gray-200">{it.total_score}</strong> · {it.tier} ·

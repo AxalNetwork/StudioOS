@@ -5,17 +5,17 @@ export default {
   subsections: [
     {
       id: 'cant-see-projects',
-      title: "Can't see my projects",
+      title: "Can't see my startups",
       overview:
-        "If your project list is empty, the most common causes are: you’re viewing the wrong workspace, your role doesn’t have project access, or your account is impersonating another user.",
+        "If your startup list is empty, the most common causes are: you’re viewing the wrong workspace, your role doesn’t have startup access, or your account is impersonating another user.",
       howto: [
-        'Check the role badge in the bottom-left of the sidebar — Investors and Mentors don’t own projects, only Founders and Admins do.',
+        'Check the role badge in the bottom-left of the sidebar — Investors and Mentors don’t own startups, only Founders and Admins do.',
         'If you’re an admin, exit any "View as" mode from the violet bar at the top of the screen.',
         'Refresh the page. If it’s still empty, try signing out and back in.',
-        'If the project should be there, contact support with the project name.',
+        'If the startup should be there, contact support with the startup name.',
       ],
       tips: [
-        'New projects can take a few seconds to appear after creation — refresh once if it doesn’t show right away.',
+        'New startups can take a few seconds to appear after creation — refresh once if it doesn’t show right away.',
       ],
       pitfalls: [
         'Multiple browser tabs in different "View as" modes can cause confusing empty views — close extras.',
@@ -125,7 +125,7 @@ export default {
       id: 'customer-chat',
       title: 'Reaching the studio team',
       overview:
-        "Need to reach the studio team? Open the Personal Advisor on the Studio page — it answers questions about your projects and can file a tracked support ticket for you in one step. Tickets keep a written record the team follows up on, in-app and (optionally) by email.",
+        "Need to reach the studio team? Open the Personal Advisor on the Studio page — it answers questions about your startups and can file a tracked support ticket for you in one step. Tickets keep a written record the team follows up on, in-app and (optionally) by email.",
       howto: [
         'Go to the Studio page and open the Personal Advisor.',
         'Ask your question, or click "Open a ticket" to file a tracked support request.',

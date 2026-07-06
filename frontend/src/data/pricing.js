@@ -38,7 +38,7 @@ export const FOUNDER_TIERS = [
     priceAnnual: 0,
     tagline: 'Validate one idea end-to-end.',
     features: [
-      '1 active project',
+      '1 active startup',
       'AI scoring (5 runs / month)',
       'Spin-Out Lab — 4-week sprint',
       'Public profile + referral link',

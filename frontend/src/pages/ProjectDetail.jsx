@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { safeExternalUrl } from '../lib/url';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, FileText, Target, Building, Rocket, Pencil, Trash2, X, Database, Search, ExternalLink, AlertCircle, PieChart, Users, UserPlus, Link2, Copy, Lock, Mail, Check } from 'lucide-react';
@@ -10,6 +10,7 @@ import { useEscapeClose } from '../components/useEscapeClose';
 import { getPitchCopyLengthStatus } from '../lib/pitchCopyLength';
 import { StatusBadge } from './Dashboard';
 import VentureRiskPanel from '../components/VentureRiskPanel';
+import CompetitorAnalysis from '../components/CompetitorAnalysis';
 
 const weekLabels = {
   week_1: { name: 'Week 1 — Validation Sprint', tasks: ['Define problem + ICP', 'Run user interviews', 'Validate willingness to pay', 'Draft 1-page concept'] },
@@ -32,6 +33,10 @@ export default function ProjectDetail() {
   const [loadError, setLoadError] = useState('');
   const [editing, setEditing] = useState(false);
   const [cbOpen, setCbOpen] = useState(false);
+  // Task #3 — Competitor Analysis folded in as a startup-scoped in-page section,
+  // revealed by the header button (mirrors the cbOpen reveal pattern).
+  const [compOpen, setCompOpen] = useState(false);
+  const compRef = useRef(null);
   // Task #1 — caller's membership permissions ({ can_edit, can_manage, my_role }).
   // 403 (e.g. investors) resolves to null → no edit rights.
   const [perm, setPerm] = useState(null);
@@ -46,7 +51,7 @@ export default function ProjectDetail() {
     ]).then(([p, s, d, m]) => {
       setProject(p); setScores(s); setDocs(d); setPerm(m);
     }).catch((e) => {
-      setLoadError(e?.message || 'Failed to load project');
+      setLoadError(e?.message || 'Failed to load startup');
     }).finally(() => setLoading(false));
   };
 
@@ -61,6 +66,23 @@ export default function ProjectDetail() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project]);
+
+  // ?comp=1 auto-opens the competitor-analysis section (deep-link parity with ?cb=1).
+  useEffect(() => {
+    if (searchParams.get('comp') === '1' && project && !compOpen) {
+      setCompOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('comp');
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project]);
+
+  useEffect(() => {
+    if (!compOpen) return;
+    const t = setTimeout(() => compRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+    return () => clearTimeout(t);
+  }, [compOpen]);
 
   const advanceWeek = async () => {
     try {
@@ -124,11 +146,11 @@ export default function ProjectDetail() {
     return (
       <div className="text-center py-20">
         <div className="text-red-600 text-sm mb-3">{loadError}</div>
-        <Link to="/projects" className="text-violet-600 hover:underline text-sm">Back to Projects</Link>
+        <Link to="/projects" className="text-violet-600 hover:underline text-sm">Back to Startups</Link>
       </div>
     );
   }
-  if (!project) return <div className="text-red-600 text-center py-20">Project not found</div>;
+  if (!project) return <div className="text-red-600 text-center py-20">Startup not found</div>;
 
   const week = weekLabels[project.playbook_week] || weekLabels.week_1;
   const latestScore = scores[0];
@@ -136,8 +158,22 @@ export default function ProjectDetail() {
   return (
     <div data-testid="project-detail">
       <Link to="/projects" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-4">
-        <ArrowLeft size={14} /> Back to Projects
+        <ArrowLeft size={14} /> Back to Startups
       </Link>
+
+      {compOpen && (
+        <div ref={compRef} className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
+              <Search size={14} className="text-violet-600" /> Competitor Analysis
+            </h3>
+            <button onClick={() => setCompOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" aria-label="Hide competitor analysis" title="Hide">
+              <X size={16} />
+            </button>
+          </div>
+          <CompetitorAnalysis project={project} embedded />
+        </div>
+      )}
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
@@ -155,17 +191,22 @@ export default function ProjectDetail() {
             <Link
               to={`/build/captable?project=${project.id}`}
               className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-xs text-gray-700 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300"
-              title="Open this project's cap table in the simulator"
+              title="Open this startup's cap table in the simulator"
             >
               <PieChart size={12} /> Cap Table
             </Link>
-            <Link
-              to="/build/competitors"
-              className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-xs text-gray-700 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300"
-              title="Map this market's competitive landscape"
+            <button
+              type="button"
+              onClick={() => setCompOpen((v) => !v)}
+              className={`flex items-center gap-1 px-3 py-1.5 border rounded-lg text-xs ${
+                compOpen
+                  ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/40 dark:border-violet-800 dark:text-violet-300'
+                  : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300'
+              }`}
+              title="Map this startup's competitive landscape"
             >
               <Search size={12} /> Competitor Analysis
-            </Link>
+            </button>
             {project.uid && (
               <Link
                 to={`/startups/${project.uid}`}
@@ -247,7 +288,7 @@ export default function ProjectDetail() {
           onSaved={(updated) => {
             setProject((p) => ({ ...p, ...updated }));
             setEditing(false);
-            showToast({ kind: 'success', msg: 'Project updated' });
+            showToast({ kind: 'success', msg: 'Startup updated' });
           }}
           onError={(msg) => showToast({ kind: 'error', msg })}
         />
@@ -548,7 +589,7 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
             <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
               <Database size={16} className="text-violet-600" /> Look up on Crunchbase
             </h2>
-            <p className="text-xs text-gray-500 mt-0.5">Search and attach a Crunchbase company snapshot to this project.</p>
+            <p className="text-xs text-gray-500 mt-0.5">Search and attach a Crunchbase company snapshot to this startup.</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close"><X size={18} /></button>
         </div>
@@ -945,7 +986,7 @@ function PitchCopyMeter({ status }) {
 }
 
 const EDITABLE_FIELDS = [
-  { key: 'name', label: 'Project Name', required: true },
+  { key: 'name', label: 'Startup Name', required: true },
   { key: 'description', label: 'Description' },
   { key: 'sector', label: 'Sector', sectorSelect: true },
   { key: 'problem_statement', label: 'Problem Statement', textarea: true },
@@ -1107,7 +1148,7 @@ function ProjectMembersSection({ projectId, onError }) {
         <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Team</h3>
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-        Co-founders can read &amp; edit project data; advisors have read-only access.
+        Co-founders can read &amp; edit startup data; advisors have read-only access.
       </p>
 
       {loading ? (
@@ -1357,7 +1398,7 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
 
   const submit = async () => {
     if (!form.name.trim()) {
-      onError('Project name is required');
+      onError('Startup name is required');
       return;
     }
     // Coerce blank string → null so the PUT clears the column rather
@@ -1388,7 +1429,7 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
       });
       onSaved(updated);
     } catch (e) {
-      onError(e?.message || 'Failed to update project');
+      onError(e?.message || 'Failed to update startup');
     } finally {
       setSaving(false);
     }
@@ -1403,10 +1444,10 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
         className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto dark:bg-gray-900"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
-        aria-label="Edit project"
+        aria-label="Edit startup"
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Edit Project</h2>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Edit Startup</h2>
           <button onClick={handleClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">
             <X size={18} />
           </button>

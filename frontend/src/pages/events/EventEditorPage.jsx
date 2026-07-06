@@ -18,7 +18,7 @@ const AUDIENCE_RULES = [
   { key: 'comp_invested_lps', label: 'Invested LPs', help: 'Limited partners who have invested.' },
   { key: 'comp_investors', label: 'Investors', help: 'Users with an investor profile.' },
   { key: 'comp_host_connections', label: 'My connections', help: 'Your accepted network connections.' },
-  { key: 'comp_project_founders', label: 'Project founders', help: 'Founders of active projects.' },
+  { key: 'comp_project_founders', label: 'Startup founders', help: 'Founders of active startups.' },
 ];
 
 const COMMON_TZS = [

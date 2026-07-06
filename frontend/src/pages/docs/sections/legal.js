@@ -7,7 +7,7 @@ export default {
       id: 'incorporation',
       title: 'Incorporation',
       overview:
-        "The Incorporation wizard takes you from a project to a registered company in a single sitting. Pick a jurisdiction (Delaware C-Corp by default), confirm officers and registered agent, sign the formation docs, and the platform files them with the state.",
+        "The Incorporation wizard takes you from a startup to a registered company in a single sitting. Pick a jurisdiction (Delaware C-Corp by default), confirm officers and registered agent, sign the formation docs, and the platform files them with the state.",
       howto: [
         'Open Incorporation from the Legal sidebar group.',
         'Pick a jurisdiction (Delaware, Wyoming, UK, Singapore, and more supported).',
@@ -37,7 +37,7 @@ export default {
         'Open Cofounder Agreement from the Legal sidebar.',
         'Add your co-founder’s details and confirm equity split.',
         'Both parties sign the NDA, then the full agreement.',
-        'Both download a signed PDF; the doc is also stored under your project documents.',
+        'Both download a signed PDF; the doc is also stored under your startup documents.',
       ],
       tips: [
         'Don’t skip the NDA stage — it protects the conversation if you don’t end up signing the full agreement.',
@@ -59,10 +59,10 @@ export default {
       overview:
         "NDAs are required before any deep-context conversation: investor diligence, co-founder discussions, and partner engagements that touch sensitive IP. The platform issues mutual NDAs from a templated library, captures both signatures, and stores the executed copy with an audit trail.",
       howto: [
-        'Open the deal, project, or co-founder match where the NDA is needed.',
+        'Open the deal, startup, or co-founder match where the NDA is needed.',
         'Click "Send NDA"; the wizard pre-fills both parties from the record.',
         'Review terms (duration, scope, jurisdiction) and send.',
-        'Both sides sign in-browser; the executed PDF is stored against the deal/project.',
+        'Both sides sign in-browser; the executed PDF is stored against the deal/startup.',
       ],
       tips: [
         'Mutual NDAs are the default — request a one-way NDA only when you genuinely have nothing to disclose.',
@@ -177,12 +177,12 @@ export default {
         "The Legal Templates library covers the documents most spin-outs need: SAFE, term sheet, stock purchase agreement, bylaws, founder equity split, IP assignment, voting rights, and 83(b) election letter. All are starting points and your spin-out includes attorney review.",
       howto: [
         'Open Legal → Templates.',
-        'Pick the template you need; the wizard pre-fills from your project data.',
+        'Pick the template you need; the wizard pre-fills from your startup data.',
         'Review and edit; route to the partner attorney for review before signing.',
       ],
       tips: [
         'Never sign a template without attorney review for anything money-related.',
-        'Keep a versioned copy of every executed agreement under project documents.',
+        'Keep a versioned copy of every executed agreement under startup documents.',
       ],
       pitfalls: [
         'Modifying clauses without legal review can break enforceability — flag every change to the attorney.',

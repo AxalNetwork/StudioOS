@@ -95,7 +95,7 @@ export default function ScoringPage() {
   };
 
   const generateMemo = async () => {
-    if (!selectedProject) return alert('Select a project first');
+    if (!selectedProject) return alert('Select a startup first');
     try {
       const memo = await api.generateDealMemo(selectedProject);
       alert(`Deal Memo generated! Decision: ${memo.decision}`);
@@ -153,7 +153,7 @@ export default function ScoringPage() {
             </div>
 
             <div className="mb-4">
-              <label className="block text-xs text-gray-600 mb-1 font-medium">Link to Project (optional)</label>
+              <label className="block text-xs text-gray-600 mb-1 font-medium">Link to Startup (optional)</label>
               <ModernSelect
                 value={selectedProject || ''}
                 onChange={e => setSelectedProject(e.target.value ? parseInt(e.target.value) : null)}
@@ -329,14 +329,14 @@ function CooldownBanner({ info }) {
       <Lock size={14} className="mt-0.5 flex-shrink-0" />
       <div className="flex-1">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <strong>Official scoring is on cooldown for this project.</strong>
+          <strong>Official scoring is on cooldown for this startup.</strong>
           {valid && (
             <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 border border-amber-300 px-1.5 py-0.5 font-mono">
               Unlocks in {formatRemaining(remainingMs)}
             </span>
           )}
           <span
-            title="Each official run locks the project's scoring for 7 days so LP-facing numbers stay stable. Practice mode is unlimited and never visible to LPs. To unlock early (e.g. after a major intake change), ask an admin to run scoring with ?force=1."
+            title="Each official run locks the startup's scoring for 7 days so LP-facing numbers stay stable. Practice mode is unlimited and never visible to LPs. To unlock early (e.g. after a major intake change), ask an admin to run scoring with ?force=1."
             className="inline-flex items-center cursor-help opacity-70 hover:opacity-100"
           >
             <HelpCircle size={12} />

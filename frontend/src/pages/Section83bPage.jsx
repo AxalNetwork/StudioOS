@@ -99,7 +99,7 @@ function CreateModal({ open, onClose, projects: parentProjects, onCreated }) {
         </div>
         <div className="space-y-3">
           <label className="block">
-            <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Project</div>
+            <div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Startup</div>
             <select value={projectId} onChange={(e) => setProjectId(e.target.value)}
               className="w-full border rounded-md px-3 py-2 text-sm">
               <option value="">Select…</option>
@@ -241,7 +241,7 @@ function TrackerCard({ tracker, onChange }) {
   );
 }
 
-export default function Section83bPage() {
+export default function Section83bPage({ embedded = false }) {
   const navigate = useNavigate();
   const [trackers, setTrackers] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -285,19 +285,21 @@ export default function Section83bPage() {
   }, [trackers]);
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
+    <div className={embedded ? 'max-w-5xl mx-auto' : 'max-w-5xl mx-auto p-6'}>
       <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <button onClick={() => navigate('/incorporate')}
-            className="text-xs text-gray-500 hover:text-gray-800 inline-flex items-center gap-1 mb-1">
-            <ArrowLeft size={12} /> Back to Incorporate
-          </button>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">83(b) Election Tracker</h1>
-        <PageExplainer pageKey="section_83b" />
-          <p className="text-sm text-gray-600 mt-1">
-            30-day countdown, IRS mailing checklist, and certified-mail receipt upload.
-          </p>
-        </div>
+        {!embedded && (
+          <div>
+            <button onClick={() => navigate('/incorporate')}
+              className="text-xs text-gray-500 hover:text-gray-800 inline-flex items-center gap-1 mb-1">
+              <ArrowLeft size={12} /> Back to Incorporate
+            </button>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">83(b) Election Tracker</h1>
+            <PageExplainer pageKey="section_83b" />
+            <p className="text-sm text-gray-600 mt-1">
+              30-day countdown, IRS mailing checklist, and certified-mail receipt upload.
+            </p>
+          </div>
+        )}
         <button onClick={() => setShowNew(true)}
           className="px-4 py-2 text-sm font-semibold rounded-md bg-violet-600 hover:bg-violet-700 text-white inline-flex items-center gap-1 shrink-0">
           <Plus size={14} /> New tracker

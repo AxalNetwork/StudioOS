@@ -55,8 +55,8 @@ export default function AdminTrashPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1 dark:text-gray-100">Trash · Projects</h1>
-        <p className="text-sm text-gray-600">Soft-deleted projects. Restored within 30 days, otherwise auto-purged.</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1 dark:text-gray-100">Trash · Startups</h1>
+        <p className="text-sm text-gray-600">Soft-deleted startups. Restored within 30 days, otherwise auto-purged.</p>
       </div>
 
       {loading ? (
@@ -76,7 +76,7 @@ export default function AdminTrashPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-gray-600 text-xs uppercase dark:border-gray-800">
-                <th className="text-left px-5 py-3">Project</th>
+                <th className="text-left px-5 py-3">Startup</th>
                 <th className="text-left px-5 py-3 hidden md:table-cell">Founder</th>
                 <th className="text-left px-5 py-3 hidden md:table-cell">Sector</th>
                 <th className="text-left px-5 py-3">Deleted</th>
@@ -105,7 +105,7 @@ export default function AdminTrashPage() {
                         onClick={() => handleRestore(p)}
                         disabled={busy === p.id}
                         className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded text-violet-700 hover:bg-violet-50 disabled:opacity-50"
-                        title="Restore project"
+                        title="Restore startup"
                       >
                         <RotateCcw size={12} /> Restore
                       </button>

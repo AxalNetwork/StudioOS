@@ -443,17 +443,17 @@ export default function BrandBuilderPage() {
       {/* Step 1 — pick project & audience */}
       <section className="bg-white border border-gray-200 rounded-xl p-5 mb-5 dark:bg-gray-900 dark:border-gray-800">
         <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 dark:text-gray-100">
-          <Users size={15} className="text-violet-600" /> 1. Project & audience
+          <Users size={15} className="text-violet-600" /> 1. Startup & audience
         </h2>
         <div className="grid sm:grid-cols-2 gap-3 mb-3">
           <label className="block">
-            <span className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Project</span>
+            <span className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Startup</span>
             <select
               value={projectId || ''}
               onChange={(e) => setProjectId(parseInt(e.target.value) || null)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 dark:border-gray-800 dark:text-gray-100"
             >
-              <option value="">Pick a project…</option>
+              <option value="">Pick a startup…</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </label>
@@ -631,7 +631,7 @@ export default function BrandBuilderPage() {
               description. Leaves those three inputs untouched. */}
           <div className="border border-gray-200 rounded-lg p-3 mb-4 dark:border-gray-800">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Auto-fill page copy from your project name, sector & description.</span>
+              <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Auto-fill page copy from your startup name, sector & description.</span>
               <button
                 onClick={autofill}
                 disabled={autofillBusy || !projectId}

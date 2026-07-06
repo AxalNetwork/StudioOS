@@ -90,7 +90,7 @@ function AdvisorTab({ projects }) {
               <option value="team">Team Building</option>
             </ModernSelect>
             <ModernSelect value={projectId} onChange={e => setProjectId(e.target.value)}>
-              <option value="">No project context</option>
+              <option value="">No startup context</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </ModernSelect>
           </div>
@@ -164,7 +164,7 @@ function FinancialTab({ projects }) {
         <h3 className="text-sm font-semibold text-gray-900 mb-4 dark:text-gray-100">Financial Parameters</h3>
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <label className="text-xs text-gray-600">Project</label>
+            <label className="text-xs text-gray-600">Startup</label>
             <div className="mt-1">
               <ModernSelect {...f('project_id')}>
                 <option value="">Standalone</option>
@@ -275,7 +275,7 @@ function DiligenceTab({ projects }) {
         <div className="flex gap-3">
           <div className="flex-1">
             <ModernSelect value={projectId} onChange={e => setProjectId(e.target.value)}>
-              <option value="">Select a project...</option>
+              <option value="">Select a startup...</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </ModernSelect>
           </div>

@@ -71,7 +71,7 @@ export default function NeedsBoardPage({ user }) {
 // ---------------------------------------------------------------------------
 // Browse — public open needs (partners + investors + admins)
 // ---------------------------------------------------------------------------
-function BrowseTab({ user }) {
+export function BrowseTab({ user }) {
   const [filters, setFilters] = useState({ category: '', q: '' });
   const [needs, setNeeds] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -165,7 +165,7 @@ function NeedCard({ n, onClick }) {
 // ---------------------------------------------------------------------------
 // My needs (founders) — post + manage
 // ---------------------------------------------------------------------------
-function MyNeedsTab({ user }) {
+export function MyNeedsTab({ user }) {
   const [needs, setNeeds] = useState([]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -265,7 +265,7 @@ function NeedFormModal({ user, need, onClose, onSaved }) {
     <Modal title={isEdit ? 'Edit need' : 'Post a need'} onClose={onClose} wide>
       <div className="space-y-3">
         {!isEdit && (
-          <Field label="Project">
+          <Field label="Startup">
             <select value={draft.project_id} onChange={(e) => setDraft({ ...draft, project_id: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
               <option value="">— select —</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -506,7 +506,7 @@ function QuoteFormModal({ needId, onClose, onSaved }) {
 // ---------------------------------------------------------------------------
 // My quotes (partners)
 // ---------------------------------------------------------------------------
-function MyQuotesTab() {
+export function MyQuotesTab() {
   const [quotes, setQuotes] = useState([]);
   const [error, setError] = useState(null);
   async function load() {
@@ -568,7 +568,7 @@ const ENG_LABEL = {
   delivered: 'Delivered', reviewed: 'Reviewed', invoiced: 'Invoiced', cancelled: 'Cancelled',
 };
 
-function EngagementsTab({ user }) {
+export function EngagementsTab({ user }) {
   const [rows, setRows] = useState([]);
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);

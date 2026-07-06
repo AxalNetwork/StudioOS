@@ -81,7 +81,7 @@ export default function PortfolioPositionsPage() {
       {isAdmin && creating && (
         <form onSubmit={onCreate} className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {field('project_id', 'Project ID', { required: true, inputMode: 'numeric' })}
+            {field('project_id', 'Startup ID', { required: true, inputMode: 'numeric' })}
             {field('round_name', 'Round (e.g. Seed)', { required: true })}
             {field('invested_amount', 'Invested $', { inputMode: 'decimal' })}
             {field('ownership_pct', 'Ownership %', { inputMode: 'decimal' })}
@@ -114,7 +114,7 @@ export default function PortfolioPositionsPage() {
             <tbody>
               {items.map((it) => (
                 <tr key={it.project_id} className="border-b border-gray-50 dark:border-gray-800/50">
-                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{it.project?.name || `Project ${it.project_id}`}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{it.project?.name || `Startup ${it.project_id}`}</td>
                   <td className="px-4 py-3">{fmtMoney(it.total_invested)}</td>
                   <td className="px-4 py-3">{it.rounds}</td>
                   <td className="px-4 py-3">{fmtPct(it.latest_ownership_pct)} {it.latest_round ? <span className="text-gray-400">({it.latest_round})</span> : null}</td>

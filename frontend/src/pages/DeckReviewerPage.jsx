@@ -71,7 +71,7 @@ async function fetchMarkdown(url) {
   return res.text();
 }
 
-export default function DeckReviewerPage() {
+export default function DeckReviewerPage({ embedded = false }) {
   const navigate = useNavigate();
   const fileRef = useRef(null);
   const [projects, setProjects] = useState([]);
@@ -206,14 +206,18 @@ export default function DeckReviewerPage() {
   const busy = phase !== 'idle';
 
   return (
-    <div className="max-w-4xl mx-auto py-6 px-4">
-      <button onClick={() => navigate(-1)} className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 mb-3">
-        <ArrowLeft size={16} /> Back
-      </button>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">Pitch deck reviewer</h1>
-      <p className="text-sm text-gray-600 dark:text-gray-400 mb-5 max-w-2xl">
-        Upload your existing pitch deck (PDF, DOC, DOCX or PPTX, max {MAX_MB}MB). Our AI plays a seed-stage VC and gives you blunt, specific feedback grounded in your startup&apos;s data.
-      </p>
+    <div className={embedded ? 'max-w-4xl mx-auto' : 'max-w-4xl mx-auto py-6 px-4'}>
+      {!embedded && (
+        <>
+          <button onClick={() => navigate(-1)} className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 mb-3">
+            <ArrowLeft size={16} /> Back
+          </button>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">Pitch deck reviewer</h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-5 max-w-2xl">
+            Upload your existing pitch deck (PDF, DOC, DOCX or PPTX, max {MAX_MB}MB). Our AI plays a seed-stage VC and gives you blunt, specific feedback grounded in your startup&apos;s data.
+          </p>
+        </>
+      )}
 
       {!projects.length && (
         <div className={`${CARD} p-4 mb-4 text-center text-sm text-gray-700 dark:text-gray-300`}>
