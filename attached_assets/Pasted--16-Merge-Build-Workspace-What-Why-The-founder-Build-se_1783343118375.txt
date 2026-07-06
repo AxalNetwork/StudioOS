@@ -1,0 +1,43 @@
+#16 - Merge Build Workspace
+What & Why
+The founder "Build" section currently exposes four separate destinations that all belong to the same "run your venture" workflow: Founder Portal (submit + auto-score a new startup), Execution (Startups / Pipeline Board / Roadmap), Studio Ops (finance / HR / legal / compliance workflows + strategic review), and Spin-Outs (ventures that passed the Decision Gate). Merge these four into ONE tabbed page so a founder has a single home for the whole intake → build → operate → spin-out lifecycle, following the same consolidation pattern already used for the Team workspace. Separately, rename the "Projects" concept to "Startups" across the UI.
+Chosen page title: "Command Center" (route /build/command-center). It reads clearly under the "Build" group and captures a single cockpit unifying intake, execution, ops, and spin-outs. Acceptable alternatives if you prefer: "Venture" or "Operations Hub" — swap the title/route in one place if so.
+Done looks like
+* The founder sidebar "Build" group shows a single Command Center item instead of the separate Founder Portal, Execution, Studio Ops, and Spin-Outs items. Signals, Team, Metrics, and Brand & Landing remain their own Build items.
+* Clicking Command Center opens one page with four deep-linkable tabs — Founder Portal, Execution, Studio Ops, Spin-Outs — each rendering its existing functionality unchanged, under one governing page title (no duplicate per-tab page headings).
+* The active tab is reflected in the URL (?tab=) so tabs are shareable/bookmarkable, and the Build nav row stays highlighted on every tab and legacy route.
+* Old links keep working: visiting the legacy founder routes (Founder Portal, Execution + its board/roadmap sub-routes, Studio Ops, Spin-Outs) lands a founder on the matching tab.
+* Everywhere the app said "Projects" as a feature/nav label or page title, it now says "Startups" (the underlying /projects URL is unchanged).
+* Non-founder personas (e.g. admin) keep their existing standalone access to these pages.
+* npm run test:drift passes; both changelogs get a plain-English + technical entry.
+Out of scope
+* No changes to the underlying data model, APIs, or the actual functionality inside each of the four pages — this is an information-architecture consolidation plus a label rename.
+* No visual redesign of the individual pages beyond suppressing their now-duplicate page-level headings.
+* Renaming the /projects route/URL itself, or renaming database fields/API params — only user-facing "Projects" labels/titles change.
+* Non-founder sidebars keep their current structure.
+Steps
+1. Build the merged Command Center page — Create one founder-facing tabbed workspace (mirror the existing Team workspace pattern: deep-linkable ?tab=, single governing title, embedded child pages that suppress their own H1). Tabs in lifecycle order: Founder Portal, Execution, Studio Ops, Spin-Outs. Reuse the four existing pages as-is inside the tabs.
+2. Add embedded support to the reused pages — Give Founder Portal, Studio Ops, and Spin-Outs an embedded prop that suppresses their own page-level heading when hosted in a tab (Execution already composes children that support this). Keep every other behavior/state intact.
+3. Rewire the founder sidebar — Replace the four separate Build items with a single Command Center entry whose match keeps it active across all the legacy routes; leave Signals, Team, Metrics, Brand & Landing untouched. If a standalone "Founder Portal" nav item exists in the founder nav, fold it in here. Document the merge in the sidebar config comment block so the nav-integrity guard treats the removals as intentional.
+4. Add routes + legacy redirects — Register /build/command-center and redirect founders from the legacy routes (Founder Portal, Execution incl. board/roadmap, Studio Ops, Spin-Outs incl. the /spin-outs alias) to the matching tab, following the existing persona-conditional redirect pattern. Preserve standalone routes for non-founder personas (admin).
+5. Rename "Projects" → "Startups" — Update the user-facing "Projects" nav label, the Projects page title/heading (and its list aria-label), and the Execution "Projects" section header to "Startups". Do not change the /projects URL or backend field names.
+6. Docs + changelogs — Add a line to both CHANGELOG.md and frontend/public/CHANGELOG-user.md; optionally register a page explainer for the new page. Run npm run test:drift and fix any nav-integrity/typecheck failures.
+Relevant files
+* frontend/src/sidebarConfig.js:83-95,169-188
+* frontend/src/App.jsx
+* frontend/src/pages/TeamBuildingPage.jsx
+* frontend/src/pages/FounderPortal.jsx
+* frontend/src/pages/ExecutionPage.jsx:54-79
+* frontend/src/pages/StudioOpsPage.jsx:37-56
+* frontend/src/pages/SpinOutsPage.jsx
+* frontend/src/pages/ProjectsPage.jsx:23,121-123,193
+* frontend/src/lib/explainers.js:80
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md
+Dependencies
+Reconcile open branches & PRs
+
+Open task
+Merge Refer & Earn + Payouts into one Referrals workspace
+
+Open task
