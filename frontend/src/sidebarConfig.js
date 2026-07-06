@@ -19,7 +19,7 @@ import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, Shield, ShieldCheck, Share2,
-  Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug,
+  Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, Plug, LayoutGrid,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2, ShieldAlert,
   Gavel, Inbox, FileBarChart, Radar,
@@ -81,7 +81,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/articles', icon: FileText, label: 'Content Queue' },
     ]},
     { key: 'studio', label: 'Studio', items: [
-      { to: '/projects', icon: Zap, label: 'Projects' },
+      { to: '/projects', icon: Zap, label: 'Startups' },
       { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
       { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
       { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
@@ -148,9 +148,13 @@ export const SIDEBAR_GROUPS = {
   //
   // Intentional removals (documented so a nav-integrity guard treats them as
   // deliberate, not silent drops):
-  //   • "Founder Portal" (/founder) — redundant with Studio/Home; founders
-  //     hitting /founder are redirected to /studio in App.jsx. The route stays
-  //     registered for admin.
+  //   • "Founder Portal" (/founder), "Execution" (/execution + board/roadmap),
+  //     "Studio Ops" (/studio-ops) and "Spin-Outs" (/spinouts) are merged into
+  //     one "Command Center" workspace (/build/command-center). Each is now a
+  //     deep-linkable tab (?tab=founder-portal|execution|studio-ops|spin-outs);
+  //     founders hitting the legacy routes are redirected into the matching tab
+  //     in App.jsx. Every route stays registered and reachable for admin/other
+  //     personas.
   //   • "Portfolio Health" (/portfolio/health) — folded into Metrics
   //     (/build/metrics) as the founder's own company-health view; the
   //     /portfolio/health route stays registered and reachable for other roles.
@@ -170,11 +174,13 @@ export const SIDEBAR_GROUPS = {
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
     ]},
     { key: 'build', label: 'Build', items: [
-      // Task #12/#14 — Projects, Pipeline Board and Roadmap are merged into one
-      // Execution area (founder persona only). `match` keeps the item active
-      // across every Execution view and its legacy deep-linked routes.
-      { to: '/execution', icon: Zap, label: 'Execution', match: ['/execution', '/projects', '/pipeline', '/build/roadmap'] },
-      { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
+      // Command Center merges four founder Build destinations — Founder Portal
+      // (/founder), Execution (/execution + board/roadmap), Studio Ops
+      // (/studio-ops) and Spin-Outs (/spinouts, + the /spin-outs alias) — into
+      // one tabbed page at /build/command-center. `match` keeps the row active
+      // across every tab and every legacy deep-linked route (founders are
+      // redirected from those routes into the matching ?tab= in App.jsx).
+      { to: '/build/command-center', icon: LayoutGrid, label: 'Command Center', match: ['/build/command-center', '/founder', '/execution', '/studio-ops', '/spinouts', '/spin-outs', '/projects', '/pipeline', '/build/roadmap'] },
       { to: '/signals', icon: Radar, label: 'Signals' },
       // Team Building — consolidates the former "Find a Mentor" (Validate),
       // "Find a Co-founder" (Validate) and "Jobs" (Launch) items into one
@@ -183,7 +189,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/build/team', icon: Users, label: 'Team', match: ['/build/team', '/mentors', '/cofounder', '/my/jobs', '/jobs', '/my/applications'] },
       { to: '/build/metrics', icon: TrendingUp, label: 'Metrics' },
       { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
-      { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
     ]},
     { key: 'validate', label: 'Validate', items: [
       { to: '/contacts', icon: Inbox, label: 'Contacts' },

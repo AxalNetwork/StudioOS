@@ -105,6 +105,7 @@ const CofounderPage = lazy(() => import('./pages/CofounderPage'));
 // Team Building — founder workspace consolidating Mentor/Advisor, Co-Founder
 // and Jobs into one tabbed page at /build/team.
 const TeamBuildingPage = lazy(() => import('./pages/TeamBuildingPage'));
+const CommandCenterPage = lazy(() => import('./pages/CommandCenterPage'));
 // Task #20 — /skills and /values are consolidated into the advisor flow.
 // The underlying SkillsProfilePage/ValuesAssessmentPage files are kept intact on
 // disk (data stores), but their routes now redirect to /studio.
@@ -1296,9 +1297,9 @@ function AppInner() {
       {/* Task #12 — Founder Execution area: one deep-linkable shell wrapping the
           Projects / Board / Roadmap views. Standalone routes above stay intact
           for other personas. */}
-      <Route path="/execution" element={guard(['admin', 'founder'], <ExecutionPage />)} />
-      <Route path="/execution/board" element={guard(['admin', 'founder'], <ExecutionPage />)} />
-      <Route path="/execution/roadmap" element={guard(['admin', 'founder'], <ExecutionPage />)} />
+      <Route path="/execution" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=execution" replace /> : <ExecutionPage />)} />
+      <Route path="/execution/board" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=execution" replace /> : <ExecutionPage />)} />
+      <Route path="/execution/roadmap" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=execution" replace /> : <ExecutionPage />)} />
       {/* Task #1 — RAISE Workspaces. Three founder workspaces compose the
           existing pages via an `embedded` prop; each guarded for the roles of
           the pages it wraps. Standalone routes (/build/financials, /build/captable,
@@ -1337,6 +1338,7 @@ function AppInner() {
           role but redirect a founder into the matching tab so old deep links
           keep resolving. */}
       <Route path="/build/team" element={guard(['admin', 'founder'], <TeamBuildingPage />)} />
+      <Route path="/build/command-center" element={guard(['admin', 'founder'], <CommandCenterPage />)} />
       <Route path="/mentors" element={guard(['admin', 'founder', 'partner', 'investor', 'mentor'], user?.role === 'founder' ? <Navigate to="/build/team?tab=mentor" replace /> : <MentorsPage />)} />
       <Route path="/office-hours" element={guard(['admin', 'mentor'], <OfficeHoursPage />)} />
       <Route path="/partner/office-hours" element={guard(['admin', 'partner'], <PartnerOfficeHoursPage />)} />
@@ -1368,7 +1370,7 @@ function AppInner() {
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor'], <TrustCenterPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
-      <Route path="/spinouts" element={guard(['admin', 'founder', 'partner', 'investor'], <SpinOutsPage />)} />
+      <Route path="/spinouts" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=spin-outs" replace /> : <SpinOutsPage />)} />
       {/* Friendly-URL alias: the canonical route is /spinouts (no hyphen),
           but users frequently type or link /spin-outs. Redirect instead of
           rendering a blank page. */}
@@ -1381,7 +1383,7 @@ function AppInner() {
       {/* Task #19 — the founder sidebar no longer surfaces "Founder Portal"
           (folded into Studio/Home). Founders hitting the old link are
           redirected to /studio; admins keep the Founder Portal surface. */}
-      <Route path="/founder" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/studio" replace /> : <FounderPortal />)} />
+      <Route path="/founder" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=founder-portal" replace /> : <FounderPortal />)} />
       {/* Task #18 — investor-lifecycle features ported from PR #119. */}
       <Route path="/ic" element={guard(['admin', 'partner', 'investor'], <ICDecisionsPage />)} />
       <Route path="/ic/:uid" element={guard(['admin', 'partner', 'investor'], <ICDecisionPage />)} />
@@ -1399,7 +1401,7 @@ function AppInner() {
       {/* Task #15 — /payouts is now the Payouts tab of the merged Referrals workspace. */}
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/refer?tab=payouts" replace />)} />
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
-      <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], <StudioOpsPage />)} />
+      <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=studio-ops" replace /> : <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />
       <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], <PipelinePage />)} />
       <Route path="/relationships" element={guard(['admin', 'founder', 'partner', 'investor'], <RelationshipsPage />)} />

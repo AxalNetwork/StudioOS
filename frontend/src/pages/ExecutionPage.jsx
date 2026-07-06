@@ -32,11 +32,14 @@ function SectionHeader({ icon: Icon, title, description }) {
   );
 }
 
-export default function ExecutionPage() {
+export default function ExecutionPage({ embedded = false }) {
   const location = useLocation();
 
   // Legacy sub-routes scroll to their section; the base route scrolls to top.
+  // Skip entirely when embedded (inside Command Center) so switching to the
+  // Execution tab never yanks the window scroll position around.
   useEffect(() => {
+    if (embedded) return;
     let targetId = null;
     if (location.pathname.startsWith('/execution/board')) targetId = 'execution-board';
     else if (location.pathname.startsWith('/execution/roadmap')) targetId = 'execution-roadmap';
@@ -49,19 +52,21 @@ export default function ExecutionPage() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 60);
     return () => clearTimeout(t);
-  }, [location.pathname]);
+  }, [location.pathname, embedded]);
 
   return (
     <div data-testid="execution-page" className="space-y-10">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Execution</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          Your projects, pipeline board and roadmap — all in one place.
-        </p>
-      </div>
+      {!embedded && (
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Execution</h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            Your startups, pipeline board and roadmap — all in one place.
+          </p>
+        </div>
+      )}
 
-      <section id="execution-projects" aria-label="Projects" className="scroll-mt-6">
-        <SectionHeader icon={Zap} title="Projects" description="Venture pipeline & 4-week playbook tracking" />
+      <section id="execution-projects" aria-label="Startups" className="scroll-mt-6">
+        <SectionHeader icon={Zap} title="Startups" description="Venture pipeline & 4-week playbook tracking" />
         <ProjectsPage embedded />
       </section>
 

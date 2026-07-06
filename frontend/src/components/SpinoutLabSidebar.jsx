@@ -20,7 +20,7 @@ const FEATURE_CATALOGUE = {
   projects: {
     to: '/projects',
     icon: Zap,
-    label: 'Projects',
+    label: 'Startups',
     blurb: 'Spin up your venture record. The whole platform hangs off this one project for the rest of the sprint.',
   },
   'customer-discovery': {

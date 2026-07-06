@@ -11,7 +11,7 @@ const TYPE_META = {
 };
 const TASK_STATUSES = ['todo', 'in_progress', 'review', 'done'];
 
-export default function StudioOpsPage() {
+export default function StudioOpsPage({ embedded = false }) {
   const [tab, setTab] = useState('kanban');
   const [workflows, setWorkflows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,16 +35,18 @@ export default function StudioOpsPage() {
   for (const wf of workflows) if (byType[wf.type]) byType[wf.type].push(wf);
 
   return (
-    <div className="p-6 max-w-[1600px] mx-auto">
+    <div className={embedded ? 'max-w-[1600px] mx-auto' : 'p-6 max-w-[1600px] mx-auto'}>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <Briefcase className="text-violet-600" size={24} />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Studio Ops</h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Strategic oversight, finance, HR, legal & compliance workflows.</p>
+        {!embedded && (
+          <div className="flex items-center gap-3">
+            <Briefcase className="text-violet-600" size={24} />
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Studio Ops</h1>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Strategic oversight, finance, HR, legal & compliance workflows.</p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
+        )}
+        <div className={`flex items-center gap-2 ${embedded ? 'ml-auto' : ''}`}>
           <button onClick={reload} className="flex items-center gap-2 bg-white border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm text-gray-700 px-3 py-2 rounded-lg dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
             <RefreshCw size={14} /> Refresh
           </button>

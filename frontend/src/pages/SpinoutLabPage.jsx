@@ -255,7 +255,7 @@ const FEATURE_EXPLAINERS = {
     blurb: "Your home base for the 4-week sprint — track milestones, days remaining, and what unlocks next.",
   },
   projects: {
-    label: 'Projects',
+    label: 'Startups',
     blurb: 'Spin up your venture record. The whole platform hangs off this one project for the rest of the sprint.',
   },
   'customer-discovery': {

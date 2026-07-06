@@ -1,63 +1,64 @@
 /**
- * Command Center — the founder's single workspace for running the whole venture
- * lifecycle. This is an IA consolidation, not a rebuild: four pre-existing
- * founder surfaces are composed here as deep-linkable tabs and reused as-is via
- * an `embedded` prop that suppresses each one's own page-level heading so a
- * single "Command Center" title governs.
+ * Command Center — the founder's single home for the whole venture lifecycle:
+ * intake → build → operate → spin-out. This is an IA consolidation, not a
+ * rebuild. Four pre-existing founder surfaces are composed here as deep-linkable
+ * tabs and reused as-is via an `embedded` prop that suppresses each one's own
+ * page-level heading so a single "Command Center" title governs:
  *
- * Tabs (lifecycle order):
  *   - Founder Portal → FounderPortal  (submit + auto-score a new startup)
- *   - Execution      → ExecutionPage  (startups, pipeline board, roadmap)
- *   - Studio Ops     → StudioOpsPage  (finance / HR / legal / compliance ops)
+ *   - Execution      → ExecutionPage  (Startups / Pipeline Board / Roadmap)
+ *   - Studio Ops     → StudioOpsPage  (finance / HR / legal / compliance)
  *   - Spin-Outs      → SpinOutsPage   (ventures past the Decision Gate)
  *
- * The active tab is stored in `?tab=` so every sub-surface is deep-linkable and
- * the legacy /founder, /execution (+board/roadmap), /pipeline, /build/roadmap,
- * /studio-ops and /spinouts routes redirect founders straight into the matching
- * tab (see App.jsx). Mirrors the TeamBuildingPage / ReferralsPage pattern. There
- * is no tier gating here — all four surfaces are ungated for founders.
+ * The active tab lives in the `?tab=` query string so every sub-surface is
+ * deep-linkable and the legacy /founder, /execution (+ board/roadmap),
+ * /studio-ops and /spinouts routes can redirect founders straight into the
+ * matching tab (see App.jsx). None of the four pages carries a tier gate, so —
+ * unlike TeamBuildingPage — there is no per-tab paywall here.
  */
 import React, { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Sparkles, Zap, Briefcase, Rocket } from 'lucide-react';
+import { ClipboardCheck, Zap, Briefcase, Rocket } from 'lucide-react';
 import PageExplainer from '../components/PageExplainer';
 import FounderPortal from './FounderPortal';
 import ExecutionPage from './ExecutionPage';
 import StudioOpsPage from './StudioOpsPage';
 import SpinOutsPage from './SpinOutsPage';
 
+// Tab registry, ordered by the venture lifecycle: intake (Founder Portal) →
+// build (Execution) → operate (Studio Ops) → graduate (Spin-Outs). `blurb`
+// sets the tone shown under the tab bar.
 const TABS = [
   {
     id: 'founder-portal',
     label: 'Founder Portal',
-    icon: Sparkles,
-    blurb: 'Submit a new startup and get an instant readiness score across market, team, product, capital and fit.',
+    icon: ClipboardCheck,
+    blurb: 'Submit a new startup and get it scored instantly against the studio rubric.',
   },
   {
     id: 'execution',
     label: 'Execution',
     icon: Zap,
-    blurb: 'Run the build — your startups, the pipeline board and the roadmap, all in one place.',
+    blurb: 'Track your startups, pipeline board and roadmap — all in one place.',
   },
   {
     id: 'studio-ops',
     label: 'Studio Ops',
     icon: Briefcase,
-    blurb: 'Strategic oversight plus finance, HR, legal and compliance workflows for operating the company.',
+    blurb: 'Run finance, HR, legal and compliance workflows with strategic oversight.',
   },
   {
-    id: 'spinouts',
+    id: 'spin-outs',
     label: 'Spin-Outs',
     icon: Rocket,
-    blurb: 'Ventures that have passed the Decision Gate and entered spin-out, incorporation or independent scaling.',
+    blurb: 'Ventures past the Decision Gate — spinning out, incorporating, or scaling independently.',
   },
 ];
 
 export default function CommandCenterPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Resolve the active tab from ?tab=, falling back to the first tab
-  // (Founder Portal) so a fresh open lands at the top of the lifecycle.
+  // Resolve the active tab from ?tab=, falling back to the first tab.
   const requested = searchParams.get('tab');
   const activeId = useMemo(() => {
     if (requested && TABS.some((t) => t.id === requested)) return requested;
@@ -78,8 +79,8 @@ export default function CommandCenterPage() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Command Center</h1>
         <PageExplainer pageKey="command_center" />
         <p className="mt-1 max-w-3xl text-sm text-gray-600 dark:text-gray-400">
-          One workspace for the whole venture lifecycle — from intake and scoring through
-          execution, studio operations and spin-out.
+          One home for the whole venture lifecycle — submit and score a new startup, run
+          execution, operate the studio, and manage spin-outs.
         </p>
       </div>
 

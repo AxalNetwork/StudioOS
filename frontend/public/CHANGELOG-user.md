@@ -5,6 +5,23 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your Build tools are now one place: Command Center
+
+We've combined **Founder Portal**, **Execution**, **Studio Ops**, and **Spin-Outs**
+into a single **Command Center** in the sidebar. Open it and switch between four
+tabs that follow your venture's journey: **Founder Portal** (submit and instantly
+score a new startup), **Execution** (your startups, pipeline board, and roadmap),
+**Studio Ops** (finance, HR, legal, and compliance), and **Spin-Outs** (ventures
+past the Decision Gate). Everything works exactly as before — it's just grouped so
+it's faster to move through your whole workflow in one place. Each tab has its own
+web address, so you can bookmark or share a specific one, and your old links still
+take you straight to the right tab.
+
+We've also renamed **Projects** to **Startups** in the navigation and page titles,
+so the wording matches how you think about the companies you're building.
+
+---
+
 ## Refer & Earn and Payouts are now one place: Referrals
 
 We've combined **Refer & Earn** and **Payouts** into a single **Referrals** area

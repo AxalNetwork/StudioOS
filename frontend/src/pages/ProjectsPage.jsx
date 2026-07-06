@@ -120,7 +120,7 @@ export default function ProjectsPage({ embedded = false }) {
         <div>
           {!embedded && (
             <>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Projects</h1>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Startups</h1>
               <PageExplainer pageKey="projects" />
               <p className="text-sm text-gray-600">Venture pipeline & 4-week playbook tracking</p>
             </>
@@ -190,7 +190,7 @@ export default function ProjectsPage({ embedded = false }) {
               items={filtered}
               itemHeight={PROJECT_ROW_HEIGHT}
               height={600}
-              ariaLabel={`Projects list, ${filtered.length} projects`}
+              ariaLabel={`Startups list, ${filtered.length} startups`}
               virtualRow={(p, _i, style, ariaAttributes) => (
                 <div style={style} {...ariaAttributes}
                      className="hover:bg-gray-50/50 transition-colors border-b border-gray-100 text-sm">

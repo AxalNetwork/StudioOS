@@ -82,6 +82,11 @@ export const EXPLAINERS = {
     body: 'One workspace to recruit advice from mentors, find a co-founder, and hire for open roles — advisors, founders, and talent in one place.',
     docPath: 'validate-grow/team-building',
   },
+  command_center: {
+    title: 'Run your venture from one place',
+    body: 'Your founder home for the whole lifecycle — submit and score a new startup, run execution, operate the studio, and manage spin-outs, all in one tabbed workspace.',
+    docPath: 'build/command-center',
+  },
   market_intel: {
     title: 'Market signal, on demand',
     body: 'Comp-set deltas, funding rounds, hiring velocity and news sentiment for the segments you care about — refreshed daily.',

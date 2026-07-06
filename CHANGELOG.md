@@ -10,6 +10,51 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Merge Build workspace — Command Center + Projects→Startups rename
+
+Frontend-only IA consolidation. The four founder **Build** sidebar destinations —
+Founder Portal (`/founder`), Execution (`/execution` + `/execution/board` +
+`/execution/roadmap`), Studio Ops (`/studio-ops`) and Spin-Outs (`/spinouts`, +
+the `/spin-outs` alias) — now live in a single tabbed **Command Center**
+workspace at `/build/command-center`. Mirrors the `/build/team` (Team Building)
+and RAISE consolidations: deep-linkable `?tab=`, one governing H1, embedded child
+pages that suppress their own heading. No business logic, data-fetching, API, or
+schema changes.
+
+- **New workspace** (`frontend/src/pages/CommandCenterPage.jsx`) — four
+  deep-linkable tabs in lifecycle order: Founder Portal → Execution → Studio Ops
+  → Spin-Outs. Active tab driven by `?tab=` (deep-linkable, survives refresh,
+  `replace`d so it doesn't stack history). Unlike TeamBuildingPage there is no
+  tier gate — none of the four pages is gated. `data-testid="command-center-page"`.
+- **`embedded` prop** added to `FounderPortal`, `StudioOpsPage`, `SpinOutsPage`
+  and `ExecutionPage` (the last did **not** previously accept it — it rendered its
+  "Execution" H1 unconditionally and force-scrolled on mount; both are now guarded
+  by `embedded`). Each suppresses its own icon/title/subtitle header and drops the
+  outer `p-6` padding when embedded. `ProjectsPage`/`PipelinePage`/`RoadmapPage`
+  already supported `embedded` (reused unchanged via ExecutionPage).
+- **Routing** (`frontend/src/App.jsx`) — new `/build/command-center` route
+  (`guard(['admin','founder'])`, lazy). Legacy routes are **persona-conditional**:
+  founders are `Navigate`d into the matching tab (`/founder`→`?tab=founder-portal`;
+  `/execution`+board+roadmap→`?tab=execution`; `/studio-ops`→`?tab=studio-ops`;
+  `/spinouts`→`?tab=spin-outs`), while admin/partner/investor keep the standalone
+  pages. `/spin-outs` still aliases to `/spinouts` (which then applies the persona
+  redirect). `/projects`, `/pipeline`, `/build/roadmap` unchanged.
+- **Sidebar** (`frontend/src/sidebarConfig.js`) — the founder Build group's four
+  items collapse to one **Command Center** entry (icon `LayoutGrid`) whose `match`
+  array keeps the row active across every tab and every legacy route; Signals,
+  Team, Metrics, Brand & Landing untouched. Removals documented in the founder
+  nav comment block so the nav-integrity guard treats them as intentional.
+- **Projects → Startups rename** (user-facing nav labels/titles only; `/projects`
+  URL, route keys, filter keys and backend fields unchanged) — founder Execution
+  "Startups" section header + `aria-label`, `ProjectsPage` H1 + list `aria-label`,
+  the admin sidebar nav label, plus the secondary nav labels that point at the same
+  feature: `SemanticSearch` type filter, the operator/advisor persona `nav_extras`
+  (`lib/personas.js`), the Spin-Out Lab feature-catalogue label (`SpinoutLabSidebar`
+  + `SpinoutLabPage`) and the `G P` keyboard-shortcut label. Descriptive body copy
+  (docs prose, marketing/product pages, deck-template mockups) still reads
+  "Projects" and is out of scope for this label pass.
+- **Explainer** — new `command_center` entry in `frontend/src/lib/explainers.js`.
+
 ## Task #15 — Merge Refer & Earn + Payouts into one Referrals workspace
 
 Frontend-only IA consolidation. The two separate founder/partner/investor/admin

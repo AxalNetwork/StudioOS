@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 
 const SPINOUT_STATUSES = ['spinout', 'spinout_ready', 'incorporated', 'active'];
 
-export default function SpinOutsPage() {
+export default function SpinOutsPage({ embedded = false }) {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -27,14 +27,18 @@ export default function SpinOutsPage() {
   }, []);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center gap-3 mb-2">
-        <Rocket className="text-violet-600" size={22} />
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Spin-Outs</h1>
-      </div>
-      <p className="text-sm text-gray-600 mb-6">
-        Projects that have passed the Decision Gate and entered spin-out, incorporation, or independent scaling.
-      </p>
+    <div className={embedded ? 'max-w-6xl mx-auto' : 'p-6 max-w-6xl mx-auto'}>
+      {!embedded && (
+        <>
+          <div className="flex items-center gap-3 mb-2">
+            <Rocket className="text-violet-600" size={22} />
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Spin-Outs</h1>
+          </div>
+          <p className="text-sm text-gray-600 mb-6">
+            Startups that have passed the Decision Gate and entered spin-out, incorporation, or independent scaling.
+          </p>
+        </>
+      )}
 
       <div className="mb-4 text-xs text-gray-500">
         Need to move a project to spin-out? Open it in the{' '}
