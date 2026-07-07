@@ -10,6 +10,32 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Founder UX Audit #1 (part a) — Startup Lifecycle module + Command Center Overview tab
+
+Implements the lifecycle spine from `FOUNDER_UX_AUDIT.md` Critical item #1: a founder-editable lifecycle stage + derived checklist, surfaced on a new **Overview** tab that is now the default landing surface of the Command Center. This is part (a) — the lifecycle module, venture snapshot and metrics strip. Part (b) (the broader tab restructure: unstack Execution, merge Spin-Outs into a Startups filter, drop Founder Portal as a tab, founder-language pass) is deferred pending user confirmation.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/sql/migrations/139_lifecycle_stage.sql` — adds `projects.lifecycle_stage` + `projects.lifecycle_manual_checks` (TEXT/JSON). Idempotent guard `ensureLifecycleColumns` mirrors the column adds at runtime for older DBs.
+- `cloudflare-worker/src/routes/progress.ts` — new `GET /api/progress/lifecycle/:projectId` and `PUT /api/progress/lifecycle/:projectId`. Stages: `idea → validate → build → launch → grow → raise`. GET infers the stage from observable signals when none is stored (`stored:false`), returns per-stage checklist (auto items derived from signals; manual items are founder check-offs) and advance suggestions. PUT validates the stage against the allowed set (400 otherwise), clamps `manual_checks` to booleans, and **merges** manual checks (PATCH-like) so toggling one stage's check never wipes another's. `lifecycle_stage` is written only via this PUT (kept out of `projects.ts` privilegedFields).
+
+**Backend — dev FastAPI (SQLite/Postgres mirror, never deployed)**
+- `backend/app/models/migrations.py` — `ensure_lifecycle_columns` (wired into `main.py` lifespan) mirrors the two columns.
+- `backend/app/api/routes/progress.py` — mirrors GET/PUT `/progress/lifecycle/{id}` with the same inference, validation and merge semantics.
+
+**Frontend**
+- `frontend/src/components/command-center/LifecycleModule.jsx` — 6-stage rail (clickable to set stage when editable), auto-detected hint when the stage is inferred, advance-stage suggestion banners, a "next best action" derived from the first incomplete checklist item, and the current stage's checklist (manual items toggle via the merge PUT; auto items are read-only and deep-link to the surface that moves them).
+- `frontend/src/components/command-center/OverviewTab.jsx` — resolves the founder's project (`?project_id=` or first in scope), fetches lifecycle/project/scores/metrics/signals via `Promise.allSettled` (one failing endpoint never blanks the page), and renders a venture snapshot card (name/status/playbook week/score-tier), the `LifecycleModule`, and a read-only traction strip linking to `/build/metrics`. Empty state (no venture) routes to the Founder Portal intake.
+- `frontend/src/pages/CommandCenterPage.jsx` — adds **Overview** as the first + default tab; the four legacy tabs (`founder-portal`, `execution`, `studio-ops`, `spin-outs`) and their `?tab=` deep links are unchanged.
+- `frontend/src/lib/api.js` — `getLifecycle(projectId)` / `updateLifecycle(projectId, data)`.
+
+**Deviation from the audit spec**
+- The audit's metrics strip lists a **runway** tile, but `metrics_snapshots` has no runway column and none is derivable without cash/burn inputs. Rather than fabricate a value, the strip shows **Monthly churn** (falling back to **New users** when churn is unset) alongside MRR, active users and traction score. Flagged for the user.
+
+**Drift / types**
+- `cloudflare-worker/` `tsc --noEmit` passes; `npm run test:drift` green. Backend GET/PUT verified with authenticated smoke tests (stage inference, persistence, 400 on invalid stage, boolean clamping, cross-stage merge preservation).
+
+---
+
 ## Task #5 — Public author profiles
 
 Live author profile pages driven by the user's Settings > Profile as the single source of truth.

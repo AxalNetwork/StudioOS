@@ -1684,15 +1684,15 @@ function buildLifecycleChecklist(
       ];
     case 'build':
       return [
-        { key: 'roadmap_set', label: 'Set a 90-day roadmap', done: m('roadmap_set'), href: '/build/command-center?tab=roadmap', manual: true },
+        { key: 'roadmap_set', label: 'Set a 90-day roadmap', done: m('roadmap_set'), href: '/build/roadmap', manual: true },
         { key: 'key_role_filled', label: 'Fill a key team role', done: m('key_role_filled'), href: '/build/team', manual: true },
-        { key: 'mvp_shipped', label: 'Ship your MVP', done: m('mvp_shipped'), href: '/build/command-center?tab=roadmap', manual: true },
+        { key: 'mvp_shipped', label: 'Ship your MVP', done: m('mvp_shipped'), href: '/build/roadmap', manual: true },
       ];
     case 'launch':
       return [
         { key: 'launch_page', label: 'Publish your public launch page', done: s.landing_published, href: '/build/brand', manual: false },
         { key: 'first_campaign', label: 'Run your first campaign', done: m('first_campaign'), href: '/build/brand', manual: true },
-        { key: 'launch_checklist', label: 'Complete your launch checklist', done: m('launch_checklist'), href: '/build/command-center?tab=roadmap', manual: true },
+        { key: 'launch_checklist', label: 'Complete your launch checklist', done: m('launch_checklist'), href: '/build/roadmap', manual: true },
       ];
     case 'grow':
       return [
@@ -1796,7 +1796,16 @@ progress.put('/lifecycle/:projectId', async (c) => {
       sets.push('lifecycle_manual_checks = ?');
       binds.push(null);
     } else if (typeof mc === 'object' && !Array.isArray(mc)) {
-      const serialized = JSON.stringify(parseManualChecks(JSON.stringify(mc)));
+      // Merge (PATCH-like) so toggling a check on one stage never wipes another
+      // stage's saved check-offs. `null` above still clears everything.
+      const existingRow = await c.env.DB.prepare(
+        'SELECT lifecycle_manual_checks FROM projects WHERE id = ?',
+      ).bind(projectId).first<{ lifecycle_manual_checks: string | null }>();
+      const merged = {
+        ...parseManualChecks(existingRow?.lifecycle_manual_checks),
+        ...parseManualChecks(JSON.stringify(mc)),
+      };
+      const serialized = JSON.stringify(merged);
       if (serialized.length > 4000) return c.json({ detail: 'manual_checks too large' }, 400);
       sets.push('lifecycle_manual_checks = ?');
       binds.push(serialized);

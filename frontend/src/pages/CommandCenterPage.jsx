@@ -18,17 +18,25 @@
  */
 import React, { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ClipboardCheck, Zap, Briefcase, Rocket } from 'lucide-react';
+import { LayoutDashboard, ClipboardCheck, Zap, Briefcase, Rocket } from 'lucide-react';
 import PageExplainer from '../components/PageExplainer';
+import OverviewTab from '../components/command-center/OverviewTab';
 import FounderPortal from './FounderPortal';
 import ExecutionPage from './ExecutionPage';
 import StudioOpsPage from './StudioOpsPage';
 import SpinOutsPage from './SpinOutsPage';
 
-// Tab registry, ordered by the venture lifecycle: intake (Founder Portal) →
-// build (Execution) → operate (Studio Ops) → graduate (Spin-Outs). `blurb`
-// sets the tone shown under the tab bar.
+// Tab registry, ordered by the venture lifecycle: overview (where am I + what's
+// next) → intake (Founder Portal) → build (Execution) → operate (Studio Ops) →
+// graduate (Spin-Outs). `blurb` sets the tone shown under the tab bar. Overview
+// is the default landing tab.
 const TABS = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    icon: LayoutDashboard,
+    blurb: 'Where your venture stands right now — its lifecycle stage, next best action and live traction.',
+  },
   {
     id: 'founder-portal',
     label: 'Founder Portal',
@@ -117,7 +125,9 @@ export default function CommandCenterPage() {
 
       {/* Each embedded page keeps its own loading / empty / results states. */}
       <div>
-        {activeId === 'founder-portal' ? (
+        {activeId === 'overview' ? (
+          <OverviewTab />
+        ) : activeId === 'founder-portal' ? (
           <FounderPortal embedded />
         ) : activeId === 'execution' ? (
           <ExecutionPage embedded />

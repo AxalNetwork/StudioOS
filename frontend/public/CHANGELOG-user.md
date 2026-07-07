@@ -5,6 +5,19 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your Command Center now opens on an Overview
+
+The Command Center now starts on a new **Overview** tab that shows, at a glance, where your startup is on its journey and what to do next:
+
+- A **Startup Lifecycle** track — Idea → Validate → Build → Launch → Grow → Raise — highlights the stage you're in. If you haven't set one, we'll suggest a stage based on your activity; tap any stage to confirm or change it.
+- A **next best action** and a short **checklist** for your current stage. Some items tick themselves off automatically as you make progress (like publishing a landing page); others you can check off yourself, and each links straight to where you get it done.
+- A **venture snapshot** with your startup's status, score and playbook week.
+- A read-only **traction snapshot** (MRR, active users, churn/new users, and your traction score) with a one-click link into your full Metrics page.
+
+Your existing Command Center tabs and bookmarks are unchanged.
+
+---
+
 ## Author profiles are now shareable and live
 
 Every article author now has a public profile page at `/authors/:id` — showing their photo, headline, bio, and social links (LinkedIn, X/Twitter, Website, GitHub, and the new Instagram field). The profile is powered directly by what you fill in under **Settings > Profile**, so there's no separate "author bio" to maintain.

@@ -204,15 +204,15 @@ def _build_lifecycle_checklist(stage: str, s: dict, manual: dict) -> list:
         ]
     if stage == "build":
         return [
-            {"key": "roadmap_set", "label": "Set a 90-day roadmap", "done": m("roadmap_set"), "href": "/build/command-center?tab=roadmap", "manual": True},
+            {"key": "roadmap_set", "label": "Set a 90-day roadmap", "done": m("roadmap_set"), "href": "/build/roadmap", "manual": True},
             {"key": "key_role_filled", "label": "Fill a key team role", "done": m("key_role_filled"), "href": "/build/team", "manual": True},
-            {"key": "mvp_shipped", "label": "Ship your MVP", "done": m("mvp_shipped"), "href": "/build/command-center?tab=roadmap", "manual": True},
+            {"key": "mvp_shipped", "label": "Ship your MVP", "done": m("mvp_shipped"), "href": "/build/roadmap", "manual": True},
         ]
     if stage == "launch":
         return [
             {"key": "launch_page", "label": "Publish your public launch page", "done": s["landing_published"], "href": "/build/brand", "manual": False},
             {"key": "first_campaign", "label": "Run your first campaign", "done": m("first_campaign"), "href": "/build/brand", "manual": True},
-            {"key": "launch_checklist", "label": "Complete your launch checklist", "done": m("launch_checklist"), "href": "/build/command-center?tab=roadmap", "manual": True},
+            {"key": "launch_checklist", "label": "Complete your launch checklist", "done": m("launch_checklist"), "href": "/build/roadmap", "manual": True},
         ]
     if stage == "grow":
         return [
@@ -306,7 +306,12 @@ def update_lifecycle(
             sets.append("lifecycle_manual_checks = :mc")
             params["mc"] = None
         elif isinstance(mc, dict):
-            serialized = json.dumps(_parse_manual_checks(mc))
+            # Merge (PATCH-like) so toggling a check on one stage never wipes
+            # another stage's saved check-offs. `None` above still clears all.
+            existing_row = _load_lifecycle_row(session, project_id)
+            existing = _parse_manual_checks(existing_row.get("lifecycle_manual_checks") if existing_row else None)
+            merged = {**existing, **_parse_manual_checks(mc)}
+            serialized = json.dumps(merged)
             if len(serialized) > 4000:
                 raise HTTPException(status_code=400, detail="manual_checks too large")
             sets.append("lifecycle_manual_checks = :mc")
