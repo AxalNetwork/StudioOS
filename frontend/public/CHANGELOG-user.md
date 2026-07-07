@@ -5,6 +5,19 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Due diligence, decisions and positions now flow together
+
+Due diligence is no longer an admin-only tool, and the steps from scoring a startup to committing capital now hand off to each other instead of making you start over each time:
+
+- **Run your own due diligence.** Investors and advisors get a Due Diligence area, and any review items assigned to you show up as next steps on your home screen.
+- **Open a diligence case straight from a deal.** One click from a deal you've joined starts — or reopens — its diligence case.
+- **From memo to committee in one step.** "Generate deal memo" now opens a ready-to-use investment-committee decision seeded with that memo.
+- **Votes become journal notes.** Each committee vote drafts a private journal entry (invest, pass or defer) you can refine later.
+- **Invest decisions prefill the cap table.** Deciding to invest gives you a "Record position" button that fills in the startup and round for you.
+- **Market Intelligence, tidied up.** The long list of tabs is now grouped into five clear lenses: Sector Compass, Investor Signals, Capital Markets, Founder Pulse and Ecosystem.
+
+---
+
 ## Take action right from your matches
 
 Your AI-scored matches are no longer just something to read — every card now lets you act:

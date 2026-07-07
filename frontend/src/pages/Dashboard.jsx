@@ -256,17 +256,30 @@ function DealLifecycle({ lifecycle }) {
   }
   const stages = lifecycle?.stages || [];
   if (!stages.length) return null;
+  // Task #83 — open DD reviewer items (assigned to me) lead the checklist so the
+  // module's "next best action" points at concrete diligence work, then the
+  // funnel-stage rollup follows.
+  const nextActions = (lifecycle?.next_actions || []).map((a) => ({
+    key: a.key,
+    label: a.label,
+    done: !!a.done,
+    manual: !!a.manual,
+    href: a.href,
+  }));
   const lc = {
     stage: lifecycle.current_stage || stages[0].id,
     stored: true,
     stages: stages.map((s) => ({ id: s.id, label: s.label, goal: `${s.count} ${s.count === 1 ? 'deal' : 'deals'} at this stage` })),
-    checklist: stages.map((s) => ({
-      key: s.id,
-      label: `${s.label} · ${s.count}`,
-      done: !!s.reached,
-      manual: false,
-      href: s.href,
-    })),
+    checklist: [
+      ...nextActions,
+      ...stages.map((s) => ({
+        key: s.id,
+        label: `${s.label} · ${s.count}`,
+        done: !!s.reached,
+        manual: false,
+        href: s.href,
+      })),
+    ],
     suggestions: [],
   };
   return <LifecycleModule lifecycle={lc} canEdit={false} />;

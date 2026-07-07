@@ -152,8 +152,15 @@ dd.get('/cases', async (c) => {
 
 dd.post('/cases', async (c) => {
   const user = await requireDdReader(c);
-  if (user.role !== 'admin' && user.role !== 'partner') {
-    return c.json({ error: 'Only admins or partners may open cases' }, 403);
+  // Task #83 — de-admin Due Diligence. Admins/partners may open a case on any
+  // subject. Investors get a scoped path: they may open diligence ONLY on a
+  // startup (subject_type='project') they are actively in a deal room for
+  // (enforced below against investor_dealroom_members) — this is a role gate
+  // AND an ownership gate, so an investor can't open cases on arbitrary
+  // founders/partners/other investors. Advisors remain read/review-only.
+  const isPrivileged = user.role === 'admin' || user.role === 'partner';
+  if (!isPrivileged && user.role !== 'investor') {
+    return c.json({ error: 'You do not have permission to open cases' }, 403);
   }
   const body = await c.req.json().catch(() => ({}));
   const subjectType = String(body.subject_type || '') as DDSubjectType;
@@ -167,6 +174,19 @@ dd.post('/cases', async (c) => {
   }
   const sql = getSQL(c.env);
   try {
+    if (!isPrivileged) {
+      if (subjectType !== 'project') {
+        return c.json({ error: 'You can only open diligence on a startup you are in a deal with' }, 403);
+      }
+      const member: any[] = await sql`
+        SELECT 1 FROM investor_dealroom_members m
+        JOIN deals d ON d.id = m.deal_id
+        WHERE m.investor_user_id = ${user.id} AND d.project_id = ${subjectId}
+        LIMIT 1`;
+      if (member.length === 0) {
+        return c.json({ error: 'You can only open diligence on a startup you are in a deal room for' }, 403);
+      }
+    }
     const uid = genUid();
     const inserted: any[] = await sql`
       INSERT INTO dd_cases (uid, subject_type, subject_id, subject_label, owner_user_id)

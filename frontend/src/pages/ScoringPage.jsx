@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
-import { Target, ChevronDown, ChevronUp, Play, FileText, ShieldCheck, AlertTriangle, Lock, HelpCircle } from 'lucide-react';
+import { Target, ChevronDown, ChevronUp, Play, FileText, ShieldCheck, AlertTriangle, Lock, HelpCircle, ArrowRight } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
 
@@ -45,10 +46,12 @@ function ScoreBar({ label, value, max, color = 'violet' }) {
 
 export default function ScoringPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [queue, setQueue] = useState([]);
   const [form, setForm] = useState(defaultForm);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [memoBusy, setMemoBusy] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
   // Epic 5: Practice mode (sandbox) is the default for founders. Sandbox runs
   // are unlimited, never visible to LPs, and never lock the project's official
@@ -106,13 +109,24 @@ export default function ScoringPage() {
     setLoading(false);
   };
 
+  // Task #83 — the deal memo is the on-ramp into the Investment Committee, not a
+  // dead-end alert. Generate the memo, then immediately open (create) an IC
+  // decision seeded from that just-stored scoring memo (`from_scoring`) and jump
+  // straight into it so scoring flows into committee. If the IC step fails the
+  // memo is still persisted server-side, so we fall back to the old confirmation.
   const generateMemo = async () => {
-    if (!selectedProject) return alert('Select a startup first');
+    if (!selectedProject || memoBusy) return;
+    setMemoBusy(true);
     try {
       const memo = await api.generateDealMemo(selectedProject);
-      alert(`Deal Memo generated! Decision: ${memo.decision}`);
+      const name = queue.find(p => p.id === selectedProject)?.name || 'Deal';
+      const dec = await api.icCreate({ project_id: selectedProject, title: `${name} — IC review`, from_scoring: true });
+      if (dec?.uid) { navigate(`/ic/${dec.uid}`); return; }
+      alert(`Deal Memo generated! Decision: ${memo?.decision ?? '—'}`);
     } catch (e) {
       alert(e.message);
+    } finally {
+      setMemoBusy(false);
     }
   };
 
@@ -238,8 +252,9 @@ export default function ScoringPage() {
                 {practiceMode ? <Play size={14} /> : <ShieldCheck size={14} />} {loading ? 'Scoring...' : (practiceMode ? 'Run Practice Score' : 'Submit Official Score')}
               </button>
               {selectedProject && result && (
-                <button onClick={generateMemo} className="flex items-center gap-2 px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg text-sm font-medium transition-colors dark:text-gray-100">
-                  <FileText size={14} /> Generate Deal Memo
+                <button onClick={generateMemo} disabled={memoBusy}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white rounded-lg text-sm font-medium transition-colors">
+                  <FileText size={14} /> {memoBusy ? 'Generating…' : 'Generate deal memo'} <ArrowRight size={14} />
                 </button>
               )}
             </div>

@@ -21,6 +21,7 @@ type DecisionRow = {
   title: string; memo: string | null; terms_json: string | null;
   status: string; decision: string | null; outcome: string | null;
   created_by: number | null; decided_at: string | null;
+  dd_case_id: number | null;
   created_at: string; updated_at: string;
 };
 
@@ -49,9 +50,14 @@ async function dto(env: Env, d: DecisionRow, opts: { votes?: boolean } = {}): Pr
     title: d.title, memo: d.memo, terms: jload(d.terms_json, null),
     status: d.status, decision: d.decision, outcome: d.outcome,
     created_by: d.created_by, decided_at: d.decided_at,
+    dd_case_id: d.dd_case_id ?? null,
     created_at: d.created_at, updated_at: d.updated_at,
     tally: await tally(env, d.id),
   };
+  if (d.dd_case_id != null) {
+    base.dd_case = await env.DB.prepare('SELECT uid, subject_label, status FROM dd_cases WHERE id = ?')
+      .bind(d.dd_case_id).first<any>().catch(() => null);
+  }
   if (opts.votes) {
     const votes = await env.DB.prepare(
       `SELECT v.vote, v.rationale, v.user_id, v.created_at, u.name AS user_name
@@ -118,11 +124,18 @@ r.post('/', async (c) => {
       }
     }
     const termsJson = body.terms != null ? JSON.stringify(body.terms) : null;
+    // Task #83 — an IC decision may carry the Due-Diligence case it was formed
+    // from, so the Diligence → Commit hand-off is a real link, not a re-search.
+    let ddCaseId: number | null = null;
+    if (body.dd_case_id != null && Number.isFinite(Number(body.dd_case_id))) {
+      const cs = await c.env.DB.prepare('SELECT id FROM dd_cases WHERE id = ?').bind(Number(body.dd_case_id)).first<{ id: number }>();
+      if (cs) ddCaseId = Number(cs.id);
+    }
     const uid = newUid();
     const ins = await c.env.DB.prepare(
-      `INSERT INTO ic_decisions (uid, project_id, deal_id, title, memo, terms_json, status, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`
-    ).bind(uid, projectId, dealId, title, memo, termsJson, user.id, nowIso(), nowIso()).run();
+      `INSERT INTO ic_decisions (uid, project_id, deal_id, dd_case_id, title, memo, terms_json, status, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`
+    ).bind(uid, projectId, dealId, ddCaseId, title, memo, termsJson, user.id, nowIso(), nowIso()).run();
     const d = await c.env.DB.prepare('SELECT * FROM ic_decisions WHERE id = ?')
       .bind((ins as any).meta?.last_row_id).first<DecisionRow>();
     return c.json(await dto(c.env, d!, { votes: true }), 201);
@@ -164,9 +177,17 @@ r.put('/:uid', async (c) => {
     if (body.outcome !== undefined) {
       outcome = body.outcome && ['open', 'vindicated', 'regret'].includes(body.outcome) ? body.outcome : null;
     }
+    let ddCaseId = d.dd_case_id;
+    if (body.dd_case_id !== undefined) {
+      ddCaseId = null;
+      if (body.dd_case_id != null && Number.isFinite(Number(body.dd_case_id))) {
+        const cs = await c.env.DB.prepare('SELECT id FROM dd_cases WHERE id = ?').bind(Number(body.dd_case_id)).first<{ id: number }>();
+        if (cs) ddCaseId = Number(cs.id);
+      }
+    }
     await c.env.DB.prepare(
-      `UPDATE ic_decisions SET title=?, memo=?, terms_json=?, status=?, decision=?, outcome=?, decided_at=?, updated_at=? WHERE id=?`
-    ).bind(title, memo, termsJson, status, decision, outcome, decidedAt, nowIso(), d.id).run();
+      `UPDATE ic_decisions SET title=?, memo=?, terms_json=?, status=?, decision=?, outcome=?, decided_at=?, dd_case_id=?, updated_at=? WHERE id=?`
+    ).bind(title, memo, termsJson, status, decision, outcome, decidedAt, ddCaseId, nowIso(), d.id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM ic_decisions WHERE id = ?').bind(d.id).first<DecisionRow>();
     return c.json(await dto(c.env, fresh!, { votes: true }));
   } catch (e) { return mapError(c, e); }
@@ -191,6 +212,42 @@ r.post('/:uid/vote', async (c) => {
     // First vote moves a draft into the voting stage.
     if (d.status === 'draft') {
       await c.env.DB.prepare("UPDATE ic_decisions SET status='voting', updated_at=? WHERE id=?").bind(nowIso(), d.id).run();
+    }
+    // Task #83 — auto-draft a PRIVATE decision-journal entry for the voter, so
+    // every IC vote lands in the ledger (audit ⑧) without re-typing. It is a
+    // draft the voter can later refine on the Watchlist/Journal surface.
+    // Idempotent per (owner_user_id, ic_decision_id) via the partial unique
+    // index from migration 142: re-voting UPDATES the same draft. Never let a
+    // journal failure fail the vote — the vote is the source of truth.
+    if (d.project_id != null) {
+      try {
+        const decisionMap: Record<string, string> = { yes: 'invest', no: 'pass', abstain: 'defer' };
+        const journalDecision = decisionMap[vote];
+        const thesis = (rationale && rationale.trim().length >= 3)
+          ? rationale.trim().slice(0, 4000)
+          : `IC vote (${vote}) on "${d.title}"`;
+        const existing = await c.env.DB.prepare(
+          'SELECT id FROM decision_journal_entries WHERE owner_user_id = ? AND ic_decision_id = ?'
+        ).bind(user.id, d.id).first<{ id: number }>();
+        if (existing) {
+          // Keep the voter's hand-edited thesis unless they supplied a fresh rationale.
+          if (rationale && rationale.trim().length >= 3) {
+            await c.env.DB.prepare(
+              'UPDATE decision_journal_entries SET decision=?, thesis=?, updated_at=? WHERE id=?'
+            ).bind(journalDecision, thesis, nowIso(), existing.id).run();
+          } else {
+            await c.env.DB.prepare(
+              'UPDATE decision_journal_entries SET decision=?, updated_at=? WHERE id=?'
+            ).bind(journalDecision, nowIso(), existing.id).run();
+          }
+        } else {
+          await c.env.DB.prepare(
+            `INSERT INTO decision_journal_entries
+               (uid, owner_user_id, project_id, deal_id, ic_decision_id, decision, conviction, thesis, outcome_status, decided_at, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, '3', ?, 'pending', ?, ?, ?)`
+          ).bind(newUid(), user.id, d.project_id, d.deal_id, d.id, journalDecision, thesis, nowIso(), nowIso(), nowIso()).run();
+        }
+      } catch { /* journal is best-effort; never block the vote */ }
     }
     const fresh = await c.env.DB.prepare('SELECT * FROM ic_decisions WHERE id = ?').bind(d.id).first<DecisionRow>();
     return c.json(await dto(c.env, fresh!, { votes: true }));

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { reportError } from '../lib/log';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
-import { api } from '../lib/api';
-import { ArrowRight, ChevronDown, ChevronRight, DoorOpen, X, Loader2, Check } from 'lucide-react';
+import { api, dd } from '../lib/api';
+import { ArrowRight, ChevronDown, ChevronRight, DoorOpen, X, Loader2, Check, FileSearch } from 'lucide-react';
 import { openPaywall } from '../components/PaywallModal';
 import ReferenceChecksPanel from '../components/ReferenceChecksPanel';
 import FounderRiskBadge from '../components/FounderRiskBadge';
@@ -271,13 +272,42 @@ export default function DealsPage() {
 //   • Pass       → records a decision-journal `pass` with a reason (≥10 chars);
 //                  hidden when the deal has no project_id (journal needs one).
 function InvestorDealActions({ deal, isMember, onJoined, onView }) {
+  const navigate = useNavigate();
   const [joining, setJoining] = useState(false);
   const [roomQuota, setRoomQuota] = useState('');
   const [roomTier, setRoomTier] = useState('');
   const [passOpen, setPassOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [passState, setPassState] = useState('idle'); // idle | busy | done
+  const [ddBusy, setDdBusy] = useState(false);
   const [err, setErr] = useState('');
+
+  // Task #83 — open (or continue) a Due-Diligence case straight from the deal.
+  // Find-or-create so repeat clicks reuse the existing case on this startup
+  // instead of piling up duplicates. Gated on membership (the worker only lets
+  // an investor open DD on a startup they're in a deal room for).
+  const openDd = async () => {
+    if (ddBusy || deal.project_id == null) return;
+    setDdBusy(true); setErr('');
+    try {
+      let target = null;
+      try {
+        const res = await dd.listCases({ subject_type: 'project' });
+        target = (res.items || []).find(c => Number(c.subject_id) === Number(deal.project_id)) || null;
+      } catch { /* listing 404s in dev FastAPI — fall through to create */ }
+      if (!target) {
+        target = await dd.openCase({
+          subject_type: 'project',
+          subject_id: deal.project_id,
+          subject_label: deal.project_name || `Startup #${deal.project_id}`,
+        });
+      }
+      if (target?.uid) navigate(`/due-diligence/${target.uid}`);
+    } catch (e) {
+      setErr(e.message || 'Could not open a diligence case');
+      reportError('DealsPage:openDd', e);
+    } finally { setDdBusy(false); }
+  };
 
   const join = async () => {
     if (joining) return;
@@ -342,6 +372,12 @@ function InvestorDealActions({ deal, isMember, onJoined, onView }) {
         )}
         {passState === 'done' && (
           <span className="text-xs text-gray-500 flex items-center gap-1 dark:text-gray-400"><Check size={12} /> Passed</span>
+        )}
+        {isMember && deal.project_id != null && (
+          <button onClick={openDd} disabled={ddBusy}
+            className="px-3 py-1.5 border border-violet-300 hover:bg-violet-50 disabled:opacity-60 text-violet-700 rounded-lg text-xs font-medium flex items-center gap-1 dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-900/20">
+            {ddBusy ? <Loader2 size={12} className="animate-spin" /> : <FileSearch size={12} />} Open DD case
+          </button>
         )}
       </div>
 
