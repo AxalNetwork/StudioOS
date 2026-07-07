@@ -10,6 +10,26 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Investor UX Audit ④ — Investor permissions & scoring safety
+
+Closes two role-bleed holes from the Investor UX audit: investors held studio-operator write powers they should not have, and exploring the scoring engine as any non-founder silently wrote an OFFICIAL (LP-facing, 7-day cooldown-locking) score. Investors are now observers/voters on the pipeline, and scoring is practice-by-default for every role with an explicit official-submit confirm. Admin/partner behavior on the pipeline and scoring is otherwise unchanged. No schema changes.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/pipeline.ts` — `ADVANCE_ROLES` narrowed from `{admin, partner, investor}` to `{admin, partner}`. This is the shared studio-operator write gate, so investors now get 403 on create-project, advance-stage, MVP-task create/patch, metrics snapshot, and decision-gate review/decide. Error strings already read "admins or partners". Community voting (`/pipeline/votes/:id`) is a separate gate (any session) and is unchanged.
+- `cloudflare-worker/src/routes/scoring.ts` — sandbox (practice) is now honored for **all** roles, not just founders. Previously `willBeOfficial`/`effectiveSandbox` hard-coded `user.role === 'founder'`, so a partner/investor run always wrote official. Now `willBeOfficial = !!project_id && !isSandbox` and `effectiveSandbox = isSandbox`, kept in lockstep. Sandbox is strictly the safer path (never LP-visible, never locks the window), so this widens choice without a privilege change. The 7-day official cooldown, UNIQUE-index week race → 409, anomaly-hold, and admin `?force=1` escape hatch are all intact.
+
+**Backend — dev FastAPI (SQLite/Postgres mirror, never deployed)**
+- `backend/app/api/routes/scoring.py` — mirrors the Worker: `is_sandbox = bool(req.is_sandbox)` (was `... and _is_founder(user)`) so local testing matches prod practice-by-default behavior.
+
+**Frontend**
+- `frontend/src/pages/PipelinePage.jsx` — `canEdit` narrowed to `admin|partner` (was `admin|partner|investor`). This single gate hides all board write controls for investors: drag-and-drop, "New Pipeline Startup", the drawer's Advance/Trigger-review/Decide (Spin-Out/Iterate/Kill) buttons, and the Tasks/Metrics editors. Investors still see the board and the per-deal vote widget.
+- `frontend/src/pages/ScoringPage.jsx` — the run button now reflects the mode ("Run Practice Score" vs "Submit Official Score") and, in official mode, opens a new `OfficialConfirmModal` explaining the consequences (signed, LP-visible after sign-off, 7-day lock) before writing. Practice runs still fire immediately. Practice remains the default mode on load for every role.
+
+**Validation**
+- `npm run test:drift` (typecheck + API drift). Frontend modules transform cleanly via Vite (HMR, no errors).
+
+---
+
 ## Founder UX Audit #1 (part b) — Command Center tab restructure
 
 Completes Critical item #1 from `FOUNDER_UX_AUDIT.md`: restructures the Command Center around the venture lifecycle with four founder-language tabs and folds away the tabs that exposed studio-internal structure. Frontend-only — no backend, schema or verdict-logic changes.

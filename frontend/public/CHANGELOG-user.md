@@ -5,6 +5,15 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Clearer roles on the pipeline, and safer scoring
+
+We tightened up who does what, so the platform matches how a venture studio actually works:
+
+- **The pipeline board is now run by the studio team.** Admins and partners move startups between stages, trigger AI reviews and make the go/no-go calls. Investors can still follow every deal on the board and cast their vote on each one — they just no longer drive the studio's internal pipeline.
+- **Scoring now starts in Practice mode for everyone.** You can run the scoring engine as many times as you like to explore a startup without it counting. When you're ready to lock in a number, switch to **Submit Official** — and we'll now ask you to confirm first, with a clear reminder that an official score is recorded, shared, and locked for 7 days. No more accidental official scores.
+
+---
+
 ## Your Command Center is now organized around your startup's journey
 
 We've reorganized the Command Center into four clear tabs, in the order you actually work:
