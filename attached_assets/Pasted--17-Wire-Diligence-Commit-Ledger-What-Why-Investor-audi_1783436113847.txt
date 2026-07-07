@@ -1,0 +1,38 @@
+#17 - Wire Diligence → Commit → Ledger
+What & Why
+Investor audit items ⑤ + ⑧ (Important). The Source→Exit funnel stages don't hand off: a DD case can't attach to an IC decision, an IC "invest" verdict creates no capital record, and the thesis-before-the-vote journal isn't connected to the IC vote. Meanwhile Due Diligence lives at an /admin/* URL the investor can only peek into, and Market Intelligence is one page with 21 tabs. Wire the chain and give diligence an investor-facing home.
+Done looks like
+* Due Diligence has an investor-facing home (no /admin framing); an investor can open a DD case from a deal they're in, and open reviewer items feed the lifecycle module's next-actions.
+* A DD case can be attached to an IC decision (dd_case_id); an IC "invest" outcome prompts a pre-filled position/LP (ledger) record; each IC vote auto-drafts a journal entry.
+* Market Intelligence's 21 tabs are regrouped into 4–5 lenses with an overview and one "insight → action" verb per lens.
+* "Generate deal memo → open IC decision" is the primary CTA on the scoring surface.
+Out of scope
+* The Support-group consolidation and the single canonical holdings/capital store (Support task, which depends on the ledger record shape defined here).
+Steps
+1. De-admin Due Diligence: add an investor-facing DD route/page reusing the existing case system so an investor can open/continue a case from a deal, and feed open reviewer items into the lifecycle next-actions.
+2. Wire the funnel hand-offs: add dd_case_id to IC decisions; on an IC "invest" outcome pre-fill a position/LP ledger record; auto-draft a journal entry per IC vote; and promote "Generate deal memo → IC" as the primary scoring CTA.
+3. Regroup Market Intelligence's tabs into 4–5 lenses with an overview and a single insight→action verb per lens.
+Constraints
+* Adding a new top-level app route (e.g. investor /due-diligence) requires TWO patterns (exact + /*) in BOTH the top-level [[routes]] block AND [[env.production.routes]] in wrangler.toml (see the apex-routing invariant in replit.md).
+* New migration (e.g. IC dd_case_id) is a cloudflare-worker/sql/migrations/NNN_*.sql in numeric order.
+* Coordinates with the permissions/scoring task on ScoringPage.jsx, and depends on the fixed watchlist/journal contract for the journal auto-entry.
+* Update BOTH changelogs for user-facing changes; pass npm run test:drift before merge.
+Relevant files
+* cloudflare-worker/src/routes/dd.ts
+* cloudflare-worker/src/routes/ic.ts
+* cloudflare-worker/src/routes/positions.ts
+* cloudflare-worker/src/routes/market_intel.ts
+* cloudflare-worker/sql/migrations/
+* frontend/src/pages/AdminDueDiligencePage.jsx
+* frontend/src/pages/AdminDueDiligenceCasePage.jsx
+* frontend/src/pages/ICDecisionsPage.jsx
+* frontend/src/pages/ICDecisionPage.jsx
+* frontend/src/pages/MarketIntelPage.jsx
+* frontend/src/pages/ScoringPage.jsx
+Dependencies
+Investor permissions & scoring safety
+
+Open task
+
+Fix Watchlist/Journal contract + reminders
+Main
