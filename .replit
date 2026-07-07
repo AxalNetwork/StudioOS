@@ -37,7 +37,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "UV_PROJECT_ENVIRONMENT=.venv uv run uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload"
+args = "UV_PROJECT_ENVIRONMENT=.venv uv run uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload"
 waitForPort = 8000
 
 [[workflows.workflow]]
@@ -71,9 +71,8 @@ externalPort = 80
 localPort = 5001
 externalPort = 3001
 
-[[ports]]
-localPort = 8000
-externalPort = 8000
+# Port 8000 (FastAPI dev backend) is NOT mapped externally.
+# Frontend Vite proxy forwards /api/* to localhost:8000 internally only.
 
 [deployment]
 deploymentTarget = "autoscale"
