@@ -5,6 +5,77 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## One home for your investment preferences
+
+If you're an investor, everything about what you're looking for now lives in one place:
+
+- **Edit your thesis any time.** A new **"My thesis"** card under Settings → Privacy lets you update the sectors, stages, geographies and free-text description you invest in — no need to redo onboarding just to change your mind.
+- **We now keep everything you tell us.** A few details from the investor sign-up (like your firm, accreditation status and where you're based) were being collected but not saved. They're saved now.
+- **The old "Preferences" pop-up on the Matches page is gone.** The button there now takes you straight to your thesis in Settings, so there's a single source of truth.
+
+---
+
+## Clearer roles on the pipeline, and safer scoring
+
+We tightened up who does what, so the platform matches how a venture studio actually works:
+
+- **The pipeline board is now run by the studio team.** Admins and partners move startups between stages, trigger AI reviews and make the go/no-go calls. Investors can still follow every deal on the board and cast their vote on each one — they just no longer drive the studio's internal pipeline.
+- **Scoring now starts in Practice mode for everyone.** You can run the scoring engine as many times as you like to explore a startup without it counting. When you're ready to lock in a number, switch to **Submit Official** — and we'll now ask you to confirm first, with a clear reminder that an official score is recorded, shared, and locked for 7 days. No more accidental official scores.
+
+---
+
+## Your Command Center is now organized around your startup's journey
+
+We've reorganized the Command Center into four clear tabs, in the order you actually work:
+
+- **Overview** — where your startup is on its journey and what to do next (this is still where you land).
+- **Startups** — all your startups in one place. Switch between a **List** and a **pipeline Board**, or filter down to just your **spin-outs**.
+- **Roadmap** — your goals and milestones, now their own tab instead of being tucked away.
+- **Operations** — finance, hiring, legal and compliance, plus an AI **focus recommendation** for each venture, written in plain, encouraging language.
+
+Starting a new startup is now a simple **"New startup"** button (from Overview or Startups) that opens the guided intake — so there's no separate "Founder Portal" tab to hunt for. All your existing links and bookmarks still work and take you to the right place.
+
+---
+
+## Your Command Center now opens on an Overview
+
+The Command Center now starts on a new **Overview** tab that shows, at a glance, where your startup is on its journey and what to do next:
+
+- A **Startup Lifecycle** track — Idea → Validate → Build → Launch → Grow → Raise — highlights the stage you're in. If you haven't set one, we'll suggest a stage based on your activity; tap any stage to confirm or change it.
+- A **next best action** and a short **checklist** for your current stage. Some items tick themselves off automatically as you make progress (like publishing a landing page); others you can check off yourself, and each links straight to where you get it done.
+- A **venture snapshot** with your startup's status, score and playbook week.
+- A read-only **traction snapshot** (MRR, active users, churn/new users, and your traction score) with a one-click link into your full Metrics page.
+
+Your existing Command Center tabs and bookmarks are unchanged.
+
+---
+
+## Author profiles are now shareable and live
+
+Every article author now has a public profile page at `/authors/:id` — showing their photo, headline, bio, and social links (LinkedIn, X/Twitter, Website, GitHub, and the new Instagram field). The profile is powered directly by what you fill in under **Settings > Profile**, so there's no separate "author bio" to maintain.
+
+**What changed for authors:**
+- Your **headshot, headline, bio, and all social links** now appear on article pages in the byline and on your author page.
+- A new **Instagram** field has been added to the Social links section in Settings.
+- The **Public author profile** section at the bottom of Settings shows a live preview of how your profile looks to readers, with a "View public profile" link and a "Copy link" button to share your author URL.
+
+**What changed for readers:**
+- Article bylines now show the author's photo and headline (not just their name).
+- Clicking an author's name takes you to their full profile with their published articles.
+
+---
+
+## Contacts and Relationships are now one "Network" page
+
+We've combined **Contacts** and **Relationships** into a single **Network** page,
+so everything about the people in your network lives in one place. Open
+**Network** from the sidebar and switch between the **Contacts** tab — your
+inbound sign-ups and invites — and the **Relationships** tab — your partner graph
+and connection strength. Your old bookmarks still work: they take you straight to
+the right tab. The old Activity Feed and Leaderboard have been retired.
+
+---
+
 ## Manage your advisors in the Advisory Suite
 
 The **Advisory Suite** (renamed from "AI Advisory Suite" — it does more than AI

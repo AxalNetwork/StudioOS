@@ -43,8 +43,16 @@ export default function RoadmapPage({ embedded = false }) {
           setProjectId(fromQuery);
         } else if (safeList.length > 0) {
           // Stale ?project_id in URL — silently fall back to the first
-          // available project rather than splashing a 404 banner.
-          if (fromQuery) setSearchParams({}, { replace: true });
+          // available project rather than splashing a 404 banner. Clear only
+          // project_id; preserve other params (e.g. ?tab= when embedded in the
+          // Command Center) so we don't knock the host page off its tab.
+          if (fromQuery) {
+            setSearchParams((prev) => {
+              const next = new URLSearchParams(prev);
+              next.delete('project_id');
+              return next;
+            }, { replace: true });
+          }
           setProjectId(safeList[0].id);
         }
       } catch (e) { setError(e.message); }
@@ -54,7 +62,13 @@ export default function RoadmapPage({ embedded = false }) {
 
   useEffect(() => {
     if (!projectId) return;
-    setSearchParams({ project_id: String(projectId) }, { replace: true });
+    // Merge project_id into the existing query string rather than replacing it,
+    // so a host ?tab= (Command Center embed) survives this write.
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('project_id', String(projectId));
+      return next;
+    }, { replace: true });
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);

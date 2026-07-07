@@ -10,6 +10,157 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Unify investor preferences & thesis
+
+Makes `investor_profiles` the single canonical store for what an investor is looking for and retires the legacy `user_preferences` write path. Onboarding fields that were collected but silently dropped are now persisted, and investors can edit their thesis from Settings for the first time. The old Matches "Preferences" modal is gone. The scorer still *reads* `user_preferences` for now (that read migration is a separate sourcing task), so brand-new investors have empty deal-flow scoring until then — an accepted, documented gap.
+
+**Schema (D1 + dev SQLite)**
+- `cloudflare-worker/sql/migrations/140_investor_profile_unify.sql` — adds `firm_name`, `accreditation_status`, `country`, `lp_intent`, `lp_target_usd`, `notes` to `investor_profiles`; keeps a guarded `CREATE TABLE IF NOT EXISTS user_preferences` (still read by the scorer); one-time backfill copies legacy `bio`→`thesis_text` and check-size cents→`ticket_min_usd`/`ticket_max_usd` (USD) via COALESCE only where the profile fields are empty. No focus/stage mapping (the two vocabularies differ).
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/investor_signals.ts` — profile store extended for the six new columns (bootstrap cols, `ProfileRow`, `emptyProfile`, `shapeProfile`, `ProfileUpsertBody`). The PUT is full-replace, so it now loads the existing row and applies **preserve-if-absent** per field (`body.x === undefined ? existing : sanitized`) — a partial save from any Settings card can no longer wipe onboarding-only data.
+- `cloudflare-worker/src/routes/matches.ts` — removed `GET`/`PUT /preferences` (the write path) and the now-unused `safeJson` helper. The `user_preferences` table DDL in `ensureSchema` and the four scorer reads are intentionally kept.
+- `cloudflare-worker/src/services/onboardingChecklist.ts` — the `*.notifs` checklist items ("Configure notifications") counted `user_preferences` rows as a proxy; retiring that write path would have made them uncompletable, so they now check `users.notification_prefs`, falling back to the legacy `user_preferences` row for pre-existing accounts.
+
+**Backend — dev FastAPI (never deployed)**
+- `backend/app/api/routes/investor_signals.py` — mirrors the preserve-if-absent PUT and the empty-profile shape.
+- `backend/app/api/routes/matches.py` — removed `get_preferences`/`put_preferences`; kept `_load_prefs` (still used by the scorer).
+
+**Frontend**
+- `frontend/src/pages/OnboardingInvestorPage.jsx` — `handleFinish` now sends the six previously-dropped fields (firm name, accreditation status, country, LP intent, LP target, notes).
+- `frontend/src/pages/SettingsPage.jsx` — new **"My thesis"** card in Privacy lets investors edit sectors, stages, geographies and free-text thesis (anti-thesis is shown read-only; it stays editable in the existing "Investor Thesis & Matching" card). Saves through the full-replace profile PUT, resending the fields it doesn't edit so nothing is lost.
+- `frontend/src/pages/MatchesPage.jsx` — removed the legacy "Preferences" modal; the button and empty-state banner now link to `/settings/privacy`, and the banner is driven by the canonical profile's `sectors`.
+- `frontend/src/lib/api.js` — removed `matchPreferences`/`matchPreferencesSave`.
+
+**Validation**
+- `npm run test:drift` (full suite incl. `tsc --noEmit` in `cloudflare-worker/`) passes.
+
+---
+
+## Investor UX Audit ④ — Investor permissions & scoring safety
+
+Closes two role-bleed holes from the Investor UX audit: investors held studio-operator write powers they should not have, and exploring the scoring engine as any non-founder silently wrote an OFFICIAL (LP-facing, 7-day cooldown-locking) score. Investors are now observers/voters on the pipeline, and scoring is practice-by-default for every role with an explicit official-submit confirm. Admin/partner behavior on the pipeline and scoring is otherwise unchanged. No schema changes.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/pipeline.ts` — `ADVANCE_ROLES` narrowed from `{admin, partner, investor}` to `{admin, partner}`. This is the shared studio-operator write gate, so investors now get 403 on create-project, advance-stage, MVP-task create/patch, metrics snapshot, and decision-gate review/decide. Error strings already read "admins or partners". Community voting (`/pipeline/votes/:id`) is a separate gate (any session) and is unchanged.
+- `cloudflare-worker/src/routes/scoring.ts` — sandbox (practice) is now honored for **all** roles, not just founders. Previously `willBeOfficial`/`effectiveSandbox` hard-coded `user.role === 'founder'`, so a partner/investor run always wrote official. Now `willBeOfficial = !!project_id && !isSandbox` and `effectiveSandbox = isSandbox`, kept in lockstep. Sandbox is strictly the safer path (never LP-visible, never locks the window), so this widens choice without a privilege change. The 7-day official cooldown, UNIQUE-index week race → 409, anomaly-hold, and admin `?force=1` escape hatch are all intact.
+
+**Backend — dev FastAPI (SQLite/Postgres mirror, never deployed)**
+- `backend/app/api/routes/scoring.py` — mirrors the Worker: `is_sandbox = bool(req.is_sandbox)` (was `... and _is_founder(user)`) so local testing matches prod practice-by-default behavior.
+
+**Frontend**
+- `frontend/src/pages/PipelinePage.jsx` — `canEdit` narrowed to `admin|partner` (was `admin|partner|investor`). This single gate hides all board write controls for investors: drag-and-drop, "New Pipeline Startup", the drawer's Advance/Trigger-review/Decide (Spin-Out/Iterate/Kill) buttons, and the Tasks/Metrics editors. Investors still see the board and the per-deal vote widget.
+- `frontend/src/pages/ScoringPage.jsx` — the run button now reflects the mode ("Run Practice Score" vs "Submit Official Score") and, in official mode, opens a new `OfficialConfirmModal` explaining the consequences (signed, LP-visible after sign-off, 7-day lock) before writing. Practice runs still fire immediately. Practice remains the default mode on load for every role.
+
+**Validation**
+- `npm run test:drift` (typecheck + API drift). Frontend modules transform cleanly via Vite (HMR, no errors).
+
+---
+
+## Founder UX Audit #1 (part b) — Command Center tab restructure
+
+Completes Critical item #1 from `FOUNDER_UX_AUDIT.md`: restructures the Command Center around the venture lifecycle with four founder-language tabs and folds away the tabs that exposed studio-internal structure. Frontend-only — no backend, schema or verdict-logic changes.
+
+**Frontend**
+- `frontend/src/pages/CommandCenterPage.jsx` — rewritten. Tabs are now **Overview | Startups | Roadmap | Operations** (lifecycle order; Overview still default). Roadmap is promoted out of the old stacked Execution tab; Studio Ops is renamed **Operations**. The active tab lives in `?tab=` (deep-linkable). Legacy `?tab=` values are aliased so every old link (and the `/execution`, `/studio-ops`, `/spinouts`, `/founder` redirects in `App.jsx`) keeps working: `execution→startups`, `studio-ops→operations`, `spin-outs→startups` (with the Spin-outs filter pre-applied). **Founder Portal is no longer a tab** — intake is launched as the **"New startup"** action and rendered on its own hidden surface (`?tab=founder-portal`|`new`) with a "Back to Command Center" link.
+- `frontend/src/components/command-center/StartupsTab.jsx` — new. A List/Board view toggle over the existing `ProjectsPage` (list) and `PipelinePage` (board), plus an "All startups / Spin-outs" status filter that folds in the former Spin-Outs tab (statuses `spinout|spinout_ready|incorporated|active`). A single **"New startup"** button routes to the guided intake wizard.
+- `frontend/src/pages/ProjectsPage.jsx` — added optional, backward-compatible props: `statusFilter` (client-side status-array filter), `hideCreate` (hide the built-in New Startup button), `onNewStartup` (override the create action for the button + empty-state CTA). Standalone behaviour (admin `/projects`) unchanged.
+- `frontend/src/pages/StudioOpsPage.jsx` — added optional `founderCopy` prop (default off; admin `/studio-ops` unchanged). When on: the "Strategic Oversight" sub-tab → "Focus recommendation", the review card heading → "Focus recommendation", the verdict label → "Suggested focus", the rule verdict is mapped to founder language (CONTINUE→Keep building, ITERATE→Refine & iterate, SPIN-OUT→Ready to spin out, KILL→Reassess & refocus), and the word "kill" is softened out of the AI summary. **Backend verdicts (`studioops.ts`) are unchanged.**
+
+**Bug fixed en route**
+- `frontend/src/pages/RoadmapPage.jsx` — its two `setSearchParams(..., { replace: true })` calls replaced the *entire* query string, clobbering the host `?tab=roadmap` when embedded in the Command Center (the Roadmap tab silently fell back to Overview). Both now merge into the existing params via the functional updater, preserving `tab`. Standalone behaviour unchanged.
+
+**Validation**
+- Frontend-only; all changed modules transform cleanly via Vite. End-to-end (Playwright) as the demo founder: four-tab structure with Overview default; Startups List/Board toggle + Spin-outs filter + New startup intake; Roadmap tab renders and *stays* active (regression check for the clobber bug); Operations "Focus recommendation" relabel with no "kill" text; all four legacy aliases (`execution`, `studio-ops`, `spin-outs`, `founder-portal`) resolve to the correct surface/state.
+
+---
+
+## Founder UX Audit #1 (part a) — Startup Lifecycle module + Command Center Overview tab
+
+Implements the lifecycle spine from `FOUNDER_UX_AUDIT.md` Critical item #1: a founder-editable lifecycle stage + derived checklist, surfaced on a new **Overview** tab that is now the default landing surface of the Command Center. This is part (a) — the lifecycle module, venture snapshot and metrics strip. Part (b) (the broader tab restructure: unstack Execution, merge Spin-Outs into a Startups filter, drop Founder Portal as a tab, founder-language pass) is deferred pending user confirmation.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/sql/migrations/139_lifecycle_stage.sql` — adds `projects.lifecycle_stage` + `projects.lifecycle_manual_checks` (TEXT/JSON). Idempotent guard `ensureLifecycleColumns` mirrors the column adds at runtime for older DBs.
+- `cloudflare-worker/src/routes/progress.ts` — new `GET /api/progress/lifecycle/:projectId` and `PUT /api/progress/lifecycle/:projectId`. Stages: `idea → validate → build → launch → grow → raise`. GET infers the stage from observable signals when none is stored (`stored:false`), returns per-stage checklist (auto items derived from signals; manual items are founder check-offs) and advance suggestions. PUT validates the stage against the allowed set (400 otherwise), clamps `manual_checks` to booleans, and **merges** manual checks (PATCH-like) so toggling one stage's check never wipes another's. `lifecycle_stage` is written only via this PUT (kept out of `projects.ts` privilegedFields).
+
+**Backend — dev FastAPI (SQLite/Postgres mirror, never deployed)**
+- `backend/app/models/migrations.py` — `ensure_lifecycle_columns` (wired into `main.py` lifespan) mirrors the two columns.
+- `backend/app/api/routes/progress.py` — mirrors GET/PUT `/progress/lifecycle/{id}` with the same inference, validation and merge semantics.
+
+**Frontend**
+- `frontend/src/components/command-center/LifecycleModule.jsx` — 6-stage rail (clickable to set stage when editable), auto-detected hint when the stage is inferred, advance-stage suggestion banners, a "next best action" derived from the first incomplete checklist item, and the current stage's checklist (manual items toggle via the merge PUT; auto items are read-only and deep-link to the surface that moves them).
+- `frontend/src/components/command-center/OverviewTab.jsx` — resolves the founder's project (`?project_id=` or first in scope), fetches lifecycle/project/scores/metrics/signals via `Promise.allSettled` (one failing endpoint never blanks the page), and renders a venture snapshot card (name/status/playbook week/score-tier), the `LifecycleModule`, and a read-only traction strip linking to `/build/metrics`. Empty state (no venture) routes to the Founder Portal intake.
+- `frontend/src/pages/CommandCenterPage.jsx` — adds **Overview** as the first + default tab; the four legacy tabs (`founder-portal`, `execution`, `studio-ops`, `spin-outs`) and their `?tab=` deep links are unchanged.
+- `frontend/src/lib/api.js` — `getLifecycle(projectId)` / `updateLifecycle(projectId, data)`.
+
+**Deviation from the audit spec**
+- The audit's metrics strip lists a **runway** tile, but `metrics_snapshots` has no runway column and none is derivable without cash/burn inputs. Rather than fabricate a value, the strip shows **Monthly churn** (falling back to **New users** when churn is unset) alongside MRR, active users and traction score. Flagged for the user.
+
+**Drift / types**
+- `cloudflare-worker/` `tsc --noEmit` passes; `npm run test:drift` green. Backend GET/PUT verified with authenticated smoke tests (stage inference, persistence, 400 on invalid stage, boolean clamping, cross-stage merge preservation).
+
+---
+
+## Task #5 — Public author profiles
+
+Live author profile pages driven by the user's Settings > Profile as the single source of truth.
+
+**Backend (Cloudflare Worker)**
+- `cloudflare-worker/src/routes/public.ts` — new `GET /api/public/authors/:userId` endpoint; returns `{ author, items }` from the live `users` table (display_name, headline, bio, socials, headshot_r2_key, city, country) plus the author's published articles. No auth. Falls back gracefully on older dev DBs.
+- `cloudflare-worker/src/routes/articles.ts` — added `u.uid AS author_uid`, `u.headline AS author_headline`, and live-headshot CASE expression to all three public article queries (list, by-author, detail); updated `publicArticleShape` to expose `author_headline`.
+- `cloudflare-worker/src/routes/settings.ts` — added `headline` to the SQL SELECT and to the `profile` sub-object in the settings GET response so ProfileSection can read it.
+
+**Frontend**
+- `frontend/src/components/AuthorCard.jsx` — new shared component. Full variant (author page header): 80px photo, name, headline, role badge, location, bio, social icon links (LinkedIn, X, Website, GitHub, Instagram). Compact variant (`compact` prop): 36px photo, name, headline inline, social icons — used in article bylines. All fields hidden when empty; dark mode; mobile-friendly; inline SVGs for brand icons (lucide 1.x dropped them).
+- `frontend/src/pages/AuthorProfilePage.jsx` — rewritten to call `api.articles.authorProfile(id)` → `GET /api/public/authors/:userId` (live profile) instead of deriving author from the first article. Uses `AuthorCard` for the header.
+- `frontend/src/pages/ArticleReaderPage.jsx` — article byline now uses `AuthorCard compact` with live headshot (`author_photo_url`) and `author_headline`. Removed hand-rolled name/role-badge markup.
+- `frontend/src/pages/SettingsPage.jsx` — (a) added `instagram` to the ProfileSection social links editor; (b) updated description to "public author profile"; (c) added "Public author profile" preview card that renders `AuthorCard` live from current form state + a "View public profile" link and "Copy link" button (`/authors/:data.id`).
+- `frontend/src/lib/api.js` — added `articles.authorProfile(userId)` method → `GET /api/public/authors/:userId`.
+
+**Routing**
+- `wrangler.toml` — added `/authors` + `/authors/*` exact+wildcard route pairs to BOTH the top-level `[[routes]]` block (binds the live prod deploy) and `[[env.production.routes]]` (kept in lockstep per apex-routing invariant).
+
+**Drift / types**
+- `npm run test:drift` passes (990 SPA paths, 132 Worker prefixes, 0 new drift).
+- `tsc --noEmit` in `cloudflare-worker/` passes.
+
+---
+
+## Task #1 — Merge Contacts & Relationships into a unified Network page
+
+Information-architecture + routing refactor: the standalone **Contacts** and
+**Network/Relationships** pages are merged into one **Network** feature. Product
+logic, data fetching, and card/empty-state UI are reused, not rewritten.
+
+- **New container** — `frontend/src/pages/NetworkPage.jsx` (lazy-loaded, default
+  export). Title "Network & Relationships"; a Contacts tab (primary) and a
+  Relationships tab, driven by a `?tab=contacts|relationships` query param.
+  Contacts is admin/founder-only; partner/investor see Relationships alone (the
+  tab bar hides when only one tab is available). `useSearchParams` selects the
+  active tab; an unknown/inaccessible `?tab=` falls back to the first allowed tab.
+- **Panels** — `ContactsPage.jsx` now exports a self-contained `ContactsPanel`
+  (named; default export removed) and `RelationshipsPage.jsx` exports
+  `RelationshipsPanel`. Each panel owns its own data, filters, and create/invite
+  action; the container only owns the title + tabs.
+- **Deleted** — the Relationships **Activity Feed** and **Leaderboard** tabs are
+  gone from the UI. Their client wrappers (`api.activityLogs`,
+  `api.partnerLeaderboard`) and the underlying Worker endpoints are left in place
+  — no longer called by the frontend — to keep the API-drift guard satisfied and
+  avoid any Worker changes (per the task's "endpoints can remain" scope).
+- **Routing** — `App.jsx` mounts `/network` (guard: admin/founder/partner/
+  investor) and redirects `/contacts` → `/network?tab=contacts` and
+  `/relationships` → `/network?tab=relationships`. Dead `ContactsPage`/
+  `RelationshipsPage` lazy imports removed.
+- **Sidebar** — every role now has a single **Network** entry (`/network`); the
+  founder "Contacts" item is removed and the relationships/network items across
+  admin, founder, and partner now point at `/network` with legacy routes kept in
+  `match` for active-state. The command palette derives from the sidebar, so it
+  reflects the single entry automatically.
+- **Tests** — `frontend/test/network_nav.test.mjs` (`node --test`) asserts the
+  single sidebar entry, the redirects, the `/network` mount, both tabs +
+  Contacts role-gating, the absence of Activity Feed/Leaderboard, and the named
+  panel exports.
+
 ## Task #75 — Advisory Suite advisor management
 
 Founders can now build and manage a directory of human advisors inside the

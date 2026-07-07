@@ -65,8 +65,11 @@ async def score_startup(
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    # Sandbox is founder-only — coerce for partner/admin actors.
-    is_sandbox = bool(req.is_sandbox) and _is_founder(user)
+    # Practice-by-default (Investor UX audit ④): sandbox is honored for every
+    # role, not just founders. Sandbox is the safer path (never LP-visible, never
+    # locks the 7-day cooldown); an official run happens only when the caller
+    # explicitly opts out of sandbox. Mirrors cloudflare-worker/src/routes/scoring.ts.
+    is_sandbox = bool(req.is_sandbox)
 
     # Epic 5: OFFICIAL runs must include every required rubric input. Sandbox
     # stays permissive so founders can iterate freely on partial drafts.

@@ -482,3 +482,97 @@ def get_public_startup(handle: str, session: Session = Depends(get_session)):
         "followers": followers,
         "joined_at": str(proj.created_at) if proj.created_at else None,
     }
+
+
+@router.get("/authors/{user_id}")
+def author_profile(user_id: int, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Dev parity for GET /api/public/authors/:userId (Worker public.ts).
+
+    Returns the author's live profile plus their published articles.
+    Returns 404 when the user is inactive or has no published articles.
+    """
+    import json as _json
+
+    user = session.get(User, user_id)
+    if user is None or not getattr(user, "is_active", True):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    socials_raw: dict[str, str] = {}
+    try:
+        socials_raw = _json.loads(getattr(user, "socials", None) or "{}") or {}
+    except Exception:
+        pass
+
+    location_parts = [p for p in [getattr(user, "city", None), getattr(user, "country", None)] if p]
+    location = ", ".join(location_parts) or None
+
+    company: Any = None
+    try:
+        ext_row = session.execute(
+            text(
+                "SELECT JSON_EXTRACT(experience, '$[0].company') AS company "
+                "FROM user_profile_ext WHERE user_id = :uid LIMIT 1"
+            ),
+            {"uid": user_id},
+        ).mappings().fetchone()
+        if ext_row:
+            company = ext_row["company"] or None
+    except Exception:
+        pass
+
+    author_obj: dict[str, Any] = {
+        "id": user.id,
+        "uid": getattr(user, "uid", None),
+        "name": getattr(user, "display_name", None) or getattr(user, "name", None) or None,
+        "role": getattr(user, "role", None),
+        "headline": getattr(user, "headline", None),
+        "bio": getattr(user, "bio", None),
+        "headshot_url": f"/api/settings/headshot/{user.uid}" if getattr(user, "headshot_r2_key", None) else None,
+        "location": location,
+        "company": company,
+        "socials": {
+            "linkedin": socials_raw.get("linkedin") or None,
+            "twitter": socials_raw.get("twitter") or None,
+            "website": socials_raw.get("website") or None,
+            "github": socials_raw.get("github") or None,
+            "instagram": socials_raw.get("instagram") or None,
+        },
+    }
+
+    items: list[dict[str, Any]] = []
+    try:
+        rows = session.execute(
+            text(
+                "SELECT id, slug, title, subtitle, sector, tags, cover_r2_key, "
+                "published_at, word_count, read_minutes, excerpt "
+                "FROM articles WHERE author_user_id = :uid AND status = 'published' "
+                "ORDER BY published_at DESC LIMIT 50"
+            ),
+            {"uid": user_id},
+        ).mappings().fetchall()
+        for r in rows:
+            tags_val: list[str] = []
+            try:
+                tags_val = _json.loads(r["tags"] or "[]") or []
+            except Exception:
+                pass
+            items.append({
+                "id": r["id"],
+                "slug": r["slug"],
+                "title": r["title"],
+                "subtitle": r["subtitle"] or None,
+                "sector": r["sector"] or None,
+                "tags": tags_val,
+                "cover_url": f"/api/articles/cover/{r['id']}" if r["cover_r2_key"] else None,
+                "published_at": r["published_at"],
+                "word_count": r["word_count"],
+                "read_minutes": r["read_minutes"],
+                "excerpt": r["excerpt"] or None,
+            })
+    except Exception:
+        pass
+
+    if not items:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    return {"author": author_obj, "items": items}

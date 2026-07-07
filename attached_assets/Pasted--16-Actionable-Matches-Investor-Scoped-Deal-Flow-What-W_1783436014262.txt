@@ -1,0 +1,31 @@
+#16 - Actionable Matches & Investor-Scoped Deal Flow
+What & Why
+Investor audit item ② (Critical) plus item ⑪'s shared DealCard/ScorePill primitive. Scored match cards are read-only dead ends, and Deal Flow is a firm-wide funnel whose only action is a naked stage-advance button — no "my deals", no pass, no intro request. Give every scored card real verbs, scope Deal Flow to the investor, and dedupe the ~5 different deal-card implementations behind one shared primitive.
+Done looks like
+* Every scored match card offers: Add to watchlist, Request intro (consuming the intro quota, surfacing the limit/402 state), and Open/join deal room.
+* Deal Flow defaults to "my deals"; the naked advance button is replaced by per-relationship actions (view room; pass with reason → auto-creates a journal entry).
+* A single shared DealCard/ScorePill component renders scored deals consistently across matches and deal flow.
+Out of scope
+* Pipeline gate permissions (permissions task).
+* Deal-desk home composition (deal-desk task, which may also render cards via this shared primitive).
+Steps
+1. Build a shared DealCard/ScorePill primitive and adopt it in the AI Matches and Deal Flow surfaces.
+2. Add the three actions to scored match cards, wiring "Request intro" to consume the intro quota (surface the 402/limit state), "Add to watchlist", and "Open/join deal room".
+3. Scope Deal Flow to "my deals" by default and replace the advance button with per-relationship actions, including "pass with reason" that writes an auto journal entry.
+Constraints
+* Depends on the unified preference store (thesis filtering) and the fixed watchlist/journal contract — the pass→journal and add-to-watchlist writes must target the reconciled schema.
+* Update BOTH changelogs for user-facing changes; pass npm run test:drift before merge.
+Relevant files
+* frontend/src/pages/MatchesPage.jsx
+* frontend/src/pages/DealsPage.jsx
+* frontend/src/pages/WatchlistJournalPage.jsx
+* cloudflare-worker/src/routes/introductions.ts
+* cloudflare-worker/src/routes/deals.ts
+* cloudflare-worker/src/routes/watchlist.ts
+Dependencies
+Unify investor preferences & thesis
+
+Open task
+
+Fix Watchlist/Journal contract + reminders
+Main

@@ -10,6 +10,66 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #5 — Public author profiles
+
+Live author profile pages driven by the user's Settings > Profile as the single source of truth.
+
+**Backend (Cloudflare Worker)**
+- `cloudflare-worker/src/routes/public.ts` — new `GET /api/public/authors/:userId` endpoint; returns `{ author, items }` from the live `users` table (display_name, headline, bio, socials, headshot_r2_key, city, country) plus the author's published articles. No auth. Falls back gracefully on older dev DBs.
+- `cloudflare-worker/src/routes/articles.ts` — added `u.uid AS author_uid`, `u.headline AS author_headline`, and live-headshot CASE expression to all three public article queries (list, by-author, detail); updated `publicArticleShape` to expose `author_headline`.
+- `cloudflare-worker/src/routes/settings.ts` — added `headline` to the SQL SELECT and to the `profile` sub-object in the settings GET response so ProfileSection can read it.
+
+**Frontend**
+- `frontend/src/components/AuthorCard.jsx` — new shared component. Full variant (author page header): 80px photo, name, headline, role badge, location, bio, social icon links (LinkedIn, X, Website, GitHub, Instagram). Compact variant (`compact` prop): 36px photo, name, headline inline, social icons — used in article bylines. All fields hidden when empty; dark mode; mobile-friendly; inline SVGs for brand icons (lucide 1.x dropped them).
+- `frontend/src/pages/AuthorProfilePage.jsx` — rewritten to call `api.articles.authorProfile(id)` → `GET /api/public/authors/:userId` (live profile) instead of deriving author from the first article. Uses `AuthorCard` for the header.
+- `frontend/src/pages/ArticleReaderPage.jsx` — article byline now uses `AuthorCard compact` with live headshot (`author_photo_url`) and `author_headline`. Removed hand-rolled name/role-badge markup.
+- `frontend/src/pages/SettingsPage.jsx` — (a) added `instagram` to the ProfileSection social links editor; (b) updated description to "public author profile"; (c) added "Public author profile" preview card that renders `AuthorCard` live from current form state + a "View public profile" link and "Copy link" button (`/authors/:data.id`).
+- `frontend/src/lib/api.js` — added `articles.authorProfile(userId)` method → `GET /api/public/authors/:userId`.
+
+**Routing**
+- `wrangler.toml` — added `/authors` + `/authors/*` exact+wildcard route pairs to BOTH the top-level `[[routes]]` block (binds the live prod deploy) and `[[env.production.routes]]` (kept in lockstep per apex-routing invariant).
+
+**Drift / types**
+- `npm run test:drift` passes (990 SPA paths, 132 Worker prefixes, 0 new drift).
+- `tsc --noEmit` in `cloudflare-worker/` passes.
+
+---
+
+## Task #1 — Merge Contacts & Relationships into a unified Network page
+
+Information-architecture + routing refactor: the standalone **Contacts** and
+**Network/Relationships** pages are merged into one **Network** feature. Product
+logic, data fetching, and card/empty-state UI are reused, not rewritten.
+
+- **New container** — `frontend/src/pages/NetworkPage.jsx` (lazy-loaded, default
+  export). Title "Network & Relationships"; a Contacts tab (primary) and a
+  Relationships tab, driven by a `?tab=contacts|relationships` query param.
+  Contacts is admin/founder-only; partner/investor see Relationships alone (the
+  tab bar hides when only one tab is available). `useSearchParams` selects the
+  active tab; an unknown/inaccessible `?tab=` falls back to the first allowed tab.
+- **Panels** — `ContactsPage.jsx` now exports a self-contained `ContactsPanel`
+  (named; default export removed) and `RelationshipsPage.jsx` exports
+  `RelationshipsPanel`. Each panel owns its own data, filters, and create/invite
+  action; the container only owns the title + tabs.
+- **Deleted** — the Relationships **Activity Feed** and **Leaderboard** tabs are
+  gone from the UI. Their client wrappers (`api.activityLogs`,
+  `api.partnerLeaderboard`) and the underlying Worker endpoints are left in place
+  — no longer called by the frontend — to keep the API-drift guard satisfied and
+  avoid any Worker changes (per the task's "endpoints can remain" scope).
+- **Routing** — `App.jsx` mounts `/network` (guard: admin/founder/partner/
+  investor) and redirects `/contacts` → `/network?tab=contacts` and
+  `/relationships` → `/network?tab=relationships`. Dead `ContactsPage`/
+  `RelationshipsPage` lazy imports removed.
+- **Sidebar** — every role now has a single **Network** entry (`/network`); the
+  founder "Contacts" item is removed and the relationships/network items across
+  admin, founder, and partner now point at `/network` with legacy routes kept in
+  `match` for active-state. The command palette derives from the sidebar, so it
+  reflects the single entry automatically.
+- **Tests** — `frontend/test/network_nav.test.mjs` (`node --test`) asserts the
+  single sidebar entry, the redirects, the `/network` mount, both tabs +
+  Contacts role-gating, the absence of Activity Feed/Leaderboard, and the named
+  panel exports.
+
 ## Task #75 — Advisory Suite advisor management
 
 Founders can now build and manage a directory of human advisors inside the

@@ -1,0 +1,72 @@
+You are working inside the Axal.vc codebase.
+
+Goal:
+Merge the current Contacts and Network/Relationships experiences into one unified feature named NETWORK.
+
+Final naming:
+- Sidebar label: Network
+- Page title: Network & Relationships
+- Main tab: Contacts
+- Secondary tab: Relationships
+
+Delete entirely:
+- Activity Feed (7)
+- Leaderboard
+
+This is an information architecture and routing refactor, not a rewrite of the underlying product logic.
+
+What to do:
+1) Locate the current Contacts page and the current Network / Relationships page.
+2) Merge them into a single page called Network & Relationships.
+3) Keep Contacts as the primary default tab inside the page.
+4) Keep Relationships as the second tab.
+5) Remove Activity Feed and Leaderboard completely from the UI, routes, and sidebar.
+6) Update the sidebar so only one top-level item remains:
+   - Network
+7) Redirect old routes:
+   - /contacts -> /network?tab=contacts (or the equivalent in this app)
+   - /network-relationships or any older network route -> /network?tab=relationships
+8) Preserve all useful data, lists, cards, and empty states from both pages.
+9) Do not duplicate logic. Reuse shared components and data fetching.
+10) Keep the design clean and consistent with the rest of the app.
+
+Page behavior:
+- The Network & Relationships page should feel like a unified relationship workspace.
+- The Contacts tab should show inbound contacts, signups, invites, and contact status.
+- The Relationships tab should show active relationships, partner connections, and any reputation or graph data that already exists.
+- If there are existing filters like Customer / Investor / Partner / Advisor / Cofounder, keep them inside the Contacts tab.
+- Keep an add action such as “Add / Invite” or “New Relationship” where appropriate.
+
+UI requirements:
+- Clean header with title and short subtitle.
+- Tabs or segmented control for Contacts and Relationships.
+- Clear empty states.
+- No Activity Feed tab.
+- No Leaderboard tab.
+- No extra duplicate pages for the same concept.
+
+Implementation requirements:
+- Refactor the current page components into a shared Network container.
+- Move Contacts and Relationships into that container as tabs or sub-routes.
+- Remove the deleted pages from navigation, routing, and any page registry.
+- Update breadcrumbs, page titles, and metadata.
+- Add or update tests for:
+  - sidebar rendering
+  - tab switching
+  - redirect behavior
+  - deleted tab absence
+
+Acceptance criteria:
+- There is only one sidebar entry: Network.
+- The page title is Network & Relationships.
+- Contacts and Relationships are both available inside that page.
+- Activity Feed and Leaderboard are gone.
+- Old links still work through redirects.
+- The experience feels like one cohesive product, not two separate pages.
+
+Start by:
+1) Finding the two existing page implementations.
+2) Extracting any shared components.
+3) Building the unified Network page.
+4) Removing deleted features from routes and sidebar.
+5) Adding redirects and tests.

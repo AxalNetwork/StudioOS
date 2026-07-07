@@ -11,7 +11,7 @@ const TYPE_META = {
 };
 const TASK_STATUSES = ['todo', 'in_progress', 'review', 'done'];
 
-export default function StudioOpsPage({ embedded = false }) {
+export default function StudioOpsPage({ embedded = false, founderCopy = false }) {
   const [tab, setTab] = useState('kanban');
   const [workflows, setWorkflows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +69,7 @@ export default function StudioOpsPage({ embedded = false }) {
       <div className="border-b border-gray-200 dark:border-gray-700 mb-6 flex gap-1 flex-wrap dark:border-gray-800">
         {[
           { id: 'kanban', label: 'Kanban Board' },
-          { id: 'strategic', label: 'Strategic Oversight' },
+          { id: 'strategic', label: founderCopy ? 'Focus recommendation' : 'Strategic Oversight' },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
@@ -101,7 +101,7 @@ export default function StudioOpsPage({ embedded = false }) {
         </div>
       )}
 
-      {!loading && tab === 'strategic' && <StrategicReview />}
+      {!loading && tab === 'strategic' && <StrategicReview founderCopy={founderCopy} />}
 
       {openWfId && <WorkflowDrawer id={openWfId} onClose={() => setOpenWfId(null)} onChanged={reload} />}
       {showQuickActions && <QuickActionsModal onClose={() => setShowQuickActions(false)} onCreated={() => { setShowQuickActions(false); reload(); }} />}
@@ -224,7 +224,31 @@ function WorkflowDrawer({ id, onClose, onChanged }) {
   );
 }
 
-function StrategicReview() {
+// Founder-facing relabeling of the internal continue / iterate / spin-out / kill
+// verdict vocabulary. Backend verdicts (studioops.ts) are unchanged — this only
+// softens the copy shown to founders in the Command Center → Operations tab.
+const FOUNDER_VERDICT = {
+  CONTINUE: 'Keep building',
+  ITERATE: 'Refine & iterate',
+  'SPIN-OUT': 'Ready to spin out',
+  KILL: 'Reassess & refocus',
+};
+function founderVerdict(rec) {
+  if (!rec) return rec;
+  return FOUNDER_VERDICT[String(rec).trim().toUpperCase()] || rec;
+}
+function softenVerdicts(text) {
+  if (!text) return text;
+  // Soften the harsh "kill" verdict (and its common inflections the model may
+  // emit) into founder-friendly "reassess" language, preserving capitalization.
+  const MAP = { '': 'reassess', s: 'reassesses', ed: 'reassessed', ing: 'reassessing' };
+  return String(text).replace(/\bkill(s|ed|ing)?\b/gi, (m, suf) => {
+    const word = MAP[(suf || '').toLowerCase()] || 'reassess';
+    return /^[A-Z]/.test(m) ? word.charAt(0).toUpperCase() + word.slice(1) : word;
+  });
+}
+
+function StrategicReview({ founderCopy = false }) {
   const [projectId, setProjectId] = useState('');
   const [projects, setProjects] = useState([]);
   const [review, setReview] = useState(null);
@@ -243,8 +267,8 @@ function StrategicReview() {
 
   return (
     <div className="bg-white border border-gray-200 dark:border-gray-700 rounded-xl p-6 dark:bg-gray-900 dark:border-gray-800">
-      <h2 className="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2 dark:text-gray-100"><Sparkles size={16} className="text-violet-500" /> Strategic Review</h2>
-      <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">AI-powered metrics summary + continue / iterate / spin-out / kill recommendation.</p>
+      <h2 className="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2 dark:text-gray-100"><Sparkles size={16} className="text-violet-500" /> {founderCopy ? 'Focus recommendation' : 'Strategic Review'}</h2>
+      <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">{founderCopy ? "An AI read on your venture's momentum, with a suggested focus for the next stage." : 'AI-powered metrics summary + continue / iterate / spin-out / kill recommendation.'}</p>
 
       <div className="flex gap-2 mb-4">
         <div className="relative flex-1">
@@ -276,12 +300,12 @@ function StrategicReview() {
             <KV k="Tier" v={review.metrics.tier ?? 'unscored'} />
           </div>
           <div className="bg-violet-50 border border-violet-200 rounded-lg p-4">
-            <div className="text-[10px] uppercase tracking-wide text-violet-600 font-semibold mb-1">Recommendation (rule-based)</div>
-            <div className="text-2xl font-bold text-violet-900">{review.rule_recommendation}</div>
+            <div className="text-[10px] uppercase tracking-wide text-violet-600 font-semibold mb-1">{founderCopy ? 'Suggested focus' : 'Recommendation (rule-based)'}</div>
+            <div className="text-2xl font-bold text-violet-900">{founderCopy ? founderVerdict(review.rule_recommendation) : review.rule_recommendation}</div>
           </div>
           <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4 dark:border-gray-800">
             <div className="text-[10px] uppercase tracking-wide text-gray-600 dark:text-gray-400 font-semibold mb-2 flex items-center gap-1"><Brain size={11} /> AI Analysis</div>
-            <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed dark:text-gray-200">{review.ai_summary}</div>
+            <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed dark:text-gray-200">{founderCopy ? softenVerdicts(review.ai_summary) : review.ai_summary}</div>
             <div className="text-[10px] text-gray-400 mt-2">Model: {review.model}</div>
           </div>
         </div>

@@ -1,0 +1,39 @@
+#14 - Fix Watchlist/Journal Contract + Reminders
+What & Why
+Investor audit item ⑦ (Important, but a prerequisite for later journal-writing work). The Watchlist & Journal page is the best-designed investor surface, but the frontend writes fields and enums the worker never persists — the frontend uses source, tags, external_*, statuses passed_on|archived, and outcomes hit|miss|partial, while the worker persists statuses watching|passed|converted and outcomes win|loss|pending — so data is silently lost. Also next_check_at exists in the worker with no UI and no reminder. Align the contract and surface the follow-up date; this is the cheapest path to the "next action" concept the whole panel is missing.
+Done looks like
+* Frontend and worker agree on watchlist/journal statuses, outcomes, and fields; no user input is silently dropped.
+* next_check_at is visible and settable on journal/watchlist items and drives a reminder/notification when due.
+* No regression to existing watchlist/journal data.
+Out of scope
+* Auto-creating journal entries from "pass" or IC votes (the sourcing and wiring tasks do that on top of this fixed contract).
+Steps
+1. Reconcile the watchlist/journal data contract: align the frontend fields/enums to the worker's persisted schema (or extend the worker schema via a migration where the extra fields are genuinely wanted) so writes round-trip losslessly.
+2. Surface next_check_at in the Watchlist/Journal UI as a settable, visible follow-up date.
+3. Add a due-reminder for next_check_at reusing the existing notification/reminder mechanism.
+Constraints
+* Any schema change is a cloudflare-worker/sql/migrations/NNN_*.sql in numeric order.
+* Update BOTH changelogs for user-facing changes; pass npm run test:drift before merge.
+Relevant files
+* frontend/src/pages/WatchlistJournalPage.jsx
+* cloudflare-worker/src/routes/watchlist.ts
+* cloudflare-worker/sql/migrations/  #14 - Fix Watchlist/Journal Contract + Reminders
+What & Why
+Investor audit item ⑦ (Important, but a prerequisite for later journal-writing work). The Watchlist & Journal page is the best-designed investor surface, but the frontend writes fields and enums the worker never persists — the frontend uses source, tags, external_*, statuses passed_on|archived, and outcomes hit|miss|partial, while the worker persists statuses watching|passed|converted and outcomes win|loss|pending — so data is silently lost. Also next_check_at exists in the worker with no UI and no reminder. Align the contract and surface the follow-up date; this is the cheapest path to the "next action" concept the whole panel is missing.
+Done looks like
+* Frontend and worker agree on watchlist/journal statuses, outcomes, and fields; no user input is silently dropped.
+* next_check_at is visible and settable on journal/watchlist items and drives a reminder/notification when due.
+* No regression to existing watchlist/journal data.
+Out of scope
+* Auto-creating journal entries from "pass" or IC votes (the sourcing and wiring tasks do that on top of this fixed contract).
+Steps
+1. Reconcile the watchlist/journal data contract: align the frontend fields/enums to the worker's persisted schema (or extend the worker schema via a migration where the extra fields are genuinely wanted) so writes round-trip losslessly.
+2. Surface next_check_at in the Watchlist/Journal UI as a settable, visible follow-up date.
+3. Add a due-reminder for next_check_at reusing the existing notification/reminder mechanism.
+Constraints
+* Any schema change is a cloudflare-worker/sql/migrations/NNN_*.sql in numeric order.
+* Update BOTH changelogs for user-facing changes; pass npm run test:drift before merge.
+Relevant files
+* frontend/src/pages/WatchlistJournalPage.jsx
+* cloudflare-worker/src/routes/watchlist.ts
+* cloudflare-worker/sql/migrations/

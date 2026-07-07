@@ -118,7 +118,7 @@ const MatchesPage = lazy(() => import('./pages/MatchesPage'));
 const StudioOpsPage = lazy(() => import('./pages/StudioOpsPage'));
 const NetworkEffectsPage = lazy(() => import('./pages/NetworkEffectsPage'));
 const PipelinePage = lazy(() => import('./pages/PipelinePage'));
-const RelationshipsPage = lazy(() => import('./pages/RelationshipsPage'));
+const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
 const SpinOutsPage = lazy(() => import('./pages/SpinOutsPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
@@ -153,7 +153,6 @@ const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
 const LPReportingPage = lazy(() => import('./pages/LPReportingPage'));
 const PortfolioUpdatesPage = lazy(() => import('./pages/PortfolioUpdatesPage'));
 const PortfolioPositionsPage = lazy(() => import('./pages/PortfolioPositionsPage'));
-const ContactsPage = lazy(() => import('./pages/ContactsPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const DocsPage = lazy(() => import('./pages/DocsPage'));
 const OnboardingPersonaPage = lazy(() => import('./pages/OnboardingPersonaPage'));
@@ -1413,8 +1412,9 @@ function AppInner() {
       <Route path="/lp-reports" element={guard(['admin', 'investor'], <LPReportingPage />)} />
       <Route path="/portfolio/updates" element={guard(['admin', 'partner', 'investor', 'founder'], <PortfolioUpdatesPage />)} />
       <Route path="/portfolio/positions" element={guard(['admin', 'investor'], <PortfolioPositionsPage />)} />
-      {/* Contacts — founder inbound relationship hub (PR #120). */}
-      <Route path="/contacts" element={guard(['admin', 'founder'], <ContactsPage />)} />
+      {/* Task #1 — Contacts merged into the unified Network page. The legacy
+          /contacts route now redirects into the Contacts tab. */}
+      <Route path="/contacts" element={<Navigate to="/network?tab=contacts" replace />} />
       {/* Raise pipeline — investor contacts promoted from the Contacts hub. */}
       {/* Task #1 — RAISE Workspaces: legacy /raise (Raise Pipeline) now lives in
           the Capital workspace pipeline tab. */}
@@ -1432,7 +1432,10 @@ function AppInner() {
       <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=studio-ops" replace /> : <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />
       <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], <PipelinePage />)} />
-      <Route path="/relationships" element={guard(['admin', 'founder', 'partner', 'investor'], <RelationshipsPage />)} />
+      {/* Task #1 — unified Network page (Contacts + Relationships tabs). The
+          legacy /relationships route redirects into the Relationships tab. */}
+      <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkPage />)} />
+      <Route path="/relationships" element={<Navigate to="/network?tab=relationships" replace />} />
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
       {/* Task #17 — the investor sidebar no longer surfaces "Investor Portal"
           (redundant with Studio). Investors hitting the old bookmark are

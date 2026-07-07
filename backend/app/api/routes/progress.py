@@ -80,6 +80,256 @@ def _get_project_or_404(session: Session, project_id: int) -> Project:
 
 
 # ---------------------------------------------------------------------------
+# Startup Lifecycle module (FOUNDER_UX_AUDIT.md Critical #1) — dev mirror of the
+# Worker's GET|PUT /progress/lifecycle/:projectId. Prod = Cloudflare Worker on
+# D1; this keeps the dev FastAPI surface in parity so the founder Overview tab
+# works against `npm run dev`. Stage is founder-editable via the NEW PUT here —
+# never via the privileged projects.stage/status trio.
+# ---------------------------------------------------------------------------
+LIFECYCLE_STAGES = ["idea", "validate", "build", "launch", "grow", "raise"]
+LIFECYCLE_STAGE_META = {
+    "idea": {"label": "Idea", "goal": "Shape the concept and capture it"},
+    "validate": {"label": "Validate", "goal": "Prove someone wants it"},
+    "build": {"label": "Build", "goal": "Ship the MVP with the right people"},
+    "launch": {"label": "Launch", "goal": "Get to market"},
+    "grow": {"label": "Grow", "goal": "Find repeatable traction"},
+    "raise": {"label": "Raise", "goal": "Fund the next stage"},
+}
+
+
+def _normalize_lifecycle_stage(raw: Any) -> Optional[str]:
+    if not isinstance(raw, str):
+        return None
+    v = raw.strip().lower()
+    return v if v in LIFECYCLE_STAGES else None
+
+
+def _parse_manual_checks(raw: Any) -> dict:
+    if not raw:
+        return {}
+    try:
+        v = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
+    if not isinstance(v, dict):
+        return {}
+    return {k: (val is True) for k, val in v.items() if isinstance(k, str) and len(k) <= 64}
+
+
+def _ensure_lifecycle_columns(session: Session) -> None:
+    """Dev safety net so the columns exist even if the migration bootstrap ran
+    before this feature landed. Postgres supports IF NOT EXISTS."""
+    for col in ("lifecycle_stage", "lifecycle_manual_checks"):
+        try:
+            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates a static column name from a local literal tuple, dev-only FastAPI not exposed to user input
+                f"ALTER TABLE projects ADD COLUMN IF NOT EXISTS {col} VARCHAR"
+            ))
+            session.commit()
+        except Exception:
+            session.rollback()
+
+
+def _compute_lifecycle_signals(session: Session, project_id: int) -> dict:
+    out: dict = {
+        "landing_published": False,
+        "interview_count": 0,
+        "latest_mrr": None,
+        "active_users": None,
+        "monthly_churn_pct": None,
+        "new_users": None,
+        "active_prospects": 0,
+    }
+    try:
+        row = session.exec(text(
+            "SELECT published FROM landing_pages WHERE project_id = :pid"
+        ), params={"pid": project_id}).mappings().first()
+        out["landing_published"] = bool(row and int(row.get("published") or 0) == 1)
+    except Exception:
+        logger.debug("lifecycle: landing_pages lookup failed", exc_info=True)
+    try:
+        row = session.exec(text(
+            "SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = :pid"
+        ), params={"pid": project_id}).mappings().first()
+        out["interview_count"] = int(row["n"]) if row and row.get("n") is not None else 0
+    except Exception:
+        logger.debug("lifecycle: discovery_interviews count failed", exc_info=True)
+    try:
+        row = session.exec(text(
+            "SELECT mrr, active_users, monthly_churn_pct, new_users "
+            "FROM metrics_snapshots WHERE project_id = :pid "
+            "ORDER BY snapshot_date DESC, id DESC LIMIT 1"
+        ), params={"pid": project_id}).mappings().first()
+        if row:
+            out["latest_mrr"] = None if row.get("mrr") is None else float(row["mrr"])
+            out["active_users"] = None if row.get("active_users") is None else int(row["active_users"])
+            out["monthly_churn_pct"] = None if row.get("monthly_churn_pct") is None else float(row["monthly_churn_pct"])
+            out["new_users"] = None if row.get("new_users") is None else int(row["new_users"])
+    except Exception:
+        logger.debug("lifecycle: metrics_snapshots lookup failed", exc_info=True)
+    try:
+        row = session.exec(text(
+            "SELECT COUNT(*) AS n FROM raise_prospects WHERE project_id = :pid AND stage != 'passed'"
+        ), params={"pid": project_id}).mappings().first()
+        out["active_prospects"] = int(row["n"]) if row and row.get("n") is not None else 0
+    except Exception:
+        logger.debug("lifecycle: raise_prospects count failed", exc_info=True)
+    return out
+
+
+def _infer_stage_from_signals(s: dict) -> str:
+    if s["active_prospects"] > 0:
+        return "raise"
+    if (s["latest_mrr"] or 0) > 0:
+        return "grow"
+    if s["landing_published"] and s["interview_count"] >= 5:
+        return "validate"
+    return "idea"
+
+
+def _build_lifecycle_checklist(stage: str, s: dict, manual: dict) -> list:
+    def m(k: str) -> bool:
+        return manual.get(k) is True
+
+    if stage == "idea":
+        return [
+            {"key": "concept_summary", "label": "Write a one-line concept summary", "done": m("concept_summary"), "href": "/build/command-center?tab=founder-portal", "manual": True},
+            {"key": "talk_cofounders", "label": "Talk to 3 potential co-founders", "done": m("talk_cofounders"), "href": "/build/team?tab=cofounder", "manual": True},
+            {"key": "first_hypothesis", "label": "Note your riskiest assumption", "done": m("first_hypothesis"), "href": "/build/discovery", "manual": True},
+        ]
+    if stage == "validate":
+        return [
+            {"key": "landing_published", "label": "Publish a landing page", "done": s["landing_published"], "href": "/build/brand", "manual": False},
+            {"key": "interviews_5", "label": "Log 5 customer interviews", "done": s["interview_count"] >= 5, "href": "/build/discovery", "manual": False},
+            {"key": "validated_hypothesis", "label": "Validate a key hypothesis", "done": m("validated_hypothesis"), "href": "/build/discovery", "manual": True},
+        ]
+    if stage == "build":
+        return [
+            {"key": "roadmap_set", "label": "Set a 90-day roadmap", "done": m("roadmap_set"), "href": "/build/roadmap", "manual": True},
+            {"key": "key_role_filled", "label": "Fill a key team role", "done": m("key_role_filled"), "href": "/build/team", "manual": True},
+            {"key": "mvp_shipped", "label": "Ship your MVP", "done": m("mvp_shipped"), "href": "/build/roadmap", "manual": True},
+        ]
+    if stage == "launch":
+        return [
+            {"key": "launch_page", "label": "Publish your public launch page", "done": s["landing_published"], "href": "/build/brand", "manual": False},
+            {"key": "first_campaign", "label": "Run your first campaign", "done": m("first_campaign"), "href": "/build/brand", "manual": True},
+            {"key": "launch_checklist", "label": "Complete your launch checklist", "done": m("launch_checklist"), "href": "/build/roadmap", "manual": True},
+        ]
+    if stage == "grow":
+        return [
+            {"key": "metrics_logged", "label": "Log weekly metrics / connect Stripe", "done": (s["latest_mrr"] or 0) > 0 or (s["active_users"] or 0) > 0, "href": "/build/metrics", "manual": False},
+            {"key": "mrr_positive", "label": "Reach positive MRR", "done": (s["latest_mrr"] or 0) > 0, "href": "/build/metrics", "manual": False},
+            {"key": "retention_tracked", "label": "Track retention & churn", "done": m("retention_tracked"), "href": "/build/metrics", "manual": True},
+        ]
+    if stage == "raise":
+        return [
+            {"key": "investors_10", "label": "Add 10 investors to your pipeline", "done": s["active_prospects"] >= 10, "href": "/raise/capital", "manual": False},
+            {"key": "pitch_ready", "label": "Prepare your pitch deck", "done": m("pitch_ready"), "href": "/raise/pitch", "manual": True},
+            {"key": "data_room", "label": "Assemble your data room", "done": m("data_room"), "href": "/raise/capital", "manual": True},
+        ]
+    return []
+
+
+def _build_lifecycle_suggestions(stage: str, s: dict) -> list:
+    if stage == "idea" and (s["landing_published"] or s["interview_count"] >= 1):
+        return [{"to": "validate", "reason": "You've started talking to customers — ready to Validate?"}]
+    if stage == "validate" and s["landing_published"] and s["interview_count"] >= 5:
+        return [{"to": "build", "reason": "Landing page live and 5+ interviews logged — time to Build?"}]
+    if stage == "launch" and (s["latest_mrr"] or 0) > 0:
+        return [{"to": "grow", "reason": "You're generating revenue — move to Grow?"}]
+    if stage == "grow" and s["active_prospects"] > 0:
+        return [{"to": "raise", "reason": "Investors are in your pipeline — ready to Raise?"}]
+    return []
+
+
+def _load_lifecycle_row(session: Session, project_id: int):
+    return session.exec(text(
+        "SELECT lifecycle_stage, lifecycle_manual_checks FROM projects WHERE id = :pid"
+    ), params={"pid": project_id}).mappings().first()
+
+
+def _build_lifecycle_response(session: Session, project_id: int) -> dict:
+    row = _load_lifecycle_row(session, project_id)
+    signals = _compute_lifecycle_signals(session, project_id)
+    stored_stage = _normalize_lifecycle_stage(row.get("lifecycle_stage") if row else None)
+    stage = stored_stage or _infer_stage_from_signals(signals)
+    manual = _parse_manual_checks(row.get("lifecycle_manual_checks") if row else None)
+    return {
+        "project_id": project_id,
+        "stage": stage,
+        "stored": bool(stored_stage),
+        "stages": [{"id": sid, **LIFECYCLE_STAGE_META[sid]} for sid in LIFECYCLE_STAGES],
+        "signals": signals,
+        "checklist": _build_lifecycle_checklist(stage, signals, manual),
+        "suggestions": _build_lifecycle_suggestions(stage, signals),
+    }
+
+
+@router.get("/lifecycle/{project_id}")
+def get_lifecycle(
+    project_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    p = _get_project_or_404(session, project_id)
+    _ensure_can_view(p, user)
+    _ensure_lifecycle_columns(session)
+    return _build_lifecycle_response(session, project_id)
+
+
+@router.put("/lifecycle/{project_id}")
+def update_lifecycle(
+    project_id: int,
+    body: dict,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    p = _get_project_or_404(session, project_id)
+    _ensure_can_edit(p, user)
+    _ensure_lifecycle_columns(session)
+
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Body required")
+
+    sets: list = []
+    params: dict = {"pid": project_id}
+
+    if "stage" in body:
+        stage = _normalize_lifecycle_stage(body.get("stage"))
+        if not stage:
+            raise HTTPException(status_code=400, detail=f"stage must be one of: {', '.join(LIFECYCLE_STAGES)}")
+        sets.append("lifecycle_stage = :stage")
+        params["stage"] = stage
+
+    if "manual_checks" in body:
+        mc = body.get("manual_checks")
+        if mc is None:
+            sets.append("lifecycle_manual_checks = :mc")
+            params["mc"] = None
+        elif isinstance(mc, dict):
+            # Merge (PATCH-like) so toggling a check on one stage never wipes
+            # another stage's saved check-offs. `None` above still clears all.
+            existing_row = _load_lifecycle_row(session, project_id)
+            existing = _parse_manual_checks(existing_row.get("lifecycle_manual_checks") if existing_row else None)
+            merged = {**existing, **_parse_manual_checks(mc)}
+            serialized = json.dumps(merged)
+            if len(serialized) > 4000:
+                raise HTTPException(status_code=400, detail="manual_checks too large")
+            sets.append("lifecycle_manual_checks = :mc")
+            params["mc"] = serialized
+        else:
+            raise HTTPException(status_code=400, detail="manual_checks must be an object")
+
+    if not sets:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+
+    session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- SET clause is built from static code-defined column assignments; all values are bound params, dev-only FastAPI not exposed to user input
+        f"UPDATE projects SET {', '.join(sets)} WHERE id = :pid"
+    ), params=params)
+    session.commit()
+    return _build_lifecycle_response(session, project_id)
+
+
+# ---------------------------------------------------------------------------
 # Discovery — interviews & hypotheses
 # ---------------------------------------------------------------------------
 class HypothesisItem(BaseModel):

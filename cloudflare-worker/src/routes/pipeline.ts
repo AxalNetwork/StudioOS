@@ -7,8 +7,13 @@ import { notifyPipelineRoom } from '../services/realtime';
 const pipeline = new Hono<{ Bindings: Env }>();
 
 const STAGES = ['idea', 'mvp_dev', 'traction_review', 'decision_gate', 'spinout_ready', 'iterate'];
-// Phase 0.1 split: pipeline advance is investor-side; partner kept for backcompat.
-const ADVANCE_ROLES = new Set(['admin', 'partner', 'investor']);
+// Studio-operator write gate. The pipeline board (create startup, advance
+// stage, MVP tasks, metrics snapshots, decision-gate review/decide) is an
+// operator surface — only admins and partners run the studio. Investors are
+// deliberately excluded (Investor UX audit ④): they observe and vote, they do
+// not drive the studio's MVP pipeline or decide Kill gates. Community voting
+// (POST /pipeline/votes/:id) is separate and stays open to any session.
+const ADVANCE_ROLES = new Set(['admin', 'partner']);
 const REVIEW_RATE_LIMIT = 60; // per hour
 
 let migrated = false;

@@ -837,6 +837,8 @@ export const api = {
   deleteMetricsSnapshot: (id) => request(`/progress/metrics/${id}`, { method: 'DELETE' }),
   importMetricsFromStripe: (projectId) => request(`/progress/metrics/${projectId}/import-stripe`, { method: 'POST' }),
   getProgressSignals: (projectId) => request(`/progress/signals/${projectId}`),
+  getLifecycle: (projectId) => request(`/progress/lifecycle/${projectId}`),
+  updateLifecycle: (projectId, data) => request(`/progress/lifecycle/${projectId}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // Task #36 — Service Provider Marketplace
   listProviders: (params = {}) => request(`/marketplace/providers${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`),
@@ -1504,8 +1506,6 @@ export const api = {
   deckGetBrand: () => request('/decks/brand'),
   deckSetWatermark: (url) => request('/decks/brand/watermark', { method: 'PUT', body: JSON.stringify({ watermark_url: url }) }),
 
-  matchPreferences: () => request('/matches/preferences'),
-  matchPreferencesSave: (data) => request('/matches/preferences', { method: 'PUT', body: JSON.stringify(data) }),
   matchDealFlow: () => request('/matches/deal-flow'),
   matchCoInvest: () => request('/matches/co-invest'),
   matchReferralScores: () => request('/matches/referral-scores'),
@@ -2831,6 +2831,7 @@ export const articles = {
     qs.set('offset', String(offset));
     return request(`/articles/by-author/${userId}?${qs.toString()}`);
   },
+  authorProfile: (userId) => request(`/public/authors/${userId}`),
   read: (slug) => request(`/articles/${encodeURIComponent(slug)}`),
   // Author
   trustMe: () => request('/articles/trust/me'),

@@ -81,7 +81,13 @@ scoring.post('/score', async (c) => {
   }
 
   const isSandbox = body.is_sandbox === true || body.is_sandbox === 1 || body.is_sandbox === '1';
-  const willBeOfficial = !!body.project_id && !(isSandbox && user.role === 'founder');
+  // Practice-by-default (Investor UX audit ④). Sandbox is honored for ALL roles
+  // now — previously it was founder-only, so an investor/partner exploring the
+  // scorer silently wrote an OFFICIAL, LP-facing, cooldown-locking run. Sandbox
+  // is strictly the safer path (never LP-visible, never locks the 7-day window),
+  // so widening who can choose it is not a privilege change. An official run is
+  // only produced when the caller explicitly opts out of sandbox.
+  const willBeOfficial = !!body.project_id && !isSandbox;
 
   // Official runs require the full rubric. Sandbox stays permissive so
   // founders can practice partial inputs without seeing 400s.
@@ -118,8 +124,11 @@ scoring.post('/score', async (c) => {
     return c.json({ error: 'Forbidden' }, 403);
   }
 
-  // Sandbox is founder-only — partners/admins always write official runs.
-  const effectiveSandbox = isSandbox && user.role === 'founder';
+  // Practice-by-default: sandbox is honored for every role (see willBeOfficial
+  // above). Keep this in lockstep with willBeOfficial — an official run (and its
+  // 7-day cooldown, LP visibility, anomaly hold) is produced only when the
+  // caller does not opt into sandbox.
+  const effectiveSandbox = isSandbox;
 
   // Official cooldown: 1 per 7d per project. Sandbox bypasses; admin override
   // is /scoring/score?force=1 for cases where genuine intake data changed.

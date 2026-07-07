@@ -1,0 +1,62 @@
+You are working in the Axal.vc Replit project.
+
+Goal:
+Review the PR / feature branch created by Claude Code, verify the integration quality, and decide whether it should be merged or closed.
+
+Important:
+- This is an integration and verification task, not a redesign task.
+- Do not assume the branch is correct just because it exists.
+- Verify that the changes are well integrated with the current codebase before merging.
+- If the branch introduces conflicts, regressions, duplicated logic, broken routes, or poor architecture, do not merge it. Instead, explain why it should be closed or revised.
+
+What to do:
+1) Inspect the branch changes from Claude Code.
+2) Compare them against the current main codebase.
+3) Check whether the implementation is cleanly integrated:
+   - routing
+   - navigation / sidebar
+   - page structure
+   - component reuse
+   - state management
+   - data flow
+   - styling consistency
+   - redirects and backwards compatibility where relevant
+4) Run or review the relevant tests.
+5) Check for broken imports, duplicated components, dead code, or conflicting page definitions.
+6) Verify that the new work matches the intended UX and product structure.
+7) Confirm the user-facing flows still make sense after integration.
+8) Decide one of the following:
+   - MERGE: if the branch is clean, stable, and well integrated.
+   - CLOSE: if the branch is messy, incomplete, redundant, or creates technical debt.
+
+Decision criteria for MERGE:
+- No regressions in existing flows.
+- Routes and navigation work correctly.
+- Components are reused appropriately.
+- No duplicated pages or conflicting implementations.
+- Styling is consistent with the app.
+- Tests pass or the changes are reasonably safe to integrate.
+
+Decision criteria for CLOSE:
+- The branch duplicates existing logic.
+- The branch breaks the app or adds instability.
+- The architecture is inconsistent with the codebase.
+- The changes are incomplete or not ready for production.
+- The branch needs a rewrite instead of a merge.
+
+Deliverables:
+- A short integration report.
+- A clear merge/close recommendation.
+- A bullet list of any issues found.
+- A bullet list of what was verified.
+- If merging, state exactly what was successfully integrated.
+- If closing, state exactly why and what would need to be fixed.
+
+Workflow:
+1) Open the branch and inspect diffs.
+2) Trace the changed files through the app.
+3) Validate that the user flows still work.
+4) Check for code quality and architecture fit.
+5) Conclude with MERGE or CLOSE.
+
+Be decisive and specific. Do not give a vague answer.

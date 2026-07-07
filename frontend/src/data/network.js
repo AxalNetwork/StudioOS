@@ -97,7 +97,7 @@ export const PROGRAMS = [
     audience: ['founders'],
     description: '30-minute slots with Axal VC partners and advisors on fundraising, product, and GTM.',
     nextSession: 'Every Tuesday · 10:00 PT',
-    status: 'open',
+    status: 'coming_soon',
   },
   {
     id: 'investor-roundtable',
@@ -108,13 +108,13 @@ export const PROGRAMS = [
     audience: ['investors', 'partners'],
     description: 'Curated dealflow review and diligence discussion for angels, LPs, and syndicate leads.',
     nextSession: 'First Thursday of the month',
-    status: 'open',
+    status: 'coming_soon',
   },
   {
     id: 'spinout-demo-day',
-    name: 'Spin-Out Demo Day',
+    name: '30D Spin-Out Demo Day',
     category: 'demo_day',
-    cadence: 'Quarterly',
+    cadence: 'Monthly',
     format: 'hybrid',
     audience: ['founders', 'investors'],
     description: 'Graduating Spin-Out Lab cohorts pitch to the investor network. Warm intros follow.',
@@ -141,7 +141,7 @@ export const PROGRAMS = [
     audience: ['founders', 'partners'],
     description: 'Free 1:1 clinics with vetted service partners — legal, finance, design, recruiting.',
     nextSession: 'Book via the Directory',
-    status: 'open',
+    status: 'coming_soon',
   },
   {
     id: 'community-sessions',
@@ -152,7 +152,7 @@ export const PROGRAMS = [
     audience: ['founders', 'investors', 'partners', 'advisors'],
     description: 'Meetups and dinners hosted by city and topic circles. Anyone in the network can host.',
     nextSession: 'See Communities & Circles',
-    status: 'open',
+    status: 'coming_soon',
   },
 ];
 

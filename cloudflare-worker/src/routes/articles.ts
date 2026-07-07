@@ -98,11 +98,15 @@ function publicArticleShape(row: any) {
     author_user_id: row.author_user_id ?? null,
     author_handle: row.author_handle ?? null,
     author_role: row.author_role ?? null,
+    author_headline: row.author_headline ?? null,
     author_website: row.author_website ?? null,
     author_bio: row.author_bio ?? null,
     author_twitter: row.author_twitter ?? null,
     author_linkedin: row.author_linkedin ?? null,
     author_photo_url: row.author_photo_url ?? null,
+    author_socials: (() => {
+      try { return JSON.parse(row.author_socials_json || '{}'); } catch { return {}; }
+    })(),
   };
 }
 
@@ -206,10 +210,13 @@ articles.get('/', async (c) => {
   const sql = `SELECT a.id, a.slug, a.title, a.subtitle, a.sector, a.tags,
                       a.cover_r2_key, a.published_at, a.word_count, a.read_minutes,
                       a.author_user_id, a.excerpt, a.seo_title, a.canonical_url,
-                      u.name AS author_name, NULL AS author_handle, u.role AS author_role,
+                      COALESCE(u.display_name, u.name) AS author_name, u.uid AS author_uid, NULL AS author_handle, u.role AS author_role,
+                      u.headline AS author_headline,
+                      u.socials AS author_socials_json,
                       aw.website_url AS author_website,
                       aw.bio AS author_bio, aw.twitter_url AS author_twitter,
-                      aw.linkedin_url AS author_linkedin, aw.photo_url AS author_photo_url
+                      aw.linkedin_url AS author_linkedin,
+                      CASE WHEN u.headshot_r2_key IS NOT NULL THEN '/api/settings/headshot/' || u.uid ELSE aw.photo_url END AS author_photo_url
                  FROM articles a
                  LEFT JOIN users u ON u.id = a.author_user_id
                  LEFT JOIN author_websites aw ON aw.user_id = a.author_user_id
@@ -239,10 +246,13 @@ articles.get('/by-author/:user_id', async (c) => {
     `SELECT a.id, a.slug, a.title, a.subtitle, a.sector, a.tags,
             a.cover_r2_key, a.published_at, a.word_count, a.read_minutes,
             a.author_user_id, a.excerpt, a.seo_title, a.canonical_url,
-            u.name AS author_name, NULL AS author_handle, u.role AS author_role,
+            COALESCE(u.display_name, u.name) AS author_name, u.uid AS author_uid, NULL AS author_handle, u.role AS author_role,
+            u.headline AS author_headline,
+            u.socials AS author_socials_json,
             aw.website_url AS author_website,
             aw.bio AS author_bio, aw.twitter_url AS author_twitter,
-            aw.linkedin_url AS author_linkedin, aw.photo_url AS author_photo_url
+            aw.linkedin_url AS author_linkedin,
+            CASE WHEN u.headshot_r2_key IS NOT NULL THEN '/api/settings/headshot/' || u.uid ELSE aw.photo_url END AS author_photo_url
        FROM articles a
        LEFT JOIN users u ON u.id = a.author_user_id
        LEFT JOIN author_websites aw ON aw.user_id = a.author_user_id
@@ -311,10 +321,13 @@ articles.get('/:slug', async (c, next) => {
   const cached = seededCover ? null : await cacheLookup(c);
   if (cached) return cached;
   const row: any = await c.env.DB.prepare(
-    `SELECT a.*, u.name AS author_name, NULL AS author_handle, u.role AS author_role,
+    `SELECT a.*, COALESCE(u.display_name, u.name) AS author_name, u.uid AS author_uid, NULL AS author_handle, u.role AS author_role,
+            u.headline AS author_headline,
+            u.socials AS author_socials_json,
             aw.website_url AS author_website,
             aw.bio AS author_bio, aw.twitter_url AS author_twitter,
-            aw.linkedin_url AS author_linkedin, aw.photo_url AS author_photo_url
+            aw.linkedin_url AS author_linkedin,
+            CASE WHEN u.headshot_r2_key IS NOT NULL THEN '/api/settings/headshot/' || u.uid ELSE aw.photo_url END AS author_photo_url
        FROM articles a
        LEFT JOIN users u ON u.id = a.author_user_id
        LEFT JOIN author_websites aw ON aw.user_id = a.author_user_id

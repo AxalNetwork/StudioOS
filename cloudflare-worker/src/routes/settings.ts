@@ -194,7 +194,7 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
   const sql = getSQL(c.env);
   const rows = await sql`
     SELECT id, uid, email, name, role, email_verified, kyc_status, access_level,
-           bio, headshot_r2_key, jurisdictions, socials,
+           bio, headline, headshot_r2_key, jurisdictions, socials,
            notification_prefs, privacy_prefs, role_prefs,
            deletion_requested_at, last_active_at, created_at,
            totp_recovery_codes,
@@ -252,6 +252,7 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
     created_at: u.created_at,
     profile: {
       bio: u.bio || '',
+      headline: u.headline || '',
       headshot_url: u.headshot_r2_key ? `/api/settings/headshot/${u.uid}` : null,
       socials: safeJson(u.socials, {}),
     },
@@ -294,7 +295,7 @@ const patchRootSettings = async (c: Context<{ Bindings: Env }>) => {
   if (body.socials !== undefined) {
     const s = body.socials || {};
     const safe: Record<string, string> = {};
-    for (const k of ['linkedin', 'twitter', 'website', 'github']) {
+    for (const k of ['linkedin', 'twitter', 'website', 'github', 'instagram']) {
       if (typeof s[k] === 'string') {
         const v = clampStr(s[k], 300);
         if (v) safe[k] = v;

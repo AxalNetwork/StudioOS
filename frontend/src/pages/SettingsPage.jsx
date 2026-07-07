@@ -24,6 +24,7 @@ const ReferralsPage = lazy(() => import('./ReferralsPage'));
 // Integrations section; lazy so its provider/OAuth deps stay out of the
 // settings chunk (mirrors the ReferralsPage embed above).
 const IntegrationsPage = lazy(() => import('./IntegrationsPage'));
+import AuthorCard from '../components/AuthorCard';
 
 // Task #4 (Y-2) — small reusable trust score on the profile surface so
 // the user can see their compliance posture without bouncing to the
@@ -305,6 +306,7 @@ export default function SettingsPage() {
             <>
               <PrivacyCoreCard flash={flash} />
               <InvestorSignalsContributionCard flash={flash} role={data?.role} />
+              <InvestorMyThesisCard flash={flash} role={data?.role} />
               <InvestorThesisEditorCard flash={flash} role={data?.role} />
               <MarketIntelContributionCard flash={flash} />
               <PrivacySection data={data} patch={patch} flash={flash} reload={() => api.getSettings().then(setData)} hideAccountDelete />
@@ -967,15 +969,66 @@ function ProfileSection({ data, onSaved, flash, patch }) {
         </div>
       </Card>
 
-      <Card title="Social links" description="Optional. Public to other Axal VC members.">
+      <Card title="Social links" description="Optional. Shown on your public author profile.">
         <div className="grid sm:grid-cols-2 gap-3">
-          {['linkedin', 'twitter', 'website', 'github'].map(k => (
+          {['linkedin', 'twitter', 'website', 'github', 'instagram'].map(k => (
             <Field key={k} label={k[0].toUpperCase() + k.slice(1)}>
               <input value={socials[k] || ''} onChange={e => setSocials({ ...socials, [k]: e.target.value })}
                 onBlur={() => patch({ socials })} placeholder={`https://...`} className={inputCls} />
             </Field>
           ))}
         </div>
+      </Card>
+
+      <Card title="Public author profile" description="How you appear on article pages and your shareable author page. Headline is edited in the Personal Identity section above.">
+        <div className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 p-5">
+          <AuthorCard
+            author={{
+              name,
+              headline: data.profile?.headline || null,
+              bio,
+              headshot_url: headshotPreview,
+              role: data.role || null,
+              location: null,
+              socials: {
+                linkedin: socials.linkedin || null,
+                twitter: socials.twitter || null,
+                website: socials.website || null,
+                github: socials.github || null,
+                instagram: socials.instagram || null,
+              },
+            }}
+          />
+          {!name && !bio && !headshotPreview && Object.values(socials).every(v => !v) && (
+            <p className="mt-3 text-sm text-gray-400 dark:text-gray-500 italic">
+              Fill in your profile above to preview how you&apos;ll appear to readers.
+            </p>
+          )}
+        </div>
+        {data.id ? (
+          <div className="mt-4 flex flex-wrap items-center gap-4">
+            <a
+              href={`https://axal.vc/authors/${data.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-violet-700 dark:text-violet-400 hover:underline"
+            >
+              View public profile ↗
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  navigator.clipboard.writeText(`https://axal.vc/authors/${data.id}`);
+                  flash('Link copied!');
+                } catch { flash('Could not copy'); }
+              }}
+              className="text-sm text-gray-500 dark:text-gray-400 hover:text-violet-700 dark:hover:text-violet-400 transition"
+            >
+              Copy link
+            </button>
+          </div>
+        ) : null}
       </Card>
     </>
   );
@@ -3237,6 +3290,11 @@ function InvestorSignalsContributionCard({ flash, role }) {
         ticket_band: profile.ticket_band,
         thesis_text: profile.thesis_text,
         contribute_to_signals: next,
+        // The profile PUT is full-replace on these JSON columns; resend them so
+        // toggling the Signals opt-in never wipes anti-thesis / value weights.
+        anti_thesis_sectors: profile.anti_thesis_sectors || [],
+        anti_thesis_stages: profile.anti_thesis_stages || [],
+        value_weights: profile.value_weights || {},
       });
       setProfile(r.profile);
       flash(next ? 'Now contributing to Investor Signals' : 'Opted out — your data will be removed within 6 hours');
@@ -3276,6 +3334,130 @@ function InvestorSignalsContributionCard({ flash, role }) {
         <p className="text-xs text-gray-500 dark:text-gray-400">
           Opting out removes your contribution within 6 hours, the next time the aggregator runs.
         </p>
+      </div>
+    </Card>
+  );
+}
+
+// Investor "My thesis" editor — the positive thesis (sectors, stages,
+// geographies, free-text) that powers deal sourcing and founder matching.
+// The investor-profile PUT is full-replace on these JSON columns, so we resend
+// the fields this card doesn't edit (investor_type, ticket_band, contribute,
+// anti-thesis, value_weights). Onboarding-only fields (firm/accreditation/
+// LP intent/notes) are preserved server-side by the PUT's preserve-if-absent
+// path since we omit them here. Only investors (or anyone with a completed
+// profile) see it.
+function InvestorMyThesisCard({ flash, role }) {
+  const [profile, setProfile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getInvestorProfile()
+      .then(r => { if (!cancelled) setProfile(r.profile); })
+      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const isInvestor = String(role || '').toLowerCase() === 'investor';
+  if (!isInvestor && !profile?.completed_at) return null;
+  if (err) return <Card title="My thesis"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (!profile) return <Card title="My thesis"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
+
+  const SECTOR_OPTIONS = ['AI/ML','Climate','Fintech','Healthtech','Consumer','Enterprise SaaS','Crypto','Bio','Defense','Robotics','Energy'];
+  const STAGE_OPTIONS  = ['Pre-seed','Seed','Series A','Series B+','Growth'];
+  const GEO_OPTIONS    = ['North America','Europe','LATAM','APAC','MENA','Africa'];
+
+  const sectors = profile.sectors || [];
+  const stages = profile.stages || [];
+  const geos = profile.geos || [];
+  const antiSectors = profile.anti_thesis_sectors || [];
+  const antiStages = profile.anti_thesis_stages || [];
+
+  const toggle = (key, val) => {
+    const arr = (profile[key] || []).includes(val)
+      ? (profile[key] || []).filter(x => x !== val)
+      : [...(profile[key] || []), val];
+    setProfile({ ...profile, [key]: arr });
+  };
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const r = await api.saveInvestorProfile({
+        investor_type: profile.investor_type,
+        sectors: profile.sectors || [],
+        stages: profile.stages || [],
+        geos: profile.geos || [],
+        ticket_band: profile.ticket_band,
+        thesis_text: profile.thesis_text,
+        contribute_to_signals: profile.contribute_to_signals !== false,
+        anti_thesis_sectors: profile.anti_thesis_sectors || [],
+        anti_thesis_stages: profile.anti_thesis_stages || [],
+        value_weights: profile.value_weights || {},
+      });
+      setProfile(r.profile);
+      flash('Thesis saved');
+    } catch (e) {
+      flash(e.message || 'Failed to save', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const chipRow = (key, options, selected) => (
+    <div className="flex flex-wrap gap-2">
+      {options.map(s => (
+        <button key={s} onClick={() => toggle(key, s)}
+          className={`text-xs px-2.5 py-1 rounded-full border ${selected.includes(s)
+            ? 'bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700'
+            : 'bg-white text-gray-700 border-gray-300 hover:border-violet-300 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-700'}`}>
+          {s}
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <Card
+      title="My thesis"
+      description="The sectors, stages, geographies and free-text thesis we use to source deal flow and score founder matches."
+    >
+      <div className="space-y-5">
+        <div>
+          <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Sectors</span>
+          {chipRow('sectors', SECTOR_OPTIONS, sectors)}
+        </div>
+        <div>
+          <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Stages</span>
+          {chipRow('stages', STAGE_OPTIONS, stages)}
+        </div>
+        <div>
+          <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Geographies</span>
+          {chipRow('geos', GEO_OPTIONS, geos)}
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Thesis (free text)</label>
+          <textarea rows={3} value={profile.thesis_text || ''}
+            onChange={e => setProfile({ ...profile, thesis_text: e.target.value })}
+            placeholder="What do you look for? What's your edge?"
+            className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100" />
+        </div>
+        {(antiSectors.length > 0 || antiStages.length > 0) && (
+          <div className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-800 pt-3">
+            <span className="font-medium text-gray-700 dark:text-gray-300">Anti-thesis:</span>{' '}
+            {[...antiSectors, ...antiStages].join(', ')}
+            <span className="text-gray-400"> — edit in “Investor Thesis &amp; Matching” below.</span>
+          </div>
+        )}
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={save} disabled={busy}
+            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
+            {busy ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
+            {busy ? 'Saving…' : 'Save thesis'}
+          </button>
+        </div>
       </div>
     </Card>
   );

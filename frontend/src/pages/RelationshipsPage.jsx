@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Users, Plus, Loader2, X, Award, Activity, Network, Trophy } from 'lucide-react';
+import { Plus, Loader2, X, Award } from 'lucide-react';
 import { api } from '../lib/api';
 import { useEscapeClose } from '../components/useEscapeClose';
 
@@ -10,47 +10,25 @@ const REL_TYPES = [
   { id: 'strategic_alliance', label: 'Strategic Alliance', color: 'bg-amber-100 text-amber-700' },
   { id: 'advisor_mentee', label: 'Advisor ↔ Mentee', color: 'bg-pink-100 text-pink-700' },
 ];
-const ACTION_LABELS = {
-  dashboard_view: '👀 Viewed Dashboard', deal_review: '📂 Reviewed Deal', syndicate_join: '🤝 Joined Syndicate',
-  syndicate_create: '✨ Created Syndicate', referral_convert: '💸 Referral Converted', studio_ops_task: '📋 Studio Ops Task',
-  ai_scoring: '🤖 AI Scoring', payout_request: '💰 Payout Request', pipeline_advance: '🚀 Pipeline Advanced',
-  metric_snapshot: '📊 Metric Snapshot', relationship_create: '🔗 Relationship Created', profile_update: '👤 Profile Updated',
-  login: '🔐 Logged In', logout: '🚪 Logged Out',
-};
 
-export default function RelationshipsPage() {
-  const [tab, setTab] = useState('relationships');
+// Relationships tab body for the unified Network page. Self-contained: owns its
+// partner summary, relationships grid, and create/edit modals. Rendered by
+// NetworkPage as the "Relationships" tab. The page-level title lives in the
+// NetworkPage container.
+export function RelationshipsPanel() {
   const [summary, setSummary] = useState(null);
   const [rels, setRels] = useState([]);
-  const [logs, setLogs] = useState({ items: [], total: 0 });
-  const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [err, setErr] = useState('');
 
   const reload = async () => {
     setLoading(true); setErr('');
-    const labels = ['Partner summary', 'Relationships', 'Activity log', 'Leaderboard'];
-    const results = await Promise.allSettled([
-      api.partnerSummary(), api.partnerRelationships(),
-      api.activityLogs(200, 0), api.partnerLeaderboard(),
-    ]);
-    const [s, r, l, lb] = results;
+    const labels = ['Partner summary', 'Relationships'];
+    const results = await Promise.allSettled([api.partnerSummary(), api.partnerRelationships()]);
+    const [s, r] = results;
     if (s.status === 'fulfilled') setSummary(s.value); else setSummary(null);
     setRels(r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : []);
-    if (l.status === 'fulfilled') {
-      // Strip observability noise — http_get / http_post rows are per-request
-      // telemetry written by the middleware, not user-facing domain events.
-      const rawItems = l.value.items || l.value.logs || [];
-      const filtered = rawItems.filter(item => {
-        const action = item.action || item.action_type || '';
-        return !action.startsWith('http_');
-      });
-      setLogs({ items: filtered, total: filtered.length });
-    } else {
-      setLogs({ items: [], total: 0 });
-    }
-    setLeaderboard(lb.status === 'fulfilled' && Array.isArray(lb.value) ? lb.value : []);
     const failures = results
       .map((res, i) => res.status === 'rejected' ? `${labels[i]}: ${res.reason?.message || 'failed'}` : null)
       .filter(Boolean);
@@ -62,19 +40,8 @@ export default function RelationshipsPage() {
   if (loading) return <Loading />;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <Network className="text-violet-600" size={24} />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Network & Relationships</h1>
-            <p className="text-sm text-gray-600">Your partner graph, activity, and reputation.</p>
-          </div>
-        </div>
-        <button onClick={() => setCreating(true)} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm px-3 py-2 rounded-lg">
-          <Plus size={14} /> New Relationship
-        </button>
-      </div>
+    <div className="space-y-6">
+      <p className="text-sm text-gray-600 dark:text-gray-400">Your partner graph and relationship strength.</p>
 
       {err && <div className="bg-red-50 border border-red-200 text-red-700 rounded p-2 text-sm">{err}</div>}
 
@@ -108,26 +75,14 @@ export default function RelationshipsPage() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto [&>button]:whitespace-nowrap dark:border-gray-800">
-        {[
-          {id: 'relationships', label: `Relationships (${rels.length})`, icon: Users},
-          {id: 'activity', label: `Activity Feed (${logs.total})`, icon: Activity},
-          {id: 'leaderboard', label: 'Leaderboard', icon: Trophy},
-        ].map(t => {
-          const Icon = t.icon;
-          return (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1 px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === t.id ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-              <Icon size={14} /> {t.label}
-            </button>
-          );
-        })}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Relationships ({rels.length})</h2>
+        <button onClick={() => setCreating(true)} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm px-3 py-2 rounded-lg">
+          <Plus size={14} /> New Relationship
+        </button>
       </div>
 
-      {tab === 'relationships' && <RelationshipsTab rels={rels} reload={reload} />}
-      {tab === 'activity' && <ActivityTab logs={logs} />}
-      {tab === 'leaderboard' && <LeaderboardTab leaderboard={leaderboard} meId={summary?.id} />}
+      <RelationshipsTab rels={rels} reload={reload} />
 
       {creating && <CreateRelModal onClose={() => setCreating(false)} onCreated={() => { setCreating(false); reload(); }} />}
     </div>
@@ -135,8 +90,8 @@ export default function RelationshipsPage() {
 }
 
 function RelationshipsTab({ rels, reload }) {
-  if (rels.length === 0) return <Empty text="You haven't formed any partner relationships yet. Click 'New Relationship' to start." />;
   const [editing, setEditing] = useState(null);
+  if (rels.length === 0) return <Empty text="You haven't formed any partner relationships yet. Click 'New Relationship' to start." />;
   return (
     <>
     <div className="grid md:grid-cols-2 gap-3">
@@ -169,54 +124,6 @@ function RelationshipsTab({ rels, reload }) {
     </div>
     {editing && <EditRelModal rel={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />}
     </>
-  );
-}
-
-function ActivityTab({ logs }) {
-  if (logs.items.length === 0) return <Empty text="No domain activity yet. Actions like logins, KYC submissions, referrals, and role changes will appear here." />;
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100 dark:bg-gray-900 dark:border-gray-800">
-      {logs.items.map((l, idx) => {
-        const action = l.action || l.action_type || '';
-        const label = ACTION_LABELS[action] || action.replace(/_/g, ' ');
-        const detail = l.details || l.description || '';
-        return (
-          <div key={l.id ?? idx} className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50">
-            <div className="flex-1 min-w-0">
-              <div className="font-medium text-gray-900 dark:text-gray-100">{label}</div>
-              {detail && <div className="text-[10px] text-gray-500 truncate">{detail}</div>}
-            </div>
-            <div className="text-[10px] text-gray-400 shrink-0">{new Date(l.created_at).toLocaleString()}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function LeaderboardTab({ leaderboard, meId }) {
-  if (leaderboard.length === 0) return <Empty text="Leaderboard will populate as partners build their network." />;
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto dark:bg-gray-900 dark:border-gray-800">
-      <table className="w-full text-sm min-w-[640px]">
-        <thead className="bg-gray-50 text-xs text-gray-700 dark:text-gray-300">
-          <tr><th className="text-left px-4 py-2">#</th><th className="text-left px-4 py-2">Partner</th><th className="text-center px-4 py-2">Score</th><th className="text-center px-4 py-2">Rels</th><th className="text-center px-4 py-2">Reach</th><th className="text-right px-4 py-2">Earnings</th><th className="text-left px-4 py-2">Badges</th></tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {leaderboard.map((p, i) => (
-            <tr key={p.id} className={p.id === meId ? 'bg-violet-50' : 'hover:bg-gray-50'}>
-              <td className="px-4 py-2 font-bold text-gray-700 dark:text-gray-300">{i + 1}</td>
-              <td className="px-4 py-2"><div className="font-medium">{p.name || p.email}</div><div className="text-[10px] text-gray-500">{p.role}</div></td>
-              <td className="px-4 py-2 text-center font-bold text-violet-700">{Math.round(p.network_score)}</td>
-              <td className="px-4 py-2 text-center text-gray-700 dark:text-gray-300">{p.active_relationships}</td>
-              <td className="px-4 py-2 text-center text-gray-700 dark:text-gray-300">{p.network_reach}</td>
-              <td className="px-4 py-2 text-right text-emerald-600 font-medium">${((p.total_earnings || 0) / 100).toFixed(0)}</td>
-              <td className="px-4 py-2"><div className="flex gap-1 flex-wrap">{(p.verified_badges || []).map(b => <span key={b} className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">{b.replace('_', ' ')}</span>)}</div></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }
 

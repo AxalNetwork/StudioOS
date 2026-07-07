@@ -60,13 +60,17 @@ export default function PipelinePage({ embedded = false }) {
   };
   useEffect(() => { (async () => { try { setMe(await api.getCurrentUser()); } catch {} reload(); })(); }, []);
 
-  const canEdit = me && (me.role === 'admin' || me.role === 'partner' || me.role === 'investor');
+  // Studio-operator write access. The board (create/advance/gate/tasks/metrics)
+  // is an operator surface — admins and partners only. Investors observe and
+  // vote (DealVoteWidget stays open to any session), matching the server gate in
+  // routes/pipeline.ts (ADVANCE_ROLES). Investor UX audit ④.
+  const canEdit = me && (me.role === 'admin' || me.role === 'partner');
 
-  // Live board updates: subscribe to the global pipeline 'overview' room
-  // once we know the user has board-edit access. Any stage_advanced /
-  // project_created event triggers a quick reload so cards reflect the
-  // change without the user pressing refresh. Skipped while a local move
-  // is in flight to avoid clobbering the optimistic UI.
+  // Live board updates: subscribe to the global pipeline 'overview' room for
+  // any authenticated session (the board is watchable — and votable — by all).
+  // Any stage_advanced / project_created event triggers a quick reload so cards
+  // reflect the change without the user pressing refresh. Skipped while a local
+  // move is in flight to avoid clobbering the optimistic UI.
   const [, setLiveTick] = useState(0);
   // Vote tallies pushed live via WebSocket — keyed by deal_id. Each entry
   // mirrors the GET /pipeline/votes/{id} payload. The DealCard widget uses

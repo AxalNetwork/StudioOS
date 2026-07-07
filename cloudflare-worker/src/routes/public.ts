@@ -997,4 +997,89 @@ publicRoutes.post('/analytics/pageview', async (c) => {
   return c.body(null, 204);
 });
 
+// Task #5 — Public author profile page. Accepts numeric user ID and returns
+// the live profile from the users table (not the legacy author_websites table)
+// plus the author's published articles. Powers /authors/:userId in the SPA.
+// No auth required — fields here are limited to the public display set.
+publicRoutes.get('/authors/:userId', async (c) => {
+  const userId = Number(c.req.param('userId'));
+  if (!Number.isInteger(userId) || userId <= 0) return c.json({ detail: 'invalid' }, 400);
+
+  let userRow: any = null;
+  try {
+    userRow = await c.env.DB.prepare(
+      `SELECT u.id, u.uid, u.name, u.display_name, u.headline, u.bio, u.socials,
+              u.headshot_r2_key, u.city, u.country, u.role
+         FROM users u
+        WHERE u.id = ? AND u.is_active = 1 LIMIT 1`,
+    ).bind(userId).first<any>();
+  } catch { /* older dev DB may be missing columns — fall through to 404 */ }
+  if (!userRow) return c.json({ detail: 'Not found' }, 404);
+
+  let company: string | null = null;
+  try {
+    const companyRow: any = await c.env.DB.prepare(
+      `SELECT JSON_EXTRACT(experience, '$[0].company') AS company FROM user_profile_ext WHERE user_id = ? LIMIT 1`,
+    ).bind(userId).first<any>();
+    company = companyRow?.company || null;
+  } catch { /* user_profile_ext may not exist on older dev DBs */ }
+
+  let items: any[] = [];
+  try {
+    const res = await c.env.DB.prepare(
+      `SELECT a.id, a.slug, a.title, a.subtitle, a.sector, a.tags,
+              a.cover_r2_key, a.published_at, a.word_count, a.read_minutes,
+              a.author_user_id, a.excerpt
+         FROM articles a
+        WHERE a.author_user_id = ? AND a.status = 'published'
+        ORDER BY a.published_at DESC
+        LIMIT 50`,
+    ).bind(userId).all<any>();
+    items = (res.results || []).map((row: any) => {
+      let tags: string[] = [];
+      try { tags = JSON.parse(row.tags || '[]'); } catch { tags = []; }
+      return {
+        id: row.id,
+        slug: row.slug,
+        title: row.title,
+        subtitle: row.subtitle || null,
+        sector: row.sector || null,
+        tags,
+        cover_url: row.cover_r2_key ? `/api/articles/cover/${row.id}` : null,
+        published_at: row.published_at,
+        word_count: row.word_count,
+        read_minutes: row.read_minutes,
+        excerpt: row.excerpt || null,
+      };
+    });
+  } catch { /* articles table missing on older dev DB */ }
+
+  if (items.length === 0) return c.json({ detail: 'Not found' }, 404);
+
+  const socials = safeJsonParse<Record<string, string>>(userRow.socials, {}) || {};
+  const location = [userRow.city, userRow.country].filter(Boolean).join(', ') || null;
+
+  return c.json({
+    author: {
+      id: userRow.id,
+      uid: userRow.uid,
+      name: userRow.display_name || userRow.name || null,
+      role: userRow.role || null,
+      headline: userRow.headline || null,
+      bio: userRow.bio || null,
+      headshot_url: userRow.headshot_r2_key ? `/api/settings/headshot/${userRow.uid}` : null,
+      location,
+      company,
+      socials: {
+        linkedin: socials.linkedin || null,
+        twitter: socials.twitter || null,
+        website: socials.website || null,
+        github: socials.github || null,
+        instagram: socials.instagram || null,
+      },
+    },
+    items,
+  });
+});
+
 export default publicRoutes;

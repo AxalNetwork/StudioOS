@@ -5,6 +5,32 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Author profiles are now shareable and live
+
+Every article author now has a public profile page at `/authors/:id` — showing their photo, headline, bio, and social links (LinkedIn, X/Twitter, Website, GitHub, and the new Instagram field). The profile is powered directly by what you fill in under **Settings > Profile**, so there's no separate "author bio" to maintain.
+
+**What changed for authors:**
+- Your **headshot, headline, bio, and all social links** now appear on article pages in the byline and on your author page.
+- A new **Instagram** field has been added to the Social links section in Settings.
+- The **Public author profile** section at the bottom of Settings shows a live preview of how your profile looks to readers, with a "View public profile" link and a "Copy link" button to share your author URL.
+
+**What changed for readers:**
+- Article bylines now show the author's photo and headline (not just their name).
+- Clicking an author's name takes you to their full profile with their published articles.
+
+---
+
+## Contacts and Relationships are now one "Network" page
+
+We've combined **Contacts** and **Relationships** into a single **Network** page,
+so everything about the people in your network lives in one place. Open
+**Network** from the sidebar and switch between the **Contacts** tab — your
+inbound sign-ups and invites — and the **Relationships** tab — your partner graph
+and connection strength. Your old bookmarks still work: they take you straight to
+the right tab. The old Activity Feed and Leaderboard have been retired.
+
+---
+
 ## Manage your advisors in the Advisory Suite
 
 The **Advisory Suite** (renamed from "AI Advisory Suite" — it does more than AI

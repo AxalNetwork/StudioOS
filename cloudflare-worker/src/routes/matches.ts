@@ -100,60 +100,9 @@ function ruleScoreDealFlow(project: any, prefs: any): { score: number; reasons: 
   return { score: Math.max(0, Math.min(100, score)), reasons };
 }
 
-// --------- Preferences ---------
-
-matches.get('/preferences', async (c) => {
-  const user = await requireAuth(c);
-  await ensureSchema(c.env);
-  const sql = getSQL(c.env);
-  const rows = await sql`SELECT * FROM user_preferences WHERE user_id = ${user.id}`;
-  await sql.end();
-  if (rows.length === 0) {
-    return c.json({
-      user_id: user.id,
-      investment_focus: [], preferred_stages: [], preferred_roles: [],
-      min_check_cents: null, max_check_cents: null, risk_tolerance: null, bio: null,
-      updated_at: null,
-    });
-  }
-  const p: any = rows[0];
-  return c.json({
-    ...p,
-    investment_focus: safeJson(p.investment_focus, []),
-    preferred_stages: safeJson(p.preferred_stages, []),
-    preferred_roles: safeJson(p.preferred_roles, []),
-  });
-});
-
-matches.put('/preferences', async (c) => {
-  const user = await requireAuth(c);
-  await ensureSchema(c.env);
-  let data: any;
-  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
-  if (!data || typeof data !== 'object') return c.json({ error: 'Body must be an object' }, 400);
-  const focus = JSON.stringify(Array.isArray(data.investment_focus) ? data.investment_focus.slice(0, 20) : []);
-  const stagesArr = JSON.stringify(Array.isArray(data.preferred_stages) ? data.preferred_stages.slice(0, 10) : []);
-  const rolesArr = JSON.stringify(Array.isArray(data.preferred_roles) ? data.preferred_roles.slice(0, 10) : []);
-  const minC = data.min_check_cents ? parseInt(data.min_check_cents) : null;
-  const maxC = data.max_check_cents ? parseInt(data.max_check_cents) : null;
-  const risk = ['low', 'medium', 'high'].includes(data.risk_tolerance) ? data.risk_tolerance : null;
-  const bio = (data.bio || '').toString().slice(0, 1000);
-
-  await c.env.DB.prepare(`
-    INSERT INTO user_preferences (user_id, investment_focus, preferred_stages, preferred_roles, min_check_cents, max_check_cents, risk_tolerance, bio, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(user_id) DO UPDATE SET
-      investment_focus = excluded.investment_focus,
-      preferred_stages = excluded.preferred_stages,
-      preferred_roles = excluded.preferred_roles,
-      min_check_cents = excluded.min_check_cents,
-      max_check_cents = excluded.max_check_cents,
-      risk_tolerance = excluded.risk_tolerance,
-      bio = excluded.bio,
-      updated_at = CURRENT_TIMESTAMP
-  `).bind(user.id, focus, stagesArr, rolesArr, minC, maxC, risk, bio).run();
-  return c.json({ ok: true });
-});
+// Investor preferences moved to the canonical investor-profile store
+// (routes/investor_signals.ts). The user_preferences table + scorer reads
+// remain until the sourcing task migrates them; only the write path is retired.
 
 // --------- Rate limit (max 60 LLM scoring requests per user per hour) ---------
 async function checkLlmQuota(env: Env, userId: number): Promise<boolean> {
@@ -780,7 +729,5 @@ matches.get('/summary', async (c) => {
 
   return c.json({ unlocked, types });
 });
-
-function safeJson(s: any, def: any) { try { return s ? JSON.parse(s) : def; } catch { return def; } }
 
 export default matches;

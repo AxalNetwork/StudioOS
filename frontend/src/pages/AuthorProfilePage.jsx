@@ -1,30 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, FileText, Globe, UserCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, FileText } from 'lucide-react';
 import { articles as api } from '../lib/api';
 import { reportError } from '../lib/log';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
-import { safeExternalUrl } from '../lib/url';
-
-// lucide-react 1.x dropped the brand glyphs; ship local inline SVGs (matching
-// lucide's stroke style) so the author social links render unchanged.
-function Twitter({ className, size = 24 }) {
-  return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z" />
-    </svg>
-  );
-}
-function Linkedin({ className, size = 24 }) {
-  return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
-      <rect width="4" height="12" x="2" y="9" />
-      <circle cx="4" cy="4" r="2" />
-    </svg>
-  );
-}
+import AuthorCard from '../components/AuthorCard';
 
 function ArticleCard({ a }) {
   return (
@@ -57,6 +38,11 @@ function ArticleCard({ a }) {
         {a.subtitle && (
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 line-clamp-2">{a.subtitle}</p>
         )}
+        {a.published_at && (
+          <p className="mt-auto pt-3 text-xs text-slate-400 dark:text-slate-500">
+            {new Date(a.published_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+          </p>
+        )}
       </div>
     </Link>
   );
@@ -77,32 +63,16 @@ export default function AuthorProfilePage() {
       setLoading(false);
       return;
     }
-    (async () => {
-      try {
-        const r = await api.byAuthor(id);
+    api.authorProfile(id)
+      .then((r) => {
+        setAuthor(r.author || null);
         setItems(r.items || []);
-        // Derive author metadata from the first article if available.
-        const first = (r.items || [])[0];
-        if (first) {
-          setAuthor({
-            name: first.author,
-            role: first.author_role,
-            website: first.author_website,
-            bio: first.author_bio ?? null,
-            twitter: first.author_twitter ?? null,
-            linkedin: first.author_linkedin ?? null,
-            photo_url: first.author_photo_url ?? null,
-          });
-        } else {
-          setAuthor(null);
-        }
-      } catch (e) {
-        reportError('AuthorProfile:byAuthor', e);
+      })
+      .catch((e) => {
+        reportError('AuthorProfile:authorProfile', e);
         setErr('Failed to load author profile');
-      } finally {
-        setLoading(false);
-      }
-    })();
+      })
+      .finally(() => setLoading(false));
   }, [userId]);
 
   return (
@@ -129,57 +99,14 @@ export default function AuthorProfilePage() {
           </div>
         )}
         {!loading && !err && (
-          <div className="max-w-7xl mx-auto px-6 py-10">
-            {/* Author header */}
-            <div className="mb-10">
-              <div className="flex items-start gap-4">
-                {/* Avatar: photo when set, UserCircle placeholder otherwise */}
-                <div className="w-16 h-16 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden">
-                  {author?.photo_url ? (
-                    <img
-                      src={author.photo_url}
-                      alt={author.name || 'Author'}
-                      className="w-16 h-16 object-cover"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }}
-                    />
-                  ) : null}
-                  {!author?.photo_url && (
-                    <UserCircle className="w-10 h-10 text-slate-400 dark:text-slate-600" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h1 className="text-2xl font-bold">{author?.name || 'Unknown author'}</h1>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-                    {author?.role && (
-                      <span className="px-2 py-0.5 text-xs rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                        {author.role}
-                      </span>
-                    )}
-                    {author?.website && (
-                      <a href={safeExternalUrl(author.website)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-violet-700 dark:hover:text-violet-400 hover:underline">
-                        <Globe className="w-3.5 h-3.5" /> Website
-                      </a>
-                    )}
-                    {author?.twitter && (
-                      <a href={safeExternalUrl(author.twitter)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-violet-700 dark:hover:text-violet-400 hover:underline">
-                        <Twitter className="w-3.5 h-3.5" /> X / Twitter
-                      </a>
-                    )}
-                    {author?.linkedin && (
-                      <a href={safeExternalUrl(author.linkedin)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-violet-700 dark:hover:text-violet-400 hover:underline">
-                        <Linkedin className="w-3.5 h-3.5" /> LinkedIn
-                      </a>
-                    )}
-                  </div>
-                  {author?.bio && (
-                    <p className="mt-3 text-sm text-slate-600 dark:text-slate-400 max-w-2xl leading-relaxed">
-                      {author.bio}
-                    </p>
-                  )}
-                </div>
+          <div className="max-w-7xl mx-auto px-6 py-10 xl:py-14">
+            {author ? (
+              <div className="mb-12 pb-10 border-b border-slate-200 dark:border-slate-800">
+                <AuthorCard author={author} userId={Number(userId)} />
               </div>
-            </div>
-            {/* Articles grid */}
+            ) : (
+              <div className="mb-10 text-slate-500 dark:text-slate-400 text-sm">Author profile unavailable.</div>
+            )}
             {items.length > 0 ? (
               <section>
                 <h2 className="text-lg font-semibold mb-6 text-slate-900 dark:text-slate-100">

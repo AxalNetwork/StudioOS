@@ -55,12 +55,24 @@ export default function ScoringPage() {
   // 7-day cooldown. Toggle Off = Official run.
   const [practiceMode, setPracticeMode] = useState(true);
   const [cooldownInfo, setCooldownInfo] = useState(null); // { message, lockedUntilMs }
+  // Official runs are consequential (signed, LP-visible after sign-off, 7-day
+  // cooldown lock). Require an explicit confirm before writing one so nobody —
+  // investors especially — submits an official score by reflex. Practice runs
+  // are unlimited and run immediately. Investor UX audit ④.
+  const [confirmOfficial, setConfirmOfficial] = useState(false);
 
   useEffect(() => {
     api.scoringQueue().then(setQueue).catch(() => {});
   }, []);
 
-  const runScore = async () => {
+  // Entry point for the "Run" button. In official mode we gate on an explicit
+  // confirmation; practice mode runs straight through.
+  const handleRun = () => {
+    if (practiceMode) { performScore(); return; }
+    setConfirmOfficial(true);
+  };
+
+  const performScore = async () => {
     setLoading(true);
     setCooldownInfo(null);
     try {
@@ -222,8 +234,8 @@ export default function ScoringPage() {
             </Section>
 
             <div className="flex gap-3 mt-6">
-              <button onClick={runScore} disabled={loading} style={{ color: '#ffffff' }} className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
-                <Play size={14} /> {loading ? 'Scoring...' : 'Run Full Score'}
+              <button onClick={handleRun} disabled={loading} style={{ color: '#ffffff' }} className={`flex items-center gap-2 px-5 py-2.5 ${practiceMode ? 'bg-violet-600 hover:bg-violet-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50`}>
+                {practiceMode ? <Play size={14} /> : <ShieldCheck size={14} />} {loading ? 'Scoring...' : (practiceMode ? 'Run Practice Score' : 'Submit Official Score')}
               </button>
               {selectedProject && result && (
                 <button onClick={generateMemo} className="flex items-center gap-2 px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg text-sm font-medium transition-colors dark:text-gray-100">
@@ -282,6 +294,46 @@ export default function ScoringPage() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {confirmOfficial && (
+        <OfficialConfirmModal
+          projectName={queue.find(p => p.id === selectedProject)?.name || null}
+          onCancel={() => setConfirmOfficial(false)}
+          onConfirm={() => { setConfirmOfficial(false); performScore(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function OfficialConfirmModal({ projectName, onCancel, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4" onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full dark:bg-gray-900" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2">
+          <ShieldCheck size={18} className="text-emerald-600" />
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Submit an official score?</h2>
+        </div>
+        <div className="p-6 space-y-3 text-sm text-gray-700 dark:text-gray-300">
+          <p>
+            You're about to run an <strong>official</strong> score
+            {projectName ? <> for <strong>{projectName}</strong></> : null}. Official runs are:
+          </p>
+          <ul className="list-disc pl-5 space-y-1 text-xs text-gray-600 dark:text-gray-400">
+            <li>Signed &amp; recorded, and visible to partners/LPs after admin sign-off.</li>
+            <li>Locked for <strong>7 days</strong> — no new official run for this startup until then.</li>
+          </ul>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Just exploring? Cancel and switch to <strong>Practice mode</strong> — unlimited runs, never LP-visible, no cooldown.
+          </p>
+        </div>
+        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-2">
+          <button onClick={onCancel} className="text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 px-4 py-2 rounded-lg dark:text-gray-300">Cancel</button>
+          <button onClick={onConfirm} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg">
+            <ShieldCheck size={14} /> Submit official score
+          </button>
         </div>
       </div>
     </div>
