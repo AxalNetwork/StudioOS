@@ -71,6 +71,11 @@ externalPort = 80
 localPort = 5001
 externalPort = 3001
 
+[[ports]]
+localPort = 8000
+externalPort = 8000
+exposeLocalhost = true
+
 # Port 8000 (FastAPI dev backend) is NOT mapped externally.
 # Frontend Vite proxy forwards /api/* to localhost:8000 internally only.
 
