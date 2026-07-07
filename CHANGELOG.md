@@ -10,6 +10,33 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Unify investor preferences & thesis
+
+Makes `investor_profiles` the single canonical store for what an investor is looking for and retires the legacy `user_preferences` write path. Onboarding fields that were collected but silently dropped are now persisted, and investors can edit their thesis from Settings for the first time. The old Matches "Preferences" modal is gone. The scorer still *reads* `user_preferences` for now (that read migration is a separate sourcing task), so brand-new investors have empty deal-flow scoring until then — an accepted, documented gap.
+
+**Schema (D1 + dev SQLite)**
+- `cloudflare-worker/sql/migrations/140_investor_profile_unify.sql` — adds `firm_name`, `accreditation_status`, `country`, `lp_intent`, `lp_target_usd`, `notes` to `investor_profiles`; keeps a guarded `CREATE TABLE IF NOT EXISTS user_preferences` (still read by the scorer); one-time backfill copies legacy `bio`→`thesis_text` and check-size cents→`ticket_min_usd`/`ticket_max_usd` (USD) via COALESCE only where the profile fields are empty. No focus/stage mapping (the two vocabularies differ).
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/investor_signals.ts` — profile store extended for the six new columns (bootstrap cols, `ProfileRow`, `emptyProfile`, `shapeProfile`, `ProfileUpsertBody`). The PUT is full-replace, so it now loads the existing row and applies **preserve-if-absent** per field (`body.x === undefined ? existing : sanitized`) — a partial save from any Settings card can no longer wipe onboarding-only data.
+- `cloudflare-worker/src/routes/matches.ts` — removed `GET`/`PUT /preferences` (the write path) and the now-unused `safeJson` helper. The `user_preferences` table DDL in `ensureSchema` and the four scorer reads are intentionally kept.
+- `cloudflare-worker/src/services/onboardingChecklist.ts` — the `*.notifs` checklist items ("Configure notifications") counted `user_preferences` rows as a proxy; retiring that write path would have made them uncompletable, so they now check `users.notification_prefs`, falling back to the legacy `user_preferences` row for pre-existing accounts.
+
+**Backend — dev FastAPI (never deployed)**
+- `backend/app/api/routes/investor_signals.py` — mirrors the preserve-if-absent PUT and the empty-profile shape.
+- `backend/app/api/routes/matches.py` — removed `get_preferences`/`put_preferences`; kept `_load_prefs` (still used by the scorer).
+
+**Frontend**
+- `frontend/src/pages/OnboardingInvestorPage.jsx` — `handleFinish` now sends the six previously-dropped fields (firm name, accreditation status, country, LP intent, LP target, notes).
+- `frontend/src/pages/SettingsPage.jsx` — new **"My thesis"** card in Privacy lets investors edit sectors, stages, geographies and free-text thesis (anti-thesis is shown read-only; it stays editable in the existing "Investor Thesis & Matching" card). Saves through the full-replace profile PUT, resending the fields it doesn't edit so nothing is lost.
+- `frontend/src/pages/MatchesPage.jsx` — removed the legacy "Preferences" modal; the button and empty-state banner now link to `/settings/privacy`, and the banner is driven by the canonical profile's `sectors`.
+- `frontend/src/lib/api.js` — removed `matchPreferences`/`matchPreferencesSave`.
+
+**Validation**
+- `npm run test:drift` (full suite incl. `tsc --noEmit` in `cloudflare-worker/`) passes.
+
+---
+
 ## Investor UX Audit ④ — Investor permissions & scoring safety
 
 Closes two role-bleed holes from the Investor UX audit: investors held studio-operator write powers they should not have, and exploring the scoring engine as any non-founder silently wrote an OFFICIAL (LP-facing, 7-day cooldown-locking) score. Investors are now observers/voters on the pipeline, and scoring is practice-by-default for every role with an explicit official-submit confirm. Admin/partner behavior on the pipeline and scoring is otherwise unchanged. No schema changes.

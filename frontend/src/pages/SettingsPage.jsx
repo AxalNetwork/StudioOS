@@ -306,6 +306,7 @@ export default function SettingsPage() {
             <>
               <PrivacyCoreCard flash={flash} />
               <InvestorSignalsContributionCard flash={flash} role={data?.role} />
+              <InvestorMyThesisCard flash={flash} role={data?.role} />
               <InvestorThesisEditorCard flash={flash} role={data?.role} />
               <MarketIntelContributionCard flash={flash} />
               <PrivacySection data={data} patch={patch} flash={flash} reload={() => api.getSettings().then(setData)} hideAccountDelete />
@@ -3289,6 +3290,11 @@ function InvestorSignalsContributionCard({ flash, role }) {
         ticket_band: profile.ticket_band,
         thesis_text: profile.thesis_text,
         contribute_to_signals: next,
+        // The profile PUT is full-replace on these JSON columns; resend them so
+        // toggling the Signals opt-in never wipes anti-thesis / value weights.
+        anti_thesis_sectors: profile.anti_thesis_sectors || [],
+        anti_thesis_stages: profile.anti_thesis_stages || [],
+        value_weights: profile.value_weights || {},
       });
       setProfile(r.profile);
       flash(next ? 'Now contributing to Investor Signals' : 'Opted out — your data will be removed within 6 hours');
@@ -3328,6 +3334,130 @@ function InvestorSignalsContributionCard({ flash, role }) {
         <p className="text-xs text-gray-500 dark:text-gray-400">
           Opting out removes your contribution within 6 hours, the next time the aggregator runs.
         </p>
+      </div>
+    </Card>
+  );
+}
+
+// Investor "My thesis" editor — the positive thesis (sectors, stages,
+// geographies, free-text) that powers deal sourcing and founder matching.
+// The investor-profile PUT is full-replace on these JSON columns, so we resend
+// the fields this card doesn't edit (investor_type, ticket_band, contribute,
+// anti-thesis, value_weights). Onboarding-only fields (firm/accreditation/
+// LP intent/notes) are preserved server-side by the PUT's preserve-if-absent
+// path since we omit them here. Only investors (or anyone with a completed
+// profile) see it.
+function InvestorMyThesisCard({ flash, role }) {
+  const [profile, setProfile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getInvestorProfile()
+      .then(r => { if (!cancelled) setProfile(r.profile); })
+      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const isInvestor = String(role || '').toLowerCase() === 'investor';
+  if (!isInvestor && !profile?.completed_at) return null;
+  if (err) return <Card title="My thesis"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (!profile) return <Card title="My thesis"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
+
+  const SECTOR_OPTIONS = ['AI/ML','Climate','Fintech','Healthtech','Consumer','Enterprise SaaS','Crypto','Bio','Defense','Robotics','Energy'];
+  const STAGE_OPTIONS  = ['Pre-seed','Seed','Series A','Series B+','Growth'];
+  const GEO_OPTIONS    = ['North America','Europe','LATAM','APAC','MENA','Africa'];
+
+  const sectors = profile.sectors || [];
+  const stages = profile.stages || [];
+  const geos = profile.geos || [];
+  const antiSectors = profile.anti_thesis_sectors || [];
+  const antiStages = profile.anti_thesis_stages || [];
+
+  const toggle = (key, val) => {
+    const arr = (profile[key] || []).includes(val)
+      ? (profile[key] || []).filter(x => x !== val)
+      : [...(profile[key] || []), val];
+    setProfile({ ...profile, [key]: arr });
+  };
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const r = await api.saveInvestorProfile({
+        investor_type: profile.investor_type,
+        sectors: profile.sectors || [],
+        stages: profile.stages || [],
+        geos: profile.geos || [],
+        ticket_band: profile.ticket_band,
+        thesis_text: profile.thesis_text,
+        contribute_to_signals: profile.contribute_to_signals !== false,
+        anti_thesis_sectors: profile.anti_thesis_sectors || [],
+        anti_thesis_stages: profile.anti_thesis_stages || [],
+        value_weights: profile.value_weights || {},
+      });
+      setProfile(r.profile);
+      flash('Thesis saved');
+    } catch (e) {
+      flash(e.message || 'Failed to save', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const chipRow = (key, options, selected) => (
+    <div className="flex flex-wrap gap-2">
+      {options.map(s => (
+        <button key={s} onClick={() => toggle(key, s)}
+          className={`text-xs px-2.5 py-1 rounded-full border ${selected.includes(s)
+            ? 'bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700'
+            : 'bg-white text-gray-700 border-gray-300 hover:border-violet-300 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-700'}`}>
+          {s}
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <Card
+      title="My thesis"
+      description="The sectors, stages, geographies and free-text thesis we use to source deal flow and score founder matches."
+    >
+      <div className="space-y-5">
+        <div>
+          <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Sectors</span>
+          {chipRow('sectors', SECTOR_OPTIONS, sectors)}
+        </div>
+        <div>
+          <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Stages</span>
+          {chipRow('stages', STAGE_OPTIONS, stages)}
+        </div>
+        <div>
+          <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Geographies</span>
+          {chipRow('geos', GEO_OPTIONS, geos)}
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Thesis (free text)</label>
+          <textarea rows={3} value={profile.thesis_text || ''}
+            onChange={e => setProfile({ ...profile, thesis_text: e.target.value })}
+            placeholder="What do you look for? What's your edge?"
+            className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100" />
+        </div>
+        {(antiSectors.length > 0 || antiStages.length > 0) && (
+          <div className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-800 pt-3">
+            <span className="font-medium text-gray-700 dark:text-gray-300">Anti-thesis:</span>{' '}
+            {[...antiSectors, ...antiStages].join(', ')}
+            <span className="text-gray-400"> — edit in “Investor Thesis &amp; Matching” below.</span>
+          </div>
+        )}
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={save} disabled={busy}
+            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
+            {busy ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
+            {busy ? 'Saving…' : 'Save thesis'}
+          </button>
+        </div>
       </div>
     </Card>
   );

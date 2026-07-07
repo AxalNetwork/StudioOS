@@ -329,6 +329,13 @@ async function detect(env: Env, userId: number, key: string, primaryPersonaId?: 
     case 'inv.notifs':
     case 'op.notifs':
     case 'mt.notifs':
+      // Notification prefs live on users.notification_prefs (JSON). The legacy
+      // user_preferences row is a fallback for accounts configured before the
+      // investor-preferences unification retired that write path.
+      if ((await num(env,
+        `SELECT COUNT(*) FROM users WHERE id = ?
+            AND notification_prefs IS NOT NULL AND notification_prefs <> '' AND notification_prefs <> '{}'`,
+        userId)) > 0) return true;
       return (await num(env, `SELECT COUNT(*) FROM user_preferences WHERE user_id = ?`, userId)) > 0;
 
     // ----- operatingPartner side-effects -----

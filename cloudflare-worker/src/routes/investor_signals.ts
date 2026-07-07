@@ -68,6 +68,12 @@ async function ensureSchema(env: Env): Promise<void> {
         anti_thesis_sectors_json TEXT NOT NULL DEFAULT '[]',
         anti_thesis_stages_json TEXT NOT NULL DEFAULT '[]',
         value_weights_json TEXT NOT NULL DEFAULT '{}',
+        accreditation_status TEXT,
+        country TEXT,
+        firm_name TEXT,
+        lp_intent TEXT,
+        lp_target_usd INTEGER,
+        notes TEXT,
         completed_at TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )`,
@@ -82,6 +88,13 @@ async function ensureSchema(env: Env): Promise<void> {
       `ALTER TABLE investor_profiles ADD COLUMN anti_thesis_sectors_json TEXT NOT NULL DEFAULT '[]'`,
       `ALTER TABLE investor_profiles ADD COLUMN anti_thesis_stages_json TEXT NOT NULL DEFAULT '[]'`,
       `ALTER TABLE investor_profiles ADD COLUMN value_weights_json TEXT NOT NULL DEFAULT '{}'`,
+      // Migration 140 — unify onboarding fields into the canonical store.
+      `ALTER TABLE investor_profiles ADD COLUMN accreditation_status TEXT`,
+      `ALTER TABLE investor_profiles ADD COLUMN country TEXT`,
+      `ALTER TABLE investor_profiles ADD COLUMN firm_name TEXT`,
+      `ALTER TABLE investor_profiles ADD COLUMN lp_intent TEXT`,
+      `ALTER TABLE investor_profiles ADD COLUMN lp_target_usd INTEGER`,
+      `ALTER TABLE investor_profiles ADD COLUMN notes TEXT`,
     ];
     for (const colSql of bootstrapCols) {
       try { await env.DB.prepare(colSql).run(); } catch { /* already exists */ }
@@ -151,6 +164,12 @@ interface ProfileRow {
   anti_thesis_sectors_json: string;
   anti_thesis_stages_json: string;
   value_weights_json: string;
+  accreditation_status: string | null;
+  country: string | null;
+  firm_name: string | null;
+  lp_intent: string | null;
+  lp_target_usd: number | null;
+  notes: string | null;
   completed_at: string | null;
   updated_at: string;
 }
@@ -171,6 +190,12 @@ function emptyProfile(userId: number): ProfileRow {
     anti_thesis_sectors_json: '[]',
     anti_thesis_stages_json: '[]',
     value_weights_json: '{}',
+    accreditation_status: null,
+    country: null,
+    firm_name: null,
+    lp_intent: null,
+    lp_target_usd: null,
+    notes: null,
     completed_at: null,
     updated_at: new Date().toISOString(),
   };
@@ -210,6 +235,12 @@ function shapeProfile(row: ProfileRow) {
     anti_thesis_sectors: safeJsonArray(row.anti_thesis_sectors_json),
     anti_thesis_stages: safeJsonArray(row.anti_thesis_stages_json),
     value_weights: safeJsonObject(row.value_weights_json),
+    accreditation_status: row.accreditation_status,
+    country: row.country,
+    firm_name: row.firm_name,
+    lp_intent: row.lp_intent,
+    lp_target_usd: row.lp_target_usd,
+    notes: row.notes,
     completed_at: row.completed_at,
     updated_at: row.updated_at,
   };
@@ -235,6 +266,12 @@ interface ProfileUpsertBody {
   anti_thesis_sectors?: unknown;
   anti_thesis_stages?: unknown;
   value_weights?: unknown;
+  accreditation_status?: unknown;
+  country?: unknown;
+  firm_name?: unknown;
+  lp_intent?: unknown;
+  lp_target_usd?: unknown;
+  notes?: unknown;
 }
 
 investorProfile.put('/me', async (c) => {
@@ -270,6 +307,34 @@ investorProfile.put('/me', async (c) => {
     return out;
   })();
 
+  // Onboarding fields the Settings cards don't send. Preserve-if-absent: the
+  // two Settings cards PUT a fixed subset (no accreditation/firm/LP/notes), so
+  // treating absent as null would wipe what onboarding persisted. Only
+  // overwrite when the key is present in the body.
+  const ACCRED_OPTIONS = ['accredited', 'qp', 'non_us', 'not_sure'];
+  const LP_INTENT_OPTIONS = ['yes_now', 'maybe', 'deal_only', 'no'];
+  const existing = await c.env.DB.prepare(
+    `SELECT accreditation_status, country, firm_name, lp_intent, lp_target_usd, notes
+       FROM investor_profiles WHERE user_id = ?`,
+  ).bind(user.id).first<{
+    accreditation_status: string | null; country: string | null; firm_name: string | null;
+    lp_intent: string | null; lp_target_usd: number | null; notes: string | null;
+  }>();
+  const clampStr = (v: unknown, max: number): string | null =>
+    typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null;
+  const accreditation_status = body.accreditation_status === undefined
+    ? (existing?.accreditation_status ?? null)
+    : (typeof body.accreditation_status === 'string' && ACCRED_OPTIONS.includes(body.accreditation_status) ? body.accreditation_status : null);
+  const country = body.country === undefined ? (existing?.country ?? null) : clampStr(body.country, 80);
+  const firm_name = body.firm_name === undefined ? (existing?.firm_name ?? null) : clampStr(body.firm_name, 120);
+  const lp_intent = body.lp_intent === undefined
+    ? (existing?.lp_intent ?? null)
+    : (typeof body.lp_intent === 'string' && LP_INTENT_OPTIONS.includes(body.lp_intent) ? body.lp_intent : null);
+  const lp_target_usd = body.lp_target_usd === undefined
+    ? (existing?.lp_target_usd ?? null)
+    : (() => { const n = parseInt(String(body.lp_target_usd), 10); return Number.isFinite(n) && n >= 0 ? n : null; })();
+  const notes = body.notes === undefined ? (existing?.notes ?? null) : clampStr(body.notes, 2000);
+
   const isComplete = !!(investor_type && sectors.length && stages.length && ticket_band);
   const completed_at = isComplete ? new Date().toISOString() : null;
 
@@ -279,8 +344,9 @@ investorProfile.put('/me', async (c) => {
       ticket_band, ticket_min_usd, ticket_max_usd,
       thesis_text, thesis_keywords_json, contribute_to_signals,
       anti_thesis_sectors_json, anti_thesis_stages_json, value_weights_json,
+      accreditation_status, country, firm_name, lp_intent, lp_target_usd, notes,
       completed_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT completed_at FROM investor_profiles WHERE user_id = ?)), CURRENT_TIMESTAMP)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT completed_at FROM investor_profiles WHERE user_id = ?)), CURRENT_TIMESTAMP)
     ON CONFLICT(user_id) DO UPDATE SET
       investor_type = excluded.investor_type,
       sectors_json = excluded.sectors_json,
@@ -295,6 +361,12 @@ investorProfile.put('/me', async (c) => {
       anti_thesis_sectors_json = excluded.anti_thesis_sectors_json,
       anti_thesis_stages_json = excluded.anti_thesis_stages_json,
       value_weights_json = excluded.value_weights_json,
+      accreditation_status = excluded.accreditation_status,
+      country = excluded.country,
+      firm_name = excluded.firm_name,
+      lp_intent = excluded.lp_intent,
+      lp_target_usd = excluded.lp_target_usd,
+      notes = excluded.notes,
       completed_at = COALESCE(excluded.completed_at, investor_profiles.completed_at),
       updated_at = CURRENT_TIMESTAMP`,
   ).bind(
@@ -303,6 +375,7 @@ investorProfile.put('/me', async (c) => {
     ticket_band, ticket_min_usd, ticket_max_usd,
     thesis_text, JSON.stringify(thesis_keywords), contribute_to_signals,
     JSON.stringify(anti_thesis_sectors), JSON.stringify(anti_thesis_stages), JSON.stringify(value_weights),
+    accreditation_status, country, firm_name, lp_intent, lp_target_usd, notes,
     completed_at, user.id,
   ).run();
 

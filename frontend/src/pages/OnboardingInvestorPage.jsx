@@ -225,6 +225,12 @@ export default function OnboardingInvestorPage() {
         anti_thesis_sectors: values.anti_thesis_sectors || [],
         anti_thesis_stages: values.anti_thesis_stages || [],
         value_weights,
+        firm_name: values.firm_name || null,
+        accreditation_status: values.accreditation_status || null,
+        country: values.country || null,
+        lp_intent: values.lp_intent || null,
+        lp_target_usd: values.lp_target_usd || null,
+        notes: values.notes || null,
       });
     } catch {
       // Surfacing this in the wizard would be confusing; the user can

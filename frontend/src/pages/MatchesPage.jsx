@@ -1,35 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, Target, TrendingUp, Users, Settings, Loader2, Save, RefreshCw, Brain, ChevronDown, Building2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Sparkles, Target, TrendingUp, Users, Settings, Loader2, RefreshCw, Brain, ChevronDown, Building2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
-
-const SECTORS = ['AI', 'Fintech', 'Climate', 'Health', 'B2B SaaS', 'Consumer', 'Crypto', 'DevTools', 'Marketplaces', 'Hardware'];
-const STAGES = ['idea', 'mvp', 'traction_review', 'spinout_ready', 'tier_1', 'tier_2'];
-const ROLES = ['Lead Investor', 'Co-Investor', 'Operator', 'Advisor', 'Board Member'];
 
 export default function MatchesPage() {
   const { role } = useAuth();
   const [tab, setTab] = useState('deal-flow');
-  const [prefs, setPrefs] = useState(null);
-  const [editPrefs, setEditPrefs] = useState(false);
-  const [savingPrefs, setSavingPrefs] = useState(false);
-
-  useEffect(() => { (async () => { try { setPrefs(await api.matchPreferences()); } catch {} })(); }, []);
-
-  const savePrefs = async (next) => {
-    setSavingPrefs(true);
-    try {
-      await api.matchPreferencesSave({
-        ...next,
-        min_check_cents: next.min_check_dollars ? Math.round(parseFloat(next.min_check_dollars) * 100) : null,
-        max_check_cents: next.max_check_dollars ? Math.round(parseFloat(next.max_check_dollars) * 100) : null,
-      });
-      setPrefs(await api.matchPreferences());
-      setEditPrefs(false);
-    } finally { setSavingPrefs(false); }
-  };
+  const [profile, setProfile] = useState(null);
 
   const isFounder = String(role || '').toLowerCase() === 'founder';
+
+  // Investor thesis is now the canonical investor-profile store, edited from
+  // Settings → Privacy → "My thesis". We only read it here to nudge investors
+  // who haven't set any sectors yet.
+  useEffect(() => {
+    if (isFounder) return;
+    (async () => {
+      try { setProfile((await api.getInvestorProfile())?.profile || null); }
+      catch { /* soft — the nudge just won't render */ }
+    })();
+  }, [isFounder]);
   const tabs = [
     { id: 'deal-flow', label: 'Deal Flow', icon: Target, investorOnly: true },
     { id: 'co-invest', label: 'Co-Investment', icon: TrendingUp, investorOnly: true },
@@ -52,17 +43,17 @@ export default function MatchesPage() {
           </div>
         </div>
         {!isFounder && (
-          <button onClick={() => setEditPrefs(true)}
+          <Link to="/settings/privacy"
             className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-sm text-gray-700 px-3 py-2 rounded-lg dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300">
-            <Settings size={14} /> Investor Preferences
-          </button>
+            <Settings size={14} /> My thesis
+          </Link>
         )}
       </div>
 
-      {prefs && !isFounder && !prefs.investment_focus?.length && !editPrefs && (
+      {profile && !isFounder && !profile.sectors?.length && (
         <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 mb-6 text-xs text-amber-800 flex items-center justify-between">
-          <span>Set your investment preferences to get high-signal matches.</span>
-          <button onClick={() => setEditPrefs(true)} className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium px-3 py-1 rounded">Configure</button>
+          <span>Set your investment thesis to get high-signal matches.</span>
+          <Link to="/settings/privacy" className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium px-3 py-1 rounded">Configure</Link>
         </div>
       )}
 
@@ -84,10 +75,6 @@ export default function MatchesPage() {
       {tab === 'co-invest' && <CoInvest />}
       {tab === 'referrals' && <ReferralScores />}
       {tab === 'investor-match' && <InvestorMatch />}
-
-      {editPrefs && prefs && (
-        <PreferencesModal initial={prefs} onClose={() => setEditPrefs(false)} onSave={savePrefs} saving={savingPrefs} />
-      )}
     </div>
   );
 }
@@ -371,111 +358,4 @@ function Loading({ text }) {
 }
 function Empty({ text }) {
   return <div className="text-center py-12 text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-xl dark:border-gray-800">{text}</div>;
-}
-
-function PreferencesModal({ initial, onSave, onClose, saving }) {
-  const [form, setForm] = useState({
-    investment_focus: initial.investment_focus || [],
-    preferred_stages: initial.preferred_stages || [],
-    preferred_roles: initial.preferred_roles || [],
-    min_check_dollars: initial.min_check_cents ? (initial.min_check_cents / 100).toString() : '',
-    max_check_dollars: initial.max_check_cents ? (initial.max_check_cents / 100).toString() : '',
-    risk_tolerance: initial.risk_tolerance || 'medium',
-    bio: initial.bio || '',
-  });
-  const toggle = (key, val) => setForm(f => ({
-    ...f, [key]: f[key].includes(val) ? f[key].filter(x => x !== val) : [...f[key], val]
-  }));
-
-  return (
-    <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between dark:border-gray-800">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Investor Preferences</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-900 text-xl">×</button>
-        </div>
-        <div className="p-6 space-y-5">
-          <div>
-            <label className="text-xs text-gray-700 font-medium block mb-2 dark:text-gray-300">Investment Focus (sectors)</label>
-            <div className="flex flex-wrap gap-2">
-              {SECTORS.map(s => (
-                <button key={s} onClick={() => toggle('investment_focus', s)}
-                  className={`text-xs px-3 py-1.5 rounded-full border ${form.investment_focus.includes(s) ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-700 border-gray-300 hover:border-violet-400'}`}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-700 font-medium block mb-2 dark:text-gray-300">Preferred Stages</label>
-            <div className="flex flex-wrap gap-2">
-              {STAGES.map(s => (
-                <button key={s} onClick={() => toggle('preferred_stages', s)}
-                  className={`text-xs px-3 py-1.5 rounded-full border ${form.preferred_stages.includes(s) ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-700 border-gray-300 hover:border-violet-400'}`}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-700 font-medium block mb-2 dark:text-gray-300">Preferred Roles</label>
-            <div className="flex flex-wrap gap-2">
-              {ROLES.map(s => (
-                <button key={s} onClick={() => toggle('preferred_roles', s)}
-                  className={`text-xs px-3 py-1.5 rounded-full border ${form.preferred_roles.includes(s) ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-700 border-gray-300 hover:border-violet-400'}`}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">Min Check ($)</label>
-              <input type="number" min="0" value={form.min_check_dollars} onChange={e => setForm(f => ({ ...f, min_check_dollars: e.target.value }))}
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none dark:border-gray-700" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">Max Check ($)</label>
-              <input type="number" min="0" value={form.max_check_dollars} onChange={e => setForm(f => ({ ...f, max_check_dollars: e.target.value }))}
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none dark:border-gray-700" />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">Risk Tolerance</label>
-            <div className="relative">
-              <select
-                value={form.risk_tolerance}
-                onChange={e => setForm(f => ({ ...f, risk_tolerance: e.target.value }))}
-                className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 pr-9 py-2 text-sm text-gray-900 shadow-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-100 focus:outline-none transition cursor-pointer dark:border-gray-700 dark:text-gray-100"
-              >
-                <option value="low">Low — proven traction only</option>
-                <option value="medium">Medium — balanced</option>
-                <option value="high">High — early/contrarian bets</option>
-              </select>
-              <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">Bio / Thesis (optional)</label>
-            <textarea rows={3} value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))}
-              placeholder="What's your investment thesis or area of expertise?"
-              className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none dark:border-gray-700" />
-          </div>
-        </div>
-        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-2 dark:border-gray-800">
-          <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 px-4 py-2 rounded-lg dark:text-gray-300">Cancel</button>
-          <button onClick={() => onSave(form)} disabled={saving}
-            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
-            {saving ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
-            {saving ? 'Saving…' : 'Save Preferences'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 }

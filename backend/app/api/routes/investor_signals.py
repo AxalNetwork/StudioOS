@@ -80,6 +80,12 @@ def _empty_profile(user_id: int) -> dict:
         "anti_thesis_sectors": [],
         "anti_thesis_stages": [],
         "value_weights": {},
+        "accreditation_status": None,
+        "country": None,
+        "firm_name": None,
+        "lp_intent": None,
+        "lp_target_usd": None,
+        "notes": None,
         "completed_at": None,
         "updated_at": None,
     }
@@ -172,6 +178,35 @@ def update_my_profile(payload: dict, session: Session = Depends(get_session), us
     else:
         value_weights = {k: min(1.0, max(0.0, float(v))) for k, v in value_weights.items() if isinstance(v, (int, float, str))}
 
+    # Onboarding fields the Settings cards don't send. Preserve-if-absent so a
+    # Settings-card save (fixed subset) never wipes onboarding's accreditation/
+    # firm/LP/notes data. Mirrors the worker PUT.
+    accred_options = {"accredited", "qp", "non_us", "not_sure"}
+    lp_intent_options = {"yes_now", "maybe", "deal_only", "no"}
+
+    def _clamp_str(v: Any, limit: int) -> Optional[str]:
+        return v.strip()[:limit] if isinstance(v, str) and v.strip() else None
+
+    def _to_int_nn(v: Any) -> Optional[int]:
+        try:
+            n = int(v)
+            return n if n >= 0 else None
+        except (ValueError, TypeError):
+            return None
+
+    if "accreditation_status" in body:
+        accreditation_status = body.get("accreditation_status") if body.get("accreditation_status") in accred_options else None
+    else:
+        accreditation_status = existing.get("accreditation_status")
+    country = _clamp_str(body.get("country"), 80) if "country" in body else existing.get("country")
+    firm_name = _clamp_str(body.get("firm_name"), 120) if "firm_name" in body else existing.get("firm_name")
+    if "lp_intent" in body:
+        lp_intent = body.get("lp_intent") if body.get("lp_intent") in lp_intent_options else None
+    else:
+        lp_intent = existing.get("lp_intent")
+    lp_target_usd = _to_int_nn(body.get("lp_target_usd")) if "lp_target_usd" in body else existing.get("lp_target_usd")
+    notes = _clamp_str(body.get("notes"), 2000) if "notes" in body else existing.get("notes")
+
     next_payload = {
         "user_id": user.id,
         "investor_type": investor_type,
@@ -187,6 +222,12 @@ def update_my_profile(payload: dict, session: Session = Depends(get_session), us
         "anti_thesis_sectors": anti_sectors,
         "anti_thesis_stages": anti_stages,
         "value_weights": value_weights,
+        "accreditation_status": accreditation_status,
+        "country": country,
+        "firm_name": firm_name,
+        "lp_intent": lp_intent,
+        "lp_target_usd": lp_target_usd,
+        "notes": notes,
     }
     try:
         session.exec(text("""

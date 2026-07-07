@@ -1506,8 +1506,6 @@ export const api = {
   deckGetBrand: () => request('/decks/brand'),
   deckSetWatermark: (url) => request('/decks/brand/watermark', { method: 'PUT', body: JSON.stringify({ watermark_url: url }) }),
 
-  matchPreferences: () => request('/matches/preferences'),
-  matchPreferencesSave: (data) => request('/matches/preferences', { method: 'PUT', body: JSON.stringify(data) }),
   matchDealFlow: () => request('/matches/deal-flow'),
   matchCoInvest: () => request('/matches/co-invest'),
   matchReferralScores: () => request('/matches/referral-scores'),

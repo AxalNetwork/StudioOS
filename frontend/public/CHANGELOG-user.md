@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## One home for your investment preferences
+
+If you're an investor, everything about what you're looking for now lives in one place:
+
+- **Edit your thesis any time.** A new **"My thesis"** card under Settings → Privacy lets you update the sectors, stages, geographies and free-text description you invest in — no need to redo onboarding just to change your mind.
+- **We now keep everything you tell us.** A few details from the investor sign-up (like your firm, accreditation status and where you're based) were being collected but not saved. They're saved now.
+- **The old "Preferences" pop-up on the Matches page is gone.** The button there now takes you straight to your thesis in Settings, so there's a single source of truth.
+
+---
+
 ## Clearer roles on the pipeline, and safer scoring
 
 We tightened up who does what, so the platform matches how a venture studio actually works:
