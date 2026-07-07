@@ -12,7 +12,7 @@ The investor panel has the opposite disease from the founder panel. The founder 
 
 1. **The investor home renders none of its investor data.** `/studio` (`Dashboard.jsx`) is byte-for-byte the founder page plus a trial banner. Meanwhile the dashboard API (`dashboard.ts`) assembles `proprietary_deal_flow` (scored, NDA-masked), `ai_scored_opportunities`, `quick_stats`, and `syndication_tools` for investors on every load — **and `Dashboard.jsx` reads none of them**. The quota meters (`InvestorQuotaBars`) are mounted only on `/partner-portal`, from which investors are redirected away (`App.jsx:1443`): an investor can never see their own intro/deal-room usage.
 
-2. **There is no deal spine.** Nothing answers the investor's core questions: *which deals am I in, at what stage, and what's my next action?* Deal Flow is a firm-wide funnel of **all** deals (not "mine") whose only action is a stage-advance button; Pipeline Board is the studio's internal MVP kanban; AI Match cards are read-only dead ends (no pass / intro / add-to-watchlist); the Decision Journal's `next_check_at` follow-up field exists in the worker but is never surfaced. Four sourcing pages, zero next actions.
+2. **There is no deal spine, and the funnel stages don't hand off.** Nothing answers the investor's core questions: *which deals am I in, at what stage, and what's my next action?* Deal Flow is a firm-wide funnel of **all** deals (not "mine") whose only action is a stage-advance button; Pipeline Board is the studio's internal MVP kanban; AI Match cards are read-only dead ends (no pass / intro / add-to-watchlist); the Decision Journal's `next_check_at` follow-up exists in the worker but is never surfaced. Downstream it's the same: a due-diligence case can't attach to an IC decision, and an IC **"invest" verdict creates no capital record** — the only wired hand-off in the entire Source→Exit funnel is scoring → deal memo → IC (`from_scoring`).
 
 3. **The thesis is captured twice and used for neither.** Onboarding's 9 steps write `investor_profiles` (sectors, stages, geos, thesis, anti-thesis, value weights) — which feeds the *founder's* investor-match view, **not** the investor's own deal filtering. The Matches page has a second "Investor Preferences" modal writing a separate `user_preferences` table. The two stores overlap ~80% and are never synced. Worse, onboarding collects `accreditation_status`, `country`, `firm_name`, and LP intent and **silently drops them** (never passed to `saveInvestorProfile`).
 
@@ -69,11 +69,34 @@ The investor panel has the opposite disease from the founder panel. The founder 
 
 ### 4) Diligence — Scoring Engine, Due Diligence, Market Intelligence, Risk Matrix
 
-*(Section pending final exploration pass — findings and recommendations slot in here.)*
+**What's there.**
+- **Scoring Engine** (`ScoringPage.jsx` + `scoring.ts`): a 100-point, 6-category rubric with a Practice/Official toggle — but **investor runs always write OFFICIAL scores** (7-day cooldown, admin-only `?force=1`). Deal-memo generation (partner/investor) exists here and can seed an IC decision (`from_scoring`, `ic.ts:106`) — the one wired hand-off in the whole funnel.
+- **Due Diligence** (`/admin/due-diligence` → `AdminDueDiligencePage.jsx` + `dd.ts`): a real case system (11 section types, 9 data connectors, NDA-gated verdicts) — but the investor gets a scoped *reviewer* view inside an admin console URL; opening a case, running scans, and generating reports are admin/partner actions. An investor screening a deal **cannot start diligence on it**.
+- **Market Intelligence** (`MarketIntelPage.jsx`, 2,947 lines): a **21-tab** research portal (Sector Compass, Founder/Investor/Geography lenses, Citations, Custom Watchlist, Market Pulse, Public Markets, Private Rounds, High Conviction, Studio Benchmarks, Investor Signals, Platform Personas, plus 8 advisor-derived tabs). Exports are Professional-gated. Rich, real data — one page, twenty-one doors.
+- **Risk Matrix** (`RiskMatrixPage.jsx` + `venture_risk.ts`): portfolio-wide company × 10-layer risk heatmap; investor read-only.
+
+**Critique.** The group has depth but no direction. The most consequential trap: an investor exploring the scorer silently writes an *official* score onto a startup. The most consequential gap: diligence — the group's namesake — is a console the investor can only peek into, at an `/admin/*` URL that says "you don't belong here". Market Intelligence is the opposite failure: everything is there, arranged as a wall, and insight never becomes action (nothing links a hot sector to the investor's thesis or watchlist except the one Custom Watchlist tab).
+
+**Recommendation.**
+- **Scoring**: default investors to Practice mode with an explicit "Submit official score" confirm; promote "Generate deal memo → open IC decision" to the page's primary CTA — it's the funnel's only working bridge, currently buried.
+- **Due Diligence**: give it an investor-facing home (route alias without the `/admin` framing); let an investor open a DD case on a deal they're in (deal-room membership as the permission); surface their open reviewer items as next actions in the lifecycle module.
+- **Market Intelligence**: regroup the 21 tabs into 4–5 lenses with an overview landing tab (Research: compass/lenses/citations · Markets: pulse/public/private · Community signals: personas + advisor-derived · My watchlist); add one "insight → action" verb per view (add sector to thesis, add company to watchlist). Restructure the page's internal nav only — the content is good.
+- **Risk Matrix**: fine as-is; cross-link it from the Portfolio Health drawer (same companies, complementary views).
 
 ### 5) Commit — IC Decisions, Legal & Capital, Capital & Investment
 
-*(Section pending final exploration pass — findings and recommendations slot in here.)*
+**What's there.**
+- **IC Decisions** (`ICDecisionsPage.jsx`, 137 lines + `ic.ts`): a real draft → voting → decided workflow with `ic_votes` tallies, Professional-gated, memo optionally seeded from a scoring run. Thin but sound.
+- **Legal & Capital** (`LegalCapitalPage.jsx` + `legalcap.ts`): five tabs; the investor is read-only everywhere except the **LP Portal** tab (syndicate-scoped Commit / Paid / Decline).
+- **Capital & Investment** (`CapitalPage.jsx` + `capital.ts`): fund-ops KPIs, LP list, capital calls; the non-admin investor is read-only plus "Mark Paid" on their own (IDOR-scoped) calls.
+
+**Critique.** Individually defensible, collectively unplumbed. A due-diligence case cannot be attached to an IC decision. An IC **"invest" decision creates no capital record** — the decision evaporates; someone must separately remember to record a position (`portfolio_positions`), an LP commitment, or a syndicate entry. Capital calls live in **two stores** (`capital.ts` tables vs `legalcap.ts`'s spin-out engine). And the "thesis before the vote" discipline the Decision Journal was built for is not connected to the IC vote where the thesis actually gets tested.
+
+**Recommendation** (wire the chain — smallest changes, biggest coherence gain):
+- **DD → IC**: an optional `dd_case_id` on IC decisions; the IC page shows the case verdict inline.
+- **IC → ledger**: on an "invest" outcome, prompt to record the position (pre-filled `portfolio_positions` row or LP commitment) — decision to ledger in one step.
+- **IC → journal**: auto-draft a Decision Journal entry (decision, conviction, thesis from the memo) on every IC vote — the anti-portfolio then builds itself.
+- **One capital-call store**: consolidate `legalcap` calls into the `capital.ts`/`funds.ts` model; `/capital` itself folds into the Fund Ops workspace (§6) — it is fund-side administration, not an investor commit surface.
 
 ### 6) Support — the portfolio & fund-ops eight
 
@@ -134,6 +157,10 @@ Six investor-facing stages, mapped to what already exists:
 | Remove (investor nav) | Advisors, Jobs, Articles, Partners | Routes stay live for other roles |
 | Relocate | Due Diligence off `/admin/*` framing | Investor-facing diligence home (see §4) |
 | Fix | Watchlist/Journal field & enum mismatches | Worker schema aligned with UI |
+| Fix | Investor scoring runs silently official | Practice by default + explicit confirm |
+| Wire | DD case → IC decision → position/journal | `dd_case_id` on IC; invest-outcome prompt |
+| Merge | Capital calls in `legalcap.ts` + `capital.ts` | One store under Fund Ops |
+| Regroup | Market Intelligence's 21 tabs | 4–5 lenses + overview (in-page nav only) |
 | Rename | "Deal Flow Pipeline" vs "Pipeline Board" collision | Deal Flow = my funnel; Pipeline = studio ops |
 
 ## Recommended investor information architecture (sidebar unchanged)
@@ -145,8 +172,15 @@ Sourcing
   Pipeline Board   read-only studio context for investors (write = operators)
   AI Matches       actionable cards (watchlist / intro / deal room), one preference store
   Watchlist & Journal  unchanged concept + fixed persistence + next-check reminders
-Diligence    (see §4 — pending)
-Commit       (see §5 — pending)
+Diligence
+  Scoring Engine       practice-by-default · "memo → IC" as primary CTA
+  Due Diligence        investor-facing home (no /admin framing) · open case from my deal
+  Market Intelligence  21 tabs → 4-5 lenses + overview · insight→action verbs
+  Risk Matrix          unchanged · cross-linked from Portfolio Health
+Commit
+  IC Decisions         home of the group · DD case attach · invest → position prompt → journal
+  Legal & Capital      LP Portal (syndicate commits) · rest read-only context
+  Capital & Investment folds into Fund Ops (fund-side administration)
 Support
   Portfolio        Health · Updates · Positions (tabs)
   Fund Ops         Funds admin · LP Reporting · Capital calls
@@ -156,20 +190,33 @@ Support
 Account      Trust & Identity · Calendar · Events · Activity · Docs · Support · Settings
 ```
 
+## High-impact redesign recommendations (the short list)
+
+1. **Plug in what's already built** — render the dashboard's dead investor payload, mount the unreachable quota bars: the investor home becomes real with near-zero new backend.
+2. **Give every scored card a verb** — watchlist / intro / deal room on matches; interest must have somewhere to go.
+3. **One thesis, used everywhere** — a single preference store filtering Deal Flow, Matches, and the home strip.
+4. **Wire the funnel** — DD → IC → position → journal; a decision should leave a paper trail without human memory.
+5. **Separate customer from operator** — investors lose studio write powers (pipeline gates, official scores by accident); their own funnel gains them.
+6. **Consolidate the fund suite** — one modeling workspace, one holdings table, one capital-call store.
+
 ## Prioritized redesign roadmap
 
-*(Finalized after §4–5 land; drafted priorities below.)*
+Effort: S = day-scale, M = multi-day, L = week+. Risk notes flag shared surfaces — most investor pages also serve admin/partner, so changes must be role-aware.
 
-### Critical
-1. **Investor deal desk on `/studio`** — render the existing dashboard payload, mount the quota bars, add the lifecycle rail + next actions aggregation route.
-2. **One preference store** — canonicalize `investor_profiles`, migrate `user_preferences`, persist the dropped onboarding fields.
-3. **Actionable matches + investor-scoped Deal Flow** — watchlist/intro/deal-room verbs on cards; "My deals" default; per-relationship actions replacing the naked advance button.
-4. **Permissions split** — remove investor from `ADVANCE_ROLES`/gate decisions on the studio pipeline.
+### Critical — the product thesis
+1. **Investor deal desk on `/studio`** — render the existing `dashboard.ts` investor payload, mount `InvestorQuotaBars`, add the lifecycle rail + a `GET /api/dashboard/investor-lifecycle` aggregation over existing relationship tables. *(L — reuses the founder audit's rail/next-action components; role-conditional rendering inside Dashboard.jsx)*
+2. **Actionable matches + investor-scoped Deal Flow** — watchlist/intro/deal-room verbs on scored cards; "My deals" default view; per-relationship actions replacing the naked advance button. *(M — deals.ts/matches.ts additions; intro verb finally consumes the intro quota)*
+3. **One preference store** — canonicalize `investor_profiles`; Matches modal reads/writes it; one-time migration of `user_preferences` investor rows; persist the dropped onboarding fields (accreditation, firm, LP intent). *(M)*
+4. **Permissions split** — remove investor from `pipeline.ts` `ADVANCE_ROLES` (or gate behind an explicit operator flag); scoring defaults to Practice for investors with explicit official-submit confirm. *(S — highest safety-to-effort ratio)*
 
-### Important
-5. **Support consolidation** — Fund Modeling merge (cheapest, same engine), then Portfolio workspace, then canonical holdings/capital-calls.
-6. **Watchlist/Journal contract fix + next-check reminders.**
-7. **Diligence & Commit flow** (pending §4–5 findings).
+### Important — finish the lifecycles
+5. **Wire Diligence→Commit→Ledger** — `dd_case_id` on IC decisions; invest-outcome prompt creating the `portfolio_positions`/LP record; auto-drafted journal entry per IC vote. *(M)*
+6. **Support consolidation** — Fund Modeling merge first (same engine/table/components — cheapest), then the Portfolio workspace (Health/Updates/Positions tabs), then canonical holdings + one capital-call store. *(L, sequenceable)*
+7. **Watchlist/Journal contract fix** — persist `source`/`tags`/external fields, align enums, surface `next_check_at` with a reminder notification. *(M — includes a small migration)*
+8. **Due Diligence investor home + Market Intelligence regrouping** — de-admin the DD route + open-case-from-my-deal; MI 21 tabs → 4–5 lenses with insight→action verbs. *(M/L)*
 
 ### Nice to have
-8. Account-group trim; locked-tab previews; investor RoleBadge style; shared DealCard/ScorePill primitive replacing the ~5 copies.
+9. Account-group trim (drop Advisors/Jobs/Articles/Partners from investor nav; routes stay live). *(S)*
+10. Locked-tab previews for Deal Flow/Pipeline on free tier (blurred cards + quota card beside every 402). *(S/M)*
+11. Shared DealCard/ScorePill primitive replacing the ~5 re-implementations; investor RoleBadge style. *(M, incremental)*
+12. Label the Liquidity mock settlement as simulation until real; "My thesis" card in Settings. *(S)*
