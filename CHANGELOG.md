@@ -10,6 +10,20 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Actionable matches & investor-scoped deal flow (investor-audit #2)
+
+The scored-match cards on the AI Matching Engine were read-only, and Deal Flow showed the whole firm-wide funnel with an operator-only "advance stage" button that made no sense for an investor. This gives every match card real verbs, scopes the deal pipeline to an investor's own relationships, and dedupes three near-identical scored-card implementations behind one shared component.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/matches.ts` — `GET /api/matches/deal-flow` now resolves a `deal_id` per project (correlated subquery, `ORDER BY id DESC LIMIT 1`) and `GET /api/matches/co-invest` selects `d.id as deal_id`, so a scored card can deep-link/join the actual deal room instead of only the project.
+- `cloudflare-worker/src/routes/deals.ts` — `GET /api/deals` accepts `?scope=mine` for investors and annotates each deal with `is_member` (is this investor in the dealroom?). `scope=mine` filters to deals the investor has a real relationship with: dealroom member (`investor_dealroom_members`), introduced (`investor_introductions.project_id`), or a converted watchlist item (`watchlist_items.converted_deal_id`, wrapped in try/catch for fresh DBs). Scope/annotation apply to the investor role only; operators and founders are unaffected. Calls `ensureInvestorPaywallSchema` before touching the paywall tables.
+
+**Frontend**
+- `frontend/src/components/ScoredDealCard.jsx` (new) — one shared `ScoredDealCard` + exported `ScorePill` (80/60 match thresholds). Each card carries three self-managed actions: **Watchlist** (`watchlistCreate`), **Request intro** (`introductionsRequest`, gated to `canRequestIntro`/investor role), and **Open deal room** (`dealroomJoin` then navigate, shown only when a `deal_id` is present). Intro and dealroom join both 402 *without* a `required` field, so the global PaywallModal never auto-opens — the card surfaces the quota message inline with an `openPaywall()` Upgrade CTA.
+- `frontend/src/pages/MatchesPage.jsx` — Deal Flow and Co-Investment now render `ScoredDealCard` (co-invest keyed by `deal_id`, with a `#rank`); the local `DealCard`/`ScorePill` and unused `Brain` import were removed. `InvestorMatch`/`ReferralScores` reuse the shared `ScorePill`. PipelinePage's own ScorePill (70/40 traction thresholds on a kanban tile) is deliberately left separate.
+- `frontend/src/pages/DealsPage.jsx` — investors get a **My deals / All deals** scope toggle (default `mine`, derived from the resolved role and refetched when role hydrates or scope changes) and per-relationship row actions replacing the advance button: **Join room** / **View room** (driven by `is_member`; 402 handled inline) and **Pass** (records a `decision_journal` `pass` with a ≥10-char reason, client-validated; hidden when the deal has no `project_id`).
+- `frontend/src/lib/api.js` — `listDeals(status, scope)` now takes a scope param; added `dealroomJoin`/`dealroomLeave` and `introductionsRequest`.
+
 ## Investor deal desk on /studio (investor-audit #1)
 
 Investors landing on `/studio` were shown the founder home (Profile & Fit + studio-ops widgets) plus a trial banner — none of it relevant to an LP/angel. The Dashboard API already computed an investor payload (`proprietary_deal_flow`, `ai_scored_opportunities`, `quick_stats`, `syndication_tools`) that the frontend discarded. This turns `/studio` into a real investor deal desk.

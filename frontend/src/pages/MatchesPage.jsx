@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Sparkles, Target, TrendingUp, Users, Settings, Loader2, RefreshCw, Brain, ChevronDown, Building2 } from 'lucide-react';
+import { Sparkles, Target, TrendingUp, Users, Settings, Loader2, RefreshCw, ChevronDown, Building2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
+import ScoredDealCard, { ScorePill } from '../components/ScoredDealCard';
 
 export default function MatchesPage() {
   const { role } = useAuth();
@@ -10,6 +11,9 @@ export default function MatchesPage() {
   const [profile, setProfile] = useState(null);
 
   const isFounder = String(role || '').toLowerCase() === 'founder';
+  // Task #82 — only investors may request an intro (the worker 403s admins/
+  // partners on POST /introductions/request), so gate the button by role.
+  const canRequestIntro = String(role || '').toLowerCase() === 'investor';
 
   // Investor thesis is now the canonical investor-profile store, edited from
   // Settings → Privacy → "My thesis". We only read it here to nudge investors
@@ -71,8 +75,8 @@ export default function MatchesPage() {
         })}
       </div>
 
-      {tab === 'deal-flow' && <DealFlow />}
-      {tab === 'co-invest' && <CoInvest />}
+      {tab === 'deal-flow' && <DealFlow canRequestIntro={canRequestIntro} />}
+      {tab === 'co-invest' && <CoInvest canRequestIntro={canRequestIntro} />}
       {tab === 'referrals' && <ReferralScores />}
       {tab === 'investor-match' && <InvestorMatch />}
     </div>
@@ -200,7 +204,7 @@ function BreakdownPill({ label, value, weight }) {
   );
 }
 
-function DealFlow() {
+function DealFlow({ canRequestIntro }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -224,13 +228,15 @@ function DealFlow() {
         <button onClick={load} className="text-xs text-violet-600 hover:underline flex items-center gap-1"><RefreshCw size={12} /> Refresh</button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {data.items.map(it => <DealCard key={it.project.id} item={it} />)}
+        {data.items.map(it => (
+          <ScoredDealCard key={it.project.id} item={it} canRequestIntro={canRequestIntro} />
+        ))}
       </div>
     </div>
   );
 }
 
-function CoInvest() {
+function CoInvest({ canRequestIntro }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -248,27 +254,10 @@ function CoInvest() {
   if (!data?.items?.length) return <Empty text="No active co-investment opportunities right now." />;
 
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-gray-500 mb-3">Top {data.items.length} of {data.total} active deals, ranked for you.</p>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <p className="text-xs text-gray-500 md:col-span-2">Top {data.items.length} of {data.total} active deals, ranked for you.</p>
       {data.items.map((it, i) => (
-        <div key={it.project.id} className="bg-white border border-gray-200 rounded-xl p-5 flex gap-5 items-start dark:bg-gray-900 dark:border-gray-800">
-          <div className="flex-shrink-0">
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${
-              i === 0 ? 'bg-amber-400 text-white' : i < 3 ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-gray-700'
-            }`}>{i + 1}</div>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-3 mb-1">
-              <h3 className="font-semibold text-gray-900 truncate dark:text-gray-100">{it.project.name}</h3>
-              <ScorePill score={it.score} />
-            </div>
-            <div className="text-xs text-gray-500 mb-2">{it.project.sector} • {it.project.stage} • {it.project.status}</div>
-            <p className="text-sm text-gray-700 leading-relaxed dark:text-gray-300">{it.explanation}</p>
-            {it.project.funding_needed && (
-              <div className="text-xs text-gray-500 mt-2">Funding needed: ${Number(it.project.funding_needed).toLocaleString()}</div>
-            )}
-          </div>
-        </div>
+        <ScoredDealCard key={it.project.deal_id ?? it.project.id} item={it} canRequestIntro={canRequestIntro} rank={i + 1} />
       ))}
     </div>
   );
@@ -322,33 +311,6 @@ function ReferralScores() {
   );
 }
 
-function DealCard({ item }) {
-  const p = item.project;
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow dark:bg-gray-900 dark:border-gray-800">
-      <div className="flex items-start justify-between mb-2">
-        <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-gray-900 truncate dark:text-gray-100">{p.name}</h3>
-          <div className="text-xs text-gray-500 mt-0.5">{p.sector || 'Other'} • {p.stage} • {p.status}</div>
-        </div>
-        <ScorePill score={item.score} />
-      </div>
-      {p.problem_statement && <p className="text-xs text-gray-700 mt-2 line-clamp-2 dark:text-gray-300">{p.problem_statement}</p>}
-      <div className="mt-3 pt-3 border-t border-gray-100">
-        <div className="flex items-start gap-2 text-xs text-gray-700 dark:text-gray-300">
-          <Brain size={12} className="text-violet-500 flex-shrink-0 mt-0.5" />
-          <span className="leading-relaxed">{item.explanation}</span>
-        </div>
-        <div className="text-[10px] text-gray-400 mt-2">{item.cached ? 'Cached' : 'Fresh'} • {item.model || 'rule-based'}</div>
-      </div>
-    </div>
-  );
-}
-
-function ScorePill({ score }) {
-  const color = score >= 80 ? 'bg-emerald-100 text-emerald-700' : score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600';
-  return <span className={`text-xs font-bold px-2 py-1 rounded ${color}`}>{Math.round(score)}</span>;
-}
 function Pill({ v }) {
   const colors = { approved: 'bg-emerald-100 text-emerald-700', converted: 'bg-violet-100 text-violet-700', pending: 'bg-amber-100 text-amber-700', rejected: 'bg-red-100 text-red-700', not_started: 'bg-gray-100 text-gray-600' };
   return <span className={`text-[11px] px-2 py-1 rounded ${colors[v] || 'bg-gray-100 text-gray-600'}`}>{(v || '').replace('_', ' ')}</span>;

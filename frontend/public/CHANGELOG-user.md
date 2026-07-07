@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Take action right from your matches
+
+Your AI-scored matches are no longer just something to read — every card now lets you act:
+
+- **Do something with each match.** Add a company to your watchlist, request a warm intro, or open its deal room without leaving the Matching Engine. If you've hit your plan's intro or deal-room limit, the card tells you and offers an upgrade on the spot.
+- **A deal pipeline that's actually yours.** In Deal Flow you can switch between **My deals** — the ones you've joined, been introduced to, or converted from your watchlist — and the full pipeline.
+- **Work each deal.** Join a deal room (or jump back into one you're already in), and pass on a deal with a short reason that's saved to your decision journal for later.
+
+---
+
 ## A home screen built for investors
 
 If you're an investor, your home screen is now a proper deal desk instead of the founder view:

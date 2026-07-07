@@ -141,11 +141,16 @@ matches.get('/deal-flow', async (c) => {
   const prefsRow = await sql`SELECT * FROM user_preferences WHERE user_id = ${user.id}`;
   const prefs = prefsRow[0] || null;
 
-  // Show vetted (not rejected) projects
+  // Show vetted (not rejected) projects. Task #82 — expose the latest deal id
+  // per project (deal_id, may be null) so a scored match card can offer
+  // "Open/join deal room" without an extra round-trip. NOTE: match_scores.deal_id
+  // separately stores the *project* id (a misnomer); this deal_id is the real
+  // deals.id and lives only on the returned project object.
   const projects = await sql`
-    SELECT * FROM projects
-    WHERE status NOT IN ('rejected') AND status IS NOT NULL
-    ORDER BY created_at DESC LIMIT 50
+    SELECT p.*, (SELECT d.id FROM deals d WHERE d.project_id = p.id ORDER BY d.id DESC LIMIT 1) AS deal_id
+    FROM projects p
+    WHERE p.status NOT IN ('rejected') AND p.status IS NOT NULL
+    ORDER BY p.created_at DESC LIMIT 50
   `;
 
   // Pull existing cached scores
@@ -185,9 +190,10 @@ matches.get('/co-invest', async (c) => {
   const prefsRow = await sql`SELECT * FROM user_preferences WHERE user_id = ${user.id}`;
   const prefs = prefsRow[0] || null;
 
-  // Co-invest = active deals (status=active) where capital is being raised
+  // Co-invest = active deals (status=active) where capital is being raised.
+  // Task #82 — expose d.id as deal_id so the card can open/join the deal room.
   const projects = await sql`
-    SELECT p.*, d.status as deal_status FROM projects p
+    SELECT p.*, d.status as deal_status, d.id as deal_id FROM projects p
     JOIN deals d ON d.project_id = p.id
     WHERE p.status IN ('tier_1', 'tier_2') AND d.status IN ('active', 'scored')
     ORDER BY p.created_at DESC LIMIT 30
