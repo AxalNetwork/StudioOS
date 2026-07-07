@@ -10,6 +10,17 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Investor deal desk on /studio (investor-audit #1)
+
+Investors landing on `/studio` were shown the founder home (Profile & Fit + studio-ops widgets) plus a trial banner — none of it relevant to an LP/angel. The Dashboard API already computed an investor payload (`proprietary_deal_flow`, `ai_scored_opportunities`, `quick_stats`, `syndication_tools`) that the frontend discarded. This turns `/studio` into a real investor deal desk.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/dashboard.ts` — new read-only `GET /api/dashboard/investor-lifecycle`. Aggregates the caller's own deal funnel into `{ stages[], current_stage, counts, generated_at }`. Five ordered stages (watching → warm intro → deal room → diligence → committed) each carry a `count`, a `reached` flag, and a deep-link `href`; `current_stage` is the deepest stage with activity. Every count is scoped to `user.id` and wrapped in `safeQuery` (each falls back to `0`), so a missing table degrades to an empty funnel instead of a 500. Sources: `watchlist_items` (owner, `status='watching'`), `investor_introductions` (investor), `investor_dealroom_members` (investor), `dd_cases` owned-or-reviewed, `decision_journal_entries` (`decision='invest'`), plus ride-along counts for IC engagement (`ic_decisions`/`ic_votes`), recorded `portfolio_positions`, and open `secondary_listings`. No `index.ts` change — the dashboard app is already mounted at `/api/dashboard`. Route never writes.
+
+**Frontend**
+- `frontend/src/lib/api.js` — `investorLifecycle()` → `GET /dashboard/investor-lifecycle`.
+- `frontend/src/pages/Dashboard.jsx` — when `role_view === 'investor'`, renders a new `InvestorHome` instead of `ProfileFitSection` + the operator grid: `InvestorQuotaBars`, a read-only deal-lifecycle funnel (reuses `command-center/LifecycleModule` with `canEdit={false}`; the funnel payload is mapped into the module's `stages`/`checklist` shape so "next best action" auto-derives from the first un-reached stage), a quick-stats row (deals in flow, avg AI match, watching, active deal rooms), and an `AI-scored opportunities` strip built from `ai_scored_opportunities` (cards link out only — Open → `/projects/:id`, plus `/watchlist` and `/deals`; deep card actions are deferred to the Actionable-Matches task). `RoleBadge` gains an `investor` (indigo) style. `PersonalAdvisor`, `SemanticSearch`, and the trial banner are unchanged for investors. Non-investor roles keep the existing home verbatim.
+
 ## Watchlist & decision journal — full contract + follow-up reminders
 
 Reconciles the Worker's watchlist and decision-journal routes with the SPA + dev-FastAPI contract (investor-audit #14). Both surfaces previously exposed a thin subset of fields; the SPA sent — and expected back — richer objects (external prospects, tags, key risks, expected multiple/timeline, structured outcomes) that the Worker silently dropped. Adds a `next_check_at` follow-up reminder that actually fires.

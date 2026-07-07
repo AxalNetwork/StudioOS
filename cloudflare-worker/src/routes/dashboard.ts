@@ -266,4 +266,82 @@ dashboard.post('/refresh-scores', async (c) => {
   return c.json({ ok: true, message: 'Cache cleared. Next fetch will re-aggregate.' });
 });
 
+// Task #81 — Investor deal lifecycle.
+//
+// A READ-ONLY aggregation that answers "what deals is THIS investor engaged
+// with, and how far along?" for the investor deal desk on /studio. Every
+// count is scoped to the caller's own user id (no cross-user leakage) and the
+// route NEVER writes — in particular it must not touch watchlist/journal.
+//
+// The funnel stages (watching → intro → deal room → diligence → committed) are
+// derived from the same tables their dedicated surfaces own:
+//   watching   — watchlist_items (owner_user_id, status='watching')
+//   intro      — investor_introductions (investor_user_id)
+//   dealroom   — investor_dealroom_members (investor_user_id)
+//   diligence  — dd_cases the investor owns OR reviews
+//   committed  — decision_journal_entries (owner_user_id, decision='invest')
+// Extra per-investor counts (IC engagement, recorded positions, open secondary
+// listings) ride along in `counts` for the quick-stats row.
+dashboard.get('/investor-lifecycle', async (c) => {
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  const n = (rows: any): number => {
+    const r = Array.isArray(rows) ? rows[0] : null;
+    return r ? parseInt((r as any).n, 10) || 0 : 0;
+  };
+
+  const [
+    watching, watchlistTotal, intros, introsPending, dealrooms,
+    ddTotal, ddOpen, icEngaged, committed, positions, listingsOpen,
+  ] = await Promise.all([
+    safeQuery('inv:watching', () => sql`SELECT COUNT(*) AS n FROM watchlist_items WHERE owner_user_id = ${user.id} AND status = 'watching'`, [{ n: 0 }]),
+    safeQuery('inv:watchlistTotal', () => sql`SELECT COUNT(*) AS n FROM watchlist_items WHERE owner_user_id = ${user.id} AND status != 'archived'`, [{ n: 0 }]),
+    safeQuery('inv:intros', () => sql`SELECT COUNT(*) AS n FROM investor_introductions WHERE investor_user_id = ${user.id}`, [{ n: 0 }]),
+    safeQuery('inv:introsPending', () => sql`SELECT COUNT(*) AS n FROM investor_introductions WHERE investor_user_id = ${user.id} AND status = 'pending'`, [{ n: 0 }]),
+    safeQuery('inv:dealrooms', () => sql`SELECT COUNT(*) AS n FROM investor_dealroom_members WHERE investor_user_id = ${user.id}`, [{ n: 0 }]),
+    safeQuery('inv:ddTotal', () => sql`SELECT COUNT(*) AS n FROM dd_cases WHERE owner_user_id = ${user.id} OR id IN (SELECT case_id FROM dd_reviewers WHERE user_id = ${user.id})`, [{ n: 0 }]),
+    safeQuery('inv:ddOpen', () => sql`SELECT COUNT(*) AS n FROM dd_cases WHERE (owner_user_id = ${user.id} OR id IN (SELECT case_id FROM dd_reviewers WHERE user_id = ${user.id})) AND status IN ('open', 'in_review')`, [{ n: 0 }]),
+    safeQuery('inv:icEngaged', () => sql`SELECT COUNT(DISTINCT d.id) AS n FROM ic_decisions d LEFT JOIN ic_votes v ON v.ic_decision_id = d.id WHERE d.created_by = ${user.id} OR v.user_id = ${user.id}`, [{ n: 0 }]),
+    safeQuery('inv:committed', () => sql`SELECT COUNT(*) AS n FROM decision_journal_entries WHERE owner_user_id = ${user.id} AND decision = 'invest'`, [{ n: 0 }]),
+    safeQuery('inv:positions', () => sql`SELECT COUNT(*) AS n FROM portfolio_positions WHERE created_by = ${user.id}`, [{ n: 0 }]),
+    safeQuery('inv:listingsOpen', () => sql`SELECT COUNT(*) AS n FROM secondary_listings WHERE user_id = ${user.id} AND status IN ('open', 'listed', 'matched')`, [{ n: 0 }]),
+  ]);
+
+  try { await sql.end(); } catch {}
+
+  const counts = {
+    watching: n(watching),
+    watchlist_total: n(watchlistTotal),
+    intros: n(intros),
+    intros_pending: n(introsPending),
+    dealrooms: n(dealrooms),
+    dd_total: n(ddTotal),
+    dd_open: n(ddOpen),
+    ic_engaged: n(icEngaged),
+    committed: n(committed),
+    positions: n(positions),
+    listings_open: n(listingsOpen),
+  };
+
+  // Ordered funnel. `href` deep-links to the surface that moves the stage.
+  const stages = [
+    { id: 'watching', label: 'Watching', count: counts.watching, reached: counts.watching > 0, href: '/watchlist' },
+    { id: 'intro', label: 'Warm intro', count: counts.intros, reached: counts.intros > 0, href: '/deals' },
+    { id: 'dealroom', label: 'Deal room', count: counts.dealrooms, reached: counts.dealrooms > 0, href: '/deals' },
+    { id: 'diligence', label: 'Diligence', count: counts.dd_total, reached: counts.dd_total > 0, href: '/admin/due-diligence' },
+    { id: 'committed', label: 'Committed', count: counts.committed, reached: counts.committed > 0, href: '/watchlist' },
+  ];
+
+  // Current stage = the deepest one with any activity (falls back to the first).
+  let currentStage = stages[0].id;
+  for (const s of stages) if (s.reached) currentStage = s.id;
+
+  return c.json({
+    stages,
+    current_stage: currentStage,
+    counts,
+    generated_at: new Date().toISOString(),
+  });
+});
+
 export default dashboard;

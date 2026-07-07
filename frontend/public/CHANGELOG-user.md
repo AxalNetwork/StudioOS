@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A home screen built for investors
+
+If you're an investor, your home screen is now a proper deal desk instead of the founder view:
+
+- **See your deals by stage.** A lifecycle strip shows how many deals you have at each step — watching, warm intro, deal room, diligence and committed — and points you to the best next move.
+- **Your AI-scored opportunities, front and center.** The startups matched to your thesis now appear as cards you can open, add to your watchlist, or request an intro on.
+- **Quick numbers at a glance.** Deals in your flow, your average AI match score, how many you're watching, and your active deal rooms — all up top.
+
+---
+
 ## A smarter watchlist and decision journal
 
 If you track prospects and record your investment calls, both tools now hold everything you need:

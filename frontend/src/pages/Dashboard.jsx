@@ -2,13 +2,17 @@ import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import InfoStrip from '../components/InfoStrip';
 import { Link } from 'react-router-dom';
-import { Bell, RefreshCw, Loader2, Briefcase, ChevronRight } from 'lucide-react';
+import { Bell, RefreshCw, Loader2, Briefcase, ChevronRight, Sparkles, TrendingUp, Eye, Handshake, ArrowRight } from 'lucide-react';
 import { api } from '../lib/api';
 import { reportError } from '../lib/log';
 import SemanticSearch from '../components/SemanticSearch';
 import InvestorTrialBanner from '../components/InvestorTrialBanner';
+import InvestorQuotaBars from '../components/InvestorQuotaBars';
 import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
 import ProfileFitSection from '../components/profile/ProfileFitSection';
+// Task #81 — reuse the founder command-center lifecycle rail for the investor
+// deal desk (rendered read-only: canEdit={false}).
+import LifecycleModule from '../components/command-center/LifecycleModule';
 // Task #6 (IF) — first-login product tour (the onboarding checklist panel
 // was removed 2026-05-22: signup flow already runs the persona chatbot and
 // the page already surfaces the Personal Advisor, so the checklist
@@ -21,6 +25,9 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [error, setError] = useState('');
+  // Task #81 — investor deal lifecycle. `undefined` = not yet loaded, `null` =
+  // loaded-but-empty/error, object = funnel payload.
+  const [investorLC, setInvestorLC] = useState(undefined);
   // Task #51 — one-time "Google sign-out scope" notice after a fresh
   // Google signup (?google_signup=1 stamped by /api/auth/google/callback).
   // sessionStorage gate keeps the banner from re-firing on refresh.
@@ -60,6 +67,17 @@ export default function Dashboard() {
 
   useEffect(() => { load(); }, []);
 
+  // Task #81 — once we know the viewer is an investor, pull their read-only
+  // deal-lifecycle funnel. Silent on error so the deal desk still renders.
+  useEffect(() => {
+    if (data?.role_view !== 'investor') return;
+    let cancelled = false;
+    api.investorLifecycle()
+      .then((d) => { if (!cancelled) setInvestorLC(d); })
+      .catch((e) => { if (!cancelled) { setInvestorLC(null); reportError('Dashboard:investorLifecycle', e); } });
+    return () => { cancelled = true; };
+  }, [data?.role_view]);
+
   // Task #10 — a 200 response with no `user` is a malformed payload. Capture it
   // so it's debuggable; the render below shows a recoverable state rather than
   // throwing on the destructure / blanking.
@@ -84,6 +102,14 @@ export default function Dashboard() {
   const refresh = async () => {
     setRefreshing(true);
     try { await api.refreshDashboardScores(); } catch {}
+    // Task #81 — the lifecycle effect is keyed on role_view (unchanged by a
+    // manual refresh), so re-pull the funnel here to keep it in step with the
+    // freshly-aggregated dashboard payload.
+    if (data?.role_view === 'investor') {
+      api.investorLifecycle()
+        .then((d) => setInvestorLC(d))
+        .catch((e) => { setInvestorLC(null); reportError('Dashboard:investorLifecycle', e); });
+    }
     load(true);
   };
 
@@ -111,6 +137,7 @@ export default function Dashboard() {
 
   const { user, operator_workspace, notifications, role_view } = data;
 
+  const isInvestor = role_view === 'investor';
   const isOperator = role_view === 'founder' || role_view === 'admin' || (operator_workspace?.assigned_tasks?.length > 0);
   const unreadNotifs = notifications?.length || 0;
 
@@ -158,33 +185,161 @@ export default function Dashboard() {
       {/* Task #12 (AC-3) — Personal Advisor replaces the legacy persona tile. */}
       <PersonalAdvisor />
 
-      {/* Task #20 — Best-Fit: skills/values/archetype/completion + matches range. */}
-      <ProfileFitSection />
+      {isInvestor ? (
+        /* Task #81 — Investor deal desk: quota bars, deal-lifecycle funnel,
+           scored-opportunity strip, and quick stats. No ProfileFitSection. */
+        <InvestorHome data={data} lifecycle={investorLC} user={user} />
+      ) : (
+        <>
+          {/* Task #20 — Best-Fit: skills/values/archetype/completion + matches range. */}
+          <ProfileFitSection />
 
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          {isOperator && operator_workspace?.assigned_tasks?.length > 0 && (
-            <Card title="My Studio Ops Tasks" icon={Briefcase} link="/studio-ops" linkLabel="Open Studio Ops">
-              <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                {operator_workspace.assigned_tasks.slice(0, 6).map(t => (
-                  <div key={t.id} className="py-2 flex items-center gap-3 text-sm">
-                    <PriorityDot p={t.priority} />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-900 dark:text-gray-100 truncate">{t.title}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{t.workflow_title} • {t.type}</div>
-                    </div>
-                    <span className="text-[10px] uppercase text-gray-500 dark:text-gray-400">{t.status}</span>
+          {/* Main Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              {isOperator && operator_workspace?.assigned_tasks?.length > 0 && (
+                <Card title="My Studio Ops Tasks" icon={Briefcase} link="/studio-ops" linkLabel="Open Studio Ops">
+                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {operator_workspace.assigned_tasks.slice(0, 6).map(t => (
+                      <div key={t.id} className="py-2 flex items-center gap-3 text-sm">
+                        <PriorityDot p={t.priority} />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-900 dark:text-gray-100 truncate">{t.title}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{t.workflow_title} • {t.type}</div>
+                        </div>
+                        <span className="text-[10px] uppercase text-gray-500 dark:text-gray-400">{t.status}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </Card>
-          )}
-        </div>
+                </Card>
+              )}
+            </div>
 
-        <div className="space-y-6">
-          <IndependentSubsidiariesWidget />
+            <div className="space-y-6">
+              <IndependentSubsidiariesWidget />
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------- Task #81 — Investor deal desk ----------
+
+// The investor home surface. Composes the quota bars, the read-only deal
+// lifecycle funnel (reusing the founder LifecycleModule), a scored-opportunity
+// strip rendered as actionable cards, and a quick-stats row. Deliberately
+// simple so the Actionable-Matches task can re-skin the scored strip later.
+function InvestorHome({ data, lifecycle, user }) {
+  const opportunities = data?.ai_scored_opportunities || [];
+  const dealFlowCount = data?.proprietary_deal_flow?.length || 0;
+  return (
+    <div className="space-y-6">
+      <InvestorQuotaBars user={user} />
+      <DealLifecycle lifecycle={lifecycle} />
+      <InvestorStats quickStats={data?.quick_stats} counts={lifecycle?.counts} dealFlowCount={dealFlowCount} />
+      <ScoredOpportunities items={opportunities} />
+    </div>
+  );
+}
+
+// Maps the /dashboard/investor-lifecycle payload into the shape LifecycleModule
+// expects and renders it read-only. `undefined` lifecycle = still loading.
+function DealLifecycle({ lifecycle }) {
+  if (lifecycle === undefined) {
+    return (
+      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
+        <Loader2 className="animate-spin" size={14} /> Loading your deal lifecycle…
+      </div>
+    );
+  }
+  const stages = lifecycle?.stages || [];
+  if (!stages.length) return null;
+  const lc = {
+    stage: lifecycle.current_stage || stages[0].id,
+    stored: true,
+    stages: stages.map((s) => ({ id: s.id, label: s.label, goal: `${s.count} ${s.count === 1 ? 'deal' : 'deals'} at this stage` })),
+    checklist: stages.map((s) => ({
+      key: s.id,
+      label: `${s.label} · ${s.count}`,
+      done: !!s.reached,
+      manual: false,
+      href: s.href,
+    })),
+    suggestions: [],
+  };
+  return <LifecycleModule lifecycle={lc} canEdit={false} />;
+}
+
+// Compact quick-stats row for the investor home.
+function InvestorStats({ quickStats, counts, dealFlowCount }) {
+  const scoreAvg = quickStats?.ai_score_avg;
+  const items = [
+    { icon: TrendingUp, label: 'Deals in flow', value: dealFlowCount },
+    { icon: Sparkles, label: 'Avg AI match', value: scoreAvg != null ? `${scoreAvg}` : '—' },
+    { icon: Eye, label: 'Watching', value: counts?.watching ?? '—' },
+    { icon: Handshake, label: 'Active deal rooms', value: counts?.dealrooms ?? '—' },
+  ];
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {items.map((it) => (
+        <div key={it.label} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
+          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+            <it.icon size={15} />
+            <span className="text-xs font-medium uppercase tracking-wide">{it.label}</span>
+          </div>
+          <p className="mt-1.5 text-xl font-bold text-gray-900 dark:text-gray-100">{it.value}</p>
         </div>
+      ))}
+    </div>
+  );
+}
+
+// The AI-scored deal strip. Each card links out (navigation only) — the
+// Actionable-Matches task owns the shared card primitive + intro-quota actions.
+function ScoredOpportunities({ items }) {
+  const list = (items || []).filter((o) => o && (o.deal_name || o.deal_id)).slice(0, 6);
+  return (
+    <Card title="AI-scored opportunities" icon={Sparkles} link="/deals" linkLabel="View deal flow">
+      {list.length === 0 ? (
+        <p className="text-sm text-gray-500 dark:text-gray-400 py-4">
+          No scored opportunities yet. As deals are matched to your thesis, they'll appear here.
+        </p>
+      ) : (
+        <div className="grid sm:grid-cols-2 gap-3">
+          {list.map((o) => <ScoredCard key={o.id ?? o.deal_id} o={o} />)}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ScoredCard({ o }) {
+  const score = typeof o.score === 'number' ? Math.round(o.score) : null;
+  return (
+    <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-800/40 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{o.deal_name || 'Confidential deal'}</div>
+          <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+            {[o.sector, o.stage].filter(Boolean).join(' • ') || '—'}
+          </div>
+        </div>
+        {score != null && (
+          <span className="shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+            {score}
+          </span>
+        )}
+      </div>
+      <div className="mt-2.5 flex items-center gap-3 text-[11px] font-medium">
+        {o.deal_id && (
+          <Link to={`/projects/${o.deal_id}`} className="inline-flex items-center gap-1 text-violet-600 dark:text-violet-300 hover:underline">
+            Open <ArrowRight size={11} />
+          </Link>
+        )}
+        <Link to="/watchlist" className="text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-300">Watchlist</Link>
+        <Link to="/deals" className="text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-300">Request intro</Link>
       </div>
     </div>
   );
@@ -267,7 +422,13 @@ function PriorityDot({ p }) {
 }
 
 function RoleBadge({ role }) {
-  const styles = { admin: 'bg-violet-600 text-white', partner: 'bg-blue-100 text-blue-700', founder: 'bg-emerald-100 text-emerald-700' };
+  // Task #81 — investors get their own indigo badge instead of the gray fallback.
+  const styles = {
+    admin: 'bg-violet-600 text-white',
+    partner: 'bg-blue-100 text-blue-700',
+    founder: 'bg-emerald-100 text-emerald-700',
+    investor: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
+  };
   return <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${styles[role] || 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>{role}</span>;
 }
 
