@@ -167,6 +167,23 @@ def ensure_project_product_demo_columns() -> None:
         session.commit()
 
 
+def ensure_lifecycle_columns() -> None:
+    """FOUNDER_UX_AUDIT.md Critical #1 — founder-editable Startup Lifecycle stage
+    + manual check-offs on `projects`. Mirrors Worker D1 migration 139 so the dev
+    FastAPI backend persists the same fields. Idempotent
+    (`ADD COLUMN IF NOT EXISTS`). Kept SEPARATE from the privileged
+    stage/status/playbook_week trio."""
+    with Session(engine) as session:
+        for col in ("lifecycle_stage", "lifecycle_manual_checks"):
+            try:
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+                    f"ALTER TABLE projects ADD COLUMN IF NOT EXISTS {col} VARCHAR"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_lifecycle_columns: %s ALTER failed: %s", col, exc)
+        session.commit()
+
+
 def ensure_user_access_level_column() -> None:
     """Idempotently add `users.access_level` for the limited-access feature.
 

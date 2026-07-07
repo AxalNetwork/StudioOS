@@ -837,6 +837,8 @@ export const api = {
   deleteMetricsSnapshot: (id) => request(`/progress/metrics/${id}`, { method: 'DELETE' }),
   importMetricsFromStripe: (projectId) => request(`/progress/metrics/${projectId}/import-stripe`, { method: 'POST' }),
   getProgressSignals: (projectId) => request(`/progress/signals/${projectId}`),
+  getLifecycle: (projectId) => request(`/progress/lifecycle/${projectId}`),
+  updateLifecycle: (projectId, data) => request(`/progress/lifecycle/${projectId}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // Task #36 — Service Provider Marketplace
   listProviders: (params = {}) => request(`/marketplace/providers${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`),

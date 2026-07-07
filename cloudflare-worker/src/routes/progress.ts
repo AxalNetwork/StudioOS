@@ -1533,4 +1533,283 @@ progress.post('/metrics/:projectId/import-stripe', async (c) => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Startup Lifecycle module (FOUNDER_UX_AUDIT.md, Critical #1).
+//
+// A FOUNDER-editable lifecycle stage + a checklist whose completion is DERIVED
+// at read time from real signals (published landing page, logged interviews,
+// latest metrics snapshot, active raise prospects). Only the non-derivable
+// items are stored as founder check-offs in projects.lifecycle_manual_checks.
+//
+// Kept deliberately separate from the privileged projects.stage/status/
+// playbook_week trio — those are never touched here. Advancement is SUGGESTED,
+// never automatic: the founder confirms a move via PUT.
+// ---------------------------------------------------------------------------
+const LIFECYCLE_STAGES = ['idea', 'validate', 'build', 'launch', 'grow', 'raise'] as const;
+type LifecycleStage = typeof LIFECYCLE_STAGES[number];
+
+const LIFECYCLE_STAGE_META: Record<LifecycleStage, { label: string; goal: string }> = {
+  idea: { label: 'Idea', goal: 'Shape the concept and capture it' },
+  validate: { label: 'Validate', goal: 'Prove someone wants it' },
+  build: { label: 'Build', goal: 'Ship the MVP with the right people' },
+  launch: { label: 'Launch', goal: 'Get to market' },
+  grow: { label: 'Grow', goal: 'Find repeatable traction' },
+  raise: { label: 'Raise', goal: 'Fund the next stage' },
+};
+
+// Additive + idempotent columns on `projects`, same WeakMap pattern as the
+// ensure* helpers in routes/projects.ts so a cold D1 isolate / dev SQLite works
+// before migration 139 applies.
+const _lifecycleColsReady = new WeakMap<object, true>();
+async function ensureLifecycleColumns(env: Env): Promise<void> {
+  const db = env.DB as unknown as object;
+  if (_lifecycleColsReady.has(db)) return;
+  try { await env.DB.exec(`ALTER TABLE projects ADD COLUMN lifecycle_stage TEXT`); }
+  catch (_e) { /* duplicate column on re-run is fine */ }
+  try { await env.DB.exec(`ALTER TABLE projects ADD COLUMN lifecycle_manual_checks TEXT`); }
+  catch (_e) { /* duplicate column on re-run is fine */ }
+  _lifecycleColsReady.set(db, true);
+}
+
+function normalizeLifecycleStage(raw: unknown): LifecycleStage | null {
+  if (typeof raw !== 'string') return null;
+  const v = raw.trim().toLowerCase();
+  return (LIFECYCLE_STAGES as readonly string[]).includes(v) ? (v as LifecycleStage) : null;
+}
+
+function parseManualChecks(raw: string | null | undefined): Record<string, boolean> {
+  if (!raw) return {};
+  try {
+    const v = JSON.parse(raw);
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+    const out: Record<string, boolean> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if (typeof k === 'string' && k.length <= 64) out[k] = val === true;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+type LifecycleSignals = {
+  landing_published: boolean;
+  interview_count: number;
+  latest_mrr: number | null;
+  active_users: number | null;
+  monthly_churn_pct: number | null;
+  new_users: number | null;
+  active_prospects: number;
+};
+
+// Every query is wrapped defensively: source tables may be absent on a cold
+// isolate, and pipeline.ts also writes a *deal-keyed* metrics_snapshots, so we
+// ensure the founder-metrics shape first and never let a signal miss 500 the GET.
+async function computeLifecycleSignals(env: Env, projectId: number): Promise<LifecycleSignals> {
+  const out: LifecycleSignals = {
+    landing_published: false,
+    interview_count: 0,
+    latest_mrr: null,
+    active_users: null,
+    monthly_churn_pct: null,
+    new_users: null,
+    active_prospects: 0,
+  };
+  try {
+    const lp = await env.DB.prepare('SELECT published FROM landing_pages WHERE project_id = ?')
+      .bind(projectId).first<{ published: number | null }>();
+    out.landing_published = Number(lp?.published ?? 0) === 1;
+  } catch (_e) { /* table may not exist yet */ }
+  try {
+    const di = await env.DB.prepare('SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?')
+      .bind(projectId).first<{ n: number }>();
+    out.interview_count = Number(di?.n ?? 0);
+  } catch (_e) { /* noop */ }
+  try {
+    await ensureMetricsSnapshotsSchema(env);
+    const ms = await env.DB.prepare(
+      `SELECT mrr, active_users, monthly_churn_pct, new_users
+         FROM metrics_snapshots WHERE project_id = ?
+        ORDER BY snapshot_date DESC, id DESC LIMIT 1`,
+    ).bind(projectId).first<{
+      mrr: number | null; active_users: number | null;
+      monthly_churn_pct: number | null; new_users: number | null;
+    }>();
+    if (ms) {
+      out.latest_mrr = ms.mrr == null ? null : Number(ms.mrr);
+      out.active_users = ms.active_users == null ? null : Number(ms.active_users);
+      out.monthly_churn_pct = ms.monthly_churn_pct == null ? null : Number(ms.monthly_churn_pct);
+      out.new_users = ms.new_users == null ? null : Number(ms.new_users);
+    }
+  } catch (_e) { /* noop */ }
+  try {
+    const rp = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM raise_prospects WHERE project_id = ? AND stage != 'passed'`,
+    ).bind(projectId).first<{ n: number }>();
+    out.active_prospects = Number(rp?.n ?? 0);
+  } catch (_e) { /* noop */ }
+  return out;
+}
+
+// The unstored default: infer the furthest stage the real signals justify.
+// Deliberately conservative (never jumps to build/launch, which have no reliable
+// signal) — suggestions nudge the founder forward from there.
+function inferStageFromSignals(s: LifecycleSignals): LifecycleStage {
+  if (s.active_prospects > 0) return 'raise';
+  if ((s.latest_mrr ?? 0) > 0) return 'grow';
+  if (s.landing_published && s.interview_count >= 5) return 'validate';
+  return 'idea';
+}
+
+type ChecklistItem = { key: string; label: string; done: boolean; href: string; manual: boolean };
+
+function buildLifecycleChecklist(
+  stage: LifecycleStage,
+  s: LifecycleSignals,
+  manual: Record<string, boolean>,
+): ChecklistItem[] {
+  const m = (k: string): boolean => manual[k] === true;
+  switch (stage) {
+    case 'idea':
+      return [
+        { key: 'concept_summary', label: 'Write a one-line concept summary', done: m('concept_summary'), href: '/build/command-center?tab=founder-portal', manual: true },
+        { key: 'talk_cofounders', label: 'Talk to 3 potential co-founders', done: m('talk_cofounders'), href: '/build/team?tab=cofounder', manual: true },
+        { key: 'first_hypothesis', label: 'Note your riskiest assumption', done: m('first_hypothesis'), href: '/build/discovery', manual: true },
+      ];
+    case 'validate':
+      return [
+        { key: 'landing_published', label: 'Publish a landing page', done: s.landing_published, href: '/build/brand', manual: false },
+        { key: 'interviews_5', label: 'Log 5 customer interviews', done: s.interview_count >= 5, href: '/build/discovery', manual: false },
+        { key: 'validated_hypothesis', label: 'Validate a key hypothesis', done: m('validated_hypothesis'), href: '/build/discovery', manual: true },
+      ];
+    case 'build':
+      return [
+        { key: 'roadmap_set', label: 'Set a 90-day roadmap', done: m('roadmap_set'), href: '/build/command-center?tab=roadmap', manual: true },
+        { key: 'key_role_filled', label: 'Fill a key team role', done: m('key_role_filled'), href: '/build/team', manual: true },
+        { key: 'mvp_shipped', label: 'Ship your MVP', done: m('mvp_shipped'), href: '/build/command-center?tab=roadmap', manual: true },
+      ];
+    case 'launch':
+      return [
+        { key: 'launch_page', label: 'Publish your public launch page', done: s.landing_published, href: '/build/brand', manual: false },
+        { key: 'first_campaign', label: 'Run your first campaign', done: m('first_campaign'), href: '/build/brand', manual: true },
+        { key: 'launch_checklist', label: 'Complete your launch checklist', done: m('launch_checklist'), href: '/build/command-center?tab=roadmap', manual: true },
+      ];
+    case 'grow':
+      return [
+        { key: 'metrics_logged', label: 'Log weekly metrics / connect Stripe', done: (s.latest_mrr ?? 0) > 0 || (s.active_users ?? 0) > 0, href: '/build/metrics', manual: false },
+        { key: 'mrr_positive', label: 'Reach positive MRR', done: (s.latest_mrr ?? 0) > 0, href: '/build/metrics', manual: false },
+        { key: 'retention_tracked', label: 'Track retention & churn', done: m('retention_tracked'), href: '/build/metrics', manual: true },
+      ];
+    case 'raise':
+      return [
+        { key: 'investors_10', label: 'Add 10 investors to your pipeline', done: s.active_prospects >= 10, href: '/raise/capital', manual: false },
+        { key: 'pitch_ready', label: 'Prepare your pitch deck', done: m('pitch_ready'), href: '/raise/pitch', manual: true },
+        { key: 'data_room', label: 'Assemble your data room', done: m('data_room'), href: '/raise/capital', manual: true },
+      ];
+    default:
+      return [];
+  }
+}
+
+// Only ever suggest moving FORWARD one stage, and only when the next stage's
+// signals actually appear. Returns [] when nothing to suggest.
+function buildLifecycleSuggestions(
+  stage: LifecycleStage,
+  s: LifecycleSignals,
+): Array<{ to: LifecycleStage; reason: string }> {
+  if (stage === 'idea' && (s.landing_published || s.interview_count >= 1)) {
+    return [{ to: 'validate', reason: "You've started talking to customers — ready to Validate?" }];
+  }
+  if (stage === 'validate' && s.landing_published && s.interview_count >= 5) {
+    return [{ to: 'build', reason: 'Landing page live and 5+ interviews logged — time to Build?' }];
+  }
+  if (stage === 'launch' && (s.latest_mrr ?? 0) > 0) {
+    return [{ to: 'grow', reason: "You're generating revenue — move to Grow?" }];
+  }
+  if (stage === 'grow' && s.active_prospects > 0) {
+    return [{ to: 'raise', reason: 'Investors are in your pipeline — ready to Raise?' }];
+  }
+  return [];
+}
+
+async function buildLifecycleResponse(env: Env, projectId: number) {
+  const row = await env.DB.prepare(
+    'SELECT lifecycle_stage, lifecycle_manual_checks FROM projects WHERE id = ?',
+  ).bind(projectId).first<{ lifecycle_stage: string | null; lifecycle_manual_checks: string | null }>();
+  const signals = await computeLifecycleSignals(env, projectId);
+  const storedStage = normalizeLifecycleStage(row?.lifecycle_stage);
+  const stage = storedStage ?? inferStageFromSignals(signals);
+  const manual = parseManualChecks(row?.lifecycle_manual_checks);
+  return {
+    project_id: projectId,
+    stage,
+    stored: !!storedStage,
+    stages: LIFECYCLE_STAGES.map((id) => ({ id, ...LIFECYCLE_STAGE_META[id] })),
+    signals,
+    checklist: buildLifecycleChecklist(stage, signals, manual),
+    suggestions: buildLifecycleSuggestions(stage, signals),
+  };
+}
+
+progress.get('/lifecycle/:projectId', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+
+  const project = await loadProject(c.env, projectId);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanView(project, user);
+
+  await ensureLifecycleColumns(c.env);
+  return c.json(await buildLifecycleResponse(c.env, projectId));
+});
+
+progress.put('/lifecycle/:projectId', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+
+  const project = await loadProject(c.env, projectId);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+
+  await ensureLifecycleColumns(c.env);
+
+  const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+  if (!body || typeof body !== 'object') return c.json({ detail: 'Body required' }, 400);
+
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+
+  if (body.stage !== undefined) {
+    const stage = normalizeLifecycleStage(body.stage);
+    if (!stage) {
+      return c.json({ detail: `stage must be one of: ${LIFECYCLE_STAGES.join(', ')}` }, 400);
+    }
+    sets.push('lifecycle_stage = ?');
+    binds.push(stage);
+  }
+
+  if (body.manual_checks !== undefined) {
+    const mc = body.manual_checks;
+    if (mc === null) {
+      sets.push('lifecycle_manual_checks = ?');
+      binds.push(null);
+    } else if (typeof mc === 'object' && !Array.isArray(mc)) {
+      const serialized = JSON.stringify(parseManualChecks(JSON.stringify(mc)));
+      if (serialized.length > 4000) return c.json({ detail: 'manual_checks too large' }, 400);
+      sets.push('lifecycle_manual_checks = ?');
+      binds.push(serialized);
+    } else {
+      return c.json({ detail: 'manual_checks must be an object' }, 400);
+    }
+  }
+
+  if (sets.length === 0) return c.json({ detail: 'Nothing to update' }, 400);
+  binds.push(projectId);
+  await c.env.DB.prepare(`UPDATE projects SET ${sets.join(', ')} WHERE id = ?`).bind(...binds).run();
+
+  return c.json(await buildLifecycleResponse(c.env, projectId));
+});
+
 export default progress;
