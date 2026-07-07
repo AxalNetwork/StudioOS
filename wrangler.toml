@@ -157,6 +157,15 @@ zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/insights/*"
 zone_name  = "axal.vc"
+# Task #83 — de-admin Due Diligence. Investors/advisors reach DD at /due-diligence
+# (no /admin framing). Apex-route it in lockstep with [[env.production.routes]]
+# below so hard-loads/bookmarks/301-converged URLs hit the Worker, not Jekyll.
+[[routes]]
+pattern    = "axal.vc/due-diligence"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/due-diligence/*"
+zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/directory"
 zone_name  = "axal.vc"
@@ -736,6 +745,13 @@ pattern    = "axal.vc/insights"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/insights/*"
+zone_name  = "axal.vc"
+# Task #83 — de-admin Due Diligence (mirror of the top-level [[routes]] block).
+[[env.production.routes]]
+pattern    = "axal.vc/due-diligence"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/due-diligence/*"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/directory"

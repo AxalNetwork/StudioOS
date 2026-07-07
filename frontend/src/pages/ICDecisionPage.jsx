@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Gavel, Save } from 'lucide-react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Gavel, Save, ShieldCheck, PieChart } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
 
@@ -10,8 +10,13 @@ const OUTCOMES = ['open', 'vindicated', 'regret'];
 
 export default function ICDecisionPage() {
   const { uid } = useParams();
+  const navigate = useNavigate();
   const { role } = useAuth();
   const canWrite = ['admin', 'partner', 'investor'].includes(role);
+  // Task #83 — after an "invest" decision, admins commit it to the cap-table /
+  // position ledger. Prefill the position form via router state so they don't
+  // re-key the startup + round.
+  const canRecordPosition = role === 'admin';
   const [d, setD] = useState(null);
   const [err, setErr] = useState(null);
   const [memo, setMemo] = useState('');
@@ -54,10 +59,18 @@ export default function ICDecisionPage() {
         <Gavel size={20} />
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{d.title}</h1>
       </div>
-      <div className="text-sm text-gray-500 mb-6">
+      <div className="text-sm text-gray-500 mb-3">
         {d.project?.name ? `${d.project.name} · ` : ''}Status: <span className="font-medium">{d.status}</span>
         {d.decision ? ` · Decision: ${d.decision}` : ''}{d.outcome ? ` · Outcome: ${d.outcome}` : ''}
       </div>
+
+      {/* Task #83 — link back to the diligence case this decision was drawn from. */}
+      {d.dd_case?.uid && (
+        <Link to={`/due-diligence/${d.dd_case.uid}`}
+          className="inline-flex items-center gap-1.5 mb-6 px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
+          <ShieldCheck size={13} /> Diligence: {d.dd_case.subject_label || `Case ${d.dd_case.uid}`}
+        </Link>
+      )}
 
       {err && <div className="mb-4 px-4 py-2 bg-rose-50 text-rose-700 rounded-lg text-sm">{err}</div>}
 
@@ -95,6 +108,11 @@ export default function ICDecisionPage() {
                 </button>
               ))}
             </div>
+            {/* Task #83 — each vote auto-drafts a private journal entry (yes→invest,
+                no→pass, abstain→defer) you can refine later on your Watchlist. */}
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              Voting drafts a private journal entry (your rationale becomes the thesis) you can refine on your Watchlist.
+            </p>
           </div>
         )}
         <ul className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -120,6 +138,25 @@ export default function ICDecisionPage() {
               </button>
             ))}
           </div>
+          {/* Task #83 — commit an "invest" decision to the position ledger. */}
+          {d.decision === 'invest' && canRecordPosition && (
+            <div className="mb-4 -mt-1 flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => navigate('/portfolio/positions', {
+                  state: {
+                    prefill: {
+                      project_id: d.project?.id ?? null,
+                      startup_name: d.project?.name || '',
+                      round_name: d.title || '',
+                    },
+                  },
+                })}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium">
+                <PieChart size={14} /> Record position
+              </button>
+              <span className="text-xs text-gray-500">Prefills the startup &amp; round on the position ledger.</span>
+            </div>
+          )}
           <div className="text-xs text-gray-500 mb-1">Post-hoc outcome</div>
           <div className="flex flex-wrap gap-2">
             {OUTCOMES.map((o) => (

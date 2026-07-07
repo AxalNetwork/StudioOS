@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ShieldAlert, Plus, RefreshCw, Search, ExternalLink } from 'lucide-react';
 import { dd } from '../lib/api';
 import { reportError } from '../lib/log';
@@ -27,6 +27,11 @@ export default function AdminDueDiligencePage() {
   const [search, setSearch] = useState('');
   const [openModal, setOpenModal] = useState(false);
   const { toast, push } = useToast();
+  const location = useLocation();
+  // Task #83 — the same page is mounted at both /admin/due-diligence (admin) and
+  // /due-diligence (investor). Derive the base so internal links stay on the
+  // caller's surface and investors never get bounced through an /admin URL.
+  const base = location.pathname.startsWith('/admin') ? '/admin/due-diligence' : '/due-diligence';
 
   const load = async () => {
     setLoading(true);
@@ -153,7 +158,7 @@ export default function AdminDueDiligencePage() {
               {filtered.map(c => (
                 <tr key={c.id} className="border-b border-gray-100 dark:border-gray-700/40 hover:bg-violet-50/40 dark:hover:bg-gray-700/30">
                   <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">
-                    <Link to={`/admin/due-diligence/${c.uid}`} className="hover:text-violet-600">{c.subject_label}</Link>
+                    <Link to={`${base}/${c.uid}`} className="hover:text-violet-600">{c.subject_label}</Link>
                     <div className="text-[11px] text-gray-400 font-mono">{c.uid.slice(0, 12)}…</div>
                   </td>
                   <td className="px-4 py-3 capitalize text-gray-700 dark:text-gray-300">{c.subject_type}</td>
@@ -170,7 +175,7 @@ export default function AdminDueDiligencePage() {
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{c.created_at ? new Date(c.created_at).toLocaleDateString() : '—'}</td>
                   <td className="px-4 py-3 text-right">
-                    <Link to={`/admin/due-diligence/${c.uid}`} className="text-violet-600 hover:underline text-xs inline-flex items-center gap-1">
+                    <Link to={`${base}/${c.uid}`} className="text-violet-600 hover:underline text-xs inline-flex items-center gap-1">
                       Open <ExternalLink size={11} />
                     </Link>
                   </td>

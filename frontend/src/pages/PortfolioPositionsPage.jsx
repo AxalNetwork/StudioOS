@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { PieChart, Plus, RefreshCw, X } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
@@ -9,13 +10,31 @@ const fmtPct = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
 export default function PortfolioPositionsPage() {
   const { role } = useAuth();
   const isAdmin = role === 'admin';
+  const location = useLocation();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
   const [detail, setDetail] = useState(null); // { project, rounds, cap_table_snapshot }
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [prefillName, setPrefillName] = useState('');
   const [form, setForm] = useState({ project_id: '', round_name: '', invested_amount: '', shares: '', price_per_share: '', ownership_pct: '', position_date: '' });
+
+  // Task #83 — when we arrive from an IC "invest" decision the startup + round
+  // are handed over via router state; prefill the form and open it so the admin
+  // only has to fill the economics. Runs once on the incoming navigation.
+  useEffect(() => {
+    const p = location.state?.prefill;
+    if (!p || !isAdmin) return;
+    setForm((f) => ({
+      ...f,
+      project_id: p.project_id != null ? String(p.project_id) : f.project_id,
+      round_name: p.round_name || f.round_name,
+    }));
+    setPrefillName(p.startup_name || '');
+    setCreating(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   const load = () => {
     setLoading(true);
@@ -80,6 +99,11 @@ export default function PortfolioPositionsPage() {
 
       {isAdmin && creating && (
         <form onSubmit={onCreate} className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+          {prefillName && (
+            <div className="mb-3 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-xs">
+              Prefilled from the IC decision for <strong>{prefillName}</strong>. Fill in the economics to record the position.
+            </div>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {field('project_id', 'Startup ID', { required: true, inputMode: 'numeric' })}
             {field('round_name', 'Round (e.g. Seed)', { required: true })}

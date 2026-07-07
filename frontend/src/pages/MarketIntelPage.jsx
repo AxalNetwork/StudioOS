@@ -19,6 +19,10 @@ export default function MarketIntelPage() {
   const [conviction, setConviction] = useState([]);
   const [enriched, setEnriched] = useState([]);
   const [tab, setTab] = useState('compass');
+  // Task #83 — the ~21 MI sub-tabs are regrouped under 5 top-level lenses (see
+  // LENSES below). `lens` scopes the sub-tab dropdown; `tab` still drives every
+  // body, so this is a pure navigation layer. Default lens owns the default tab.
+  const [lens, setLens] = useState('sector');
 
   useEffect(() => {
     Promise.all([
@@ -97,6 +101,24 @@ export default function MarketIntelPage() {
     { key: 'mi_capital_velocity', label: 'Capital Velocity', icon: Wind },
   ];
 
+  // Task #83 — 5 lenses over the 21 tab keys above (every key is covered exactly
+  // once). Ordering inside each lens sets the sub-tab dropdown order + the tab we
+  // fall to when a lens is picked and the current tab isn't in it.
+  const LENSES = [
+    { key: 'sector', label: 'Sector Compass', icon: Compass, tabs: ['compass', 'founder_lens', 'geography', 'mi_sector_heat', 'mi_sentiment_geo'] },
+    { key: 'investor', label: 'Investor Signals', icon: TrendingUp, tabs: ['investor_lens', 'investor_signals', 'conviction', 'mi_fit', 'mi_capital_velocity'] },
+    { key: 'capital', label: 'Capital Markets', icon: Globe, tabs: ['macro', 'private', 'studio'] },
+    { key: 'founder', label: 'Founder Pulse', icon: Activity, tabs: ['pulse', 'mi_sentiment', 'mi_talc', 'mi_demand_supply'] },
+    { key: 'ecosystem', label: 'Ecosystem', icon: Users, tabs: ['platform_personas', 'mi_partner_pulse', 'watchlist', 'citations'] },
+  ];
+  const activeLens = LENSES.find((l) => l.key === lens) || LENSES[0];
+  const visibleTabs = tabs.filter((t) => activeLens.tabs.includes(t.key));
+  const selectLens = (lk) => {
+    const L = LENSES.find((l) => l.key === lk) || LENSES[0];
+    setLens(L.key);
+    if (!L.tabs.includes(tab)) setTab(L.tabs[0]);
+  };
+
   return (
     <div data-testid="market-intel-page" data-active-tab={tab}>
       <div className="flex items-end justify-between mb-4 flex-wrap gap-2">
@@ -128,7 +150,30 @@ export default function MarketIntelPage() {
         </div>
       </div>
 
-      <div className="mb-6">
+      <div className="mb-6 space-y-3">
+        {/* Task #83 — top-level lens picker. Groups the ~21 sub-tabs into 5
+            lenses; the dropdown below is scoped to the active lens. */}
+        <div className="flex flex-wrap gap-2" data-testid="mi-lens-picker">
+          {LENSES.map((l) => {
+            const Icon = l.icon;
+            const active = l.key === lens;
+            return (
+              <button
+                key={l.key}
+                type="button"
+                data-testid={`mi-lens-${l.key}`}
+                onClick={() => selectLens(l.key)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                  active
+                    ? 'bg-violet-600 border-violet-600 text-white'
+                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'
+                }`}
+              >
+                <Icon size={14} /> {l.label}
+              </button>
+            );
+          })}
+        </div>
         {/* Tab selector — native select on all screen sizes (no horizontal scroll) */}
         <div className="relative w-full md:max-w-xs">
           <select
@@ -137,7 +182,7 @@ export default function MarketIntelPage() {
             onChange={e => setTab(e.target.value)}
             className="w-full appearance-none bg-white border border-violet-300 rounded-xl px-4 py-3 pr-10 text-sm font-medium text-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-400 transition-colors shadow-sm cursor-pointer dark:bg-gray-900"
           >
-            {tabs.map(t => (
+            {visibleTabs.map(t => (
               <option key={t.key} value={t.key} data-testid={`mi-tab-${t.key}`}>
                 {t.label}
               </option>

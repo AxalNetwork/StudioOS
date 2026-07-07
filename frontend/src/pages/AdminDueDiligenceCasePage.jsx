@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Play, FileDown, Send, RefreshCw, Shield, AlertTriangle, CheckCircle2, ClipboardList, Mail, Upload } from 'lucide-react';
 import { dd } from '../lib/api';
 import { reportError } from '../lib/log';
@@ -36,6 +36,9 @@ const SOURCE_STATUS = {
 export default function AdminDueDiligenceCasePage() {
   const { uid } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  // Task #83 — mounted at both /admin/due-diligence/:uid and /due-diligence/:uid.
+  const base = location.pathname.startsWith('/admin') ? '/admin/due-diligence' : '/due-diligence';
   const inv = searchParams.get('inv');
   const focusSection = searchParams.get('section');
   const [data, setData] = useState(null);
@@ -141,7 +144,7 @@ export default function AdminDueDiligenceCasePage() {
 
   return (
     <div>
-      <Link to="/admin/due-diligence" className="inline-flex items-center gap-1 text-sm text-violet-600 hover:underline mb-3">
+      <Link to={base} className="inline-flex items-center gap-1 text-sm text-violet-600 hover:underline mb-3">
         <ArrowLeft size={14} /> All cases
       </Link>
 

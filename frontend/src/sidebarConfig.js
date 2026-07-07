@@ -352,7 +352,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'diligence', label: 'Diligence', items: [
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
-      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
+      { to: '/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
       { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
     ]},
@@ -398,7 +398,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/advisors', icon: UserCircle, label: 'Advisor Directory' },
       { to: '/signals', icon: Radar, label: 'Signals' },
-      { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
+      { to: '/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
     ]},
     { key: 'account', label: 'Account', items: [

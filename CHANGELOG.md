@@ -10,6 +10,27 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Diligence → Commit → Ledger hand-offs (investor-audit #5 + #8, Task #83)
+
+Due Diligence was admin-only, and the investor funnel had no real hand-offs between scoring, the IC, the diligence case, the decision journal, and the position ledger — each was a separate re-search. This de-admins DD for investors/advisors, feeds open reviewer items into the lifecycle's next-actions, and wires the funnel so each stage carries the previous one's context. Also regroups Market Intelligence's ~21 sub-tabs under 5 lenses.
+
+**Migration**
+- `cloudflare-worker/sql/migrations/142_ic_dd_journal_links.sql` — `ic_decisions.dd_case_id` (+ index) links an IC decision to the DD case it was formed from; `decision_journal_entries.ic_decision_id` (+ partial unique index on `(owner_user_id, ic_decision_id) WHERE ic_decision_id IS NOT NULL`) lets an IC vote find-or-update exactly one auto-drafted journal entry per voter.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/dd.ts` — `POST /dd/cases` now lets an investor open a case when `subject_type='project'` AND they're in a deal room for that project (`investor_dealroom_members` JOIN `deals` ON `project_id`); admin/partner behaviour unchanged.
+- `cloudflare-worker/src/routes/dashboard.ts` — `GET /api/dashboard/investor-lifecycle` gains `next_actions[]` (open DD reviewer sections assigned to the caller → `/due-diligence/:uid`); the diligence stage now deep-links `/due-diligence` (was `/admin/due-diligence`). Route still read-only.
+- `cloudflare-worker/src/routes/ic.ts` — IC decisions carry `dd_case_id` (POST/PUT + DTO resolves `{uid, subject_label, status}`); casting a vote auto-drafts a private `decision_journal_entries` row (yes→invest / no→pass / abstain→defer; find-or-update by `owner_user_id + ic_decision_id`; rationale ≥3 chars becomes the thesis, else synthesized; conviction `3`; wrapped in try/catch so a journal failure never fails the vote). Skips when the decision has no `project_id`.
+
+**Frontend**
+- `frontend/src/App.jsx` / `sidebarConfig.js` / `wrangler.toml` — new investor/advisor-facing `/due-diligence` (+ `/due-diligence/:uid`) routes reuse the existing `AdminDueDiligence(Case)Page` (internal `base` derived from `useLocation`); guarded to `admin,partner,investor,advisor` and apex-routed in BOTH `wrangler.toml` route blocks. Reviewer-invite emails still point at `/admin/due-diligence/:uid` (apex via `/admin/*`).
+- `frontend/src/pages/DealsPage.jsx` — deal-room members get an **Open DD case** action (find-or-create on the deal's `project_id` via `dd.listCases`/`dd.openCase` → `/due-diligence/:uid`).
+- `frontend/src/pages/Dashboard.jsx` — the investor lifecycle prepends `next_actions[]` ahead of the funnel-stage rollup so the module's "next best action" points at concrete diligence work.
+- `frontend/src/pages/ICDecisionPage.jsx` — links back to its DD case; an **invest** decision shows a **Record position** CTA (admin) that prefills the position ledger via router `state.prefill`; a hint notes each vote drafts a private journal entry.
+- `frontend/src/pages/PortfolioPositionsPage.jsx` — reads router `state.prefill` to auto-open + pre-fill the round form (startup id + round) when arriving from an IC decision.
+- `frontend/src/pages/ScoringPage.jsx` — **Generate deal memo** is now the primary CTA and, on success, creates an IC decision seeded from the just-stored scoring memo (`from_scoring: true`) and navigates to `/ic/:uid` (falls back to the old confirmation if the IC step fails; memo is already persisted).
+- `frontend/src/pages/MarketIntelPage.jsx` — the ~21 sub-tabs are regrouped under 5 top-level lenses (Sector Compass / Investor Signals / Capital Markets / Founder Pulse / Ecosystem). A pill picker scopes the sub-tab dropdown to the active lens; every tab body still renders off `tab`, so it's a pure navigation layer.
+
 ## Actionable matches & investor-scoped deal flow (investor-audit #2)
 
 The scored-match cards on the AI Matching Engine were read-only, and Deal Flow showed the whole firm-wide funnel with an operator-only "advance stage" button that made no sense for an investor. This gives every match card real verbs, scopes the deal pipeline to an investor's own relationships, and dedupes three near-identical scored-card implementations behind one shared component.

@@ -307,7 +307,28 @@ dashboard.get('/investor-lifecycle', async (c) => {
     safeQuery('inv:listingsOpen', () => sql`SELECT COUNT(*) AS n FROM secondary_listings WHERE user_id = ${user.id} AND status IN ('open', 'listed', 'matched')`, [{ n: 0 }]),
   ]);
 
+  // Task #83 — open DD reviewer items assigned to THIS investor feed the
+  // lifecycle module's next-actions. Scoped to `assignee_user_id = user` (no
+  // cross-user leakage) and only for cases that are still open/in-review.
+  const reviewerRows = await safeQuery('inv:ddNextActions', () => sql`
+    SELECT s.title AS section_title, c.uid AS case_uid, c.subject_label AS subject_label
+      FROM dd_sections s
+      JOIN dd_cases c ON c.id = s.case_id
+     WHERE s.assignee_user_id = ${user.id}
+       AND s.status IN ('pending', 'assigned', 'in_review')
+       AND c.status IN ('open', 'in_review')
+     ORDER BY s.updated_at DESC
+     LIMIT 5`, [] as any[]);
+
   try { await sql.end(); } catch {}
+
+  const nextActions = (Array.isArray(reviewerRows) ? reviewerRows : []).map((r: any) => ({
+    key: `dd:${r.case_uid}:${r.section_title}`,
+    label: `Review ${r.section_title} — ${r.subject_label}`,
+    href: `/due-diligence/${r.case_uid}`,
+    done: false,
+    manual: false,
+  }));
 
   const counts = {
     watching: n(watching),
@@ -328,7 +349,7 @@ dashboard.get('/investor-lifecycle', async (c) => {
     { id: 'watching', label: 'Watching', count: counts.watching, reached: counts.watching > 0, href: '/watchlist' },
     { id: 'intro', label: 'Warm intro', count: counts.intros, reached: counts.intros > 0, href: '/deals' },
     { id: 'dealroom', label: 'Deal room', count: counts.dealrooms, reached: counts.dealrooms > 0, href: '/deals' },
-    { id: 'diligence', label: 'Diligence', count: counts.dd_total, reached: counts.dd_total > 0, href: '/admin/due-diligence' },
+    { id: 'diligence', label: 'Diligence', count: counts.dd_total, reached: counts.dd_total > 0, href: '/due-diligence' },
     { id: 'committed', label: 'Committed', count: counts.committed, reached: counts.committed > 0, href: '/watchlist' },
   ];
 
@@ -339,6 +360,7 @@ dashboard.get('/investor-lifecycle', async (c) => {
   return c.json({
     stages,
     current_stage: currentStage,
+    next_actions: nextActions,
     counts,
     generated_at: new Date().toISOString(),
   });
