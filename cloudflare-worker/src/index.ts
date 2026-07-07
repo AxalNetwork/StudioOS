@@ -1591,6 +1591,21 @@ export default {
             console.error('[cron] event reminder sweep failed', e);
           }
         }
+        // Task #14 — watchlist follow-up reminder sweep every 15 minutes. Fires
+        // one notification per `watching` item whose next_check_at is due and
+        // hasn't been reminded for that checkpoint (reminded_at guard). Cheap on
+        // idle ticks: exits after a single small SELECT when nothing is due.
+        if (now.getUTCMinutes() % 15 === 0) {
+          try {
+            const { sweepWatchlistReminders } = await import('./services/watchlistReminders');
+            const r = await sweepWatchlistReminders(env, now);
+            if (r.sent > 0) {
+              console.info(`[cron] watchlist reminders candidates=${r.candidates} sent=${r.sent}`);
+            }
+          } catch (e) {
+            console.error('[cron] watchlist reminder sweep failed', e);
+          }
+        }
         // Task #13 — daily analytics snapshot at 02:05 UTC. Captures
         // yesterday's Overview + Financial rollup into `analytics_snapshots`
         // (USD baseline) so admin historical comparisons survive the

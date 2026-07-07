@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A smarter watchlist and decision journal
+
+If you track prospects and record your investment calls, both tools now hold everything you need:
+
+- **Watch companies that aren't on the platform yet.** Add an outside prospect by name and link, tag it, note the sector and stage, and jot your thesis — right alongside the startups you already follow.
+- **Never lose track of a follow-up.** Set a "check back on" date for anything you're watching and we'll remind you when it comes due. Move the date and the reminder simply moves with it.
+- **A fuller decision journal.** Record your conviction (1–5), key risks, what you expect to happen and by when, and your target multiple. Later, log the actual outcome — hit, miss, partial or inconclusive — so you can look back and learn.
+- **See your track record.** The anti-portfolio view shows the deals you passed on, and how those calls aged: the ones you were right to skip, the ones you'd regret, and the ones still playing out.
+
+---
+
 ## One home for your investment preferences
 
 If you're an investor, everything about what you're looking for now lives in one place:
