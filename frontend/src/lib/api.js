@@ -1548,6 +1548,8 @@ export const api = {
 
   getDashboard: (fresh = false) => request('/dashboard' + (fresh ? '?fresh=1' : '')),
   refreshDashboardScores: () => request('/dashboard/refresh-scores', { method: 'POST', body: JSON.stringify({}) }),
+  // Task #81 — read-only investor deal lifecycle (funnel counts by stage).
+  investorLifecycle: () => request('/dashboard/investor-lifecycle'),
 
   pipelineActive: () => request('/pipeline/active'),
   pipelineCreateProject: (data) => request('/pipeline/projects', { method: 'POST', body: JSON.stringify(data) }),
