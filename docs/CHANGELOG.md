@@ -10,6 +10,31 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Task #5 — Public author profiles
+
+Live author profile pages driven by the user's Settings > Profile as the single source of truth.
+
+**Backend (Cloudflare Worker)**
+- `cloudflare-worker/src/routes/public.ts` — new `GET /api/public/authors/:userId` endpoint; returns `{ author, items }` from the live `users` table (display_name, headline, bio, socials, headshot_r2_key, city, country) plus the author's published articles. No auth. Falls back gracefully on older dev DBs.
+- `cloudflare-worker/src/routes/articles.ts` — added `u.uid AS author_uid`, `u.headline AS author_headline`, and live-headshot CASE expression to all three public article queries (list, by-author, detail); updated `publicArticleShape` to expose `author_headline`.
+- `cloudflare-worker/src/routes/settings.ts` — added `headline` to the SQL SELECT and to the `profile` sub-object in the settings GET response so ProfileSection can read it.
+
+**Frontend**
+- `frontend/src/components/AuthorCard.jsx` — new shared component. Full variant (author page header): 80px photo, name, headline, role badge, location, bio, social icon links (LinkedIn, X, Website, GitHub, Instagram). Compact variant (`compact` prop): 36px photo, name, headline inline, social icons — used in article bylines. All fields hidden when empty; dark mode; mobile-friendly; inline SVGs for brand icons (lucide 1.x dropped them).
+- `frontend/src/pages/AuthorProfilePage.jsx` — rewritten to call `api.articles.authorProfile(id)` → `GET /api/public/authors/:userId` (live profile) instead of deriving author from the first article. Uses `AuthorCard` for the header.
+- `frontend/src/pages/ArticleReaderPage.jsx` — article byline now uses `AuthorCard compact` with live headshot (`author_photo_url`) and `author_headline`. Removed hand-rolled name/role-badge markup.
+- `frontend/src/pages/SettingsPage.jsx` — (a) added `instagram` to the ProfileSection social links editor; (b) updated description to "public author profile"; (c) added "Public author profile" preview card that renders `AuthorCard` live from current form state + a "View public profile" link and "Copy link" button (`/authors/:data.id`).
+- `frontend/src/lib/api.js` — added `articles.authorProfile(userId)` method → `GET /api/public/authors/:userId`.
+
+**Routing**
+- `wrangler.toml` — added `/authors` + `/authors/*` exact+wildcard route pairs to BOTH the top-level `[[routes]]` block (binds the live prod deploy) and `[[env.production.routes]]` (kept in lockstep per apex-routing invariant).
+
+**Drift / types**
+- `npm run test:drift` passes (990 SPA paths, 132 Worker prefixes, 0 new drift).
+- `tsc --noEmit` in `cloudflare-worker/` passes.
+
+---
+
 ## Task #1 — Merge Contacts & Relationships into a unified Network page
 
 Information-architecture + routing refactor: the standalone **Contacts** and
