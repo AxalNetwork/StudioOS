@@ -5,6 +5,19 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your Command Center is now organized around your startup's journey
+
+We've reorganized the Command Center into four clear tabs, in the order you actually work:
+
+- **Overview** — where your startup is on its journey and what to do next (this is still where you land).
+- **Startups** — all your startups in one place. Switch between a **List** and a **pipeline Board**, or filter down to just your **spin-outs**.
+- **Roadmap** — your goals and milestones, now their own tab instead of being tucked away.
+- **Operations** — finance, hiring, legal and compliance, plus an AI **focus recommendation** for each venture, written in plain, encouraging language.
+
+Starting a new startup is now a simple **"New startup"** button (from Overview or Startups) that opens the guided intake — so there's no separate "Founder Portal" tab to hunt for. All your existing links and bookmarks still work and take you to the right place.
+
+---
+
 ## Your Command Center now opens on an Overview
 
 The Command Center now starts on a new **Overview** tab that shows, at a glance, where your startup is on its journey and what to do next:

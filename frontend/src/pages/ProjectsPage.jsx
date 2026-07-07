@@ -20,7 +20,7 @@ import { Rocket } from 'lucide-react';
 const PROJECT_ROW_HEIGHT = 52;
 const PROJECT_GRID = 'minmax(0, 2fr) minmax(0, 1fr) 110px 120px minmax(0, 1fr) 96px';
 
-export default function ProjectsPage({ embedded = false }) {
+export default function ProjectsPage({ embedded = false, statusFilter = null, hideCreate = false, onNewStartup = null }) {
   const { user, refresh } = useAuth();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -111,7 +111,8 @@ export default function ProjectsPage({ embedded = false }) {
   };
 
   const filtered = projects.filter(p =>
-    !filter || p.name.toLowerCase().includes(filter.toLowerCase()) || p.sector?.toLowerCase().includes(filter.toLowerCase())
+    (!statusFilter || (Array.isArray(statusFilter) && statusFilter.includes(String(p.status || '').toLowerCase()))) &&
+    (!filter || p.name.toLowerCase().includes(filter.toLowerCase()) || p.sector?.toLowerCase().includes(filter.toLowerCase()))
   );
 
   return (
@@ -126,9 +127,11 @@ export default function ProjectsPage({ embedded = false }) {
             </>
           )}
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-medium text-white transition-colors">
-          <Plus size={14} /> New Startup
-        </button>
+        {!hideCreate && (
+          <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-medium text-white transition-colors">
+            <Plus size={14} /> New Startup
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -176,7 +179,7 @@ export default function ProjectsPage({ embedded = false }) {
           icon={Rocket}
           title="No startups yet"
           body='Create your first startup to start scoring, due-diligence, and pipeline tracking.'
-          cta={{ label: 'New startup', onClick: () => setShowForm(true) }}
+          cta={{ label: 'New startup', onClick: () => (onNewStartup ? onNewStartup() : setShowForm(true)) }}
           secondary={{ label: 'Learn more', to: '/docs#core/projects' }}
         />
       ) : (

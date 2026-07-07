@@ -10,6 +10,24 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Founder UX Audit #1 (part b) — Command Center tab restructure
+
+Completes Critical item #1 from `FOUNDER_UX_AUDIT.md`: restructures the Command Center around the venture lifecycle with four founder-language tabs and folds away the tabs that exposed studio-internal structure. Frontend-only — no backend, schema or verdict-logic changes.
+
+**Frontend**
+- `frontend/src/pages/CommandCenterPage.jsx` — rewritten. Tabs are now **Overview | Startups | Roadmap | Operations** (lifecycle order; Overview still default). Roadmap is promoted out of the old stacked Execution tab; Studio Ops is renamed **Operations**. The active tab lives in `?tab=` (deep-linkable). Legacy `?tab=` values are aliased so every old link (and the `/execution`, `/studio-ops`, `/spinouts`, `/founder` redirects in `App.jsx`) keeps working: `execution→startups`, `studio-ops→operations`, `spin-outs→startups` (with the Spin-outs filter pre-applied). **Founder Portal is no longer a tab** — intake is launched as the **"New startup"** action and rendered on its own hidden surface (`?tab=founder-portal`|`new`) with a "Back to Command Center" link.
+- `frontend/src/components/command-center/StartupsTab.jsx` — new. A List/Board view toggle over the existing `ProjectsPage` (list) and `PipelinePage` (board), plus an "All startups / Spin-outs" status filter that folds in the former Spin-Outs tab (statuses `spinout|spinout_ready|incorporated|active`). A single **"New startup"** button routes to the guided intake wizard.
+- `frontend/src/pages/ProjectsPage.jsx` — added optional, backward-compatible props: `statusFilter` (client-side status-array filter), `hideCreate` (hide the built-in New Startup button), `onNewStartup` (override the create action for the button + empty-state CTA). Standalone behaviour (admin `/projects`) unchanged.
+- `frontend/src/pages/StudioOpsPage.jsx` — added optional `founderCopy` prop (default off; admin `/studio-ops` unchanged). When on: the "Strategic Oversight" sub-tab → "Focus recommendation", the review card heading → "Focus recommendation", the verdict label → "Suggested focus", the rule verdict is mapped to founder language (CONTINUE→Keep building, ITERATE→Refine & iterate, SPIN-OUT→Ready to spin out, KILL→Reassess & refocus), and the word "kill" is softened out of the AI summary. **Backend verdicts (`studioops.ts`) are unchanged.**
+
+**Bug fixed en route**
+- `frontend/src/pages/RoadmapPage.jsx` — its two `setSearchParams(..., { replace: true })` calls replaced the *entire* query string, clobbering the host `?tab=roadmap` when embedded in the Command Center (the Roadmap tab silently fell back to Overview). Both now merge into the existing params via the functional updater, preserving `tab`. Standalone behaviour unchanged.
+
+**Validation**
+- Frontend-only; all changed modules transform cleanly via Vite. End-to-end (Playwright) as the demo founder: four-tab structure with Overview default; Startups List/Board toggle + Spin-outs filter + New startup intake; Roadmap tab renders and *stays* active (regression check for the clobber bug); Operations "Focus recommendation" relabel with no "kill" text; all four legacy aliases (`execution`, `studio-ops`, `spin-outs`, `founder-portal`) resolve to the correct surface/state.
+
+---
+
 ## Founder UX Audit #1 (part a) — Startup Lifecycle module + Command Center Overview tab
 
 Implements the lifecycle spine from `FOUNDER_UX_AUDIT.md` Critical item #1: a founder-editable lifecycle stage + derived checklist, surfaced on a new **Overview** tab that is now the default landing surface of the Command Center. This is part (a) — the lifecycle module, venture snapshot and metrics strip. Part (b) (the broader tab restructure: unstack Execution, merge Spin-Outs into a Startups filter, drop Founder Portal as a tab, founder-language pass) is deferred pending user confirmation.
