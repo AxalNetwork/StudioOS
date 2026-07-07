@@ -50,6 +50,34 @@ export function jload<T>(s: string | null | undefined, def: T): T {
   try { return JSON.parse(s) as T; } catch { return def; }
 }
 
+/** Trim a value to a string, capped at `max`, or null when blank. */
+export function trimOrNull(v: unknown, max = 100000): string | null {
+  const s = v == null ? '' : String(v).trim();
+  return s ? s.slice(0, max) : null;
+}
+
+/**
+ * Normalise a tags input to a JSON-array string, mirroring backend
+ * watchlist.py::_normalise_tags: accepts a JSON-array string, a comma-separated
+ * string, or an array; trims + drops blanks; caps at 20 entries.
+ */
+export function normaliseTags(value: unknown): string {
+  if (value == null) return '[]';
+  if (Array.isArray(value)) {
+    return JSON.stringify(value.map((t) => String(t).trim()).filter(Boolean).slice(0, 20));
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return JSON.stringify(parsed.map((t: unknown) => String(t).trim()).filter(Boolean).slice(0, 20));
+      }
+    } catch { /* not JSON — fall through to CSV parsing */ }
+    return JSON.stringify(value.split(',').map((t) => t.trim()).filter(Boolean).slice(0, 20));
+  }
+  return '[]';
+}
+
 /** Map auth-helper Errors to JSON responses. Use inside `try {...} catch (e) { return mapError(c, e); }`. */
 export function mapError(c: Context<{ Bindings: Env }>, e: any) {
   const msg = String(e?.message || e || 'Error');

@@ -10,6 +10,24 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Watchlist & decision journal — full contract + follow-up reminders
+
+Reconciles the Worker's watchlist and decision-journal routes with the SPA + dev-FastAPI contract (investor-audit #14). Both surfaces previously exposed a thin subset of fields; the SPA sent — and expected back — richer objects (external prospects, tags, key risks, expected multiple/timeline, structured outcomes) that the Worker silently dropped. Adds a `next_check_at` follow-up reminder that actually fires.
+
+**Schema (migration 141 — already merged)**
+- Fresh-DB DDL in `cloudflare-worker/sql/t13_t14_t15.sql` brought in line with migration 141 so a from-scratch build matches a migrated one: `watchlist_items` gains `external_name`/`external_url`/`sector`/`stage`/`source`/`tags_json` (NOT NULL DEFAULT `'[]'`)/`reminded_at`, `project_id` is now nullable (external prospects), status vocabulary is `watching|converted|passed_on|archived`, plus partial unique `uq_watchlist_owner_external` (one external prospect per owner). `decision_journal_entries` gains `watchlist_item_id`, `key_risks`, `expected_multiple` (REAL), `expected_timeline_months` (INT), `tags_json`, `outcome_status` (NOT NULL DEFAULT `'pending'`), `outcome_actual_multiple` (REAL), `decided_at`, plus the watchlist/outcome-status indexes.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/watchlist.ts` — rewritten to the full contract. List returns `{items, counts:{watching,converted,passed_on,archived}}`; create is idempotent and 201; PUT applies each field explicitly (no cast-assignment), stamps `passed_at` on transition into `passed_on`; convert/delete preserved. Anti-portfolio returns `{owner,total_passes,counts:{vindicated,regret,open},regret_rate,biggest_regret,rows}`. Existing route signatures unchanged (drift-safe); `/items`, `/items/:id`, `/digest`, `/watchlist/anti-portfolio` aliases kept.
+- `cloudflare-worker/src/routes/journal.ts` — rewritten to the full contract. Decision `invest|pass|defer`, conviction integer 1..5, thesis min-10, plus `key_risks`/`expected_outcome`/`expected_multiple`/`expected_timeline_months`/`tags`. `resolveTargets` links a `project_uid` and/or ownership-checked `watchlist_uid`/`deal_uid`. List returns `{items,counts_by_decision,counts_by_outcome}`; `POST /:uid/outcome` records `outcome_status` (rejects `pending`) + `outcome_actual_multiple`. `/entries` aliases translate numeric id → uid for PATCH/DELETE.
+- `cloudflare-worker/src/services/watchlistGrading.ts` (new, zero runtime imports) — pure `gradePass(signal)` (vindicated/regret/open) and `reminderDue(nextCheckAt, remindedAt, now)`; `parseTs` accepts ISO / space-separated / `Z` / date-only.
+- `cloudflare-worker/src/services/watchlistReminders.ts` (new) — `sweepWatchlistReminders(env, now)` selects due `watching` items (LIMIT 1000), fires one `watchlist_followup` notification (category `deals`, deep-links `/watchlist`) per due checkpoint, then stamps `reminded_at`. Bumping `next_check_at` re-arms it.
+- `cloudflare-worker/src/index.ts` — cron wires the sweep every 15 minutes (between the event-reminder sweep and the analytics snapshot), best-effort try/catch.
+- `cloudflare-worker/src/routes/_t13t14t15_helpers.ts` — added `trimOrNull(v,max)` and `normaliseTags(value)` (CSV or array, cap 20).
+
+**Tests**
+- `cloudflare-worker/test/watchlistJournal.contract.test.ts` (new) — unit coverage for `gradePass`, `reminderDue` (re-arm, date-only, space-ts, garbage), `normaliseTags`, `trimOrNull`; appended to the `test:drift` strip-types gate in root `package.json`.
+
 ## Unify investor preferences & thesis
 
 Makes `investor_profiles` the single canonical store for what an investor is looking for and retires the legacy `user_preferences` write path. Onboarding fields that were collected but silently dropped are now persisted, and investors can edit their thesis from Settings for the first time. The old Matches "Preferences" modal is gone. The scorer still *reads* `user_preferences` for now (that read migration is a separate sourcing task), so brand-new investors have empty deal-flow scoring until then — an accepted, documented gap.

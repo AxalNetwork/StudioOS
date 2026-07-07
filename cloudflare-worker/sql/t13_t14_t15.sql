@@ -119,11 +119,18 @@ CREATE TABLE IF NOT EXISTS watchlist_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uid TEXT NOT NULL UNIQUE,
   owner_user_id INTEGER NOT NULL,
-  project_id INTEGER NOT NULL,
-  conviction TEXT,            -- 'low' | 'medium' | 'high'
+  project_id INTEGER,                        -- NULL for external prospects
+  external_name TEXT,                        -- Task #14 — off-platform prospect
+  external_url TEXT,
+  sector TEXT,
+  stage TEXT,
   thesis TEXT,
+  conviction TEXT,                           -- 'low' | 'medium' | 'high'
+  source TEXT,                               -- referral | inbound | cold | conf | ...
+  tags_json TEXT NOT NULL DEFAULT '[]',      -- Task #14
+  status TEXT NOT NULL DEFAULT 'watching',   -- watching | converted | passed_on | archived
   next_check_at TEXT,
-  status TEXT NOT NULL DEFAULT 'watching', -- watching | converted | passed
+  reminded_at TEXT,                          -- Task #14 — last follow-up reminder fired
   passed_reason TEXT,
   passed_at TEXT,
   converted_deal_id INTEGER,
@@ -134,6 +141,9 @@ CREATE TABLE IF NOT EXISTS watchlist_items (
 );
 CREATE INDEX IF NOT EXISTS idx_watchlist_owner ON watchlist_items(owner_user_id, status);
 CREATE INDEX IF NOT EXISTS idx_watchlist_project ON watchlist_items(project_id);
+-- One external prospect per owner (project_id NULL rows only; partial index).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_watchlist_owner_external
+  ON watchlist_items(owner_user_id, external_name) WHERE project_id IS NULL;
 
 -- ---------------------------------------------------------------------------
 -- T14.2 — Decision journal
@@ -143,19 +153,29 @@ CREATE TABLE IF NOT EXISTS decision_journal_entries (
   uid TEXT NOT NULL UNIQUE,
   owner_user_id INTEGER NOT NULL,
   project_id INTEGER,
+  watchlist_item_id INTEGER,        -- Task #14 — link to a watchlist prospect
   deal_id INTEGER,
-  decision TEXT NOT NULL,           -- 'invest' | 'pass' | 'follow' | 'other'
+  decision TEXT NOT NULL,           -- 'invest' | 'pass' | 'defer'
+  conviction TEXT,                  -- 1..5 (legacy low|medium|high migrated)
   thesis TEXT NOT NULL,
+  key_risks TEXT,                   -- Task #14
   expected_outcome TEXT,
-  conviction TEXT,                  -- low|medium|high
-  outcome TEXT,                     -- 'win'|'loss'|'pending'
+  expected_multiple REAL,           -- Task #14
+  expected_timeline_months INTEGER, -- Task #14
+  tags_json TEXT NOT NULL DEFAULT '[]',           -- Task #14
+  outcome TEXT,                     -- legacy 'win'|'loss'|'pending' (kept, unused)
+  outcome_status TEXT NOT NULL DEFAULT 'pending', -- pending|hit|miss|partial|inconclusive
   outcome_notes TEXT,
+  outcome_actual_multiple REAL,     -- Task #14
   outcome_recorded_at TEXT,
+  decided_at TEXT,                  -- Task #14
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_journal_owner ON decision_journal_entries(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_journal_project ON decision_journal_entries(project_id);
+CREATE INDEX IF NOT EXISTS idx_journal_watchlist ON decision_journal_entries(watchlist_item_id);
+CREATE INDEX IF NOT EXISTS idx_journal_outcome_status ON decision_journal_entries(outcome_status);
 
 -- ---------------------------------------------------------------------------
 -- T14.3 — Portfolio health snapshots (one per project per day)
