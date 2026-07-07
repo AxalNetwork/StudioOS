@@ -681,10 +681,23 @@ export const api = {
   updateTicket: (id, data) => request(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   syncTickets: () => request('/tickets/sync', { method: 'POST' }),
 
-  listDeals: (status) => request(`/deals${status ? `?status=${status}` : ''}`),
+  // Task #82 — `scope='mine'` narrows the funnel to deals the investor has a
+  // relationship with (dealroom member / introduced / converted watchlist).
+  listDeals: (status, scope) => {
+    const q = new URLSearchParams();
+    if (status) q.set('status', status);
+    if (scope) q.set('scope', scope);
+    const qs = q.toString();
+    return request(`/deals${qs ? `?${qs}` : ''}`);
+  },
   createDeal: (data) => request('/deals', { method: 'POST', body: JSON.stringify(data) }),
   getDeal: (id) => request(`/deals/${id}`),
   updateDeal: (id, data) => request(`/deals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  // Task #82 — deal-room membership. join() is idempotent ({ok, already_member});
+  // both may 402 with code:'quota_dealrooms_exhausted' (no `required` field, so
+  // the global PaywallModal does NOT auto-open — callers surface it inline).
+  dealroomJoin: (id) => request(`/deals/${id}/dealroom/join`, { method: 'POST' }),
+  dealroomLeave: (id) => request(`/deals/${id}/dealroom/leave`, { method: 'DELETE' }),
 
   listUsers: (role) => request(`/users${role ? `?role=${role}` : ''}`),
   createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
@@ -1965,6 +1978,12 @@ export const api = {
     request(`/investor-seats/${id}`, { method: 'DELETE' }),
   introductionsQuota: () => request('/introductions/quota'),
   listIntroductions: () => request('/introductions/'),
+  // Task #82 — request a warm intro to a founder/project. Consumes the intro
+  // quota; on exhaustion the worker returns 402 {code:'quota_intros_exhausted',
+  // message, upgrade_to, checkout_path} WITHOUT a `required` field, so the
+  // global PaywallModal does NOT auto-open — callers surface the limit inline.
+  introductionsRequest: (data) =>
+    request('/introductions/request', { method: 'POST', body: JSON.stringify(data || {}) }),
 
   // ---------- Trust layer (Task #58) ----------
   // Task #4 (Y-2) — Trust Center v2 endpoints. The legacy

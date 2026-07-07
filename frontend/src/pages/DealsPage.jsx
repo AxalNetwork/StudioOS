@@ -3,7 +3,8 @@ import { reportError } from '../lib/log';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
-import { ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronRight, DoorOpen, X, Loader2, Check } from 'lucide-react';
+import { openPaywall } from '../components/PaywallModal';
 import ReferenceChecksPanel from '../components/ReferenceChecksPanel';
 import FounderRiskBadge from '../components/FounderRiskBadge';
 import LockedFounderCard from '../components/LockedFounderCard';
@@ -89,14 +90,23 @@ export default function DealsPage() {
   const role = useCurrentRole();
   const canSeeReferences = role === 'admin' || role === 'investor';
   const canSeeRisk = role === 'admin' || role === 'partner' || role === 'investor';
+  // Task #82 — investors work their own funnel. `scope` narrows the list to
+  // deals they have a real relationship with (dealroom member / introduced /
+  // converted watchlist item); operators & founders ignore it entirely.
+  const isInvestor = role === 'investor';
+  const [scope, setScope] = useState('mine');
 
   useEffect(() => {
     loadDeals();
-  }, [canSeeRisk]);
+    // Role hydrates asynchronously (localStorage first-paint → /auth/me), so
+    // isInvestor/canSeeRisk can flip after the first render — refetch then, and
+    // whenever the investor toggles scope.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canSeeRisk, isInvestor, scope]);
 
   const loadDeals = async () => {
     try {
-      const d = await api.listDeals();
+      const d = await api.listDeals(undefined, isInvestor ? scope : undefined);
       setDeals(d);
       // Task #40 — fan-in founder trust scores in one batched call.
       // Only roles that render the badge (admin/partner/investor) get
@@ -157,6 +167,17 @@ export default function DealsPage() {
         ))}
       </div>
 
+      {isInvestor && (
+        <div className="flex gap-2 mb-4">
+          {[['mine', 'My deals'], ['all', 'All deals']].map(([val, label]) => (
+            <button key={val} onClick={() => setScope(val)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${scope === val ? 'bg-violet-600 text-white' : 'bg-gray-200 text-gray-700 hover:text-gray-900 dark:bg-gray-800 dark:text-gray-300'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex gap-2 mb-4 flex-wrap">
         {STATUSES.map(s => (
           <button key={s} onClick={() => setFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize ${filter === s ? 'bg-violet-600 text-white' : 'bg-gray-200 text-gray-700 hover:text-gray-900'}`}>
@@ -208,10 +229,19 @@ export default function DealsPage() {
                       <DealTrustBadge founderUserId={deal.founder_user_id} data={trustScores[deal.founder_user_id]} />
                     )}
                     {canSeeRisk && <FounderRiskBadge dealId={deal.id} />}
-                    {nextStatus && deal.status !== 'rejected' && (
-                      <button onClick={() => updateDeal(deal.id, nextStatus)} className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-medium flex items-center gap-1">
-                        <ArrowRight size={12} /> {nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)}
-                      </button>
+                    {isInvestor ? (
+                      <InvestorDealActions
+                        deal={deal}
+                        isMember={!!deal.is_member}
+                        onJoined={loadDeals}
+                        onView={() => setExpanded(isOpen ? null : deal.id)}
+                      />
+                    ) : (
+                      nextStatus && deal.status !== 'rejected' && (
+                        <button onClick={() => updateDeal(deal.id, nextStatus)} className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-medium flex items-center gap-1">
+                          <ArrowRight size={12} /> {nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)}
+                        </button>
+                      )
                     )}
                     <span className="text-xs text-gray-600">{new Date(deal.created_at).toLocaleDateString()}</span>
                   </div>
@@ -229,6 +259,119 @@ export default function DealsPage() {
           })
         )}
       </div>
+    </div>
+  );
+}
+
+// Task #82 — per-relationship investor actions on a deal row, replacing the
+// operator-only "advance stage" button:
+//   • Join room  → api.dealroomJoin(deal.id) (idempotent; 402 quota_dealrooms
+//                  has no `required` field so we surface the limit inline)
+//   • View room  → expand the row's dealroom panel (already a member)
+//   • Pass       → records a decision-journal `pass` with a reason (≥10 chars);
+//                  hidden when the deal has no project_id (journal needs one).
+function InvestorDealActions({ deal, isMember, onJoined, onView }) {
+  const [joining, setJoining] = useState(false);
+  const [roomQuota, setRoomQuota] = useState('');
+  const [roomTier, setRoomTier] = useState('');
+  const [passOpen, setPassOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [passState, setPassState] = useState('idle'); // idle | busy | done
+  const [err, setErr] = useState('');
+
+  const join = async () => {
+    if (joining) return;
+    setJoining(true); setErr(''); setRoomQuota('');
+    try {
+      await api.dealroomJoin(deal.id); // idempotent
+      onJoined();
+    } catch (e) {
+      if (e.status === 402) {
+        setRoomQuota((e.data && e.data.message) || 'You have reached your deal-room limit.');
+        setRoomTier((e.data && e.data.upgrade_to) || 'professional');
+      } else {
+        setErr(e.message || 'Could not join the deal room');
+        reportError('DealsPage:dealroomJoin', e);
+      }
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  const submitPass = async () => {
+    const thesis = reason.trim();
+    if (thesis.length < 10) { setErr('Add a reason of at least 10 characters.'); return; }
+    setPassState('busy'); setErr('');
+    try {
+      await api.journalCreate({
+        project_id: deal.project_id,
+        deal_id: deal.id,
+        decision: 'pass',
+        conviction: 1,
+        thesis,
+      });
+      setPassState('done'); setPassOpen(false);
+    } catch (e) {
+      setPassState('idle');
+      setErr(e.message || 'Could not record your pass');
+      reportError('DealsPage:passJournal', e);
+    }
+  };
+
+  const canPass = deal.project_id != null;
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-2">
+        {isMember ? (
+          <button onClick={onView}
+            className="px-3 py-1.5 border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-medium flex items-center gap-1 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+            <DoorOpen size={12} /> View room
+          </button>
+        ) : (
+          <button onClick={join} disabled={joining}
+            className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white rounded-lg text-xs font-medium flex items-center gap-1">
+            {joining ? <Loader2 size={12} className="animate-spin" /> : <DoorOpen size={12} />} Join room
+          </button>
+        )}
+        {canPass && passState !== 'done' && (
+          <button onClick={() => setPassOpen(o => !o)}
+            className="px-3 py-1.5 border border-gray-300 hover:bg-gray-50 text-gray-600 rounded-lg text-xs font-medium flex items-center gap-1 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">
+            <X size={12} /> Pass
+          </button>
+        )}
+        {passState === 'done' && (
+          <span className="text-xs text-gray-500 flex items-center gap-1 dark:text-gray-400"><Check size={12} /> Passed</span>
+        )}
+      </div>
+
+      {passOpen && (
+        <div className="mt-1 w-64 bg-white border border-gray-200 rounded-lg p-2 shadow-sm dark:bg-gray-900 dark:border-gray-700">
+          <textarea
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            rows={3}
+            placeholder="Why are you passing? (min 10 chars — logged to your decision journal)"
+            className="w-full text-xs border border-gray-300 rounded p-2 focus:border-violet-500 focus:ring-1 focus:ring-violet-200 focus:outline-none dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100"
+          />
+          <div className="flex justify-end gap-2 mt-2">
+            <button onClick={() => { setPassOpen(false); setErr(''); }}
+              className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 dark:text-gray-400">Cancel</button>
+            <button onClick={submitPass} disabled={passState === 'busy' || reason.trim().length < 10}
+              className="px-2.5 py-1 text-xs bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white rounded flex items-center gap-1">
+              {passState === 'busy' ? <Loader2 size={12} className="animate-spin" /> : null} Record pass
+            </button>
+          </div>
+        </div>
+      )}
+
+      {roomQuota && (
+        <div className="mt-1 w-64 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300">
+          {roomQuota}{' '}
+          <button onClick={() => openPaywall(roomTier || 'professional', roomQuota)} className="underline font-medium">Upgrade</button>
+        </div>
+      )}
+      {err && <div className="mt-1 text-[11px] text-red-600 dark:text-red-400">{err}</div>}
     </div>
   );
 }

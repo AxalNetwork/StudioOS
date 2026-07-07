@@ -9,6 +9,10 @@ const deals = new Hono<{ Bindings: Env }>();
 deals.get('/', async (c) => {
   const user = await requireAuth(c);
   const status = c.req.query('status');
+  // Task #82 — investors can narrow the firm-wide funnel to "my deals":
+  // deals they have an actual relationship with (dealroom member, introduced,
+  // or a converted watchlist item). scope is ignored for operators and founders.
+  const scope = c.req.query('scope');
   const sql = getSQL(c.env);
   const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
   // IDOR guard: founders can only list deals on their own projects.
@@ -20,6 +24,29 @@ deals.get('/', async (c) => {
     rows = status
       ? await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.user_id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN founders f ON f.id = p.founder_id WHERE d.status = ${status} AND (p.id IS NULL OR p.deleted_at IS NULL) ORDER BY d.created_at DESC`
       : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.user_id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN founders f ON f.id = p.founder_id WHERE (p.id IS NULL OR p.deleted_at IS NULL) ORDER BY d.created_at DESC`;
+    // Task #82 — annotate each deal with is_member (is this investor in the
+    // dealroom?) so the SPA can render "View room" vs "Join room", and apply
+    // the optional scope=mine relationship filter.
+    if (user.role === 'investor') {
+      await ensureInvestorPaywallSchema(c.env);
+      const memberRows = await sql`SELECT deal_id FROM investor_dealroom_members WHERE investor_user_id = ${user.id}`;
+      const memberSet = new Set<number>((memberRows as any[]).map((r) => Number(r.deal_id)));
+      const introRows = await sql`SELECT project_id FROM investor_introductions WHERE investor_user_id = ${user.id} AND project_id IS NOT NULL`;
+      const introSet = new Set<number>((introRows as any[]).map((r) => Number(r.project_id)));
+      let convertedSet = new Set<number>();
+      try {
+        const convRows = await sql`SELECT converted_deal_id FROM watchlist_items WHERE owner_user_id = ${user.id} AND converted_deal_id IS NOT NULL`;
+        convertedSet = new Set<number>((convRows as any[]).map((r) => Number(r.converted_deal_id)));
+      } catch { /* watchlist_items absent on a fresh DB — no conversions to fold in */ }
+      rows = (rows as any[]).map((d) => ({ ...d, is_member: memberSet.has(Number(d.id)) ? 1 : 0 }));
+      if (scope === 'mine') {
+        rows = (rows as any[]).filter((d) =>
+          memberSet.has(Number(d.id))
+          || (d.project_id != null && introSet.has(Number(d.project_id)))
+          || convertedSet.has(Number(d.id)),
+        );
+      }
+    }
   } else {
     if (!user.founder_id) { await sql.end(); return c.json([]); }
     rows = status
