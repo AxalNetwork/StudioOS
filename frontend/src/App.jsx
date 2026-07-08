@@ -56,6 +56,9 @@ const AdminEventsPage = lazy(() => import('./pages/admin/AdminEventsPage'));
 const AdminJobsPage = lazy(() => import('./pages/admin/AdminJobsPage'));
 const AdminCirclesPage = lazy(() => import('./pages/admin/AdminCirclesPage'));
 const AdminTeam = lazy(() => import('./pages/admin/AdminTeam'));
+// Task #9 — 'exploring' holding-state surfaces.
+const ExploringDashboard = lazy(() => import('./pages/ExploringDashboard'));
+const AdminExploring = lazy(() => import('./pages/admin/AdminExploring'));
 const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
 const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'));
 const AdminX = lazy(() => import('./pages/admin/AdminX'));
@@ -203,6 +206,8 @@ const ROLE_LABELS = {
   partner: 'Partner',
   investor: 'Investor',
   advisor: 'Advisor',
+  // Task #9 — chat-onboarded holding state awaiting admin role review.
+  exploring: 'Exploring',
 };
 
 const ROLE_COLORS = {
@@ -211,6 +216,7 @@ const ROLE_COLORS = {
   partner: 'bg-emerald-100 text-emerald-700',
   investor: 'bg-purple-100 text-purple-700',
   advisor: 'bg-amber-100 text-amber-700',
+  exploring: 'bg-sky-100 text-sky-700',
 };
 
 const ROLE_DEFAULT_PATH = {
@@ -227,6 +233,10 @@ const ROLE_DEFAULT_PATH = {
   // pins them to /onboarding/chat, but this default keeps any stray
   // role-lookup (e.g. landing-page fallback) from 404-ing them out.
   pending: '/onboarding/chat',
+  // Task #9 — chat-completed users hold at 'exploring' until an admin signs
+  // them in via the binding agreement + assigns the final role. RoleGuard
+  // bounces them here from any route their role can't access.
+  exploring: '/exploring',
 };
 
 // Legacy /dashboard → /studio. Preserve the query string and hash so old links
@@ -535,7 +545,10 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
                 onClick={() => setOpen(false)}
               />
               <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[160px] z-50">
-                {Object.entries(ROLE_LABELS).map(([role, label]) => (
+                {/* Task #9 — 'exploring' is a holding state, not a persona an
+                    admin needs to preview (v1). Filter it from View-as; admins
+                    inspect exploring users via /admin/exploring instead. */}
+                {Object.entries(ROLE_LABELS).filter(([role]) => role !== 'exploring').map(([role, label]) => (
                   <button
                     key={role}
                     onClick={() => { onViewModeChange(role); setOpen(false); }}
@@ -1251,15 +1264,17 @@ function AppInner() {
       <Route path="/partners/onboard" element={<PartnerOnboardPage />} />
       <Route path="/settings/email/confirm" element={<EmailChangeConfirmPage />} />
       <Route path="/settings/email/revoke" element={<EmailChangeRevokePage />} />
-      <Route path="/settings/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SettingsPage />)} />
+      <Route path="/settings/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
 
       {/* Phase 0.1 — investor role added to every guard a partner currently
           passes. Investor-only nav is curated above (NAV_BY_ROLE.investor)
           so we get a tighter capital-allocator surface; per-route guards
           stay permissive so deep links keep working during the split. */}
       <Route path="/studio" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Dashboard />)} />
+      {/* Task #9 — holding-state dashboard for chat-onboarded users awaiting admin role review. */}
+      <Route path="/exploring" element={guard(['admin', 'exploring'], <ExploringDashboard />)} />
       <Route path="/dashboard" element={<DashboardRedirect />} />
-      <Route path="/onboarding/chat" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'pending'], <OnboardingChatPage />)} />
+      <Route path="/onboarding/chat" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'pending', 'exploring'], <OnboardingChatPage />)} />
       <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor'], <OnboardingPersonaPage />)} />
       <Route path="/onboarding/founder" element={guard(['admin', 'founder'], <OnboardingFounderPage />)} />
       <Route path="/onboarding/investor" element={guard(['admin', 'investor'], <OnboardingInvestorPage />)} />
@@ -1305,6 +1320,8 @@ function AppInner() {
       <Route path="/admin/refer-earn" element={guard(['admin'], <AdminReferEarnPayouts />)} />
       <Route path="/admin/partners" element={guard(['admin'], <AdminPartnerInvitations />)} />
       <Route path="/admin/team" element={guard(['admin'], <AdminTeam />)} />
+      {/* Task #9 — exploring-users review queue (binding e-sign + role assignment). */}
+      <Route path="/admin/exploring" element={guard(['admin'], <AdminExploring />)} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       <Route path="/admin/telegram" element={guard(['admin'], <AdminTelegram />)} />
       <Route path="/admin/x" element={guard(['admin'], <AdminX />)} />
@@ -1373,7 +1390,7 @@ function AppInner() {
       <Route path="/wellbeing/expert/:uid" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ExpertProfilePage />)} />
       <Route path="/partners" element={guard(['admin', 'partner', 'investor'], <PartnersPage />)} />
       <Route path="/capital" element={guard(['admin', 'investor'], <CapitalPage />)} />
-      <Route path="/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <TicketsPage />)} />
+      <Route path="/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'], <DealsPage />)} />
       <Route path="/market-intel" element={guard(['admin', 'partner', 'investor'], <MarketIntelPage />)} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <AdvisoryPage />)} />
@@ -1413,9 +1430,9 @@ function AppInner() {
       {/* Task #10 — portfolio Venture Risk matrix (internal deal team). */}
       <Route path="/portfolio/risk-matrix" element={guard(['admin', 'partner', 'investor'], <RiskMatrixPage />)} />
       <Route path="/watchlist" element={guard(['admin', 'partner', 'investor'], <WatchlistJournalPage />)} />
-      <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ActivityPage />)} />
+      <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
-      <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor'], <TrustCenterPage />)} />
+      <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor', 'exploring'], <TrustCenterPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
       <Route path="/spinouts" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=spin-outs" replace /> : <SpinOutsPage />)} />
       {/* Friendly-URL alias: the canonical route is /spinouts (no hyphen),
@@ -1477,12 +1494,12 @@ function AppInner() {
           screen so the page literally pretends not to exist; admins are
           redirected into the hash-anchored docs surface. */}
       <Route path="/docs/admin/*" element={<AdminDocsPathGuard />} />
-      <Route path="/docs" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <DocsPage />)} />
+      <Route path="/docs" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <DocsPage />)} />
       {/* Task #17 — investor "Profile" nav lands on the self-profile surface
           (the Settings profile section rendered at its own path so the sidebar
           item highlights independently of Settings). */}
-      <Route path="/profile" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SettingsPage />)} />
-      <Route path="/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SettingsPage />)} />
+      <Route path="/profile" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      <Route path="/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
 
       {/* Task #53 — Public partner directory + profiles (no auth). The
           static /partners route below takes precedence over /partners/:slug

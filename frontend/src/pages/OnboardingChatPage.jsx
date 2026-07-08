@@ -67,7 +67,7 @@ export default function OnboardingChatPage() {
     setSaving(true);
     setError('');
     try {
-      await api.profilingSave({ email, messages });
+      const saved = await api.profilingSave({ email, messages });
       // Task #2 — funnel: completed = saved with ≥1 user answer. Flushed by
       // the tracker's pagehide hook as the hard redirect below unloads.
       track('onboarding_chat_complete', {
@@ -81,7 +81,13 @@ export default function OnboardingChatPage() {
       // /onboarding/chat — re-mounting this component with an empty chat.
       // A hard reload remounts App.jsx so the effect re-runs and sees the
       // freshly-flipped `completed_at`.
-      window.location.assign('/studio?profile_pending=1');
+      //
+      // Task #9 — /save now returns the user's ACTUAL post-save role.
+      // Fresh signups land in the 'exploring' holding state → route them
+      // to the exploring dashboard, not /studio (which their role can't see).
+      window.location.assign(
+        saved?.role === 'exploring' ? '/exploring' : '/studio?profile_pending=1'
+      );
     } catch (e) {
       setError(e.message);
       setSaving(false);
@@ -100,13 +106,17 @@ export default function OnboardingChatPage() {
     setSkipping(true);
     setError('');
     try {
-      await api.profilingSave({ email, messages });
+      const saved = await api.profilingSave({ email, messages });
       // Task #2 — funnel: skipped (partial/zero answers still persisted).
       track('onboarding_chat_skip', {
         user_turns: messages.filter((m) => m.role === 'user').length,
       });
-      // Same hard-reload rationale as finish() above.
-      window.location.assign('/dashboard');
+      // Same hard-reload rationale as finish() above. Task #9 — skip also
+      // enters the 'exploring' holding state (suggested_role may be null;
+      // the Personal Advisor's role detector fills it in later).
+      window.location.assign(
+        saved?.role === 'exploring' ? '/exploring' : '/dashboard'
+      );
     } catch (e) {
       setError(e.message);
       setSkipping(false);

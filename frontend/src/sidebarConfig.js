@@ -73,6 +73,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/events', icon: Ticket, label: 'Event Admin' },
       { to: '/admin/jobs', icon: Briefcase, label: 'Job Board Admin' },
       { to: '/admin/circles', icon: Network, label: 'Communities Admin' },
+      // Task #9 — chat-onboarded users awaiting binding agreement + role assignment.
+      { to: '/admin/exploring', icon: UserCircle, label: 'Exploring Users' },
       { to: '/monitoring', icon: Activity, label: 'Monitoring' },
       { to: '/admin/telegram', icon: Send, label: 'Telegram Channels' },
       // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
@@ -404,6 +406,25 @@ export const SIDEBAR_GROUPS = {
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
+      { to: '/settings', icon: SettingsIcon, label: 'Settings' },
+    ]},
+  ],
+
+  // Task #9 — 'exploring' holding state: chat-onboarded users awaiting the
+  // binding agreement + admin role assignment. Deliberately lean — the
+  // dashboard (Personal Advisor + Profile & Fit) plus account basics only.
+  // An explicit group is REQUIRED here: the sidebar falls back to the
+  // founder nav for unknown roles, which exploring users must never see.
+  exploring: [
+    { key: 'home', label: 'Home', items: [
+      { to: '/exploring', icon: LayoutDashboard, label: 'Dashboard', highlight: true },
+    ]},
+    { key: 'account', label: 'Account', items: [
+      { to: '/profile', icon: UserCircle, label: 'My Profile' },
+      { to: '/docs', icon: BookOpen, label: 'Documentation' },
+      { to: '/trust', icon: Lock, label: 'Trust Center' },
+      { to: '/activity', icon: Activity, label: 'Activity Log' },
+      { to: '/tickets', icon: MessageSquare, label: 'Support' },
       { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],

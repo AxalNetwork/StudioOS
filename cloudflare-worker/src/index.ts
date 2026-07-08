@@ -202,6 +202,8 @@ import assessmentRoutes from './routes/assessment';
 import adminAssessmentRoutes from './routes/admin_assessment';
 import consultations, { adminConsultations } from './routes/consultations';
 import adminBestFit from './routes/admin_bestfit';
+// Task #9 — Admin review queue for 'exploring' users (binding e-sign + role assignment).
+import adminExploring from './routes/admin_exploring';
 import bestFitSelf from './routes/best_fit';
 // T3 — Reserve allocation + waterfall simulator (Task #46 port).
 import fundSimulatorRoutes from './routes/fund_simulator';
@@ -221,6 +223,8 @@ import { Jobs } from './models/jobs';
 import { writeCronRunHistory } from './util/cronHistory';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
+// Task #9 — 'exploring' holding-state role (CHECK relax + user_role_review side table).
+import { ensureExploringSchema, exploringSchemaReady } from './services/exploringSchema';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
@@ -675,6 +679,9 @@ app.route('/api/admin/assessment', adminAssessmentRoutes);
 // the specific prefixes resolve here, not in the generic admin router.
 app.route('/api/admin/consultations', adminConsultations);
 app.route('/api/admin/best-fit', adminBestFit);
+// Task #9 — Exploring-users review queue. Mount BEFORE the catch-all
+// /api/admin so /api/admin/exploring/* resolves here. requireAdmin per-route.
+app.route('/api/admin/exploring', adminExploring);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
@@ -1081,6 +1088,13 @@ export default {
     }
     if (!_advisorSchemaReady && env.DB) {
       await ensureAdvisorSchema(env);
+    }
+    // Task #9 — relax the users.role CHECK for 'exploring' + create the
+    // user_role_review side table BEFORE any request can hit the
+    // /api/profiling/save holding-state flip. Same isolate-once pattern
+    // as the two ensures above.
+    if (!exploringSchemaReady() && env.DB) {
+      await ensureExploringSchema(env);
     }
     return app.fetch(request, env, ctx);
   },

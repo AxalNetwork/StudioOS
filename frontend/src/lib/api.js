@@ -2672,6 +2672,17 @@ export const adminTeam = {
   reorder: (order) => request('/admin/team/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
 };
 
+// Task #9 — Admin review queue for 'exploring' users (chat-onboarded,
+// awaiting binding agreement + final role assignment).
+export const adminExploring = {
+  list: ({ limit = 100, offset = 0 } = {}) =>
+    request(`/admin/exploring/users?limit=${limit}&offset=${offset}`),
+  sendBinding: (userId, payload = {}) =>
+    request(`/admin/exploring/users/${userId}/binding`, { method: 'POST', body: JSON.stringify(payload) }),
+  assignRole: (userId, role) =>
+    request(`/admin/exploring/users/${userId}/assign-role`, { method: 'POST', body: JSON.stringify({ role }) }),
+};
+
 // Task #1 — Admin advisor & partner network profiles (drives Spin-Out
 // Demo Day deck's Advisors & Network slide).
 export const adminNetworkProfiles = {

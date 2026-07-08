@@ -107,6 +107,42 @@ import { notifyAdvisorPageFill, notifyAdvisorProgress } from '../services/realti
 
 const advisor = new Hono<{ Bindings: Env }>();
 
+// ---------------------------------------------------------------------------
+// Task #9 — 'exploring' persona overlay.
+//
+// Exploring users (chat-onboarded, awaiting admin role review) map to
+// persona 'unknown' in personaFor(), which pins selectBank() to the 3-question
+// ROLE_DETECTOR forever. So they could never complete Skills/Values/
+// Archetype/Fit profiling while in the holding state. advisorUser() wraps
+// requireAuth: when the REAL role is 'exploring' and user_role_review holds a
+// suggested_role, we overlay that suggestion onto `role` for BANK SELECTION
+// ONLY (the users table is never written). `actual_role` preserves the real
+// role so writeRouter's role_detect guard still routes the detector answer
+// into user_role_review.suggested_role instead of users.role.
+// ---------------------------------------------------------------------------
+type AdvisorUser = User & { actual_role?: string };
+const OVERLAYABLE_SUGGESTIONS = new Set(['founder', 'investor', 'advisor', 'partner']);
+
+async function applyExploringOverlay(env: Env, user: User): Promise<AdvisorUser> {
+  if (String(user.role || '').toLowerCase() !== 'exploring') return user;
+  let suggested: string | null = null;
+  try {
+    const { getSuggestedRole } = await import('../services/exploringSchema');
+    suggested = await getSuggestedRole(env, user.id);
+  } catch { /* best-effort — fall through to detector-only */ }
+  const overlay = suggested && OVERLAYABLE_SUGGESTIONS.has(String(suggested).toLowerCase())
+    ? String(suggested).toLowerCase()
+    : user.role;
+  // Cast: 'exploring'/'advisor' live outside the declared User.role union
+  // (the DB CHECK is wider than the TS type); bank selection only reads it.
+  return { ...user, role: overlay as User['role'], actual_role: 'exploring' };
+}
+
+async function advisorUser(c: Context<{ Bindings: Env }>): Promise<AdvisorUser> {
+  const user = await requireAuth(c);
+  return applyExploringOverlay(c.env, user);
+}
+
 // Per-call output cap for /explain. AC-1 caps replies to ≤120 words so
 // the buffered stripVerbatimLeak post-processing stays cheap; 512 tokens
 // is a generous ceiling that fits that bound for the Workers AI llama
@@ -522,7 +558,7 @@ async function applyAdvisorGate(c: Context<{ Bindings: Env }>, user: User): Prom
 // POST /start  —  open or resume the user's active conversation.
 // ---------------------------------------------------------------------------
 advisor.post('/start', async (c) => {
-  const user = await requireAuth(c);
+  const user = await advisorUser(c);
   // Kill switch runs FIRST, before any D1 schema probe / column-ensure
   // call, so a disabled advisor short-circuits without touching the DB.
   if (isAdvisorDisabled(c.env)) {
@@ -691,7 +727,7 @@ interface AnswerEnvelope {
   progress: { total: number; answered: number; skipped: number; percent: number };
 }
 advisor.post('/answer', async (c) => {
-  const user = await requireAuth(c);
+  const user = await advisorUser(c);
   // Kill switch (Task #5 → Task #7) runs FIRST, before any D1 work.
   if (isAdvisorDisabled(c.env)) {
     return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
@@ -1034,13 +1070,15 @@ advisor.post('/answer', async (c) => {
   }
 
   // Re-fetch the user if the role-detector just changed persona so
-  // the next bank reflects the new role.
+  // the next bank reflects the new role. Task #9: for exploring users the
+  // detector writes user_role_review.suggested_role (users.role untouched),
+  // so re-apply the overlay to pick up the fresh suggestion.
   let liveUser = user;
   if (q.id === 'role_detect.primary' && result.status === 'saved') {
     const fresh = await c.env.DB.prepare(
       `SELECT id, email, name, role, founder_id FROM users WHERE id = ?`,
     ).bind(user.id).first<User>();
-    if (fresh) liveUser = { ...user, ...fresh };
+    if (fresh) liveUser = await applyExploringOverlay(c.env, { ...user, ...fresh });
   }
 
   await ensureAdvisorWeekColumn(c.env);
@@ -1194,7 +1232,7 @@ advisor.post('/answer', async (c) => {
 // POST /skip  —  record a skip and advance.
 // ---------------------------------------------------------------------------
 advisor.post('/skip', async (c) => {
-  const user = await requireAuth(c);
+  const user = await advisorUser(c);
   const blocked = await applyAdvisorGate(c, user);
   if (blocked) return blocked;
   await ensureSchema(c.env);
@@ -1287,7 +1325,7 @@ advisor.post('/skip', async (c) => {
 // out one-call-per-page without overpulling.
 // ---------------------------------------------------------------------------
 advisor.get('/sources', async (c) => {
-  const user = await requireAuth(c);
+  const user = await advisorUser(c);
   const blocked = await applyAdvisorGate(c, user);
   if (blocked) return blocked;
   await ensureSchema(c.env);
@@ -1346,7 +1384,7 @@ advisor.get('/sources', async (c) => {
 // no second round-trip.
 // ---------------------------------------------------------------------------
 advisor.get('/answered', async (c) => {
-  const user = await requireAuth(c);
+  const user = await advisorUser(c);
   const blocked = await applyAdvisorGate(c, user);
   if (blocked) return blocked;
   await ensureSchema(c.env);
@@ -1397,7 +1435,7 @@ advisor.get('/answered', async (c) => {
 // "drill in" affordance.
 // ---------------------------------------------------------------------------
 advisor.get('/next-question', async (c) => {
-  const user = await requireAuth(c);
+  const user = await advisorUser(c);
   const blocked = await applyAdvisorGate(c, user);
   if (blocked) return blocked;
   await ensureSchema(c.env);
@@ -1441,7 +1479,7 @@ advisor.get('/next-question', async (c) => {
 // working through one rollout cycle.
 // ---------------------------------------------------------------------------
 advisor.get('/progress', async (c) => {
-  const user = await requireAuth(c);
+  const user = await advisorUser(c);
   const blocked = await applyAdvisorGate(c, user);
   if (blocked) return blocked;
   await ensureSchema(c.env);
@@ -1580,7 +1618,7 @@ advisor.get('/progress', async (c) => {
 // so the UI can show "Unlocks in Week 3" hints without guessing.
 // ---------------------------------------------------------------------------
 advisor.get('/manifest', async (c) => {
-  const user = await requireAuth(c);
+  const user = await advisorUser(c);
   const blocked = await applyAdvisorGate(c, user);
   if (blocked) return blocked;
   await ensureSchema(c.env);
@@ -1636,7 +1674,7 @@ advisor.get('/manifest', async (c) => {
 // looks the conversation up by its public uid (the only ID we expose
 // outside the worker).
 async function conversationDetailHandler(c: Context<{ Bindings: Env }>): Promise<Response> {
-  const user = await requireAuth(c);
+  const user = await advisorUser(c);
   // Gate runs BEFORE the schema probe so non-phase / kill-switch users
   // never touch D1 from this read endpoint either.
   const blocked = await applyAdvisorGate(c, user);
@@ -1691,7 +1729,7 @@ function sseEvent(event: string, data: unknown): string {
 }
 
 advisor.post('/explain', async (c) => {
-  const user = await requireAuth(c);
+  const user = await advisorUser(c);
   // Kill switch (Task #5 → Task #7) runs FIRST, before any D1 work.
   if (isAdvisorDisabled(c.env)) {
     return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
@@ -1942,14 +1980,14 @@ advisor.post('/explain', async (c) => {
 // ---------------------------------------------------------------------------
 
 advisor.get('/tools', async (c) => {
-  const user = await requireAuth(c);
+  const user = await advisorUser(c);
   const blocked = await applyAdvisorGate(c, user);
   if (blocked) return blocked;
   return c.json({ tools: TOOL_SCHEMAS });
 });
 
 advisor.post('/tool', async (c) => {
-  const user = await requireAuth(c);
+  const user = await advisorUser(c);
   const blocked = await applyAdvisorGate(c, user);
   if (blocked) return blocked;
   await ensureSchema(c.env);
@@ -2112,7 +2150,7 @@ const TOOL_CALL_SYSTEM_PROMPT = [
 ].join('\n');
 
 advisor.post('/tool/auto', async (c) => {
-  const user = await requireAuth(c);
+  const user = await advisorUser(c);
   const blocked = await applyAdvisorGate(c, user);
   if (blocked) return blocked;
   await ensureSchema(c.env);
@@ -2267,7 +2305,7 @@ advisor.post('/tool/auto', async (c) => {
 // "asked" timestamp (purely a peek).
 // ---------------------------------------------------------------------------
 async function buildVisibleBank(c: Context<{ Bindings: Env }>, focus: string | null) {
-  const user = await requireAuth(c);
+  const user = await advisorUser(c);
   await ensureSchema(c.env);
   await ensureAdvisorWeekColumn(c.env);
   const gate = await loadAdvisorGate(c.env, user);
@@ -2293,7 +2331,7 @@ advisor.post('/turn', async (c) => {
   // bank hydration (`buildVisibleBank` runs ensureSchema +
   // ensureAdvisorWeekColumn + several reads). Per Task #5 spec, blocked
   // users must short-circuit without touching the DB.
-  const earlyUser = await requireAuth(c);
+  const earlyUser = await advisorUser(c);
   const blocked = await applyAdvisorGate(c, earlyUser);
   if (blocked) return blocked;
   const focus = (c.req.query('focus') || '').trim() || null;
@@ -2325,7 +2363,7 @@ advisor.post('/turn', async (c) => {
 
 advisor.get('/queue', async (c) => {
   // Gate BEFORE buildVisibleBank — see /turn for the same rationale.
-  const earlyUser = await requireAuth(c);
+  const earlyUser = await advisorUser(c);
   const blocked = await applyAdvisorGate(c, earlyUser);
   if (blocked) return blocked;
   const focus = (c.req.query('focus') || '').trim() || null;
@@ -2386,7 +2424,7 @@ const TRANSCRIBE_MODEL = '@cf/openai/whisper';
 const TRANSCRIBE_MAX_B64 = 6 * 1024 * 1024;
 
 advisor.post('/transcribe', async (c) => {
-  const user = await requireAuth(c);
+  const user = await advisorUser(c);
   const blocked = await applyAdvisorGate(c, user);
   if (blocked) return blocked;
   // Workers AI is bound in production (wrangler.toml [ai]); guard anyway so a

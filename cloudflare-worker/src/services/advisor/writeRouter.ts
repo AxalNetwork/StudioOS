@@ -647,6 +647,25 @@ export async function routeAnswer(
   if (questionId === 'role_detect.primary') {
     const role = mapRoleAnswer(value);
     if (!role) return { status: 'failed', error: 'unable to map answer to a role' };
+    // Task #9 — exploring users never get users.role written by the
+    // detector: the answer lands in user_role_review.suggested_role and an
+    // admin applies the final role from /api/admin/exploring. The caller
+    // may pass an OVERLAID user (role = suggested persona for bank
+    // selection), so check `actual_role` (stamped by the overlay) first.
+    const actualRole = String((user as User & { actual_role?: string }).actual_role || user.role || '').toLowerCase();
+    if (actualRole === 'exploring') {
+      try {
+        const { upsertSuggestedRole } = await import('../exploringSchema.ts');
+        await upsertSuggestedRole(env, user.id, role);
+      } catch (e) {
+        return { status: 'failed', error: (e as Error).message };
+      }
+      return {
+        status: 'saved',
+        saved_to: { table: 'user_role_review', column: 'suggested_role', id: user.id },
+        hint: `Noted — you sound like a ${role}. An Axal admin will confirm your final role.`,
+      };
+    }
     try {
       await env.DB.prepare(`UPDATE users SET role = ? WHERE id = ?`).bind(role, user.id).run();
     } catch (e) {
