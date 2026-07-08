@@ -65,6 +65,8 @@ function Row({ u, onSendBinding, onAssign, busy }) {
   const [role, setRole] = useState(
     ASSIGNABLE_ROLES.includes(u.suggested_role) ? u.suggested_role : '',
   );
+  // Onboarding-conversation summary: clamped by default, click to expand.
+  const [expanded, setExpanded] = useState(false);
   const signed = String(u.binding_status || '').toLowerCase() === 'completed';
   const assigned = !!u.assigned_role;
 
@@ -88,6 +90,19 @@ function Row({ u, onSendBinding, onAssign, busy }) {
         )}
         {u.founder_track && (
           <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{u.founder_track}</div>
+        )}
+      </td>
+      <td className="px-3 py-3 align-top max-w-xs">
+        {u.onboarding_summary ? (
+          <p
+            className={`text-xs text-gray-600 dark:text-gray-300 leading-relaxed cursor-pointer ${expanded ? '' : 'line-clamp-3'}`}
+            onClick={() => setExpanded((v) => !v)}
+            title={expanded ? 'Click to collapse' : 'Click to expand'}
+          >
+            {u.onboarding_summary}
+          </p>
+        ) : (
+          <span className="text-xs text-gray-400 dark:text-gray-500">No conversation captured</span>
         )}
       </td>
       <td className="px-3 py-3 align-top text-sm text-gray-700 dark:text-gray-300">
@@ -240,11 +255,12 @@ export default function AdminExploring() {
             No users are currently in the exploring state.
           </div>
         ) : (
-          <table className="w-full text-sm min-w-[760px]">
+          <table className="w-full text-sm min-w-[920px]">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 <th className="px-3 py-2.5 font-medium">User</th>
                 <th className="px-3 py-2.5 font-medium">Suggested role</th>
+                <th className="px-3 py-2.5 font-medium">Conversation</th>
                 <th className="px-3 py-2.5 font-medium">Profiling</th>
                 <th className="px-3 py-2.5 font-medium">Agreement</th>
                 <th className="px-3 py-2.5 font-medium">Actions</th>

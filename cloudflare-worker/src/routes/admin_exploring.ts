@@ -35,6 +35,51 @@ function appUrl(env: Env): string {
   return env.APP_URL || 'https://axal.vc';
 }
 
+/**
+ * Derive a concise onboarding-conversation summary for the admin queue.
+ * Preference order:
+ *   1. `partner_profiles.extracted_data`.summary — the one-sentence AI summary
+ *      the /api/profiling/save extraction stores.
+ *   2. Fallback: the user's own chat messages from `chat_history` (joined,
+ *      truncated) so admins still get context when extraction returned no
+ *      summary (older rows / extraction failure).
+ *   3. null when neither exists (e.g. user skipped the chat).
+ * Pure + exported for direct unit testing (admin_exploring.summary.test.ts).
+ */
+export function deriveOnboardingSummary(
+  extractedJson: string | null | undefined,
+  chatJson: string | null | undefined,
+  maxLen = 280,
+): string | null {
+  const clip = (s: string): string => {
+    const t = s.replace(/\s+/g, ' ').trim();
+    if (!t) return '';
+    return t.length > maxLen ? `${t.slice(0, maxLen - 1).trimEnd()}…` : t;
+  };
+  if (extractedJson) {
+    try {
+      const extracted = JSON.parse(extractedJson);
+      const summary = typeof extracted?.summary === 'string' ? clip(extracted.summary) : '';
+      if (summary) return summary;
+    } catch { /* malformed extraction — fall through to chat fallback */ }
+  }
+  if (chatJson) {
+    try {
+      const messages = JSON.parse(chatJson);
+      if (Array.isArray(messages)) {
+        const userText = messages
+          .filter((m: any) => m && m.role === 'user' && typeof m.content === 'string')
+          .map((m: any) => m.content.trim())
+          .filter(Boolean)
+          .join(' · ');
+        const clipped = clip(userText);
+        if (clipped) return clipped;
+      }
+    } catch { /* malformed chat history */ }
+  }
+  return null;
+}
+
 async function logAdminAction(
   env: Env, adminId: number, adminEmail: string, action: string, details: Record<string, unknown>,
 ): Promise<void> {
@@ -74,6 +119,8 @@ adminExploring.get('/users', async (c) => {
          pp.founder_track, pp.legal_entity_name, pp.entity_type,
          pp.current_stage, pp.partnership_goal, pp.existing_jurisdiction,
          pp.admin_status AS profile_admin_status,
+         pp.extracted_data AS _extracted_data,
+         pp.chat_history AS _chat_history,
          COALESCE(aa.answered, 0) AS profiling_answered
        FROM users u
        LEFT JOIN user_role_review rr ON rr.user_id = u.id
@@ -89,7 +136,16 @@ adminExploring.get('/users', async (c) => {
        ORDER BY COALESCE(rr.onboarded_at, u.created_at) DESC
        LIMIT ? OFFSET ?`
     ).bind(limit, offset).all();
-    return c.json({ users: rows.results || [], limit, offset });
+    // Derive the concise conversation summary server-side and strip the raw
+    // JSON blobs (chat_history can be large; the queue only needs the gist).
+    const users = (rows.results || []).map((r: any) => {
+      const { _extracted_data, _chat_history, ...rest } = r;
+      return {
+        ...rest,
+        onboarding_summary: deriveOnboardingSummary(_extracted_data, _chat_history),
+      };
+    });
+    return c.json({ users, limit, offset });
   } catch (e) {
     console.error('[admin_exploring] list failed', e);
     return c.json({ error: 'Failed to list exploring users' }, 500);
