@@ -1,0 +1,48 @@
+#9 - Legal Engine v1
+What & Why
+Roadmap item #7 from the Founder UX audit. The Legal Engine is a skeleton: the jurisdiction picker is a local TODO that does not persist, status pills are hardcoded rather than reflecting real document state, only 4 document groups exist where 6 are specified, and the engine is still founder-accessible when it should be de-admined. The legal templates were already seeded, so this task wires the engine on top of them.
+Done looks like
+* The jurisdiction picker persists the founder's selection and drives which templates/steps show.
+* Status pills reflect real per-document/per-step state instead of hardcoded values.
+* The engine presents all 6 document groups (currently incorporation, founders, compliance, equity — add the two missing groups).
+* Access to the Legal Engine is restricted to the intended roles (founder access removed / de-admined).
+Out of scope
+* Authoring new legal template content (templates are already seeded).
+* E-signature or external filing integrations.
+Steps
+1. Persist jurisdiction — Replace the local TODO picker with a persisted jurisdiction selection that drives the engine's contents.
+2. Real status pills — Drive document/step status pills from actual state instead of hardcoded values.
+3. Six groups — Expand the engine from 4 to the 6 specified document groups.
+4. De-admin access — Restrict the Legal Engine routes to the intended roles, removing founder access.
+Architectural notes:
+* Backend lives in the Cloudflare Worker (worker-route-first); persist jurisdiction and status server-side.
+* Any schema change is a new cloudflare-worker/sql/migrations/NNN_*.sql at the next free number (currently 143); renumber on collision.
+* The engine is served at /raise/legal-engine and its sub-routes; keep App.jsx guard edits minimal and additive.
+Relevant files
+* frontend/src/pages/LegalEnginePage.jsx
+* cloudflare-worker/src/routes/legal.ts
+* frontend/src/App.jsx:1338-1342
+ #9 - Legal Engine v1
+What & Why
+Roadmap item #7 from the Founder UX audit. The Legal Engine is a skeleton: the jurisdiction picker is a local TODO that does not persist, status pills are hardcoded rather than reflecting real document state, only 4 document groups exist where 6 are specified, and the engine is still founder-accessible when it should be de-admined. The legal templates were already seeded, so this task wires the engine on top of them.
+Done looks like
+* The jurisdiction picker persists the founder's selection and drives which templates/steps show.
+* Status pills reflect real per-document/per-step state instead of hardcoded values.
+* The engine presents all 6 document groups (currently incorporation, founders, compliance, equity — add the two missing groups).
+* Access to the Legal Engine is restricted to the intended roles (founder access removed / de-admined).
+Out of scope
+* Authoring new legal template content (templates are already seeded).
+* E-signature or external filing integrations.
+Steps
+1. Persist jurisdiction — Replace the local TODO picker with a persisted jurisdiction selection that drives the engine's contents.
+2. Real status pills — Drive document/step status pills from actual state instead of hardcoded values.
+3. Six groups — Expand the engine from 4 to the 6 specified document groups.
+4. De-admin access — Restrict the Legal Engine routes to the intended roles, removing founder access.
+Architectural notes:
+* Backend lives in the Cloudflare Worker (worker-route-first); persist jurisdiction and status server-side.
+* Any schema change is a new cloudflare-worker/sql/migrations/NNN_*.sql at the next free number (currently 143); renumber on collision.
+* The engine is served at /raise/legal-engine and its sub-routes; keep App.jsx guard edits minimal and additive.
+Relevant files
+* frontend/src/pages/LegalEnginePage.jsx
+* cloudflare-worker/src/routes/legal.ts
+* frontend/src/App.jsx:1338-1342
