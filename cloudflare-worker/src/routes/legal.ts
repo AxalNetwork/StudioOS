@@ -21,6 +21,8 @@ import {
   getIncorporationForUser,
 } from '../services/incorporations';
 import legal83b from './legal_83b';
+import legalEngine from './legal_engine';
+import { JURISDICTIONS, JURISDICTION_TEMPLATE_TITLES } from '../services/jurisdictionCatalog';
 
 const legal = new Hono<{ Bindings: Env }>();
 
@@ -66,13 +68,9 @@ const TEMPLATES: Record<string, { title: string; layer: string; content: string 
 // Task #30 — Jurisdiction wizard (worker parity).
 // Read-only catalogue endpoint. Doc generation + entity creation stays
 // on the FastAPI backend, which is the source of truth for both DBs.
-const JURISDICTIONS = [
-  { id: 'us_de_ccorp', label: 'Delaware C-Corp', country: 'United States', country_code: 'US', entity_type: 'C Corporation', summary: 'The default for VC-backed startups.', est_cost_usd: [500, 1500], time_to_form_days: [1, 7], fundraising_friendly: true, atlas_supported: true, pros: ['Stripe Atlas one-click', 'Universally accepted by US VCs'], cons: ['21% federal corporate tax', 'Annual filings + agent'], tax_summary: '21% federal corporate income tax. DE franchise tax $400–$1,750.', templates: ['certificate_of_incorporation_de', 'bylaws', 'stock_purchase_agreement', 'section_83b'] },
-  { id: 'us_de_llc', label: 'Delaware LLC', country: 'United States', country_code: 'US', entity_type: 'Limited Liability Company', summary: 'Pass-through taxation. Hard to take VC.', est_cost_usd: [300, 800], time_to_form_days: [1, 5], fundraising_friendly: false, atlas_supported: false, pros: ['Pass-through tax', 'Flexible operating agreement'], cons: ['Most VCs cannot invest in LLCs', 'Self-employment tax'], tax_summary: 'Pass-through. DE franchise tax flat $300/yr.', templates: ['operating_agreement', 'ein_application_kit', 'member_consent'] },
-  { id: 'uk_ltd', label: 'UK Private Limited (Ltd)', country: 'United Kingdom', country_code: 'GB', entity_type: 'Private Limited Company', summary: 'Fast and credible for European VCs.', est_cost_usd: [50, 250], time_to_form_days: [1, 3], fundraising_friendly: true, atlas_supported: false, pros: ['£50 same-day filing', 'SEIS/EIS angel tax relief'], cons: ['US VCs may want a flip', 'Public PSC register'], tax_summary: 'Corporation tax 25% (19% small-profits up to £50k).', templates: ['uk_memorandum_of_association', 'uk_articles_of_association', 'uk_form_in01_kit'] },
-  { id: 'sg_pte', label: 'Singapore Pte Ltd', country: 'Singapore', country_code: 'SG', entity_type: 'Private Limited (Pte. Ltd.)', summary: 'Asia hub. Strong rule of law, English-language filings.', est_cost_usd: [600, 1500], time_to_form_days: [1, 5], fundraising_friendly: true, atlas_supported: false, pros: ['Startup tax exemption ~75% on first S$100k', '17% headline corporate tax'], cons: ['Need SG-resident director', 'Bank account 2–4 weeks'], tax_summary: '17% corporate tax; effective ~4–8% in years 1–3.', templates: ['sg_constitution', 'sg_acra_form_45_kit', 'sg_first_directors_resolution'] },
-  { id: 'ee_oy', label: 'Estonia OÜ (e-Residency)', country: 'Estonia', country_code: 'EE', entity_type: 'Osaühing (Private Limited)', summary: 'Fully remote, 0% tax on retained earnings.', est_cost_usd: [200, 500], time_to_form_days: [3, 14], fundraising_friendly: false, atlas_supported: false, pros: ['0% tax on retained earnings', '100% online incorporation'], cons: ['20% distribution tax on dividends', 'Need e-Residency first (~6–8 weeks)'], tax_summary: '0% on retained earnings. 20% distribution tax on dividends.', templates: ['ee_articles_of_association', 'ee_e_residency_application_kit', 'ee_founding_resolution'] },
-];
+// Task #2 (Legal Engine v1) — the catalog now lives in
+// services/jurisdictionCatalog.ts (imported above) so the lightweight
+// legal_engine sub-app can share it without this file's heavy import graph.
 
 legal.get('/jurisdictions', async (c) => {
   await requireAuth(c);
