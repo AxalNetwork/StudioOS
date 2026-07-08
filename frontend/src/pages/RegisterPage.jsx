@@ -4,6 +4,7 @@ import { storePendingNext, sanitizeNextPath } from '../lib/pendingNext';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Copy, Check, Mail, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
+import { track } from '../lib/funnel';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
@@ -49,6 +50,9 @@ export default function RegisterPage() {
   }, []);
   const continueWithGoogle = async () => {
     setGoogleBusy(true); setError('');
+    // Task #2 — funnel: Google-path signups leave the page here; there is no
+    // register_success counterpart (the OAuth callback lands them signed in).
+    track('register_submit', { mode: 'google' });
     try {
       // Task #1 — carry the invite/deep-link target through the OAuth state
       // so the worker callback lands the user straight on it (new signups
@@ -97,7 +101,19 @@ export default function RegisterPage() {
     if (em && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) {
       setForm((f) => ({ ...f, email: em }));
     }
+    // Task #2 — funnel: register page reached. Attribution (utm/ref/lane/
+    // invite) is captured inside the tracker from its own URL allowlist.
+    track('register_view');
   }, []);
+
+  // Task #2 — funnel: first interaction with the form (typed into any field).
+  // Ref (not state) so re-renders can't re-fire it; once per page view.
+  const formStartRef = useRef(false);
+  const markFormStart = () => {
+    if (formStartRef.current) return;
+    formStartRef.current = true;
+    track('register_form_start');
+  };
 
   // Task #10 — audit copy fix: no more "We use TOTP…" jargon in subheads.
   const laneCopy = {
@@ -148,6 +164,8 @@ export default function RegisterPage() {
           // Task #10 — surface the failure instead of silently leaving the
           // CTA disabled forever (ad blocker / strict network).
           setTurnstileFailed(true);
+          // Task #2 — funnel: how many signups hit a dead Turnstile widget.
+          track('register_turnstile_failed');
         }
       }, 200);
       return () => clearInterval(interval);
@@ -175,9 +193,17 @@ export default function RegisterPage() {
   }, [step]);
 
   const validateStep1 = () => {
-    if (!form.name.trim()) { setError('Please enter your full name'); return false; }
+    if (!form.name.trim()) {
+      setError('Please enter your full name');
+      track('register_field_error', { field: 'name' });
+      return false;
+    }
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-    if (!form.email.trim() || !emailRe.test(form.email.trim())) { setError('Please enter a valid email address (e.g. you@example.com)'); return false; }
+    if (!form.email.trim() || !emailRe.test(form.email.trim())) {
+      setError('Please enter a valid email address (e.g. you@example.com)');
+      track('register_field_error', { field: 'email' });
+      return false;
+    }
     return true;
   };
 
@@ -198,6 +224,7 @@ export default function RegisterPage() {
     if (TURNSTILE_SITE_KEY && !turnstileFailed && !turnstileToken) { setError('Please complete the verification challenge'); return; }
     setLoading(true);
     setError('');
+    track('register_submit', { mode: 'magic' });
     try {
       // When Turnstile never loaded, /register would reject us (the token is
       // server-enforced) — skip account pre-creation and fall back to the
@@ -212,6 +239,7 @@ export default function RegisterPage() {
         }
       }
       await api.magicStart(form.email.trim());
+      track('register_success', { mode: 'magic' });
       setEmailMode('magic');
       setResendCooldown(60);
       setStep(3);
@@ -229,6 +257,7 @@ export default function RegisterPage() {
     if (TURNSTILE_SITE_KEY && !turnstileToken) { setError(turnstileFailed ? 'Bot verification could not load, so the authenticator flow is unavailable right now. Use the sign-in link instead.' : 'Please complete the verification challenge'); return; }
     setLoading(true);
     setError('');
+    track('register_submit', { mode: 'classic' });
     try {
       // Task #66 — the inline pre-login chatbot (legacy step 2) is retired.
       // The full-screen post-login `/onboarding/chat` page is now the single
@@ -237,6 +266,10 @@ export default function RegisterPage() {
       // the verification email immediately and jumps straight to the
       // "Check Your Email" step; the chatbot runs after the user logs in.
       const res = await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, role: laneRole });
+      // Task #2 — funnel: email_sent:false is the audit's silent-drop-off
+      // signal (provider outage / misconfig) — alert threshold documented in
+      // ANALYTICS_FUNNEL.md.
+      track('register_success', { mode: 'classic', email_sent: res?.email_sent !== false });
       setEmailWarning(res?.email_sent === false);
       if (res?.verification_url) setVerificationUrl(res.verification_url);
       setEmailMode('classic');
@@ -252,6 +285,7 @@ export default function RegisterPage() {
     if (resendCooldown > 0) return;
     setLoading(true);
     setError('');
+    track('register_resend_click', { mode: emailMode });
     try {
       if (emailMode === 'magic') {
         // Task #10 — resend the magic sign-in link (server rate-limits
@@ -318,13 +352,13 @@ export default function RegisterPage() {
               <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); registerWithMagic(); }}>
                 <div>
                   <label className="text-xs text-gray-600 block mb-1">Full Name</label>
-                  <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  <input type="text" value={form.name} onChange={e => { markFormStart(); setForm(f => ({ ...f, name: e.target.value })); }}
                     placeholder="John Smith" autoComplete="name"
                     className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-base sm:text-sm text-gray-900 placeholder-gray-500 focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div>
                   <label className="text-xs text-gray-600 block mb-1">Email</label>
-                  <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                  <input type="email" value={form.email} onChange={e => { markFormStart(); setForm(f => ({ ...f, email: e.target.value })); }}
                     placeholder="john@company.com" autoComplete="email" inputMode="email"
                     className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-base sm:text-sm text-gray-900 placeholder-gray-500 focus:border-violet-500 focus:outline-none" />
                 </div>

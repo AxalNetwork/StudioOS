@@ -235,6 +235,7 @@ import lpReports from './routes/lp_reports';
 import portfolioUpdates from './routes/portfolio_updates';
 import positions from './routes/positions';
 import contacts from './routes/contacts';
+import track from './routes/track';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -427,6 +428,11 @@ app.post('/api/client-error', async (c) => {
   }
   return c.body(null, 204);
 });
+
+// Task #2 — First-party signup-funnel event sink (batched, consent-gated on
+// the client, per-IP `track` rate-limit bucket). Same telemetry philosophy
+// as /api/client-error above: unauthenticated, best-effort, always 204.
+app.route('/api/track', track);
 
 // Real-time WebSocket fan-out (Durable Objects). Must stay at the edge.
 app.route('/api', realtime);
@@ -1288,6 +1294,22 @@ export default {
               console.info(`[cron] personas digest scanned=${r.scanned} sent=${r.sent}`);
             }
           } catch (e) { console.error('[cron] personas digest failed', e); }
+        }
+        // Task #2 — funnel_events retention purge at 04:20 UTC. First-party
+        // funnel rows are pseudonymous but still subject to GDPR storage
+        // limitation; 180 days is ample for cohort comparisons (window is
+        // documented in ANALYTICS_FUNNEL.md alongside the manual purge SQL).
+        // Best-effort: a cold DB without the table just logs and moves on.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
+          try {
+            const r = await env.DB.prepare(
+              "DELETE FROM funnel_events WHERE created_at < datetime('now', '-180 days')",
+            ).run();
+            const purged = (r as any)?.meta?.changes || 0;
+            if (purged) console.info(`[cron] funnel_events purge deleted=${purged}`);
+          } catch (e) {
+            console.error('[cron] funnel_events purge failed', e);
+          }
         }
         // Task #5 (IE) — Daily KV snapshot to R2 at 02:00 UTC. D1
         // backup is taken separately by .github/workflows/backup-d1.yml

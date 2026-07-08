@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## We measure our own signup experience now — privately
+
+To find and fix the places where joining StudioOS is confusing or broken, the platform now keeps count of the steps people take while signing up (like "opened the sign-up page" or "verified their email").
+
+- **Only with your permission.** Nothing is counted unless you accept analytics cookies in the cookie banner. Decline, and nothing is ever recorded.
+- **No outside companies.** The counts go straight to our own servers — there is no Google Analytics or any other third-party tracker involved.
+- **No personal details.** We don't store your name, email, or address in these counts — just anonymous steps, which are deleted automatically after six months.
+
+---
+
 ## Invitations now take you straight where you were headed
 
 Joining from an invitation is finally seamless:

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Shield, LogIn, KeyRound, Mail } from 'lucide-react';
 import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import { api } from '../lib/api';
+import { track } from '../lib/funnel';
 import { storePendingNext } from '../lib/pendingNext';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 
@@ -91,6 +92,8 @@ export default function LoginPage() {
   // post-auth and routes the user to their invitation target.
   useEffect(() => {
     storePendingNext(safeNextPath());
+    // Task #2 — funnel: sign-in page reached.
+    track('login_view');
   }, []);
 
   // Discover whether the worker has Google OAuth configured; hide the
@@ -114,6 +117,8 @@ export default function LoginPage() {
     const code = params.get('google_error');
     if (code) {
       setError(GOOGLE_ERROR_COPY[code] || 'Google sign-in failed.');
+      // Task #2 — funnel: OAuth callback bounced the user back with an error.
+      track('login_error', { method: 'google', reason: code.slice(0, 40) });
       const url = new URL(window.location.href);
       url.searchParams.delete('google_error');
       window.history.replaceState({}, '', url.pathname + (url.search ? `?${url.searchParams}` : ''));
@@ -126,6 +131,8 @@ export default function LoginPage() {
     const code = params.get('magic_error');
     if (code) {
       setError(MAGIC_ERROR_COPY[code] || 'That sign-in link could not be used. Request a new one below.');
+      // Task #2 — funnel: magic-link verify failed (expired/re-used/invalid).
+      track('login_error', { method: 'magic', reason: code.slice(0, 40) });
       const url = new URL(window.location.href);
       url.searchParams.delete('magic_error');
       window.history.replaceState({}, '', url.pathname + (url.search ? `?${url.searchParams}` : ''));
@@ -138,6 +145,7 @@ export default function LoginPage() {
   // full-assurance session server-side.
   const signInWithPasskey = async () => {
     setPasskeyBusy(true); setError('');
+    track('login_submit', { method: 'passkey' });
     try {
       const wanted = email.trim() || undefined;
       const options = await api.passkey.authOptions(wanted);
@@ -146,18 +154,27 @@ export default function LoginPage() {
       if (!res?.token || !res?.user) throw new Error('Invalid response from server.');
       localStorage.setItem('token', res.token);
       localStorage.setItem('user', JSON.stringify(res.user));
+      // Task #2 — funnel: flushed by the tracker's pagehide hook as this
+      // full-page navigation unloads the SPA.
+      track('login_success', { method: 'passkey' });
       window.location.href = safeNextPath() || '/studio'; // codeql[js/client-side-unvalidated-url-redirection] -- safeNextPath() returns only same-origin '/'-prefixed paths (rejects '//'); defence-in-depth
     } catch (e) {
       if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
         setError('Passkey sign-in was cancelled.');
+        track('login_error', { method: 'passkey', reason: 'cancelled' });
       } else {
         setError(e?.message || 'Passkey sign-in failed.');
+        track('login_error', { method: 'passkey' });
       }
     } finally { setPasskeyBusy(false); }
   };
 
   const continueWithGoogle = async () => {
     setGoogleBusy(true); setError('');
+    // Task #2 — funnel: no login_success counterpart here — the OAuth
+    // callback lands the user signed in; failures bounce back as
+    // ?google_error= (tracked above).
+    track('login_submit', { method: 'google' });
     try {
       // Preserve a `?next=` return path (e.g. a paid event invite) across the
       // Google round-trip. The worker's /auth/google/start re-sanitizes the
@@ -266,11 +283,15 @@ export default function LoginPage() {
     }
     if (totpCode.length !== 6) { setError('Enter the 6-digit code from your authenticator.'); return; }
     setLoading(true); setError('');
+    track('login_submit', { method: 'totp' });
     try {
       const res = await api.login({ email: email.trim(), totp_code: totpCode, turnstileToken });
       if (!res?.token || !res?.user) throw new Error('Invalid response from server.');
       localStorage.setItem('token', res.token);
       localStorage.setItem('user', JSON.stringify(res.user));
+      // Task #2 — funnel: flushed by the tracker's pagehide hook as this
+      // full-page navigation unloads the SPA.
+      track('login_success', { method: 'totp' });
       // Relative path — stays on whichever canonical host the user signed in
       // on (axal.vc post-flip). The Worker serves the SPA on /studio for
       // both axal.vc and app.axal.vc per the apex routing table in wrangler.toml.
@@ -283,8 +304,10 @@ export default function LoginPage() {
       if (/not set up for TOTP/i.test(msg)) {
         setTotpMissing(true);
         setError("Your account doesn't have an authenticator app yet — that's normal if you joined by signing a partner agreement or via an email link. Use “Email me a sign-in link” below instead.");
+        track('login_error', { method: 'totp', reason: 'totp_missing' });
       } else {
         setError(msg);
+        track('login_error', { method: 'totp' });
       }
       resetTurnstile();
     } finally { setLoading(false); }
@@ -303,12 +326,17 @@ export default function LoginPage() {
     }
     if (magicBusy || magicCooldown > 0) return;
     setMagicBusy(true); setError('');
+    // Task #2 — funnel: "submit" for the magic path = link requested. The
+    // sign-in itself completes server-side on /magic/verify; failures bounce
+    // back as ?magic_error= (tracked above).
+    track('login_submit', { method: 'magic' });
     try {
       await api.magicStart(target);
       setMagicSentTo(target);
       setMagicCooldown(60);
     } catch (e) {
       setError(e?.message || 'Could not send your sign-in link. Please try again in a moment.');
+      track('login_error', { method: 'magic', reason: 'send_failed' });
     } finally { setMagicBusy(false); }
   };
 

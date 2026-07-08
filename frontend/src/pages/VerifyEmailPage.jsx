@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
+import { track } from '../lib/funnel';
 import { CheckCircle, XCircle, ShieldCheck, ArrowRight } from 'lucide-react';
 import TotpEnrollment from '../components/TotpEnrollment';
 
@@ -25,10 +26,14 @@ export default function VerifyEmailPage() {
   useEffect(() => {
     if (ranRef.current) return;
     ranRef.current = true;
+    // Task #2 — funnel: verification link opened. The tracker never reads the
+    // full query string, so the single-use token cannot leak into analytics.
+    track('verify_email_view');
     const token = searchParams.get('token');
     if (!token) {
       setStatus('error');
       setError('Missing verification token.');
+      track('verify_email_result', { outcome: 'error', reason: 'missing_token' });
       return;
     }
     (async () => {
@@ -45,9 +50,13 @@ export default function VerifyEmailPage() {
           setSignedIn(true);
         }
         setStatus('verified');
+        // Task #2 — funnel: signed_in separates new-worker sessions from the
+        // legacy "verified but must sign in manually" path.
+        track('verify_email_result', { outcome: 'success', signed_in: !!res?.token });
       } catch (e) {
         setError(e.message || 'Verification failed.');
         setStatus('error');
+        track('verify_email_result', { outcome: 'error' });
       }
     })();
   }, [searchParams]);

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { api } from '../lib/api';
+import { track } from '../lib/funnel';
 import {
   Check, Copy, Download, Smartphone, ShieldCheck,
   ChevronDown, ChevronRight, HelpCircle, ExternalLink, XCircle,
@@ -82,7 +83,34 @@ export default function TotpEnrollment({ onDone, onCancel }) {
   const [codesCopied, setCodesCopied] = useState(false);
   const canvasRef = useRef(null);
 
+  // Task #2 — funnel: totp_setup_start / _complete / _abandon. Refs (not
+  // state) so React.StrictMode double-invocation and re-renders can't
+  // double-fire. Abandon = explicit "Not now"/Close OR leaving the page
+  // mid-enrolment — NEVER unmount (parents unmount this on success too).
+  const startedRef = useRef(false);
+  const completedRef = useRef(false);
+  const abandonedRef = useRef(false);
+  const markAbandon = (reason) => {
+    if (!startedRef.current || completedRef.current || abandonedRef.current) return;
+    abandonedRef.current = true;
+    track('totp_setup_abandon', { reason });
+  };
+  const cancel = () => {
+    markAbandon('cancel');
+    onCancel?.();
+  };
   useEffect(() => {
+    const onHide = () => markAbandon('pagehide');
+    window.addEventListener('pagehide', onHide);
+    return () => window.removeEventListener('pagehide', onHide);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!startedRef.current) {
+      startedRef.current = true;
+      track('totp_setup_start');
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -115,6 +143,11 @@ export default function TotpEnrollment({ onDone, onCancel }) {
     setError('');
     try {
       const res = await api.enrolTotpConfirm({ totp_secret: data.totp_secret, totp_code: code });
+      // Task #2 — funnel: enrolment persists server-side at confirm, so this
+      // (not onDone, which additionally requires the recovery-codes ack) is
+      // the completion moment.
+      completedRef.current = true;
+      track('totp_setup_complete');
       setRecoveryCodes(res?.recovery_codes || []);
       setPhase('recovery');
     } catch (e) {
@@ -171,7 +204,7 @@ export default function TotpEnrollment({ onDone, onCancel }) {
         </div>
         <p className="text-sm text-gray-700 dark:text-gray-300 mb-4">{error}</p>
         {onCancel && (
-          <button onClick={onCancel} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+          <button onClick={cancel} className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
             Close
           </button>
         )}
@@ -328,7 +361,7 @@ export default function TotpEnrollment({ onDone, onCancel }) {
           {busy ? 'Verifying…' : 'Verify & activate'}
         </button>
         {onCancel && (
-          <button type="button" onClick={onCancel}
+          <button type="button" onClick={cancel}
             className="w-full text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 py-1 transition-colors">
             Not now
           </button>

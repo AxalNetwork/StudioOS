@@ -4,6 +4,7 @@ import InfoStrip from '../components/InfoStrip';
 import { Link } from 'react-router-dom';
 import { Bell, RefreshCw, Loader2, Briefcase, ChevronRight, Sparkles, TrendingUp, Eye, Handshake, ArrowRight } from 'lucide-react';
 import { api } from '../lib/api';
+import { trackOnce } from '../lib/funnel';
 import { reportError } from '../lib/log';
 import SemanticSearch from '../components/SemanticSearch';
 import InvestorTrialBanner from '../components/InvestorTrialBanner';
@@ -66,6 +67,12 @@ export default function Dashboard() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Task #2 — funnel: activation endpoint. trackOnce de-dupes per browser
+  // (localStorage) so only the FIRST dashboard render after signup counts.
+  useEffect(() => {
+    trackOnce('dashboard_first_view');
+  }, []);
 
   // Task #81 — once we know the viewer is an investor, pull their read-only
   // deal-lifecycle funnel. Silent on error so the deal desk still renders.

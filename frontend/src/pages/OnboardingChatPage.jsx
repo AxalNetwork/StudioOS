@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Sparkles, Send } from 'lucide-react';
 import { api } from '../lib/api';
+import { track } from '../lib/funnel';
 import { useAuth } from '../hooks/useAuthSync';
 
 /**
@@ -30,6 +31,11 @@ export default function OnboardingChatPage() {
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, chatLoading]);
+
+  // Task #2 — funnel: onboarding chat reached (post-auth profiling gate).
+  useEffect(() => {
+    track('onboarding_chat_view');
+  }, []);
 
   const sendChat = async () => {
     const text = input.trim();
@@ -62,6 +68,11 @@ export default function OnboardingChatPage() {
     setError('');
     try {
       await api.profilingSave({ email, messages });
+      // Task #2 — funnel: completed = saved with ≥1 user answer. Flushed by
+      // the tracker's pagehide hook as the hard redirect below unloads.
+      track('onboarding_chat_complete', {
+        user_turns: messages.filter((m) => m.role === 'user').length,
+      });
       // Task #66 — full-page redirect (not SPA navigate). RequireAuth in
       // App.jsx fetches `onboarding_progress` inside a useEffect keyed on
       // `[user?.id]`; after save the user id hasn't changed, so a soft
@@ -90,6 +101,10 @@ export default function OnboardingChatPage() {
     setError('');
     try {
       await api.profilingSave({ email, messages });
+      // Task #2 — funnel: skipped (partial/zero answers still persisted).
+      track('onboarding_chat_skip', {
+        user_turns: messages.filter((m) => m.role === 'user').length,
+      });
       // Same hard-reload rationale as finish() above.
       window.location.assign('/dashboard');
     } catch (e) {
