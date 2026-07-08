@@ -29,11 +29,11 @@
 --    prospects) and add external_name/url/sector/stage/source/tags_json +
 --    reminded_at. INSERT..SELECT preserves ids so decision_journal_entries'
 --    new watchlist_item_id column keeps pointing at the right rows. Backfill
---    legacy status 'passed' -> 'passed_on'. Wrapped in a transaction for
---    atomicity (mirrors 039_project_cascade.sql).
+--    legacy status 'passed' -> 'passed_on'. NOTE: no SQL BEGIN/COMMIT — D1
+--    rejects transaction statements ("use state.storage.transaction()...");
+--    the wrangler `d1 execute --file` batch is applied atomically by D1.
 -- ---------------------------------------------------------------------------
 DROP TABLE IF EXISTS watchlist_items_new;
-BEGIN;
 CREATE TABLE watchlist_items_new (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uid TEXT NOT NULL UNIQUE,
@@ -75,7 +75,6 @@ CREATE INDEX IF NOT EXISTS idx_watchlist_project ON watchlist_items(project_id);
 -- External items are unique by name within an owner (matches dev entity).
 CREATE UNIQUE INDEX IF NOT EXISTS uq_watchlist_owner_external
   ON watchlist_items(owner_user_id, external_name) WHERE project_id IS NULL;
-COMMIT;
 
 -- ---------------------------------------------------------------------------
 -- 2. decision_journal_entries — add the richer contract columns. Bare ALTERs

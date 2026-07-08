@@ -5,6 +5,131 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Run your raise from one board
+
+The Raise Pipeline is now a full fundraising workspace:
+
+- **Your round at a glance.** Set your target, close date and round name once — the header shows how much is committed, your progress toward target, and how many investors are in play.
+- **Add investors your way.** Add them one at a time with a quick form, or upload a CSV (name, email, firm, amount, notes) and import your whole list at once. Anyone with an email is also added to your Contacts hub automatically.
+- **Drag investors between stages.** The pipeline is now a board — drag a card from "To contact" through "Committed" (or "Passed") as conversations progress.
+- **Everything about an investor in one place.** Click any card to open a side panel with their stage, firm, check size and notes, plus their linked contact record with a shortcut into your Contacts hub.
+- **Keep investors in the loop.** Post investor updates right from the pipeline. Each update is saved to your raise and noted on every active investor's contact timeline. Updates are recorded in StudioOS — they are not sent as emails.
+
+---
+
+## People first: Team and Advisory redesigned around humans
+
+The pages about your team and advisors now lead with people, not tools:
+
+- **"Your People".** The Team page opens on advisors for everyone, and its new title says what it's really about — the humans building this with you. Sections your plan doesn't include yet show a blurred preview of what's inside instead of a plain lock.
+- **Advisory starts with your advisors.** The advisor directory is now the first thing you see; the AI tools moved behind it. The AI Advisor tab now hosts the same interactive advisor you know from your home screen, with the older question-and-answer form kept as a clearly labeled backup.
+- **Remember every advisor relationship.** Each advisor card can now show when you last met, when to follow up (overdue follow-ups are highlighted), what the follow-up is about, and your private notes — all editable from the advisor's edit panel.
+- **Browse co-founders before committing.** You no longer need a profile just to look around — browse candidates as a guest, and you'll be guided to create your profile when you want to express interest. Match scores appear once you have a profile to match against.
+
+---
+
+## Your investor workspace, consolidated
+
+We tidied the investor sidebar so related tools live together instead of as a long list of separate links:
+
+- **Four focused workspaces.** Portfolio (Health, Company Updates and Cap Table), Fund Modeling (Reserve Allocation and Exit Waterfall), Fund Ops (Funds, LP Reporting and Capital Calls) and your own My LP Portal now open as tabbed areas instead of scattered pages.
+- **LP Reporting shows real numbers.** TVPI and DPI are now calculated live from each fund's called, distributed and NAV figures — no more hand-typed values.
+- **A lighter Account menu.** Advisors, Partners, Jobs and Articles were removed from the investor Account group to keep it focused on what LPs actually use.
+- **Exits are clearly a simulation.** The buyer-matching "execute exit" flow now says plainly that it's a simulation — no real money moves.
+- **See your usage next to every upgrade prompt.** When you hit a plan limit, a small card now shows your live billing and introductions usage right beside the upgrade options.
+- **Previews instead of locks.** Tabs you can't open yet show a blurred preview of what's inside rather than a plain lock.
+
+---
+
+## Due diligence, decisions and positions now flow together
+
+Due diligence is no longer an admin-only tool, and the steps from scoring a startup to committing capital now hand off to each other instead of making you start over each time:
+
+- **Run your own due diligence.** Investors and advisors get a Due Diligence area, and any review items assigned to you show up as next steps on your home screen.
+- **Open a diligence case straight from a deal.** One click from a deal you've joined starts — or reopens — its diligence case.
+- **From memo to committee in one step.** "Generate deal memo" now opens a ready-to-use investment-committee decision seeded with that memo.
+- **Votes become journal notes.** Each committee vote drafts a private journal entry (invest, pass or defer) you can refine later.
+- **Invest decisions prefill the cap table.** Deciding to invest gives you a "Record position" button that fills in the startup and round for you.
+- **Market Intelligence, tidied up.** The long list of tabs is now grouped into five clear lenses: Sector Compass, Investor Signals, Capital Markets, Founder Pulse and Ecosystem.
+
+---
+
+## Take action right from your matches
+
+Your AI-scored matches are no longer just something to read — every card now lets you act:
+
+- **Do something with each match.** Add a company to your watchlist, request a warm intro, or open its deal room without leaving the Matching Engine. If you've hit your plan's intro or deal-room limit, the card tells you and offers an upgrade on the spot.
+- **A deal pipeline that's actually yours.** In Deal Flow you can switch between **My deals** — the ones you've joined, been introduced to, or converted from your watchlist — and the full pipeline.
+- **Work each deal.** Join a deal room (or jump back into one you're already in), and pass on a deal with a short reason that's saved to your decision journal for later.
+
+---
+
+## A home screen built for investors
+
+If you're an investor, your home screen is now a proper deal desk instead of the founder view:
+
+- **See your deals by stage.** A lifecycle strip shows how many deals you have at each step — watching, warm intro, deal room, diligence and committed — and points you to the best next move.
+- **Your AI-scored opportunities, front and center.** The startups matched to your thesis now appear as cards you can open, add to your watchlist, or request an intro on.
+- **Quick numbers at a glance.** Deals in your flow, your average AI match score, how many you're watching, and your active deal rooms — all up top.
+
+---
+
+## A smarter watchlist and decision journal
+
+If you track prospects and record your investment calls, both tools now hold everything you need:
+
+- **Watch companies that aren't on the platform yet.** Add an outside prospect by name and link, tag it, note the sector and stage, and jot your thesis — right alongside the startups you already follow.
+- **Never lose track of a follow-up.** Set a "check back on" date for anything you're watching and we'll remind you when it comes due. Move the date and the reminder simply moves with it.
+- **A fuller decision journal.** Record your conviction (1–5), key risks, what you expect to happen and by when, and your target multiple. Later, log the actual outcome — hit, miss, partial or inconclusive — so you can look back and learn.
+- **See your track record.** The anti-portfolio view shows the deals you passed on, and how those calls aged: the ones you were right to skip, the ones you'd regret, and the ones still playing out.
+
+---
+
+## One home for your investment preferences
+
+If you're an investor, everything about what you're looking for now lives in one place:
+
+- **Edit your thesis any time.** A new **"My thesis"** card under Settings → Privacy lets you update the sectors, stages, geographies and free-text description you invest in — no need to redo onboarding just to change your mind.
+- **We now keep everything you tell us.** A few details from the investor sign-up (like your firm, accreditation status and where you're based) were being collected but not saved. They're saved now.
+- **The old "Preferences" pop-up on the Matches page is gone.** The button there now takes you straight to your thesis in Settings, so there's a single source of truth.
+
+---
+
+## Clearer roles on the pipeline, and safer scoring
+
+We tightened up who does what, so the platform matches how a venture studio actually works:
+
+- **The pipeline board is now run by the studio team.** Admins and partners move startups between stages, trigger AI reviews and make the go/no-go calls. Investors can still follow every deal on the board and cast their vote on each one — they just no longer drive the studio's internal pipeline.
+- **Scoring now starts in Practice mode for everyone.** You can run the scoring engine as many times as you like to explore a startup without it counting. When you're ready to lock in a number, switch to **Submit Official** — and we'll now ask you to confirm first, with a clear reminder that an official score is recorded, shared, and locked for 7 days. No more accidental official scores.
+
+---
+
+## Your Command Center is now organized around your startup's journey
+
+We've reorganized the Command Center into four clear tabs, in the order you actually work:
+
+- **Overview** — where your startup is on its journey and what to do next (this is still where you land).
+- **Startups** — all your startups in one place. Switch between a **List** and a **pipeline Board**, or filter down to just your **spin-outs**.
+- **Roadmap** — your goals and milestones, now their own tab instead of being tucked away.
+- **Operations** — finance, hiring, legal and compliance, plus an AI **focus recommendation** for each venture, written in plain, encouraging language.
+
+Starting a new startup is now a simple **"New startup"** button (from Overview or Startups) that opens the guided intake — so there's no separate "Founder Portal" tab to hunt for. All your existing links and bookmarks still work and take you to the right place.
+
+---
+
+## Your Command Center now opens on an Overview
+
+The Command Center now starts on a new **Overview** tab that shows, at a glance, where your startup is on its journey and what to do next:
+
+- A **Startup Lifecycle** track — Idea → Validate → Build → Launch → Grow → Raise — highlights the stage you're in. If you haven't set one, we'll suggest a stage based on your activity; tap any stage to confirm or change it.
+- A **next best action** and a short **checklist** for your current stage. Some items tick themselves off automatically as you make progress (like publishing a landing page); others you can check off yourself, and each links straight to where you get it done.
+- A **venture snapshot** with your startup's status, score and playbook week.
+- A read-only **traction snapshot** (MRR, active users, churn/new users, and your traction score) with a one-click link into your full Metrics page.
+
+Your existing Command Center tabs and bookmarks are unchanged.
+
+---
+
 ## Author profiles are now shareable and live
 
 Every article author now has a public profile page at `/authors/:id` — showing their photo, headline, bio, and social links (LinkedIn, X/Twitter, Website, GitHub, and the new Instagram field). The profile is powered directly by what you fill in under **Settings > Profile**, so there's no separate "author bio" to maintain.

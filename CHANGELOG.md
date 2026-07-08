@@ -10,6 +10,14 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Prod deploy — D1 migration-ledger adoption + migrations 139–145 applied
+
+Ops entry for the first ledger-driven prod deploy (2026-07-08).
+
+- One-time `npm run d1:baseline` run against prod (ledger now authoritative, 147 rows). It **marked 139–145 without executing them** although their effects were absent (they postdate the last hand-apply) — caught by PRAGMA verification, fixed by un-marking the 7 ledger rows and re-running `node scripts/migrate-d1.mjs --remote` to real-apply. All seven verified present afterwards (`lifecycle_stage`, investor-profile unify cols, watchlist/journal contract, `dd_case_id`/`ic_decision_id`, advisor relationship fields, `brand_sites`/`page_slug`, raise tables).
+- `cloudflare-worker/sql/migrations/141_watchlist_journal_contract.sql` — stripped SQL `BEGIN;`/`COMMIT;`: D1 rejects transaction statements, so the file could never apply remotely (the wrangler `--file` batch is atomic anyway). See GOTCHAS → Migrations & schema.
+- Worker deployed to production; `scripts/check-spa-live.mjs` all green (apex + app.axal.vc routes, hashed assets, `/api/health`).
+
 ## Raise Pipeline v1 (Task #1)
 
 The raise pipeline grows from a flat prospect list into a real fundraising workspace: a server-persisted active round with target/raised/close-date header, add-investor form + CSV import, a drag-between-stages kanban, a prospect drawer linked to the underlying Contacts-hub record, and investor updates posted from the pipeline. Worker-only domain (dev FastAPI has no contacts routes).
