@@ -10,6 +10,16 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Magic-link sign-in + entry-screen fixes (Task #10)
+
+The backend magic-link auth (BLOCK-AUTH-01: `POST /api/auth/magic/start` + `/magic/verify`, 15-min single-use links) finally gets UI — `api.magicStart` previously had zero callers. Audit P0 tier (fixes 1, 2, 6) plus copy/form polish (10, 12, 13, 15) from `SIGNUP_FRICTION_AUDIT_2026-07-08.md`. Frontend-only except one email-copy string; no new backend flows.
+
+- **Login (`LoginPage.jsx`)** — "Email me a sign-in link" button with sent-state (Open Gmail/Outlook deep links, spam hint, 60s resend cooldown). The `'Account not set up for TOTP authentication'` error (deal-activated partners, magic signups) is now mapped to friendly copy and highlights the magic button instead of dead-ending.
+- **Register (`RegisterPage.jsx`)** — magic link is the primary email path: `register({ defer_email: true })` (409 "already registered" tolerated — link signs existing users in) then `magicStart`; classic verification→TOTP flow kept as a secondary text link. Step 3 copy branches on `emailMode`; resend re-sends whichever email the user is waiting for. Real `<form>` (Enter submits), `autocomplete`/`inputmode`, `text-base sm:text-sm` inputs (no iOS focus zoom), Terms/Privacy trust line, "Continue with Google — fastest".
+- **Turnstile fail-visible fallback (both pages)** — when the widget script never loads (~10s poll exhausted), an amber notice explains why the token-gated CTA is unavailable and points at the magic link (which the server rate-limits per-IP/per-email independently). On register, the fallback skips `register()` (token is server-enforced) and sends the bare magic link — `magic/verify` find-or-creates; referral attribution is lost only in that edge case.
+- **Partner dead end (`PartnerOnboardPage.jsx`, `partnerDeals.ts`)** — the post-signing "Sign in to Partner Portal" CTA (which led to the TOTP wall) now requests a magic link for `invitation.recipient_email` inline; the deal-activation email tells signers to use "Email me a sign-in link".
+- **Copy (`LandingPage.jsx` et al.)** — "How it works" step 2 reframed per audit ("Browse and match with just your email — verification comes later…"); "We use TOTP…" jargon removed from register subheads/lane copy; check-email screens gain the spam hint + inbox deep links.
+
 ## Prod deploy — D1 migration-ledger adoption + migrations 139–145 applied
 
 Ops entry for the first ledger-driven prod deploy (2026-07-08).

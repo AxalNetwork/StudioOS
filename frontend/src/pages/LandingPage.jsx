@@ -75,9 +75,9 @@ const HOW_IT_WORKS = [
   },
   {
     week: 'Step 2',
-    title: 'Get verified',
+    title: 'Get matched',
     icon: BadgeCheck,
-    desc: 'KYC, KYB, accreditation, and NDAs — only where the activity actually requires it.',
+    desc: 'Browse and match with just your email — verification comes later, only when you invest or sign.',
   },
   {
     week: 'Step 3',

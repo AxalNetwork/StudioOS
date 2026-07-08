@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Shield, LogIn, KeyRound } from 'lucide-react';
+import { ArrowLeft, Shield, LogIn, KeyRound, Mail } from 'lucide-react';
 import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import { api } from '../lib/api';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
@@ -65,6 +65,23 @@ export default function LoginPage() {
   // BLOCK-AUTH-02 — passkey state.
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   const passkeySupported = typeof window !== 'undefined' && browserSupportsWebAuthn();
+  // Task #10 — passwordless magic-link sign-in (BLOCK-AUTH-01 finally gets UI).
+  const [magicBusy, setMagicBusy] = useState(false);
+  const [magicSentTo, setMagicSentTo] = useState('');
+  const [magicCooldown, setMagicCooldown] = useState(0);
+  // Set when /login answers "Account not set up for TOTP authentication" —
+  // e.g. partners created by deal activation. We swap the raw error for
+  // friendly copy and steer them to the magic link.
+  const [totpMissing, setTotpMissing] = useState(false);
+  // Task #10 — fail-visible Turnstile: true once the 50-attempt (~10s) poll
+  // gives up, so we can explain the disabled button instead of staying silent.
+  const [turnstileFailed, setTurnstileFailed] = useState(false);
+
+  useEffect(() => {
+    if (magicCooldown <= 0) return;
+    const t = setTimeout(() => setMagicCooldown(magicCooldown - 1), 1000);
+    return () => clearTimeout(t);
+  }, [magicCooldown]);
 
   // Discover whether the worker has Google OAuth configured; hide the
   // button otherwise so we don't show users a control that returns 503.
@@ -162,6 +179,9 @@ export default function LoginPage() {
           renderTurnstile();
         } else if (attempts >= 50) {
           clearInterval(interval);
+          // Task #10 — surface the failure instead of silently leaving the
+          // sign-in button disabled forever (ad blocker / strict network).
+          setTurnstileFailed(true);
         }
       }, 200);
       return () => clearInterval(interval);
@@ -174,7 +194,7 @@ export default function LoginPage() {
       }
       turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
         sitekey: TURNSTILE_SITE_KEY,
-        callback: (token) => setTurnstileToken(token),
+        callback: (token) => { setTurnstileToken(token); setTurnstileFailed(false); },
         'expired-callback': () => setTurnstileToken(''),
         theme: 'light',
       });
@@ -246,9 +266,40 @@ export default function LoginPage() {
       // both axal.vc and app.axal.vc per the apex routing table in wrangler.toml.
       window.location.href = safeNextPath() || '/studio'; // codeql[js/client-side-unvalidated-url-redirection] -- safeNextPath() returns only same-origin '/'-prefixed paths (rejects '//'); defence-in-depth
     } catch (e) {
-      setError(e?.message || 'Sign in failed.');
+      const msg = e?.message || 'Sign in failed.';
+      // Task #10 — accounts without a TOTP enrolment (e.g. partners created
+      // by deal activation, magic-link signups) hit this exact server error.
+      // Map it to actionable copy + highlight the magic-link path.
+      if (/not set up for TOTP/i.test(msg)) {
+        setTotpMissing(true);
+        setError("Your account doesn't have an authenticator app yet — that's normal if you joined by signing a partner agreement or via an email link. Use “Email me a sign-in link” below instead.");
+      } else {
+        setError(msg);
+      }
       resetTurnstile();
     } finally { setLoading(false); }
+  };
+
+  // ---- Task #10 — request a magic sign-in link ----
+  const sendMagicLink = async () => {
+    const target = email.trim();
+    if (!target) { setError('Enter your email above, then request a sign-in link.'); return; }
+    // Turnstile still gates the request when the widget is working; when it
+    // failed to load, the magic link is deliberately the recovery path
+    // (the endpoint has its own per-IP + per-email rate limits server-side).
+    if (TURNSTILE_SITE_KEY && !turnstileFailed && !turnstileToken) {
+      setError('Please complete the verification challenge first.');
+      return;
+    }
+    if (magicBusy || magicCooldown > 0) return;
+    setMagicBusy(true); setError('');
+    try {
+      await api.magicStart(target);
+      setMagicSentTo(target);
+      setMagicCooldown(60);
+    } catch (e) {
+      setError(e?.message || 'Could not send your sign-in link. Please try again in a moment.');
+    } finally { setMagicBusy(false); }
   };
 
   return (
@@ -266,7 +317,7 @@ export default function LoginPage() {
 
           <h2 className="text-xl font-bold text-gray-900 mb-1">Welcome Back</h2>
           <p className="text-sm text-gray-600 mb-6">
-            Sign in with your email and your authenticator code.
+            Sign in with your authenticator code — or just request an email sign-in link.
           </p>
 
           {error && (
@@ -276,11 +327,11 @@ export default function LoginPage() {
           <div className="space-y-4">
             <div>
               <label className="text-xs text-gray-600 block mb-1">Email</label>
-              <input type="email" value={email} autoComplete="email"
+              <input type="email" value={email} autoComplete="email" inputMode="email"
                 onChange={e => setEmail(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && submit()}
                 placeholder="john@company.com"
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-sm" />
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-base sm:text-sm" />
             </div>
 
             <div>
@@ -300,11 +351,62 @@ export default function LoginPage() {
               <div ref={turnstileRef} className="flex justify-center" />
             )}
 
+            {/* Task #10 — fail-visible fallback when the Turnstile script
+                never loads (ad blocker, strict network). The code sign-in
+                stays disabled (server enforces the token) but we say so and
+                point at the magic link, which has its own rate limits. */}
+            {TURNSTILE_SITE_KEY && turnstileFailed && (
+              <div className="text-xs text-amber-800 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">
+                Human verification couldn't load — usually an ad blocker or strict network.
+                Code sign-in is unavailable, but you can still use <strong>Email me a sign-in link</strong> below.
+              </div>
+            )}
+
             <button onClick={submit}
               disabled={loading || (TURNSTILE_SITE_KEY && !turnstileToken) || totpCode.length !== 6}
               className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white flex items-center justify-center gap-2">
               {loading ? 'Signing in…' : <>Sign in <LogIn size={14} /></>}
             </button>
+
+            {/* Task #10 — passwordless email sign-in link (BLOCK-AUTH-01 UI). */}
+            {magicSentTo ? (
+              <div className="bg-emerald-50 border border-emerald-300 rounded-lg p-3 space-y-2">
+                <p className="text-xs text-emerald-800">
+                  <strong>Sign-in link sent to {magicSentTo}.</strong> Tap the link in the email and you're in — it expires in 15 minutes and works once.
+                </p>
+                <p className="text-[11px] text-emerald-700">
+                  It can take a minute. Check spam for mail from <strong>support@axal.vc</strong>.
+                </p>
+                <div className="flex gap-2">
+                  <a href="https://mail.google.com" target="_blank" rel="noopener noreferrer"
+                    className="flex-1 text-center text-xs font-medium text-emerald-900 bg-white border border-emerald-300 hover:bg-emerald-100 rounded-md py-1.5 transition-colors">
+                    Open Gmail
+                  </a>
+                  <a href="https://outlook.live.com/mail" target="_blank" rel="noopener noreferrer"
+                    className="flex-1 text-center text-xs font-medium text-emerald-900 bg-white border border-emerald-300 hover:bg-emerald-100 rounded-md py-1.5 transition-colors">
+                    Open Outlook
+                  </a>
+                </div>
+                <button type="button" onClick={sendMagicLink} disabled={magicBusy || magicCooldown > 0}
+                  className="w-full text-xs text-emerald-800 hover:text-emerald-900 disabled:opacity-60 py-1 font-medium">
+                  {magicCooldown > 0 ? `Resend available in ${magicCooldown}s` : magicBusy ? 'Sending…' : 'Resend link'}
+                </button>
+              </div>
+            ) : (
+              <div>
+                <button type="button" onClick={sendMagicLink} disabled={magicBusy}
+                  className={`w-full disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
+                    totpMissing
+                      ? 'bg-violet-600 hover:bg-violet-700 text-white ring-2 ring-violet-300'
+                      : 'bg-white hover:bg-gray-50 border border-gray-300 text-gray-700'
+                  }`}>
+                  <Mail size={14} /> {magicBusy ? 'Sending link…' : 'Email me a sign-in link'}
+                </button>
+                <p className="text-[10px] text-gray-500 text-center mt-1">
+                  No password or authenticator needed — we'll email you a one-time link.
+                </p>
+              </div>
+            )}
 
             {/* BLOCK-AUTH-02 — passkey sign-in (Face ID / Touch ID / security key). */}
             {passkeySupported && (

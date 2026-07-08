@@ -442,7 +442,9 @@ export async function activatePartnerDealOnSignature(
       userId,
       type: 'partner_deal_activated',
       title: `Welcome to the Axal partner network`,
-      body: `Your ${deal.deal_type.replace(/_/g, ' ')} agreement is live. Your one-time referral code is ${referralCode || '(pending)'} — share it to grant network access for ${termMonths} months.`,
+      // Task #10 — point signers at the magic-link path: these accounts have
+      // no TOTP enrolled, so "sign in with your authenticator" is a dead end.
+      body: `Your ${deal.deal_type.replace(/_/g, ' ')} agreement is live. Your one-time referral code is ${referralCode || '(pending)'} — share it to grant network access for ${termMonths} months. To open your Partner Portal, choose "Email me a sign-in link" on the sign-in page — no password or authenticator needed.`,
       link: '/partner-portal',
       channels: ['in_app', 'email'],
     });

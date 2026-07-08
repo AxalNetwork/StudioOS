@@ -22,6 +22,13 @@ export default function RegisterPage() {
   const [recoveryAck, setRecoveryAck] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [turnstileToken, setTurnstileToken] = useState('');
+  // Task #10 — fail-visible Turnstile: true once the 50-attempt (~10s) poll
+  // gives up, so we can explain ourselves instead of a silently dead button.
+  const [turnstileFailed, setTurnstileFailed] = useState(false);
+  // Task #10 — which email flow produced the "Check Your Email" step:
+  // 'magic' (primary: one-click sign-in link) or 'classic' (verification
+  // email → TOTP enrolment). Drives step-3 copy and the resend action.
+  const [emailMode, setEmailMode] = useState('magic');
   const [emailWarning, setEmailWarning] = useState(false);
   const [verificationUrl, setVerificationUrl] = useState('');
   const [refCode, setRefCode] = useState('');
@@ -84,20 +91,21 @@ export default function RegisterPage() {
     }
   }, []);
 
+  // Task #10 — audit copy fix: no more "We use TOTP…" jargon in subheads.
   const laneCopy = {
     partner: {
       title: 'Join the Partner Network',
-      desc: "Get matched with deals before they go public. We use TOTP for secure, passwordless authentication.",
+      desc: "Get matched with deals before they go public. Free to join — no password to remember, we'll email you a secure sign-in link.",
       chatGreeting: "Welcome to Axal VC, the global venture partner network. To match you with the right deal flow, tell me what you bring — sector expertise, capital, distribution, technical, legal, or operational?",
     },
     lp: {
       title: 'Open your LP Account',
-      desc: 'Track commitments, calls, and distributions. We use TOTP for secure, passwordless authentication.',
+      desc: "Track commitments, calls, and distributions. Free to join — no password to remember, we'll email you a secure sign-in link.",
       chatGreeting: "Welcome to Axal VC, the global venture partner network. To set up your LP profile, tell me about your fund or family office: vintage focus, ticket size, sectors, and any restrictions.",
     },
     founder: {
       title: 'Submit your pitch',
-      desc: "We'll score your venture within 72 hours. We use TOTP for secure, passwordless authentication.",
+      desc: "We'll score your venture within 72 hours. Free to join — no password to remember, we'll email you a secure sign-in link.",
       chatGreeting: "Welcome to Axal VC, the global venture partner network. To run our 100-point scoring on your venture, tell me about it: problem, team, traction, and the next 12 months. If you're applying to Spin-Out Lab, mention that too.",
     },
   };
@@ -161,6 +169,9 @@ export default function RegisterPage() {
           renderTurnstile();
         } else if (attempts >= 50) {
           clearInterval(interval);
+          // Task #10 — surface the failure instead of silently leaving the
+          // CTA disabled forever (ad blocker / strict network).
+          setTurnstileFailed(true);
         }
       }, 200);
       return () => clearInterval(interval);
@@ -173,7 +184,7 @@ export default function RegisterPage() {
       }
       turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
         sitekey: TURNSTILE_SITE_KEY,
-        callback: (token) => setTurnstileToken(token),
+        callback: (token) => { setTurnstileToken(token); setTurnstileFailed(false); },
         'expired-callback': () => setTurnstileToken(''),
         theme: 'light',
       });
@@ -187,11 +198,59 @@ export default function RegisterPage() {
     };
   }, [step]);
 
-  const register = async () => {
-    if (!form.name.trim()) { setError('Please enter your full name'); return; }
+  const validateStep1 = () => {
+    if (!form.name.trim()) { setError('Please enter your full name'); return false; }
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-    if (!form.email.trim() || !emailRe.test(form.email.trim())) { setError('Please enter a valid email address (e.g. you@example.com)'); return; }
-    if (TURNSTILE_SITE_KEY && !turnstileToken) { setError('Please complete the verification challenge'); return; }
+    if (!form.email.trim() || !emailRe.test(form.email.trim())) { setError('Please enter a valid email address (e.g. you@example.com)'); return false; }
+    return true;
+  };
+
+  const resetTurnstileWidget = () => {
+    if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {
+      try { window.turnstile.reset(turnstileWidgetId.current); } catch {}
+      setTurnstileToken('');
+    }
+  };
+
+  // Task #10 — primary email path: create/refresh the account (deferring the
+  // classic verification email), then send a magic sign-in link. One tap on
+  // the link both verifies the address and signs the user in (BLOCK-AUTH-01).
+  // If the account already exists with TOTP configured, /register answers 409
+  // — the magic link still signs them in, so we proceed identically.
+  const registerWithMagic = async () => {
+    if (!validateStep1()) return;
+    if (TURNSTILE_SITE_KEY && !turnstileFailed && !turnstileToken) { setError('Please complete the verification challenge'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      // When Turnstile never loaded, /register would reject us (the token is
+      // server-enforced) — skip account pre-creation and fall back to the
+      // bare magic link, which find-or-creates the account on verify and has
+      // its own per-IP/per-email rate limits. Referral attribution is lost in
+      // that edge case, but the user isn't.
+      if (!(TURNSTILE_SITE_KEY && turnstileFailed)) {
+        try {
+          await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, defer_email: true });
+        } catch (e) {
+          if (!/already registered/i.test(e?.message || '')) throw e;
+        }
+      }
+      await api.magicStart(form.email.trim());
+      setEmailMode('magic');
+      setResendCooldown(60);
+      setStep(3);
+    } catch (e) {
+      setError(e.message);
+      resetTurnstileWidget();
+    }
+    setLoading(false);
+  };
+
+  // Task #10 — 'classic' secondary path (verification email → TOTP enrolment),
+  // for users who want an authenticator from day one.
+  const register = async () => {
+    if (!validateStep1()) return;
+    if (TURNSTILE_SITE_KEY && !turnstileToken) { setError(turnstileFailed ? 'Bot verification could not load, so the authenticator flow is unavailable right now. Use the sign-in link instead.' : 'Please complete the verification challenge'); return; }
     setLoading(true);
     setError('');
     try {
@@ -204,13 +263,11 @@ export default function RegisterPage() {
       const res = await api.register({ ...form, turnstileToken, ref_code: refCode || undefined });
       setEmailWarning(res?.email_sent === false);
       if (res?.verification_url) setVerificationUrl(res.verification_url);
+      setEmailMode('classic');
       setStep(3);
     } catch (e) {
       setError(e.message);
-      if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {
-        try { window.turnstile.reset(turnstileWidgetId.current); } catch {}
-        setTurnstileToken('');
-      }
+      resetTurnstileWidget();
     }
     setLoading(false);
   };
@@ -266,10 +323,16 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.resendVerification({ email: form.email });
-      if (res?.verification_url) {
-        setVerificationUrl(res.verification_url);
-        setEmailWarning(true);
+      if (emailMode === 'magic') {
+        // Task #10 — resend the magic sign-in link (server rate-limits
+        // 3/15min per email; surface its error message if we hit the cap).
+        await api.magicStart(form.email.trim());
+      } else {
+        const res = await api.resendVerification({ email: form.email });
+        if (res?.verification_url) {
+          setVerificationUrl(res.verification_url);
+          setEmailWarning(true);
+        }
       }
       setResendCooldown(60);
     } catch (e) { setError(e.message); }
@@ -355,7 +418,8 @@ export default function RegisterPage() {
           {step === 1 && (
             <>
               <h2 className="text-xl font-bold text-gray-900 mb-1">{activeLane?.title || 'Create Your Account'}</h2>
-              <p className="text-sm text-gray-600 mb-6">{activeLane?.desc || 'Join the Global Venture Partner Network. We use TOTP for secure, passwordless authentication.'}</p>
+              {/* Task #10 — audit's exact subhead copy (fix 10). */}
+              <p className="text-sm text-gray-600 mb-6">{activeLane?.desc || "Free to join. No password to remember — we'll email you a secure sign-in link."}</p>
 
               {productIntent === 'spinout-lab' && (
                 <div className="bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 mb-4 text-xs text-amber-800">
@@ -371,26 +435,50 @@ export default function RegisterPage() {
 
               {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{error}</div>}
 
-              <div className="space-y-4">
+              {/* Task #10 — real <form> so Enter submits (audit fix 12);
+                  inputs get autocomplete/inputmode and ≥16px mobile font
+                  (fix 13, prevents iOS focus zoom). */}
+              <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); registerWithMagic(); }}>
                 <div>
                   <label className="text-xs text-gray-600 block mb-1">Full Name</label>
                   <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    placeholder="John Smith"
-                    className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-sm text-gray-900 placeholder-gray-500 focus:border-violet-500 focus:outline-none" />
+                    placeholder="John Smith" autoComplete="name"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-base sm:text-sm text-gray-900 placeholder-gray-500 focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div>
                   <label className="text-xs text-gray-600 block mb-1">Email</label>
                   <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                    placeholder="john@company.com"
-                    className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-sm text-gray-900 placeholder-gray-500 focus:border-violet-500 focus:outline-none" />
+                    placeholder="john@company.com" autoComplete="email" inputMode="email"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-base sm:text-sm text-gray-900 placeholder-gray-500 focus:border-violet-500 focus:outline-none" />
                 </div>
                 {TURNSTILE_SITE_KEY && (
                   <div ref={turnstileRef} className="flex justify-center" />
                 )}
-                <button onClick={register} disabled={loading || (TURNSTILE_SITE_KEY && !turnstileToken)}
-                  className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white transition-colors">
-                  {loading ? 'Creating Account...' : 'Continue'}
+                {/* Task #10 — fail-visible fallback: explain a dead Turnstile
+                    instead of a silently disabled CTA. The sign-in link still
+                    works (server rate-limits it independently). */}
+                {TURNSTILE_SITE_KEY && turnstileFailed && (
+                  <div className="text-xs text-amber-800 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">
+                    Human verification couldn't load — usually an ad blocker or strict network.
+                    You can still continue with an emailed sign-in link below.
+                  </div>
+                )}
+                <button type="submit" disabled={loading || (TURNSTILE_SITE_KEY && !turnstileToken && !turnstileFailed)}
+                  className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white transition-colors flex items-center justify-center gap-2">
+                  <Mail size={14} /> {loading ? 'Sending link…' : 'Email me a sign-in link'}
                 </button>
+                {/* Task #10 — audit's exact trust line (fix 15). */}
+                <p className="text-[10px] text-gray-500 text-center leading-relaxed">
+                  By continuing you agree to our <Link to="/terms" className="underline hover:text-gray-700">Terms</Link> and{' '}
+                  <Link to="/privacy" className="underline hover:text-gray-700">Privacy Policy</Link>. We'll only email you about your account.
+                </p>
+                <p className="text-xs text-gray-500 text-center">
+                  Prefer an authenticator app from day one?{' '}
+                  <button type="button" onClick={register} disabled={loading}
+                    className="text-violet-600 hover:underline font-medium disabled:opacity-50">
+                    Verify by email and set one up
+                  </button>
+                </p>
 
                 {/* Task #51 — Optional "Continue with Google" sign-up. Skips
                     the email-verification and TOTP-enrolment steps (steps 3-4)
@@ -417,14 +505,14 @@ export default function RegisterPage() {
                         <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.4-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.2-8l-6.6 5.1C9.6 39.6 16.2 44 24 44z" />
                         <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2c-.4.4 6.7-4.9 6.7-14.8 0-1.3-.1-2.4-.4-3.5z" />
                       </svg>
-                      {googleBusy ? 'Redirecting…' : 'Continue with Google'}
+                      {googleBusy ? 'Redirecting…' : 'Continue with Google — fastest'}
                     </button>
                     <p className="text-[10px] text-gray-500 text-center">
-                      We'll create your account from your Google profile. You can enrol TOTP later from Settings.
+                      We'll create your account from your Google profile. You can enrol an authenticator later from Settings.
                     </p>
                   </>
                 )}
-              </div>
+              </form>
 
               <p className="text-xs text-gray-600 text-center mt-4">
                 Already have an account? <Link to="/login" className="text-violet-600 hover:underline font-medium">Sign in</Link>
@@ -498,7 +586,11 @@ export default function RegisterPage() {
                 {emailWarning ? 'Verify Your Email' : 'Check Your Email'}
               </h2>
               <p className="text-sm text-gray-600 mb-3 text-center">
-                {emailWarning ? 'Email delivery is not configured. Use the link below to verify:' : `We've sent a verification link to`}
+                {emailWarning
+                  ? 'Email delivery is not configured. Use the link below to verify:'
+                  : emailMode === 'magic'
+                    ? `We've sent a sign-in link to`
+                    : `We've sent a verification link to`}
               </p>
               {!emailWarning && (
                 <div className="bg-gray-50 rounded-lg px-4 py-3 mb-6 text-center">
@@ -540,11 +632,32 @@ export default function RegisterPage() {
                   <p className="text-[11px] text-gray-400 text-center mt-2">This link expires in 24 hours.</p>
                 </div>
               ) : !emailWarning && (
-                <div className="flex items-start gap-2 bg-violet-50 border border-violet-300 rounded-lg p-3 mb-6">
+                <div className="flex items-start gap-2 bg-violet-50 border border-violet-300 rounded-lg p-3 mb-4">
                   <Mail size={16} className="text-violet-600 shrink-0 mt-0.5" />
                   <p className="text-xs text-violet-700">
-                    Click the link in the email to verify your address and continue setting up your authenticator. The link expires in 24 hours.
+                    {emailMode === 'magic'
+                      ? "Tap the link in the email and you're signed in — no password or authenticator needed. The link expires in 15 minutes and works once."
+                      : 'Click the link in the email to verify your address and continue setting up your authenticator. The link expires in 24 hours.'}
                   </p>
+                </div>
+              )}
+
+              {/* Task #10 — audit's exact spam hint + inbox deep links. */}
+              {!emailWarning && (
+                <div className="mb-6">
+                  <p className="text-[11px] text-gray-500 text-center mb-2">
+                    It can take a minute. Check spam for mail from <strong>support@axal.vc</strong>.
+                  </p>
+                  <div className="flex gap-2">
+                    <a href="https://mail.google.com" target="_blank" rel="noopener noreferrer"
+                      className="flex-1 text-center text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md py-1.5 transition-colors">
+                      Open Gmail
+                    </a>
+                    <a href="https://outlook.live.com/mail" target="_blank" rel="noopener noreferrer"
+                      className="flex-1 text-center text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md py-1.5 transition-colors">
+                      Open Outlook
+                    </a>
+                  </div>
                 </div>
               )}
 
@@ -552,7 +665,7 @@ export default function RegisterPage() {
                 <button onClick={resendEmail} disabled={loading || resendCooldown > 0}
                   className="w-full bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-gray-700 flex items-center justify-center gap-2 transition-colors">
                   <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-                  {resendCooldown > 0 ? `Resend available in ${resendCooldown}s` : loading ? 'Sending...' : 'Resend Verification Email'}
+                  {resendCooldown > 0 ? `Resend available in ${resendCooldown}s` : loading ? 'Sending...' : emailMode === 'magic' ? 'Resend sign-in link' : 'Resend Verification Email'}
                 </button>
                 <button onClick={() => { setStep(1); setError(''); setVerificationUrl(''); setEmailWarning(false); }}
                   className="w-full text-sm text-gray-500 hover:text-gray-700 py-1 transition-colors">

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Handshake, Send, ArrowRight, Loader2, AlertTriangle, CheckCircle2,
-  FileSignature, Sparkles, RefreshCw, Bot, User as UserIcon, Clock,
+  FileSignature, Sparkles, RefreshCw, Bot, User as UserIcon, Clock, Mail,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
@@ -69,6 +69,38 @@ export default function PartnerOnboardPage() {
   const [loading, setLoading] = useState(true);
   const [errorState, setErrorState] = useState(null);
   const [invitation, setInvitation] = useState(null);
+
+  // Task #10 — magic-link handoff to the Partner Portal. Deal-activated
+  // accounts have no TOTP enrolled, so sending signers to /login's
+  // authenticator form was a hard dead end ("Account not set up for TOTP").
+  const [portalLinkBusy, setPortalLinkBusy] = useState(false);
+  const [portalLinkSentTo, setPortalLinkSentTo] = useState('');
+  const [portalLinkCooldown, setPortalLinkCooldown] = useState(0);
+
+  useEffect(() => {
+    if (portalLinkCooldown <= 0) return;
+    const t = setTimeout(() => setPortalLinkCooldown(portalLinkCooldown - 1), 1000);
+    return () => clearTimeout(t);
+  }, [portalLinkCooldown]);
+
+  const sendPortalLink = async () => {
+    const email = invitation?.recipient_email;
+    if (!email) {
+      showToast({ kind: 'error', msg: 'Could not determine your email — use the sign-in page instead.' });
+      return;
+    }
+    if (portalLinkBusy || portalLinkCooldown > 0) return;
+    setPortalLinkBusy(true);
+    try {
+      await api.magicStart(email);
+      setPortalLinkSentTo(email);
+      setPortalLinkCooldown(60);
+    } catch (e) {
+      showToast({ kind: 'error', msg: e?.message || 'Could not send the sign-in link. Please try again.' });
+    } finally {
+      setPortalLinkBusy(false);
+    }
+  };
   const [adminName, setAdminName] = useState('Axal VC');
   const [, setExistingProfile] = useState(null);
   const [, setExistingDeal] = useState(null);
@@ -490,23 +522,52 @@ export default function PartnerOnboardPage() {
               </div>
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">You're all set</h2>
               <p className="text-sm text-gray-600 max-w-md mx-auto">
-                Your partnership is active. Sign in to access your Partner Portal — your referral code,
-                granted tiers, and deal terms are waiting there.
+                Your partnership is active. We'll email you a sign-in link — no password or
+                authenticator needed. Your referral code, granted tiers, and deal terms are
+                waiting in your Partner Portal.
               </p>
               {selectedDeal?.referral_code && (
                 <div className="inline-block rounded-lg bg-violet-50 px-4 py-2 font-mono text-violet-700 text-sm">
                   {selectedDeal.referral_code}
                 </div>
               )}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => navigate('/login')}
-                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-md bg-violet-600 text-white text-sm font-medium hover:bg-violet-700"
-                >
-                  Sign in to Partner Portal <ArrowRight size={14} />
+              {/* Task #10 — magic-link CTA instead of the /login TOTP dead end. */}
+              {portalLinkSentTo ? (
+                <div className="max-w-md mx-auto rounded-lg bg-emerald-50 border border-emerald-300 p-3 space-y-2 text-left">
+                  <p className="text-xs text-emerald-800">
+                    <strong>Sign-in link sent to {portalLinkSentTo}.</strong> Tap it to open your
+                    Partner Portal — it expires in 15 minutes and works once.
+                  </p>
+                  <p className="text-[11px] text-emerald-700">
+                    It can take a minute. Check spam for mail from <strong>support@axal.vc</strong>.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={sendPortalLink}
+                    disabled={portalLinkBusy || portalLinkCooldown > 0}
+                    className="w-full text-xs text-emerald-800 hover:text-emerald-900 disabled:opacity-60 py-1 font-medium"
+                  >
+                    {portalLinkCooldown > 0 ? `Resend available in ${portalLinkCooldown}s` : portalLinkBusy ? 'Sending…' : 'Resend link'}
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <button
+                    type="button"
+                    onClick={sendPortalLink}
+                    disabled={portalLinkBusy}
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-md bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-60"
+                  >
+                    <Mail size={14} /> {portalLinkBusy ? 'Sending link…' : 'Email me a sign-in link'} <ArrowRight size={14} />
+                  </button>
+                </div>
+              )}
+              <p className="text-xs text-gray-500">
+                Prefer the sign-in page?{' '}
+                <button type="button" onClick={() => navigate('/login')} className="text-violet-600 hover:underline font-medium">
+                  Go there instead
                 </button>
-              </div>
+              </p>
             </div>
           </Card>
         )}
