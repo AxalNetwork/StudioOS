@@ -422,6 +422,11 @@ class AdvisorUpdate(BaseModel):
     expertise: Optional[List[str]] = None
     linkedin_url: Optional[str] = None
     hourly_rate: Optional[float] = None
+    # Relationship fields — dev mirror of Worker migration 143.
+    last_session_at: Optional[str] = None
+    follow_up_at: Optional[str] = None
+    follow_up_note: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class AdvisorAssignments(BaseModel):
@@ -463,6 +468,10 @@ def _shape_advisor(m, assignments) -> dict:
         "hourly_rate": m["hourly_rate"],
         "source": m["source"],
         "status": m["status"] or "active",
+        "last_session_at": m["last_session_at"],
+        "notes": m["notes"],
+        "follow_up_at": m["follow_up_at"],
+        "follow_up_note": m["follow_up_note"],
         "assignments": assignments,
         "created_at": _iso(m["created_at"]),
         "updated_at": _iso(m["updated_at"]),
@@ -555,13 +564,40 @@ def update_advisor(
         if hourly is not None and hourly < 0:
             hourly = m["hourly_rate"]
 
+    # Relationship fields — same semantics as the Worker PUT: absent key keeps
+    # the stored value, empty/None clears, garbage dates 400 loudly, and the
+    # note/notes caps match (500 / 4000).
+    def _parse_date_field(key: str):
+        if key not in provided:
+            return m[key]
+        raw = getattr(payload, key)
+        if raw is None or not str(raw).strip():
+            return None
+        raw = str(raw).strip()[:40]
+        try:
+            datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"{key} must be an ISO-8601 date")
+        return raw
+
+    last_session = _parse_date_field("last_session_at")
+    follow_up_at = _parse_date_field("follow_up_at")
+    notes = (payload.notes[:4000] if payload.notes else None) if "notes" in provided else m["notes"]
+    follow_up_note = (
+        (payload.follow_up_note[:500] if payload.follow_up_note else None)
+        if "follow_up_note" in provided else m["follow_up_note"]
+    )
+
     session.exec(
         text(
             "UPDATE advisor_profiles SET name=:n, bio=:b, linkedin_url=:l, "
-            "sectors_json=:s, expertise_json=:e, hourly_rate=:h, updated_at=:u WHERE id=:id"
+            "sectors_json=:s, expertise_json=:e, hourly_rate=:h, "
+            "last_session_at=:p_ls, notes=:p_no, follow_up_at=:p_fa, follow_up_note=:p_fn, "
+            "updated_at=:u WHERE id=:id"
         ).bindparams(
             n=name.strip(), b=bio, l=linkedin, s=sectors, e=expertise,
-            h=hourly, u=datetime.utcnow(), id=advisor_id,
+            h=hourly, p_ls=last_session, p_no=notes, p_fa=follow_up_at, p_fn=follow_up_note,
+            u=datetime.utcnow(), id=advisor_id,
         )
     )
     session.commit()

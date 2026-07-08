@@ -971,6 +971,10 @@ def ensure_advisor_profiles_tables() -> None:
         source VARCHAR,
         status VARCHAR NOT NULL DEFAULT 'active',
         source_contact_id INTEGER,
+        last_session_at TEXT,
+        notes TEXT,
+        follow_up_at TEXT,
+        follow_up_note TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
     )
@@ -996,6 +1000,12 @@ def ensure_advisor_profiles_tables() -> None:
                 "CREATE INDEX IF NOT EXISTS ix_advisor_startups_profile "
                 "ON advisor_startups(advisor_profile_id)"
             ))
+            # Relationship fields (dev mirror of Worker migration 143) — the
+            # table may pre-date these columns, so ALTER idempotently.
+            for col in ("last_session_at", "notes", "follow_up_at", "follow_up_note"):
+                session.exec(text(
+                    f"ALTER TABLE advisor_profiles ADD COLUMN IF NOT EXISTS {col} TEXT"
+                ))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- static schema DDL over a fixed tuple, no user input, dev-only FastAPI
             session.commit()
         except Exception as exc:  # noqa: BLE001
             logger.warning("ensure_advisor_profiles_tables failed: %s", exc)

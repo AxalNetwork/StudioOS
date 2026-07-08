@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Brain, Send, DollarSign, BarChart3, CheckCircle, AlertTriangle, XCircle, Info, ChevronDown, Users, Inbox, Mail, MailX, Archive, RotateCcw, Pencil, X, ArrowUpRight, Building2 } from 'lucide-react';
+import { Brain, Send, DollarSign, BarChart3, CheckCircle, AlertTriangle, XCircle, Info, ChevronDown, Users, Inbox, Mail, MailX, Archive, RotateCcw, Pencil, X, ArrowUpRight, Building2, Calendar, Clock } from 'lucide-react';
 import { api } from '../lib/api';
+import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
 
 // lucide-react in this repo predates the `Linkedin` glyph, so we ship a tiny
 // inline SVG (same approach as JobManagePage.jsx / IntegrationsPage.jsx).
@@ -23,7 +24,9 @@ function ModernSelect({ value, onChange, children, ...props }) {
 }
 
 export default function AdvisoryPage() {
-  const [tab, setTab] = useState('advisor');
+  // People-first: the advisor directory leads and is the default landing tab;
+  // the AI surfaces follow it.
+  const [tab, setTab] = useState('directory');
   const [projects, setProjects] = useState([]);
 
   useEffect(() => {
@@ -32,29 +35,65 @@ export default function AdvisoryPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Advisory Suite</h1>
-      <p className="text-sm text-gray-600 mb-6">Strategy, financial planning, diligence, and your advisor directory</p>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Advisory</h1>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">Your advisors first — plus AI strategy, financial planning, and diligence tools</p>
 
       <div className="flex gap-1 mb-6 flex-wrap">
         {[
+          { key: 'directory', label: 'Advisors', icon: Users },
           { key: 'advisor', label: 'AI Advisor', icon: Brain },
           { key: 'financial', label: 'Financial Planner', icon: DollarSign },
           { key: 'diligence', label: 'Diligence Checker', icon: BarChart3 },
-          { key: 'directory', label: 'Advisors', icon: Users },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-colors ${
-              tab === t.key ? 'bg-violet-600 text-white' : 'bg-gray-50 text-gray-600 hover:text-gray-900'
+              tab === t.key ? 'bg-violet-600 text-white' : 'bg-gray-50 text-gray-600 hover:text-gray-900 dark:bg-gray-800 dark:text-gray-400 dark:hover:text-gray-100'
             }`}>
             <t.icon size={14} /> {t.label}
           </button>
         ))}
       </div>
 
-      {tab === 'advisor' && <AdvisorTab projects={projects} />}
+      {tab === 'directory' && <AdvisorsTab projects={projects} />}
+      {tab === 'advisor' && <AiAdvisorTab projects={projects} />}
       {tab === 'financial' && <FinancialTab projects={projects} />}
       {tab === 'diligence' && <DiligenceTab projects={projects} />}
-      {tab === 'directory' && <AdvisorsTab projects={projects} />}
+    </div>
+  );
+}
+
+// AI Advisor tab — the REAL interactive Personal Advisor (same component the
+// Dashboard mounts) is the primary surface. The old template Q&A form is kept
+// as a clearly-labeled fallback: it takes over when /api/advisor isn't
+// mounted in this environment (dev FastAPI, older workers), and otherwise
+// stays available behind a disclosure for quick canned guidance.
+function AiAdvisorTab({ projects }) {
+  // null = probing (PersonalAdvisor hides itself until it knows),
+  // true = advisor live, false = endpoint missing → template takes over.
+  const [available, setAvailable] = useState(null);
+  return (
+    <div className="space-y-6">
+      {available !== false && (
+        <PersonalAdvisor disablePersistedFullscreen onAvailabilityChange={setAvailable} />
+      )}
+      {available === false ? (
+        <div className="space-y-4">
+          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-900 flex items-center gap-2">
+            <Info size={14} className="shrink-0" />
+            The interactive AI Advisor isn't available in this environment — showing the template advisor instead.
+          </div>
+          <AdvisorTab projects={projects} />
+        </div>
+      ) : available === true ? (
+        <details className="group">
+          <summary className="text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200">
+            Template advisor (fallback) — canned playbook answers, no AI context
+          </summary>
+          <div className="mt-4">
+            <AdvisorTab projects={projects} />
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }
@@ -477,12 +516,44 @@ function AdvisorsTab({ projects }) {
   );
 }
 
+// Parse a stored date. Date-only strings (YYYY-MM-DD, what the drawer's
+// <input type=date> saves) are treated as LOCAL dates — Date.parse would read
+// them as UTC midnight, showing "one day early" west of UTC.
+function parseAdvisorDate(iso) {
+  if (!iso) return null;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso).trim());
+  if (dateOnly) {
+    const d = new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? null : new Date(t);
+}
+
+// Render a stored date as a short human string; returns null on bad input.
+function fmtDate(iso) {
+  const d = parseAdvisorDate(iso);
+  return d ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+}
+
+// A follow-up is overdue once its (local) day has fully passed — a follow-up
+// dated today is "due", not overdue.
+function isOverdue(iso) {
+  const d = parseAdvisorDate(iso);
+  if (!d) return false;
+  const endOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+  return endOfDay.getTime() <= Date.now();
+}
+
 function AdvisorCard({ advisor, busy, onEdit, onArchive }) {
   const a = advisor;
   const archived = a.status === 'archived';
   const chips = (arr, cls) => (arr || []).slice(0, 6).map((s, i) => (
     <span key={i} className={`inline-block text-[10px] px-2 py-0.5 rounded-full ${cls}`}>{s}</span>
   ));
+  const lastSession = fmtDate(a.last_session_at);
+  const followUp = fmtDate(a.follow_up_at);
+  const followUpOverdue = followUp && isOverdue(a.follow_up_at);
   return (
     <div className={`bg-white border border-gray-200 rounded-xl p-5 dark:bg-gray-900 dark:border-gray-800 ${archived ? 'opacity-60' : ''}`}>
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -512,6 +583,37 @@ function AdvisorCard({ advisor, busy, onEdit, onArchive }) {
         {typeof a.hourly_rate === 'number' && <span>${a.hourly_rate}/hr</span>}
         {a.linkedin_url && <a href={a.linkedin_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-violet-600 hover:underline"><Linkedin size={11} /> LinkedIn</a>}
       </div>
+      {/* Relationship strip — makes the working relationship legible at a
+          glance: when you last spoke, what's next, and your running notes. */}
+      {(lastSession || followUp || a.notes) && (
+        <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 space-y-1">
+          <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px]">
+            {lastSession && (
+              <span className="inline-flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                <Calendar size={11} /> Last session {lastSession}
+              </span>
+            )}
+            {followUp && (
+              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${
+                followUpOverdue
+                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                  : 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'}`}>
+                <Clock size={11} /> Follow-up {followUpOverdue ? 'overdue — ' : ''}{followUp}
+              </span>
+            )}
+          </div>
+          {a.follow_up_note && (
+            <div className="text-[11px] text-gray-600 dark:text-gray-400 truncate" title={a.follow_up_note}>
+              ↳ {a.follow_up_note}
+            </div>
+          )}
+          {a.notes && (
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 whitespace-pre-line" title={a.notes}>
+              {a.notes}
+            </p>
+          )}
+        </div>
+      )}
       {a.assignments?.length > 0 && (
         <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
           <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Advising</div>
@@ -536,6 +638,11 @@ function AdvisorEditDrawer({ advisor, projects, onClose, onSaved, setNotice }) {
     expertise: (advisor.expertise || []).join(', '),
     linkedin_url: advisor.linkedin_url || '',
     hourly_rate: advisor.hourly_rate ?? '',
+    // Relationship fields — date inputs want YYYY-MM-DD, so trim any time part.
+    last_session_at: (advisor.last_session_at || '').slice(0, 10),
+    follow_up_at: (advisor.follow_up_at || '').slice(0, 10),
+    follow_up_note: advisor.follow_up_note || '',
+    notes: advisor.notes || '',
   });
   const [assigned, setAssigned] = useState(() => new Set((advisor.assignments || []).map(a => a.project_id)));
   const [saving, setSaving] = useState(false);
@@ -559,6 +666,10 @@ function AdvisorEditDrawer({ advisor, projects, onClose, onSaved, setNotice }) {
         expertise: toList(form.expertise),
         linkedin_url: form.linkedin_url,
         hourly_rate: form.hourly_rate === '' ? null : Number(form.hourly_rate),
+        last_session_at: form.last_session_at || null,
+        follow_up_at: form.follow_up_at || null,
+        follow_up_note: form.follow_up_note || null,
+        notes: form.notes || null,
       });
       await api.advisorProfileAssign(advisor.id, Array.from(assigned));
       setNotice({ type: 'success', msg: 'Advisor updated.' });
@@ -605,6 +716,24 @@ function AdvisorEditDrawer({ advisor, projects, onClose, onSaved, setNotice }) {
               <label className="text-xs text-gray-600 dark:text-gray-400">Hourly rate ($)</label>
               <input type="number" min="0" {...field('hourly_rate')} className={inputCls} />
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-400">Last session</label>
+              <input type="date" {...field('last_session_at')} className={inputCls} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-400">Next follow-up</label>
+              <input type="date" {...field('follow_up_at')} className={inputCls} />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-gray-600 dark:text-gray-400">Follow-up note <span className="text-gray-400">(what's next)</span></label>
+            <input {...field('follow_up_note')} maxLength={500} placeholder="e.g. Send the updated deck before our next call" className={inputCls} />
+          </div>
+          <div>
+            <label className="text-xs text-gray-600 dark:text-gray-400">Notes <span className="text-gray-400">(private to you)</span></label>
+            <textarea {...field('notes')} rows={3} maxLength={4000} placeholder="How you work together, intros made, context to remember…" className={inputCls} />
           </div>
           <div>
             <label className="text-xs text-gray-600 dark:text-gray-400 mb-1 block">Advising which startups</label>

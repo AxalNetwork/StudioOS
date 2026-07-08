@@ -266,9 +266,37 @@ advisory.put('/advisors/:id', async (c) => {
       else { const n = Number(body.hourly_rate); hourly = Number.isFinite(n) && n >= 0 ? n : row.hourly_rate; }
     }
 
+    // Relationship fields (migration 143). Dates must be ISO-8601 parseable;
+    // reject bad input loudly rather than silently storing garbage.
+    const parseDateField = (key: 'last_session_at' | 'follow_up_at'): string | null | undefined => {
+      if (body[key] === undefined) return undefined; // not in payload → keep current
+      if (body[key] === null || body[key] === '') return null;
+      const raw = String(body[key]).slice(0, 40);
+      if (Number.isNaN(Date.parse(raw))) {
+        const e: any = new Error(`${key} must be an ISO-8601 date`);
+        e.status = 400;
+        throw e;
+      }
+      return raw;
+    };
+    const lastSession = parseDateField('last_session_at');
+    const followUpAt = parseDateField('follow_up_at');
+    const notes = body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 4000) : null) : row.notes;
+    const followUpNote = body.follow_up_note !== undefined
+      ? (body.follow_up_note ? String(body.follow_up_note).slice(0, 500) : null)
+      : row.follow_up_note;
+
     await c.env.DB.prepare(
-      `UPDATE advisor_profiles SET name=?, bio=?, linkedin_url=?, sectors_json=?, expertise_json=?, hourly_rate=?, updated_at=? WHERE id=?`,
-    ).bind(name.trim(), bio, linkedin, sectors, expertise, hourly, nowIso(), id).run();
+      `UPDATE advisor_profiles SET name=?, bio=?, linkedin_url=?, sectors_json=?, expertise_json=?, hourly_rate=?,
+        last_session_at=?, notes=?, follow_up_at=?, follow_up_note=?, updated_at=? WHERE id=?`,
+    ).bind(
+      name.trim(), bio, linkedin, sectors, expertise, hourly,
+      lastSession === undefined ? row.last_session_at : lastSession,
+      notes,
+      followUpAt === undefined ? row.follow_up_at : followUpAt,
+      followUpNote,
+      nowIso(), id,
+    ).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_profiles WHERE id = ?').bind(id).first<AdvisorProfileRow>();
     return c.json(shapeAdvisorProfile(fresh as AdvisorProfileRow, await loadAssignments(c.env, id)));
   } catch (e) { return mapError(c, e); }

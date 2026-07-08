@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## People first: Team and Advisory redesigned around humans
+
+The pages about your team and advisors now lead with people, not tools:
+
+- **"Your People".** The Team page opens on advisors for everyone, and its new title says what it's really about — the humans building this with you. Sections your plan doesn't include yet show a blurred preview of what's inside instead of a plain lock.
+- **Advisory starts with your advisors.** The advisor directory is now the first thing you see; the AI tools moved behind it. The AI Advisor tab now hosts the same interactive advisor you know from your home screen, with the older question-and-answer form kept as a clearly labeled backup.
+- **Remember every advisor relationship.** Each advisor card can now show when you last met, when to follow up (overdue follow-ups are highlighted), what the follow-up is about, and your private notes — all editable from the advisor's edit panel.
+- **Browse co-founders before committing.** You no longer need a profile just to look around — browse candidates as a guest, and you'll be guided to create your profile when you want to express interest. Match scores appear once you have a profile to match against.
+
+---
+
 ## Your investor workspace, consolidated
 
 We tidied the investor sidebar so related tools live together instead of as a long list of separate links:

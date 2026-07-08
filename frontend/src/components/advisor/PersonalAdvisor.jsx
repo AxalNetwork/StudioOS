@@ -107,13 +107,24 @@ function useVisualViewportStyle() {
   return style;
 }
 
-export default function PersonalAdvisor() {
+// Props (both optional — the Dashboard mount passes neither):
+//   disablePersistedFullscreen — non-Dashboard mounts (e.g. the Advisory
+//     page) set this so a `viewMode:'fullscreen'` persisted from the
+//     Dashboard doesn't auto-open the takeover overlay on load. The user
+//     can still maximize; the persisted viewMode is simply not read or
+//     written by such mounts (conversation_id stays shared — server-side).
+//   onAvailabilityChange(available: bool) — fired when we learn whether
+//     /api/advisor exists in this environment, so a host page can swap in
+//     a fallback surface instead of the card silently rendering null.
+export default function PersonalAdvisor({ disablePersistedFullscreen = false, onAvailabilityChange } = {}) {
   const { user } = useAuth();
   const persisted = useMemo(() => safeReadJSON(STORAGE_KEY, {}) || {}, []);
   // viewMode: 'normal' (embedded card) | 'fullscreen' (viewport takeover).
   // Migration: legacy persisted state used a `minimised` boolean (now
   // removed) — we ignore it and default to 'normal'.
-  const [viewMode, setViewMode] = useState(persisted.viewMode === 'fullscreen' ? 'fullscreen' : 'normal');
+  const [viewMode, setViewMode] = useState(
+    !disablePersistedFullscreen && persisted.viewMode === 'fullscreen' ? 'fullscreen' : 'normal',
+  );
   const [conversationId, setConversationId] = useState(persisted.conversation_id || null);
   const [persona, setPersona] = useState(null);
   const [question, setQuestion] = useState(null);     // public_question shape from server
@@ -162,8 +173,16 @@ export default function PersonalAdvisor() {
 
   // ---------- Persistence -------------------------------------------------
   useEffect(() => {
+    if (disablePersistedFullscreen) {
+      // Non-Dashboard mount: keep whatever viewMode the Dashboard persisted
+      // (don't stomp it with this mount's transient state) but still share
+      // the conversation pointer.
+      const prev = safeReadJSON(STORAGE_KEY, {}) || {};
+      safeWriteJSON(STORAGE_KEY, { viewMode: prev.viewMode || 'normal', conversation_id: conversationId });
+      return;
+    }
     safeWriteJSON(STORAGE_KEY, { viewMode, conversation_id: conversationId });
-  }, [viewMode, conversationId]);
+  }, [viewMode, conversationId, disablePersistedFullscreen]);
 
   // ---------- Server-driven progress (by_page / by_section / overall) ----
   const refreshProgress = useCallback(async () => {
@@ -187,11 +206,17 @@ export default function PersonalAdvisor() {
     } catch { setLabState(null); }
   }, []);
 
+  // Keep the latest availability callback in a ref so `bootstrap` (deps [])
+  // never goes stale if the host re-renders with a new function identity.
+  const availabilityRef = useRef(onAvailabilityChange);
+  useEffect(() => { availabilityRef.current = onAvailabilityChange; }, [onAvailabilityChange]);
+
   // ---------- Initial load ------------------------------------------------
   const bootstrap = useCallback(async () => {
     setLoadError(null);
     try {
       const r = await api.advisor.start();
+      availabilityRef.current?.(true);
       setConversationId(r.conversation_id || r.conversation_uid || null);
       setPersona(r.persona || null);
       setQuestion(r.next_question || r.next || null);
@@ -216,8 +241,10 @@ export default function PersonalAdvisor() {
       // the card silently rather than rendering a confusing error.
       if (e?.status === 404) {
         setUnavailable(true);
+        availabilityRef.current?.(false);
         return;
       }
+      availabilityRef.current?.(true);
       setLoadError(e?.message || 'Could not load advisor');
     }
   }, []);

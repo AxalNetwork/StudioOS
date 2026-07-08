@@ -34,6 +34,12 @@ export type AdvisorProfileRow = {
   source: string | null;
   status: string;
   source_contact_id: number | null;
+  // Relationship fields (migration 143) — how the founder actually works
+  // with this advisor: last session date, running notes, next follow-up.
+  last_session_at: string | null;
+  notes: string | null;
+  follow_up_at: string | null;
+  follow_up_note: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -66,6 +72,10 @@ export function shapeAdvisorProfile(row: AdvisorProfileRow, assignments: Advisor
     source: row.source,
     status: row.status,
     source_contact_id: row.source_contact_id,
+    last_session_at: row.last_session_at ?? null,
+    notes: row.notes ?? null,
+    follow_up_at: row.follow_up_at ?? null,
+    follow_up_note: row.follow_up_note ?? null,
     assignments,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -89,6 +99,10 @@ export async function ensureAdvisorProfilesSchema(env: Env): Promise<void> {
         source            TEXT,
         status            TEXT NOT NULL DEFAULT 'active',
         source_contact_id INTEGER,
+        last_session_at   TEXT,
+        notes             TEXT,
+        follow_up_at      TEXT,
+        follow_up_note    TEXT,
         created_at        TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
       )`),
@@ -108,6 +122,16 @@ export async function ensureAdvisorProfilesSchema(env: Env): Promise<void> {
       env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_advisor_startups_project
         ON advisor_startups (project_id)`),
     ]);
+    // Relationship columns (migration 143) for tables created before the
+    // columns existed. Each ALTER runs individually OUTSIDE the batch above:
+    // D1 batches are atomic, so a duplicate-column error inside the batch
+    // would roll back the whole schema bootstrap. "duplicate column" is the
+    // expected steady-state here, hence the per-statement swallow.
+    for (const col of ['last_session_at TEXT', 'notes TEXT', 'follow_up_at TEXT', 'follow_up_note TEXT']) {
+      try {
+        await env.DB.prepare(`ALTER TABLE advisor_profiles ADD COLUMN ${col}`).run();
+      } catch { /* column already exists */ }
+    }
     _ready = true;
   } catch (err) {
     console.warn('[advisorProfilesSchema] ensure failed', err);

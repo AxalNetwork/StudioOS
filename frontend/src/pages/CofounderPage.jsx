@@ -117,8 +117,10 @@ function BrowseTab({ profile, profileLoading, onCreateProfile }) {
   });
   const [interestModal, setInterestModal] = useState(null);
 
+  // Browse-first: candidates load whether or not the viewer has a profile.
+  // Without one, cards come back unscored and "I'm interested" routes to
+  // profile creation instead (the API keeps its profile gate on interest).
   async function load() {
-    if (!profile) return;
     setLoading(true); setErr(null);
     try {
       const r = await api.cofounderBrowse(filters);
@@ -128,28 +130,24 @@ function BrowseTab({ profile, profileLoading, onCreateProfile }) {
   }
 
   useEffect(() => { api.cofounderVocab().then(setVocab).catch(() => {}); }, []);
-  useEffect(() => { if (profile) load(); /* eslint-disable-next-line */ }, [profile]);
+  useEffect(() => { if (!profileLoading) load(); /* eslint-disable-next-line */ }, [profile, profileLoading]);
 
-  if (profileLoading) return <div className="text-sm text-slate-500">Loading…</div>;
-  if (!profile) {
-    return (
-      <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center">
-        <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-        <h3 className="font-semibold text-slate-900 mb-2">Create a profile to browse</h3>
-        <p className="text-sm text-slate-600 mb-4 max-w-md mx-auto">
-          You need a co-founder profile before browsing candidates — fairness goes both
-          ways. It only takes a minute.
-        </p>
-        <button onClick={onCreateProfile}
-                className="inline-flex items-center gap-1.5 text-sm px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-          <Plus className="w-4 h-4" /> Create my profile
-        </button>
-      </div>
-    );
-  }
+  if (profileLoading) return <div className="text-sm text-slate-500 dark:text-slate-400">Loading…</div>;
 
   return (
     <div className="space-y-4">
+      {!profile && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border border-blue-200 bg-blue-50 rounded-lg px-4 py-3 dark:bg-blue-950/40 dark:border-blue-900">
+          <p className="text-sm text-blue-900 dark:text-blue-200">
+            You're browsing as a guest — create your profile to see match scores and
+            reach out to candidates.
+          </p>
+          <button onClick={onCreateProfile}
+                  className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 shrink-0">
+            <Plus className="w-4 h-4" /> Create my profile
+          </button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="w-4 h-4 absolute left-2 top-2.5 text-slate-400" />
@@ -198,7 +196,7 @@ function BrowseTab({ profile, profileLoading, onCreateProfile }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {items.map((c) => (
           <BrowseCard key={c.uid} card={c}
-                      onInterest={() => setInterestModal(c)} />
+                      onInterest={() => (profile ? setInterestModal(c) : onCreateProfile())} />
         ))}
       </div>
 
@@ -255,9 +253,11 @@ function BrowseCard({ card, onInterest }) {
           </div>
         </div>
         <div className="text-right flex flex-col items-end gap-1">
-          <span className="inline-flex items-center gap-1 text-xs text-blue-700 font-semibold">
-            <Sparkles className="w-3 h-3" /> {card.match_score}
-          </span>
+          {card.match_score != null && (
+            <span className="inline-flex items-center gap-1 text-xs text-blue-700 font-semibold">
+              <Sparkles className="w-3 h-3" /> {card.match_score}
+            </span>
+          )}
           {/* Task #51 — admin/investor/partner viewers see the trust score
               (badge no-ops for founder viewers, who are the normal audience). */}
           <UserTrustBadge userId={card.user_id} viewerRole={user?.role} />

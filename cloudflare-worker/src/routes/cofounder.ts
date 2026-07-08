@@ -396,10 +396,12 @@ function scoreMatch(
 cofounder.get('/browse', async (c) => {
   const user = await requireAuth(c);
   try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  // Browse-first: founders may browse anonymized candidate cards WITHOUT a
+  // profile of their own. Match scoring needs the viewer's profile, so
+  // profile-less viewers get unscored cards (match_score: null) plus a
+  // `viewer_has_profile: false` flag the UI uses to prompt profile creation.
+  // Expressing interest (POST /interest) still requires a profile.
   const viewerProfile = await getProfile(c.env, user.id);
-  if (!viewerProfile) {
-    return c.json({ detail: 'Create your co-founder profile first (PUT /api/cofounder/me)' }, 400);
-  }
   const q = c.req.query('q')?.toLowerCase() || null;
   const skill = c.req.query('skill')?.toLowerCase() || null;
   const sector = c.req.query('sector')?.toLowerCase() || null;
@@ -492,7 +494,7 @@ cofounder.get('/browse', async (c) => {
   }
 
   const scored: Array<{
-    score: number; why: string[]; watch_outs: string[]; breakdown: Record<string, number>; profile: ProfileRow;
+    score: number | null; why: string[]; watch_outs: string[]; breakdown: Record<string, number>; profile: ProfileRow;
   }> = [];
   for (const p of rows) {
     if (closedIds.has(p.user_id)) continue;
@@ -510,6 +512,12 @@ cofounder.get('/browse', async (c) => {
       ].join(' ').toLowerCase();
       if (!blob.includes(q)) continue;
     }
+    if (!viewerProfile) {
+      // No viewer profile → nothing to score against. Cards stay browsable
+      // but unscored; scoreMatch would dereference viewer fields unguarded.
+      scored.push({ score: null, why: [], watch_outs: [], breakdown: {}, profile: p });
+      continue;
+    }
     const candidateVectors = candidateVectorsMap.get(p.user_id) || { values: {}, skills: {} };
     const { score, why, watch_outs, breakdown } = scoreMatch({
       viewerProfile,
@@ -519,7 +527,7 @@ cofounder.get('/browse', async (c) => {
     });
     scored.push({ score, why, watch_outs, breakdown, profile: p });
   }
-  scored.sort((a, b) => (b.score - a.score) || (a.profile.id - b.profile.id));
+  scored.sort((a, b) => ((b.score ?? 0) - (a.score ?? 0)) || (a.profile.id - b.profile.id));
   const cards = scored.slice(0, limit).map(({ score, why, watch_outs, breakdown, profile: p }) => {
     const card: any = serializeProfilePublic(p, uidById.get(p.user_id) || null);
     // Task #51 — surface integer user_id alongside the (already-public)
@@ -541,7 +549,7 @@ cofounder.get('/browse', async (c) => {
   await logMatchListGeneration(c.env, user as any, 'cofounder_browse', {
     result_count: cards.length,
   });
-  return c.json({ items: cards });
+  return c.json({ items: cards, viewer_has_profile: !!viewerProfile });
 });
 
 // ---------------------------------------------------------------------------

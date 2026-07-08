@@ -10,6 +10,26 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Team & Advisory human-first redesign (Task #1)
+
+The people surfaces led with AI tools and paywalls instead of humans. This flips both: directories and real relationships first, AI second, gates shown as previews rather than walls.
+
+**Frontend**
+- `frontend/src/pages/TeamBuildingPage.jsx` — H1 → "Your People" with people-first subtitle; every tier now lands on the Advisor tab (locked tabs no longer skipped); `LockedTab` is a blurred **static skeleton** preview (fake `PreviewCard`s — never real gated data) with the upgrade CTA overlaid, same `openPaywall` flow.
+- `frontend/src/pages/AdvisoryPage.jsx` — tab order + default flipped to directory-first ("Advisors" leads, `tab` state defaults `'directory'`); new `AiAdvisorTab` mounts the **real** `PersonalAdvisor` (same component as the Dashboard) as the primary AI surface, with the old template `AdvisorTab` demoted to a labeled fallback (auto-swapped in when `/api/advisor` 404s — dev FastAPI / older workers — else behind a `<details>` disclosure); `AdvisorCard` gains a relationship strip (last session, follow-up with overdue amber highlight, follow-up note, running notes) and `AdvisorEditDrawer` gains the matching fields (date inputs, 500/4000 char caps), all with `dark:` variants.
+- `frontend/src/components/advisor/PersonalAdvisor.jsx` — new optional props: `disablePersistedFullscreen` (non-Dashboard mounts ignore + don't clobber the persisted `viewMode:'fullscreen'`; conversation pointer still shared) and `onAvailabilityChange(bool)` (fired from bootstrap via a ref so hosts can swap in a fallback when the endpoint is missing).
+- `frontend/src/pages/CofounderPage.jsx` — browse-first: the profile-gate panel is gone; guests see the browse grid with a slim "browsing as a guest" banner, clicking Interest without a profile routes into profile creation, and the match-score chip hides when `match_score` is null.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/sql/migrations/143_advisor_relationship_fields.sql` — `advisor_profiles` + `last_session_at`, `notes`, `follow_up_at`, `follow_up_note` (all TEXT/nullable).
+- `cloudflare-worker/src/services/advisorProfilesSchema.ts` — Row type, CREATE TABLE and per-statement try/catch ALTER loop cover the four new columns.
+- `cloudflare-worker/src/routes/advisory.ts` — `PUT /advisors/:id` accepts the four fields; ISO dates validated (400 on garbage), `notes` capped 4000 / `follow_up_note` 500; `undefined` keeps the stored value.
+- `cloudflare-worker/src/routes/cofounder.ts` — `GET /cofounder/browse` no longer 400s without a profile: `score` is `number|null` (no self-scoring against a missing profile), sorted with null-last, response adds `viewer_has_profile`. `POST /interest` keeps the profile requirement.
+
+**Backend — dev FastAPI parity**
+- `backend/app/services/cofounder.py` + `backend/app/routes/cofounder.py` — browse no longer raises without a profile; `score: None`, `viewer_has_profile` returned.
+- `backend/app/api/routes/advisory.py` + `backend/app/models/migrations.py` (`ensure_advisor_profiles_tables`) — the four relationship fields mirrored in dev with the same PUT semantics (absent keeps, empty clears, bad date → 400, 4000/500 caps); columns added via idempotent `ADD COLUMN IF NOT EXISTS`. NB: SQLAlchemy `text().bindparams()` rejects a bind param named `fn` (collides with its `@_generative` decorator internals) — prefixed the new params `p_*`.
+
 ## Investor Support consolidation & Account trim (Task #4)
 
 The investor "Support" sidebar had eight peer links that were really four jobs, and the "Account" group carried founder-oriented rows (Advisors, Partners, Jobs, Articles) an LP never needs. This folds the fund/portfolio surfaces into four tabbed workspaces backed by the existing canonical stores, trims the Account group, labels the mock liquidity settlement as a simulation, and standardizes the locked/paywall UX so every 402 shows the investor's live quota.
