@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Shield, LogIn, KeyRound, Mail } from 'lucide-react';
 import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import { api } from '../lib/api';
+import { storePendingNext } from '../lib/pendingNext';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 
 // Single-page sign-in: email + authenticator code + Cloudflare Turnstile.
@@ -82,6 +83,15 @@ export default function LoginPage() {
     const t = setTimeout(() => setMagicCooldown(magicCooldown - 1), 1000);
     return () => clearTimeout(t);
   }, [magicCooldown]);
+
+  // Task #1 — persist `?next=` so the MAGIC-LINK path honours it too. The
+  // TOTP and Google paths below read safeNextPath() directly, but the magic
+  // link round-trips through the user's inbox and the worker's /magic/verify
+  // (which lands on the default page); RequireAuth consumes this stored copy
+  // post-auth and routes the user to their invitation target.
+  useEffect(() => {
+    storePendingNext(safeNextPath());
+  }, []);
 
   // Discover whether the worker has Google OAuth configured; hide the
   // button otherwise so we don't show users a control that returns 503.

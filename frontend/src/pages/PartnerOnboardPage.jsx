@@ -191,10 +191,22 @@ export default function PartnerOnboardPage() {
     const greeting = invitation.personal_message
       ? `${invitation.personal_message}\n\n— ${adminName}`
       : `Hi${invitation.recipient_name ? ' ' + invitation.recipient_name : ''}, welcome! I'll ask ${chatQuestions.length} quick questions so we can draft the right partnership for you.`;
+    // Task #1 — the admin already typed the invitee's name on the invitation;
+    // don't make them retype it. Prefill the draft and turn the first
+    // question into a confirm-or-correct step.
+    const prefillName = chatQuestions[0]?.key === 'full_name'
+      ? String(invitation.recipient_name || '').trim()
+      : '';
     setChatTurns([
       { role: 'bot', text: greeting },
-      { role: 'bot', text: chatQuestions[0].q },
+      {
+        role: 'bot',
+        text: prefillName
+          ? `Just to confirm — is "${prefillName}" your full legal name? Press send to confirm, or edit it first.`
+          : chatQuestions[0].q,
+      },
     ]);
+    if (prefillName) setDraft(prefillName);
   }, [invitation, profileDone, chatTurns.length, adminName, chatQuestions]);
 
   useEffect(() => {

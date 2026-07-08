@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { safeReadJSON } from '../lib/storage';
+import { storePendingNext, sanitizeNextPath } from '../lib/pendingNext';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Copy, Check, Mail, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
@@ -28,6 +29,10 @@ export default function RegisterPage() {
   const [refCode, setRefCode] = useState('');
   const [lane, setLane] = useState(null); // 'partner' | 'investor' | 'lp' | 'founder' | null
   const [productIntent, setProductIntent] = useState(null); // 'spinout-lab' | null
+  // Task #1 — validated `?next=` return path (e.g. a startup-team invitation
+  // that bounced a brand-new user here). Also persisted to localStorage so it
+  // survives the email/OAuth round-trip; RequireAuth consumes it post-auth.
+  const [nextPath, setNextPath] = useState(null);
   // Task #51 — optional "Continue with Google" on step 1. Hidden when the
   // worker has no GOOGLE_AUTH_CLIENT_ID configured (start returns 503).
   const [googleAvailable, setGoogleAvailable] = useState(false);
@@ -45,7 +50,10 @@ export default function RegisterPage() {
   const continueWithGoogle = async () => {
     setGoogleBusy(true); setError('');
     try {
-      const { url } = await api.googleStartUrl({ action: 'signin' });
+      // Task #1 — carry the invite/deep-link target through the OAuth state
+      // so the worker callback lands the user straight on it (new signups
+      // included). The localStorage copy written on mount is defence-in-depth.
+      const { url } = await api.googleStartUrl({ action: 'signin', ...(nextPath ? { redirect: nextPath } : {}) });
       if (!url) throw new Error('No redirect URL returned.');
       window.location.href = url;
     } catch (e) {
@@ -75,9 +83,17 @@ export default function RegisterPage() {
     }
     const p = params.get('product');
     if (p === 'spinout-lab') setProductIntent('spinout-lab');
+    // Task #1 — persist the `?next=` return path across the email/OAuth
+    // round-trip (open-redirect-safe: same-origin paths only).
+    const nx = sanitizeNextPath(params.get('next'));
+    if (nx) {
+      setNextPath(nx);
+      storePendingNext(nx);
+    }
     // Prefill the email when arriving from a flow that already captured it
-    // (e.g. the public job-board apply → register hand-off passes ?email=).
-    const em = params.get('email');
+    // (e.g. the public job-board apply → register hand-off passes ?email=,
+    // and referral invitation emails pass ?invitee= — Task #1).
+    const em = params.get('email') || params.get('invitee');
     if (em && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) {
       setForm((f) => ({ ...f, email: em }));
     }
@@ -99,6 +115,12 @@ export default function RegisterPage() {
     },
   };
   const activeLane = lane && laneCopy[lane] ? laneCopy[lane] : null;
+
+  // Task #1 — lane → account role. The marketing site's audience lanes map
+  // onto the worker's CHECK-constrained roles (`lp` folds into investor, so
+  // LP signups get the investor portal instead of the partner default).
+  const LANE_ROLE = { partner: 'partner', investor: 'investor', lp: 'investor', founder: 'founder' };
+  const laneRole = lane ? LANE_ROLE[lane] : undefined;
 
   const turnstileRef = useRef(null);
   const turnstileWidgetId = useRef(null);
@@ -184,7 +206,7 @@ export default function RegisterPage() {
       // that edge case, but the user isn't.
       if (!(TURNSTILE_SITE_KEY && turnstileFailed)) {
         try {
-          await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, defer_email: true });
+          await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, defer_email: true, role: laneRole });
         } catch (e) {
           if (!/already registered/i.test(e?.message || '')) throw e;
         }
@@ -214,7 +236,7 @@ export default function RegisterPage() {
       // and unlocked by `/api/profiling/save` (auth-bound). Register sends
       // the verification email immediately and jumps straight to the
       // "Check Your Email" step; the chatbot runs after the user logs in.
-      const res = await api.register({ ...form, turnstileToken, ref_code: refCode || undefined });
+      const res = await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, role: laneRole });
       setEmailWarning(res?.email_sent === false);
       if (res?.verification_url) setVerificationUrl(res.verification_url);
       setEmailMode('classic');

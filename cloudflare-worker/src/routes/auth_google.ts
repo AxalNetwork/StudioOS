@@ -637,7 +637,15 @@ authGoogle.get('/callback', async (c) => {
     // Llama 3.1 8B via /api/profiling/chat) which classifies persona and
     // saves a partner_profiles row for admin review. Existing users honour
     // the sanitized redirect target the caller passed to /start.
-    const landing = newSignup ? '/onboarding/chat' : sanitizeRedirect(state.redirect);
+    //
+    // Task #1 — invite/deep-link continuity: when the caller passed an
+    // EXPLICIT redirect (e.g. /register?next=… → an invitation acceptance
+    // page), honour it for new signups too instead of hard-routing them to
+    // the chat. Only the default '/dashboard' falls through to the chatbot
+    // landing; the client-side gate still nudges un-profiled users there
+    // on their next navigation.
+    const requested = sanitizeRedirect(state.redirect);
+    const landing = newSignup && requested === '/dashboard' ? '/onboarding/chat' : requested;
     const url = `${appUrl(c.env)}${landing}${landing.includes('?') ? '&' : '?'}google=ok${newSignup ? '&google_signup=1' : ''}`;
     return c.redirect(url, 302);
   } catch (e: any) {

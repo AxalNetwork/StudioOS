@@ -23,6 +23,7 @@ export default function OnboardingChatPage() {
   const [input, setInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [skipping, setSkipping] = useState(false);
   const [error, setError] = useState('');
   const scrollRef = useRef(null);
 
@@ -73,6 +74,27 @@ export default function OnboardingChatPage() {
     } catch (e) {
       setError(e.message);
       setSaving(false);
+    }
+  };
+
+  // Task #1 — the chat is skippable. Saves whatever partial answers exist
+  // (zero user turns is fine — /api/profiling/save only requires a messages
+  // array) so the gate releases, then drops the user on the dashboard. They
+  // can finish profiling later; admins see the partial transcript meanwhile.
+  const skipForNow = async () => {
+    if (!email) {
+      setError('Session expired. Please sign in again.');
+      return;
+    }
+    setSkipping(true);
+    setError('');
+    try {
+      await api.profilingSave({ email, messages });
+      // Same hard-reload rationale as finish() above.
+      window.location.assign('/dashboard');
+    } catch (e) {
+      setError(e.message);
+      setSkipping(false);
     }
   };
 
@@ -135,13 +157,23 @@ export default function OnboardingChatPage() {
 
         <button
           onClick={finish}
-          disabled={saving || chatLoading}
+          disabled={saving || skipping || chatLoading}
           className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white transition-colors"
         >
           {saving ? 'Saving profile...' : 'Save & continue'}
         </button>
+        {/* Task #1 — skippable onboarding: never trap an invited user in the
+            chatbot. Partial answers are persisted; they can finish later. */}
+        <button
+          type="button"
+          onClick={skipForNow}
+          disabled={saving || skipping || chatLoading}
+          className="w-full mt-2 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-50 py-1.5 transition-colors"
+        >
+          {skipping ? 'Taking you to your dashboard…' : "Skip for now — I'll do this later"}
+        </button>
         <p className="text-[11px] text-gray-500 dark:text-gray-400 text-center mt-2">
-          An admin will review your profile and propose a Closing Binder.
+          Your answers help us tailor your workspace — you can update them anytime.
         </p>
       </div>
     </div>

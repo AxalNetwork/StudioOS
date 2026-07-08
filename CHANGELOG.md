@@ -10,6 +10,17 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Invitation & lane continuity through signup (Task #1)
+
+A `?next=` deep link (e.g. a startup-team invitation) now survives the entire signup round-trip on every auth path, audience lanes map to real account roles, and the onboarding chatbot stops trapping invited users.
+
+- **`?next=` continuity (`frontend/src/lib/pendingNext.js`, new)** — RegisterPage validates and persists the return path (localStorage `gvpn:next`, 24 h TTL, same-origin `/`-paths only, mirrors the worker's `sanitizeRedirect`). `RequireAuth` (App.jsx) consumes it once per page load after auth resolves and `<Navigate>`s there BEFORE the Task #66 chat gate engages; the gate stays suppressed while the user remains on the target (they get nudged to the chat on their next navigation instead). Consume-once uses module state so StrictMode double-renders and the "redirected" flag (set post-commit in a `useEffect`) can't half-consume it.
+- **Magic-link path (`LoginPage.jsx`)** — `/login?next=` is now also stored via `storePendingNext`; the TOTP and Google paths already honoured `safeNextPath()` client-side, but the magic link round-trips through the inbox and `/magic/verify` (which lands on the default page), so the stored copy is the only way it survives.
+- **Google path (`RegisterPage.jsx` + `cloudflare-worker/src/routes/auth_google.ts`)** — RegisterPage passes `redirect: nextPath` into `/auth/google/start`; the callback now honours an EXPLICIT sanitized redirect for `newSignup` too — only the default `'/dashboard'` still falls through to `/onboarding/chat`.
+- **Lane → role (`RegisterPage.jsx`)** — both register payloads (magic `defer_email` and classic) now send `role` derived from the `?lane=` param (`lp` folds into `investor`); the worker already validated `role ∈ founder/partner/investor` and defaulted to `partner`, so LP/investor/founder signups stop landing in the partner default.
+- **Skippable onboarding chat (`OnboardingChatPage.jsx`)** — new "Skip for now" button saves the partial transcript via `/api/profiling/save` (zero user turns accepted; flips `onboarding_progress.completed_at`, releasing the gate) and hard-reloads to `/dashboard` (same rationale as `finish()`). Footer copy softened ("An admin will review…" → tailoring copy).
+- **Invitee prefills** — `/register?invitee=` now prefills the email field (referral invitation emails already append `&invitee=<email>` to their `/register?ref=` links; `?email=` still works). `PartnerOnboardPage` prefills the first chatbot question (`full_name`) from `invitation.recipient_name` as a confirm-or-correct step instead of making the invitee retype what the admin already entered.
+
 ## Optional TOTP + enrolment correctness (Task #11)
 
 TOTP stops being a signup gate and becomes an optional, recommended upgrade — and enrolment now proves the authenticator works before anything persists server-side.

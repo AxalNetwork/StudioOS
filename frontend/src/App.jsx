@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
+import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
@@ -817,6 +818,23 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   const [onboardingComplete, setOnboardingComplete] = useState(true);
   const [onboardingLoaded, setOnboardingLoaded] = useState(false);
 
+  // Task #1 — invite/deep-link continuity. RegisterPage persisted a validated
+  // `?next=` path (localStorage `gvpn:next`) before the email/OAuth
+  // round-trip; consume it once per page load after auth resolves and route
+  // the user there BEFORE the onboarding-chat gate engages. While the user
+  // remains on that target, the gate stays suppressed so an invitation
+  // acceptance is never hijacked by the chatbot (they get nudged to the chat
+  // on their next navigation instead).
+  const pendingNext = user && !oauthBootstrapping ? consumePendingNextOnce() : null;
+  const pendingTargetPath = pendingNext ? pendingNext.split(/[?#]/)[0] : null;
+  const atPendingNext = !!(pendingTargetPath && location.pathname === pendingTargetPath);
+  const pendingRedirect = !!(pendingNext && !atPendingNext && !pendingNextRedirected());
+  useEffect(() => {
+    // Marked post-commit so StrictMode's double render can't half-consume
+    // the redirect (both renders return the same <Navigate>).
+    if (pendingRedirect) markPendingNextRedirected();
+  }, [pendingRedirect]);
+
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
@@ -888,6 +906,12 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Task #1 — route to the stored invite/deep-link target (at most once per
+  // page load) before the chat gate below can pin the user to the chatbot.
+  if (pendingRedirect) {
+    return <Navigate to={pendingNext} replace />;
+  }
+
   // Task #66 — onboarding-chatbot gate.
   // Every new account (email + Google signup) gets an `onboarding_progress`
   // row written with `flow='chat'` and `completed_at=NULL` at signup time.
@@ -915,6 +939,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     onboardingFlow === 'chat' &&
     !onboardingComplete &&
     !onChatPath &&
+    !atPendingNext && // Task #1 — invite target outranks the chat gate
     chatGateRole !== 'admin' &&
     realUser?.role !== 'admin' &&
     !isImpersonating &&
