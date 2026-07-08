@@ -5,6 +5,27 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## We measure our own signup experience now — privately
+
+To find and fix the places where joining StudioOS is confusing or broken, the platform now keeps count of the steps people take while signing up (like "opened the sign-up page" or "verified their email").
+
+- **Only with your permission.** Nothing is counted unless you accept analytics cookies in the cookie banner. Decline, and nothing is ever recorded.
+- **No outside companies.** The counts go straight to our own servers — there is no Google Analytics or any other third-party tracker involved.
+- **No personal details.** We don't store your name, email, or address in these counts — just anonymous steps, which are deleted automatically after six months.
+
+---
+
+## Invitations now take you straight where you were headed
+
+Joining from an invitation is finally seamless:
+
+- **You land on your invitation, not a detour.** If you create an account from an invitation link, you now arrive at that invitation right after signing up — whether you signed up with an emailed link, an authenticator, or Google. Previously the welcome chat could swallow the invitation entirely.
+- **The welcome chat is now optional.** A new "Skip for now" button takes you straight to your dashboard — you can tell us about yourself later.
+- **Less retyping.** Coming from an invitation email, your email address is already filled in on the sign-up form, and partner invitations pre-fill your name in the welcome conversation so you just confirm it.
+- **The right account from the start.** Signing up as an investor or founder from the website now sets up the matching account type right away, instead of a generic one.
+
+---
+
 ## Verifying your email now signs you in
 
 Getting started is one step shorter, and extra security is there when you want it:
