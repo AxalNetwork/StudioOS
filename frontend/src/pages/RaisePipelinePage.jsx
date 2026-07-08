@@ -133,8 +133,8 @@ export default function RaisePipelinePage({ embedded = false }) {
     setLoading(true); setErr(null);
     Promise.all([
       api.raiseProspects(pid),
-      api.raiseRound(pid).catch(() => ({ round: null, raised: 0, committed_count: 0 })),
-      api.raiseUpdates(pid).catch(() => ({ items: [] })),
+      api.raiseRound(pid).catch((e) => { setErr(e?.message || 'Failed to load round details'); return { round: null, raised: 0, committed_count: 0 }; }),
+      api.raiseUpdates(pid).catch((e) => { setErr(e?.message || 'Failed to load investor updates'); return { items: [] }; }),
     ])
       .then(([pr, rd, up]) => {
         setItems(pr?.items || []);
@@ -149,7 +149,7 @@ export default function RaisePipelinePage({ embedded = false }) {
 
   const refreshRound = (pid = projectId) => {
     if (!pid) return;
-    api.raiseRound(pid).then(setRoundInfo).catch(() => {});
+    api.raiseRound(pid).then(setRoundInfo).catch((e) => setErr(e?.message || 'Failed to refresh round details'));
   };
 
   const update = async (id, patch) => {
