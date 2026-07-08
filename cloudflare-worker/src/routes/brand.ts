@@ -31,10 +31,15 @@ let _migrated = false;
 async function ensureSchema(env: Env): Promise<void> {
   if (_migrated) return;
   const stmts = [
+    // Multi-page sites: project_id is deliberately NOT unique (one project can
+    // own many pages); (project_id, page_slug) uniqueness is enforced by
+    // idx_landing_project_page below. Pre-existing prod tables are rebuilt by
+    // migration 144 — this CREATE only covers fresh DBs.
     `CREATE TABLE IF NOT EXISTS landing_pages (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
-       project_id INTEGER NOT NULL UNIQUE,
+       project_id INTEGER NOT NULL,
        slug TEXT NOT NULL UNIQUE,
+       page_slug TEXT NOT NULL DEFAULT 'home',
        name TEXT NOT NULL,
        tagline TEXT,
        headline TEXT,
@@ -51,6 +56,23 @@ async function ensureSchema(env: Env): Promise<void> {
        created_at TEXT DEFAULT (datetime('now')),
        updated_at TEXT DEFAULT (datetime('now'))
      )`,
+    // Editable, human-readable startup slug — one per project, globally unique.
+    `CREATE TABLE IF NOT EXISTS brand_sites (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       project_id INTEGER NOT NULL UNIQUE,
+       slug TEXT NOT NULL UNIQUE,
+       created_at TEXT DEFAULT (datetime('now')),
+       updated_at TEXT DEFAULT (datetime('now'))
+     )`,
+    // Founder-saved reusable page designs (design fields + copy seeds).
+    `CREATE TABLE IF NOT EXISTS brand_custom_templates (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       user_id INTEGER NOT NULL,
+       name TEXT NOT NULL,
+       snapshot_json TEXT NOT NULL,
+       created_at TEXT DEFAULT (datetime('now'))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_brand_custom_templates_user ON brand_custom_templates(user_id)`,
     `CREATE TABLE IF NOT EXISTS waitlist_signups (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
        project_id INTEGER NOT NULL,
@@ -64,6 +86,7 @@ async function ensureSchema(env: Env): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_waitlist_project ON waitlist_signups(project_id)`,
     `CREATE INDEX IF NOT EXISTS idx_waitlist_email ON waitlist_signups(email)`,
     `CREATE INDEX IF NOT EXISTS idx_landing_slug ON landing_pages(slug)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_landing_project_page ON landing_pages(project_id, page_slug)`,
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('brand schema:', e?.message); }
@@ -306,6 +329,7 @@ function rowToLanding(row: any) {
     id: row.id,
     project_id: row.project_id,
     slug: row.slug,
+    page_slug: row.page_slug || 'home',
     preview_token: row.preview_token || null,
     name: row.name,
     tagline: row.tagline,
@@ -392,6 +416,194 @@ function contrastRatio(a: string, b: string): number {
   const l1 = luminance(a) + 0.05;
   const l2 = luminance(b) + 0.05;
   return Math.max(l1, l2) / Math.min(l1, l2);
+}
+
+// --- Multi-page sites (Task #2) --------------------------------------------
+
+// Editable, human-readable slugs (site + page): lowercase alnum + hyphens,
+// 1-48 chars, no leading/trailing hyphen. Stricter than the legacy random
+// slug on purpose — these are user-facing URLs.
+const CLEAN_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
+function cleanSlug(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim().toLowerCase();
+  return CLEAN_SLUG_RE.test(s) ? s : null;
+}
+// /p/* is its own namespace so site slugs can't shadow app routes; this list
+// only blocks names that would be confusing or useful for phishing.
+const RESERVED_SITE_SLUGS = new Set(['api', 'app', 'admin', 'axal', 'assets', 'landing', 'login', 'preview', 'register', 'static', 'www']);
+
+function deriveSlugBase(name: string): string {
+  return (name || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-')
+    .slice(0, 44)
+    .replace(/-+$/, '');
+}
+
+const newPreviewToken = (): string =>
+  Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, '0')).join('');
+
+const isUniqueError = (e: any, needle: string): boolean => {
+  const msg = String(e?.message || '');
+  return msg.includes('UNIQUE') && msg.includes(needle);
+};
+
+// Get-or-create the project's site slug. Derived slugs are auto-suffixed on
+// collision (-2, -3, …); user-edited slugs go through the PUT below, which
+// 409s instead — user input is never silently mutated.
+async function ensureSite(env: Env, projectId: number, seedName: string): Promise<{ slug: string }> {
+  const existing = await env.DB.prepare('SELECT slug FROM brand_sites WHERE project_id = ?').bind(projectId).first<any>();
+  if (existing) return existing;
+  let base = deriveSlugBase(seedName) || `venture-${projectId}`;
+  if (RESERVED_SITE_SLUGS.has(base)) base = `${base}-site`;
+  for (let i = 0; i < 30; i++) {
+    const candidate = i === 0 ? base : `${base.slice(0, 43)}-${i + 1}`;
+    try {
+      await env.DB.prepare('INSERT INTO brand_sites (project_id, slug) VALUES (?, ?)').bind(projectId, candidate).run();
+      return { slug: candidate };
+    } catch (e: any) {
+      if (isUniqueError(e, 'brand_sites.project_id')) {
+        // Concurrent create won the race — use theirs.
+        const row = await env.DB.prepare('SELECT slug FROM brand_sites WHERE project_id = ?').bind(projectId).first<any>();
+        if (row) return row;
+      }
+      if (!isUniqueError(e, 'brand_sites.slug')) throw e;
+    }
+  }
+  throw new Error('could not allocate a site slug');
+}
+
+// Derive a free page slug within a project (server-derived path only).
+async function allocatePageSlug(env: Env, projectId: number, seedName: string): Promise<string> {
+  const base = deriveSlugBase(seedName) || 'page';
+  for (let i = 0; i < 50; i++) {
+    const candidate = i === 0 ? base : `${base.slice(0, 43)}-${i + 1}`;
+    const hit = await env.DB.prepare(
+      'SELECT 1 AS x FROM landing_pages WHERE project_id = ? AND page_slug = ?',
+    ).bind(projectId, candidate).first<any>();
+    if (!hit) return candidate;
+  }
+  throw new Error('could not allocate a page slug');
+}
+
+// Shared sanitised parse of a landing-page write body. The legacy single-page
+// PUT and every multi-page write go through here, so all write paths get
+// identical sanitisation — including pages seeded from saved custom templates
+// (snapshots are re-sanitised at apply time; never trusted from storage).
+function parseLandingFields(body: any) {
+  const audienceBinds: (string | null)[] = [];
+  for (const aud of ['customer', 'partner', 'investor', 'advisor', 'mentor', 'cofounder']) {
+    for (const part of ['headline', 'body', 'cta']) {
+      audienceBinds.push(String(body?.[`audience_${aud}_${part}`] || '').trim() || null);
+    }
+  }
+  return {
+    tagline: body?.tagline || null,
+    headline: body?.headline || null,
+    subheadline: body?.subheadline || null,
+    cta: String(body?.cta_text || 'Join the waitlist'),
+    color: String(body?.theme_color || '#7c3aed'),
+    paletteBg: cleanHex(body?.palette_bg),
+    paletteInk: cleanHex(body?.palette_ink),
+    paletteSecondary: cleanHex(body?.palette_secondary),
+    paletteAccent: cleanHex(body?.palette_accent),
+    fontPairing: cleanFontPairing(body?.font_pairing),
+    logoAssetId: String(body?.logo_asset_id || '').trim() || null,
+    logoUrl: sanitizeLogoUrl(String(body?.logo_url || '').trim()),
+    logoSvg: sanitizeSvg(body?.logo_svg) || null,
+    audienceBinds,
+    template: String(body?.template || '').trim() || 'minimal',
+    heroMediaUrl: sanitizeUrl(String(body?.hero_media_url || '').trim()),
+    productScreenshotUrl: sanitizeUrl(String(body?.product_screenshot_url || '').trim()),
+    audience: VALID_PAGE_AUDIENCE(body?.audience),
+    goal: VALID_GOAL(body?.goal),
+    templateKit: cleanTemplateKit(body?.template_kit),
+    contentJson: JSON.stringify(sanitizeLandingContent(body?.content_json)),
+  };
+}
+
+// Update one page by id. pageSlug === null leaves page_slug unchanged.
+async function updateLandingRow(env: Env, id: number, name: string, body: any, previewToken: string, pageSlug: string | null): Promise<void> {
+  const f = parseLandingFields(body);
+  await env.DB.prepare(
+    `UPDATE landing_pages SET name=?, tagline=?, headline=?, subheadline=?, cta_text=?,
+     logo_url=?, logo_svg=?, logo_asset_id=?, theme_color=?, palette_bg=?, palette_ink=?,
+     palette_secondary=?, palette_accent=?, font_pairing=?,
+     audience_customer_headline=?, audience_customer_body=?, audience_customer_cta=?,
+     audience_partner_headline=?, audience_partner_body=?, audience_partner_cta=?,
+     audience_investor_headline=?, audience_investor_body=?, audience_investor_cta=?,
+     audience_advisor_headline=?, audience_advisor_body=?, audience_advisor_cta=?,
+     audience_mentor_headline=?, audience_mentor_body=?, audience_mentor_cta=?,
+     audience_cofounder_headline=?, audience_cofounder_body=?, audience_cofounder_cta=?,
+     template=?, hero_media_url=?, product_screenshot_url=?,
+     audience=?, goal=?, template_kit=?, content_json=?,
+     preview_token=?, page_slug=COALESCE(?, page_slug), updated_at=datetime('now') WHERE id=?`
+  ).bind(
+    name, f.tagline, f.headline, f.subheadline, f.cta,
+    f.logoUrl, f.logoSvg, f.logoAssetId, f.color, f.paletteBg, f.paletteInk,
+    f.paletteSecondary, f.paletteAccent, f.fontPairing,
+    ...f.audienceBinds,
+    f.template, f.heroMediaUrl, f.productScreenshotUrl,
+    f.audience, f.goal, f.templateKit, f.contentJson,
+    previewToken, pageSlug, id,
+  ).run();
+}
+
+// Insert a page. Every page still gets a legacy globally-unique random slug
+// so the existing waitlist / view / share endpoints keep working unchanged.
+async function insertLandingRow(env: Env, pid: number, pageSlug: string, name: string, body: any): Promise<number> {
+  const f = parseLandingFields(body);
+  const slug = slugify(name);
+  const previewToken = newPreviewToken();
+  const res = await env.DB.prepare(
+    `INSERT INTO landing_pages (project_id, slug, page_slug, preview_token, name, tagline, headline, subheadline, cta_text,
+     logo_url, logo_svg, logo_asset_id, theme_color, palette_bg, palette_ink, palette_secondary, palette_accent, font_pairing,
+     audience_customer_headline, audience_customer_body, audience_customer_cta,
+     audience_partner_headline, audience_partner_body, audience_partner_cta,
+     audience_investor_headline, audience_investor_body, audience_investor_cta,
+     audience_advisor_headline, audience_advisor_body, audience_advisor_cta,
+     audience_mentor_headline, audience_mentor_body, audience_mentor_cta,
+     audience_cofounder_headline, audience_cofounder_body, audience_cofounder_cta,
+     template, hero_media_url, product_screenshot_url,
+     audience, goal, template_kit, content_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+             ?, ?, ?, ?, ?, ?, ?, ?, ?,
+             ?, ?, ?, ?, ?, ?, ?, ?, ?,
+             ?, ?, ?,
+             ?, ?, ?, ?)`
+  ).bind(
+    pid, slug, pageSlug, previewToken, name, f.tagline, f.headline, f.subheadline, f.cta,
+    f.logoUrl, f.logoSvg, f.logoAssetId, f.color, f.paletteBg, f.paletteInk, f.paletteSecondary, f.paletteAccent, f.fontPairing,
+    ...f.audienceBinds,
+    f.template, f.heroMediaUrl, f.productScreenshotUrl,
+    f.audience, f.goal, f.templateKit, f.contentJson,
+  ).run();
+  return Number((res as any).meta?.last_row_id);
+}
+
+// Public JSON must not leak the draft preview token.
+function publicLanding(row: any) {
+  const out: any = rowToLanding(row);
+  delete out.preview_token;
+  return out;
+}
+
+// Design + copy-seed fields captured into a saved custom template. Snapshots
+// are built server-side from a page the caller owns (never from a raw body).
+const TEMPLATE_SNAPSHOT_FIELDS = [
+  'template', 'template_kit', 'audience', 'goal', 'theme_color',
+  'palette_bg', 'palette_ink', 'palette_secondary', 'palette_accent', 'font_pairing',
+  'cta_text', 'headline', 'subheadline', 'tagline', 'hero_media_url', 'product_screenshot_url',
+] as const;
+
+function snapshotFromRow(row: any): Record<string, any> {
+  const snap: Record<string, any> = {};
+  for (const k of TEMPLATE_SNAPSHOT_FIELDS) snap[k] = row[k] ?? null;
+  snap.content_json = parseContentJson(row.content_json);
+  return snap;
 }
 
 // Returns a curated 5-color palette from a hash of the description.
@@ -695,7 +907,9 @@ brand.get('/landing/by-project/:pid', async (c) => {
     return c.json({ error: 'forbidden' }, 403);
   }
   await ensureSchema(c.env);
-  const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE project_id = ?').bind(pid).first<any>();
+  // Primary page = oldest page (multi-page sites; legacy single-page callers
+  // keep working against it).
+  const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1').bind(pid).first<any>();
   if (!row) return c.json(null);
   return c.json(rowToLanding(row));
 });
@@ -712,104 +926,21 @@ brand.put('/landing/by-project/:pid', async (c) => {
   const name = String(body?.name || '').trim();
   if (!name) return c.json({ error: 'name required' }, 400);
   await ensureSchema(c.env);
-  const existing = await c.env.DB.prepare('SELECT id, slug, preview_token FROM landing_pages WHERE project_id = ?').bind(pid).first<any>();
-  const cta = String(body?.cta_text || 'Join the waitlist');
-  const color = String(body?.theme_color || '#7c3aed');
-  const paletteBg = cleanHex(body?.palette_bg);
-  const paletteInk = cleanHex(body?.palette_ink);
-  const paletteSecondary = cleanHex(body?.palette_secondary);
-  const paletteAccent = cleanHex(body?.palette_accent);
-  const fontPairing = cleanFontPairing(body?.font_pairing);
-  const logoAssetId = String(body?.logo_asset_id || '').trim() || null;
-  const audCustomerHeadline = String(body?.audience_customer_headline || '').trim() || null;
-  const audCustomerBody = String(body?.audience_customer_body || '').trim() || null;
-  const audCustomerCta = String(body?.audience_customer_cta || '').trim() || null;
-  const audPartnerHeadline = String(body?.audience_partner_headline || '').trim() || null;
-  const audPartnerBody = String(body?.audience_partner_body || '').trim() || null;
-  const audPartnerCta = String(body?.audience_partner_cta || '').trim() || null;
-  const audInvestorHeadline = String(body?.audience_investor_headline || '').trim() || null;
-  const audInvestorBody = String(body?.audience_investor_body || '').trim() || null;
-  const audInvestorCta = String(body?.audience_investor_cta || '').trim() || null;
-  const audAdvisorHeadline = String(body?.audience_advisor_headline || '').trim() || null;
-  const audAdvisorBody = String(body?.audience_advisor_body || '').trim() || null;
-  const audAdvisorCta = String(body?.audience_advisor_cta || '').trim() || null;
-  const audMentorHeadline = String(body?.audience_mentor_headline || '').trim() || null;
-  const audMentorBody = String(body?.audience_mentor_body || '').trim() || null;
-  const audMentorCta = String(body?.audience_mentor_cta || '').trim() || null;
-  const audCofounderHeadline = String(body?.audience_cofounder_headline || '').trim() || null;
-  const audCofounderBody = String(body?.audience_cofounder_body || '').trim() || null;
-  const audCofounderCta = String(body?.audience_cofounder_cta || '').trim() || null;
-  const template = String(body?.template || '').trim() || 'minimal';
-  const heroMediaUrl = sanitizeUrl(String(body?.hero_media_url || '').trim());
-  const productScreenshotUrl = sanitizeUrl(String(body?.product_screenshot_url || '').trim());
-  const audience = VALID_PAGE_AUDIENCE(body?.audience);
-  const goal = VALID_GOAL(body?.goal);
-  const templateKit = cleanTemplateKit(body?.template_kit);
-  const logoUrl = sanitizeLogoUrl(String(body?.logo_url || '').trim());
-  const contentJson = JSON.stringify(sanitizeLandingContent(body?.content_json));
+  // Legacy single-page endpoint — operates on the project's PRIMARY page
+  // (oldest by id). Additional pages are managed by the /pages endpoints.
+  const existing = await c.env.DB.prepare('SELECT id, slug, preview_token FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1').bind(pid).first<any>();
+  let rowId: number;
   if (existing) {
-    const previewToken = existing.preview_token || Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, '0')).join('');
-    await c.env.DB.prepare(
-      `UPDATE landing_pages SET name=?, tagline=?, headline=?, subheadline=?, cta_text=?,
-       logo_url=?, logo_svg=?, logo_asset_id=?, theme_color=?, palette_bg=?, palette_ink=?,
-       palette_secondary=?, palette_accent=?, font_pairing=?,
-       audience_customer_headline=?, audience_customer_body=?, audience_customer_cta=?,
-       audience_partner_headline=?, audience_partner_body=?, audience_partner_cta=?,
-       audience_investor_headline=?, audience_investor_body=?, audience_investor_cta=?,
-       audience_advisor_headline=?, audience_advisor_body=?, audience_advisor_cta=?,
-       audience_mentor_headline=?, audience_mentor_body=?, audience_mentor_cta=?,
-       audience_cofounder_headline=?, audience_cofounder_body=?, audience_cofounder_cta=?,
-       template=?, hero_media_url=?, product_screenshot_url=?,
-       audience=?, goal=?, template_kit=?, content_json=?,
-       preview_token=?, updated_at=datetime('now') WHERE project_id=?`
-    ).bind(
-      name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
-      logoUrl, sanitizeSvg(body?.logo_svg) || null, logoAssetId, color,
-      paletteBg, paletteInk, paletteSecondary, paletteAccent, fontPairing,
-      audCustomerHeadline, audCustomerBody, audCustomerCta,
-      audPartnerHeadline, audPartnerBody, audPartnerCta,
-      audInvestorHeadline, audInvestorBody, audInvestorCta,
-      audAdvisorHeadline, audAdvisorBody, audAdvisorCta,
-      audMentorHeadline, audMentorBody, audMentorCta,
-      audCofounderHeadline, audCofounderBody, audCofounderCta,
-      template, heroMediaUrl, productScreenshotUrl,
-      audience, goal, templateKit, contentJson,
-      previewToken, pid,
-    ).run();
+    const previewToken = existing.preview_token || newPreviewToken();
+    await updateLandingRow(c.env, existing.id, name, body, previewToken, null);
+    rowId = existing.id;
   } else {
-    const slug = slugify(name);
-    const previewToken = Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, '0')).join('');
-    await c.env.DB.prepare(
-      `INSERT INTO landing_pages (project_id, slug, preview_token, name, tagline, headline, subheadline, cta_text,
-       logo_url, logo_svg, logo_asset_id, theme_color, palette_bg, palette_ink, palette_secondary, palette_accent, font_pairing,
-       audience_customer_headline, audience_customer_body, audience_customer_cta,
-       audience_partner_headline, audience_partner_body, audience_partner_cta,
-       audience_investor_headline, audience_investor_body, audience_investor_cta,
-       audience_advisor_headline, audience_advisor_body, audience_advisor_cta,
-       audience_mentor_headline, audience_mentor_body, audience_mentor_cta,
-       audience_cofounder_headline, audience_cofounder_body, audience_cofounder_cta,
-       template, hero_media_url, product_screenshot_url,
-       audience, goal, template_kit, content_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-               ?, ?, ?, ?, ?, ?, ?, ?, ?,
-               ?, ?, ?, ?, ?, ?, ?, ?, ?,
-               ?, ?, ?,
-               ?, ?, ?, ?)`
-    ).bind(
-      pid, slug, previewToken, name, body?.tagline || null, body?.headline || null, body?.subheadline || null, cta,
-      logoUrl, sanitizeSvg(body?.logo_svg) || null, logoAssetId, color,
-      paletteBg, paletteInk, paletteSecondary, paletteAccent, fontPairing,
-      audCustomerHeadline, audCustomerBody, audCustomerCta,
-      audPartnerHeadline, audPartnerBody, audPartnerCta,
-      audInvestorHeadline, audInvestorBody, audInvestorCta,
-      audAdvisorHeadline, audAdvisorBody, audAdvisorCta,
-      audMentorHeadline, audMentorBody, audMentorCta,
-      audCofounderHeadline, audCofounderBody, audCofounderCta,
-      template, heroMediaUrl, productScreenshotUrl,
-      audience, goal, templateKit, contentJson,
-    ).run();
+    rowId = await insertLandingRow(c.env, pid, 'home', name, body);
   }
-  const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE project_id = ?').bind(pid).first<any>();
+  // Make sure the project has a branded site slug once a page exists.
+  try { await ensureSite(c.env, pid, name); }
+  catch (e: any) { console.error('brand ensureSite:', e?.message); }
+  const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE id = ?').bind(rowId).first<any>();
   return c.json(rowToLanding(row));
 });
 
@@ -821,8 +952,10 @@ brand.post('/landing/by-project/:pid/publish', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   const flag = body?.published === false ? 0 : 1;
   await ensureSchema(c.env);
+  // Primary page only — per-page publish lives at /landing/pages/:id/publish.
   await c.env.DB.prepare(
-    `UPDATE landing_pages SET published=?, updated_at=datetime('now') WHERE project_id=?`
+    `UPDATE landing_pages SET published=?, updated_at=datetime('now')
+     WHERE id = (SELECT id FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1)`
   ).bind(flag, pid).run();
   return c.json({ ok: true, published: !!flag });
 });
@@ -851,14 +984,337 @@ brand.get('/landing/by-project/:pid/preview-url', async (c) => {
   try { await projectOwned(c.env, user, pid); }
   catch (e: any) { return c.json({ error: 'forbidden' }, 403); }
   await ensureSchema(c.env);
-  const row = await c.env.DB.prepare('SELECT preview_token FROM landing_pages WHERE project_id = ?').bind(pid).first<any>();
+  const row = await c.env.DB.prepare('SELECT id, preview_token FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1').bind(pid).first<any>();
   if (!row) return c.json({ error: 'no preview token' }, 404);
   let token = row.preview_token;
   if (!token) {
-    token = Array.from(crypto.getRandomValues(new Uint8Array(16))).map((b) => b.toString(16).padStart(2, '0')).join('');
-    await c.env.DB.prepare('UPDATE landing_pages SET preview_token = ? WHERE project_id = ?').bind(token, pid).run();
+    token = newPreviewToken();
+    await c.env.DB.prepare('UPDATE landing_pages SET preview_token = ? WHERE id = ?').bind(token, row.id).run();
   }
   return c.json({ url: `/landing/preview/${token}` });
+});
+
+// --- Multi-page site endpoints (Task #2) ------------------------------------
+
+// Branded startup URL for a project (get-or-create).
+brand.get('/site/by-project/:pid', async (c) => {
+  const user = await requireAuth(c);
+  const pid = parseInt(c.req.param('pid'));
+  try { await projectOwned(c.env, user, pid); }
+  catch (e: any) {
+    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
+    return c.json({ error: 'forbidden' }, 403);
+  }
+  await ensureSchema(c.env);
+  const proj = await c.env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(pid).first<any>();
+  try {
+    const site = await ensureSite(c.env, pid, String(proj?.name || ''));
+    return c.json({ slug: site.slug, path: `/p/${site.slug}` });
+  } catch (e: any) {
+    console.error('brand site get:', e?.message);
+    return c.json({ error: 'could not allocate a site slug' }, 500);
+  }
+});
+
+// Edit the startup slug. User-chosen slugs are never auto-suffixed — a
+// collision is an explicit 409 so the founder picks something else.
+brand.put('/site/by-project/:pid', async (c) => {
+  const user = await requireAuth(c);
+  const pid = parseInt(c.req.param('pid'));
+  try { await projectOwned(c.env, user, pid); }
+  catch (e: any) {
+    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
+    return c.json({ error: 'forbidden' }, 403);
+  }
+  await ensureSchema(c.env);
+  const body = await c.req.json().catch(() => ({} as any));
+  const slug = cleanSlug(body?.slug);
+  if (!slug) {
+    return c.json({ error: 'Slug must be 1-48 characters: lowercase letters, numbers, and hyphens (no leading/trailing hyphen).' }, 400);
+  }
+  if (RESERVED_SITE_SLUGS.has(slug)) return c.json({ error: 'That slug is reserved.' }, 400);
+  const proj = await c.env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(pid).first<any>();
+  try {
+    await ensureSite(c.env, pid, String(proj?.name || ''));
+    await c.env.DB.prepare(
+      `UPDATE brand_sites SET slug = ?, updated_at = datetime('now') WHERE project_id = ?`
+    ).bind(slug, pid).run();
+  } catch (e: any) {
+    if (isUniqueError(e, 'brand_sites.slug')) {
+      return c.json({ error: 'That startup URL is already taken.' }, 409);
+    }
+    console.error('brand site put:', e?.message);
+    return c.json({ error: 'could not update site slug' }, 500);
+  }
+  return c.json({ slug, path: `/p/${slug}` });
+});
+
+// List all pages of a project's site.
+brand.get('/landing/by-project/:pid/pages', async (c) => {
+  const user = await requireAuth(c);
+  const pid = parseInt(c.req.param('pid'));
+  try { await projectOwned(c.env, user, pid); }
+  catch (e: any) {
+    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
+    return c.json({ error: 'forbidden' }, 403);
+  }
+  await ensureSchema(c.env);
+  const rows = await c.env.DB.prepare(
+    `SELECT id, page_slug, slug, name, headline, template, template_kit, audience, goal,
+            published, views_count, updated_at
+     FROM landing_pages WHERE project_id = ? ORDER BY id`
+  ).bind(pid).all<any>();
+  const pages = ((rows.results ?? []) as any[]).map((r) => ({
+    ...r,
+    page_slug: r.page_slug || 'home',
+    published: !!r.published,
+    views_count: r.views_count ?? 0,
+  }));
+  return c.json({ pages });
+});
+
+// Create a new page, optionally seeded from a saved custom template.
+brand.post('/landing/by-project/:pid/pages', async (c) => {
+  const user = await requireAuth(c);
+  const pid = parseInt(c.req.param('pid'));
+  try { await projectOwned(c.env, user, pid); }
+  catch (e: any) {
+    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
+    return c.json({ error: 'forbidden' }, 403);
+  }
+  await ensureSchema(c.env);
+  const body = await c.req.json().catch(() => ({} as any));
+  const name = String(body?.name || '').trim();
+  if (!name) return c.json({ error: 'name required' }, 400);
+
+  // Seed from a saved template the caller owns; the merged body is re-parsed
+  // through the shared sanitiser, so stored snapshots are never trusted as-is.
+  let seed: Record<string, any> = body || {};
+  const tplId = parseInt(String(body?.from_custom_template_id ?? '')) || 0;
+  if (tplId) {
+    const tpl = await c.env.DB.prepare(
+      'SELECT snapshot_json FROM brand_custom_templates WHERE id = ? AND user_id = ?'
+    ).bind(tplId, user.id).first<any>();
+    if (!tpl) return c.json({ error: 'template not found' }, 404);
+    let snap: Record<string, any> = {};
+    try { snap = JSON.parse(tpl.snapshot_json) || {}; }
+    catch { return c.json({ error: 'template snapshot is corrupted' }, 500); }
+    seed = { ...snap };
+    for (const [k, v] of Object.entries(body || {})) {
+      if (v !== undefined && v !== null && v !== '') seed[k] = v;
+    }
+  }
+
+  // Page slug: explicit value must be valid (400) and free (409); otherwise
+  // derive from the name with auto-suffixing.
+  const rawPageSlug = body?.page_slug;
+  let pageSlug: string;
+  const userChoseSlug = rawPageSlug !== undefined && rawPageSlug !== null && String(rawPageSlug).trim() !== '';
+  if (userChoseSlug) {
+    const cleaned = cleanSlug(rawPageSlug);
+    if (!cleaned) {
+      return c.json({ error: 'Page slug must be 1-48 characters: lowercase letters, numbers, and hyphens (no leading/trailing hyphen).' }, 400);
+    }
+    pageSlug = cleaned;
+  } else {
+    pageSlug = await allocatePageSlug(c.env, pid, name);
+  }
+
+  let rowId: number;
+  try {
+    rowId = await insertLandingRow(c.env, pid, pageSlug, name, seed);
+  } catch (e: any) {
+    if (isUniqueError(e, 'page_slug') || isUniqueError(e, 'idx_landing_project_page')) {
+      return c.json({ error: 'A page with that slug already exists on this site.' }, 409);
+    }
+    if (isUniqueError(e, 'landing_pages.project_id')) {
+      // Pre-migration DB still enforcing one page per project — explicit, not silent.
+      return c.json({ error: 'multi-page not available until migration 144 is applied' }, 500);
+    }
+    throw e;
+  }
+  try { await ensureSite(c.env, pid, name); }
+  catch (e: any) { console.error('brand ensureSite:', e?.message); }
+  const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE id = ?').bind(rowId).first<any>();
+  return c.json(rowToLanding(row), 201);
+});
+
+// Load one owned page (any page, not just the primary).
+brand.get('/landing/pages/:id', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  await ensureSchema(c.env);
+  const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE id = ?').bind(id).first<any>();
+  if (!row) return c.json({ error: 'not found' }, 404);
+  try { await projectOwned(c.env, user, row.project_id); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+  return c.json(rowToLanding(row));
+});
+
+// Update one page (content + optional page_slug rename).
+brand.put('/landing/pages/:id', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  await ensureSchema(c.env);
+  const existing = await c.env.DB.prepare('SELECT id, project_id, preview_token FROM landing_pages WHERE id = ?').bind(id).first<any>();
+  if (!existing) return c.json({ error: 'not found' }, 404);
+  try { await projectOwned(c.env, user, existing.project_id); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+  const body = await c.req.json().catch(() => ({} as any));
+  const name = String(body?.name || '').trim();
+  if (!name) return c.json({ error: 'name required' }, 400);
+  let pageSlug: string | null = null;
+  const rawPageSlug = body?.page_slug;
+  if (rawPageSlug !== undefined && rawPageSlug !== null && String(rawPageSlug).trim() !== '') {
+    pageSlug = cleanSlug(rawPageSlug);
+    if (!pageSlug) {
+      return c.json({ error: 'Page slug must be 1-48 characters: lowercase letters, numbers, and hyphens (no leading/trailing hyphen).' }, 400);
+    }
+  }
+  const previewToken = existing.preview_token || newPreviewToken();
+  try {
+    await updateLandingRow(c.env, id, name, body, previewToken, pageSlug);
+  } catch (e: any) {
+    if (isUniqueError(e, 'page_slug') || isUniqueError(e, 'idx_landing_project_page')) {
+      return c.json({ error: 'A page with that slug already exists on this site.' }, 409);
+    }
+    throw e;
+  }
+  const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE id = ?').bind(id).first<any>();
+  return c.json(rowToLanding(row));
+});
+
+// Delete a page — but never the last one (unpublish instead).
+brand.delete('/landing/pages/:id', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  await ensureSchema(c.env);
+  const row = await c.env.DB.prepare('SELECT id, project_id FROM landing_pages WHERE id = ?').bind(id).first<any>();
+  if (!row) return c.json({ error: 'not found' }, 404);
+  try { await projectOwned(c.env, user, row.project_id); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+  const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM landing_pages WHERE project_id = ?').bind(row.project_id).first<any>();
+  if (Number(count?.n || 0) <= 1) {
+    return c.json({ error: 'Cannot delete the last page of a site — unpublish it instead.' }, 400);
+  }
+  await c.env.DB.prepare('DELETE FROM landing_pages WHERE id = ?').bind(id).run();
+  return c.json({ ok: true });
+});
+
+// Per-page publish toggle.
+brand.post('/landing/pages/:id/publish', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  await ensureSchema(c.env);
+  const row = await c.env.DB.prepare('SELECT id, project_id FROM landing_pages WHERE id = ?').bind(id).first<any>();
+  if (!row) return c.json({ error: 'not found' }, 404);
+  try { await projectOwned(c.env, user, row.project_id); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+  const body = await c.req.json().catch(() => ({} as any));
+  const flag = body?.published === false ? 0 : 1;
+  await c.env.DB.prepare(
+    `UPDATE landing_pages SET published=?, updated_at=datetime('now') WHERE id=?`
+  ).bind(flag, id).run();
+  return c.json({ ok: true, published: !!flag });
+});
+
+// Per-page draft preview URL.
+brand.get('/landing/pages/:id/preview-url', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  await ensureSchema(c.env);
+  const row = await c.env.DB.prepare('SELECT id, project_id, preview_token FROM landing_pages WHERE id = ?').bind(id).first<any>();
+  if (!row) return c.json({ error: 'not found' }, 404);
+  try { await projectOwned(c.env, user, row.project_id); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+  let token = row.preview_token;
+  if (!token) {
+    token = newPreviewToken();
+    await c.env.DB.prepare('UPDATE landing_pages SET preview_token = ? WHERE id = ?').bind(token, id).run();
+  }
+  return c.json({ url: `/landing/preview/${token}` });
+});
+
+// --- Saved custom templates (Task #2) ---------------------------------------
+
+const MAX_CUSTOM_TEMPLATES = 50;
+
+brand.get('/custom-templates', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const rows = await c.env.DB.prepare(
+    'SELECT id, name, snapshot_json, created_at FROM brand_custom_templates WHERE user_id = ? ORDER BY created_at DESC, id DESC'
+  ).bind(user.id).all<any>();
+  const templates = ((rows.results ?? []) as any[]).map((r) => {
+    let snap: Record<string, any> = {};
+    try { snap = JSON.parse(r.snapshot_json) || {}; } catch { /* summary fields stay null */ }
+    return {
+      id: r.id,
+      name: r.name,
+      created_at: r.created_at,
+      template: snap.template ?? null,
+      template_kit: snap.template_kit ?? null,
+      theme_color: snap.theme_color ?? null,
+      palette_bg: snap.palette_bg ?? null,
+      palette_ink: snap.palette_ink ?? null,
+      font_pairing: snap.font_pairing ?? null,
+    };
+  });
+  return c.json({ templates });
+});
+
+// Snapshot an owned page into a reusable template (server-side capture).
+brand.post('/custom-templates', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const body = await c.req.json().catch(() => ({} as any));
+  const name = String(body?.name || '').trim().slice(0, 80);
+  if (!name) return c.json({ error: 'name required' }, 400);
+  const fromPageId = parseInt(String(body?.from_page_id ?? '')) || 0;
+  if (!fromPageId) return c.json({ error: 'from_page_id required' }, 400);
+  const page = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE id = ?').bind(fromPageId).first<any>();
+  if (!page) return c.json({ error: 'page not found' }, 404);
+  try { await projectOwned(c.env, user, page.project_id); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+  const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM brand_custom_templates WHERE user_id = ?').bind(user.id).first<any>();
+  if (Number(count?.n || 0) >= MAX_CUSTOM_TEMPLATES) {
+    return c.json({ error: `Template limit reached (${MAX_CUSTOM_TEMPLATES}) — delete one first.` }, 400);
+  }
+  const snapshot = snapshotFromRow(page);
+  const res = await c.env.DB.prepare(
+    'INSERT INTO brand_custom_templates (user_id, name, snapshot_json) VALUES (?, ?, ?)'
+  ).bind(user.id, name, JSON.stringify(snapshot)).run();
+  return c.json({ id: Number((res as any).meta?.last_row_id), name, ...{
+    template: snapshot.template ?? null,
+    template_kit: snapshot.template_kit ?? null,
+    theme_color: snapshot.theme_color ?? null,
+    palette_bg: snapshot.palette_bg ?? null,
+    palette_ink: snapshot.palette_ink ?? null,
+    font_pairing: snapshot.font_pairing ?? null,
+  } }, 201);
+});
+
+brand.delete('/custom-templates/:id', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  const res = await c.env.DB.prepare(
+    'DELETE FROM brand_custom_templates WHERE id = ? AND user_id = ?'
+  ).bind(id, user.id).run();
+  if (!Number((res as any).meta?.changes || 0)) return c.json({ error: 'not found' }, 404);
+  return c.json({ ok: true });
+});
+
+// Public JSON for a branded site page (no auth; published pages only).
+brand.get('/p/:site/:page', async (c) => {
+  await ensureSchema(c.env);
+  const site = await c.env.DB.prepare('SELECT project_id FROM brand_sites WHERE slug = ?').bind(c.req.param('site')).first<any>();
+  if (!site) return c.json({ error: 'not found' }, 404);
+  const row = await c.env.DB.prepare(
+    'SELECT * FROM landing_pages WHERE project_id = ? AND page_slug = ? AND published = 1'
+  ).bind(site.project_id, c.req.param('page')).first<any>();
+  if (!row) return c.json({ error: 'not found' }, 404);
+  return c.json(publicLanding(row));
 });
 
 brand.get('/landing/:slug', async (c) => {
@@ -867,7 +1323,8 @@ brand.get('/landing/:slug', async (c) => {
     `SELECT * FROM landing_pages WHERE slug = ? AND published = 1`
   ).bind(c.req.param('slug')).first<any>();
   if (!row) return c.json({ error: 'not found' }, 404);
-  return c.json(rowToLanding(row));
+  // Public payload — the draft preview token stays private.
+  return c.json(publicLanding(row));
 });
 
 brand.get('/templates', async (c) => {
@@ -952,6 +1409,37 @@ export async function renderLandingHtml(env: Env, slug: string, nonce?: string):
     `UPDATE landing_pages SET views_count = COALESCE(views_count, 0) + 1 WHERE slug = ?`
   ).bind(slug).run().catch(() => {});
   return buildLandingPageHtml(row, { slug, noindex: false, nonce });
+}
+
+// Branded site SSR — /p/{site}/{page} (and /p/{site} → the home page).
+// The row's legacy slug is passed through so the rendered waitlist form and
+// view ping keep POSTing to the existing /api/brand/landing/:slug endpoints.
+export async function renderSitePage(env: Env, siteSlug: string, pageSlug: string | null, nonce?: string): Promise<Response> {
+  await ensureSchema(env);
+  const site = await env.DB.prepare('SELECT project_id FROM brand_sites WHERE slug = ?').bind(siteSlug).first<any>();
+  if (!site) {
+    return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain' } });
+  }
+  let row: any = null;
+  if (pageSlug) {
+    row = await env.DB.prepare(
+      'SELECT * FROM landing_pages WHERE project_id = ? AND page_slug = ? AND published = 1'
+    ).bind(site.project_id, pageSlug).first<any>();
+  } else {
+    // Site root: prefer the "home" page, else the oldest published page.
+    row = await env.DB.prepare(
+      `SELECT * FROM landing_pages WHERE project_id = ? AND published = 1
+       ORDER BY CASE WHEN page_slug = 'home' THEN 0 ELSE 1 END, id LIMIT 1`
+    ).bind(site.project_id).first<any>();
+  }
+  if (!row) {
+    return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain' } });
+  }
+  // Increment view count fire-and-forget — never block the render.
+  env.DB.prepare(
+    'UPDATE landing_pages SET views_count = COALESCE(views_count, 0) + 1 WHERE id = ?'
+  ).bind(row.id).run().catch(() => {});
+  return buildLandingPageHtml(row, { slug: row.slug, noindex: false, nonce });
 }
 
 export async function renderLandingPreview(env: Env, token: string, nonce?: string): Promise<Response> {

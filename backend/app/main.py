@@ -528,6 +528,46 @@ def _landing_preview(token: str, request: Request, session: Session = Depends(ge
     nonce = getattr(request.state, "csp_nonce", "")
     return _render_landing_html(row, noindex=True, csp_nonce=nonce)
 
+# Task #2 — branded multi-page site URLs (/p/{startup}/{page}); /p/{startup}
+# renders the site's home page. Mirrors the Worker's renderSitePage.
+def _render_site_page(site_slug: str, page_slug, request: Request, session: Session):
+    from backend.app.api.routes.brand import _ensure_schema, _render_landing_html
+    _ensure_schema(session)
+    site = session.exec(text(
+        "SELECT project_id FROM brand_sites WHERE slug = :slug"
+    ), params={"slug": site_slug}).mappings().first()
+    if not site:
+        raise HTTPException(status_code=404, detail="not found")
+    if page_slug:
+        row = session.exec(text(
+            "SELECT * FROM landing_pages WHERE project_id = :pid AND page_slug = :ps AND published = TRUE"
+        ), params={"pid": site["project_id"], "ps": page_slug}).mappings().first()
+    else:
+        # Site root: prefer the "home" page, else the oldest published page.
+        row = session.exec(text(
+            "SELECT * FROM landing_pages WHERE project_id = :pid AND published = TRUE "
+            "ORDER BY CASE WHEN page_slug = 'home' THEN 0 ELSE 1 END, id LIMIT 1"
+        ), params={"pid": site["project_id"]}).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="not found")
+    try:
+        session.exec(text(
+            "UPDATE landing_pages SET views_count = COALESCE(views_count,0)+1 WHERE id = :id"
+        ), params={"id": row["id"]})
+        session.commit()
+    except Exception:
+        session.rollback()
+    nonce = getattr(request.state, "csp_nonce", "")
+    return _render_landing_html(row, noindex=False, csp_nonce=nonce)
+
+@app.get("/p/{site_slug}/{page_slug}", response_class=HTMLResponse)
+def _site_page_html(site_slug: str, page_slug: str, request: Request, session: Session = Depends(get_session)):
+    return _render_site_page(site_slug, page_slug, request, session)
+
+@app.get("/p/{site_slug}", response_class=HTMLResponse)
+def _site_home_html(site_slug: str, request: Request, session: Session = Depends(get_session)):
+    return _render_site_page(site_slug, None, request, session)
+
 from backend.app.api.routes import decks as _decks  # noqa: E402
 app.include_router(_decks.router, prefix="/api")
 app.include_router(personas.router, prefix="/api")

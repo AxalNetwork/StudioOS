@@ -136,7 +136,7 @@ import customerChat from './routes/customer_chat';
 // Task #8 (IH) — Data import + migration tools (Carta/AngelList CSV/Deck
 // PDF+PPTX/Investor portfolio/HubSpot pipeline/Universal CSV).
 import importsRoutes from './routes/imports';
-import brand, { renderLandingHtml, renderLandingPreview, renderTemplatePreview } from './routes/brand';
+import brand, { renderLandingHtml, renderLandingPreview, renderTemplatePreview, renderSitePage } from './routes/brand';
 import decks from './routes/decks';
 import competitors from './routes/competitors';
 import deckReviewer from './routes/deck_reviewer';
@@ -732,6 +732,11 @@ app.get('/landing/template-preview/:style', (c) => renderTemplatePreview(c.env, 
 app.get('/landing/:slug', async (c) => renderLandingHtml(c.env, c.req.param('slug'), c.get('cspNonce' as never) as string | undefined));
 // Task #4 — private preview URL for unpublished drafts (noindex).
 app.get('/landing/preview/:token', async (c) => renderLandingPreview(c.env, c.req.param('token'), c.get('cspNonce' as never) as string | undefined));
+// Task #2 — branded multi-page site URLs: /p/{startup}/{page} resolves the
+// editable site slug + page slug; /p/{startup} renders the site's home page.
+// Requires the axal.vc/p{,/*} apex routes in wrangler.toml (both blocks).
+app.get('/p/:site/:page', async (c) => renderSitePage(c.env, c.req.param('site'), c.req.param('page'), c.get('cspNonce' as never) as string | undefined));
+app.get('/p/:site', async (c) => renderSitePage(c.env, c.req.param('site'), null, c.get('cspNonce' as never) as string | undefined));
 // Task #15 — Cloudflare Access on sensitive R2 read endpoints. Soft no-op in
 // dev/preview; production wrangler secrets engage the gate. Per-route auth
 // checks (requireAdmin/requireAuth) still run as the inner perimeter.

@@ -141,6 +141,39 @@ def _ensure_schema(session: Session) -> None:
             session.commit()
         except Exception:
             session.rollback()
+    # Task #2 — multi-page sites (mirror of Worker migration 144):
+    # landing_pages loses its one-page-per-project constraint, gains page_slug
+    # (unique per project); brand_sites holds the editable startup URL slug;
+    # brand_custom_templates stores saved template snapshots.
+    for s in [
+        "ALTER TABLE landing_pages DROP CONSTRAINT IF EXISTS landing_pages_project_id_key",
+        "ALTER TABLE landing_pages ADD COLUMN IF NOT EXISTS page_slug TEXT NOT NULL DEFAULT 'home'",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_landing_project_page ON landing_pages(project_id, page_slug)",
+        """
+        CREATE TABLE IF NOT EXISTS brand_sites (
+            id BIGSERIAL PRIMARY KEY,
+            project_id INTEGER NOT NULL UNIQUE,
+            slug TEXT NOT NULL UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS brand_custom_templates (
+            id BIGSERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_brand_custom_templates_user ON brand_custom_templates(user_id)",
+    ]:
+        try:
+            session.exec(text(s))
+            session.commit()
+        except Exception:
+            session.rollback()
     _migrated = True
 
 
@@ -183,6 +216,66 @@ def _sanitize_logo_url(url: Optional[str]) -> Optional[str]:
 def _slugify(name: str) -> str:
     base = _SLUG_RE.sub("-", (name or "").lower()).strip("-")[:48] or "page"
     return f"{base}-{secrets.token_hex(3)}"
+
+
+# Task #2 — multi-page site helpers (mirror of routes/brand.ts).
+_CLEAN_SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$")
+_RESERVED_SITE_SLUGS = {"api", "app", "admin", "axal", "assets", "landing", "login", "preview", "register", "static", "www"}
+
+
+def _clean_slug(v: Any) -> Optional[str]:
+    if not isinstance(v, str):
+        return None
+    s = v.strip().lower()
+    return s if _CLEAN_SLUG_RE.match(s) else None
+
+
+def _derive_slug_base(name: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", (name or "").lower())
+    s = re.sub(r"^-+|-+$", "", s)
+    s = re.sub(r"-{2,}", "-", s)[:44]
+    return re.sub(r"-+$", "", s)
+
+
+def _ensure_site(session: Session, project_id: int, seed_name: str) -> str:
+    """Get-or-create the project's site slug. Derived slugs auto-suffix on
+    collision; user-edited slugs go through the PUT (409 on collision)."""
+    row = session.exec(text(
+        "SELECT slug FROM brand_sites WHERE project_id = :pid"
+    ), params={"pid": project_id}).mappings().first()
+    if row:
+        return row["slug"]
+    base = _derive_slug_base(seed_name) or f"venture-{project_id}"
+    if base in _RESERVED_SITE_SLUGS:
+        base = f"{base}-site"
+    for i in range(30):
+        candidate = base if i == 0 else f"{base[:43]}-{i + 1}"
+        try:
+            session.exec(text(
+                "INSERT INTO brand_sites (project_id, slug) VALUES (:pid, :slug)"
+            ), params={"pid": project_id, "slug": candidate})
+            session.commit()
+            return candidate
+        except Exception:
+            session.rollback()
+            row = session.exec(text(
+                "SELECT slug FROM brand_sites WHERE project_id = :pid"
+            ), params={"pid": project_id}).mappings().first()
+            if row:  # concurrent create won the race — use theirs
+                return row["slug"]
+    raise HTTPException(status_code=500, detail="could not allocate a site slug")
+
+
+def _allocate_page_slug(session: Session, project_id: int, seed_name: str) -> str:
+    base = _derive_slug_base(seed_name) or "page"
+    for i in range(50):
+        candidate = base if i == 0 else f"{base[:43]}-{i + 1}"
+        hit = session.exec(text(
+            "SELECT 1 FROM landing_pages WHERE project_id = :pid AND page_slug = :ps"
+        ), params={"pid": project_id, "ps": candidate}).first()
+        if not hit:
+            return candidate
+    raise HTTPException(status_code=500, detail="could not allocate a page slug")
 
 
 # Audience-first flow validators (mirror of routes/brand.ts). The page's
@@ -434,7 +527,31 @@ def _row_to_landing(row) -> Dict[str, Any]:
         "goal": row.get("goal") or None,
         "template_kit": row.get("template_kit") or None,
         "content_json": _parse_content_json(row.get("content_json")),
+        "page_slug": row.get("page_slug") or "home",
     }
+
+
+def _public_landing(row) -> Dict[str, Any]:
+    """Public payload — the draft preview token stays private."""
+    out = _row_to_landing(row)
+    out.pop("preview_token", None)
+    return out
+
+
+# Design + copy-seed fields captured into a saved custom template (mirror of
+# TEMPLATE_SNAPSHOT_FIELDS in routes/brand.ts). Snapshots are built
+# server-side from a page the caller owns — never from a raw request body.
+_TEMPLATE_SNAPSHOT_FIELDS = (
+    "template", "template_kit", "audience", "goal", "theme_color",
+    "palette_bg", "palette_ink", "palette_secondary", "palette_accent", "font_pairing",
+    "cta_text", "headline", "subheadline", "tagline", "hero_media_url", "product_screenshot_url",
+)
+
+
+def _snapshot_from_row(row) -> Dict[str, Any]:
+    snap: Dict[str, Any] = {k: row.get(k) for k in _TEMPLATE_SNAPSHOT_FIELDS}
+    snap["content_json"] = _parse_content_json(row.get("content_json"))
+    return snap
 
 
 # --- payloads --------------------------------------------------------------
@@ -758,32 +875,12 @@ def logo(payload: LogoPayload, user: User = Depends(get_current_user)):
     return {"url": None, "svg": _svg_logo(payload.name or "A", payload.color or "#7c3aed"), "source": "svg"}
 
 
-@router.get("/landing/by-project/{project_id}")
-def get_landing(project_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
-    _project_owned(session, project_id, user)
-    _ensure_schema(session)
-    row = session.exec(text(
-        "SELECT * FROM landing_pages WHERE project_id = :pid"
-    ), params={"pid": project_id}).mappings().first()
-    if not row:
-        return None
-    return _row_to_landing(row)
-
-
-@router.put("/landing/by-project/{project_id}")
-def upsert_landing(
-    project_id: int,
-    payload: LandingUpsert,
-    user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    _project_owned(session, project_id, user)
-    _ensure_schema(session)
-    existing = session.exec(text(
-        "SELECT id, slug, preview_token FROM landing_pages WHERE project_id = :pid"
-    ), params={"pid": project_id}).mappings().first()
-    params = {
-        "pid": project_id,
+def _landing_params(payload: "LandingUpsert") -> Dict[str, Any]:
+    """Shared sanitised param dict for every landing-page write path (legacy
+    single-page PUT and all multi-page writes) — mirror of the Worker's
+    parseLandingFields. Template-seeded pages re-run through here at apply
+    time, so stored snapshots are never trusted as-is."""
+    return {
         "name": payload.name,
         "tagline": payload.tagline,
         "headline": payload.headline,
@@ -820,59 +917,100 @@ def upsert_landing(
         "goal": _valid_goal(payload.goal),
         "template_kit": _clean_template_kit(payload.template_kit),
         "content_json": _content_json_str(payload.content_json),
+        "template": payload.template or "minimal",
+        "hero_media_url": _sanitize_url(payload.hero_media_url),
+        "product_screenshot_url": _sanitize_url(payload.product_screenshot_url),
     }
-    if existing:
-        preview_token = existing.get("preview_token") or secrets.token_hex(16)
-        params["preview_token"] = preview_token
-        params["template"] = payload.template or "minimal"
-        params["hero_media_url"] = _sanitize_url(payload.hero_media_url)
-        params["product_screenshot_url"] = _sanitize_url(payload.product_screenshot_url)
-        session.exec(text(
-            "UPDATE landing_pages SET name=:name, tagline=:tagline, headline=:headline, "
-            "subheadline=:subheadline, cta_text=:cta, logo_url=:logo_url, logo_svg=:logo_svg, "
-            "logo_asset_id=:logo_asset_id, theme_color=:color, palette_bg=:palette_bg, "
-            "palette_ink=:palette_ink, palette_secondary=:palette_secondary, "
-            "palette_accent=:palette_accent, font_pairing=:font_pairing, "
-            "audience_customer_headline=:ac_h, audience_customer_body=:ac_b, audience_customer_cta=:ac_c, "
-            "audience_partner_headline=:ap_h, audience_partner_body=:ap_b, audience_partner_cta=:ap_c, "
-            "audience_investor_headline=:ai_h, audience_investor_body=:ai_b, audience_investor_cta=:ai_c, "
-            "audience_advisor_headline=:adv_h, audience_advisor_body=:adv_b, audience_advisor_cta=:adv_c, "
-            "audience_mentor_headline=:men_h, audience_mentor_body=:men_b, audience_mentor_cta=:men_c, "
-            "audience_cofounder_headline=:cof_h, audience_cofounder_body=:cof_b, audience_cofounder_cta=:cof_c, "
-            "template=:template, hero_media_url=:hero_media_url, product_screenshot_url=:product_screenshot_url, "
-            "audience=:audience, goal=:goal, template_kit=:template_kit, content_json=:content_json, "
-            "preview_token=:preview_token, updated_at=CURRENT_TIMESTAMP WHERE project_id=:pid"
-        ), params=params)
-    else:
-        slug = _slugify(payload.name)
-        preview_token = secrets.token_hex(16)
-        params["slug"] = slug
-        params["preview_token"] = preview_token
-        params["template"] = payload.template or "minimal"
-        params["hero_media_url"] = _sanitize_url(payload.hero_media_url)
-        params["product_screenshot_url"] = _sanitize_url(payload.product_screenshot_url)
-        session.exec(text(
-            "INSERT INTO landing_pages (project_id, slug, preview_token, name, tagline, headline, subheadline, "
-            "cta_text, logo_url, logo_svg, logo_asset_id, theme_color, palette_bg, palette_ink, "
-            "palette_secondary, palette_accent, font_pairing, "
-            "audience_customer_headline, audience_customer_body, audience_customer_cta, "
-            "audience_partner_headline, audience_partner_body, audience_partner_cta, "
-            "audience_investor_headline, audience_investor_body, audience_investor_cta, "
-            "audience_advisor_headline, audience_advisor_body, audience_advisor_cta, "
-            "audience_mentor_headline, audience_mentor_body, audience_mentor_cta, "
-            "audience_cofounder_headline, audience_cofounder_body, audience_cofounder_cta, "
-            "template, hero_media_url, product_screenshot_url, audience, goal, template_kit, content_json) "
-            "VALUES (:pid, :slug, :preview_token, :name, :tagline, :headline, :subheadline, :cta, :logo_url, "
-            ":logo_svg, :logo_asset_id, :color, :palette_bg, :palette_ink, "
-            ":palette_secondary, :palette_accent, :font_pairing, "
-            ":ac_h, :ac_b, :ac_c, :ap_h, :ap_b, :ap_c, :ai_h, :ai_b, :ai_c, "
-            ":adv_h, :adv_b, :adv_c, :men_h, :men_b, :men_c, :cof_h, :cof_b, :cof_c, "
-            ":template, :hero_media_url, :product_screenshot_url, :audience, :goal, :template_kit, :content_json)"
-        ), params=params)
-    session.commit()
+
+
+_LANDING_UPDATE_SQL = (
+    "UPDATE landing_pages SET name=:name, tagline=:tagline, headline=:headline, "
+    "subheadline=:subheadline, cta_text=:cta, logo_url=:logo_url, logo_svg=:logo_svg, "
+    "logo_asset_id=:logo_asset_id, theme_color=:color, palette_bg=:palette_bg, "
+    "palette_ink=:palette_ink, palette_secondary=:palette_secondary, "
+    "palette_accent=:palette_accent, font_pairing=:font_pairing, "
+    "audience_customer_headline=:ac_h, audience_customer_body=:ac_b, audience_customer_cta=:ac_c, "
+    "audience_partner_headline=:ap_h, audience_partner_body=:ap_b, audience_partner_cta=:ap_c, "
+    "audience_investor_headline=:ai_h, audience_investor_body=:ai_b, audience_investor_cta=:ai_c, "
+    "audience_advisor_headline=:adv_h, audience_advisor_body=:adv_b, audience_advisor_cta=:adv_c, "
+    "audience_mentor_headline=:men_h, audience_mentor_body=:men_b, audience_mentor_cta=:men_c, "
+    "audience_cofounder_headline=:cof_h, audience_cofounder_body=:cof_b, audience_cofounder_cta=:cof_c, "
+    "template=:template, hero_media_url=:hero_media_url, product_screenshot_url=:product_screenshot_url, "
+    "audience=:audience, goal=:goal, template_kit=:template_kit, content_json=:content_json, "
+    "preview_token=:preview_token, page_slug=COALESCE(:page_slug, page_slug), "
+    "updated_at=CURRENT_TIMESTAMP WHERE id=:row_id"
+)
+
+_LANDING_INSERT_SQL = (
+    "INSERT INTO landing_pages (project_id, slug, page_slug, preview_token, name, tagline, headline, subheadline, "
+    "cta_text, logo_url, logo_svg, logo_asset_id, theme_color, palette_bg, palette_ink, "
+    "palette_secondary, palette_accent, font_pairing, "
+    "audience_customer_headline, audience_customer_body, audience_customer_cta, "
+    "audience_partner_headline, audience_partner_body, audience_partner_cta, "
+    "audience_investor_headline, audience_investor_body, audience_investor_cta, "
+    "audience_advisor_headline, audience_advisor_body, audience_advisor_cta, "
+    "audience_mentor_headline, audience_mentor_body, audience_mentor_cta, "
+    "audience_cofounder_headline, audience_cofounder_body, audience_cofounder_cta, "
+    "template, hero_media_url, product_screenshot_url, audience, goal, template_kit, content_json) "
+    "VALUES (:pid, :slug, :page_slug, :preview_token, :name, :tagline, :headline, :subheadline, :cta, :logo_url, "
+    ":logo_svg, :logo_asset_id, :color, :palette_bg, :palette_ink, "
+    ":palette_secondary, :palette_accent, :font_pairing, "
+    ":ac_h, :ac_b, :ac_c, :ap_h, :ap_b, :ap_c, :ai_h, :ai_b, :ai_c, "
+    ":adv_h, :adv_b, :adv_c, :men_h, :men_b, :men_c, :cof_h, :cof_b, :cof_c, "
+    ":template, :hero_media_url, :product_screenshot_url, :audience, :goal, :template_kit, :content_json)"
+)
+
+
+@router.get("/landing/by-project/{project_id}")
+def get_landing(project_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    _project_owned(session, project_id, user)
+    _ensure_schema(session)
+    # Multi-page: the legacy endpoint reads the primary (oldest) page.
     row = session.exec(text(
-        "SELECT * FROM landing_pages WHERE project_id = :pid"
+        "SELECT * FROM landing_pages WHERE project_id = :pid ORDER BY id LIMIT 1"
     ), params={"pid": project_id}).mappings().first()
+    if not row:
+        return None
+    return _row_to_landing(row)
+
+
+@router.put("/landing/by-project/{project_id}")
+def upsert_landing(
+    project_id: int,
+    payload: LandingUpsert,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _project_owned(session, project_id, user)
+    _ensure_schema(session)
+    # Multi-page: the legacy endpoint upserts the primary (oldest) page.
+    existing = session.exec(text(
+        "SELECT id, slug, preview_token FROM landing_pages WHERE project_id = :pid ORDER BY id LIMIT 1"
+    ), params={"pid": project_id}).mappings().first()
+    params = _landing_params(payload)
+    params["pid"] = project_id
+    if existing:
+        params["preview_token"] = existing.get("preview_token") or secrets.token_hex(16)
+        params["page_slug"] = None  # leave page_slug unchanged
+        params["row_id"] = existing["id"]
+        session.exec(text(_LANDING_UPDATE_SQL), params=params)
+        row_id = existing["id"]
+    else:
+        params["slug"] = _slugify(payload.name)
+        params["preview_token"] = secrets.token_hex(16)
+        params["page_slug"] = "home"
+        session.exec(text(_LANDING_INSERT_SQL), params=params)
+        row_id = None
+    session.commit()
+    _ensure_site(session, project_id, payload.name)
+    if row_id is not None:
+        row = session.exec(text(
+            "SELECT * FROM landing_pages WHERE id = :id"
+        ), params={"id": row_id}).mappings().first()
+    else:
+        row = session.exec(text(
+            "SELECT * FROM landing_pages WHERE project_id = :pid ORDER BY id LIMIT 1"
+        ), params={"pid": project_id}).mappings().first()
     return _row_to_landing(row)
 
 
@@ -944,9 +1082,15 @@ def publish(
     _project_owned(session, project_id, user)
     _ensure_schema(session)
     flag = bool((body or {}).get("published", True))
+    # Multi-page: the legacy endpoint toggles ONLY the primary (oldest) page.
+    primary = session.exec(text(
+        "SELECT id FROM landing_pages WHERE project_id = :pid ORDER BY id LIMIT 1"
+    ), params={"pid": project_id}).mappings().first()
+    if not primary:
+        raise HTTPException(status_code=404, detail="no landing page")
     session.exec(text(
-        "UPDATE landing_pages SET published=:p, updated_at=CURRENT_TIMESTAMP WHERE project_id=:pid"
-    ), params={"pid": project_id, "p": flag})
+        "UPDATE landing_pages SET published=:p, updated_at=CURRENT_TIMESTAMP WHERE id=:id"
+    ), params={"id": primary["id"], "p": flag})
     session.commit()
     return {"ok": True, "published": flag}
 
@@ -979,7 +1123,7 @@ def public_landing(slug: str, session: Session = Depends(get_session)):
     ), params={"slug": slug}).mappings().first()
     if not row:
         raise HTTPException(status_code=404, detail="not found")
-    return _row_to_landing(row)
+    return _public_landing(row)
 
 
 def _valid_audience(v: Optional[str]) -> Optional[str]:
@@ -1060,8 +1204,9 @@ def list_waitlist(
 def preview_url(project_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
     _project_owned(session, project_id, user)
     _ensure_schema(session)
+    # Multi-page: the legacy endpoint serves the primary (oldest) page.
     row = session.exec(text(
-        "SELECT preview_token FROM landing_pages WHERE project_id = :pid"
+        "SELECT id, preview_token FROM landing_pages WHERE project_id = :pid ORDER BY id LIMIT 1"
     ), params={"pid": project_id}).mappings().first()
     if not row:
         raise HTTPException(status_code=404, detail="no preview token")
@@ -1069,7 +1214,355 @@ def preview_url(project_id: int, user: User = Depends(get_current_user), session
     if not token:
         token = secrets.token_hex(16)
         session.exec(text(
-            "UPDATE landing_pages SET preview_token = :token WHERE project_id = :pid"
-        ), params={"token": token, "pid": project_id})
+            "UPDATE landing_pages SET preview_token = :token WHERE id = :id"
+        ), params={"token": token, "id": row["id"]})
         session.commit()
     return {"url": f"/landing/preview/{token}"}
+
+# --- Task #2: multi-page sites (mirror of Worker endpoints) -----------------
+
+
+class SiteSlugPayload(BaseModel):
+    slug: str = Field(..., min_length=1, max_length=64)
+
+
+class PageCreate(LandingUpsert):
+    page_slug: Optional[str] = None
+    from_custom_template_id: Optional[int] = None
+
+
+class PageUpdate(LandingUpsert):
+    page_slug: Optional[str] = None
+
+
+class TemplateCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+    from_page_id: int
+
+
+_MAX_CUSTOM_TEMPLATES = 50
+
+_SLUG_FORMAT_MSG = (
+    "Slug must be 1-48 characters: lowercase letters, numbers, and hyphens "
+    "(no leading/trailing hyphen)."
+)
+
+
+def _page_owned(session: Session, page_id: int, user: User):
+    row = session.exec(text(
+        "SELECT * FROM landing_pages WHERE id = :id"
+    ), params={"id": page_id}).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="not found")
+    _project_owned(session, row["project_id"], user)
+    return row
+
+
+@router.get("/site/by-project/{project_id}")
+def get_site(project_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    p = _project_owned(session, project_id, user)
+    _ensure_schema(session)
+    slug = _ensure_site(session, project_id, p.name or "")
+    return {"slug": slug, "path": f"/p/{slug}"}
+
+
+@router.put("/site/by-project/{project_id}")
+def put_site(
+    project_id: int,
+    payload: SiteSlugPayload,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    p = _project_owned(session, project_id, user)
+    _ensure_schema(session)
+    slug = _clean_slug(payload.slug)
+    if not slug:
+        raise HTTPException(status_code=400, detail=_SLUG_FORMAT_MSG)
+    if slug in _RESERVED_SITE_SLUGS:
+        raise HTTPException(status_code=400, detail="That slug is reserved.")
+    _ensure_site(session, project_id, p.name or "")
+    # User-chosen slugs are never auto-suffixed — collision is an explicit 409.
+    taken = session.exec(text(
+        "SELECT project_id FROM brand_sites WHERE slug = :slug"
+    ), params={"slug": slug}).mappings().first()
+    if taken and taken["project_id"] != project_id:
+        raise HTTPException(status_code=409, detail="That startup URL is already taken.")
+    try:
+        session.exec(text(
+            "UPDATE brand_sites SET slug = :slug, updated_at = CURRENT_TIMESTAMP WHERE project_id = :pid"
+        ), params={"slug": slug, "pid": project_id})
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="That startup URL is already taken.")
+    return {"slug": slug, "path": f"/p/{slug}"}
+
+
+@router.get("/landing/by-project/{project_id}/pages")
+def list_pages(project_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    _project_owned(session, project_id, user)
+    _ensure_schema(session)
+    rows = session.exec(text(
+        "SELECT id, page_slug, slug, name, headline, template, template_kit, audience, goal, "
+        "published, views_count, updated_at FROM landing_pages WHERE project_id = :pid ORDER BY id"
+    ), params={"pid": project_id}).mappings().all()
+    return {"pages": [
+        {
+            "id": r["id"],
+            "page_slug": r.get("page_slug") or "home",
+            "slug": r["slug"],
+            "name": r["name"],
+            "headline": r.get("headline"),
+            "template": r.get("template") or "minimal",
+            "template_kit": r.get("template_kit"),
+            "audience": r.get("audience"),
+            "goal": r.get("goal"),
+            "published": bool(r["published"]),
+            "views_count": r.get("views_count") or 0,
+            "updated_at": str(r.get("updated_at") or ""),
+        }
+        for r in rows
+    ]}
+
+
+@router.post("/landing/by-project/{project_id}/pages", status_code=201)
+def create_page(
+    project_id: int,
+    payload: PageCreate,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    p = _project_owned(session, project_id, user)
+    _ensure_schema(session)
+    body = payload
+
+    # Seed from a saved template the caller owns. The merged payload is
+    # re-validated through LandingUpsert + _landing_params, so stored
+    # snapshots are never trusted as-is.
+    if payload.from_custom_template_id:
+        tpl = session.exec(text(
+            "SELECT snapshot_json FROM brand_custom_templates WHERE id = :id AND user_id = :uid"
+        ), params={"id": payload.from_custom_template_id, "uid": user.id}).mappings().first()
+        if not tpl:
+            raise HTTPException(status_code=404, detail="template not found")
+        try:
+            snap = json.loads(tpl["snapshot_json"]) or {}
+        except Exception:
+            raise HTTPException(status_code=500, detail="template snapshot is corrupted")
+        merged: Dict[str, Any] = {k: v for k, v in snap.items() if k in LandingUpsert.model_fields}
+        for k, v in payload.model_dump(exclude_unset=True).items():
+            if k in LandingUpsert.model_fields and v not in (None, ""):
+                merged[k] = v
+        merged["name"] = payload.name
+        try:
+            body = LandingUpsert(**merged)
+        except Exception:
+            raise HTTPException(status_code=400, detail="template snapshot failed validation")
+
+    # Page slug: explicit value must be valid (400) and free (409);
+    # otherwise derive from the name with auto-suffixing.
+    if payload.page_slug:
+        page_slug = _clean_slug(payload.page_slug)
+        if not page_slug:
+            raise HTTPException(status_code=400, detail=_SLUG_FORMAT_MSG)
+        hit = session.exec(text(
+            "SELECT 1 FROM landing_pages WHERE project_id = :pid AND page_slug = :ps"
+        ), params={"pid": project_id, "ps": page_slug}).first()
+        if hit:
+            raise HTTPException(status_code=409, detail="A page with that slug already exists on this site.")
+    else:
+        page_slug = _allocate_page_slug(session, project_id, payload.name)
+
+    params = _landing_params(body)
+    params["pid"] = project_id
+    params["slug"] = _slugify(body.name)
+    params["preview_token"] = secrets.token_hex(16)
+    params["page_slug"] = page_slug
+    try:
+        session.exec(text(_LANDING_INSERT_SQL), params=params)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="A page with that slug already exists on this site.")
+    _ensure_site(session, project_id, p.name or body.name)
+    row = session.exec(text(
+        "SELECT * FROM landing_pages WHERE project_id = :pid AND page_slug = :ps"
+    ), params={"pid": project_id, "ps": page_slug}).mappings().first()
+    return _row_to_landing(row)
+
+
+@router.get("/landing/pages/{page_id}")
+def get_page(page_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    _ensure_schema(session)
+    row = _page_owned(session, page_id, user)
+    return _row_to_landing(row)
+
+
+@router.put("/landing/pages/{page_id}")
+def update_page(
+    page_id: int,
+    payload: PageUpdate,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_schema(session)
+    existing = _page_owned(session, page_id, user)
+    page_slug = None
+    if payload.page_slug:
+        page_slug = _clean_slug(payload.page_slug)
+        if not page_slug:
+            raise HTTPException(status_code=400, detail=_SLUG_FORMAT_MSG)
+        hit = session.exec(text(
+            "SELECT id FROM landing_pages WHERE project_id = :pid AND page_slug = :ps"
+        ), params={"pid": existing["project_id"], "ps": page_slug}).mappings().first()
+        if hit and hit["id"] != page_id:
+            raise HTTPException(status_code=409, detail="A page with that slug already exists on this site.")
+    params = _landing_params(payload)
+    params["preview_token"] = existing.get("preview_token") or secrets.token_hex(16)
+    params["page_slug"] = page_slug
+    params["row_id"] = page_id
+    try:
+        session.exec(text(_LANDING_UPDATE_SQL), params=params)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="A page with that slug already exists on this site.")
+    row = session.exec(text(
+        "SELECT * FROM landing_pages WHERE id = :id"
+    ), params={"id": page_id}).mappings().first()
+    return _row_to_landing(row)
+
+
+@router.delete("/landing/pages/{page_id}")
+def delete_page(page_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    _ensure_schema(session)
+    row = _page_owned(session, page_id, user)
+    count = session.exec(text(
+        "SELECT COUNT(*) AS n FROM landing_pages WHERE project_id = :pid"
+    ), params={"pid": row["project_id"]}).mappings().first()
+    if int(count["n"] or 0) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot delete the last page of a site — unpublish it instead.")
+    session.exec(text("DELETE FROM landing_pages WHERE id = :id"), params={"id": page_id})
+    session.commit()
+    return {"ok": True}
+
+
+@router.post("/landing/pages/{page_id}/publish")
+def publish_page(
+    page_id: int,
+    body: Dict[str, Any] = None,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_schema(session)
+    _page_owned(session, page_id, user)
+    flag = bool((body or {}).get("published", True))
+    session.exec(text(
+        "UPDATE landing_pages SET published=:p, updated_at=CURRENT_TIMESTAMP WHERE id=:id"
+    ), params={"id": page_id, "p": flag})
+    session.commit()
+    return {"ok": True, "published": flag}
+
+
+@router.get("/landing/pages/{page_id}/preview-url")
+def page_preview_url(page_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    _ensure_schema(session)
+    row = _page_owned(session, page_id, user)
+    token = row.get("preview_token")
+    if not token:
+        token = secrets.token_hex(16)
+        session.exec(text(
+            "UPDATE landing_pages SET preview_token = :token WHERE id = :id"
+        ), params={"token": token, "id": page_id})
+        session.commit()
+    return {"url": f"/landing/preview/{token}"}
+
+
+@router.get("/custom-templates")
+def list_custom_templates(user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    _ensure_schema(session)
+    rows = session.exec(text(
+        "SELECT id, name, snapshot_json, created_at FROM brand_custom_templates "
+        "WHERE user_id = :uid ORDER BY created_at DESC, id DESC"
+    ), params={"uid": user.id}).mappings().all()
+    templates = []
+    for r in rows:
+        try:
+            snap = json.loads(r["snapshot_json"]) or {}
+        except Exception:
+            snap = {}
+        templates.append({
+            "id": r["id"],
+            "name": r["name"],
+            "created_at": str(r.get("created_at") or ""),
+            "template": snap.get("template"),
+            "template_kit": snap.get("template_kit"),
+            "theme_color": snap.get("theme_color"),
+            "palette_bg": snap.get("palette_bg"),
+            "palette_ink": snap.get("palette_ink"),
+            "font_pairing": snap.get("font_pairing"),
+        })
+    return {"templates": templates}
+
+
+@router.post("/custom-templates", status_code=201)
+def create_custom_template(
+    payload: TemplateCreate,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    _ensure_schema(session)
+    page = _page_owned(session, payload.from_page_id, user)
+    count = session.exec(text(
+        "SELECT COUNT(*) AS n FROM brand_custom_templates WHERE user_id = :uid"
+    ), params={"uid": user.id}).mappings().first()
+    if int(count["n"] or 0) >= _MAX_CUSTOM_TEMPLATES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Template limit reached ({_MAX_CUSTOM_TEMPLATES}) — delete one first.",
+        )
+    snapshot = _snapshot_from_row(page)
+    row = session.exec(text(
+        "INSERT INTO brand_custom_templates (user_id, name, snapshot_json) "
+        "VALUES (:uid, :name, :snap) RETURNING id"
+    ), params={"uid": user.id, "name": payload.name.strip()[:80], "snap": json.dumps(snapshot)}).mappings().first()
+    session.commit()
+    return {
+        "id": row["id"],
+        "name": payload.name.strip()[:80],
+        "template": snapshot.get("template"),
+        "template_kit": snapshot.get("template_kit"),
+        "theme_color": snapshot.get("theme_color"),
+        "palette_bg": snapshot.get("palette_bg"),
+        "palette_ink": snapshot.get("palette_ink"),
+        "font_pairing": snapshot.get("font_pairing"),
+    }
+
+
+@router.delete("/custom-templates/{template_id}")
+def delete_custom_template(template_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    _ensure_schema(session)
+    row = session.exec(text(
+        "DELETE FROM brand_custom_templates WHERE id = :id AND user_id = :uid RETURNING id"
+    ), params={"id": template_id, "uid": user.id}).mappings().first()
+    session.commit()
+    if not row:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"ok": True}
+
+
+@router.get("/p/{site_slug}/{page_slug}")
+def public_site_page(site_slug: str, page_slug: str, session: Session = Depends(get_session)):
+    """Public JSON for a branded site page (published pages only)."""
+    _ensure_schema(session)
+    site = session.exec(text(
+        "SELECT project_id FROM brand_sites WHERE slug = :slug"
+    ), params={"slug": site_slug}).mappings().first()
+    if not site:
+        raise HTTPException(status_code=404, detail="not found")
+    row = session.exec(text(
+        "SELECT * FROM landing_pages WHERE project_id = :pid AND page_slug = :ps AND published = TRUE"
+    ), params={"pid": site["project_id"], "ps": page_slug}).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="not found")
+    return _public_landing(row)

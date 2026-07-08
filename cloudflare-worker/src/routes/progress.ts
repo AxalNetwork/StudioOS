@@ -472,8 +472,9 @@ async function loadCustomerSignup(
 async function landingCtaUrl(env: Env, projectId: number): Promise<string> {
   const appUrl = stripTrailingSlashes(String((env as any).APP_URL || 'https://axal.vc'));
   try {
+    // Multi-page sites: prefer a published page, then the oldest (primary).
     const row = await env.DB.prepare(
-      'SELECT slug FROM landing_pages WHERE project_id = ?',
+      'SELECT slug FROM landing_pages WHERE project_id = ? ORDER BY published DESC, id LIMIT 1',
     ).bind(projectId).first<{ slug: string }>();
     if (row?.slug) return `${appUrl}/landing/${row.slug}`;
   } catch { /* fall through to app root */ }
@@ -1616,7 +1617,8 @@ async function computeLifecycleSignals(env: Env, projectId: number): Promise<Lif
     active_prospects: 0,
   };
   try {
-    const lp = await env.DB.prepare('SELECT published FROM landing_pages WHERE project_id = ?')
+    // Multi-page sites: "published" if ANY page of the project is live.
+    const lp = await env.DB.prepare('SELECT MAX(COALESCE(published, 0)) AS published FROM landing_pages WHERE project_id = ?')
       .bind(projectId).first<{ published: number | null }>();
     out.landing_published = Number(lp?.published ?? 0) === 1;
   } catch (_e) { /* table may not exist yet */ }

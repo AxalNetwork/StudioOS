@@ -91,6 +91,96 @@ export default function BrandBuilderPage() {
   const [templates, setTemplates] = useState([]);
   // Task #20 — visual-style key currently shown in the full-screen preview modal (null = closed)
   const [previewTemplate, setPreviewTemplate] = useState(null);
+  // Task #2 — branded multi-page sites & saved templates
+  const [site, setSite] = useState(null);            // { slug, path }
+  const [siteSlugEdit, setSiteSlugEdit] = useState('');
+  const [siteSlugBusy, setSiteSlugBusy] = useState(false);
+  const [siteSlugError, setSiteSlugError] = useState('');
+  const [pages, setPages] = useState([]);
+  const [activePageId, setActivePageId] = useState(null);
+  const [pageSlugEdit, setPageSlugEdit] = useState('');
+  const [pageSlugBusy, setPageSlugBusy] = useState(false);
+  const [pageSlugError, setPageSlugError] = useState('');
+  const [showNewPage, setShowNewPage] = useState(false);
+  const [newPage, setNewPage] = useState({ name: '', page_slug: '', from_custom_template_id: '' });
+  const [newPageBusy, setNewPageBusy] = useState(false);
+  const [newPageError, setNewPageError] = useState('');
+  const [customTemplates, setCustomTemplates] = useState([]);
+  const [tplName, setTplName] = useState('');
+  const [tplBusy, setTplBusy] = useState(false);
+  const [tplMsg, setTplMsg] = useState('');
+
+  // Seed editor state from a landing-page row (initial load + page switch).
+  const seedFromLanding = (lp) => {
+    setLanding(lp);
+    setActivePageId(lp.id || null);
+    setPageSlugEdit(lp.page_slug || '');
+    setPageSlugError('');
+    const tk = lp.template || 'minimal';
+    const loadedContent = lp.content_json || {};
+    const needsSeed = !(loadedContent[tk] && Object.keys(loadedContent[tk]).length)
+      && (TEMPLATE_CONTENT_SCHEMA[tk] || []).length > 0;
+    const seededContent = needsSeed
+      ? { ...loadedContent, [tk]: defaultsForKey(tk) }
+      : loadedContent;
+    setDraft({
+      name: lp.name || '',
+      tagline: lp.tagline || '',
+      headline: lp.headline || '',
+      subheadline: lp.subheadline || '',
+      cta_text: lp.cta_text || 'Join the waitlist',
+      logo_url: lp.logo_url || null,
+      logo_svg: lp.logo_svg || null,
+      logo_asset_id: lp.logo_asset_id || null,
+      theme_color: lp.theme_color || '#7c3aed',
+      palette_bg: lp.palette_bg || '#faf7ff',
+      palette_ink: lp.palette_ink || '#1b1430',
+      palette_secondary: lp.palette_secondary || '#c4b5fd',
+      palette_accent: lp.palette_accent || '#f59e0b',
+      font_pairing: lp.font_pairing || 'editorial',
+      audience_customer_headline: lp.audience_customer_headline || '',
+      audience_customer_body: lp.audience_customer_body || '',
+      audience_customer_cta: lp.audience_customer_cta || '',
+      audience_partner_headline: lp.audience_partner_headline || '',
+      audience_partner_body: lp.audience_partner_body || '',
+      audience_partner_cta: lp.audience_partner_cta || '',
+      audience_investor_headline: lp.audience_investor_headline || '',
+      audience_investor_body: lp.audience_investor_body || '',
+      audience_investor_cta: lp.audience_investor_cta || '',
+      audience_advisor_headline: lp.audience_advisor_headline || '',
+      audience_advisor_body: lp.audience_advisor_body || '',
+      audience_advisor_cta: lp.audience_advisor_cta || '',
+      audience_mentor_headline: lp.audience_mentor_headline || '',
+      audience_mentor_body: lp.audience_mentor_body || '',
+      audience_mentor_cta: lp.audience_mentor_cta || '',
+      audience_cofounder_headline: lp.audience_cofounder_headline || '',
+      audience_cofounder_body: lp.audience_cofounder_body || '',
+      audience_cofounder_cta: lp.audience_cofounder_cta || '',
+      template: lp.template || 'minimal',
+      hero_media_url: lp.hero_media_url || '',
+      product_screenshot_url: lp.product_screenshot_url || '',
+      audience: lp.audience || '',
+      goal: lp.goal || '',
+      template_kit: lp.template_kit || '',
+      content_json: seededContent,
+    });
+  };
+
+  const refreshPages = async (pid) => {
+    try {
+      const r = await api.brandListPages(pid);
+      const list = r?.pages || [];
+      setPages(list);
+      return list;
+    } catch { return []; }
+  };
+
+  const refreshCustomTemplates = async () => {
+    try {
+      const r = await api.brandListCustomTemplates();
+      setCustomTemplates(r?.templates || []);
+    } catch {}
+  };
 
   useEffect(() => {
     api.listProjects().then((r) => {

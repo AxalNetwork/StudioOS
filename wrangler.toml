@@ -289,6 +289,15 @@ zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/landing/*"
 zone_name  = "axal.vc"
+# Task #2 — branded multi-page site URLs (/p/{startup}/{page}). Worker-served
+# SSR; without these apex routes /p/* falls through to Jekyll and 404s.
+# Exact + wildcard, mirrored in [[env.production.routes]] below.
+[[routes]]
+pattern    = "axal.vc/p"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/p/*"
+zone_name  = "axal.vc"
 # Email security — serve /.well-known/security.txt (RFC 9116) from the Worker
 # assets binding on the apex. Without this exact route the path falls through to
 # Jekyll/GitHub Pages (no such file → 404) and Cloudflare Email Security flags
@@ -345,7 +354,7 @@ zone_name  = "axal.vc"
 directory = "./docs"
 binding   = "ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/landing/*", "/assets/*"]
+run_worker_first = ["/api/*", "/landing/*", "/p/*", "/assets/*"]
 
 # ---------- Module Rules ----------
 # Task #9 (AO) — register `.md` files (and the Vite-style `?raw` suffix)
@@ -915,6 +924,13 @@ zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/landing/*"
 zone_name  = "axal.vc"
+# Task #2 — branded multi-page site URLs. Mirror of the top-level /p{,/*} routes.
+[[env.production.routes]]
+pattern    = "axal.vc/p"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/p/*"
+zone_name  = "axal.vc"
 # Email security — mirror of the top-level /.well-known/security.txt route.
 [[env.production.routes]]
 pattern    = "axal.vc/.well-known/security.txt"
@@ -1020,7 +1036,7 @@ binding = "BROWSER"
 directory = "./docs"
 binding   = "ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/landing/*", "/assets/*"]
+run_worker_first = ["/api/*", "/landing/*", "/p/*", "/assets/*"]
 
 # Task #9 (AO) — wire the studioos-tail consumer worker
 # (cloudflare-worker-tail/) so all production worker tail events get

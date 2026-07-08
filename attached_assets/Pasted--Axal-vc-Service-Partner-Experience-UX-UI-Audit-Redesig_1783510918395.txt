@@ -1,0 +1,89 @@
+# Axal.vc Service-Partner Experience — UX/UI Audit & Redesign Plan
+
+## Context
+
+Fourth and final persona audit (founder #133 merged; investor + advisor on PR #134). The service partner supplies services to founders. Exploration (subagents hit the session usage limit; completed first-hand with targeted verified reads) found: the partner lands on the wrong console entirely, the marketplace they sell through is **three parallel systems over two conflicting schemas**, their office-hours page shares the advisor persona's broken field contract, and their invoicing writes literal `stub-` invoice IDs.
+
+**Deliverable**: `PARTNER_UX_AUDIT.md` at repo root, committed to `claude/axal-founder-ux-audit-hvf5a1` (joins draft PR #134; retitle to cover the trilogy of docs). Docs only — no code changes.
+
+---
+
+# THE AUDIT (content of PARTNER_UX_AUDIT.md)
+
+## Executive summary — six systemic problems
+
+1. **Partners land on the wrong desk — twice.** `ROLE_DEFAULT_PATH` (App.jsx:219) sends partners to `/partner-portal` → `PartnerPortal.jsx`, titled **"Partner / Investor Portal"** with tabs Deals / Capital Calls / LP Investors / Portfolio — an LP-investor console with almost nothing for a *service* partner. Meanwhile their sidebar Home says **Studio** (`/studio` → the founder-identical Dashboard, whose partner payload — `dashboard.ts` computes for `isPartner` the same `proprietary_deal_flow`/`quick_stats`/`syndication_tools` set — is never rendered, as established in the investor audit). Two homes; neither is a service-partner workspace.
+
+2. **One economy, three marketplaces, two schemas.** The partner's Sourcing group points at three different backends for the same job: **My Services** (`/services` → `ServiceCatalogPage` → `services.ts` offerings + `service_engagements` "engage" requests), **Needs Board** (`/needs` → `NeedsBoardPage` → `needs.ts` full RFP economy: `founder_needs/rfps/quotes/engagements/engagement_reviews`), and **Marketplace** (`/marketplace` → `MarketplacePage` → `catalog.ts` providers/inquiries/messages/provider-reviews). Worse, the repo carries **two conflicting `CREATE TABLE IF NOT EXISTS service_offerings`** definitions — `schema.sql:724` (`owner_user_id/summary/price_usd`, the shape `services.ts` queries) vs `t13_t14_t15.sql:377` (`partner_id/description/price_min/price_max`) — whichever ran first on production won, and the other code path's columns don't exist.
+
+3. **The drift disease, again.** `ServiceCatalogPage` renders `o.description` and `o.partner_name`; `services.ts` serializes `summary` and `owner_user_id` (`services.ts:19-46`) — descriptions render blank and the create form's Description is **silently dropped** (POST reads `summary`, `services.ts:83`). `PartnerOfficeHoursPage` is broken **identically to the advisor page**: sends `start_at`/`duration_min` (`:13,23-24`) where `partner_office_hours.ts` requires `starts_at`/`ends_at` (`:60`) — slot creation 400s; status vocabulary mismatch (`pending` vs UI gates) — bookings unconfirmable. And no founder-facing page renders partner slots anyway (verified in the advisor audit: partner office hours has no discovery surface).
+
+4. **The win-work lifecycle exists — buried in one page, ending in a stub.** `needs.ts` implements a real chain: need → RFP → quote (accept/reject/withdraw) → engagement (accepted → in_progress → delivered → invoiced, partner-side transitions properly gated, delivery notes, reviews). But the entire partner workflow — browsing demand, quotes sent, active engagements — lives inside the 910-line `NeedsBoardPage`; there is no "My engagements" home, no pipeline view, no next actions. And the terminal step is fake: **`invoice` writes `invoice_id = 'stub-…'`** with the comment "Stripe Connect not in worker port" (`needs.ts:431`) — no money ever moves, while the wellbeing-experts system (again) has the full Stripe Connect kit one door over.
+
+5. **The front door is an invite token; the side door mislabels people.** Real partner onboarding is `partner_onboarding.ts` — an invite-token wizard (`/:token/profile → propose → select → finalize`) writing `partner_profiles` + `partner_deals` (managed via `PartnerDealPortal.jsx`) — invite-only deal formation. Meanwhile persona onboarding funnels every "Operator / Advisor" signup into the partner role (`personas.ts:178-181`) with **no setup path at all**: no profile prompt, no services prompt, dumped on the LP portal.
+
+6. **Bright spots exist and point the way.** **Demand Insights** (`PartnerInsightsPage`, 299 lines) is real aggregation (feed, heatmap, newsletter subscribe) — the one partner-native signal surface. The sidebar itself is the best-curated of the four personas (deliberate "Sourcing/Engage" verbs, documented removals). The failure isn't the IA — it's that the surfaces behind it are fragmented, drifted, and unpaid.
+
+## Section-by-section (compressed for the doc; full prose in the deliverable)
+
+### 1) Home
+`PartnerPortal.jsx` (491 lines): "Partner / Investor Portal", tabs Deals/Capital Calls/LP Investors/Portfolio + referral code copy. Wrong persona's furniture. **Recommendation**: partners land on a **Partner Desk** — either `/studio` with role-conditional composition (matching founder/investor pattern): lifecycle rail + open needs matching their categories + quotes awaiting + active engagements + insights digest; `/partner-portal` stays for genuinely investor-type partners (it already serves them) and is dropped from `ROLE_DEFAULT_PATH` for service partners. Align sidebar Home and actual landing.
+
+### 2) Marketplace consolidation (the core recommendation)
+One economy needs one system. Recommend: **`needs.ts` (RFP economy) becomes canonical** — it has the full lifecycle and reviews. `services.ts` offerings fold in as the partner's public "storefront" listings (migrate the one true `service_offerings` shape; resolve the double-CREATE by a migration that reconciles columns); `catalog.ts` providers/inquiries retires into needs-inquiries (an inquiry = a lightweight need). UI: **My Services** = storefront CRUD (fixed fields); **Needs Board** = demand only; a new **Engagements** tab inside the existing workspace (not a new sidebar item) = quotes sent + active work + delivery actions. FounderMarketplacePage keeps its two tabs, reading the same canonical backend.
+
+### 3) Office hours
+Same fix as the advisor audit, same file pair (`PartnerOfficeHoursPage` / `partner_office_hours.ts`); then **unify with the advisor engine** (parameterized service — already roadmapped in the advisor audit ⑥, partners gain reviews). Add a founder-facing discovery surface: render partner slots on the partner's public profile (`PublicPartnerProfilePage`) and in Team/Network contexts.
+
+### 4) Money
+Adopt the wellbeing Stripe Connect rails for engagement invoicing (replace the stub): quote amount → invoice → payment intent → payout; Earnings panel on the Partner Desk. Refer & Earn stays a separate, working program.
+
+### 5) Onboarding
+Self-serve **"Offer services"** path: persona onboarding (partner alignment) flows into a first-run setup (profile + first offering + categories) instead of the LP portal; the invite-token deal wizard remains for equity/deal partners. Fix the "Operator / Advisor"→partner mislabel jointly with the advisor audit's ③.
+
+### 6) Leads & network
+Complete the lead taxonomy (founder audit ③): partner-audience landing signups get a real destination — an intro queue on the Partner Desk / Marketplace inquiry, instead of dead-ending in `/network`. Contacts hub gains a "Promote to partner inquiry" path.
+
+## The Partner Lifecycle module (on the Partner Desk)
+| Stage | Goal | Existing surfaces | Top action | Surface first |
+|---|---|---|---|---|
+| **Join** | Get set up to sell | persona onboarding + first-run setup (new) | Complete profile + first offering | setup completeness |
+| **List** | Publish a storefront | My Services (fixed fields) | Publish 3 offerings | offering views |
+| **Win** | Convert demand | Needs Board, quotes, AI Matches | Quote 2 open needs | matching needs, quotes pending |
+| **Deliver** | Complete engagements | Engagements tab (new), office hours | Advance an engagement | active work, next milestones |
+| **Get paid** | Invoice & collect | Stripe rails (new), invoice flow | Send invoice | unpaid invoices, earnings |
+| **Grow** | Compound reputation & reach | Reviews, Demand Insights, Co-Marketing, Articles | Ask for a review; check heatmap | rating, demand trends |
+Mechanics: same rail/next-action components as the other three personas; stages derived from partner_profiles/offerings/quotes/engagements/reviews/Stripe status. No new sidebar sections.
+
+## Merge / remove / relocate
+| Action | What | Destination |
+|---|---|---|
+| Fix | ServiceCatalogPage ↔ services.ts field drift (`description`→`summary`, partner_name) | one reconciled contract |
+| Fix | `service_offerings` double-CREATE schema conflict | reconciliation migration |
+| Fix | PartnerOfficeHoursPage contract (same as advisor ①) | worker-out contract fix |
+| Merge | catalog.ts providers/inquiries + services.ts engage-requests | needs.ts canonical economy |
+| Surface | Engagements/quotes workspace | tab in existing marketplace workspace |
+| Replace | `stub-` invoicing | Stripe Connect rails (wellbeing pattern) |
+| Relocate | Service-partner default landing off "Partner / Investor Portal" | Partner Desk on /studio (role-conditional) |
+| Render | dashboard.ts partner payload (unrendered) | Partner Desk |
+| Add | Self-serve offer-services onboarding | first-run setup after persona flow |
+| Wire | partner-audience landing leads (dead-end) | intro queue / marketplace inquiry |
+| Merge | partner office hours engine into advisors engine | one parameterized service (advisor audit ⑥) |
+| Surface | partner slots for founders | PublicPartnerProfilePage + Network |
+
+## Prioritized roadmap
+**Critical** — ① Marketplace contract + schema reconciliation (catalog fields, double-CREATE) *(M)*; ② Partner Desk landing (role-conditional /studio composition + drop LP portal default for service partners; render existing dashboard payload) *(M/L)*; ③ Engagements workspace tab (quotes sent / active / history — data already served by `/quotes/me` + `/engagements`) *(M)*; ④ Office-hours contract fix (shared with advisor ①) *(S when done together)*.
+**Important** — ⑤ Stripe invoicing replacing the stub *(L)*; ⑥ Marketplace system consolidation (catalog.ts + services.ts → needs.ts canonical) *(L)*; ⑦ Self-serve onboarding + persona fix *(M)*; ⑧ Partner-lead destination + slot discovery on public profile *(M)*.
+**Nice to have** — ⑨ Partner lifecycle rail *(M, reuses rail)*; ⑩ Co-Marketing/Insights cross-links from the Desk *(S)*; ⑪ Shared primitives (with advisor ⑨) *(M)*; ⑫ Retitle "Partner / Investor Portal" for its real audience *(S)*.
+
+---
+
+## Execution steps (after approval)
+1. Write `PARTNER_UX_AUDIT.md` at repo root (full prose of the above).
+2. Commit on `claude/axal-founder-ux-audit-hvf5a1`, push `-u origin` (joins PR #134).
+3. Update PR #134 title → "Investor + Advisor + Partner UX audits and redesign roadmaps"; extend body (What & why + Manual verification) for the partner doc.
+4. No product code changes.
+
+## Verification
+- Contract claims verified first-hand this session: `services.ts:19-46,78-95` vs `ServiceCatalogPage.jsx:74,137,307,357`; `schema.sql:724` vs `t13_t14_t15.sql:377`; `needs.ts:400-442` (stub invoice at :431); `PartnerOfficeHoursPage.jsx:13-46` vs `partner_office_hours.ts:18,32,45,60`; `App.jsx:219-232` (partner → /partner-portal); `PartnerPortal.jsx:79-87` (LP-console tabs); `partner_onboarding.ts:94-294` (token wizard); `PartnerInsightsPage` api calls.
+- Markdown renders in GitHub preview; PR #134 updated; known CI config failures expected, not re-reported.

@@ -331,8 +331,9 @@ publicRoutes.get('/startup/:handle', async (c) => {
   let website: string | null = proj.website ? String(proj.website).trim() || null : null;
   if (!website) {
     try {
+      // Multi-page sites: the oldest published page is the site's public face.
       const lp = await c.env.DB.prepare(
-        `SELECT slug, published FROM landing_pages WHERE project_id = ?`,
+        `SELECT slug, published FROM landing_pages WHERE project_id = ? AND published = 1 ORDER BY id LIMIT 1`,
       ).bind(proj.id).first<any>();
       if (lp && lp.published) website = `https://axal.vc/landing/${lp.slug}`;
     } catch { /* landing_pages may not exist */ }

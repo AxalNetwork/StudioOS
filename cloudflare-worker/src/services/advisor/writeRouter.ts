@@ -804,13 +804,16 @@ export async function routeAnswer(
         // ensureSchema) so this works on dev/SQLite without a prior
         // brand-page open.
         await env.DB.exec(
-          "CREATE TABLE IF NOT EXISTS landing_pages (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL UNIQUE, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, tagline TEXT, headline TEXT, subheadline TEXT, cta_text TEXT DEFAULT 'Join the waitlist', logo_url TEXT, logo_svg TEXT, theme_color TEXT DEFAULT '#7c3aed', published INTEGER DEFAULT 0, views_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))",
+          // Lockstep with brand.ts ensureSchema / migration 144: multi-page
+          // sites — project_id is NOT unique; page_slug is unique per project.
+          "CREATE TABLE IF NOT EXISTS landing_pages (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, slug TEXT NOT NULL UNIQUE, page_slug TEXT NOT NULL DEFAULT 'home', name TEXT NOT NULL, tagline TEXT, headline TEXT, subheadline TEXT, cta_text TEXT DEFAULT 'Join the waitlist', logo_url TEXT, logo_svg TEXT, theme_color TEXT DEFAULT '#7c3aed', published INTEGER DEFAULT 0, views_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))",
         );
         const proj = await env.DB.prepare(`SELECT name FROM projects WHERE id = ?`).bind(ctx.project_id).first<{ name: string }>();
         const baseName = (proj?.name || 'page').replace(/[^a-z0-9-]+/gi, '-').toLowerCase().slice(0, 40) || 'page';
         const tail = Math.random().toString(36).slice(2, 8);
         const slug = `${baseName}-${tail}`;
-        const existing = await env.DB.prepare(`SELECT id FROM landing_pages WHERE project_id = ?`).bind(ctx.project_id).first<{ id: number }>();
+        // Multi-page sites: advisor writes target the primary (oldest) page.
+        const existing = await env.DB.prepare(`SELECT id FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1`).bind(ctx.project_id).first<{ id: number }>();
         if (existing?.id) {
           await env.DB.prepare(
             `UPDATE landing_pages SET ${col} = ?, updated_at = datetime('now') WHERE id = ?`,
@@ -1294,7 +1297,7 @@ export async function hydrateAlreadyAnswered(env: Env, user: User): Promise<Set<
         // it was changed.
         try {
           const lp = await env.DB.prepare(
-            `SELECT tagline, theme_color FROM landing_pages WHERE project_id = ?`,
+            `SELECT tagline, theme_color FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1`,
           ).bind(proj.id).first<{ tagline: string | null; theme_color: string | null }>().catch(() => null);
           if (lp?.tagline) answered.add('founder.brand.tagline');
           // theme_color is non-null on every landing_pages row (the

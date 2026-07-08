@@ -656,7 +656,7 @@ export async function fillAxalSpinoutDemoDay(
     `).bind(userId).all<AdvisorAnswerRow>().catch(() => ({ results: [] as AdvisorAnswerRow[] })),
     DB.prepare(`
       SELECT theme_color, palette_bg, palette_ink, font_pairing
-      FROM landing_pages WHERE project_id = ?
+      FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1
     `).bind(projectId).first<{
       theme_color: string | null; palette_bg: string | null;
       palette_ink: string | null; font_pairing: string | null;

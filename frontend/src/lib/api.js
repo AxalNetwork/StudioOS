@@ -1436,6 +1436,20 @@ export const api = {
   brandGetPreviewUrl: (projectId) => request(`/brand/landing/by-project/${projectId}/preview-url`),
   brandListTemplates: () => request('/brand/templates'),
 
+  // Task #2 — branded multi-page sites & saved templates.
+  brandGetSite: (projectId) => request(`/brand/site/by-project/${projectId}`),
+  brandSetSiteSlug: (projectId, slug) => request(`/brand/site/by-project/${projectId}`, { method: 'PUT', body: JSON.stringify({ slug }) }),
+  brandListPages: (projectId) => request(`/brand/landing/by-project/${projectId}/pages`),
+  brandCreatePage: (projectId, payload) => request(`/brand/landing/by-project/${projectId}/pages`, { method: 'POST', body: JSON.stringify(payload) }),
+  brandGetPage: (pageId) => request(`/brand/landing/pages/${pageId}`),
+  brandUpdatePage: (pageId, payload) => request(`/brand/landing/pages/${pageId}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  brandDeletePage: (pageId) => request(`/brand/landing/pages/${pageId}`, { method: 'DELETE' }),
+  brandPublishPage: (pageId, published) => request(`/brand/landing/pages/${pageId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
+  brandPagePreviewUrl: (pageId) => request(`/brand/landing/pages/${pageId}/preview-url`),
+  brandListCustomTemplates: () => request('/brand/custom-templates'),
+  brandSaveCustomTemplate: (name, fromPageId) => request('/brand/custom-templates', { method: 'POST', body: JSON.stringify({ name, from_page_id: fromPageId }) }),
+  brandDeleteCustomTemplate: (id) => request(`/brand/custom-templates/${id}`, { method: 'DELETE' }),
+
   // Task #25 — Pitch deck builder.
   deckGenerate: (projectId) => request('/decks/generate', { method: 'POST', body: JSON.stringify({ project_id: projectId }) }),
   deckListVersions: (projectId) => request(`/decks/by-project/${projectId}`),
