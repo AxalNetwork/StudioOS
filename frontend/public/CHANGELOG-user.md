@@ -5,6 +5,18 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Run your raise from one board
+
+The Raise Pipeline is now a full fundraising workspace:
+
+- **Your round at a glance.** Set your target, close date and round name once — the header shows how much is committed, your progress toward target, and how many investors are in play.
+- **Add investors your way.** Add them one at a time with a quick form, or upload a CSV (name, email, firm, amount, notes) and import your whole list at once. Anyone with an email is also added to your Contacts hub automatically.
+- **Drag investors between stages.** The pipeline is now a board — drag a card from "To contact" through "Committed" (or "Passed") as conversations progress.
+- **Everything about an investor in one place.** Click any card to open a side panel with their stage, firm, check size and notes, plus their linked contact record with a shortcut into your Contacts hub.
+- **Keep investors in the loop.** Post investor updates right from the pipeline. Each update is saved to your raise and noted on every active investor's contact timeline. Updates are recorded in StudioOS — they are not sent as emails.
+
+---
+
 ## People first: Team and Advisory redesigned around humans
 
 The pages about your team and advisors now lead with people, not tools:

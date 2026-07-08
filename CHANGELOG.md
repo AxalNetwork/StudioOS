@@ -10,6 +10,28 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Raise Pipeline v1 (Task #1)
+
+The raise pipeline grows from a flat prospect list into a real fundraising workspace: a server-persisted active round with target/raised/close-date header, add-investor form + CSV import, a drag-between-stages kanban, a prospect drawer linked to the underlying Contacts-hub record, and investor updates posted from the pipeline. Worker-only domain (dev FastAPI has no contacts routes).
+
+**Schema**
+- `cloudflare-worker/sql/migrations/145_raise_rounds.sql` — `raise_rounds` (one active round per project via partial unique index `uq_raise_rounds_active`, same pattern as `uq_stages_one_active`), `raise_investor_updates`, and `ALTER raise_prospects ADD COLUMN amount REAL` (check size). Mirrored in `contacts.ts` `ensureSchema` (tables via `IF NOT EXISTS`; the ALTER via the PRAGMA-guarded try/catch reference pattern).
+
+**Backend — prod Worker (D1), all in `cloudflare-worker/src/routes/contacts.ts`, founder-scoped (`requireRole` + `ownedProjectScope`), registered before `/:uid`**
+- `GET/PUT /api/contacts/raise-round` — active-round read/upsert. `raised` is always computed as `SUM(amount)` over `stage='committed'` prospects (never a stored counter). Upsert is SELECT→UPDATE-else-INSERT; a losing INSERT race re-reads the winner. `close_date` must be `YYYY-MM-DD` or it stores null. Single-project founders may omit `project_id`; otherwise 400.
+- `POST /api/contacts/raise-prospects` — add investor from the pipeline (name or valid email required). With an email it also creates-or-links the Contacts-hub row (`audience='investor'`, `source='raise'`, `promoted_to='raise'`, `promoted_ref_id`) — the reverse of `/:uid/promote`, reusing an existing unpromoted contact instead of duplicating and never clobbering a claimed `promoted_ref_id`. Duplicate (project, email) in the pipeline → 409.
+- `POST /api/contacts/raise-prospects/import` — bulk rows (client parses the CSV), capped at 50 rows/request (each row costs several D1 calls; the SPA chunks bigger files, UI cap 200). Returns `{created, skipped:[{row, reason}], total}` — per-row failures reported, never silently dropped.
+- `GET /api/contacts/raise-prospects/:id` — drawer detail joining the linked contact (uid/status/source/last-activity) via `contact_id`.
+- `PUT /api/contacts/raise-prospects/:id` — now also accepts `amount` (email stays immutable so the contact link can't desync).
+- `GET/POST /api/contacts/raise-updates` — investor updates. `recipients_count` = non-passed prospects; each linked contact gets a best-effort outbound `contact_replies` timeline row ("Investor update — <subject>"), batched in one `DB.batch`. Updates are **recorded, not emailed** (no bulk sender exists; UI copy says so explicitly).
+
+**Frontend**
+- `frontend/src/pages/RaisePipelinePage.jsx` — rebuilt: round header card (raised/target/close date/committed count + progress bar, edit modal), project selector for multi-project founders, Add-investor modal, CSV-import modal (small quote-aware client-side parser, header-mapped columns name/email/firm/amount/notes, 50-row API chunking), HTML5 drag-and-drop kanban (stage select kept in the drawer for accessibility), right-side prospect drawer (stage/firm/amount/notes + contact card linking to `/network?tab=contacts`), and an Investor updates panel. Keeps the `embedded` prop used by `CapitalWorkspacePage`.
+- `frontend/src/lib/api.js` — `raiseRound`, `raiseRoundSave`, `raiseProspectCreate`, `raiseProspectsImport`, `raiseProspectGet`, `raiseUpdates`, `raiseUpdateCreate`.
+
+**Tests**
+- `cloudflare-worker/test/raise_pipeline.test.ts` (added to `test:drift`) — drives the real contacts router over a node:sqlite D1 adapter: round upsert-not-duplicate, raised aggregation, contact create-or-link + reuse + 409, import created/skipped accounting + 50-row cap, drawer contact join, update recipients excluding `passed` + timeline rows, cross-founder 403s, close-date validation.
+
 ## Team & Advisory human-first redesign (Task #1)
 
 The people surfaces led with AI tools and paywalls instead of humans. This flips both: directories and real relationships first, AI second, gates shown as previews rather than walls.

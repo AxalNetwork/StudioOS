@@ -142,6 +142,34 @@ async function ensureSchema(env: Env): Promise<void> {
      )`,
     `CREATE INDEX IF NOT EXISTS idx_raise_prospects_project ON raise_prospects(project_id)`,
     `CREATE INDEX IF NOT EXISTS idx_raise_prospects_contact ON raise_prospects(contact_id)`,
+    // Raise Pipeline v1 — active round per project + investor updates. Canonical
+    // record is migration 145; this bootstrap self-heals a DB baselined earlier.
+    `CREATE TABLE IF NOT EXISTS raise_rounds (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       uid TEXT UNIQUE NOT NULL,
+       project_id INTEGER NOT NULL,
+       name TEXT,
+       target_amount REAL,
+       close_date TEXT,
+       status TEXT NOT NULL DEFAULT 'active',
+       notes TEXT,
+       created_at TEXT NOT NULL DEFAULT (datetime('now')),
+       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_raise_rounds_project ON raise_rounds(project_id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_raise_rounds_active ON raise_rounds(project_id) WHERE status = 'active'`,
+    `CREATE TABLE IF NOT EXISTS raise_investor_updates (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       uid TEXT UNIQUE NOT NULL,
+       project_id INTEGER NOT NULL,
+       round_id INTEGER,
+       subject TEXT NOT NULL,
+       body TEXT,
+       recipients_count INTEGER NOT NULL DEFAULT 0,
+       created_by INTEGER,
+       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_raise_updates_project ON raise_investor_updates(project_id)`,
   ];
   for (const s of stmts) await env.DB.prepare(s).run();
   // Task #32 — self-heal promoted_ref_id on an EXISTING prod contacts table
@@ -155,6 +183,18 @@ async function ensureSchema(env: Env): Promise<void> {
       catch (e) { console.warn('[contacts] ALTER promoted_ref_id failed (likely already applied)', e); }
     }
   } catch (e) { console.warn('[contacts] promoted_ref_id bootstrap failed', e); }
+  // Raise Pipeline v1 — self-heal `amount` (check size) on an EXISTING
+  // raise_prospects table. Canonical add is the ALTER in migration 145; this
+  // PRAGMA-guarded runtime check is the reference pattern for ALTERs (see
+  // GOTCHAS.md "Migrations & schema").
+  try {
+    const info = await env.DB.prepare(`PRAGMA table_info(raise_prospects)`).all<{ name: string }>();
+    const have = new Set((info.results || []).map((x) => x.name));
+    if (!have.has('amount')) {
+      try { await env.DB.prepare(`ALTER TABLE raise_prospects ADD COLUMN amount REAL`).run(); }
+      catch (e) { console.warn('[contacts] ALTER raise_prospects.amount failed (likely already applied)', e); }
+    }
+  } catch (e) { console.warn('[contacts] raise_prospects.amount bootstrap failed', e); }
   _ensured = true;
 }
 
@@ -198,6 +238,101 @@ async function loadOwned(env: Env, uid: string, user: User): Promise<ContactRow 
   const scope = await ownedProjectScope(env, user);
   if (scope === 'all' || (Array.isArray(scope) && scope.includes(row.project_id))) return row;
   return 'forbidden';
+}
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/** Non-negative finite number or null — check sizes / round targets. */
+function normAmount(v: unknown): number | null {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/**
+ * Resolve which project a raise-round/update call targets.
+ * - explicit project_id → must be in the founder's scope ('forbidden' if not);
+ * - omitted + founder owns exactly one project → that project;
+ * - omitted + founder owns none → null (caller returns an empty result);
+ * - omitted + multiple projects, or admin ('all') → 'ambiguous' (400).
+ */
+function resolveProjectId(scope: 'all' | number[], pidRaw: string | undefined | null):
+  number | null | 'ambiguous' | 'forbidden' {
+  if (pidRaw !== undefined && pidRaw !== null && pidRaw !== '') {
+    const pid = Number(pidRaw);
+    if (!Number.isFinite(pid)) return 'ambiguous';
+    if (scope !== 'all' && !scope.includes(pid)) return 'forbidden';
+    return pid;
+  }
+  if (scope === 'all') return 'ambiguous';
+  if (scope.length === 0) return null;
+  if (scope.length === 1) return scope[0];
+  return 'ambiguous';
+}
+
+/**
+ * Create a raise prospect and (when an email is present) create-or-link the
+ * underlying Contacts-hub row — the reverse direction of /:uid/promote, so a
+ * form/CSV-created prospect still has a real contact record behind it and a
+ * later promote of that contact short-circuits on promoted_ref_id instead of
+ * duplicating the prospect. Returns 'duplicate' when the project already
+ * tracks a prospect with this email, 'invalid' on bad input.
+ */
+async function createProspect(
+  env: Env,
+  projectId: number,
+  input: { name?: unknown; email?: unknown; firm?: unknown; amount?: unknown; stage?: unknown; notes?: unknown },
+): Promise<{ prospect: any } | 'duplicate' | 'invalid'> {
+  const name = input.name ? String(input.name).trim().slice(0, 200) : null;
+  const email = input.email ? String(input.email).trim().toLowerCase() : null;
+  if (email && !EMAIL_RE.test(email)) return 'invalid';
+  if (!name && !email) return 'invalid';
+  const firm = input.firm ? String(input.firm).trim().slice(0, 200) : null;
+  const notes = input.notes ? String(input.notes).slice(0, 4000) : null;
+  const amount = normAmount(input.amount);
+  const stage = typeof input.stage === 'string' && RAISE_STAGES.includes(input.stage) ? input.stage : 'to_contact';
+
+  if (email) {
+    const dup = await env.DB.prepare('SELECT id FROM raise_prospects WHERE project_id = ? AND email = ?')
+      .bind(projectId, email).first<{ id: number }>();
+    if (dup) return 'duplicate';
+  }
+
+  const res = await env.DB.prepare(
+    `INSERT INTO raise_prospects (uid, project_id, contact_id, name, email, firm, stage, amount, notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(newUid(), projectId, null, name, email, firm, stage, amount, notes, nowIso(), nowIso()).run();
+  const prospectId = lastInsertId(res);
+  let contactId: number | null = null;
+
+  if (email) {
+    // Contacts is the relationship hub — reuse an existing row for this
+    // project+email, otherwise ingest a fresh investor contact. Only claim the
+    // promoted link when it is unclaimed (never clobber e.g. a discovery link).
+    let contact = await env.DB.prepare(
+      'SELECT * FROM contacts WHERE project_id = ? AND email = ? ORDER BY id DESC LIMIT 1',
+    ).bind(projectId, email).first<ContactRow>();
+    if (!contact) {
+      await ingestContact(env, { projectId, email, name, audience: 'investor', source: 'raise', status: 'qualified' });
+      contact = await env.DB.prepare(
+        'SELECT * FROM contacts WHERE project_id = ? AND email = ? ORDER BY id DESC LIMIT 1',
+      ).bind(projectId, email).first<ContactRow>();
+    }
+    if (contact) {
+      contactId = contact.id;
+      if (contact.promoted_ref_id == null) {
+        await env.DB.prepare(
+          `UPDATE contacts SET promoted_to='raise', promoted_ref_id=?, status='qualified', last_activity_at=?, updated_at=?
+            WHERE id=? AND promoted_ref_id IS NULL`,
+        ).bind(prospectId, nowIso(), nowIso(), contact.id).run();
+      }
+      await env.DB.prepare('UPDATE raise_prospects SET contact_id=?, updated_at=? WHERE id=?')
+        .bind(contact.id, nowIso(), prospectId).run();
+    }
+  }
+
+  const prospect = await env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(prospectId).first<any>();
+  return { prospect: prospect || { id: prospectId, project_id: projectId, contact_id: contactId, name, email, firm, stage, amount, notes } };
 }
 
 // GET /api/contacts — founder inbox (filter by audience / status / routed_to)
@@ -339,11 +474,226 @@ r.put('/raise-prospects/:id', async (c) => {
     const notes = body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 4000) : null) : row.notes;
     const firm = body.firm !== undefined ? (body.firm ? String(body.firm).slice(0, 200) : null) : row.firm;
     const name = body.name !== undefined ? (body.name ? String(body.name).slice(0, 200) : null) : row.name;
+    const amount = body.amount !== undefined ? normAmount(body.amount) : (row.amount ?? null);
     await c.env.DB.prepare(
-      `UPDATE raise_prospects SET stage=?, notes=?, firm=?, name=?, updated_at=? WHERE id=?`,
-    ).bind(stage, notes, firm, name, nowIso(), id).run();
+      `UPDATE raise_prospects SET stage=?, notes=?, firm=?, name=?, amount=?, updated_at=? WHERE id=?`,
+    ).bind(stage, notes, firm, name, amount, nowIso(), id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
     return c.json(fresh);
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/contacts/raise-prospects — add an investor prospect directly from
+// the pipeline (form). Creates-or-links the underlying Contacts-hub row.
+r.post('/raise-prospects', async (c) => {
+  try {
+    const user = await requireRole(c, 'founder');
+    await ensureSchema(c.env);
+    const body = await c.req.json().catch(() => ({} as any));
+    const projectId = Number(body.project_id);
+    if (!Number.isFinite(projectId)) return c.json({ detail: 'project_id is required' }, 400);
+    const scope = await ownedProjectScope(c.env, user);
+    if (scope !== 'all' && !scope.includes(projectId)) return c.json({ detail: 'Forbidden' }, 403);
+    const out = await createProspect(c.env, projectId, body);
+    if (out === 'invalid') return c.json({ detail: 'A name or a valid email is required' }, 400);
+    if (out === 'duplicate') return c.json({ detail: 'This project already tracks a prospect with that email' }, 409);
+    return c.json(out.prospect, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/contacts/raise-prospects/import — CSV import (parsed client-side).
+// Rows are capped at 50 per request (each row costs several D1 calls; the SPA
+// chunks bigger files). Per-row failures are reported, never silently dropped.
+r.post('/raise-prospects/import', async (c) => {
+  try {
+    const user = await requireRole(c, 'founder');
+    await ensureSchema(c.env);
+    const body = await c.req.json().catch(() => ({} as any));
+    const projectId = Number(body.project_id);
+    if (!Number.isFinite(projectId)) return c.json({ detail: 'project_id is required' }, 400);
+    const scope = await ownedProjectScope(c.env, user);
+    if (scope !== 'all' && !scope.includes(projectId)) return c.json({ detail: 'Forbidden' }, 403);
+    const rows = Array.isArray(body.rows) ? body.rows : null;
+    if (!rows || rows.length === 0) return c.json({ detail: 'rows is required' }, 400);
+    if (rows.length > 50) return c.json({ detail: 'Import at most 50 rows per request' }, 400);
+    let created = 0;
+    const skipped: { row: number; reason: string }[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const out = await createProspect(c.env, projectId, rows[i] || {});
+      if (out === 'invalid') { skipped.push({ row: i + 1, reason: 'A name or a valid email is required' }); continue; }
+      if (out === 'duplicate') { skipped.push({ row: i + 1, reason: 'Already in the pipeline' }); continue; }
+      created++;
+    }
+    return c.json({ created, skipped, total: rows.length });
+  } catch (e) { return mapError(c, e); }
+});
+
+// GET /api/contacts/raise-prospects/:id — drawer detail incl. the linked
+// Contacts-hub record (via contact_id) so the SPA can render the contact card.
+r.get('/raise-prospects/:id', async (c) => {
+  try {
+    const user = await requireRole(c, 'founder');
+    await ensureSchema(c.env);
+    const id = Number(c.req.param('id'));
+    const row = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
+    if (!row) return c.json({ detail: 'Not found' }, 404);
+    const scope = await ownedProjectScope(c.env, user);
+    if (scope !== 'all' && !scope.includes(Number(row.project_id))) return c.json({ detail: 'Forbidden' }, 403);
+    let contact: any = null;
+    if (row.contact_id != null) {
+      contact = await c.env.DB.prepare(
+        'SELECT uid, name, email, audience, status, source, last_activity_at, created_at FROM contacts WHERE id = ?',
+      ).bind(row.contact_id).first<any>();
+    }
+    return c.json({ ...row, contact: contact || null });
+  } catch (e) { return mapError(c, e); }
+});
+
+// GET /api/contacts/raise-round — the project's active round + raised total
+// (raised = SUM(amount) over committed prospects; explicit, never a stored
+// counter that can drift).
+r.get('/raise-round', async (c) => {
+  try {
+    const user = await requireRole(c, 'founder');
+    await ensureSchema(c.env);
+    const scope = await ownedProjectScope(c.env, user);
+    const pid = resolveProjectId(scope, c.req.query('project_id'));
+    if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
+    if (pid === 'ambiguous') return c.json({ detail: 'project_id is required' }, 400);
+    if (pid === null) return c.json({ round: null, raised: 0, committed_count: 0 });
+    const round = await c.env.DB.prepare(
+      `SELECT * FROM raise_rounds WHERE project_id = ? AND status = 'active'`,
+    ).bind(pid).first<any>();
+    const agg = await c.env.DB.prepare(
+      `SELECT COALESCE(SUM(amount), 0) AS raised, COUNT(*) AS n FROM raise_prospects WHERE project_id = ? AND stage = 'committed'`,
+    ).bind(pid).first<{ raised: number; n: number }>();
+    return c.json({
+      round: round || null,
+      raised: Number(agg?.raised || 0),
+      committed_count: Number(agg?.n || 0),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// PUT /api/contacts/raise-round — upsert the project's single active round.
+// SELECT→UPDATE-else-INSERT; the partial unique index (project_id WHERE
+// status='active') backstops races — the losing INSERT re-reads the winner.
+r.put('/raise-round', async (c) => {
+  try {
+    const user = await requireRole(c, 'founder');
+    await ensureSchema(c.env);
+    const body = await c.req.json().catch(() => ({} as any));
+    const scope = await ownedProjectScope(c.env, user);
+    const pid = resolveProjectId(scope, body.project_id !== undefined ? String(body.project_id) : undefined);
+    if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
+    if (pid === 'ambiguous' || pid === null) return c.json({ detail: 'project_id is required' }, 400);
+    const name = body.name !== undefined ? (body.name ? String(body.name).trim().slice(0, 200) : null) : undefined;
+    const target = body.target_amount !== undefined ? normAmount(body.target_amount) : undefined;
+    const close = body.close_date !== undefined
+      ? (body.close_date && /^\d{4}-\d{2}-\d{2}$/.test(String(body.close_date)) ? String(body.close_date) : null)
+      : undefined;
+    const notes = body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 4000) : null) : undefined;
+
+    const existing = await c.env.DB.prepare(
+      `SELECT * FROM raise_rounds WHERE project_id = ? AND status = 'active'`,
+    ).bind(pid).first<any>();
+    if (existing) {
+      await c.env.DB.prepare(
+        `UPDATE raise_rounds SET name=?, target_amount=?, close_date=?, notes=?, updated_at=? WHERE id=?`,
+      ).bind(
+        name !== undefined ? name : existing.name,
+        target !== undefined ? target : existing.target_amount,
+        close !== undefined ? close : existing.close_date,
+        notes !== undefined ? notes : existing.notes,
+        nowIso(), existing.id,
+      ).run();
+      const fresh = await c.env.DB.prepare('SELECT * FROM raise_rounds WHERE id = ?').bind(existing.id).first<any>();
+      return c.json(fresh);
+    }
+    try {
+      const res = await c.env.DB.prepare(
+        `INSERT INTO raise_rounds (uid, project_id, name, target_amount, close_date, status, notes, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
+      ).bind(newUid(), pid, name ?? null, target ?? null, close ?? null, notes ?? null, nowIso(), nowIso()).run();
+      const fresh = await c.env.DB.prepare('SELECT * FROM raise_rounds WHERE id = ?').bind(lastInsertId(res)).first<any>();
+      return c.json(fresh, 201);
+    } catch {
+      // Lost the one-active-round race — return the winner.
+      const winner = await c.env.DB.prepare(
+        `SELECT * FROM raise_rounds WHERE project_id = ? AND status = 'active'`,
+      ).bind(pid).first<any>();
+      if (winner) return c.json(winner);
+      throw new Error('Failed to save the round');
+    }
+  } catch (e) { return mapError(c, e); }
+});
+
+// GET /api/contacts/raise-updates — investor updates posted from the pipeline.
+r.get('/raise-updates', async (c) => {
+  try {
+    const user = await requireRole(c, 'founder');
+    await ensureSchema(c.env);
+    const scope = await ownedProjectScope(c.env, user);
+    const pid = resolveProjectId(scope, c.req.query('project_id'));
+    if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
+    if (pid === 'ambiguous') return c.json({ detail: 'project_id is required' }, 400);
+    if (pid === null) return c.json({ items: [] });
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM raise_investor_updates WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT 100`,
+    ).bind(pid).all<any>();
+    return c.json({ items: rows.results || [] });
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/contacts/raise-updates — record an investor update. The update is
+// stored on the pipeline and logged to every linked contact's timeline as an
+// outbound reply (mirrors the invite precedent). It is NOT emailed — the UI
+// says so explicitly rather than pretending delivery happened.
+r.post('/raise-updates', async (c) => {
+  try {
+    const user = await requireRole(c, 'founder');
+    await ensureSchema(c.env);
+    const body = await c.req.json().catch(() => ({} as any));
+    const scope = await ownedProjectScope(c.env, user);
+    const pid = resolveProjectId(scope, body.project_id !== undefined ? String(body.project_id) : undefined);
+    if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
+    if (pid === 'ambiguous' || pid === null) return c.json({ detail: 'project_id is required' }, 400);
+    const subject = body.subject ? String(body.subject).trim().slice(0, 200) : '';
+    if (!subject) return c.json({ detail: 'subject is required' }, 400);
+    const text = body.body ? String(body.body).slice(0, 10000) : null;
+
+    const round = await c.env.DB.prepare(
+      `SELECT id FROM raise_rounds WHERE project_id = ? AND status = 'active'`,
+    ).bind(pid).first<{ id: number }>();
+    const recipients = await c.env.DB.prepare(
+      `SELECT id, contact_id FROM raise_prospects WHERE project_id = ? AND stage != 'passed'`,
+    ).bind(pid).all<{ id: number; contact_id: number | null }>();
+    const recips = recipients.results || [];
+
+    const res = await c.env.DB.prepare(
+      `INSERT INTO raise_investor_updates (uid, project_id, round_id, subject, body, recipients_count, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(newUid(), pid, round?.id ?? null, subject, text, recips.length, user.id, nowIso()).run();
+    const updateId = lastInsertId(res);
+
+    // Best-effort timeline log on each linked contact — batched into one D1
+    // round-trip; a logging failure never rolls back the update itself.
+    let loggedContacts = 0;
+    const withContact = recips.filter((p) => p.contact_id != null);
+    if (withContact.length > 0) {
+      try {
+        const logBody = `Investor update — ${subject}${text ? `\n\n${text.slice(0, 2000)}` : ''}`;
+        await c.env.DB.batch(withContact.map((p) =>
+          c.env.DB.prepare(
+            'INSERT INTO contact_replies (contact_id, direction, body, created_by, created_at) VALUES (?, ?, ?, ?, ?)',
+          ).bind(p.contact_id, 'outbound', logBody, user.id, nowIso()),
+        ));
+        loggedContacts = withContact.length;
+      } catch (e) { console.warn('[contacts] raise-update timeline log failed', e); }
+    }
+
+    const update = await c.env.DB.prepare('SELECT * FROM raise_investor_updates WHERE id = ?').bind(updateId).first<any>();
+    return c.json({ ...update, logged_contacts: loggedContacts }, 201);
   } catch (e) { return mapError(c, e); }
 });
 

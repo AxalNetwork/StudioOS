@@ -2393,6 +2393,13 @@ export const api = {
   contactPromote: (uid) => request(`/contacts/${uid}/promote`, { method: 'POST' }),
   raiseProspects: (projectId) => request(projectId ? `/contacts/raise-prospects?project_id=${projectId}` : '/contacts/raise-prospects'),
   raiseProspectUpdate: (id, data) => request(`/contacts/raise-prospects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  raiseProspectGet: (id) => request(`/contacts/raise-prospects/${id}`),
+  raiseProspectCreate: (data) => request('/contacts/raise-prospects', { method: 'POST', body: JSON.stringify(data) }),
+  raiseProspectsImport: (data) => request('/contacts/raise-prospects/import', { method: 'POST', body: JSON.stringify(data) }),
+  raiseRound: (projectId) => request(projectId ? `/contacts/raise-round?project_id=${projectId}` : '/contacts/raise-round'),
+  raiseRoundSave: (data) => request('/contacts/raise-round', { method: 'PUT', body: JSON.stringify(data) }),
+  raiseUpdates: (projectId) => request(projectId ? `/contacts/raise-updates?project_id=${projectId}` : '/contacts/raise-updates'),
+  raiseUpdateCreate: (data) => request('/contacts/raise-updates', { method: 'POST', body: JSON.stringify(data) }),
 
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {
