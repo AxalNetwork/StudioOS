@@ -5,6 +5,17 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Verifying your email now signs you in
+
+Getting started is one step shorter, and extra security is there when you want it:
+
+- **Click the link, you're in.** Verifying your email now signs you in directly — no separate sign-in step and no required authenticator setup before you can enter your account.
+- **Add an authenticator when you're ready.** Right after verifying — or any time from Settings → Security — you can add an authenticator app in about a minute: scan a QR code (or type in a key), enter the 6-digit code it shows, and save your recovery codes.
+- **Setup can't half-fail anymore.** Your authenticator is only switched on after you've entered a working code from it, so an interrupted setup can never lock you out.
+- **Fixed:** requesting a new verification email no longer disturbs accounts that were already verified.
+
+---
+
 ## Sign in with just your email
 
 No more authenticator hurdles to get started:

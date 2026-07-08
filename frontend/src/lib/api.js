@@ -1821,6 +1821,12 @@ export const api = {
   confirmEmailChange: (token) => request('/settings/email-change/confirm', { method: 'POST', body: JSON.stringify({ token }) }),
   revokeEmailChange: (token) => request('/settings/email-change/revoke', { method: 'POST', body: JSON.stringify({ token }) }),
   repairTotp: (totp_code) => request('/settings/totp/repair', { method: 'POST', body: JSON.stringify({ totp_code }) }),
+  // Task #11 — first-time OPTIONAL authenticator enrolment (two-phase).
+  // start() proposes a secret (nothing persists server-side); confirm()
+  // round-trips the secret + a live 6-digit code, persists the enrolment,
+  // and upgrades the current session to full assurance in place.
+  enrolTotpStart: () => request('/settings/totp/enrol/start', { method: 'POST', body: JSON.stringify({}) }),
+  enrolTotpConfirm: (data) => request('/settings/totp/enrol/confirm', { method: 'POST', body: JSON.stringify(data) }),
   revokeAllSessions: () => request('/settings/sessions/revoke-all', { method: 'POST', body: JSON.stringify({}) }),
   requestAccountDeletion: () => request('/settings/account/delete-request', { method: 'POST', body: JSON.stringify({}) }),
   cancelAccountDeletion: () => request('/settings/account/delete-request/cancel', { method: 'POST', body: JSON.stringify({}) }),

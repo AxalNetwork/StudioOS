@@ -25,6 +25,9 @@ const ReferralsPage = lazy(() => import('./ReferralsPage'));
 // settings chunk (mirrors the ReferralsPage embed above).
 const IntegrationsPage = lazy(() => import('./IntegrationsPage'));
 import AuthorCard from '../components/AuthorCard';
+// Task #11 — shared first-time optional TOTP enrolment wizard (also used on
+// the email-verification page).
+import TotpEnrollment from '../components/TotpEnrollment';
 
 // Task #4 (Y-2) — small reusable trust score on the profile surface so
 // the user can see their compliance posture without bouncing to the
@@ -295,7 +298,7 @@ export default function SettingsPage() {
               <AccountDeletionCard data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
             </>
           )}
-          {safeActive === 'security' && <AuthSection data={data} flash={flash} />}
+          {safeActive === 'security' && <AuthSection data={data} flash={flash} reload={() => api.getSettings().then(setData)} />}
           {safeActive === 'notifications' && (
             <>
               <NotificationsSection data={data} patch={patch} />
@@ -1986,11 +1989,14 @@ function ConnectedAccountsPanel({ flash }) {
   );
 }
 
-function AuthSection({ data, flash }) {
+function AuthSection({ data, flash, reload }) {
   const [code, setCode] = useState('');
   const [qrPayload, setQrPayload] = useState(null);
   const [busy, setBusy] = useState(false);
   const [revoking, setRevoking] = useState(false);
+  // Task #11 — first-time optional enrolment (magic-link / Google / classic
+  // signups that skipped the authenticator step).
+  const [enrolling, setEnrolling] = useState(false);
 
   // Sessions list (per-device revocation, populated from /settings/sessions).
   const [sessions, setSessions] = useState(null);
@@ -2097,7 +2103,10 @@ function AuthSection({ data, flash }) {
   return (
     <>
       <ConnectedAccountsPanel flash={flash} />
-      <Card title="Two-factor authentication" description="Re-pair your authenticator if you lost or replaced your device.">
+      <Card title="Two-factor authentication"
+        description={data.totp_configured
+          ? 'Re-pair your authenticator if you lost or replaced your device.'
+          : 'Protect sign-in with a 6-digit code from an authenticator app.'}>
         {!qrPayload ? (
           <div className="space-y-3">
             <div className="text-sm text-gray-700 dark:text-gray-300">
@@ -2116,6 +2125,30 @@ function AuthSection({ data, flash }) {
                   </button>
                 </div>
               </Field>
+            )}
+            {!data.totp_configured && !enrolling && (
+              <div className="space-y-2">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Add an authenticator app so signing in asks for a rotating 6-digit
+                  code — the strongest everyday protection for your account.
+                </p>
+                <button onClick={() => setEnrolling(true)}
+                  className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">
+                  Set up authenticator
+                </button>
+              </div>
+            )}
+            {!data.totp_configured && enrolling && (
+              <div className="max-w-md">
+                <TotpEnrollment
+                  onDone={() => {
+                    setEnrolling(false);
+                    flash('Authenticator enrolled — your account is now protected.');
+                    reload?.();
+                  }}
+                  onCancel={() => setEnrolling(false)}
+                />
+              </div>
             )}
           </div>
         ) : (

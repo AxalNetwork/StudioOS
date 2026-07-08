@@ -378,6 +378,9 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
         //   /api/auth/logout        — sign out
         //   /api/settings/totp/re-enrol/* — fresh post-recovery TOTP pair
         //                                  (Task #50, doesn't require existing code)
+        //   /api/settings/totp/enrol/*     — first-time optional TOTP enrolment
+        //                                  (Task #11, relocked email_only sessions
+        //                                  recover by enrolling an authenticator)
         //   /api/settings/totp/repair      — swap secrets when current code still works
         //   /api/settings/totp/recovery-codes/regenerate — fresh backup codes
         //   /api/settings/sessions  — view + revoke sessions
@@ -387,6 +390,7 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
           '/api/settings',
           '/api/settings/totp/re-enrol', '/api/settings/totp/re-enrol/start',
           '/api/settings/totp/re-enrol/confirm',
+          '/api/settings/totp/enrol',
           '/api/settings/totp/repair',
           '/api/settings/totp/recovery-codes/regenerate',
           '/api/settings/sessions',

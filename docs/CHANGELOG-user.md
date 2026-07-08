@@ -5,6 +5,28 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Verifying your email now signs you in
+
+Getting started is one step shorter, and extra security is there when you want it:
+
+- **Click the link, you're in.** Verifying your email now signs you in directly — no separate sign-in step and no required authenticator setup before you can enter your account.
+- **Add an authenticator when you're ready.** Right after verifying — or any time from Settings → Security — you can add an authenticator app in about a minute: scan a QR code (or type in a key), enter the 6-digit code it shows, and save your recovery codes.
+- **Setup can't half-fail anymore.** Your authenticator is only switched on after you've entered a working code from it, so an interrupted setup can never lock you out.
+- **Fixed:** requesting a new verification email no longer disturbs accounts that were already verified.
+
+---
+
+## Sign in with just your email
+
+No more authenticator hurdles to get started:
+
+- **Email me a sign-in link.** On the sign-in page, you can now request a secure one-time link instead of typing an authenticator code. Tap the link in the email and you're in — it works for 15 minutes.
+- **Joining is one step.** Creating an account now sends you a sign-in link right away — one tap both confirms your email and signs you in. Prefer an authenticator app from day one? That option is still there.
+- **Partners land in their portal.** After signing a partnership agreement, the "you're all set" screen now emails you a sign-in link directly — no more getting stuck at a code prompt you never set up.
+- **Clearer help along the way.** If the human-verification widget can't load (often an ad blocker), the page now says so and offers the email link instead of a greyed-out button. Check-your-email screens add an "Open Gmail / Open Outlook" shortcut and a reminder to check spam for mail from support@axal.vc.
+
+---
+
 ## Run your raise from one board
 
 The Raise Pipeline is now a full fundraising workspace:

@@ -64,6 +64,14 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
     text: `Hi {{name}},\n\nA new passkey was registered on your Axal account from {{device_name}} (IP {{ip}}).\n\nIf this was you, no action needed. If not, sign in and remove the passkey from Settings → Security immediately.`,
     html: `<p>Hi {{name}},</p><p>A new passkey was registered on your Axal account:</p><p style="background:#f3f4f6;padding:12px 14px;border-radius:8px;font-family:ui-monospace,monospace;font-size:13px;">{{device_name}} · IP {{ip}}</p><p>If this was you, no action needed. If not, sign in and remove the passkey from Settings → Security immediately.</p>`,
   }),
+  // vars: name, ip
+  auth_totp_added: t({
+    key: 'auth_totp_added', category: 'security', severity: 'warning',
+    replyTo: 'security@axal.vc', alwaysSend: true,
+    subject: 'An authenticator app was added to your Axal account',
+    text: `Hi {{name}},\n\nAn authenticator app (TOTP) was just set up on your Axal account (IP {{ip}}).\n\nIf this was you, no action needed. If not, reply to security@axal.vc immediately and sign out all sessions from Settings → Security.`,
+    html: `<p>Hi {{name}},</p><p>An authenticator app (TOTP) was just set up on your Axal account:</p><p style="background:#f3f4f6;padding:12px 14px;border-radius:8px;font-family:ui-monospace,monospace;font-size:13px;">IP {{ip}}</p><p>If this was you, no action needed. If not, reply to <a href="mailto:security@axal.vc">security@axal.vc</a> immediately and sign out all sessions from Settings → Security.</p>`,
+  }),
   // vars: name, ticket_id
   auth_recovery_started: t({
     key: 'auth_recovery_started', category: 'security', severity: 'warning',

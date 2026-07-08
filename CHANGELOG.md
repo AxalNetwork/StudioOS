@@ -10,6 +10,18 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Optional TOTP + enrolment correctness (Task #11)
+
+TOTP stops being a signup gate and becomes an optional, recommended upgrade — and enrolment now proves the authenticator works before anything persists server-side.
+
+- **Verify-email signs you in (`cloudflare-worker/src/routes/auth.ts` `/confirm-verify-email`)** — now mints a real `email_only` session mirroring `POST /login`'s response shape (token, csrf_token, user, expires_in) with cookies, `verify-email-ip` rate limit (10/900s), `is_active` check, `user_sessions` row (`factor='email'`, `assurance_level='email_only'`, `step_up_due_at` = +MAGIC_STEP_UP_DAYS) and stale cross-identity session revocation. `setup_token` still returned for back-compat with the old mandatory flow.
+- **`/resend-verification` no longer un-verifies** — early-returns for already-verified accounts instead of resetting `email_verified` and clearing the TOTP secret (the enrolment-destruction bug).
+- **Two-phase optional enrolment (`settings.ts` `POST /api/settings/totp/enrol/start` + `/confirm`)** — `start` proposes a secret (nothing persisted); `confirm` validates the round-tripped secret plus a live 6-digit code, persists secret + 10 recovery codes, sets `factor='totp'`, and upgrades the **current** session in place (assurance `full`, `last_step_up_at=now`, `step_up_due_at` cleared) *without* bumping `jwt_min_iat` — other devices stay signed in. 403 `already_configured` when TOTP exists (re-pair/repair remain the paths for that); `auth_totp_added` security email best-effort; `totp_enrolled` audit log. Routes allow-listed for email_only sessions in `src/auth.ts`. Also fixed the settings re-enrol path generating recovery codes via `generateToken().slice()` instead of `generateRecoveryCode()`.
+- **Shared wizard (`frontend/src/components/TotpEnrollment.jsx`)** — QR (client-rendered from the provisioning URI) + manual secret + `otpauth://` deep link + per-app manual instructions + live-code confirm + one-time recovery codes with copy/download and a mandatory "I've saved these" ack. Used by `VerifyEmailPage` and Settings → Security.
+- **`VerifyEmailPage.jsx`** — stores the minted session like LoginPage, shows "You're verified" with a Continue CTA plus the optional enrolment card; falls back to a Sign-in CTA when an older worker response has no token.
+- **Settings → Security (`SettingsPage.jsx` AuthSection)** — new "Set up authenticator" card when `totp_configured` is false (magic-link/Google signups), embedding the shared wizard and reloading settings on completion.
+- **`RegisterPage.jsx` cleanup** — dead step 2 (inline chatbot, retired in Task #66) and step 4 (mandatory TOTP enrolment) removed along with their orphaned state/effects/functions and icon/QRCode imports; progress bar is 2 segments now.
+
 ## Magic-link sign-in + entry-screen fixes (Task #10)
 
 The backend magic-link auth (BLOCK-AUTH-01: `POST /api/auth/magic/start` + `/magic/verify`, 15-min single-use links) finally gets UI — `api.magicStart` previously had zero callers. Audit P0 tier (fixes 1, 2, 6) plus copy/form polish (10, 12, 13, 15) from `SIGNUP_FRICTION_AUDIT_2026-07-08.md`. Frontend-only except one email-copy string; no new backend flows.

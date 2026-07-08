@@ -22,11 +22,12 @@ import * as QRCode from 'qrcode';
 import type { Env, UserSessionRow } from '../types';
 import { decodeJwt } from 'jose';
 import { getSQL } from '../db';
-import { requireAuth, hashToken, generateToken } from '../auth';
+import { requireAuth, hashToken, generateToken, selectJwt } from '../auth';
 import { hasTotpConfigured, loadTotp, persistNewTotpEnrolment } from '../services/authTotp';
 import { loadSms, getUserFactors, setUserFactor } from '../services/authSms';
 import { putHeadshotFromDataUri, getHeadshot } from '../services/r2';
 import { sendVerificationEmail } from '../services/email';
+import { send as sendSecurityEmail } from '../services/email/send';
 import {
   ensureUserSettings as ensureUserSettingsTable,
   getUserSettings,
@@ -575,11 +576,14 @@ settings.post('/totp/re-enrol/confirm', async (c) => {
     await sql.end();
     return c.json({ error: 'invalid_code' }, 401);
   }
-  // Mint fresh recovery codes alongside the new secret.
+  // Mint fresh recovery codes alongside the new secret. Task #11 — must use
+  // the canonical XXXX-XXXX-XXXX format: the previous generateToken().slice(0,10)
+  // produced 10-char codes that tryConsumeRecoveryCode (which hard-requires 12
+  // chars after normalisation) could NEVER redeem at login.
   const recoveryPlain: string[] = [];
   const recoveryHashes: string[] = [];
   for (let i = 0; i < 10; i++) {
-    const raw = generateToken().slice(0, 10);
+    const raw = generateRecoveryCode();
     recoveryPlain.push(raw);
     recoveryHashes.push(await hashToken(raw));
   }
@@ -602,6 +606,108 @@ settings.post('/totp/re-enrol/confirm', async (c) => {
     ok: true,
     recovery_codes: recoveryPlain,
     note: 'Save these one-time recovery codes somewhere safe. Sign in again with your new authenticator.',
+  });
+});
+
+// --- Task #11: first-time optional TOTP enrolment ----------------------------
+//
+// Two-phase flow mirroring /totp/re-enrol/*, but for users who have NO
+// authenticator yet (magic-link / Google / freshly-verified classic signups).
+// start() only PROPOSES a secret — nothing persists until confirm() proves the
+// user's app produces valid codes for it, so an abandoned wizard leaves zero
+// half-enrolled state. confirm() then upgrades the CURRENT session in place
+// (factor='totp', assurance 'full'): the user just presented exactly the
+// evidence a TOTP login would, so forcing a re-login would add nothing.
+//
+//   POST /totp/enrol/start    → { totp_secret, provisioning_uri, qr_code }
+//   POST /totp/enrol/confirm  { totp_secret, totp_code } → { ok, recovery_codes }
+//
+// No rate limit on confirm: the client supplies the secret it is verifying
+// against, so guessing codes has zero attack value.
+
+settings.post('/totp/enrol/start', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  if (await hasTotpConfigured(c.env, user.id)) {
+    return c.json({ error: 'already_configured', message: 'An authenticator is already set up on this account. Use re-pair instead.' }, 403);
+  }
+  const secret = new Secret();
+  const t = new TOTP({ issuer: 'Axal VC StudioOS', label: user.email, secret });
+  const uri = t.toString();
+  let qrBase64: string | null = null;
+  try {
+    const dataUrl = await QRCode.toDataURL(uri);
+    qrBase64 = dataUrl.replace('data:image/png;base64,', '');
+  } catch {}
+  return c.json({ totp_secret: secret.base32, provisioning_uri: uri, qr_code: qrBase64 });
+});
+
+settings.post('/totp/enrol/confirm', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const proposedSecret = clampStr(body?.totp_secret, 64);
+  const code = clampStr(body?.totp_code, 12);
+  if (!proposedSecret || !code) return c.json({ error: 'totp_secret and totp_code required' }, 400);
+  if (await hasTotpConfigured(c.env, user.id)) {
+    return c.json({ error: 'already_configured' }, 403);
+  }
+  let totp: TOTP;
+  try { totp = new TOTP({ secret: Secret.fromBase32(proposedSecret) }); }
+  catch { return c.json({ error: 'invalid_secret' }, 400); }
+  if (totp.validate({ token: code, window: 1 }) === null) {
+    return c.json({ error: 'invalid_code' }, 401);
+  }
+  // Recovery codes in the canonical XXXX-XXXX-XXXX format — the only shape
+  // tryConsumeRecoveryCode will redeem at login.
+  const recoveryPlain: string[] = [];
+  const recoveryHashes: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const rc = generateRecoveryCode();
+    recoveryPlain.push(rc);
+    recoveryHashes.push(await hashToken(rc));
+  }
+  await persistNewTotpEnrolment(c.env, user.id, proposedSecret, recoveryHashes);
+  try { await setUserFactor(c.env, user.id, 'totp'); } catch {}
+
+  // Upgrade the current session in place — the point of optional enrolment is
+  // that the user stays signed in. Deliberately NO jwt_min_iat bump (that
+  // would evict this very session). last_step_up_at=now is exactly what
+  // POST /auth/step-up grants after a TOTP proof; created_at is untouched so
+  // requireStepUp's window math stays honest.
+  const nowIso = new Date().toISOString();
+  const sel = await selectJwt(c);
+  const jti = sel?.payload?.jti as string | undefined;
+  if (jti) {
+    try {
+      await c.env.DB.prepare(
+        `UPDATE user_sessions
+            SET factor = 'totp', assurance_level = 'full',
+                last_step_up_at = ?, step_up_due_at = NULL
+          WHERE jti = ? AND user_id = ?`,
+      ).bind(nowIso, jti, user.id).run();
+    } catch (e) { console.error('[settings:totp-enrol] session upgrade failed', e); }
+  }
+  const sql = getSQL(c.env);
+  // Defensive: also clear the user-level relock deadline (getCurrentUser reads
+  // session step_up_due_at || users.recovery_step_up_due_at; re-enrol clears
+  // this too).
+  try { await sql`UPDATE users SET recovery_step_up_due_at = NULL WHERE id = ${user.id}`; } catch {}
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+            VALUES ('totp_enrolled', 'Authenticator app enrolled (first-time, optional TOTP)', ${user.email}, ${user.id})`;
+  await sql.end();
+
+  // Security notification — standard factor-addition control (mirrors
+  // auth_passkey_added). Best-effort; never blocks enrolment.
+  try {
+    const notifyIp = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64) || 'unknown';
+    await sendSecurityEmail(c.env, 'auth_totp_added', user.email, { name: user.name || user.email, ip: notifyIp }, { userId: user.id });
+  } catch (e) { console.error('[settings:totp-enrol] notification email failed', e); }
+
+  return c.json({
+    ok: true,
+    recovery_codes: recoveryPlain,
+    note: 'Save these one-time recovery codes somewhere safe — they will not be shown again.',
   });
 });
 

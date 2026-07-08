@@ -427,24 +427,20 @@ auth.post('/resend-verification', async (c) => {
 
   const user = users[0];
 
-  const totpConfigured = await hasTotpConfigured(c.env, user.id);
-  if (user.email_verified && totpConfigured) {
+  // Task #11 — TOTP is optional, so "account complete" is email verification
+  // alone. A verified user gets the generic response and NOTHING is reset:
+  // the old code here un-verified already-verified accounts and cleared TOTP
+  // state for any user missing either flag, which let an anonymous POST with
+  // a victim's email nuke the authenticator a magic-link/Google user had
+  // enrolled from Settings.
+  if (user.email_verified) {
     return c.json({ message: genericMsg, email_sent: false, already_verified: true });
   }
 
-  if (!user.email_verified || !totpConfigured) {
-    try {
-      const sql = getSQL(c.env);
-      // Task #1 — clear half-finished TOTP state on resend so the user gets
-      // a fresh enrolment slot. We delete the auth_totp row directly (no
-      // password_hash mutation needed: it's already independent now).
-      await sql`UPDATE users SET email_verified = false WHERE id = ${user.id}`;
-      await sql.end();
-      try { await clearTotp(c.env, user.id); } catch (e) { console.error('[AUTH] clearTotp on resend failed', e); }
-    } catch (e: any) {
-      console.error(`[AUTH] resend reset failed for ${email}: ${e?.message || 'Unknown error'}`);
-    }
-  }
+  // Unverified ⇒ classic signup never completed (login requires a verified
+  // email, so this account has never signed in). Clear any half-finished
+  // TOTP enrolment so the fresh verification link starts from a clean slate.
+  try { await clearTotp(c.env, user.id); } catch (e) { console.error('[AUTH] clearTotp on resend failed', e); }
 
   try {
     const { sent, verificationUrl, tokenStored } = await sendVerification(c.env, email, user.name, user.id);
@@ -497,6 +493,14 @@ auth.post('/confirm-verify-email', safe('confirm-verify-email', 'Could not confi
   const { token } = parsed.body;
   if (!token) return c.json({ error: 'Token required' }, 400);
 
+  // Task #11 — this endpoint now mints a session, so it carries the same
+  // IP-keyed brute-force cap as GET /verify-email (shared bucket: both are
+  // steps of the same flow).
+  const confirmIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const allowedConfirmIp = await checkRateLimit(c.env, `verify-email-ip:${confirmIp}`, 10, 900);
+  if (!allowedConfirmIp) return c.json({ error: 'Too many verification attempts. Please try again in 15 minutes.' }, 429);
+
+  await ensureAuthBlockersSchema(c.env);
   const tokenHash = await hashToken(token);
   const sql = getSQL(c.env);
   const users = await sql`SELECT * FROM users WHERE verification_token = ${tokenHash}`;
@@ -507,6 +511,7 @@ auth.post('/confirm-verify-email', safe('confirm-verify-email', 'Could not confi
     await sql.end();
     return c.json({ error: 'Verification link has expired.' }, 400);
   }
+  if (Number(user.is_active ?? 1) === 0) { await sql.end(); return c.json({ error: 'Account is inactive' }, 403); }
 
   const setupToken = generateToken();
   const setupHash = await hashToken(setupToken);
@@ -516,9 +521,40 @@ auth.post('/confirm-verify-email', safe('confirm-verify-email', 'Could not confi
   // T22.1 — PII redaction: drop name/email from details; actor stores hash.
   const verifEmailHash = await hashEmail(user.email);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('email_verified', ${`email verified (email_hash=${verifEmailHash})`}, ${verifEmailHash}, ${user.id})`;
+
+  // Task #11 — TOTP is now optional, so email verification is the moment the
+  // user is "in". Mint a LOWER-assurance session exactly like /magic/verify:
+  // factor='email' + assurance_level='email_only' means requireFactor('totp')
+  // and requireStepUp() still gate sensitive routes (both fail closed on
+  // non-strong factors), and the 7-day session-scoped step_up_due_at drives
+  // the getCurrentUser auto-relock. Proof presented here (possession of the
+  // emailed verification link) is the same evidence class as a magic link.
+  const jti = crypto.randomUUID();
+  const jwtToken = await createJWT(c.env, user.id, user.email, user.role, undefined, jti);
+  const ua = (c.req.header('user-agent') || '').slice(0, 500);
+  const stepUpDue = new Date(Date.now() + MAGIC_STEP_UP_DAYS * 86400 * 1000).toISOString();
+  try {
+    await sql`INSERT INTO user_sessions (user_id, jti, user_agent, ip, factor, assurance_level, step_up_due_at)
+              VALUES (${user.id}, ${jti}, ${ua || null}, ${confirmIp === 'unknown' ? null : confirmIp.slice(0, 64)}, 'email', 'email_only', ${stepUpDue})`;
+  } catch (e) { console.error('[AUTH:confirm-verify-email] session insert failed', e); }
   await sql.end();
 
-  return c.json({ verified: true, email: user.email, name: user.name, setup_token: setupToken });
+  await revokeStaleCrossIdentitySession(c, user.id);
+  const csrfToken = generateCsrfToken();
+  setAuthCookies(c, jwtToken, csrfToken);
+
+  return c.json({
+    verified: true,
+    email: user.email,
+    name: user.name,
+    // Legacy back-compat: /setup-totp still accepts this one-shot token.
+    setup_token: setupToken,
+    // Session fields mirror POST /login so the SPA stores them identically.
+    token: jwtToken,
+    csrf_token: csrfToken,
+    user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    expires_in: 24 * 3600,
+  });
 }));
 
 auth.post('/setup-totp', safe('setup-totp', 'Could not set up authenticator. Please try again or request a new verification email.', async (c) => {
