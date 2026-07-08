@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import PageExplainer from '../components/PageExplainer';
+import WaitlistLeadsPanel from '../components/WaitlistLeadsPanel';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Trash2, MessageSquare, CheckCircle2, XCircle, HelpCircle, AlertCircle, Save, X, FolderPlus, Star, Layers, Pencil } from 'lucide-react';
+import { Plus, Trash2, MessageSquare, CheckCircle2, XCircle, HelpCircle, AlertCircle, Save, X, FolderPlus, Star, Layers, Pencil, Inbox } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
@@ -10,6 +11,16 @@ const STATUSES = [
   { value: 'validated', label: 'Validated', icon: CheckCircle2, tone: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
   { value: 'invalidated', label: 'Invalidated', icon: XCircle, tone: 'text-rose-600 bg-rose-50 border-rose-200' },
   { value: 'inconclusive', label: 'Inconclusive', icon: HelpCircle, tone: 'text-gray-600 bg-gray-50 border-gray-200' },
+];
+
+// Discovery is one workspace with three tabs following the funnel: Leads
+// (inbound waitlist customers) → Interviews (Mom-Test log) → Insights (pain
+// themes). The active tab lives in the ?tab= query param so tabs are
+// deep-linkable and the retired /customer-discovery route can redirect in.
+const TABS = [
+  { id: 'leads', label: 'Leads', icon: Inbox },
+  { id: 'interviews', label: 'Interviews', icon: MessageSquare },
+  { id: 'insights', label: 'Insights', icon: Layers },
 ];
 
 function emptyInterview() {
@@ -41,6 +52,16 @@ export default function DiscoveryPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Active tab from the URL (?tab=), defaulting to Leads — the top of the
+  // discovery funnel and where the legacy /customer-discovery route lands.
+  // project_id is preserved alongside tab in every URL write below.
+  const activeTab = TABS.some((t) => t.id === searchParams.get('tab')) ? searchParams.get('tab') : 'leads';
+  const setTab = (id) => setSearchParams((prev) => {
+    const next = new URLSearchParams(prev);
+    next.set('tab', id);
+    return next;
+  }, { replace: true });
+
   useEffect(() => {
     (async () => {
       try {
@@ -51,7 +72,7 @@ export default function DiscoveryPage() {
         if (fromQuery && safeList.find((p) => p.id === fromQuery)) {
           setProjectId(fromQuery);
         } else if (safeList.length > 0) {
-          if (fromQuery) setSearchParams({}, { replace: true });
+          if (fromQuery) setSearchParams((prev) => { const n = new URLSearchParams(prev); n.delete('project_id'); return n; }, { replace: true });
           setProjectId(safeList[0].id);
         }
       } catch (e) {
@@ -71,7 +92,7 @@ export default function DiscoveryPage() {
 
   useEffect(() => {
     if (!projectId) return;
-    setSearchParams({ project_id: String(projectId) }, { replace: true });
+    setSearchParams((prev) => { const n = new URLSearchParams(prev); n.set('project_id', String(projectId)); return n; }, { replace: true });
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
@@ -268,9 +289,9 @@ export default function DiscoveryPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Customer Discovery</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Discovery</h1>
         <PageExplainer pageKey="customer_discovery" />
-          <p className="text-sm text-gray-500 mt-1">Mom-Test interview log. Each validated hypothesis lifts the traction signals score.</p>
+          <p className="text-sm text-gray-500 mt-1">Leads, Mom-Test interviews, and the insights they surface — each validated hypothesis lifts the traction signals score.</p>
         </div>
         <div className="flex gap-2">
           <select
@@ -292,7 +313,34 @@ export default function DiscoveryPage() {
         </div>
       </div>
 
+      {hasProjects && (
+        <div role="tablist" aria-label="Discovery sections" className="flex flex-wrap gap-1 border-b border-gray-200 dark:border-gray-800">
+          {TABS.map((t) => {
+            const Icon = t.icon;
+            const isActive = t.id === activeTab;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setTab(t.id)}
+                className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'border-violet-600 text-violet-700 dark:text-violet-300'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100'
+                }`}
+              >
+                <Icon size={16} /> {t.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {error && <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg px-4 py-3 text-sm"><AlertCircle size={16} className="mt-0.5" />{error}</div>}
+
+      {hasProjects && activeTab === 'leads' && <WaitlistLeadsPanel projects={projects} />}
 
       {!hasProjects && (
         <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center dark:bg-gray-900 dark:border-gray-700">
@@ -310,7 +358,7 @@ export default function DiscoveryPage() {
         </div>
       )}
 
-      {hasProjects && (
+      {hasProjects && activeTab === 'interviews' && (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Interviews" value={stats.interviews} />
         <Stat label="Hypotheses tested" value={stats.hypotheses} />
@@ -319,9 +367,9 @@ export default function DiscoveryPage() {
       </div>
       )}
 
-      {hasProjects && loading && <div className="text-sm text-gray-500">Loading…</div>}
+      {hasProjects && activeTab === 'interviews' && loading && <div className="text-sm text-gray-500">Loading…</div>}
 
-      {hasProjects && (
+      {hasProjects && activeTab === 'interviews' && (
       <div className="space-y-3">
         {interviews.length === 0 && !loading && (
           <div className="bg-white border border-dashed border-gray-300 rounded-xl p-8 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-700">
@@ -382,7 +430,7 @@ export default function DiscoveryPage() {
       </div>
       )}
 
-      {hasProjects && !loading && (
+      {hasProjects && activeTab === 'insights' && !loading && (
         <PainThemesPanel
           view={painView}
           onAssign={handleAssignPain}

@@ -47,7 +47,7 @@ function MatchesPanel({ listingId, onClose, currentUser }) {
     finally { setBusy(false); }
   };
   const execute = async (m) => {
-    if (!confirm(`Execute exit at ${fmt(m.proposed_price_cents)} to ${m.buyer_email}?`)) return;
+    if (!confirm(`Execute a simulated exit at ${fmt(m.proposed_price_cents)} to ${m.buyer_email}? This is a simulation — no real funds move.`)) return;
     setExecuting(m.buyer_user_id);
     try {
       await api.liquidityExecuteExit({
@@ -72,8 +72,9 @@ function MatchesPanel({ listingId, onClose, currentUser }) {
           <div>
             <div className="text-base font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
               <Sparkles size={16} className="text-violet-600" /> AI Buyer Matches · Listing #{listingId}
+              <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">Simulation</span>
             </div>
-            <p className="text-xs text-gray-500">Top candidates ranked by sector fit, capital and role.</p>
+            <p className="text-xs text-gray-500">Top candidates ranked by sector fit, capital and role. Exits execute in simulation — no real funds move.</p>
           </div>
           <button onClick={() => onClose()}><X size={18} className="text-gray-400 hover:text-gray-700" /></button>
         </div>

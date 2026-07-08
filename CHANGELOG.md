@@ -10,6 +10,31 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## Investor Support consolidation & Account trim (Task #4)
+
+The investor "Support" sidebar had eight peer links that were really four jobs, and the "Account" group carried founder-oriented rows (Advisors, Partners, Jobs, Articles) an LP never needs. This folds the fund/portfolio surfaces into four tabbed workspaces backed by the existing canonical stores, trims the Account group, labels the mock liquidity settlement as a simulation, and standardizes the locked/paywall UX so every 402 shows the investor's live quota.
+
+**Frontend — workspaces (new)**
+- `frontend/src/pages/PortfolioWorkspace.jsx` — Health · Updates · Positions (Cap Table) tabs; embeds the existing pages. The Cap Table tab is role-filtered (admin/investor).
+- `frontend/src/pages/FundModelingWorkspace.jsx` — Reserve Allocation · Exit Waterfall tabs; embeds `ReservesPage`/`WaterfallPage`.
+- `frontend/src/pages/FundOpsWorkspace.jsx` — Funds admin · LP Reporting · Capital Calls tabs. Funds admin renders the real `AdminFundsView` for admins and a role-locked blurred preview for non-admin investors; the Capital Calls panel is **role-scoped** — admins read the studio-wide ledger (`api.capitalCalls()`), investors read only their own commitments via `api.fundsLpPortal()` (the same per-LP source My LP Portal uses, never the un-scoped global `/legalcap/capital/calls`). Amounts are normalized across the `amount_cents` (worker) and `amount` (dev/LP-portal) shapes.
+- `frontend/src/pages/LPPortalPage.jsx` — "My LP Portal" as its own workspace (renders `LPPortalView`).
+- `frontend/src/components/WorkspaceTabs.jsx` — shared path-based tab bar + `WorkspaceHeader`, mirroring the `CapitalWorkspacePage` precedent.
+- `frontend/src/components/LockedPreview.jsx` — blurred-preview overlay replacing lock icons; role-lock (message only) or tier-lock (upgrade CTA + quota card).
+- `frontend/src/components/QuotaCard.jsx` — compact investor billing + introductions quota card, rendered beside paywalls and locked previews.
+
+**Frontend — edits**
+- `frontend/src/pages/LPReportingPage.jsx` — TVPI/DPI are now live-computed on display (DPI = distributed/called; TVPI = (NAV+distributed)/called; null when called ≤ 0) instead of hand-authored; removed the dpi/tvpi form inputs; added an `embedded` prop.
+- `frontend/src/pages/{ReservesPage,WaterfallPage,PortfolioHealthPage,PortfolioUpdatesPage,PortfolioPositionsPage}.jsx` — added an `embedded` prop that drops the outer padding + own title block when the page is embedded in a workspace.
+- `frontend/src/pages/FundsPage.jsx` — `AdminFundsView`/`LPPortalView` promoted to named exports; the standalone default `FundsPage` (a divergent tabbed copy) removed.
+- `frontend/src/App.jsx` — `/portfolio/health|updates|positions` → `PortfolioWorkspace`; `/portfolio/reserves|waterfall` → `FundModelingWorkspace`; `/funds` + new `/funds/capital-calls` + `/lp-reports` → `FundOpsWorkspace`; new `/lp-portal` → `LPPortalPage` (existing route guards preserved).
+- `frontend/src/sidebarConfig.js` — investor Support group: replaced "Funds" with "My LP Portal" and added "Capital Calls"; Account group: dropped Advisors, Partners, Jobs and Articles.
+- `frontend/src/components/PaywallModal.jsx` — the investor-mode paywall renders `QuotaCard` above the plan grid so every 402 shows live usage.
+- `frontend/src/pages/LiquidityPage.jsx` — buyer-match exits are labelled a **Simulation** (badge + subtitle + confirm copy): no real funds move.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/liquidity.ts` — the `execute-exit` response now carries `simulated: true` and `settlement: 'simulation'` so the mock settlement is honest on the wire.
+
 ## Diligence → Commit → Ledger hand-offs (investor-audit #5 + #8, Task #83)
 
 Due Diligence was admin-only, and the investor funnel had no real hand-offs between scoring, the IC, the diligence case, the decision journal, and the position ledger — each was a separate re-search. This de-admins DD for investors/advisors, feeds open reviewer items into the lifecycle's next-actions, and wires the funnel so each stage carries the previous one's context. Also regroups Market Intelligence's ~21 sub-tabs under 5 lenses.

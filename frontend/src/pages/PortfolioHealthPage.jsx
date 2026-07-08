@@ -209,7 +209,7 @@ function InvestorHoldingsCard() {
   );
 }
 
-export default function PortfolioHealthPage() {
+export default function PortfolioHealthPage({ embedded = false }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -264,10 +264,11 @@ export default function PortfolioHealthPage() {
   }, [data, sort]);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className={embedded ? 'max-w-7xl mx-auto' : 'p-6 max-w-7xl mx-auto'}>
       {/* Task #8 (IH) — Investor portfolio holdings (CSV-imported) */}
       <InvestorHoldingsCard />
       <div className="flex items-start justify-between mb-6">
+        {!embedded && (
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <Heart className="w-6 h-6 text-purple-600" />
@@ -279,6 +280,7 @@ export default function PortfolioHealthPage() {
             {data?.as_of && <span className="ml-2 text-slate-400">As of {data.as_of}</span>}
           </p>
         </div>
+        )}
         <button
           onClick={async () => {
             setBusy(true); setErr(null);

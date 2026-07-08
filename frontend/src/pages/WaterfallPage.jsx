@@ -92,7 +92,7 @@ function StackedSplitBar({ toLps, toGp }) {
   );
 }
 
-export default function WaterfallPage() {
+export default function WaterfallPage({ embedded = false }) {
   const [funds, setFunds] = useState([]);
   const [fundId, setFundId] = useState(null);
   const [exitValueM, setExitValueM] = useState(100);
@@ -211,10 +211,11 @@ export default function WaterfallPage() {
   const maxTranche = useMemo(() => Math.max(1, ...tranches.map((t) => Number(t.amount) || 0)), [tranches]);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className={embedded ? 'max-w-7xl mx-auto' : 'p-6 max-w-7xl mx-auto'}>
       {/* Header */}
       <div className="rounded-2xl bg-gradient-to-r from-violet-50 via-white to-blue-50 ring-1 ring-slate-200 p-5 mb-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
+          {!embedded && (
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900 flex items-center gap-2">
               <span className="w-9 h-9 rounded-xl bg-violet-600 text-white flex items-center justify-center shadow-sm">
@@ -229,6 +230,7 @@ export default function WaterfallPage() {
               <span className="text-slate-700 font-medium"> return of capital → preferred return → GP catch-up → carry split</span>.
             </p>
           </div>
+          )}
           <div className="flex items-center gap-2">
             <label className="text-xs text-slate-500 uppercase tracking-wider font-medium">Fund</label>
             <select

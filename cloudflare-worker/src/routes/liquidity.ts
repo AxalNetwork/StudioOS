@@ -197,6 +197,10 @@ liquidity.post('/execute-exit', async (c) => {
   // event.id below as liquidity_event_id) so the right LP ledgers are credited.
   return c.json({
     ok: true,
+    // Secondary-exit settlement is simulated: we record the event and credit
+    // mock LP returns, but no real funds move. Surfaced so the UI can label it.
+    simulated: true,
+    settlement: 'simulation',
     event: evt,
     listing_id: body.listing_id,
     distribution_hint: {

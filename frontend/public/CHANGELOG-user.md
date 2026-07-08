@@ -5,6 +5,19 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your investor workspace, consolidated
+
+We tidied the investor sidebar so related tools live together instead of as a long list of separate links:
+
+- **Four focused workspaces.** Portfolio (Health, Company Updates and Cap Table), Fund Modeling (Reserve Allocation and Exit Waterfall), Fund Ops (Funds, LP Reporting and Capital Calls) and your own My LP Portal now open as tabbed areas instead of scattered pages.
+- **LP Reporting shows real numbers.** TVPI and DPI are now calculated live from each fund's called, distributed and NAV figures — no more hand-typed values.
+- **A lighter Account menu.** Advisors, Partners, Jobs and Articles were removed from the investor Account group to keep it focused on what LPs actually use.
+- **Exits are clearly a simulation.** The buyer-matching "execute exit" flow now says plainly that it's a simulation — no real money moves.
+- **See your usage next to every upgrade prompt.** When you hit a plan limit, a small card now shows your live billing and introductions usage right beside the upgrade options.
+- **Previews instead of locks.** Tabs you can't open yet show a blurred preview of what's inside rather than a plain lock.
+
+---
+
 ## Due diligence, decisions and positions now flow together
 
 Due diligence is no longer an admin-only tool, and the steps from scoring a startup to committing capital now hand off to each other instead of making you start over each time:

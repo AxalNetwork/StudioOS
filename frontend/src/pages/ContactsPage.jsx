@@ -4,9 +4,11 @@ import { Plus, RefreshCw, X, Send, ArrowUpRight, CheckSquare, Square } from 'luc
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
 
-const AUDIENCES = ['customer', 'investor', 'partner', 'advisor', 'cofounder'];
+const AUDIENCES = ['customer', 'investor', 'partner', 'advisor', 'mentor', 'cofounder'];
 const STATUSES = ['new', 'invited', 'contacted', 'replied', 'qualified', 'active', 'passed'];
-const ROUTED_LABEL = { discovery: 'Customer Discovery', raise: 'Raise pipeline', network: 'Network' };
+// Destination labels for every routed_to value routeFor can emit, so the inbox
+// names the real destination instead of falling back to "Network".
+const ROUTED_LABEL = { discovery: 'Customer Discovery', raise: 'Raise pipeline', advisory: 'Advisory', team: 'Team Building', marketplace: 'Marketplace', network: 'Network' };
 const STATUS_BADGE = {
   new: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
   invited: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300',

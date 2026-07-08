@@ -26,6 +26,7 @@ import { useAuth } from '../hooks/useAuthSync';
 import { hasTier } from '../sidebarConfig';
 import { openPaywall } from '../components/PaywallModal';
 import PageExplainer from '../components/PageExplainer';
+import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
 import AdvisorsPage from './AdvisorsPage';
 import CofounderPage from './CofounderPage';
 import MyJobsPage from './jobs/MyJobsPage';
@@ -120,6 +121,14 @@ export default function TeamBuildingPage() {
           find a co-founder, and hire for open roles.
         </p>
       </div>
+
+      {/* Inbound co-founder leads captured on the founder's landing pages,
+          routed here so they're visible where the founder acts on them. */}
+      <IncomingLeadsStrip
+        audience="cofounder"
+        title="New co-founder leads"
+        blurb="People who reached out about co-founding via your landing pages."
+      />
 
       {/* Segmented tab bar. Deep-linkable via ?tab= and highlighted with the
           same violet accent the primary sidebar uses. */}

@@ -110,7 +110,6 @@ const CommandCenterPage = lazy(() => import('./pages/CommandCenterPage'));
 // The underlying SkillsProfilePage/ValuesAssessmentPage files are kept intact on
 // disk (data stores), but their routes now redirect to /studio.
 const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
-const PortfolioHealthPage = lazy(() => import('./pages/PortfolioHealthPage'));
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
 const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
 const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
@@ -144,15 +143,13 @@ const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
 const PublicRoadmapPage = lazy(() => import('./pages/PublicRoadmapPage'));
 const MonitoringPage = lazy(() => import('./pages/MonitoringPage'));
 const LiquidityPage = lazy(() => import('./pages/LiquidityPage'));
-const FundsPage = lazy(() => import('./pages/FundsPage'));
+const FundOpsWorkspace = lazy(() => import('./pages/FundOpsWorkspace'));
+const PortfolioWorkspace = lazy(() => import('./pages/PortfolioWorkspace'));
+const FundModelingWorkspace = lazy(() => import('./pages/FundModelingWorkspace'));
+const LPPortalPage = lazy(() => import('./pages/LPPortalPage'));
 const InvestorPricingPage = lazy(() => import('./pages/InvestorPricingPage'));
-const ReservesPage = lazy(() => import('./pages/ReservesPage'));
-const WaterfallPage = lazy(() => import('./pages/WaterfallPage'));
 const ICDecisionsPage = lazy(() => import('./pages/ICDecisionsPage'));
 const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
-const LPReportingPage = lazy(() => import('./pages/LPReportingPage'));
-const PortfolioUpdatesPage = lazy(() => import('./pages/PortfolioUpdatesPage'));
-const PortfolioPositionsPage = lazy(() => import('./pages/PortfolioPositionsPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const DocsPage = lazy(() => import('./pages/DocsPage'));
 const OnboardingPersonaPage = lazy(() => import('./pages/OnboardingPersonaPage'));
@@ -171,7 +168,6 @@ const BrandBuilderPage = lazy(() => import('./pages/BrandBuilderPage'));
 const CompetitorAnalysisPage = lazy(() => import('./pages/CompetitorAnalysisPage'));
 const FinancialsPage = lazy(() => import('./pages/FinancialsPage'));
 const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage'));
-const CustomerDiscoveryPage = lazy(() => import('./pages/CustomerDiscoveryPage'));
 const RoadmapPage = lazy(() => import('./pages/RoadmapPage'));
 const MetricsPage = lazy(() => import('./pages/MetricsPage'));
 const SignalsPage = lazy(() => import('./pages/SignalsPage'));
@@ -1251,7 +1247,8 @@ function AppInner() {
       <Route path="/build/competitors" element={guard(['admin', 'founder', 'partner', 'investor'], <CompetitorAnalysisPage />)} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], <FinancialsPage />)} />
       <Route path="/build/discovery" element={guard(['admin', 'founder', 'partner', 'investor'], <DiscoveryPage />)} />
-      <Route path="/customer-discovery" element={guard(['admin', 'founder'], <CustomerDiscoveryPage />)} />
+      {/* Legacy Customer Discovery folds into the unified Discovery workspace. */}
+      <Route path="/customer-discovery" element={<Navigate to="/build/discovery" replace />} />
       <Route path="/build/roadmap" element={guard(['admin', 'founder', 'partner', 'investor'], <RoadmapPage />)} />
       <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], <MetricsPage />)} />
       {/* Signals — founder decision engine over public-market evidence. Shared
@@ -1385,7 +1382,7 @@ function AppInner() {
           routes redirect here (underlying data stores kept intact). */}
       <Route path="/skills" element={<Navigate to="/studio" replace />} />
       <Route path="/values" element={<Navigate to="/studio" replace />} />
-      <Route path="/portfolio/health" element={guard(['admin', 'founder', 'partner', 'investor'], <PortfolioHealthPage />)} />
+      <Route path="/portfolio/health" element={guard(['admin', 'founder', 'partner', 'investor'], <PortfolioWorkspace />)} />
       {/* Task #18 — Partner Coverage Analytics (admin/partner-only internal dashboard). */}
       <Route path="/portfolio/coverage" element={guard(['admin', 'partner'], <PortfolioCoveragePage />)} />
       {/* Task #10 — portfolio Venture Risk matrix (internal deal team). */}
@@ -1402,9 +1399,11 @@ function AppInner() {
       <Route path="/spin-outs" element={<Navigate to="/spinouts" replace />} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], <LiquidityPage currentUser={user} />)} />
-      <Route path="/funds" element={guard(['admin', 'investor'], <FundsPage currentUser={user} />)} />
-      <Route path="/portfolio/reserves" element={guard(['admin', 'investor'], <ReservesPage />)} />
-      <Route path="/portfolio/waterfall" element={guard(['admin', 'investor'], <WaterfallPage />)} />
+      <Route path="/funds" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
+      <Route path="/funds/capital-calls" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
+      <Route path="/lp-portal" element={guard(['admin', 'investor'], <LPPortalPage />)} />
+      <Route path="/portfolio/reserves" element={guard(['admin', 'investor'], <FundModelingWorkspace />)} />
+      <Route path="/portfolio/waterfall" element={guard(['admin', 'investor'], <FundModelingWorkspace />)} />
       {/* Task #19 — the founder sidebar no longer surfaces "Founder Portal"
           (folded into Studio/Home). Founders hitting the old link are
           redirected to /studio; admins keep the Founder Portal surface. */}
@@ -1412,9 +1411,9 @@ function AppInner() {
       {/* Task #18 — investor-lifecycle features ported from PR #119. */}
       <Route path="/ic" element={guard(['admin', 'partner', 'investor'], <ICDecisionsPage />)} />
       <Route path="/ic/:uid" element={guard(['admin', 'partner', 'investor'], <ICDecisionPage />)} />
-      <Route path="/lp-reports" element={guard(['admin', 'investor'], <LPReportingPage />)} />
-      <Route path="/portfolio/updates" element={guard(['admin', 'partner', 'investor', 'founder'], <PortfolioUpdatesPage />)} />
-      <Route path="/portfolio/positions" element={guard(['admin', 'investor'], <PortfolioPositionsPage />)} />
+      <Route path="/lp-reports" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
+      <Route path="/portfolio/updates" element={guard(['admin', 'partner', 'investor', 'founder'], <PortfolioWorkspace />)} />
+      <Route path="/portfolio/positions" element={guard(['admin', 'investor'], <PortfolioWorkspace />)} />
       {/* Task #1 — Contacts merged into the unified Network page. The legacy
           /contacts route now redirects into the Contacts tab. */}
       <Route path="/contacts" element={<Navigate to="/network?tab=contacts" replace />} />

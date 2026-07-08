@@ -26,17 +26,34 @@ import { hashEmail } from '../util/hashEmail';
 
 const r = new Hono<{ Bindings: Env }>();
 
-export const CONTACT_AUDIENCES = ['customer', 'investor', 'partner', 'advisor', 'cofounder'];
+// mentor is a first-class landing-page audience (see PAGE_AUDIENCE_SET in
+// brand.ts) but was missing here, so mentor leads were coerced to 'customer' at
+// ingest. Adding it lets mentor leads flow through and route to Advisory.
+export const CONTACT_AUDIENCES = ['customer', 'investor', 'partner', 'advisor', 'mentor', 'cofounder'];
 const CONTACT_STATUSES = ['new', 'invited', 'contacted', 'replied', 'qualified', 'active', 'passed'];
 
 /** Investor raise-pipeline stages a promoted investor prospect moves through. */
 export const RAISE_STAGES = ['to_contact', 'contacted', 'meeting', 'diligence', 'committed', 'passed'];
 
-/** Audience → founder workflow the contact should feed. */
+/**
+ * Audience → founder destination the contact should feed. The map is complete
+ * so no captured lead silently defaults to the generic Network inbox:
+ *   customer → discovery   investor → raise       advisor/mentor → advisory
+ *   cofounder → team       partner  → marketplace
+ * Unknown audiences still fall back to 'network'. The Contacts inbox renders
+ * these keys via ROUTED_LABEL; destination pages surface them with
+ * IncomingLeadsStrip (filtered by audience, robust to legacy routed_to rows).
+ */
 export function routeFor(audience: string): string {
-  if (audience === 'customer') return 'discovery';
-  if (audience === 'investor') return 'raise';
-  return 'network';
+  switch (audience) {
+    case 'customer': return 'discovery';
+    case 'investor': return 'raise';
+    case 'advisor':
+    case 'mentor': return 'advisory';
+    case 'cofounder': return 'team';
+    case 'partner': return 'marketplace';
+    default: return 'network';
+  }
 }
 
 /** D1 autoincrement id from an INSERT result (meta shape varies across libs). */

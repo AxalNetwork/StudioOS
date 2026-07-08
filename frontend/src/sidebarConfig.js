@@ -22,7 +22,7 @@ import {
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, LayoutGrid,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2, ShieldAlert,
-  Gavel, Inbox, FileBarChart, Radar,
+  Gavel, Inbox, FileBarChart, Radar, Wallet, PhoneCall,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -365,22 +365,21 @@ export const SIDEBAR_GROUPS = {
       { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
       { to: '/portfolio/updates', icon: Inbox, label: 'Company Updates' },
       { to: '/portfolio/positions', icon: PieIcon, label: 'Cap Table' },
-      { to: '/funds', icon: TrendingUp, label: 'Funds' },
+      { to: '/lp-portal', icon: Wallet, label: 'My LP Portal' },
       { to: '/lp-reports', icon: FileBarChart, label: 'LP Reporting' },
+      { to: '/funds/capital-calls', icon: PhoneCall, label: 'Capital Calls' },
       { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
       { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust & Identity' },
-      { to: '/advisors', icon: Users, label: 'Advisors' },
-      { to: '/partners', icon: Network, label: 'Partners' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
-      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       // "Integrations" merged into Settings (/settings/integrations); the
       // /integrations route redirects there. Removed from the investor nav.
-      { to: '/articles/draft', icon: FileText, label: 'Articles' },
+      // Advisors, Partners, Jobs and Articles were trimmed from the investor
+      // Account group — they remain reachable by URL for other roles.
       { to: '/activity', icon: Activity, label: 'Activity' },
       { to: '/docs', icon: BookOpen, label: 'Docs' },
       { to: '/tickets', icon: MessageSquare, label: 'Support' },
