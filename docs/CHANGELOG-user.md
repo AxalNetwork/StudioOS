@@ -5,6 +5,16 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## A friendlier start: explore first, commit later
+
+Finishing the welcome chat no longer locks you into an account type right away. Instead, you start in a new "Exploring" space while our team reviews your profile.
+
+- **Your own starting dashboard.** After the welcome chat you land on a simple home with your Personal Advisor and your profile summary — keep answering questions to sharpen your fit while you wait.
+- **A real person confirms your role.** The Axal team reviews what you shared — including a short summary of your welcome conversation — sends you a membership agreement to sign, and only then unlocks the workspace that matches you — founder, investor, partner, or advisor.
+- **Nothing is lost.** Everything you tell the Personal Advisor while exploring carries over to your full account.
+
+---
+
 ## We measure our own signup experience now — privately
 
 To find and fix the places where joining StudioOS is confusing or broken, the platform now keeps count of the steps people take while signing up (like "opened the sign-up page" or "verified their email").
