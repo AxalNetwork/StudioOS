@@ -91,12 +91,22 @@ function sessionRemove(key) {
   } catch { /* noop */ }
 }
 
+let _uuidCounter = 0;
 function uuid() {
   try {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    if (typeof crypto !== 'undefined') {
+      if (crypto.randomUUID) return crypto.randomUUID();
+      if (crypto.getRandomValues) {
+        // Older engines without randomUUID — still crypto-grade.
+        const bytes = new Uint8Array(16);
+        crypto.getRandomValues(bytes);
+        return 'f' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+      }
+    }
   } catch { /* fall through */ }
-  // Fallback — non-cryptographic is fine for a pseudonymous analytics id.
-  return 'f' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  // Last resort (no Web Crypto at all): time-derived pseudonymous analytics id.
+  // Deliberately avoids Math.random (CodeQL js/insecure-randomness).
+  return 'f' + Date.now().toString(36) + (++_uuidCounter).toString(36);
 }
 
 // --- identity ---------------------------------------------------------------

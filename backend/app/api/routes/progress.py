@@ -121,7 +121,9 @@ def _ensure_lifecycle_columns(session: Session) -> None:
     before this feature landed. Postgres supports IF NOT EXISTS."""
     for col in ("lifecycle_stage", "lifecycle_manual_checks"):
         try:
-            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates a static column name from a local literal tuple, dev-only FastAPI not exposed to user input
+            # Justification: f-string interpolates a static column name from a local literal
+            # tuple, dev-only FastAPI not exposed to user input
+            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                 f"ALTER TABLE projects ADD COLUMN IF NOT EXISTS {col} VARCHAR"
             ))
             session.commit()
@@ -322,7 +324,9 @@ def update_lifecycle(
     if not sets:
         raise HTTPException(status_code=400, detail="Nothing to update")
 
-    session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- SET clause is built from static code-defined column assignments; all values are bound params, dev-only FastAPI not exposed to user input
+    # Justification: SET clause is built from static code-defined column assignments; all values
+    # are bound params, dev-only FastAPI not exposed to user input
+    session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
         f"UPDATE projects SET {', '.join(sets)} WHERE id = :pid"
     ), params=params)
     session.commit()
@@ -534,7 +538,9 @@ def _serialize_signup(r: Any) -> dict:
 
 
 def _load_customer_signup(session: Session, project_id: int, signup_id: int):
-    return session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- concatenates a module-constant SELECT with a static WHERE clause; all values are bound params, dev-only FastAPI not exposed to user input
+    # Justification: concatenates a module-constant SELECT with a static WHERE clause; all
+    # values are bound params, dev-only FastAPI not exposed to user input
+    return session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
         _WAITLIST_SELECT + " WHERE id = :sid AND project_id = :pid AND audience = 'customer'"
     ), params={"sid": signup_id, "pid": project_id}).mappings().first()
 
@@ -662,7 +668,9 @@ def list_waitlist_customers(
     p = _get_project_or_404(session, project_id)
     _ensure_can_view(p, user)
     _ensure_waitlist_crm_schema(session)
-    rows = session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- concatenates a module-constant SELECT with a static WHERE clause; all values are bound params, dev-only FastAPI not exposed to user input
+    # Justification: concatenates a module-constant SELECT with a static WHERE clause; all
+    # values are bound params, dev-only FastAPI not exposed to user input
+    rows = session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
         _WAITLIST_SELECT + " WHERE project_id = :pid AND audience = 'customer' "
         "ORDER BY created_at DESC, id DESC LIMIT 500"
     ), params={"pid": project_id}).mappings().all()

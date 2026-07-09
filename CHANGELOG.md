@@ -10,7 +10,20 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
-<<<<<<< HEAD
+
+## Code Scanning alerts resolved — crypto ids, path guard, suppression placement, committed dev secret removed (Task #7)
+
+All ~50 open GitHub Code Scanning alerts (CodeQL + Semgrep) addressed at the source so they auto-close on the next scan of `main`.
+
+- **`frontend/src/lib/funnel.js`** — analytics id fallback no longer uses `Math.random()` (CodeQL `js/insecure-randomness`): `crypto.randomUUID()` → `crypto.getRandomValues()` → a time+counter last resort that deliberately avoids `Math.random`.
+- **`frontend/src/pages/BrandBuilderPage.jsx`** — removed the dead Task #2 multi-page-site block (17 unused `useState` pairs + never-called `seedFromLanding`/`refreshPages`/`refreshCustomTemplates`, ~90 lines) behind the ~32 unused-variable notes; the live load effect already inlines the same seeding logic.
+- **`backend/app/services/file_storage.py`** — `_path()` adds a statically-recognisable traversal barrier (segment allowlist rejecting empty/`.`/`..`, absolute keys, backslashes + `normpath`/`startswith` root check) in front of the existing `resolve()`+`relative_to` guard (CodeQL `py/path-injection`).
+- **`backend/app/api/routes/brand.py`** — `_derive_slug_base` trims with `str.strip('-')`/`rstrip('-')` instead of the flagged `^-+|-+$` / `-+$` regexes (polynomial-redos).
+- **`backend/app/api/routes/public_profiles.py`** — the four empty `except: pass` blocks now narrow to `(ValueError, TypeError)` where it's JSON parsing and log at debug with context in all four.
+- **`backend/app/models/migrations.py` + `backend/app/api/routes/progress.py`** — all 39 `# nosemgrep: …avoid-sqlalchemy-text` comments carried trailing `-- justification` prose; Semgrep parses the rule-id list up to commas, so the prose (which contains commas) broke every suppression. Justifications moved to preceding `# Justification:` comment lines, leaving bare `# nosemgrep: <rule-id>` on the match line; the one comment sitting on a closing `))` (not the match's first line) moved onto the `session.exec(text(` line. Verified locally: `semgrep scan --config r/…avoid-sqlalchemy-text` → 0 findings.
+- **`.replit`** — the committed literal dev `JWT_SECRET` under `[userenv.development]` (Semgrep generic secret alert) is deleted; dev now uses the pre-existing `JWT_SECRET` Replit Secret, whose value differs from the leaked literal (verified), so no rotation of the live secret was needed. The leaked literal only ever signed dev tokens.
+- **Scan health** — both CodeQL legs (python, javascript-typescript) and Semgrep are green on the latest `main` runs (verified via the public Actions API); the earlier red run was a one-off python-leg analysis failure. Note: GitHub's *default setup* CodeQL (`dynamic/github-code-scanning/codeql`) runs alongside the advanced `.github/workflows/codeql.yml` — consider disabling default setup in repo Settings → Code security to avoid duplicate scans.
+
 ## New signups land in Exploring at signup; admins can move users into it (Task #9 follow-up, PR #141)
 
 Fresh accounts now hold in `role='exploring'` from the moment they exist — not only after the onboarding chat — and the generic admin role dropdown gains 'exploring' as a destination.
@@ -19,7 +32,7 @@ Fresh accounts now hold in `role='exploring'` from the moment they exist — not
 - **Generic role endpoint (`routes/admin.ts` PATCH `/admin/users/:id/role`)** — `'exploring'` is now an accepted destination, so an admin can send any user (e.g. a partner) back into the holding state for re-review; moving INTO exploring also resets the stale `user_role_review` assignment fields. Moving OUT of exploring still requires the binding-agreement-gated `/api/admin/exploring/users/:id/assign-role` flow — the generic endpoint rejects that direction with a 409 (`code: 'use_exploring_assign_role'`).
 - **Frontend (`pages/AdminPage.jsx` RoleDropdown)** — "Exploring" added to the Users-table role dropdown; for users already in exploring, the founder/partner/investor options are disabled client-side with a tooltip pointing at the Exploring Users queue, mirroring the 409.
 - Dev-parity note: prod/Worker-only, like the rest of the exploring feature — the dev FastAPI `UserRole` enum has no `exploring`, so its `/admin/users/{id}/role` rejects it with a 400 in dev.
-=======
+
 ## Advisor in Admin Console role management (Task #5)
 
 Admins can now set an existing user's role to Advisor from the Admin Console → Users table (previously only the Exploring queue could assign it, and the Worker rejected `advisor` on this endpoint).
@@ -27,7 +40,6 @@ Admins can now set an existing user's role to Advisor from the Admin Console →
 - **`frontend/src/pages/AdminPage.jsx`** — `RoleDropdown` OPTIONS gains `advisor` (existing disable-when-exploring behavior applies to it automatically); `handleRoleChange` confirm-dialog label map gains `Advisor`; Users-tab count/filter tiles gain an `advisor` bucket.
 - **`cloudflare-worker/src/routes/admin.ts`** — `PATCH /admin/users/:userId/role` accepts `'advisor'` in the role whitelist. The admin promotion/demotion blocks and the exploring-transition guard (409 → use the Exploring queue) are unchanged.
 - **Dev FastAPI** — no change needed: `backend/app/api/routes/admin.py` validates via the `UserRole` enum, which already includes `ADVISOR`.
->>>>>>> 6edf7ed (Task #5: Add Advisor to Admin Console role management)
 
 ## View as: Exploring for admins (Task #14)
 

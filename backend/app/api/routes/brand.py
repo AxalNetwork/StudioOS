@@ -231,10 +231,12 @@ def _clean_slug(v: Any) -> Optional[str]:
 
 
 def _derive_slug_base(name: str) -> str:
+    # str.strip/rstrip instead of `^-+|-+$` regexes: equivalent trims without
+    # the polynomial-backtracking pattern CodeQL flags (js/polynomial-redos
+    # analogue py/polynomial-redos).
     s = re.sub(r"[^a-z0-9]+", "-", (name or "").lower())
-    s = re.sub(r"^-+|-+$", "", s)
-    s = re.sub(r"-{2,}", "-", s)[:44]
-    return re.sub(r"-+$", "", s)
+    s = re.sub(r"-{2,}", "-", s.strip("-"))[:44]
+    return s.rstrip("-")
 
 
 def _ensure_site(session: Session, project_id: int, seed_name: str) -> str:

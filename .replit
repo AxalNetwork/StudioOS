@@ -92,7 +92,6 @@ GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME = "StudioOS"
 
 [userenv.development]
-JWT_SECRET = "410baf0c69c986726f82bf57827c1a49fdf57b80d8fbe18579a71ca4844ca215"
 
 [postMerge]
 path = "scripts/post-merge.sh"

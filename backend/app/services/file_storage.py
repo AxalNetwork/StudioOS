@@ -91,7 +91,18 @@ class LocalStorage:
         # bypassable by sibling dirs like `<root>_evil/...`).
         if not isinstance(key, str) or not key or "\x00" in key:
             raise ValueError("Invalid storage key")
-        p = (self.root / key).resolve()
+        # Explicit segment allowlist: no absolute keys, no backslashes, no
+        # empty/dot/dot-dot segments. Statically recognisable traversal
+        # barrier (CodeQL py/path-injection) on top of the resolve() +
+        # relative_to runtime guard below.
+        if key.startswith("/") or "\\" in key:
+            raise ValueError("Invalid storage key")
+        if any(seg in ("", ".", "..") for seg in key.split("/")):
+            raise ValueError("Invalid storage key")
+        norm = os.path.normpath(os.path.join(str(self.root), key))
+        if not norm.startswith(str(self.root) + os.sep):
+            raise ValueError(f"Refusing path outside root: {key}")
+        p = Path(norm).resolve()
         try:
             p.relative_to(self.root)
         except ValueError as exc:
