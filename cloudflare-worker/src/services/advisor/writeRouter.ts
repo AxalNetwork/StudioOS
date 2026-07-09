@@ -108,6 +108,57 @@ async function ensureInvestorProfile(env: Env, user: User): Promise<boolean> {
 }
 
 /**
+ * Lazy-create / update the explorer_needs row keyed by user_id. Table is
+ * bootstrapped by ensureExploringSchema (services/exploringSchema.ts) —
+ * call that first so a cold DB self-heals instead of failing this INSERT.
+ * `track` (founder/investor/advisor/partner) is written on every call so
+ * it always reflects the bank the caller is currently answering.
+ */
+async function ensureExplorerNeeds(env: Env, userId: number, track: string): Promise<boolean> {
+  try {
+    const { ensureExploringSchema } = await import('../exploringSchema.ts');
+    await ensureExploringSchema(env);
+    await env.DB.prepare(
+      `INSERT INTO explorer_needs (user_id, track) VALUES (?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET track = excluded.track, updated_at = datetime('now')`,
+    ).bind(userId, track).run();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Merge a single track-specific 4th-section answer (funding.*/capital.*/
+ * compensation.*/commercials.* — see banks/explorer.ts) into
+ * explorer_needs.track_extra_json, keyed by the full question_id. Mirrors
+ * mergeUserExtras/mergeProjectExtras's read-merge-write sidecar pattern.
+ */
+async function mergeExplorerTrackExtra(env: Env, userId: number, key: string, value: string): Promise<boolean> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT track_extra_json FROM explorer_needs WHERE user_id = ?`,
+    ).bind(userId).first<{ track_extra_json: string | null }>().catch(() => null);
+    let extras: Record<string, string> = {};
+    if (row?.track_extra_json) {
+      try {
+        const parsed = JSON.parse(row.track_extra_json);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          extras = parsed as Record<string, string>;
+        }
+      } catch { /* malformed — overwrite */ }
+    }
+    extras[key] = value;
+    await env.DB.prepare(
+      `UPDATE explorer_needs SET track_extra_json = ?, updated_at = datetime('now') WHERE user_id = ?`,
+    ).bind(JSON.stringify(extras), userId).run();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Resolve (or lazy-create) the advisor row owned by `user`. Uses the
  * same lookup order as routes/advisors.ts:myAdvisor — users.advisor_id
  * first, then fall back to advisors.user_id. Column names match the
@@ -553,6 +604,43 @@ async function routeFitAnswer(
   if (!saved_to) saved_to = { table: 'field_sources', column: 'evidence_text', id: user.id };
   return { status: 'saved', saved_to };
 }
+
+// ---------------------------------------------------------------------------
+// Explorer bank — Problem/Challenge Discovery (see banks/explorer.ts).
+// Every id is `explorer.<track>.<section>.<leaf>`; CONTEXT/CHALLENGES/
+// TIMELINE leaves are identically named across all 4 tracks, so one shared
+// map handles them regardless of which track the user is on. Only each
+// track's 4th section (funding/capital/compensation/commercials) varies —
+// those leaves fall through to the JSON sidecar (mergeExplorerTrackExtra).
+// ---------------------------------------------------------------------------
+const EXPLORER_ID_RE = /^explorer\.(founder|investor|advisor|partner)\.(.+)$/;
+
+const EXPLORER_SHARED_LEAF_MAP: Record<string, { col: string; serialise?: (v: string) => string | number | null }> = {
+  'context.status': { col: 'current_status' },
+  'context.team': { col: 'team_structure', serialise: (v) => {
+    const lower = v.toLowerCase();
+    if (lower.startsWith('solo') || lower.startsWith('independent') || lower.startsWith('investing solo') || lower.startsWith('advising solo')) return 'solo';
+    if (lower.startsWith('with') || lower.startsWith('part of')) return 'with_team';
+    return v;
+  } },
+  'context.sector': { col: 'sector' },
+  'context.geography': { col: 'geography' },
+  'challenges.top1_depth': { col: 'challenge_1_depth' },
+  'timeline.urgency': { col: 'timeline_urgency' },
+  'timeline.deadline': { col: 'hard_deadline' },
+  'timeline.runway': { col: 'runway_months', serialise: (v) => {
+    const n = Number(v.replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) ? n : null;
+  } },
+};
+
+// Last question id per track — answering it marks needs_assessment_completed.
+const EXPLORER_LAST_QUESTION_ID: Record<string, string> = {
+  founder: 'explorer.founder.funding.lead_investor',
+  investor: 'explorer.investor.capital.source',
+  advisor: 'explorer.advisor.compensation.min_engagement',
+  partner: 'explorer.partner.commercials.min_deal_size',
+};
 
 /**
  * Route a single answer to its persistence target.
@@ -1206,6 +1294,90 @@ export async function routeAnswer(
         return { status: 'failed', error: (e as Error).message };
       }
     }
+  }
+
+  // ---- Explorer bank ---------------------------------------------------
+  // Problem/Challenge Discovery. Four tracks (founder/investor/advisor/
+  // partner — see banks/explorer.ts), selected by the `role_detect.primary`
+  // answer. Every id is `explorer.<track>.<section>.<leaf>`; the section+
+  // leaf shape is shared across all 4 tracks (CONTEXT/CHALLENGES/TIMELINE),
+  // so one leaf→column map below covers all of them. The track's 4th
+  // section (funding/capital/compensation/commercials) varies by track and
+  // has no dedicated columns — those answers land in track_extra_json.
+  //
+  // Answers persist in explorer_needs, keyed ONLY by user_id (never
+  // founder_id/advisor_id/partner_profiles.id/etc.), so the data survives
+  // an admin re-tagging the user from 'exploring' to founder/investor/
+  // advisor/partner (routes/admin_exploring.ts). Nothing in this router or
+  // its callers ever resolves this table by a client-supplied user id —
+  // `user` here is always the requireAuth-verified caller — so an
+  // explorer's answers are visible only to that user and to admin-gated
+  // routes (requireAdmin), never to other users.
+  if (q.persona === 'explorer') {
+    if (user.role !== 'exploring' && user.role !== 'admin') {
+      return { status: 'failed', error: 'explorer questions require exploring role' };
+    }
+    const trackMatch = EXPLORER_ID_RE.exec(questionId);
+    if (!trackMatch) return { status: 'noop' };
+    const [, track, leaf] = trackMatch;
+    if (!(await ensureExplorerNeeds(env, user.id, track))) {
+      return { status: 'failed', error: 'could not initialise explorer_needs row' };
+    }
+
+    // Multi-select challenges split across 3 discrete priority columns
+    // (rather than a JSON array) so the Phase-2 recommendation engine can
+    // filter/index on the top challenge directly.
+    if (leaf === 'challenges.top3') {
+      const picks = parseList(value).slice(0, 3);
+      try {
+        await env.DB.prepare(
+          `UPDATE explorer_needs
+             SET challenge_1 = ?, challenge_2 = ?, challenge_3 = ?, updated_at = datetime('now')
+           WHERE user_id = ?`,
+        ).bind(picks[0] || null, picks[1] || null, picks[2] || null, user.id).run();
+        return {
+          status: 'saved',
+          saved_to: { table: 'explorer_needs', column: 'challenge_1', id: user.id, page_url: '/explorer/profile' },
+        };
+      } catch (e) {
+        return { status: 'failed', error: (e as Error).message };
+      }
+    }
+
+    const sharedLeaf = EXPLORER_SHARED_LEAF_MAP[leaf];
+    if (sharedLeaf) {
+      const dbValue = sharedLeaf.serialise ? sharedLeaf.serialise(value) : value;
+      try {
+        await env.DB.prepare(
+          `UPDATE explorer_needs SET ${sharedLeaf.col} = ?, updated_at = datetime('now') WHERE user_id = ?`,
+        ).bind(dbValue, user.id).run();
+        return {
+          status: 'saved',
+          saved_to: { table: 'explorer_needs', column: sharedLeaf.col, id: user.id, page_url: '/explorer/profile' },
+        };
+      } catch (e) {
+        return { status: 'failed', error: (e as Error).message };
+      }
+    }
+
+    // Track-specific 4th-section leaf (funding.*/capital.*/compensation.*/
+    // commercials.*) — no dedicated column, lands in the JSON sidecar.
+    const ok = await mergeExplorerTrackExtra(env, user.id, questionId, value);
+    if (!ok) return { status: 'failed', error: 'could not persist explorer track answer' };
+    // The last question of each track's bank (see EXPLORER_LAST_QUESTION_ID)
+    // marks the needs-assessment complete, so the admin queue + Phase-2
+    // recommendation engine know this explorer has full signal without
+    // re-deriving it from individual answer counts.
+    if (EXPLORER_LAST_QUESTION_ID[track] === questionId) {
+      try {
+        const { markNeedsAssessmentCompleted } = await import('../exploringSchema.ts');
+        await markNeedsAssessmentCompleted(env, user.id);
+      } catch { /* best-effort */ }
+    }
+    return {
+      status: 'saved',
+      saved_to: { table: 'explorer_needs', column: 'track_extra_json', id: user.id, page_url: '/explorer/profile' },
+    };
   }
 
   // ---- Admin bank -----------------------------------------------------

@@ -24,7 +24,7 @@
  *   - validate?       — client-side validator name
  */
 
-export type Persona = 'founder' | 'investor' | 'advisor' | 'partner' | 'admin' | 'unknown';
+export type Persona = 'founder' | 'investor' | 'advisor' | 'partner' | 'admin' | 'explorer' | 'unknown';
 export type Importance = 'critical' | 'high' | 'normal' | 'low';
 export type ValidateKind =
   | 'short' | 'long' | 'number' | 'select' | 'multi'
@@ -142,6 +142,15 @@ export const BANK_SIZE_TARGETS = {
   fitAdvisor: 29,
   fitCoach: 17, // coach rides in the advisor conversation; skills/values/archetype
                 // stay on the advisor bank so they're never asked twice.
+  // Explorer Problem/Challenge Discovery — one 12-question track per persona
+  // the user might become (founder/investor/advisor/partner), selected by
+  // the `role_detect.primary` answer. Documentation-only (not enforced by
+  // scripts/check-advisor-bank-drift.mjs, same reason as the fit* banks
+  // above: it's a per-track split, not one flat manifest bank).
+  explorerFounder: 12,
+  explorerInvestor: 12,
+  explorerAdvisor: 12,
+  explorerPartner: 12,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -200,6 +209,7 @@ import { INVESTOR_BANK } from './banks/investor.ts';
 import { OPERATING_PARTNER_BANK } from './banks/operatingPartner.ts';
 import { ADVISOR_BANK } from './banks/advisor.ts';
 import { ADMIN_BANK } from './banks/admin.ts';
+import { EXPLORER_BANK } from './banks/explorer.ts';
 // Task #19 — Best-Fit fit banks. Registered here so bankFor/questionById/
 // fitMeasuresIndex see them, but kept OUT of banks.manifest.json (fit answers
 // are routed by a generic fit.* branch in writeRouter, not per-id).
@@ -211,7 +221,7 @@ import { FIT_COACH_BANK } from './banks/fit_coach.ts';
 
 export type BankName =
   | 'newFounderSpinout' | 'existingFounder'
-  | 'investor' | 'operatingPartner' | 'advisor' | 'admin'
+  | 'investor' | 'operatingPartner' | 'advisor' | 'admin' | 'explorer'
   | 'fitFounder' | 'fitInvestor' | 'fitPartner' | 'fitAdvisor' | 'fitCoach';
 
 export const BANKS: Record<BankName, Question[]> = {
@@ -221,6 +231,7 @@ export const BANKS: Record<BankName, Question[]> = {
   operatingPartner:  OPERATING_PARTNER_BANK,
   advisor:            ADVISOR_BANK,
   admin:             ADMIN_BANK,
+  explorer:          EXPLORER_BANK,
   fitFounder:        FIT_FOUNDER_BANK,
   fitInvestor:       FIT_INVESTOR_BANK,
   fitPartner:        FIT_PARTNER_BANK,
@@ -247,6 +258,7 @@ export function bankFor(persona: Persona, ctx?: { spinoutLabActive?: boolean }):
     case 'partner':  return [...BANKS.operatingPartner, ...BANKS.fitPartner];
     case 'advisor':   return [...BANKS.advisor, ...BANKS.fitAdvisor, ...BANKS.fitCoach];
     case 'admin':    return BANKS.admin;
+    case 'explorer': return BANKS.explorer;
     default:         return [];
   }
 }

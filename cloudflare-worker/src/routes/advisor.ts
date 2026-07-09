@@ -62,6 +62,14 @@ import {
   type Persona,
   type Question,
 } from '../services/advisor/questionBank';
+// Task: Explorer Problem/Challenge Discovery. While the user remains in the
+// 'exploring' holding role, they get ONE of 4 track-specific needs-discovery
+// banks — founder/investor/advisor/partner — chosen by their
+// `role_detect.primary` answer (persisted as user_role_review.suggested_role,
+// overlaid onto `role` by applyExploringOverlay() below). Read `actual_role`
+// (not `role`) to detect the exploring state, since `role` may already be
+// overlaid to the suggested persona for bank-selection purposes.
+import { explorerBankForTrack } from '../services/advisor/banks/explorer';
 // Task #19 — Best-Fit. Recompute the user's persona fit scores after a fit
 // answer lands (the raw score is persisted to field_sources below).
 import { recomputeUserFit } from '../services/axalFit';
@@ -267,6 +275,14 @@ async function loadAdvisorGate(env: Env, user: User): Promise<AdvisorGate> {
   return { spinoutLabActive: active, week, completedMilestones: completed, tiers };
 }
 
+// Task: Explorer Problem/Challenge Discovery. True while the user's REAL
+// role is 'exploring', regardless of whether applyExploringOverlay() has
+// already swapped `role` to a suggested persona for bank-selection. Check
+// `actual_role` (never `role`) — `role` is not trustworthy here.
+function isExploringUser(user: User): boolean {
+  return String((user as User & { actual_role?: string }).actual_role || '').toLowerCase() === 'exploring';
+}
+
 // Build the working bank.
 //
 // AC-1 contract: "persona detection runs first if `users.role` is
@@ -282,9 +298,18 @@ async function loadAdvisorGate(env: Env, user: User): Promise<AdvisorGate> {
 // /answer call re-reads the user, sees the flipped role, and pivots
 // straight into the persona bank for the next question. Existing
 // role-known users start directly in the persona bank from /start.
+//
+// Task: Explorer Problem/Challenge Discovery — once role_detect.primary
+// picks a track (persona overlaid to founder/investor/advisor/partner),
+// a still-exploring user gets ONLY that track's Explorer needs-discovery
+// bank (12 questions) — not the deep persona bank, which is reserved for
+// users an admin has actually confirmed into that role. `unknown` persona
+// (no track picked yet) still falls through to ROLE_DETECTOR either way,
+// matching "choose one of the four first".
 function workingBankFor(user: User, gate?: AdvisorGate): Question[] {
   const persona = personaFor(user);
   if (persona === 'unknown') return ROLE_DETECTOR;
+  if (isExploringUser(user)) return explorerBankForTrack(persona);
   return bankFor(persona, { spinoutLabActive: !!gate?.spinoutLabActive });
 }
 
@@ -311,7 +336,12 @@ function selectBank(
   const detectorPending = detectorAnswered > 0 && detectorAnswered < DETECTOR_IDS.length;
   if (persona === 'unknown') return { visible: ROLE_DETECTOR, deferred: [] };
 
-  const personaBank = bankFor(persona, { spinoutLabActive: gate.spinoutLabActive });
+  // Task: Explorer Problem/Challenge Discovery — a still-exploring user
+  // gets ONLY their track's Explorer bank, not the deep persona bank (see
+  // workingBankFor above for the full rationale).
+  const personaBank = isExploringUser(user)
+    ? explorerBankForTrack(persona)
+    : bankFor(persona, { spinoutLabActive: gate.spinoutLabActive });
   // `focus` accepts either a section label (BUILD/CAPITAL/LEGAL/…)
   // or a page_target path (e.g. `/build/discovery`). Section labels
   // are uppercase ASCII; anything else is treated as a page.
