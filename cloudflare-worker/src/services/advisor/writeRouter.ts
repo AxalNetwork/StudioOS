@@ -129,8 +129,8 @@ async function ensureExplorerNeeds(env: Env, userId: number, track: string): Pro
 }
 
 /**
- * Merge a single track-specific 4th-section answer (funding.*/capital.*/
- * compensation.*/commercials.* — see banks/explorer.ts) into
+ * Merge a single track-specific 4th-section answer (funding, capital,
+ * compensation, or commercials — see banks/explorer.ts) into
  * explorer_needs.track_extra_json, keyed by the full question_id. Mirrors
  * mergeUserExtras/mergeProjectExtras's read-merge-write sidecar pattern.
  */
@@ -1360,8 +1360,8 @@ export async function routeAnswer(
       }
     }
 
-    // Track-specific 4th-section leaf (funding.*/capital.*/compensation.*/
-    // commercials.*) — no dedicated column, lands in the JSON sidecar.
+    // Track-specific 4th-section leaf (funding, capital, compensation, or
+    // commercials) — no dedicated column, lands in the JSON sidecar.
     const ok = await mergeExplorerTrackExtra(env, user.id, questionId, value);
     if (!ok) return { status: 'failed', error: 'could not persist explorer track answer' };
     // The last question of each track's bank (see EXPLORER_LAST_QUESTION_ID)
