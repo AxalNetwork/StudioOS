@@ -1,0 +1,150 @@
+
+Select alert #3955
+Insecure randomness
+High
+#3955 opened 16 hours ago • Detected by CodeQL in frontend/.../lib/funnel.js :122
+main
+
+Select alert #3954
+Uncontrolled data used in path expression
+High
+#3954 opened 16 hours ago • Detected by CodeQL in backend/.../services/file_storage.py :94
+main
+
+Select alert #3920
+Polynomial regular expression used on uncontrolled data
+High
+#3920 opened yesterday • Detected by CodeQL in backend/.../routes/brand.py :237
+main
+
+Select alert #3919
+Polynomial regular expression used on uncontrolled data
+High
+#3919 opened yesterday • Detected by CodeQL in backend/.../routes/brand.py :235
+main
+
+Select alert #3956
+Semgrep Finding: generic.secrets.security.detected-generic-secret.detected-generic-secret
+Error
+#3956 opened 16 hours ago • Detected by Semgrep OSS in .replit :95
+main
+
+Select alert #3921
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3921 opened yesterday • Detected by Semgrep OSS in backend/.../models/migrations.py :1006
+main
+
+Select alert #3918
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3918 opened 2 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :2201
+main
+
+Select alert #3917
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3917 opened 2 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :546
+main
+
+Select alert #3916
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3916 opened 2 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :530
+main
+
+Select alert #3915
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3915 opened 2 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :484
+main
+
+Select alert #3914
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3914 opened 2 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :262
+main
+
+Select alert #3913
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3913 opened 2 days ago • Detected by Semgrep OSS in backend/.../routes/progress.py :325
+main
+
+Select alert #3912
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3912 opened 2 days ago • Detected by Semgrep OSS in backend/.../routes/progress.py :124
+main
+
+Select alert #3953
+Unused variable, import, function or class
+Note
+#3953 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :178
+main
+
+Select alert #3952
+Unused variable, import, function or class
+Note
+#3952 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :169
+main
+
+Select alert #3951
+Unused variable, import, function or class
+Note
+#3951 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :114
+main
+
+Select alert #3950
+Unused variable, import, function or class
+Note
+#3950 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :111
+main
+
+Select alert #3949
+Unused variable, import, function or class
+Note
+#3949 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :111
+main
+
+Select alert #3948
+Unused variable, import, function or class
+Note
+#3948 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :110
+main
+
+Select alert #3947
+Unused variable, import, function or class
+Note
+#3947 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :110
+main
+
+Select alert #3946
+Unused variable, import, function or class
+Note
+#3946 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :109
+main
+
+Select alert #3945
+Unused variable, import, function or class
+Note
+#3945 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :109
+main
+
+Select alert #3944
+Unused variable, import, function or class
+Note
+#3944 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :108
+main
+
+Select alert #3943
+Unused variable, import, function or class
+Note
+#3943 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :107
+main
+
+Select alert #3942
+Unused variable, import, function or class
+Note
+#3942 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :107
+main
