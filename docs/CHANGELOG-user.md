@@ -5,6 +5,24 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your account starts in "Exploring" the moment you sign up
+
+You now begin in the Exploring space as soon as you create your account — no need to finish the welcome chat first. The path you picked when signing up (founder, investor, or partner) is noted for our team right away, so your review can start sooner. Admins can also move any member back into Exploring for a fresh review; moving someone out of Exploring still happens through the Exploring Users review after a signed membership agreement.
+
+---
+
+## Advisors can be assigned from the Admin Console
+
+The role menu in the Admin Console's Users table now includes **Advisor**, alongside Founder, Partner, Investor, and Exploring — so admins can make someone an advisor directly, without a workaround. The Users page also gained an **Advisors** tile, so you can see how many advisors there are and filter to just them. Members still in the "Exploring" stage are unchanged: their final role is still assigned from the Exploring Users page after a signed agreement.
+
+---
+
+## Admins can now preview the "Exploring" experience
+
+The **View as** menu in the admin bar now includes **Exploring**. Pick it to see the platform exactly as a newly onboarded member does while they wait for their role — the same starting dashboard, the same slim menu, and the same limits on where they can go. Switch back to **View as: Admin** any time. Reviewing and approving individual exploring members still happens in the Exploring Users page.
+
+---
+
 ## A friendlier start: explore first, commit later
 
 Finishing the welcome chat no longer locks you into an account type right away. Instead, you start in a new "Exploring" space while our team reviews your profile.
