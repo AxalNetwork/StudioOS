@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Fixed: the Personal Advisor no longer errors during Exploring onboarding
+
+Members in the Exploring stage who answered the Personal Advisor's opening questions (like "Which best describes how you'll use StudioOS?") were hitting an error instead of moving on. That's fixed — your answer is saved, noted for the Axal team's role review, and the conversation continues normally.
+
+---
+
 ## Fixed: changing a member's role to Exploring, Advisor, or Investor no longer fails
 
 Admins hitting an error when moving a member into Exploring (or Advisor/Investor) from the Admin Console's Users table will find it works now. A behind-the-scenes database update that these role changes depend on had been quietly failing in production; it has been repaired and applied, with no member data affected.

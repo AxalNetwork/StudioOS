@@ -11,6 +11,13 @@
 > building it.
 >
 
+## Explorer onboarding deadlock fixed — writeAnswer gate now accepts the 'unknown' persona
+
+Exploring users answering the Personal Advisor's role-detector question ("Which best describes how you'll use StudioOS?" → "I am building a startup") got `Error: writeAnswer not available for unknown`. Exploring users without a reviewed/suggested role map to persona `unknown` (`personaFor()` in `cloudflare-worker/src/routes/advisor.ts`), which pins them to the 3-question ROLE_DETECTOR bank — but the L2 tool gate's `TOOL_PERSONA_ALLOWLIST` (`services/advisor/guardrails.ts`) did not include `unknown` for `writeAnswer`, so the very detector answer that escapes the unknown state was rejected with `persona_mismatch` (403) before `routeAnswer` could write `user_role_review.suggested_role`. Onboarding deadlocked.
+
+- Fix: `'unknown'` added to the `writeAnswer` allowlist only. No other tool accepts it; scoped writes stay guarded — `selectBank()` pins unknown users to the detector bank, the `/answer` visible-bank eligibility gate 409s everything else, and every persona bank in `writeRouter.ts` re-checks the caller's role before writing.
+- Tests (`cloudflare-worker/test/advisor.scenarios.test.ts`): regression pinning `writeAnswer` OK for persona `unknown` + privileged tools (scoreDeal/draftMemo/findInvestor/listMyTasks) still `persona_mismatch` for it. 20/20 pass; worker tsc clean.
+
 ## Prod role-change 500 fixed — users role-CHECK rebuild no longer aborted by views or FK enforcement
 
 Setting any user's role to Exploring/Advisor/Investor from the Admin Console 500'd on prod: the D1 `users` table still carried the legacy `CHECK (role IN ('admin','founder','partner'))` because every lazy role-CHECK rebuild in `cloudflare-worker/src/util/usersRoleRebuild.ts` had been silently rolling back on boot since the roles shipped (the `[boot] … rebuild failed/skipped` warns on every request). Two stacked causes, both fixed by re-sequencing the rebuild batch:
