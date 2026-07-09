@@ -60,6 +60,7 @@ function RoleDropdown({ user, onRoleChange }) {
     { value: 'founder', label: 'Founder' },
     { value: 'partner', label: 'Partner' },
     { value: 'investor', label: 'Investor' },
+    { value: 'advisor', label: 'Advisor' },
     // Task #9 follow-up — lets an admin send any user (e.g. a partner) back
     // into the exploring holding state for re-review. The reverse direction
     // (exploring → founder/partner/investor) is intentionally NOT offered
@@ -409,7 +410,7 @@ export default function AdminPage({ onImpersonate }) {
   };
   const handleRoleChange = async (user, newRole) => {
     if (newRole === user.role) return;
-    const labels = { admin: 'Admin', founder: 'Founder', partner: 'Partner', investor: 'Investor', exploring: 'Exploring' };
+    const labels = { admin: 'Admin', founder: 'Founder', partner: 'Partner', investor: 'Investor', advisor: 'Advisor', exploring: 'Exploring' };
     const ok = window.confirm(
       `Change ${user.name || user.email}'s role from ${labels[user.role] || user.role} ` +
       `to ${labels[newRole] || newRole}?\n\nThis takes effect immediately and is logged in their activity history.`
@@ -425,6 +426,7 @@ export default function AdminPage({ onImpersonate }) {
     founder: users.filter(u => u.role === 'founder').length,
     partner: users.filter(u => u.role === 'partner').length,
     investor: users.filter(u => u.role === 'investor').length,
+    advisor: users.filter(u => u.role === 'advisor').length,
     // Task #9 follow-up — new signups land here pending admin review, so
     // this is often the largest bucket now; surface it as its own filter.
     exploring: users.filter(u => u.role === 'exploring').length,

@@ -11,6 +11,12 @@ You now begin in the Exploring space as soon as you create your account — no n
 
 ---
 
+## Advisors can be assigned from the Admin Console
+
+The role menu in the Admin Console's Users table now includes **Advisor**, alongside Founder, Partner, Investor, and Exploring — so admins can make someone an advisor directly, without a workaround. The Users page also gained an **Advisors** tile, so you can see how many advisors there are and filter to just them. Members still in the "Exploring" stage are unchanged: their final role is still assigned from the Exploring Users page after a signed agreement.
+
+---
+
 ## Admins can now preview the "Exploring" experience
 
 The **View as** menu in the admin bar now includes **Exploring**. Pick it to see the platform exactly as a newly onboarded member does while they wait for their role — the same starting dashboard, the same slim menu, and the same limits on where they can go. Switch back to **View as: Admin** any time. Reviewing and approving individual exploring members still happens in the Exploring Users page.

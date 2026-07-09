@@ -1045,7 +1045,7 @@ admin.patch('/users/:userId/role', async (c) => {
   // Task #9 follow-up — 'exploring' is a valid destination role so admins
   // can move a user (e.g. a partner) back into the holding state for
   // re-review, from the same dropdown used for founder/partner/investor.
-  if (!role || !['admin', 'founder', 'partner', 'investor', 'exploring'].includes(role)) {
+  if (!role || !['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'].includes(role)) {
     return c.json({ error: `Invalid role: ${role}` }, 400);
   }
   // Security policy: admin promotion is NOT allowed via this endpoint.

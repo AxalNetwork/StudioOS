@@ -10,6 +10,7 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+<<<<<<< HEAD
 ## New signups land in Exploring at signup; admins can move users into it (Task #9 follow-up, PR #141)
 
 Fresh accounts now hold in `role='exploring'` from the moment they exist — not only after the onboarding chat — and the generic admin role dropdown gains 'exploring' as a destination.
@@ -18,6 +19,15 @@ Fresh accounts now hold in `role='exploring'` from the moment they exist — not
 - **Generic role endpoint (`routes/admin.ts` PATCH `/admin/users/:id/role`)** — `'exploring'` is now an accepted destination, so an admin can send any user (e.g. a partner) back into the holding state for re-review; moving INTO exploring also resets the stale `user_role_review` assignment fields. Moving OUT of exploring still requires the binding-agreement-gated `/api/admin/exploring/users/:id/assign-role` flow — the generic endpoint rejects that direction with a 409 (`code: 'use_exploring_assign_role'`).
 - **Frontend (`pages/AdminPage.jsx` RoleDropdown)** — "Exploring" added to the Users-table role dropdown; for users already in exploring, the founder/partner/investor options are disabled client-side with a tooltip pointing at the Exploring Users queue, mirroring the 409.
 - Dev-parity note: prod/Worker-only, like the rest of the exploring feature — the dev FastAPI `UserRole` enum has no `exploring`, so its `/admin/users/{id}/role` rejects it with a 400 in dev.
+=======
+## Advisor in Admin Console role management (Task #5)
+
+Admins can now set an existing user's role to Advisor from the Admin Console → Users table (previously only the Exploring queue could assign it, and the Worker rejected `advisor` on this endpoint).
+
+- **`frontend/src/pages/AdminPage.jsx`** — `RoleDropdown` OPTIONS gains `advisor` (existing disable-when-exploring behavior applies to it automatically); `handleRoleChange` confirm-dialog label map gains `Advisor`; Users-tab count/filter tiles gain an `advisor` bucket.
+- **`cloudflare-worker/src/routes/admin.ts`** — `PATCH /admin/users/:userId/role` accepts `'advisor'` in the role whitelist. The admin promotion/demotion blocks and the exploring-transition guard (409 → use the Exploring queue) are unchanged.
+- **Dev FastAPI** — no change needed: `backend/app/api/routes/admin.py` validates via the `UserRole` enum, which already includes `ADVISOR`.
+>>>>>>> 6edf7ed (Task #5: Add Advisor to Admin Console role management)
 
 ## View as: Exploring for admins (Task #14)
 
