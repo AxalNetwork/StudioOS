@@ -1,0 +1,26 @@
+#2 - Branded Multi-Page Sites & Templates
+What & Why
+Roadmap item #5 from the Founder UX audit. Each project can only have a single landing page (landing_pages.project_id is UNIQUE), slugs are random {name}-{rand6} and non-editable, there is no branded multi-page URL scheme, and there is no way to save a design as a reusable template. Give founders editable branded URLs, multiple pages per venture, and saved templates.
+Done looks like
+* A venture can have multiple published pages, not just one (the single-page-per-project limit is gone).
+* Pages are served under a branded, multi-page URL scheme (e.g. /p/{startup}/{page}).
+* Founders can set editable, human-readable startup and page slugs instead of random suffixes.
+* Founders can save a page design as a reusable custom template and start a new page from a saved template.
+Out of scope
+* Redesigning the landing-page builder's editing UX beyond what these features require.
+* Investor-facing pages.
+Steps
+1. Multi-page data model — Remove the one-page-per-project constraint and add editable startup and page slug fields, backed by a new migration.
+2. Branded routing — Serve pages under the branded multi-page URL scheme and resolve them by startup + page slug.
+3. Editable slugs — Let founders set and edit human-readable slugs in the builder instead of random ones, with collision handling.
+4. Saved templates — Add a custom-templates store plus save-as-template and start-from-template in the builder.
+Architectural notes:
+* Backend lives in the Cloudflare Worker (worker-route-first); keep slug resolution and template storage canonical there.
+* Any schema change is a new cloudflare-worker/sql/migrations/NNN_*.sql at the next free number (currently 143); renumber on collision before merge.
+* The new public route is additive in App.jsx; keep the edit localized to avoid conflicts with other tasks touching routing.
+Relevant files
+* cloudflare-worker/src/routes/brand.ts:30-90
+* frontend/src/pages/BrandBuilderPage.jsx
+* frontend/src/pages/LandingPage.jsx
+* frontend/src/App.jsx:1242-1252
+* cloudflare-worker/sql/migrations/142_ic_dd_journal_links.sql
