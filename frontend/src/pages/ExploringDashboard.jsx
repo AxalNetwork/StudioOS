@@ -27,7 +27,7 @@ export default function ExploringDashboard() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
             Welcome, {firstName}
           </h1>
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
             <Compass size={12} /> Exploring
           </span>
         </div>

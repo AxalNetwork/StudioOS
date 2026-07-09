@@ -10,6 +10,14 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## View as: Exploring for admins (Task #14)
+
+The admin View-as menu now includes the Exploring holding state so admins can preview that experience end-to-end without impersonating a specific user.
+
+- **`App.jsx` (PortalSwitcher)** — dropped the v1 `filter(role !== 'exploring')` from the View-as dropdown; all six ROLE_LABELS entries now render. No other wiring needed: `ROLE_DEFAULT_PATH.exploring = '/exploring'` routes the switch, `RoleGuard` already computes `effectiveRole` from `viewMode` for admins (disallowed routes bounce to `/exploring`, exactly what a real exploring user gets), and `sidebarConfig.js` has the explicit lean `exploring` group. The `/exploring` route guard already admitted `['admin','exploring']`.
+- **`ExploringDashboard.jsx`** — the "Exploring" badge gains `dark:` variants (was light-only). Its widgets (PersonalAdvisor, ProfileFitSection) are self-contained and already render for admin viewers (same mounts as Dashboard.jsx), so no hardening was needed.
+- Per-user review is unchanged — admins still inspect/assign real exploring users at `/admin/exploring`.
+
 ## "Exploring" holding role + admin role-assignment queue (Task #9)
 
 The onboarding chatbot no longer auto-promotes users to their inferred role. Chat completion now lands the user in a new `role='exploring'` holding state; the inferred persona is stored as a **suggestion** and an admin turns it into a real role only after a signed binding agreement.

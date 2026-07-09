@@ -545,10 +545,12 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
                 onClick={() => setOpen(false)}
               />
               <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[160px] z-50">
-                {/* Task #9 — 'exploring' is a holding state, not a persona an
-                    admin needs to preview (v1). Filter it from View-as; admins
-                    inspect exploring users via /admin/exploring instead. */}
-                {Object.entries(ROLE_LABELS).filter(([role]) => role !== 'exploring').map(([role, label]) => (
+                {/* Task #14 — 'exploring' is offered in View-as (it was filtered
+                    out in v1) so admins can preview the holding-state experience
+                    end-to-end: /exploring dashboard, the lean exploring sidebar,
+                    and RoleGuard bounces on non-exploring routes. Per-user
+                    review still lives at /admin/exploring. */}
+                {Object.entries(ROLE_LABELS).map(([role, label]) => (
                   <button
                     key={role}
                     onClick={() => { onViewModeChange(role); setOpen(false); }}

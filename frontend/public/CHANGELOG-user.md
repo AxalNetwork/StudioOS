@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Admins can now preview the "Exploring" experience
+
+The **View as** menu in the admin bar now includes **Exploring**. Pick it to see the platform exactly as a newly onboarded member does while they wait for their role — the same starting dashboard, the same slim menu, and the same limits on where they can go. Switch back to **View as: Admin** any time. Reviewing and approving individual exploring members still happens in the Exploring Users page.
+
+---
+
 ## A friendlier start: explore first, commit later
 
 Finishing the welcome chat no longer locks you into an account type right away. Instead, you start in a new "Exploring" space while our team reviews your profile.
