@@ -151,6 +151,14 @@ async function readJson(c: any): Promise<{ ok: boolean; body: any; res: any }> {
 // here so existing call sites (register/verify/login/referral) keep
 // working unchanged.
 import { hashEmail } from '../util/hashEmail';
+// Task #9 follow-up — every fresh signup now lands directly in the
+// 'exploring' holding state instead of the lane role (founder/partner/
+// investor) it used to get. ensureExploringSchema guarantees the
+// users.role CHECK admits 'exploring' before the INSERT; upsertSuggestedRole
+// records the marketing lane the visitor picked so the admin review queue
+// (routes/admin_exploring.ts) shows a suggestion immediately, before the
+// onboarding chatbot even runs.
+import { ensureExploringSchema, upsertSuggestedRole } from '../services/exploringSchema';
 
 async function checkRateLimit(env: Env, key: string, max: number, windowSec: number): Promise<boolean> {
   // Fail-CLOSED on any KV error (audit M1). These limiters guard sensitive
@@ -281,7 +289,13 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
       await sql.end();
       return c.json({ error: 'Email already registered' }, 409);
     }
-    await sql`UPDATE users SET name = ${name}, role = ${role || 'partner'} WHERE id = ${user.id}`;
+    // Task #9 follow-up — an incomplete signup retrying /register lands
+    // in 'exploring' just like a brand-new account (see the fresh-INSERT
+    // branch below). The lane the visitor picked is recorded as the
+    // suggested role for the admin review queue, never applied directly.
+    await ensureExploringSchema(c.env);
+    await sql`UPDATE users SET name = ${name}, role = 'exploring' WHERE id = ${user.id}`;
+    try { await upsertSuggestedRole(c.env, user.id, role || null); } catch (e) { console.error('[auth] suggested-role upsert failed', e); }
     await sql.end();
     // Phase 0.1: investors embed under their own entity bucket; partners stay legacy.
     try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: role === 'investor' ? 'investor' : 'partner', id: user.id }); } catch {}
@@ -304,7 +318,15 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
     });
   }
 
-  const [user] = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${name}, ${role || 'partner'}, false) RETURNING *`;
+  // Task #9 follow-up — every fresh signup lands directly in 'exploring'
+  // (not the lane role) so it surfaces in the admin review queue from the
+  // moment the account exists. The chosen lane (founder/partner/investor)
+  // is preserved as the suggested_role via upsertSuggestedRole below, and
+  // is still used further down to seed lane-appropriate trust obligations
+  // and (for the investor lane) the trial window.
+  await ensureExploringSchema(c.env);
+  const [user] = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${name}, 'exploring', false) RETURNING *`;
+  try { await upsertSuggestedRole(c.env, user.id, role || null); } catch (e) { console.error('[auth] suggested-role upsert failed', e); }
   // Task #6 (W-1) — investor signups get a 14-day Professional trial.
   // Cron in index.ts at 04:25 UTC downgrades expired trials to free.
   if (role === 'investor') {
@@ -336,7 +358,7 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   // user_id FK is the canonical link back to the account row when joins
   // are needed for support/analytics.
   const regEmailHash = await hashEmail(email);
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_registered', ${`registered as ${role || 'partner'} — pending email verification (email_hash=${regEmailHash})`}, ${regEmailHash}, ${user.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_registered', ${`registered (lane=${role || 'partner'}) — holding in exploring pending admin review — pending email verification (email_hash=${regEmailHash})`}, ${regEmailHash}, ${user.id})`;
   // Task #66 — seed the onboarding-chatbot gate row. The frontend
   // RequireAuth guard pins this user to /onboarding/chat until the
   // chatbot save flips completed_at. INSERT OR IGNORE so this is safe
@@ -1018,9 +1040,20 @@ auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in 
         user.email_verified = true;
       }
     } else {
-      const inserted = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${email.split('@')[0]}, 'founder', true) RETURNING *`;
+      // Task #9 follow-up — magic-link is also a first-time-signup surface
+      // (LoginPage's "Email me a sign-in link"), so it must land brand-new
+      // accounts in 'exploring' and route them through the onboarding
+      // chatbot + admin review, exactly like /register and Google.
+      await ensureExploringSchema(c.env);
+      const inserted = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${email.split('@')[0]}, 'exploring', true) RETURNING *`;
       user = inserted[0];
       newSignup = true;
+      try {
+        await c.env.DB.prepare(
+          `INSERT OR IGNORE INTO onboarding_progress (user_id, flow, step, total_steps, completed_at)
+           VALUES (?, 'chat', 0, 0, NULL)`
+        ).bind(user.id).run();
+      } catch (e) { console.error('[AUTH:magic-verify] onboarding_progress seed failed', e); }
     }
 
     const eh = await hashEmail(user.email);
