@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Your account starts in "Exploring" the moment you sign up
+
+You now begin in the Exploring space as soon as you create your account — no need to finish the welcome chat first. The path you picked when signing up (founder, investor, or partner) is noted for our team right away, so your review can start sooner. Admins can also move any member back into Exploring for a fresh review; moving someone out of Exploring still happens through the Exploring Users review after a signed membership agreement.
+
+---
+
 ## Admins can now preview the "Exploring" experience
 
 The **View as** menu in the admin bar now includes **Exploring**. Pick it to see the platform exactly as a newly onboarded member does while they wait for their role — the same starting dashboard, the same slim menu, and the same limits on where they can go. Switch back to **View as: Admin** any time. Reviewing and approving individual exploring members still happens in the Exploring Users page.

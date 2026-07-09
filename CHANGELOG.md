@@ -10,6 +10,15 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+## New signups land in Exploring at signup; admins can move users into it (Task #9 follow-up, PR #141)
+
+Fresh accounts now hold in `role='exploring'` from the moment they exist — not only after the onboarding chat — and the generic admin role dropdown gains 'exploring' as a destination.
+
+- **Signup surfaces (`cloudflare-worker/src/routes/auth.ts` `/register` fresh-INSERT + incomplete-retry UPDATE, `/magic/verify` find-or-create; `routes/auth_google.ts` fresh Google signup)** — new users INSERT with `role='exploring'` instead of the marketing-lane role (founder/partner/investor). On `/register` (the only surface where a lane is chosen) the lane is preserved via `upsertSuggestedRole()` into `user_role_review.suggested_role`, so the Exploring Users queue shows the suggestion immediately, before the chatbot runs; the lane also still seeds lane-appropriate trust obligations and the investor 14-day trial. Known exception: the deck-share self-serve signup (`routes/deck_share_actions.ts` POST `/share/:token/signup`) still creates accounts with the requested role directly, outside the exploring queue.
+- **Generic role endpoint (`routes/admin.ts` PATCH `/admin/users/:id/role`)** — `'exploring'` is now an accepted destination, so an admin can send any user (e.g. a partner) back into the holding state for re-review; moving INTO exploring also resets the stale `user_role_review` assignment fields. Moving OUT of exploring still requires the binding-agreement-gated `/api/admin/exploring/users/:id/assign-role` flow — the generic endpoint rejects that direction with a 409 (`code: 'use_exploring_assign_role'`).
+- **Frontend (`pages/AdminPage.jsx` RoleDropdown)** — "Exploring" added to the Users-table role dropdown; for users already in exploring, the founder/partner/investor options are disabled client-side with a tooltip pointing at the Exploring Users queue, mirroring the 409.
+- Dev-parity note: prod/Worker-only, like the rest of the exploring feature — the dev FastAPI `UserRole` enum has no `exploring`, so its `/admin/users/{id}/role` rejects it with a 400 in dev.
+
 ## View as: Exploring for admins (Task #14)
 
 The admin View-as menu now includes the Exploring holding state so admins can preview that experience end-to-end without impersonating a specific user.
