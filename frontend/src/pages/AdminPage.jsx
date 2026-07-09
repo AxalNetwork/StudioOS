@@ -41,6 +41,8 @@ const ROLE_BADGES = {
   partner: 'bg-emerald-100 text-emerald-700',
   investor: 'bg-amber-100 text-amber-700',
   advisor: 'bg-sky-100 text-sky-700',
+  // Task #9 follow-up — new signups hold here pending admin review.
+  exploring: 'bg-sky-100 text-sky-700',
 };
 
 function RoleDropdown({ user, onRoleChange }) {
@@ -58,8 +60,15 @@ function RoleDropdown({ user, onRoleChange }) {
     { value: 'founder', label: 'Founder' },
     { value: 'partner', label: 'Partner' },
     { value: 'investor', label: 'Investor' },
+    // Task #9 follow-up — lets an admin send any user (e.g. a partner) back
+    // into the exploring holding state for re-review. The reverse direction
+    // (exploring → founder/partner/investor) is intentionally NOT offered
+    // here — that transition requires a signed binding agreement and must
+    // go through the Exploring Users queue (/admin/exploring).
+    { value: 'exploring', label: 'Exploring' },
   ];
   const currentLabel = OPTIONS.find(o => o.value === user.role)?.label ?? user.role;
+  const isExploring = user.role === 'exploring';
 
   return (
     <div ref={ref} className="relative inline-block">
@@ -81,24 +90,39 @@ function RoleDropdown({ user, onRoleChange }) {
           aria-label="Select role"
           className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-50 min-w-[120px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg py-1 overflow-hidden"
         >
-          {OPTIONS.map(opt => (
-            <li
-              key={opt.value}
-              role="option"
-              aria-selected={user.role === opt.value}
-              onClick={(e) => { e.stopPropagation(); setOpen(false); onRoleChange(user, opt.value); }}
-              className={`flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer select-none transition-colors ${
-                user.role === opt.value
-                  ? `${ROLE_BADGES[opt.value] || 'bg-gray-100 text-gray-700'} font-semibold`
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium'
-              }`}
-            >
-              <span className="w-[11px] shrink-0">
-                {user.role === opt.value && <Check size={11} />}
-              </span>
-              {opt.label}
-            </li>
-          ))}
+          {OPTIONS.map(opt => {
+            // Moving OUT of exploring requires a signed binding agreement
+            // and must go through the Exploring Users queue — disable those
+            // options here rather than let the user hit a 409 on click.
+            const disabled = isExploring && opt.value !== 'exploring';
+            return (
+              <li
+                key={opt.value}
+                role="option"
+                aria-selected={user.role === opt.value}
+                aria-disabled={disabled}
+                title={disabled ? 'Assign the final role from the Exploring Users queue (requires a signed binding agreement)' : undefined}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (disabled) return;
+                  setOpen(false);
+                  onRoleChange(user, opt.value);
+                }}
+                className={`flex items-center gap-2 px-3 py-1.5 text-xs select-none transition-colors ${
+                  disabled
+                    ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                    : user.role === opt.value
+                      ? `${ROLE_BADGES[opt.value] || 'bg-gray-100 text-gray-700'} font-semibold cursor-pointer`
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium cursor-pointer'
+                }`}
+              >
+                <span className="w-[11px] shrink-0">
+                  {user.role === opt.value && <Check size={11} />}
+                </span>
+                {opt.label}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -385,7 +409,7 @@ export default function AdminPage({ onImpersonate }) {
   };
   const handleRoleChange = async (user, newRole) => {
     if (newRole === user.role) return;
-    const labels = { admin: 'Admin', founder: 'Founder', partner: 'Partner', investor: 'Investor' };
+    const labels = { admin: 'Admin', founder: 'Founder', partner: 'Partner', investor: 'Investor', exploring: 'Exploring' };
     const ok = window.confirm(
       `Change ${user.name || user.email}'s role from ${labels[user.role] || user.role} ` +
       `to ${labels[newRole] || newRole}?\n\nThis takes effect immediately and is logged in their activity history.`
@@ -401,6 +425,9 @@ export default function AdminPage({ onImpersonate }) {
     founder: users.filter(u => u.role === 'founder').length,
     partner: users.filter(u => u.role === 'partner').length,
     investor: users.filter(u => u.role === 'investor').length,
+    // Task #9 follow-up — new signups land here pending admin review, so
+    // this is often the largest bucket now; surface it as its own filter.
+    exploring: users.filter(u => u.role === 'exploring').length,
   };
   const pendingProfiles = profiles.filter(p => p.admin_status === 'pending').length;
 
@@ -445,7 +472,7 @@ export default function AdminPage({ onImpersonate }) {
                   filter === role ? 'bg-violet-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-700 hover:border-violet-300'
                 }`}>
                 <div className="text-lg font-bold">{count}</div>
-                <div className="capitalize">{role === 'all' ? 'All Users' : `${role}s`}</div>
+                <div className="capitalize">{role === 'all' ? 'All Users' : role === 'exploring' ? 'Exploring' : `${role}s`}</div>
               </button>
             ))}
           </div>

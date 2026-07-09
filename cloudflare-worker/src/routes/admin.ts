@@ -12,6 +12,10 @@ import {
 } from './admin.conversations.helpers';
 import { runTotpRemediation } from '../services/totpRemediation';
 import { assignFounderPublicId, assignPartnerPublicId, ensurePublicIdColumns } from '../services/publicIds';
+// Task #9 follow-up — lets the generic role-change endpoint move a user
+// INTO the 'exploring' holding state (e.g. demoting a partner back for
+// re-review). ensureExploringSchema guarantees the CHECK admits the value.
+import { ensureExploringSchema } from '../services/exploringSchema';
 
 const admin = new Hono<{ Bindings: Env }>();
 
@@ -1038,7 +1042,10 @@ admin.patch('/users/:userId/role', async (c) => {
   if (!role) {
     try { role = (await c.req.json()).role; } catch {}
   }
-  if (!role || !['admin', 'founder', 'partner', 'investor'].includes(role)) {
+  // Task #9 follow-up — 'exploring' is a valid destination role so admins
+  // can move a user (e.g. a partner) back into the holding state for
+  // re-review, from the same dropdown used for founder/partner/investor.
+  if (!role || !['admin', 'founder', 'partner', 'investor', 'exploring'].includes(role)) {
     return c.json({ error: `Invalid role: ${role}` }, 400);
   }
   // Security policy: admin promotion is NOT allowed via this endpoint.
@@ -1066,9 +1073,42 @@ admin.patch('/users/:userId/role', async (c) => {
       code: 'admin_demotion_disabled',
     }, 403);
   }
+  // Task #9 follow-up — a user already in 'exploring' can only be moved to
+  // founder/partner/investor/advisor through the binding-agreement-gated
+  // /api/admin/exploring/users/:id/assign-role flow, never this generic
+  // endpoint. Without this guard an admin could bypass the signed binding
+  // agreement requirement simply by using the Users table dropdown instead
+  // of the Exploring Users queue.
+  if (String(rows[0].role).toLowerCase() === 'exploring' && role !== 'exploring') {
+    await sql.end();
+    return c.json({
+      error: 'This user is in the exploring holding state. Assign their final role from the Exploring Users queue (requires a signed binding agreement).',
+      code: 'use_exploring_assign_role',
+    }, 409);
+  }
 
   const oldRole = rows[0].role;
+  if (role === 'exploring') await ensureExploringSchema(c.env);
   await sql`UPDATE users SET role = ${role} WHERE id = ${userId}`;
+
+  // Task #9 follow-up — moving a user INTO 'exploring' resets any stale
+  // assignment state from a prior review cycle so they reappear in the
+  // Exploring Users queue needing fresh review (not shown as already
+  // assigned). Suggested-role / binding-envelope history is left intact —
+  // an admin resending the binding agreement overwrites it anyway.
+  if (role === 'exploring') {
+    try {
+      await c.env.DB.prepare(
+        `INSERT INTO user_role_review (user_id, updated_at) VALUES (?, datetime('now'))
+         ON CONFLICT(user_id) DO UPDATE SET
+           role_confirmed = 0,
+           assigned_role = NULL,
+           assigned_by_user_id = NULL,
+           assigned_at = NULL,
+           updated_at = datetime('now')`
+      ).bind(userId).run();
+    } catch (e) { console.error('[admin/role-change] exploring review reset failed', (e as Error).message); }
+  }
 
   // Task #1 (DB) — when an admin promotes someone to founder/partner,
   // immediately allocate their public AXF-/AXP- id so it is visible
