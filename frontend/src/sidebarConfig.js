@@ -136,6 +136,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
     ]},
     { key: 'account', label: 'Account', items: [
+      { to: '/products', icon: Package, label: 'Products' },
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
@@ -235,6 +236,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
     ]},
     { key: 'account', label: 'Account', items: [
+      { to: '/products', icon: Package, label: 'Products' },
       { to: '/trust', icon: Lock, label: 'Trust Center' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
@@ -313,6 +315,7 @@ export const SIDEBAR_GROUPS = {
     // has moved into Settings (/settings/referrals); /refer redirects there.
     // The whole single-item group is removed from the partner nav.
     { key: 'account', label: 'Account', items: [
+      { to: '/products', icon: Package, label: 'Products' },
       { to: '/trust', icon: Lock, label: 'Trust Center' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
@@ -375,6 +378,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
     ]},
     { key: 'account', label: 'Account', items: [
+      { to: '/products', icon: Package, label: 'Products' },
       { to: '/trust', icon: Lock, label: 'Trust & Identity' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
@@ -403,6 +407,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/tickets', icon: Ticket, label: 'Support' },
     ]},
     { key: 'account', label: 'Account', items: [
+      { to: '/products', icon: Package, label: 'Products' },
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
@@ -418,6 +423,9 @@ export const SIDEBAR_GROUPS = {
   exploring: [
     { key: 'home', label: 'Home', items: [
       { to: '/exploring', icon: LayoutDashboard, label: 'Dashboard', highlight: true },
+      // Explorer completion incentive — where the one-time 30-day-license
+      // promo code from the Personal Advisor gets redeemed.
+      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/profile', icon: UserCircle, label: 'My Profile' },

@@ -137,6 +137,8 @@ const PublicJobsPage = lazy(() => import('./pages/jobs/PublicJobsPage'));
 const PublicJobDetailPage = lazy(() => import('./pages/jobs/PublicJobDetailPage'));
 // Task #4 (ID) — Public marketing surfaces.
 const PricingPage = lazy(() => import('./pages/PricingPage'));
+// Products — in-house catalog + checkout + explorer promo redemption.
+const ProductsPage = lazy(() => import('./pages/ProductsPage'));
 // Audience product pages (For Founders / Investors & LPs / Service Partners /
 // Advisors) — one data-driven component rendered per slug from
 // data/productPages.js; footer links live in components/PublicFooter.jsx.
@@ -1393,6 +1395,10 @@ function AppInner() {
       <Route path="/partners" element={guard(['admin', 'partner', 'investor'], <PartnersPage />)} />
       <Route path="/capital" element={guard(['admin', 'investor'], <CapitalPage />)} />
       <Route path="/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
+      {/* Products — catalog + checkout + explorer promo redemption. Open to
+          every signed-in role incl. 'exploring' (that's where the Personal
+          Advisor's one-time 30-day-license codes get redeemed). */}
+      <Route path="/products" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'], <DealsPage />)} />
       <Route path="/market-intel" element={guard(['admin', 'partner', 'investor'], <MarketIntelPage />)} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <AdvisoryPage />)} />
