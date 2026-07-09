@@ -952,10 +952,15 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
     // Every column, default, FK, UNIQUE/CHECK and (replayed) index is preserved
     // — nothing is hardcoded, so no founder/investor/subscription/PII/linkedin/
     // public-id data or index is lost the first time the rebuild commits.
+    // Latch-on-success only (mirrors ensureExploringSchema): a failed rebuild
+    // must retry on the next request in this isolate, or role changes to
+    // 'investor' 500 forever behind a permanently-set _investorSchemaReady.
+    let investorRebuildOk = true;
     try {
       await rebuildUsersRoleCheckForInvestor(env);
     } catch (e) {
-      console.warn('[boot] users role-CHECK rebuild skipped:', (e as Error).message);
+      investorRebuildOk = false;
+      console.warn('[boot] users role-CHECK investor rebuild failed (will retry next request):', (e as Error).message);
     }
     // Promote partner users with an LP record to investor; create investor row.
     try {
@@ -971,7 +976,7 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
     } catch (e) {
       console.warn('[boot] investor promote step skipped:', (e as Error).message);
     }
-    _investorSchemaReady = true;
+    if (investorRebuildOk) _investorSchemaReady = true;
   } catch (e) {
     console.error('[boot] ensureInvestorSchema failed:', (e as Error).message);
   }
@@ -989,8 +994,14 @@ async function ensureAdvisorSchema(env: Env): Promise<void> {
   if (_advisorSchemaReady) return;
   try {
     // (a) relax the users.role CHECK so 'advisor' is accepted before any flip.
+    // Latch-on-success only (mirrors ensureExploringSchema): a failed rebuild
+    // must retry on the next request or advisor role changes 500 forever.
+    let advisorRebuildOk = true;
     try { await rebuildUsersRoleCheckForAdvisor(env); }
-    catch (e) { console.warn('[boot] users role-CHECK advisor rebuild skipped:', (e as Error).message); }
+    catch (e) {
+      advisorRebuildOk = false;
+      console.warn('[boot] users role-CHECK advisor rebuild failed (will retry next request):', (e as Error).message);
+    }
     // (b) structural renames — only when the old table exists and the new does not.
     const RENAMES: [string, string][] = [
       ['mentors', 'advisors'],
@@ -1030,7 +1041,7 @@ async function ensureAdvisorSchema(env: Env): Promise<void> {
     try { await env.DB.exec("UPDATE OR IGNORE field_sources SET question_id = 'advisor.' || substr(question_id, 8) WHERE question_id LIKE 'mentor.%'"); } catch {}
     // (g) rename the spinout-lab milestone key so existing week-3 progress is preserved.
     try { await env.DB.exec("UPDATE OR IGNORE spinout_lab_milestones SET milestone_key = 'advisor_meeting_booked' WHERE milestone_key = 'mentor_meeting_booked'"); } catch {}
-    _advisorSchemaReady = true;
+    if (advisorRebuildOk) _advisorSchemaReady = true;
   } catch (e) {
     console.error('[boot] ensureAdvisorSchema failed:', (e as Error).message);
   }

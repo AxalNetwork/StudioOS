@@ -5,6 +5,12 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## Fixed: changing a member's role to Exploring, Advisor, or Investor no longer fails
+
+Admins hitting an error when moving a member into Exploring (or Advisor/Investor) from the Admin Console's Users table will find it works now. A behind-the-scenes database update that these role changes depend on had been quietly failing in production; it has been repaired and applied, with no member data affected.
+
+---
+
 ## Your account starts in "Exploring" the moment you sign up
 
 You now begin in the Exploring space as soon as you create your account — no need to finish the welcome chat first. The path you picked when signing up (founder, investor, or partner) is noted for our team right away, so your review can start sooner. Admins can also move any member back into Exploring for a fresh review; moving someone out of Exploring still happens through the Exploring Users review after a signed membership agreement.

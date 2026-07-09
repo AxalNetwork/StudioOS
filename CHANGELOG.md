@@ -11,6 +11,16 @@
 > building it.
 >
 
+## Prod role-change 500 fixed — users role-CHECK rebuild no longer aborted by views or FK enforcement
+
+Setting any user's role to Exploring/Advisor/Investor from the Admin Console 500'd on prod: the D1 `users` table still carried the legacy `CHECK (role IN ('admin','founder','partner'))` because every lazy role-CHECK rebuild in `cloudflare-worker/src/util/usersRoleRebuild.ts` had been silently rolling back on boot since the roles shipped (the `[boot] … rebuild failed/skipped` warns on every request). Two stacked causes, both fixed by re-sequencing the rebuild batch:
+
+- **Views**: the old `CREATE users_new → copy → DROP users → RENAME` sequence dies on any DB with a view over `users` (prod has `partner_summary`) — `ALTER TABLE … RENAME` re-validates all schema objects and aborts with `error in view partner_summary: no such table: main.users`. The rebuild no longer RENAMEs at all: the final table is `CREATE`d directly under its real name, so views are never touched.
+- **Deferred FKs**: D1 enforces foreign keys; `DROP TABLE users` implicitly deletes every row and each child row (founders, limited_partners, …) becomes a deferred violation that only INSERTs into a table literally named `users` can resolve — rows copied into `users_new` *before* the drop never did, so the batch failed at commit with `FOREIGN KEY constraint failed` (D1: "DB was reset and rolled back"). New order: snapshot to `users_rebuild_tmp` → `DROP users` → `CREATE users` (relaxed CHECK) → copy back into `users` (violations return to zero) → drop temp → replay indexes.
+- The three per-role functions collapsed into one shared `rebuildUsersRoleCheckFor(env, role)` core (exports unchanged); the AUTOINCREMENT high-water mark (`sqlite_sequence`) is preserved so a future signup can't reuse a deleted user's id.
+- **Tests (`cloudflare-worker/test/users_role_rebuild.test.ts`)** — two new regression tests: a view-over-users seed (`partner_summary` + a view-on-view) asserting the rebuild commits and views survive byte-identical, and a `enableForeignKeyConstraints: true` D1-parity run proving the copy-back resolves the deferred violations (the old sequence fails both). 7/7 pass.
+- **Verified on prod after deploy**: `users` CHECK now `('admin','founder','partner','exploring','advisor','investor')`, 43 users intact, `partner_summary` present, 17 indexes replayed, no temp table, `sqlite_sequence` = MAX(id), zero boot warns in `wrangler tail`.
+
 ## Code Scanning alerts resolved — crypto ids, path guard, suppression placement, committed dev secret removed (Task #7)
 
 All ~50 open GitHub Code Scanning alerts (CodeQL + Semgrep) addressed at the source so they auto-close on the next scan of `main`.
