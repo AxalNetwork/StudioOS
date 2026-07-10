@@ -64,6 +64,7 @@ export const SIDEBAR_GROUPS = {
   admin: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'admin', label: 'Admin', items: [
       { to: '/admin', icon: Shield, label: 'Admin Console' },
@@ -136,7 +137,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/products', icon: Package, label: 'Products' },
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
@@ -182,6 +182,7 @@ export const SIDEBAR_GROUPS = {
   founder: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'build', label: 'Build', items: [
       // Command Center merges four founder Build destinations — Founder Portal
@@ -236,7 +237,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/products', icon: Package, label: 'Products' },
       { to: '/trust', icon: Lock, label: 'Trust Center' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
@@ -295,6 +295,7 @@ export const SIDEBAR_GROUPS = {
   partner: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'sourcing', label: 'Sourcing', items: [
       { to: '/services', icon: Package, label: 'My Services' },
@@ -315,7 +316,6 @@ export const SIDEBAR_GROUPS = {
     // has moved into Settings (/settings/referrals); /refer redirects there.
     // The whole single-item group is removed from the partner nav.
     { key: 'account', label: 'Account', items: [
-      { to: '/products', icon: Package, label: 'Products' },
       { to: '/trust', icon: Lock, label: 'Trust Center' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/tickets', icon: Ticket, label: 'Support' },
@@ -348,6 +348,7 @@ export const SIDEBAR_GROUPS = {
   investor: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'sourcing', label: 'Sourcing', items: [
       { to: '/deals', icon: Handshake, label: 'Deal Flow', requiredInvestorTier: 'professional' },
@@ -378,7 +379,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/products', icon: Package, label: 'Products' },
       { to: '/trust', icon: Lock, label: 'Trust & Identity' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
@@ -396,6 +396,7 @@ export const SIDEBAR_GROUPS = {
   advisor: [
     { key: 'home', label: 'Home', items: [
       { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
+      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'engagements', label: 'Engagements', items: [
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
@@ -407,7 +408,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/tickets', icon: Ticket, label: 'Support' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/products', icon: Package, label: 'Products' },
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },

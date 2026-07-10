@@ -408,10 +408,13 @@ function SidebarNav({ groups, role, onNavigate, user, collapsed }) {
           ? group.items.filter((it) => it.label.toLowerCase().includes(q))
           : group.items;
         if (q && visibleItems.length === 0) return null;
-        const isOpen = collapsed ? true : effectiveOpen.has(group.key);
+        const isHome = group.key === 'home';
+        // Home group renders headerless (no "Home" label / collapse chevron) —
+        // its items (Studio + Products) always show flat at the top of the nav.
+        const isOpen = isHome ? true : (collapsed ? true : effectiveOpen.has(group.key));
         return (
           <div key={group.key} className="mb-0.5">
-            {collapsed ? (
+            {isHome ? null : collapsed ? (
               <div
                 className="px-2 pt-3 pb-1 text-[9px] font-semibold uppercase tracking-wider text-gray-400 text-center"
                 title={group.label}
