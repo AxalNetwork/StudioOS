@@ -417,12 +417,12 @@ export const SIDEBAR_GROUPS = {
 
   // Task #9 — 'exploring' holding state: chat-onboarded users awaiting the
   // binding agreement + admin role assignment. Deliberately lean — the
-  // dashboard (Personal Advisor + Profile & Fit) plus account basics only.
+  // Studio (Personal Advisor + Profile & Fit) plus account basics only.
   // An explicit group is REQUIRED here: the sidebar falls back to the
   // founder nav for unknown roles, which exploring users must never see.
   exploring: [
     { key: 'home', label: 'Home', items: [
-      { to: '/exploring', icon: LayoutDashboard, label: 'Dashboard', highlight: true },
+      { to: '/exploring', icon: LayoutDashboard, label: 'Studio', highlight: true },
       // Explorer completion incentive — where the one-time 30-day-license
       // promo code from the Personal Advisor gets redeemed.
       { to: '/products', icon: Package, label: 'Products' },
