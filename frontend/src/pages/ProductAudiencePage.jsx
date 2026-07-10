@@ -56,12 +56,22 @@ function PlanCard({ plan, accent }) {
           <Sparkles size={11} aria-hidden="true" /> Most popular
         </div>
       )}
+      {plan.tagline && (
+        <p className={`text-[11px] font-semibold uppercase tracking-wider mb-1 ${accent.highlight}`}>
+          {plan.tagline}
+        </p>
+      )}
       <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{plan.name}</h3>
       <p className="mt-1 text-sm text-gray-600 min-h-[40px]">{plan.blurb}</p>
       <div className="mt-4 flex items-baseline gap-1 flex-wrap">
         <span className="text-3xl font-bold text-gray-900 dark:text-gray-100">{plan.price}</span>
         {plan.period && <span className="text-sm text-gray-500">{plan.period}</span>}
       </div>
+      {plan.badge && (
+        <div className={`mt-3 inline-flex items-center gap-1 self-start px-2.5 py-1 rounded-full text-xs font-medium ${accent.chip}`}>
+          <BadgeCheck size={12} aria-hidden="true" /> {plan.badge}
+        </div>
+      )}
       <Link
         to={plan.cta.to}
         className={`mt-5 inline-flex items-center justify-center min-h-[44px] px-4 rounded-xl text-sm font-medium transition-colors ${
@@ -75,10 +85,20 @@ function PlanCard({ plan, accent }) {
           <li key={f.text} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
             <Check size={16} className={`${accent.check} mt-0.5 shrink-0`} aria-hidden="true" />
             <span>
-              {f.text}
+              <span className="align-middle">{f.text}</span>
+              {f.limit && (
+                <span className="ml-1.5 align-middle text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 font-semibold">
+                  {f.limit}
+                </span>
+              )}
               {f.soon && (
                 <span className="ml-1.5 align-middle text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold">
                   Soon
+                </span>
+              )}
+              {f.detail && (
+                <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">
+                  {f.detail}
                 </span>
               )}
             </span>
