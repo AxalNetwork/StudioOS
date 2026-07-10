@@ -280,7 +280,7 @@ function FitCard({ state, className }) {
         <Nudge>
           <p className="font-medium text-gray-700 dark:text-gray-200">Complete your profiling to unlock</p>
           <p className="mt-1">
-            Your personal <strong>Axal Fit score &amp; band</strong> and your <strong>5 Axal behavioral values</strong>
+            Your personal <strong>Axal VC Fit score &amp; band</strong> and your <strong>5 Axal VC behavioral values</strong>
             {' '}are computed once your advisor conversation has enough signal. Finish the questions above to reveal them.
           </p>
         </Nudge>
