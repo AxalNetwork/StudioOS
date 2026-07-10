@@ -3271,6 +3271,56 @@ function DirectoryPanel() {
 // Task #16 — Metadata field component for the Payments panel create-product
 // form. Defined outside PaymentsPanel to avoid React re-mounting on every
 // parent render. Receives `kind`, `metadata`, `onChange`, and `inputCls`.
+// Audience categories a product can be filtered by on the storefront
+// (Products page). Independent of `kind` — stored as a comma-separated
+// `metadata.audience` list so a product can belong to more than one (e.g.
+// an incorporation product is both "For Founders" and "Legal Services").
+// Mirrors AUDIENCE_CATEGORIES in cloudflare-worker/src/services/catalog.ts.
+const AUDIENCE_OPTIONS = [
+  { value: 'founders', label: 'For Founders' },
+  { value: 'investors_lps', label: 'For Investors / LPs' },
+  { value: 'service_partners', label: 'For Service Partners' },
+  { value: 'advisors', label: 'For Advisors' },
+  { value: 'legal_services', label: 'Legal Services' },
+];
+
+function AudienceFields({ metadata, onChange }) {
+  const selected = (metadata.audience || '').split(',').map(s => s.trim()).filter(Boolean);
+  const toggle = (value) => {
+    const next = selected.includes(value) ? selected.filter(v => v !== value) : [...selected, value];
+    const meta = { ...metadata };
+    if (next.length > 0) meta.audience = next.join(',');
+    else delete meta.audience;
+    onChange(meta);
+  };
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+        Audience filters (Products page)
+      </label>
+      <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-1.5">
+        Leave unchecked to auto-classify from the product's kind/tier/name instead.
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {AUDIENCE_OPTIONS.map(opt => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => toggle(opt.value)}
+            className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+              selected.includes(opt.value)
+                ? 'bg-violet-600 border-violet-600 text-white'
+                : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-violet-400'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MetadataFields({ kind, metadata, onChange, inputCls }) {
   const setMeta = (k, v) => onChange({ ...metadata, [k]: v });
   if (kind === 'subscription') {
@@ -3289,11 +3339,15 @@ function MetadataFields({ kind, metadata, onChange, inputCls }) {
           value={currentSel}
           onChange={e => {
             const v = e.target.value;
-            const clean = {};
-            if (v === 'mi_pro') onChange({ ...clean, plan: 'mi_pro' });
-            else if (v === 'growth' || v === 'studio') onChange({ ...clean, tier: v });
-            else if (v === 'professional' || v === 'institutional') onChange({ ...clean, investor_tier: v });
-            else onChange(clean);
+            // Only clear the taxonomy keys this selector owns (plan / tier /
+            // investor_tier) — preserve everything else (e.g. `audience`,
+            // `commission_pct`) so switching subscription type doesn't
+            // silently wipe unrelated metadata set elsewhere in the form.
+            const { plan, tier, investor_tier, ...rest } = metadata;
+            if (v === 'mi_pro') onChange({ ...rest, plan: 'mi_pro' });
+            else if (v === 'growth' || v === 'studio') onChange({ ...rest, tier: v });
+            else if (v === 'professional' || v === 'institutional') onChange({ ...rest, investor_tier: v });
+            else onChange(rest);
           }}
         >
           <option value="">— select —</option>
@@ -3673,6 +3727,10 @@ function PaymentsPanel() {
               onChange={meta => setProdForm(f => ({ ...f, metadata: meta }))}
               inputCls={inputCls}
             />
+            <AudienceFields
+              metadata={prodForm.metadata}
+              onChange={meta => setProdForm(f => ({ ...f, metadata: meta }))}
+            />
             <div className="flex gap-2">
               <button type="submit" disabled={creating}
                 className="px-3 py-1.5 text-sm font-medium bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50">
@@ -3854,6 +3912,10 @@ function PaymentsPanel() {
                           metadata={editProdForm.metadata}
                           onChange={meta => setEditProdForm(f => ({ ...f, metadata: meta }))}
                           inputCls={inputCls}
+                        />
+                        <AudienceFields
+                          metadata={editProdForm.metadata}
+                          onChange={meta => setEditProdForm(f => ({ ...f, metadata: meta }))}
                         />
                         <div className="flex gap-2">
                           <button type="submit" disabled={savingEdit}

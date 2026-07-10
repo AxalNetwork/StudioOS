@@ -26,6 +26,18 @@ const REDEEM_REASONS = {
   expired: 'This code has expired.',
 };
 
+// Audience filter chips. Mirrors AUDIENCE_CATEGORIES in
+// cloudflare-worker/src/services/catalog.ts — kept as a local fallback (not
+// fetched) so the filter bar renders instantly, before the catalog response
+// (which also carries `audience_categories`) comes back.
+const AUDIENCE_FILTERS = [
+  { value: 'founders', label: 'For Founders' },
+  { value: 'investors_lps', label: 'For Investors / LPs' },
+  { value: 'service_partners', label: 'For Service Partners' },
+  { value: 'advisors', label: 'For Advisors' },
+  { value: 'legal_services', label: 'Legal Services' },
+];
+
 function formatMoney(cents, currency) {
   const amt = (Number(cents) || 0) / 100;
   try {
@@ -233,6 +245,7 @@ export default function ProductsPage() {
   const [unlocks, setUnlocks] = useState([]);
   const [checkout, setCheckout] = useState(null);   // { product, price }
   const [paidReceipt, setPaidReceipt] = useState(null);
+  const [audienceFilter, setAudienceFilter] = useState('all');
 
   const refreshUnlocks = useCallback(() => {
     api.alacarteUnlocks()
@@ -269,6 +282,43 @@ export default function ProductsPage() {
     refreshUnlocks();
   }, [checkout, refreshUnlocks]);
 
+  const visibleProducts = useMemo(() => {
+    if (!products) return products;
+    if (audienceFilter === 'all') return products;
+    return products.filter((p) => Array.isArray(p.categories) && p.categories.includes(audienceFilter));
+  }, [products, audienceFilter]);
+
+  const filterBar = useMemo(() => {
+    if (products === null || products.length === 0) return null;
+    return (
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => setAudienceFilter('all')}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+            audienceFilter === 'all'
+              ? 'bg-violet-600 border-violet-600 text-white'
+              : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-violet-300'
+          }`}
+        >
+          All
+        </button>
+        {AUDIENCE_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            onClick={() => setAudienceFilter(f.value)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              audienceFilter === f.value
+                ? 'bg-violet-600 border-violet-600 text-white'
+                : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-violet-300'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+    );
+  }, [products, audienceFilter]);
+
   const grid = useMemo(() => {
     if (products === null) {
       return (
@@ -284,14 +334,21 @@ export default function ProductsPage() {
         </p>
       );
     }
+    if (visibleProducts.length === 0) {
+      return (
+        <p className="text-sm text-gray-500 dark:text-gray-400 py-8 text-center">
+          No products match this filter yet.
+        </p>
+      );
+    }
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {products.map((p) => (
+        {visibleProducts.map((p) => (
           <ProductCard key={p.id} product={p} onBuy={(product, price) => { setPaidReceipt(null); setCheckout({ product, price }); }} />
         ))}
       </div>
     );
-  }, [products, catalogError]);
+  }, [products, visibleProducts, catalogError]);
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -366,7 +423,10 @@ export default function ProductsPage() {
       )}
 
       <div>
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Catalog</h2>
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Catalog</h2>
+          {filterBar}
+        </div>
         {grid}
       </div>
     </div>

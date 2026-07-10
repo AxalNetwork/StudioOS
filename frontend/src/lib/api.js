@@ -1976,9 +1976,18 @@ export const api = {
   validatePromo: (body) =>
     request('/payments/promo/validate', { method: 'POST', body: JSON.stringify(body || {}) }),
   // Mirrored Stripe catalog (read). `kind` filters: subscription | incorporation
-  // | session | alacarte. Returns { products: [{ id, name, kind, prices: [...] }] }.
-  catalogProducts: (kind) =>
-    request(`/catalog/products${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`),
+  // | session | alacarte. `audience` filters: founders | investors_lps |
+  // service_partners | advisors | legal_services (a product may match more
+  // than one; the filter is applied server-side against each product's
+  // derived `categories`). Returns { products: [{ id, name, kind, categories,
+  // prices: [...] }], audience_categories: [{ value, label }] }.
+  catalogProducts: (kind, audience) => {
+    const params = new URLSearchParams();
+    if (kind) params.set('kind', kind);
+    if (audience) params.set('audience', audience);
+    const qs = params.toString();
+    return request(`/catalog/products${qs ? `?${qs}` : ''}`);
+  },
 
   // ---------- Products page — explorer promo (30-day license codes) ----------
   // The caller's issued one-time code (from completing the Explorer needs
