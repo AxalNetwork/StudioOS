@@ -363,6 +363,11 @@ const DYNAMIC_PROMPTS: Record<Persona, string[]> = {
     'If you could automate one recurring decision you make, which would it be?',
     'Where is the studio\u2019s process creating the most friction for founders today?',
   ],
+  explorer: [
+    'Stepping back — of the paths you\u2019re weighing (founder, investor, advisor, partner), which pulls at you most, and why?',
+    'What would you need to see or learn in the next 90 days to commit to one direction?',
+    'What is the biggest unknown holding you back from choosing a path right now?',
+  ],
   unknown: [
     'Anything else on your mind that we haven\u2019t covered yet?',
     'What is the most useful thing the advisor could help you think through next?',

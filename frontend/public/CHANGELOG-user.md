@@ -5,6 +5,14 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: a guided "Discovery" chat and a Products page for Exploring members
+
+If you're in the Exploring stage, the Personal Advisor now walks you through a short set of questions about the problem or opportunity you're working on — tailored to whether you're exploring as a founder, investor, advisor, or partner. Your answers are saved to your account and stay with you even if your role changes later.
+
+There's also a new **Products** page where you can see what's on offer and redeem a one-time code that unlocks premium features for 30 days at no cost. Anything paid uses the same secure checkout as the rest of the platform.
+
+---
+
 ## Fixed: the Personal Advisor no longer errors during Exploring onboarding
 
 Members in the Exploring stage who answered the Personal Advisor's opening questions (like "Which best describes how you'll use StudioOS?") were hitting an error instead of moving on. That's fixed — your answer is saved, noted for the Axal team's role review, and the conversation continues normally.

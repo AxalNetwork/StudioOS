@@ -62,6 +62,14 @@ import {
   type Persona,
   type Question,
 } from '../services/advisor/questionBank';
+// Task: Explorer Problem/Challenge Discovery. While the user remains in the
+// 'exploring' holding role, they get ONE of 4 track-specific needs-discovery
+// banks — founder/investor/advisor/partner — chosen by their
+// `role_detect.primary` answer (persisted as user_role_review.suggested_role,
+// overlaid onto `role` by applyExploringOverlay() below). Read `actual_role`
+// (not `role`) to detect the exploring state, since `role` may already be
+// overlaid to the suggested persona for bank-selection purposes.
+import { explorerBankForTrack } from '../services/advisor/banks/explorer';
 // Task #19 — Best-Fit. Recompute the user's persona fit scores after a fit
 // answer lands (the raw score is persisted to field_sources below).
 import { recomputeUserFit } from '../services/axalFit';
@@ -267,6 +275,14 @@ async function loadAdvisorGate(env: Env, user: User): Promise<AdvisorGate> {
   return { spinoutLabActive: active, week, completedMilestones: completed, tiers };
 }
 
+// Task: Explorer Problem/Challenge Discovery. True while the user's REAL
+// role is 'exploring', regardless of whether applyExploringOverlay() has
+// already swapped `role` to a suggested persona for bank-selection. Check
+// `actual_role` (never `role`) — `role` is not trustworthy here.
+function isExploringUser(user: User): boolean {
+  return String((user as User & { actual_role?: string }).actual_role || '').toLowerCase() === 'exploring';
+}
+
 // Build the working bank.
 //
 // AC-1 contract: "persona detection runs first if `users.role` is
@@ -282,9 +298,18 @@ async function loadAdvisorGate(env: Env, user: User): Promise<AdvisorGate> {
 // /answer call re-reads the user, sees the flipped role, and pivots
 // straight into the persona bank for the next question. Existing
 // role-known users start directly in the persona bank from /start.
+//
+// Task: Explorer Problem/Challenge Discovery — once role_detect.primary
+// picks a track (persona overlaid to founder/investor/advisor/partner),
+// a still-exploring user gets ONLY that track's Explorer needs-discovery
+// bank (12 questions) — not the deep persona bank, which is reserved for
+// users an admin has actually confirmed into that role. `unknown` persona
+// (no track picked yet) still falls through to ROLE_DETECTOR either way,
+// matching "choose one of the four first".
 function workingBankFor(user: User, gate?: AdvisorGate): Question[] {
   const persona = personaFor(user);
   if (persona === 'unknown') return ROLE_DETECTOR;
+  if (isExploringUser(user)) return explorerBankForTrack(persona);
   return bankFor(persona, { spinoutLabActive: !!gate?.spinoutLabActive });
 }
 
@@ -311,7 +336,12 @@ function selectBank(
   const detectorPending = detectorAnswered > 0 && detectorAnswered < DETECTOR_IDS.length;
   if (persona === 'unknown') return { visible: ROLE_DETECTOR, deferred: [] };
 
-  const personaBank = bankFor(persona, { spinoutLabActive: gate.spinoutLabActive });
+  // Task: Explorer Problem/Challenge Discovery — a still-exploring user
+  // gets ONLY their track's Explorer bank, not the deep persona bank (see
+  // workingBankFor above for the full rationale).
+  const personaBank = isExploringUser(user)
+    ? explorerBankForTrack(persona)
+    : bankFor(persona, { spinoutLabActive: gate.spinoutLabActive });
   // `focus` accepts either a section label (BUILD/CAPITAL/LEGAL/…)
   // or a page_target path (e.g. `/build/discovery`). Section labels
   // are uppercase ASCII; anything else is treated as a page.
@@ -643,6 +673,32 @@ advisor.post('/start', async (c) => {
   const ans = Number(refreshed?.answered_count || 0);
   const skp = Number(refreshed?.skipped_count || 0);
 
+  // Explorer completion incentive — tell exploring users EARLY (on open,
+  // before they've sunk time into questions) that finishing the needs
+  // bank earns a one-time 30-day license code. If the code was already
+  // issued but not redeemed (user closed the tab before copying it),
+  // re-surface it instead so it's never lost.
+  let promoNotice: { state: 'offer' | 'issued'; message: string; code?: string; route?: string } | null = null;
+  if (isExploringUser(user)) {
+    try {
+      const { getExplorerPromo } = await import('../services/explorerPromo');
+      const issued = await getExplorerPromo(c.env, user.id);
+      if (issued && !issued.redeemed_at) {
+        promoNotice = {
+          state: 'issued',
+          message: `Reminder — your one-time code ${issued.code} is ready: it redeems a free ${issued.license_label.toLowerCase()}. Claim it on the Products page before it expires.`,
+          code: issued.code,
+          route: `/products?code=${encodeURIComponent(issued.code)}`,
+        };
+      } else if (!issued) {
+        promoNotice = {
+          state: 'offer',
+          message: 'Quick heads-up before we dive in: finish this short profile (about 12 questions) and you\'ll get a one-time promo code for a free 30-day license matched to your profile, plus a personalised summary of the tools here that fit what you\'re working on.',
+        };
+      }
+    } catch { /* best-effort — never block /start */ }
+  }
+
   const nextPub = publicQuestion(next);
   return c.json({
     // `conversation_id` is the AC-1 spec field; `conversation_uid`
@@ -659,6 +715,7 @@ advisor.post('/start', async (c) => {
     next: nextPub,
     hint: (nextPub?.hint as string | null | undefined) || null,
     complete: !next,
+    promo_notice: promoNotice,
   });
 });
 
@@ -725,6 +782,17 @@ interface AnswerEnvelope {
   error: string | null;
   complete: boolean;
   progress: { total: number; answered: number; skipped: number; percent: number };
+  // Explorer completion incentive — present only on the turn where the
+  // exploring user's needs bank completes: the one-time 30-day-license
+  // promo code + a recommendations summary built from their answers.
+  completion_payload?: {
+    promo_code: string;
+    license_label: string;
+    code_expires_at: string | null;
+    unlock_days: number;
+    summary: string | null;
+    cta: { primary: { label: string; route: string } };
+  } | null;
 }
 advisor.post('/answer', async (c) => {
   const user = await advisorUser(c);
@@ -1173,6 +1241,60 @@ advisor.post('/answer', async (c) => {
     await Promise.allSettled(tasks);
   }
 
+  // Explorer completion incentive — when this answer completed the
+  // exploring user's needs bank (writeRouter flipped
+  // user_role_review.needs_assessment_completed on the track's last
+  // question), issue the one-time 30-day-license promo code and build the
+  // recommendations summary. Issuance is idempotent (UNIQUE(user_id)), and
+  // we only attach the payload on the turn that minted the code so the
+  // chat announces it exactly once; /start re-surfaces unredeemed codes.
+  let completionPayload: AnswerEnvelope['completion_payload'] = null;
+  if (result.status === 'saved' && q.id.startsWith('explorer.') && isExploringUser(liveUser)) {
+    try {
+      const review = await c.env.DB.prepare(
+        `SELECT needs_assessment_completed FROM user_role_review WHERE user_id = ?`,
+      ).bind(user.id).first<{ needs_assessment_completed: number | null }>();
+      if (Number(review?.needs_assessment_completed || 0) === 1) {
+        const { getExplorerPromo, issueExplorerPromo, buildExplorerRecommendations } =
+          await import('../services/explorerPromo');
+        const already = await getExplorerPromo(c.env, user.id);
+        if (!already) {
+          const promo = await issueExplorerPromo(c.env, user.id);
+          if (promo) {
+            const summary = await buildExplorerRecommendations(c.env, user.id);
+            completionPayload = {
+              promo_code: promo.code,
+              license_label: promo.license_label,
+              code_expires_at: promo.expires_at,
+              unlock_days: promo.unlock_days,
+              summary,
+              cta: {
+                primary: {
+                  label: 'Redeem in Products',
+                  route: `/products?code=${encodeURIComponent(promo.code)}`,
+                },
+              },
+            };
+            // Persist the announcement so a reload's transcript rehydration
+            // (which replays advisor_messages) still shows the code + summary.
+            const announcement = [
+              `🎉 That's your profile complete — thank you! As promised, here's your one-time promo code for a free ${promo.license_label.toLowerCase()}:`,
+              '',
+              promo.code,
+              '',
+              summary || '',
+              '',
+              'Redeem it on the Products page — the confirmation will show a $0.00 total.',
+            ].join('\n').replace(/\n{3,}/g, '\n\n');
+            await recordMessage(c.env, conv.id, 'assistant', announcement, null);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[advisor] explorer promo issuance failed', (e as Error).message);
+    }
+  }
+
   const envelope: AnswerEnvelope = {
     conversation_id: conv.uid,
     conversation_uid: conv.uid,
@@ -1189,6 +1311,7 @@ advisor.post('/answer', async (c) => {
       total: bank.length, answered: ans, skipped: skp,
       percent: bank.length > 0 ? Math.round(((ans + skp) / bank.length) * 100) : 100,
     },
+    completion_payload: completionPayload,
   };
 
   // SSE branch — clients that prefer streaming get the same payload

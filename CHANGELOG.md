@@ -11,6 +11,16 @@
 > building it.
 >
 
+## Explorer Discovery bank + Products page — Problem/Challenge Discovery for Exploring users
+
+Exploring users now get a dedicated "Problem/Challenge Discovery" question bank in the Personal Advisor, plus a Products page that surfaces a one-time explorer promo code redeemable into a 30-day feature unlock (integrates PR #142).
+
+- **Bank** (`cloudflare-worker/src/services/advisor/banks/explorer.ts`) — four tracks (founder/investor/advisor/partner) selected by the `role_detect.primary` answer; every id is `explorer.<track>.<section>.<leaf>` over a shared CONTEXT/CHALLENGES/TIMELINE shape plus a track-specific 4th section. Wired into `routes/advisor.ts` (`isExploringUser` via `actual_role`, `explorerBankForTrack`, `promo_notice`, completion payload) and `selectBank`/`workingBankFor`.
+- **Persistence** — `148_explorer_needs.sql` (`explorer_needs`, keyed only by `user_id` so answers survive an admin re-tag from Exploring to a real role) and `149_explorer_promo_codes.sql` (`explorer_promo_codes`). `writeRouter.ts` routes `persona:'explorer'` answers into `explorer_needs` (shared leaf→column map; track-specific answers land in `track_extra_json`).
+- **Promo/Products** — `services/explorerPromo.ts` mints synthetic one-time codes that redeem straight into a 30-day `feature_unlocks` row ($0, no Stripe call). `routes/products.ts` (`GET /api/products/promo`, `POST /api/products/redeem`) mounted at `/api/products`; `frontend/src/pages/ProductsPage.jsx` + `components/AxalCheckout.jsx` reuse the existing Stripe catalog/checkout for paid items.
+- **Reconcile on merge**: adding `'explorer'` to the `Persona` union required an `explorer` key in `stateMachine.ts` `DYNAMIC_PROMPTS` and switching the `writeRouter.ts` explorer-role guard off the overlaid `role` onto `actual_role` (exploring users arrive with `role` overlaid onto their suggested persona; admins may answer for support). Migrations renumbered 150/151 → 148/149 to stay contiguous (local max was 147).
+- **Verified**: worker `tsc` clean; all drift guards pass (incl. advisor-bank drift with `questionIds.gen.ts` in sync); advisor/exploring/migration/authz/profiling/fit suites green; frontend build clean.
+
 ## Explorer onboarding deadlock fixed — writeAnswer gate now accepts the 'unknown' persona
 
 Exploring users answering the Personal Advisor's role-detector question ("Which best describes how you'll use StudioOS?" → "I am building a startup") got `Error: writeAnswer not available for unknown`. Exploring users without a reviewed/suggested role map to persona `unknown` (`personaFor()` in `cloudflare-worker/src/routes/advisor.ts`), which pins them to the 3-question ROLE_DETECTOR bank — but the L2 tool gate's `TOOL_PERSONA_ALLOWLIST` (`services/advisor/guardrails.ts`) did not include `unknown` for `writeAnswer`, so the very detector answer that escapes the unknown state was rejected with `persona_mismatch` (403) before `routeAnswer` could write `user_role_review.suggested_role`. Onboarding deadlocked.

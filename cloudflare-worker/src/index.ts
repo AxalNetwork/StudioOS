@@ -219,6 +219,9 @@ import catalog, { adminCatalog } from './routes/catalog';
 import adminStripe from './routes/admin_stripe';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 import payments from './routes/payments';
+// Products page — explorer promo status + $0 redemption (catalog + paid
+// checkout reuse /api/catalog + /api/payments above).
+import products from './routes/products';
 import { Jobs } from './models/jobs';
 import { writeCronRunHistory } from './util/cronHistory';
 import { enqueueReembedChunks } from './util/reembedSweep';
@@ -514,6 +517,11 @@ app.get('/api/payments/config', async (c) => {
 // cards via Stripe Elements without ever seeing the Stripe secret key. Sibling
 // of /api/billing so SKUs resolve through the same catalog mirror.
 app.route('/api/payments', payments);
+
+// Products page — explorer promo status + $0 redemption. Sibling of
+// /api/payments; paid checkout on the same page flows through the payments
+// surface above.
+app.route('/api/products', products);
 
 // Task #6 — Studio-tier paywall mounts. Wildcards run BEFORE the route
 // registration so a 402 short-circuits the handler. Bypass roles

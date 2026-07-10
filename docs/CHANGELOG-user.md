@@ -5,6 +5,26 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: a guided "Discovery" chat and a Products page for Exploring members
+
+If you're in the Exploring stage, the Personal Advisor now walks you through a short set of questions about the problem or opportunity you're working on — tailored to whether you're exploring as a founder, investor, advisor, or partner. Your answers are saved to your account and stay with you even if your role changes later.
+
+There's also a new **Products** page where you can see what's on offer and redeem a one-time code that unlocks premium features for 30 days at no cost. Anything paid uses the same secure checkout as the rest of the platform.
+
+---
+
+## Fixed: the Personal Advisor no longer errors during Exploring onboarding
+
+Members in the Exploring stage who answered the Personal Advisor's opening questions (like "Which best describes how you'll use StudioOS?") were hitting an error instead of moving on. That's fixed — your answer is saved, noted for the Axal team's role review, and the conversation continues normally.
+
+---
+
+## Fixed: changing a member's role to Exploring, Advisor, or Investor no longer fails
+
+Admins hitting an error when moving a member into Exploring (or Advisor/Investor) from the Admin Console's Users table will find it works now. A behind-the-scenes database update that these role changes depend on had been quietly failing in production; it has been repaired and applied, with no member data affected.
+
+---
+
 ## Your account starts in "Exploring" the moment you sign up
 
 You now begin in the Exploring space as soon as you create your account — no need to finish the welcome chat first. The path you picked when signing up (founder, investor, or partner) is noted for our team right away, so your review can start sooner. Admins can also move any member back into Exploring for a fresh review; moving someone out of Exploring still happens through the Exploring Users review after a signed membership agreement.

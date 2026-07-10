@@ -11,6 +11,33 @@
 > building it.
 >
 
+## Explorer Discovery bank + Products page — Problem/Challenge Discovery for Exploring users
+
+Exploring users now get a dedicated "Problem/Challenge Discovery" question bank in the Personal Advisor, plus a Products page that surfaces a one-time explorer promo code redeemable into a 30-day feature unlock (integrates PR #142).
+
+- **Bank** (`cloudflare-worker/src/services/advisor/banks/explorer.ts`) — four tracks (founder/investor/advisor/partner) selected by the `role_detect.primary` answer; every id is `explorer.<track>.<section>.<leaf>` over a shared CONTEXT/CHALLENGES/TIMELINE shape plus a track-specific 4th section. Wired into `routes/advisor.ts` (`isExploringUser` via `actual_role`, `explorerBankForTrack`, `promo_notice`, completion payload) and `selectBank`/`workingBankFor`.
+- **Persistence** — `148_explorer_needs.sql` (`explorer_needs`, keyed only by `user_id` so answers survive an admin re-tag from Exploring to a real role) and `149_explorer_promo_codes.sql` (`explorer_promo_codes`). `writeRouter.ts` routes `persona:'explorer'` answers into `explorer_needs` (shared leaf→column map; track-specific answers land in `track_extra_json`).
+- **Promo/Products** — `services/explorerPromo.ts` mints synthetic one-time codes that redeem straight into a 30-day `feature_unlocks` row ($0, no Stripe call). `routes/products.ts` (`GET /api/products/promo`, `POST /api/products/redeem`) mounted at `/api/products`; `frontend/src/pages/ProductsPage.jsx` + `components/AxalCheckout.jsx` reuse the existing Stripe catalog/checkout for paid items.
+- **Reconcile on merge**: adding `'explorer'` to the `Persona` union required an `explorer` key in `stateMachine.ts` `DYNAMIC_PROMPTS` and switching the `writeRouter.ts` explorer-role guard off the overlaid `role` onto `actual_role` (exploring users arrive with `role` overlaid onto their suggested persona; admins may answer for support). Migrations renumbered 150/151 → 148/149 to stay contiguous (local max was 147).
+- **Verified**: worker `tsc` clean; all drift guards pass (incl. advisor-bank drift with `questionIds.gen.ts` in sync); advisor/exploring/migration/authz/profiling/fit suites green; frontend build clean.
+
+## Explorer onboarding deadlock fixed — writeAnswer gate now accepts the 'unknown' persona
+
+Exploring users answering the Personal Advisor's role-detector question ("Which best describes how you'll use StudioOS?" → "I am building a startup") got `Error: writeAnswer not available for unknown`. Exploring users without a reviewed/suggested role map to persona `unknown` (`personaFor()` in `cloudflare-worker/src/routes/advisor.ts`), which pins them to the 3-question ROLE_DETECTOR bank — but the L2 tool gate's `TOOL_PERSONA_ALLOWLIST` (`services/advisor/guardrails.ts`) did not include `unknown` for `writeAnswer`, so the very detector answer that escapes the unknown state was rejected with `persona_mismatch` (403) before `routeAnswer` could write `user_role_review.suggested_role`. Onboarding deadlocked.
+
+- Fix: `'unknown'` added to the `writeAnswer` allowlist only. No other tool accepts it; scoped writes stay guarded — `selectBank()` pins unknown users to the detector bank, the `/answer` visible-bank eligibility gate 409s everything else, and every persona bank in `writeRouter.ts` re-checks the caller's role before writing.
+- Tests (`cloudflare-worker/test/advisor.scenarios.test.ts`): regression pinning `writeAnswer` OK for persona `unknown` + privileged tools (scoreDeal/draftMemo/findInvestor/listMyTasks) still `persona_mismatch` for it. 20/20 pass; worker tsc clean.
+
+## Prod role-change 500 fixed — users role-CHECK rebuild no longer aborted by views or FK enforcement
+
+Setting any user's role to Exploring/Advisor/Investor from the Admin Console 500'd on prod: the D1 `users` table still carried the legacy `CHECK (role IN ('admin','founder','partner'))` because every lazy role-CHECK rebuild in `cloudflare-worker/src/util/usersRoleRebuild.ts` had been silently rolling back on boot since the roles shipped (the `[boot] … rebuild failed/skipped` warns on every request). Two stacked causes, both fixed by re-sequencing the rebuild batch:
+
+- **Views**: the old `CREATE users_new → copy → DROP users → RENAME` sequence dies on any DB with a view over `users` (prod has `partner_summary`) — `ALTER TABLE … RENAME` re-validates all schema objects and aborts with `error in view partner_summary: no such table: main.users`. The rebuild no longer RENAMEs at all: the final table is `CREATE`d directly under its real name, so views are never touched.
+- **Deferred FKs**: D1 enforces foreign keys; `DROP TABLE users` implicitly deletes every row and each child row (founders, limited_partners, …) becomes a deferred violation that only INSERTs into a table literally named `users` can resolve — rows copied into `users_new` *before* the drop never did, so the batch failed at commit with `FOREIGN KEY constraint failed` (D1: "DB was reset and rolled back"). New order: snapshot to `users_rebuild_tmp` → `DROP users` → `CREATE users` (relaxed CHECK) → copy back into `users` (violations return to zero) → drop temp → replay indexes.
+- The three per-role functions collapsed into one shared `rebuildUsersRoleCheckFor(env, role)` core (exports unchanged); the AUTOINCREMENT high-water mark (`sqlite_sequence`) is preserved so a future signup can't reuse a deleted user's id.
+- **Tests (`cloudflare-worker/test/users_role_rebuild.test.ts`)** — two new regression tests: a view-over-users seed (`partner_summary` + a view-on-view) asserting the rebuild commits and views survive byte-identical, and a `enableForeignKeyConstraints: true` D1-parity run proving the copy-back resolves the deferred violations (the old sequence fails both). 7/7 pass.
+- **Verified on prod after deploy**: `users` CHECK now `('admin','founder','partner','exploring','advisor','investor')`, 43 users intact, `partner_summary` present, 17 indexes replayed, no temp table, `sqlite_sequence` = MAX(id), zero boot warns in `wrangler tail`.
+
 ## Code Scanning alerts resolved — crypto ids, path guard, suppression placement, committed dev secret removed (Task #7)
 
 All ~50 open GitHub Code Scanning alerts (CodeQL + Semgrep) addressed at the source so they auto-close on the next scan of `main`.

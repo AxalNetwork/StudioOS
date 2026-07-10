@@ -235,6 +235,22 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
           setAnsweredIds((hist?.answers || []).filter((a) => a.saved_status === 'saved').map((a) => a.question_id));
         } catch { /* non-fatal */ }
       }
+      // Explorer completion incentive — the worker attaches `promo_notice`
+      // for exploring users: an early "finish this and earn a 30-day
+      // license" pitch, or (state 'issued') a reminder carrying the
+      // still-unredeemed code with a Products CTA. Appended AFTER the
+      // history hydration so the functional update lands on top of it.
+      if (r.promo_notice?.message) {
+        const notice = {
+          role: 'assistant',
+          content: r.promo_notice.message,
+          promo_notice: true,
+          ...(r.promo_notice.route
+            ? { cta: { primary: { label: 'Redeem in Products', route: r.promo_notice.route } } }
+            : {}),
+        };
+        setMessages((m) => [...m, notice]);
+      }
     } catch (e) {
       // 404 → endpoint not mounted in this environment (dev FastAPI
       // backend doesn't host the advisor; worker-only feature). Hide
@@ -379,6 +395,27 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
         setMessages((m) => [...m, { role: 'assistant', content: `I couldn't save that — ${r.error}` }]);
       }
       setPendingEvidence(null);
+      // Explorer completion incentive — the turn that finished the needs
+      // bank carries the one-time promo code + recommendations summary.
+      // Rendered before any next question so the reward lands first; on
+      // reload the server-recorded announcement replays from history.
+      if (r.completion_payload?.promo_code) {
+        const cp = r.completion_payload;
+        const content = [
+          `🎉 That's your profile complete — thank you! As promised, here's your one-time promo code for a free ${String(cp.license_label || '30-day license').toLowerCase()}:`,
+          '',
+          cp.promo_code,
+          ...(cp.summary ? ['', cp.summary] : []),
+          '',
+          'Redeem it on the Products page — the confirmation will show a $0.00 total.',
+        ].join('\n');
+        setMessages((m) => [...m, {
+          role: 'assistant',
+          content,
+          completion: true,
+          cta: cp.cta || null,
+        }]);
+      }
       const next = r.next_question || r.next || null;
       setQuestion(next);
       setProgress(r.progress || progress);

@@ -122,6 +122,12 @@ zone_name  = "axal.vc"
 pattern    = "axal.vc/studio/*"
 zone_name  = "axal.vc"
 [[routes]]
+pattern    = "axal.vc/products"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/products/*"
+zone_name  = "axal.vc"
+[[routes]]
 pattern    = "axal.vc/admin"
 zone_name  = "axal.vc"
 [[routes]]
@@ -692,6 +698,7 @@ custom_domain  = true
 #   /admin, /admin/*           — admin console (incl. /admin/due-diligence)
 #   /register, /register/*     — sign-up (referral landing: /register?ref=)
 #   /login, /login/*           — sign-in
+#   /products, /products/*     — Products / explorer promo redemption page
 # Each path uses TWO patterns so `/register` matches but `/registered-*`
 # (a hypothetical Jekyll page) does NOT. Add more app paths here as the
 # Jekyll route inventory is confirmed.
@@ -715,6 +722,12 @@ pattern    = "axal.vc/studio"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/studio/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/products"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/products/*"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/admin"

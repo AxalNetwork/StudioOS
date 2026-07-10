@@ -1980,6 +1980,17 @@ export const api = {
   catalogProducts: (kind) =>
     request(`/catalog/products${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`),
 
+  // ---------- Products page — explorer promo (30-day license codes) ----------
+  // The caller's issued one-time code (from completing the Explorer needs
+  // bank in the Personal Advisor): → { promo: { code, license_label,
+  // unlock_days, issued_at, expires_at, redeemed_at } | null }.
+  productsPromo: () => request('/products/promo'),
+  // Redeem it → { ok:true, confirmation: { code, license_label, unlock_days,
+  // amount_cents:0, currency, redeemed_at, license_expires_at } }
+  // | { ok:false, reason: 'not_found'|'already_redeemed'|'expired' } (400).
+  productsRedeem: (code) =>
+    request('/products/redeem', { method: 'POST', body: JSON.stringify({ code }) }),
+
   // ---------- Task #7 (W-2) — Investor paywall (3-tier: free / pro / inst) ----------
   // Mirrors `/api/billing/investor/*` + `/api/investor-seats/*` +
   // `/api/introductions/quota`. The 402 `{required, message, …}` shape from
