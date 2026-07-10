@@ -293,6 +293,7 @@ const patchRootSettings = async (c: Context<{ Bindings: Env }>) => {
     updates.push({ col: 'name', val: n });
   }
   if (body.bio !== undefined) updates.push({ col: 'bio', val: clampStr(body.bio, 2000) });
+  if (body.headline !== undefined) updates.push({ col: 'headline', val: clampStr(body.headline, 120) });
   if (body.socials !== undefined) {
     const s = body.socials || {};
     const safe: Record<string, string> = {};

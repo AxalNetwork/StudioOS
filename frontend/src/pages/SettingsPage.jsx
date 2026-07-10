@@ -230,7 +230,23 @@ export default function SettingsPage() {
   const patch = async (delta) => {
     try {
       await api.updateSettings(delta);
-      setData(prev => ({ ...prev, ...delta }));
+      // Some settings are top-level (name, jurisdictions, …) while others live
+      // under `profile` (bio, headline, socials). Merge each into the right
+      // place so the canonical `data` stays in sync — otherwise the onBlur
+      // "changed?" guards compare against stale `data.profile.*` and re-PATCH
+      // on every blur.
+      const PROFILE_KEYS = new Set(['bio', 'headline', 'socials']);
+      setData(prev => {
+        const next = { ...prev, ...delta };
+        const profileDelta = {};
+        for (const k of Object.keys(delta)) {
+          if (PROFILE_KEYS.has(k)) profileDelta[k] = delta[k];
+        }
+        if (Object.keys(profileDelta).length) {
+          next.profile = { ...prev.profile, ...profileDelta };
+        }
+        return next;
+      });
       flash('Saved');
     } catch (e) {
       flash(e.message || 'Failed to save', 'error');
@@ -905,6 +921,7 @@ function VerificationStubCard({ data }) {
 function ProfileSection({ data, onSaved, flash, patch }) {
   const [name, setName] = useState(data.name || '');
   const [bio, setBio] = useState(data.profile?.bio || '');
+  const [headline, setHeadline] = useState(data.profile?.headline || '');
   const [socials, setSocials] = useState(data.profile?.socials || {});
   const [headshotPreview, setHeadshotPreview] = useState(data.profile?.headshot_url || null);
   const [busy, setBusy] = useState(false);
@@ -983,12 +1000,19 @@ function ProfileSection({ data, onSaved, flash, patch }) {
         </div>
       </Card>
 
-      <Card title="Public author profile" description="How you appear on article pages and your shareable author page. Headline is edited in the Personal Identity section above.">
+      <Card title="Public author profile" description="How you appear on article pages and your shareable author page.">
+        <div className="mb-4">
+          <Field label="Headline" hint="A short tagline shown next to your name on article pages and your author page — e.g. your title or publication.">
+            <input value={headline} onChange={e => setHeadline(e.target.value)} maxLength={120}
+              onBlur={() => headline !== (data.profile?.headline || '') && patch({ headline })}
+              placeholder="e.g. Founder, VJs Mag" className={inputCls} />
+          </Field>
+        </div>
         <div className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 p-5">
           <AuthorCard
             author={{
               name,
-              headline: data.profile?.headline || null,
+              headline: headline || null,
               bio,
               headshot_url: headshotPreview,
               role: data.role || null,

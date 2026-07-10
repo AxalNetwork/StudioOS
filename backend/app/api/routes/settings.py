@@ -49,6 +49,7 @@ def _safe_rollback(session: Session) -> None:
 
 _USER_COLUMNS = [
     ("bio", "TEXT"),
+    ("headline", "TEXT"),
     ("headshot_local_path", "TEXT"),
     ("jurisdictions", "TEXT"),
     ("socials", "TEXT"),
@@ -201,7 +202,7 @@ def _user_extras(session: Session, user_id: int) -> dict[str, Any]:
     row = session.exec(
         text(
             """
-            SELECT bio, headshot_local_path, jurisdictions, socials,
+            SELECT bio, headline, headshot_local_path, jurisdictions, socials,
                    notification_prefs, privacy_prefs, role_prefs,
                    jwt_min_iat, deletion_requested_at, totp_recovery_codes
             FROM users WHERE id = :uid
@@ -286,6 +287,7 @@ def get_settings(
         "created_at": str(user.created_at) if user.created_at else None,
         "profile": {
             "bio": extras.get("bio") or "",
+            "headline": extras.get("headline") or "",
             "headshot_url": (
                 f"/api/settings/headshot/{user.uid}" if extras.get("headshot_local_path") else None
             ),
@@ -334,6 +336,7 @@ def _current_jti_from_request(request: Request) -> Optional[str]:
 class _SettingsPatch(BaseModel):
     name: Optional[str] = None
     bio: Optional[str] = None
+    headline: Optional[str] = None
     socials: Optional[dict] = None
     jurisdictions: Optional[list] = None
     notification_prefs: Optional[dict] = None
@@ -358,6 +361,8 @@ def patch_settings(
         updates.append(("name", n[:120]))
     if payload.bio is not None:
         updates.append(("bio", payload.bio.strip()[:2000] if payload.bio else None))
+    if payload.headline is not None:
+        updates.append(("headline", (payload.headline.strip()[:120] or None)))
     if payload.socials is not None:
         safe = {}
         for k in ("linkedin", "twitter", "website", "github"):
