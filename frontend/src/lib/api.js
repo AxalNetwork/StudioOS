@@ -2025,6 +2025,34 @@ export const api = {
   introductionsRequest: (data) =>
     request('/introductions/request', { method: 'POST', body: JSON.stringify(data || {}) }),
 
+  // ---------- Network Introductions (all user types) ----------
+  // Curated warm-intro propositions under Network › Introductions. Accepting
+  // spends ONE introduction credit; the worker returns 402
+  // {code:'intro_credits_exhausted', packs, buy_path} when the balance is
+  // empty — callers surface the buy-more flow inline (no PaywallModal).
+  introPropositions: ({ status, refresh } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    if (refresh) qs.set('refresh', '1');
+    const q = qs.toString();
+    return request(`/introductions/propositions${q ? `?${q}` : ''}`);
+  },
+  introAccept: (uid) =>
+    request(`/introductions/propositions/${encodeURIComponent(uid)}/accept`, { method: 'POST' }),
+  introDecline: (uid) =>
+    request(`/introductions/propositions/${encodeURIComponent(uid)}/decline`, { method: 'POST' }),
+  introCredits: () => request('/introductions/credits'),
+  introCreditHistory: () => request('/introductions/credits/history'),
+  introPacks: () => request('/introductions/packs'),
+  // Mint the PaymentIntent for a credit pack (10 / 100 / 1000); the returned
+  // client_secret feeds <AxalCheckout clientSecret={…}>. Fulfilment happens
+  // via the Stripe webhook, idempotent on the intent id.
+  introCreditsIntent: (pack, nonce) =>
+    request('/payments/intro-credits/intent', {
+      method: 'POST',
+      body: JSON.stringify({ pack, nonce }),
+    }),
+
   // ---------- Trust layer (Task #58) ----------
   // Task #4 (Y-2) — Trust Center v2 endpoints. The legacy
   // /trust/summary, /trust/kyb/*, /trust/accreditation/*, /trust/nda/*

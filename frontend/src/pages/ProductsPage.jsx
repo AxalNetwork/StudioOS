@@ -12,10 +12,11 @@
 //      Stripe-native discount codes.
 //   3. Active licenses — the caller's current feature unlocks so a freshly
 //      redeemed 30-day license is visible immediately.
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Package, Ticket, CheckCircle2, AlertTriangle, Loader2, X, BadgeCheck, Receipt,
+  Sparkles,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import AxalCheckout from '../components/AxalCheckout';
@@ -198,6 +199,126 @@ function PromoRedeemCard({ initialCode, onRedeemed }) {
   );
 }
 
+// Introduction credit packs — fixed platform SKUs (10 / 100 / 1000) for the
+// Network › Introductions feature. Fetched from /api/introductions/packs;
+// this local fallback keeps the section rendering if that call fails.
+const INTRO_PACK_FALLBACK = [
+  { key: 'intro_10', credits: 10, amount_cents: 4900, currency: 'usd', label: '10 introductions', blurb: 'A focused batch of warm intros for the current push.' },
+  { key: 'intro_100', credits: 100, amount_cents: 39900, currency: 'usd', label: '100 introductions', blurb: 'A quarter of serious relationship building.' },
+  { key: 'intro_1000', credits: 1000, amount_cents: 299000, currency: 'usd', label: '1,000 introductions', blurb: 'Firm-scale allocation for teams and funds.' },
+];
+
+// Buy flow: mint the PaymentIntent for the chosen pack, then render the
+// embedded AxalCheckout against its client_secret. Credits are granted by
+// the Stripe webhook (idempotent on the intent id), so the receipt tells the
+// buyer they'll appear in Network › Introductions momentarily.
+function IntroPacksSection({ onReceipt }) {
+  const [packs, setPacks] = useState(INTRO_PACK_FALLBACK);
+  const [buying, setBuying] = useState(null);   // { pack, clientSecret }
+  const [pendingKey, setPendingKey] = useState(null);
+  const [error, setError] = useState(null);
+  const sectionRef = useRef(null);
+
+  useEffect(() => {
+    api.introPacks()
+      .then((r) => { if (Array.isArray(r?.packs) && r.packs.length) setPacks(r.packs); })
+      .catch(() => { /* fallback list stands */ });
+  }, []);
+
+  // /products#introduction-packs deep link (from the Introductions tab CTA) —
+  // the section mounts after data loads, so scroll explicitly.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash === '#introduction-packs') {
+      sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
+
+  const buy = useCallback(async (pack) => {
+    setError(null);
+    setPendingKey(pack.key);
+    try {
+      const r = await api.introCreditsIntent(pack.key);
+      if (!r?.client_secret) throw new Error('Checkout is unavailable right now.');
+      setBuying({ pack, clientSecret: r.client_secret });
+    } catch (e) {
+      setError(e?.message || 'Could not start checkout.');
+    } finally {
+      setPendingKey(null);
+    }
+  }, []);
+
+  return (
+    <div ref={sectionRef} id="introduction-packs" className="rounded-xl border border-violet-200 dark:border-violet-900 bg-white dark:bg-gray-900 p-4 scroll-mt-6">
+      <div className="flex items-center gap-2">
+        <Sparkles size={16} className="text-violet-600 dark:text-violet-400" />
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Introduction packs</h2>
+      </div>
+      <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+        Top up your Network › Introductions balance. One credit = one accepted warm introduction;
+        purchased credits never expire and stack on your monthly allowance.
+      </p>
+      <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {packs.map((p) => (
+          <div key={p.key} className="flex flex-col rounded-lg border border-gray-200 dark:border-gray-800 p-3">
+            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{p.label}</div>
+            <p className="mt-0.5 text-[11px] text-gray-600 dark:text-gray-400">{p.blurb}</p>
+            <div className="mt-auto pt-3 flex items-center justify-between gap-2">
+              <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                {formatMoney(p.amount_cents, p.currency)}
+              </span>
+              <button
+                onClick={() => buy(p)}
+                disabled={pendingKey === p.key}
+                className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium disabled:opacity-50"
+              >
+                {pendingKey === p.key ? <Loader2 size={12} className="inline animate-spin" /> : 'Buy'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {error && (
+        <p className="mt-2 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+          <AlertTriangle size={12} /> {error}
+        </p>
+      )}
+      {buying && (
+        <div className="mt-4 rounded-lg border border-gray-200 dark:border-gray-800 p-3">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              Checkout — {buying.pack.label}
+            </h3>
+            <button
+              onClick={() => setBuying(null)}
+              className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              title="Cancel checkout"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <AxalCheckout
+            clientSecret={buying.clientSecret}
+            description={`Introduction credits: ${buying.pack.label}`}
+            submitLabel="Pay now"
+            onSuccess={() => {
+              onReceipt({
+                product_name: `Introduction credits — ${buying.pack.label}`,
+                amount_cents: buying.pack.amount_cents,
+                currency: buying.pack.currency,
+                when: new Date().toISOString(),
+                free: false,
+                note: 'Payment confirmed. Your credits are being added to Network › Introductions now.',
+              });
+              setBuying(null);
+            }}
+            onError={() => { /* AxalCheckout renders its own inline error state */ }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function pickDisplayPrice(product) {
   const prices = Array.isArray(product?.prices) ? product.prices : [];
   return prices.find((p) => p && p.active !== false) || prices[0] || null;
@@ -363,6 +484,8 @@ export default function ProductsPage() {
 
       <PromoRedeemCard initialCode={deepLinkCode} onRedeemed={refreshUnlocks} />
 
+      <IntroPacksSection onReceipt={(r) => setPaidReceipt(r)} />
+
       {unlocks.length > 0 && (
         <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -391,9 +514,9 @@ export default function ProductsPage() {
           total={paidReceipt.amount_cents != null
             ? formatMoney(paidReceipt.amount_cents, paidReceipt.currency)
             : '—'}
-          note={paidReceipt.free
+          note={paidReceipt.note || (paidReceipt.free
             ? 'A promo code covered the full amount — nothing was charged.'
-            : 'Payment confirmed. Your access is active; a card receipt follows from Stripe.'}
+            : 'Payment confirmed. Your access is active; a card receipt follows from Stripe.')}
           onClose={() => setPaidReceipt(null)}
         />
       )}
