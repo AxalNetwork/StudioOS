@@ -14,7 +14,7 @@
 // offline.html, manifest, icons) so old caches drop on activate. Vite-built
 // /assets/* files are content-hashed in their filenames, so the cache-first
 // rule is safe across deploys without a version bump.
-const VERSION = 'v11-2026-07-02a';
+const VERSION = 'v12-2026-07-11a';
 const PRECACHE = `studioos-precache-${VERSION}`;
 const RUNTIME_STATIC = `studioos-static-${VERSION}`;
 const RUNTIME_API = `studioos-api-${VERSION}`;
