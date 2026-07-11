@@ -1487,9 +1487,11 @@ function AppInner() {
       <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=studio-ops" replace /> : <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />
       <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], <PipelinePage />)} />
-      {/* Task #1 — unified Network page (Contacts + Relationships tabs). The
-          legacy /relationships route redirects into the Relationships tab. */}
-      <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkPage />)} />
+      {/* Task #1 — unified Network page (Contacts + Introductions +
+          Relationships tabs). The legacy /relationships route redirects into
+          the Relationships tab. Advisors are included so the Introductions
+          feature (and its notification deep links) work for every user type. */}
+      <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <NetworkPage />)} />
       <Route path="/relationships" element={<Navigate to="/network?tab=relationships" replace />} />
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
       {/* Task #17 — the investor sidebar no longer surfaces "Investor Portal"
