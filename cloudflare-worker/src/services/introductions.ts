@@ -529,7 +529,9 @@ export async function loadIntroProfileFacts(
       const r = await env.DB.prepare(
         `SELECT id, domain_expertise FROM founders WHERE id IN (${fph})`,
       ).bind(...founderSides.map((s) => s.sideId)).all<{ id: number; domain_expertise: string | null }>();
-      const m = new Map((r.results || []).map((x) => [Number(x.id), x.domain_expertise]));
+      const m = new Map<number, string | null>(
+        (r.results || []).map((x) => [Number(x.id), x.domain_expertise ?? null]),
+      );
       for (const s of founderSides) {
         const v = m.get(s.sideId);
         if (v) out.get(s.userId)!.specializations.push(...v.split(/[,;/]+/).map((x) => x.trim()).filter(Boolean));
@@ -543,7 +545,9 @@ export async function loadIntroProfileFacts(
       const r = await env.DB.prepare(
         `SELECT id, specialization FROM partners WHERE id IN (${pph})`,
       ).bind(...partnerSides.map((s) => s.sideId)).all<{ id: number; specialization: string | null }>();
-      const m = new Map((r.results || []).map((x) => [Number(x.id), x.specialization]));
+      const m = new Map<number, string | null>(
+        (r.results || []).map((x) => [Number(x.id), x.specialization ?? null]),
+      );
       for (const s of partnerSides) {
         const v = m.get(s.sideId);
         if (v) out.get(s.userId)!.specializations.push(...v.split(/[,;/]+/).map((x) => x.trim()).filter(Boolean));
@@ -557,7 +561,9 @@ export async function loadIntroProfileFacts(
       const r = await env.DB.prepare(
         `SELECT id, sector_focus FROM investors WHERE id IN (${iph})`,
       ).bind(...investorSides.map((s) => s.sideId)).all<{ id: number; sector_focus: string | null }>();
-      const m = new Map((r.results || []).map((x) => [Number(x.id), x.sector_focus]));
+      const m = new Map<number, string | null>(
+        (r.results || []).map((x) => [Number(x.id), x.sector_focus ?? null]),
+      );
       for (const s of investorSides) {
         const v = m.get(s.sideId);
         if (v) out.get(s.userId)!.specializations.push(...v.split(/[,;/]+/).map((x) => x.trim()).filter(Boolean));
