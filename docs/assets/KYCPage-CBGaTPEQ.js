@@ -1,0 +1,1 @@
+import"./rolldown-runtime-aKtaBQYM.js";import{n as e,t}from"./jsx-runtime-2Zwg-L3c.js";import{t as n}from"./KycVerification-BY4nhw1t.js";e();var r=t();function i(){return(0,r.jsx)(n,{})}export{i as default};
