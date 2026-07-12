@@ -192,6 +192,14 @@ const PitchDeckPrintPage = lazy(() => import('./pages/PitchDeckPrintPage'));
 import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 const EmailChangeConfirmPage = lazy(() => import('./pages/EmailChangeConfirmPage'));
 const EmailChangeRevokePage = lazy(() => import('./pages/EmailChangeRevokePage'));
+// Advisor sections shell — tabbed workspaces (Network, Advisory, Research).
+const AdvisorNetworkWorkspace = lazy(() => import('./pages/advisor/network/AdvisorNetworkWorkspace'));
+const AdvisorAdvisoryWorkspace = lazy(() => import('./pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
+const AdvisorResearchWorkspace = lazy(() => import('./pages/advisor/research/AdvisorResearchWorkspace'));
+// Partner Operations shell — tabbed workspace (Overview, Capabilities, Portfolio,
+// Engagements, Performance).
+const PartnerOperationsWorkspace = lazy(() => import('./pages/partner/operations/PartnerOperationsWorkspace'));
+const GrowthWorkspace = lazy(() => import('./pages/growth/GrowthWorkspace'));
 import InactivityWarningModal from './components/InactivityWarningModal';
 import NotificationBell from './components/NotificationBell';
 import CommandPalette from './components/CommandPalette';
@@ -1467,6 +1475,47 @@ function AppInner() {
       <Route path="/lp-reports" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
       <Route path="/portfolio/updates" element={guard(['admin', 'partner', 'investor', 'founder'], <PortfolioWorkspace />)} />
       <Route path="/portfolio/positions" element={guard(['admin', 'investor'], <PortfolioWorkspace />)} />
+      {/* Advisor sections shell — three tabbed workspaces (Network, Advisory,
+          Research) scoped to the advisor (and admin) roles. Each tab deep-links
+          to its own route; the workspace derives the active tab from the URL.
+          Bare section paths redirect to their first tab so every workspace is
+          reachable by direct URL and by clicking the sidebar. */}
+      <Route path="/advisor/network" element={<Navigate to="/advisor/network/introductions" replace />} />
+      <Route path="/advisor/network/introductions" element={guard(['admin', 'advisor'], <AdvisorNetworkWorkspace />)} />
+      <Route path="/advisor/network/relationships" element={guard(['admin', 'advisor'], <AdvisorNetworkWorkspace />)} />
+      <Route path="/advisor/network/organizations" element={guard(['admin', 'advisor'], <AdvisorNetworkWorkspace />)} />
+      <Route path="/advisor/advisory" element={<Navigate to="/advisor/advisory/opportunities" replace />} />
+      <Route path="/advisor/advisory/opportunities" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
+      <Route path="/advisor/advisory/clients" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
+      <Route path="/advisor/advisory/engagements" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
+      <Route path="/advisor/advisory/delivery" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
+      <Route path="/advisor/advisory/contracts" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
+      <Route path="/advisor/research" element={<Navigate to="/advisor/research/market" replace />} />
+      <Route path="/advisor/research/market" element={guard(['admin', 'advisor'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research/companies" element={guard(['admin', 'advisor'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research/documents" element={guard(['admin', 'advisor'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research/ai" element={guard(['admin', 'advisor'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research/news" element={guard(['admin', 'advisor'], <AdvisorResearchWorkspace />)} />
+      <Route path="/partner/operations" element={<Navigate to="/partner/operations/overview" replace />} />
+      <Route path="/partner/operations/overview" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
+      <Route path="/partner/operations/capabilities" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
+      <Route path="/partner/operations/portfolio" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
+      <Route path="/partner/operations/engagements" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
+      <Route path="/partner/operations/performance" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
+      {/* Growth section — market-matching / resource-discovery workspace shared by
+          the advisor and partner profiles. A single GrowthWorkspace derives its
+          tab and role prefix from the URL; bare paths redirect to the first tab
+          (Talent) so every workspace is reachable by direct URL and sidebar. */}
+      <Route path="/advisor/growth" element={<Navigate to="/advisor/growth/talent" replace />} />
+      <Route path="/advisor/growth/talent" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
+      <Route path="/advisor/growth/customers" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
+      <Route path="/advisor/growth/capital" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
+      <Route path="/advisor/growth/experts" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
+      <Route path="/partner/growth" element={<Navigate to="/partner/growth/talent" replace />} />
+      <Route path="/partner/growth/talent" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
+      <Route path="/partner/growth/customers" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
+      <Route path="/partner/growth/capital" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
+      <Route path="/partner/growth/experts" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
       {/* Task #1 — Contacts merged into the unified Network page. The legacy
           /contacts route now redirects into the Contacts tab. */}
       <Route path="/contacts" element={<Navigate to="/network?tab=contacts" replace />} />

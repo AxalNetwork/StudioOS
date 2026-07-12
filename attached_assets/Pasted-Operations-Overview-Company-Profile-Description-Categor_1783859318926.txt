@@ -1,0 +1,412 @@
+Operations
+│
+├── Overview
+│   ├── Company Profile
+│   ├── Description
+│   ├── Categories
+│   ├── Industries Served
+│   ├── Geography
+│   ├── Team
+│   └── Website / Socials
+│
+├── Capabilities
+│   ├── Services Offered
+│   ├── Expertise
+│   ├── Technologies
+│   ├── Industries
+│   ├── Company Stages Supported
+│   └── Typical Engagements
+│
+├── Portfolio
+│   ├── Clients
+│   ├── Portfolio Companies Supported
+│   ├── Case Studies
+│   ├── Success Stories
+│   └── References
+│
+├── Engagements
+│   ├── Active Projects
+│   ├── Completed Projects
+│   ├── Retainers
+│   ├── Contracts
+│   └── Deliverables
+│
+└── Performance
+    ├── Ratings
+    ├── Feedback
+    ├── Outcomes
+    ├── Response Time
+    └── Activity   Operations
+Everything related to the service partner's business, capabilities, engagements, and operational performance.
+
+Overview
+Everything that defines the service partner.
+
+Company Profile
+General business information.
+Identity
+* Company Name
+* Logo
+* Legal Name
+* Company Type
+* Founded Date
+* Headquarters
+* Registration Number
+Business Information
+* Website
+* Email
+* Phone
+* Languages
+* Time Zone
+* Business Hours
+Branding
+* Brand Assets
+* Cover Image
+* Marketing Materials
+
+Description
+Business overview.
+Company Description
+* Mission
+* Vision
+* Company Story
+* Value Proposition
+* Elevator Pitch
+
+Categories
+How the company is classified.
+Service Categories
+* Legal
+* Finance
+* Accounting
+* Marketing
+* Recruiting
+* Product
+* Engineering
+* Design
+* Operations
+* AI
+* Cybersecurity
+* Compliance
+
+Industries Served
+Markets supported.
+Examples:
+* SaaS
+* FinTech
+* Healthcare
+* Climate
+* AI
+* Manufacturing
+* Consumer
+* Enterprise Software
+
+Geography
+Markets covered.
+Track:
+* Countries
+* Regions
+* Cities
+* Remote Services
+* On-site Services
+* Global Coverage
+
+Team
+Company members.
+Team Directory
+* Employees
+* Partners
+* Consultants
+* Advisors
+* Contractors
+
+Team Profiles
+Track:
+* Position
+* Biography
+* Expertise
+* Certifications
+* Languages
+* Availability
+
+Website & Socials
+Public presence.
+Links
+* Website
+* LinkedIn
+* X
+* GitHub
+* YouTube
+* Blog
+* Calendly
+
+Capabilities
+Everything the company can deliver.
+
+Services Offered
+Complete service catalog.
+Each service includes:
+* Service Name
+* Category
+* Description
+* Deliverables
+* Duration
+* Pricing Model
+* Team Required
+
+Expertise
+Areas of specialization.
+Examples:
+* Fundraising
+* AI
+* GTM
+* Product Strategy
+* Enterprise Sales
+* Tax
+* Legal
+* Cybersecurity
+For each expertise:
+* Experience Level
+* Certifications
+* Years of Experience
+* Case Studies
+
+Technologies
+Technology stack.
+Track:
+Platforms
+* AWS
+* Azure
+* GCP
+* Cloudflare
+Development
+* React
+* Node.js
+* Python
+* Java
+AI
+* OpenAI
+* Anthropic
+* LangChain
+* Vector Databases
+Business Software
+* HubSpot
+* Salesforce
+* Notion
+* Slack
+* Jira
+
+Industries
+Sector specialization.
+For each industry:
+* Experience
+* Number of Clients
+* Case Studies
+* Success Rate
+
+Company Stages Supported
+Client maturity.
+Examples:
+* Idea
+* Pre-seed
+* Seed
+* Series A
+* Growth
+* Enterprise
+* Public Companies
+
+Typical Engagements
+How work is usually delivered.
+Examples:
+* Advisory
+* Workshops
+* Audits
+* Implementation
+* Managed Services
+* Fractional Executive
+* Retainer
+* Project-based
+For each:
+* Typical Duration
+* Team Size
+* Deliverables
+
+Portfolio
+Evidence of previous work.
+
+Clients
+Companies served.
+For each client:
+* Company
+* Industry
+* Services
+* Engagement Period
+* Status
+
+Portfolio Companies Supported
+Specific startup ecosystem experience.
+Track:
+* Accelerators
+* VC-backed Companies
+* Unicorns
+* Public Companies
+
+Case Studies
+Detailed success stories.
+Contains:
+* Client
+* Challenge
+* Solution
+* Deliverables
+* Timeline
+* Results
+* Technologies Used
+
+Success Stories
+High-level outcomes.
+Examples:
+* Revenue Growth
+* Fundraising Success
+* Cost Reduction
+* AI Adoption
+* Product Launch
+* Hiring Success
+
+References
+Client endorsements.
+Track:
+* Reference Contact
+* Relationship
+* Testimonial
+* Permission Status
+
+Engagements
+Current and historical work.
+
+Active Projects
+Projects in progress.
+Track:
+* Client
+* Status
+* Team
+* Timeline
+* Budget
+* Progress
+* Deliverables
+
+Completed Projects
+Historical engagements.
+Track:
+* Completion Date
+* Outcome
+* Lessons Learned
+* Client Rating
+
+Retainers
+Recurring services.
+Track:
+* Monthly Fee
+* Hours
+* Services
+* Renewal
+* Utilization
+
+Contracts
+Commercial agreements.
+Track:
+* Contract Type
+* Effective Date
+* Expiration
+* Value
+* Status
+
+Deliverables
+Outputs produced.
+Examples:
+* Reports
+* Dashboards
+* Software
+* Documentation
+* Designs
+* Financial Models
+* Strategy Decks
+Track:
+* Status
+* Due Date
+* Approval
+* Version History
+
+Performance
+Operational performance metrics.
+
+Ratings
+Quality ratings.
+Track:
+* Overall Rating
+* Service Rating
+* Communication
+* Expertise
+* Value for Money
+* Professionalism
+
+Feedback
+Qualitative client feedback.
+Includes:
+* Reviews
+* Testimonials
+* Suggestions
+* Improvement Areas
+
+Outcomes
+Business impact.
+Examples:
+* Capital Raised
+* Revenue Generated
+* Costs Saved
+* Hiring Completed
+* Projects Delivered
+* Customer Growth
+* Time Saved
+
+Response Time
+Service responsiveness.
+Track:
+* First Response Time
+* Average Reply Time
+* Average Resolution Time
+* SLA Compliance
+
+Activity
+Platform engagement.
+Track:
+* Active Engagements
+* Completed Projects
+* Meetings Held
+* Deliverables Delivered
+* Proposals Sent
+* Client Interactions
+* Profile Views
+* Marketplace Visibility
+
+Recommended Final Structure
+
+Operations
+│
+├── Overview
+│   ├── Company Profile
+│   ├── Description
+│   ├── Categories
+│   ├── Industries Served
+│   ├── Geography
+│   ├── Team
+│   └── Website & Socials
+│
+├── Capabilities
+│   ├── Services Offered
+│   ├── Expertise
+│   ├── Technologies
+│   ├── Industries
+│   ├── Company Stages Supported
+│   └── Typical Engagements
+│
+├── P

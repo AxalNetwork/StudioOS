@@ -1,0 +1,371 @@
+You are building the shell of a Partner profile app in Replit.
+
+Scope
+Build ONLY the Operations section shell and its feature-page placeholders.
+Do not build the full data model yet.
+Do not wire real backend APIs.
+Use mock/placeholder data only.
+Keep the work modular so other sections can be added later.
+
+Primary goal
+Create the Partner sidebar section:
+Operations
+with these feature pages:
+- Overview
+- Capabilities
+- Portfolio
+- Engagements
+- Performance
+
+Important product rule
+This build is for the Partner profile only.
+Do not add Founder, Investor, Admin, or Advisor profile variants.
+Do not add extra top-level sections.
+Do not build Network, Advisory, or Research in this task.
+
+Architecture rules
+- Build the sidebar and routes first.
+- Create shared layout components first.
+- Make each feature page a separate route.
+- Inside each page, organize content into tabs, cards, tables, and detail panels.
+- Merge only internal options inside a page; do not create extra sidebar pages for every bullet item.
+- Keep the UI clean, partner-native, and easy to extend.
+
+Operations section structure
+
+Operations
+Everything related to the service partner's business, capabilities, engagements, and operational performance.
+
+A. Overview
+Everything that defines the service partner.
+
+Internal modules:
+- Company Profile.
+- Description.
+- Categories.
+- Industries Served.
+- Geography.
+- Team.
+- Website / Socials.
+
+Within Overview, include these data points and fields in the UI:
+
+Company Profile
+- Identity.
+- Company Name.
+- Logo.
+- Legal Name.
+- Company Type.
+- Founded Date.
+- Headquarters.
+- Registration Number.
+
+Business Information
+- Website.
+- Email.
+- Phone.
+- Languages.
+- Time Zone.
+- Business Hours.
+
+Branding
+- Brand Assets.
+- Cover Image.
+- Marketing Materials.
+
+Description
+- Company Description.
+- Mission.
+- Vision.
+- Company Story.
+- Value Proposition.
+- Elevator Pitch.
+
+Categories
+- Service Categories.
+- Legal.
+- Finance.
+- Accounting.
+- Marketing.
+- Recruiting.
+- Product.
+- Engineering.
+- Design.
+- Operations.
+- AI.
+- Cybersecurity.
+- Compliance.
+
+Industries Served
+- SaaS.
+- FinTech.
+- Healthcare.
+- Climate.
+- AI.
+- Manufacturing.
+- Consumer.
+- Enterprise Software.
+
+Geography
+- Countries.
+- Regions.
+- Cities.
+- Remote Services.
+- On-site Services.
+- Global Coverage.
+
+Team
+- Employees.
+- Partners.
+- Consultants.
+- Advisors.
+- Contractors.
+
+Team Profiles
+- Position.
+- Biography.
+- Expertise.
+- Certifications.
+- Languages.
+- Availability.
+
+Website & Socials
+- Website.
+- LinkedIn.
+- X.
+- GitHub.
+- YouTube.
+- Blog.
+- Calendly.
+
+B. Capabilities
+Everything the company can deliver.
+
+Internal modules:
+- Services Offered.
+- Expertise.
+- Technologies.
+- Industries.
+- Company Stages Supported.
+- Typical Engagements.
+
+Within Capabilities, include these data points and fields in the UI:
+
+Services Offered
+- Service Name.
+- Category.
+- Description.
+- Deliverables.
+- Duration.
+- Pricing Model.
+- Team Required.
+
+Expertise
+- Fundraising.
+- AI.
+- GTM.
+- Product Strategy.
+- Enterprise Sales.
+- Tax.
+- Legal.
+- Cybersecurity.
+- Experience Level.
+- Certifications.
+- Years of Experience.
+- Case Studies.
+
+Technologies
+- AWS.
+- Azure.
+- GCP.
+- Cloudflare.
+- React.
+- Node.js.
+- Python.
+- Java.
+- OpenAI.
+- Anthropic.
+- LangChain.
+- Vector Databases.
+- HubSpot.
+- Salesforce.
+- Notion.
+- Slack.
+- Jira.
+
+Industries
+- Experience.
+- Number of Clients.
+- Case Studies.
+- Success Rate.
+
+Company Stages Supported
+- Idea.
+- Pre-seed.
+- Seed.
+- Series A.
+- Growth.
+- Enterprise.
+- Public Companies.
+
+Typical Engagements
+- Advisory.
+- Workshops.
+- Audits.
+- Implementation.
+- Managed Services.
+- Fractional Executive.
+- Retainer.
+- Project-based.
+- Typical Duration.
+- Team Size.
+- Deliverables.
+
+C. Portfolio
+Evidence of previous work.
+
+Internal modules:
+- Clients.
+- Portfolio Companies Supported.
+- Case Studies.
+- Success Stories.
+- References.
+
+Within Portfolio, include these data points and fields in the UI:
+
+Clients
+- Company.
+- Industry.
+- Services.
+- Engagement Period.
+- Status.
+
+Portfolio Companies Supported
+- Accelerators.
+- VC-backed Companies.
+- Unicorns.
+- Public Companies.
+
+Case Studies
+- Client.
+- Challenge.
+- Solution.
+- Deliverables.
+- Timeline.
+- Results.
+- Technologies Used.
+
+Success Stories
+- Revenue Growth.
+- Fundraising Success.
+- Cost Reduction.
+- AI Adoption.
+- Product Launch.
+- Hiring Success.
+
+References
+- Reference Contact.
+- Relationship.
+- Testimonial.
+- Permission Status.
+
+D. Engagements
+Current and historical work.
+
+Internal modules:
+- Active Projects.
+- Completed Projects.
+- Retainers.
+- Contracts.
+- Deliverables.
+
+Within Engagements, include these data points and fields in the UI:
+
+Active Projects
+- Client.
+- Status.
+- Team.
+- Timeline.
+- Budget.
+- Progress.
+- Deliverables.
+
+Completed Projects
+- Completion Date.
+- Outcome.
+- Lessons Learned.
+- Client Rating.
+
+Retainers
+- Monthly Fee.
+- Hours.
+- Services.
+- Renewal.
+- Utilization.
+
+Contracts
+- Contract Type.
+- Effective Date.
+
+E. Performance
+Internal modules:
+- Ratings.
+- Feedback.
+- Outcomes.
+- Response Time.
+- Activity.
+
+Within Performance, include these data points and fields in the UI:
+- Ratings.
+- Feedback.
+- Outcomes.
+- Response Time.
+- Activity.
+
+Product requirements
+- Sidebar should show only the Operations section for this build.
+- Each feature page should have a clear header, summary card, and empty/mock data areas.
+- Overview page should look like a company profile workspace.
+- Capabilities page should look like a service catalog workspace.
+- Portfolio page should look like proof of work and references.
+- Engagements page should look like project and contract management.
+- Performance page should look like an operational scorecard.
+
+UI requirements
+- Responsive shell.
+- Left sidebar navigation.
+- Route-based page loading.
+- Consistent page headers.
+- Shared cards, lists, filters, and tabs.
+- Basic loading and empty states.
+- Clean modern internal-tool styling.
+
+Implementation tasks
+
+Task 1: App shell
+- Create the overall app shell.
+- Add sidebar navigation.
+- Add routing for Operations feature pages.
+- Add a shared header and page container.
+
+Task 2: Shared components
+- Create reusable components for sidebar, page header, tabs, cards, tables, empty states, and side panels.
+
+Task 3: Operations pages
+- Build placeholder versions of Overview, Capabilities, Portfolio, Engagements, and Performance.
+- Each page should show the right internal modules and example fields.
+
+Task 4: Mock data
+- Seed each page with realistic placeholder records.
+- Make the data structure easy to replace later.
+
+Task 5: Polish
+- Verify the shell works across desktop and mobile.
+- Ensure routes render correctly.
+- Keep everything modular and ready for future sections.
+
+Before coding
+- Inspect the current repo structure.
+- Reuse any existing layout or nav components if they already exist.
+- Summarize the smallest viable implementation plan.
+- Then build the shell and placeholder pages for Partner profile only.

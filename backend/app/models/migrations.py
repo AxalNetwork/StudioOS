@@ -210,6 +210,36 @@ def ensure_user_access_level_column() -> None:
             logger.debug("ensure_user_access_level_column: ALTER skipped: %s", exc)
 
 
+def ensure_ticket_github_columns() -> None:
+    """Add `tickets.github_issue_number` + `tickets.github_issue_url` so the
+    dev FastAPI backend can mirror a ticket to a GitHub issue in lockstep
+    with the production Worker (which already has these columns). Idempotent
+    (`ADD COLUMN IF NOT EXISTS`)."""
+    cols = (
+        ("github_issue_number", "INTEGER"),
+        ("github_issue_url", "VARCHAR"),
+    )
+    with Session(engine) as session:
+        for col, ddl in cols:
+            try:
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                    f"ALTER TABLE tickets ADD COLUMN IF NOT EXISTS {col} {ddl}"
+                ))
+                session.commit()
+            except Exception as exc:
+                session.rollback()
+                logger.debug("ensure_ticket_github_columns: ALTER %s skipped: %s", col, exc)
+        try:
+            session.exec(text(
+                "CREATE INDEX IF NOT EXISTS ix_tickets_github_issue_number "
+                "ON tickets (github_issue_number)"
+            ))
+            session.commit()
+        except Exception as exc:
+            session.rollback()
+            logger.debug("ensure_ticket_github_columns: index skipped: %s", exc)
+
+
 def ensure_score_anti_cheat_columns() -> None:
     """Epic 5 — add anti-cheat columns to `score_snapshots`. Idempotent.
 

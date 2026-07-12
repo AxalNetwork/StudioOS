@@ -1209,6 +1209,12 @@ export const api = {
   // Task #3 — Dry-run a provider auth call to verify configured credentials.
   adminTestIntegrationKeys: (provider) =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}/test`, { method: 'POST' }),
+  // GitHub ticket sync — admin config panel.
+  adminGetGithubConfig: () => request('/admin/github'),
+  adminSaveGithubConfig: (body) =>
+    request('/admin/github', { method: 'PUT', body: JSON.stringify(body || {}) }),
+  adminTestGithub: () => request('/admin/github/test', { method: 'POST' }),
+  adminDeleteGithubConfig: () => request('/admin/github', { method: 'DELETE' }),
   adminUpdateRole: (userId, role) => request(`/admin/users/${userId}/role?role=${role}`, { method: 'PATCH' }),
   adminToggleActive: (userId) => request(`/admin/users/${userId}/toggle-active`, { method: 'PATCH' }),
   // Set per-user access level. `level` is 'limited' (browse-only, no signing

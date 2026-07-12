@@ -87,6 +87,7 @@ async def lifespan(app: FastAPI):
             ensure_lifecycle_columns,
             ensure_document_file_columns,
             ensure_user_access_level_column,
+            ensure_ticket_github_columns,
             ensure_score_anti_cheat_columns,
             ensure_investor_role_split,
             ensure_marketplace_columns,
@@ -128,6 +129,9 @@ async def lifespan(app: FastAPI):
         logger.info("StudioOS migrations: document file columns ensured")
         ensure_user_access_level_column()
         logger.info("StudioOS migrations: user.access_level column ensured")
+        # Task — GitHub ticket sync: mirror issue number/url onto tickets.
+        ensure_ticket_github_columns()
+        logger.info("StudioOS migrations: ticket github columns ensured")
         # Epic 5 — anti-cheat columns on score_snapshots (HMAC, sandbox flag,
         # admin review state, 7-day cooldown).
         ensure_score_anti_cheat_columns()
@@ -446,6 +450,10 @@ from backend.app.api.routes import infra as _infra
 app.include_router(_infra.router, prefix="/api", dependencies=_BACKOFFICE_DEPS)
 from backend.app.api.routes import admin_contracts as _admin_contracts
 app.include_router(_admin_contracts.router, prefix="/api", dependencies=_BACKOFFICE_DEPS)
+from backend.app.api.routes import admin_github as _admin_github
+app.include_router(_admin_github.router, prefix="/api", dependencies=_BACKOFFICE_DEPS)
+# Public, signature-verified GitHub webhook (no auth perimeter).
+app.include_router(_admin_github.webhook_router, prefix="/api")
 from backend.app.api.routes import company as _company
 app.include_router(_company.router, prefix="/api")
 from backend.app.api.routes import files as _files

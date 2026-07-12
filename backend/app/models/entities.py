@@ -880,7 +880,24 @@ class Ticket(SQLModel, table=True):
     assigned_to: Optional[str] = None
     user_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
     project_id: Optional[int] = Field(default=None, foreign_key="projects.id")
+    # GitHub issue mirror. Populated when a ticket is filed and GitHub is
+    # configured; the webhook + pull-sync match tickets back by issue number.
+    github_issue_number: Optional[int] = Field(default=None, index=True)
+    github_issue_url: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AppSetting(SQLModel, table=True):
+    """Global admin-configured settings, keyed by name. Values holding
+    secrets (tokens, webhook secrets) are Fernet-encrypted before storage;
+    non-secret values (repo owner/name) are stored as plaintext. Used for
+    the GitHub ticket-sync config in the dev backend — the production
+    Cloudflare Worker keeps the same settings as Worker secrets instead."""
+    __tablename__ = "app_settings"
+    key: str = Field(primary_key=True)
+    value: Optional[str] = None
+    is_secret: bool = Field(default=False)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 

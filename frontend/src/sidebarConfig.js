@@ -312,6 +312,22 @@ export const SIDEBAR_GROUPS = {
       { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
     ]},
+    // Task — Partner Operations workspace. Each item deep-links to its own tab
+    // route; `match` keeps the row active across the tab and its sub-route so the
+    // group highlights correctly regardless of which tab is open.
+    { key: 'operations', label: 'Operations', items: [
+      { to: '/partner/operations/overview', icon: LayoutDashboard, label: 'Overview', match: ['/partner/operations/overview'] },
+      { to: '/partner/operations/capabilities', icon: Package, label: 'Capabilities', match: ['/partner/operations/capabilities'] },
+      { to: '/partner/operations/portfolio', icon: Layers, label: 'Portfolio', match: ['/partner/operations/portfolio'] },
+      { to: '/partner/operations/engagements', icon: Handshake, label: 'Engagements', match: ['/partner/operations/engagements'] },
+      { to: '/partner/operations/performance', icon: TrendingUp, label: 'Performance', match: ['/partner/operations/performance'] },
+    ]},
+    // Growth — market-matching / resource-discovery workspace (Talent, Customers,
+    // Capital, Experts). One nav entry opens the tabbed workspace; the four areas
+    // live as tabs inside the page, not as separate sidebar rows.
+    { key: 'growth', label: 'Growth', items: [
+      { to: '/partner/growth/talent', icon: Rocket, label: 'Growth', match: ['/partner/growth'] },
+    ]},
     // Task #4 — the former "Earn" group held only "Referrals" (/refer), which
     // has moved into Settings (/settings/referrals); /refer redirects there.
     // The whole single-item group is removed from the partner nav.
@@ -399,9 +415,14 @@ export const SIDEBAR_GROUPS = {
       { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
       { to: '/products', icon: Package, label: 'Products' },
     ]},
+    { key: 'workspaces', label: 'Workspaces', items: [
+      { to: '/advisor/network/introductions', icon: Network, label: 'Network', match: ['/advisor/network'] },
+      { to: '/advisor/advisory/opportunities', icon: Briefcase, label: 'Advisory', match: ['/advisor/advisory'] },
+      { to: '/advisor/growth/talent', icon: Rocket, label: 'Growth', match: ['/advisor/growth'] },
+      { to: '/advisor/research/market', icon: Radar, label: 'Research', match: ['/advisor/research'] },
+    ]},
     { key: 'engagements', label: 'Engagements', items: [
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
-      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
       { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/advisors', icon: UserCircle, label: 'Advisor Directory' },

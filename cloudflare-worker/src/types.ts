@@ -129,6 +129,9 @@ export interface Env {
   GITHUB_REPO_OWNER?: string;
   GITHUB_REPO_NAME?: string;
   GITHUB_ISSUES_TOKEN?: string;
+  // Shared secret used to verify inbound GitHub webhook deliveries
+  // (X-Hub-Signature-256). Set via the admin GitHub panel or wrangler.
+  GITHUB_WEBHOOK_SECRET?: string;
   PERSONA_API_KEY?: string;
   SUMSUB_API_KEY?: string;
   // LinkedIn — used by routes/linkedin.ts (Refer & Earn → "Sign in with

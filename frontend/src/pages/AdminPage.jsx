@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { reportError } from '../lib/log';
 import { api } from '../lib/api';
-import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2, ShieldAlert, KeyRound, Trash2, AlertTriangle, Heart, Eye, EyeOff, BadgeCheck, Ticket, Plus, CreditCard, Package, Zap } from 'lucide-react';
+import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2, ShieldAlert, KeyRound, Trash2, AlertTriangle, Heart, Eye, EyeOff, BadgeCheck, Ticket, Plus, CreditCard, Package, Zap, GitBranch as Github, Copy } from 'lucide-react';
 import { PERSONAS as PERSONA_TAXONOMY } from '../lib/personas';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
@@ -197,6 +197,7 @@ const ADMIN_SECTIONS = [
   { value: 'personas', label: 'Personas', Icon: Sparkles },
   { value: 'directory', label: 'Directory', Icon: Sparkles },
   { value: 'integration-keys', label: 'Integration Keys', Icon: KeyRound },
+  { value: 'github', label: 'GitHub Sync', Icon: Github },
   { value: 'promos', label: 'Promo Codes', Icon: Ticket },
   { value: 'payments', label: 'Payments', Icon: Package },
   { value: 'billing', label: 'Billing', Icon: CreditCard },
@@ -460,6 +461,7 @@ export default function AdminPage({ onImpersonate }) {
       {tab === 'personas' && <PersonasPanel />}
       {tab === 'directory' && <div data-testid="admin-directory-panel"><DirectoryPanel /></div>}
       {tab === 'integration-keys' && <div data-testid="admin-integration-keys-panel"><IntegrationKeysPanel /></div>}
+      {tab === 'github' && <div data-testid="admin-github-panel"><GithubSyncPanel /></div>}
       {tab === 'promos' && <div data-testid="admin-promos-panel"><PromoCodesPanel /></div>}
       {tab === 'payments' && <div data-testid="admin-payments-panel"><PaymentsPanel /></div>}
       {tab === 'billing' && <div data-testid="admin-billing-panel"><BillingPanel /></div>}
@@ -4833,6 +4835,200 @@ function WellbeingExpertsPanel() {
           toast.kind === 'ok' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
         }`}>{toast.msg}</div>
       )}
+    </div>
+  );
+}
+
+function GithubSyncPanel() {
+  const [cfg, setCfg] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+  const [token, setToken] = useState('');
+  const [owner, setOwner] = useState('');
+  const [repo, setRepo] = useState('');
+  const [revealedSecret, setRevealedSecret] = useState(null);
+  const { toast, showToast } = useToast(3500);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const c = await api.adminGetGithubConfig();
+      setCfg(c);
+      setOwner(c.repo_owner || '');
+      setRepo(c.repo_name || '');
+      setToken('');
+    } catch (e) {
+      reportError('AdminPage:githubConfigLoad', e);
+      showToast({ kind: 'err', msg: e.message || 'Failed to load' });
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, []);
+
+  const onSave = async () => {
+    setSaving(true);
+    try {
+      const body = { repo_owner: owner.trim(), repo_name: repo.trim() };
+      if (token.trim()) body.token = token.trim();
+      const r = await api.adminSaveGithubConfig(body);
+      if (r.webhook_secret) setRevealedSecret(r.webhook_secret);
+      showToast({ kind: 'ok', msg: 'GitHub settings saved.' });
+      setTestResult(null);
+      await refresh();
+    } catch (e) {
+      showToast({ kind: 'err', msg: e.message || 'Failed to save' });
+    } finally { setSaving(false); }
+  };
+
+  const onTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const r = await api.adminTestGithub();
+      setTestResult(r);
+      showToast({ kind: r.ok ? 'ok' : 'err', msg: r.detail || (r.ok ? 'Connected.' : 'Connection failed.') });
+    } catch (e) {
+      showToast({ kind: 'err', msg: e.message || 'Test failed' });
+    } finally { setTesting(false); }
+  };
+
+  const onRotateSecret = async () => {
+    if (!confirm('Generate a new webhook secret? You will need to update it in the GitHub webhook settings, or issue-close events will stop syncing.')) return;
+    try {
+      const r = await api.adminSaveGithubConfig({ generate_webhook_secret: true });
+      if (r.webhook_secret) setRevealedSecret(r.webhook_secret);
+      showToast({ kind: 'ok', msg: 'New webhook secret generated.' });
+      await refresh();
+    } catch (e) {
+      showToast({ kind: 'err', msg: e.message || 'Failed to rotate' });
+    }
+  };
+
+  const copy = (text, label) => {
+    try {
+      navigator.clipboard.writeText(text);
+      showToast({ kind: 'ok', msg: `${label} copied.` });
+    } catch { showToast({ kind: 'err', msg: 'Copy failed — select and copy manually.' }); }
+  };
+
+  const inputClass = 'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-3 py-2 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500';
+
+  if (loading) return (
+    <div className="flex items-center gap-2 text-gray-500 text-sm py-8 justify-center">
+      <Loader2 size={16} className="animate-spin" /> Loading GitHub settings…
+    </div>
+  );
+
+  const statusBadge = cfg?.configured
+    ? { text: 'Connected config', cls: 'bg-emerald-100 text-emerald-700' }
+    : cfg?.has_token
+      ? { text: 'Partially configured', cls: 'bg-amber-100 text-amber-700' }
+      : { text: 'Not configured', cls: 'bg-gray-100 text-gray-700' };
+
+  return (
+    <div data-density-target className="max-w-3xl">
+      {toast && (
+        <div className={`mb-4 px-4 py-2.5 rounded-lg text-sm ${toast.kind === 'ok' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+          {toast.msg}
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 mb-5">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <Github size={18} className="text-gray-800 dark:text-gray-100" />
+            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Support ticket → GitHub sync</h3>
+          </div>
+          <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${statusBadge.cls}`}>{statusBadge.text}</span>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          When configured, filing a support ticket opens a GitHub issue in the target repo, and closing/updating that issue syncs the ticket status back automatically.
+        </p>
+
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+          GitHub token {cfg?.has_token && <span className="text-emerald-600">· configured{cfg?.token_preview ? ` (${cfg.token_preview})` : ''}</span>}
+        </label>
+        <input
+          type="password"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          autoComplete="off"
+          placeholder={cfg?.has_token ? 'Leave blank to keep the current token' : 'Fine-grained PAT with Issues read/write'}
+          className={`${inputClass} mb-1`}
+        />
+        <p className="text-[11px] text-gray-500 mb-3">Needs <strong>Issues: Read and write</strong> on the target repo. Stored encrypted; never shown again after saving.</p>
+
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Repo owner</label>
+            <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder={cfg?.default_repo_owner} className={inputClass} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Repo name</label>
+            <input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder={cfg?.default_repo_name} className={inputClass} />
+          </div>
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={onSave} disabled={saving}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 inline-flex items-center gap-1.5">
+            {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save
+          </button>
+          <button onClick={onTest} disabled={testing || !cfg?.has_token}
+            title={cfg?.has_token ? 'Verify the token can reach the repo' : 'Configure a token first'}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1.5">
+            {testing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Test connection
+          </button>
+        </div>
+
+        {testResult && (
+          <div className={`mt-3 text-xs px-3 py-2 rounded-lg border ${testResult.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+            {testResult.ok ? <CheckCircle2 size={13} className="inline mr-1 -mt-0.5" /> : <XCircle size={13} className="inline mr-1 -mt-0.5" />}
+            {testResult.detail}
+          </div>
+        )}
+      </div>
+
+      {/* Webhook — manual registration */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
+        <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-1">Webhook (status sync back)</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          Add this webhook in GitHub → the repo → Settings → Webhooks → Add webhook. Set content type to <code className="text-[11px]">application/json</code> and select <strong>“Let me select individual events” → Issues</strong>.
+        </p>
+
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Payload URL</label>
+        <div className="flex gap-2 mb-3">
+          <input readOnly value={cfg?.webhook_url || ''} className={`${inputClass} font-mono text-xs`} />
+          <button onClick={() => copy(cfg?.webhook_url || '', 'Payload URL')}
+            className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 inline-flex items-center gap-1.5">
+            <Copy size={12} /> Copy
+          </button>
+        </div>
+
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Secret {cfg?.has_webhook_secret && <span className="text-emerald-600">· configured</span>}
+        </label>
+        {revealedSecret ? (
+          <div className="flex gap-2 mb-2">
+            <input readOnly value={revealedSecret} className={`${inputClass} font-mono text-xs`} />
+            <button onClick={() => copy(revealedSecret, 'Secret')}
+              className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 inline-flex items-center gap-1.5">
+              <Copy size={12} /> Copy
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-2 mb-2 flex-wrap">
+            <button onClick={onRotateSecret}
+              className="px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 inline-flex items-center gap-1.5">
+              <RefreshCw size={12} /> {cfg?.has_webhook_secret ? 'Rotate secret' : 'Generate secret'}
+            </button>
+          </div>
+        )}
+        <p className="text-[11px] text-amber-700 dark:text-amber-300">
+          The secret is shown only once — when generated or rotated. Copy it into GitHub immediately; if you lose it, rotate to get a new one (and update GitHub to match).
+        </p>
+      </div>
     </div>
   );
 }
