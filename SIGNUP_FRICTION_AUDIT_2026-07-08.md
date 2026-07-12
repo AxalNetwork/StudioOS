@@ -1,0 +1,449 @@
+# Signup Friction Audit — 2026-07-08
+
+**Scope:** the complete acquisition funnel from invitation / landing page to a
+usable, logged-in account, as implemented in this repo (production = Cloudflare
+Worker + D1 + the `frontend/` SPA per `CLAUDE.md`).
+
+**Method:** code-level trace of every screen, API call, redirect, gate, and
+email in the funnel. File references are given for every finding so each fix
+is actionable. Drop-off percentages are hypotheses to validate — there is
+currently **no funnel instrumentation at all** (see §F), which is itself a
+top-3 finding.
+
+**Files audited (primary):**
+`frontend/src/pages/RegisterPage.jsx`, `VerifyEmailPage.jsx`, `LoginPage.jsx`,
+`AcceptInvitePage.jsx`, `PartnerOnboardPage.jsx`, `OnboardingChatPage.jsx`,
+`LandingPage.jsx`, `App.jsx` (RequireAuth gates), `lib/api.js`;
+`cloudflare-worker/src/routes/auth.ts`, `auth_google.ts`,
+`admin_partners.ts`, `partner_onboarding.ts`, `services/partnerDeals.ts`,
+`templates/email/registry.ts`.
+
+---
+
+## A. Executive summary
+
+The funnel a new email-based user must complete today:
+
+```
+Invitation/Landing → /register (name+email+Turnstile)
+  → "Check Your Email" (wait for Gmail-API delivery)
+  → click link → /verify-email (3 sequential API calls)
+  → install an authenticator app + scan QR / paste secret   ← cliff
+  → "Go to Sign In" (no code check that the scan worked)
+  → /login: re-type email + 6-digit TOTP + second Turnstile ← cliff
+  → forced full-screen AI interview (/onboarding/chat, ≥1 answer + save)
+  → /studio ("profile pending admin review")
+```
+
+That is **4 page contexts, 2 app switches (inbox + authenticator), 2 Turnstile
+challenges, ~9 user actions, and one mandatory chatbot interview** before the
+user sees any product. For the audience this platform invites (LPs, partners,
+advisors — frequently non-technical, frequently on a phone reading email),
+this is one of the highest-friction signup flows I have audited.
+
+### Top 5 reasons users are likely dropping off
+
+1. **Mandatory authenticator-app (TOTP) enrollment before first login.**
+   No password option, no magic-link option in the UI. Anyone without an
+   authenticator app must find, install, and configure one mid-signup. On
+   mobile — where most invitation emails are opened — the QR code cannot be
+   scanned because it is displayed *on the same phone*, so the user must do
+   manual copy-paste of a base32 secret between apps. (`VerifyEmailPage.jsx`,
+   `auth.ts /setup-totp`, `/login`)
+2. **Email verification wall before any value.** Registration ends at a
+   "Check Your Email" dead stop. Delivery runs through a Gmail-API pipeline
+   with known failure modes (the code itself documents "user saw 'Email sent'
+   and never received anything"). Resend is rate-limited to 3/hour.
+3. **Every sign-in requires the authenticator + Turnstile, forever.** The
+   login form demands a 6-digit code on every session, and the submit button
+   is hard-disabled until Turnstile issues a token — if the Turnstile script
+   is blocked (ad blockers, corporate proxies, iOS content blockers), signup
+   and login are **silently impossible**: the button just stays disabled with
+   no explanation. (`RegisterPage.jsx:390`, `LoginPage.jsx:304`)
+4. **The invitation's promise is broken after signup.** `?next=` return paths
+   are honored by `/login` but **ignored by `/register`** and dropped by the
+   Google-signup callback, so a person invited to join a specific startup/
+   project completes the entire gauntlet and lands in a generic AI interview
+   instead of the thing they were invited to. Signed partners
+   (`PartnerOnboardPage`) are told to "Sign in to Partner Portal" but were
+   never given a credential — login rejects them with *"Account not set up
+   for TOTP authentication."* A dead end at the moment of highest intent.
+5. **Value is withheld even after full completion.** Post-signup, users are
+   pinned full-screen to an AI profiling chat whose payoff is *"an Axal VC
+   admin will review your profile and propose your partnership agreement."*
+   The landing page promised deal flow, an LP ledger, an AI advisor; the
+   funnel delivers a form, a wait, and an empty dashboard flagged
+   `profile_pending=1`.
+
+### Biggest friction point
+**TOTP-first authentication for all email signups** — it converts a 30-second
+signup into a multi-app setup ritual and then re-taxes the user on every
+subsequent login.
+
+### Fastest win
+**Expose the magic-link sign-in that already exists.** The backend is fully
+built and production-hardened (`auth.ts` BLOCK-AUTH-01: `/api/auth/magic/start`
++ `/magic/verify`, 15-min single-use links, lower-assurance session with a
+7-day TOTP step-up window, find-or-create account, lands on onboarding).
+`api.magicStart()` exists in `lib/api.js:318` — **no UI calls it**. Adding one
+email field + button ("Email me a sign-in link") to `/login` and `/register`
+collapses the entire verify→TOTP→login gauntlet into: type email → tap link →
+you're in. This is days of UI work against zero backend work.
+
+### Highest-leverage test
+**Magic-link-first signup vs. current TOTP-first flow** (Test 1 in §E).
+Everything else on the list is tuning; this changes the shape of the funnel.
+
+---
+
+## B. Step-by-step funnel audit
+
+### Stage 0 — Invitation email → click
+*What the user sees:* For partner invitations: subject
+"{{inviter_name}} invited you to partner with Axal", one "Accept invitation"
+button (`templates/email/registry.ts:294`). Other paths: project-team invites
+(`/projects/invitations/accept?token=`), referral links (`/register?ref=`),
+lane deep-links (`/register?lane=`).
+*Likely objection:* none yet — invitation CTR is usually fine.
+*Friction:* LOW.
+*Fixes:*
+- The partner email is two sentences with no preview of what accepting means
+  (time required, what they get). Add a one-line expectation: *"Takes about
+  3 minutes — answer a few questions and pick the partnership that fits."*
+- Send invites with a `?email=` prefill on any link that lands on `/register`
+  (the page already supports it, `RegisterPage.jsx:81`).
+
+### Stage 1 — Landing page (`LandingPage.jsx`)
+*What the user sees:* four lane cards ("Apply as Founder", "Open LP Account",
+"Apply as Partner", "Become an Advisor") plus generic "Join Axal VC" heroes.
+"How it works" step 2 is literally **"Get verified — KYC, KYB, accreditation,
+and NDAs"**.
+*Likely objection:* "This looks like paperwork." Advertising KYC/KYB/NDA as
+step 2 of 3 before anyone has signed up primes visitors to expect a
+compliance process, not a product.
+*Friction:* MEDIUM (copy-induced anxiety, not mechanics).
+*Fixes:*
+- Reframe step 2: *"Verification only when you transact — browsing and
+  matching need just your email."* (That's true: KYC is investor-only per
+  `App.jsx:962`.)
+- The lane CTAs set expectations the form doesn't meet (see Stage 2 message
+  match). Either make the register page lane-aware end-to-end or soften the
+  CTA to "Join as a Founder".
+- Cookie consent banner mounts globally (`App.jsx:1558`) — make sure it
+  doesn't overlap the register CTA on mobile (see §5 mobile).
+
+### Stage 2 — `/register` step 1 (`RegisterPage.jsx:355-433`)
+*What the user sees:* "Create Your Account", **Full Name + Email + Turnstile
+widget**, "Continue", optional "Continue with Google", and the copy *"We use
+TOTP for secure, passwordless authentication."* A 4-segment progress bar.
+*Likely objections & defects:*
+- **"What's TOTP?"** Security jargon on the first screen. Says "passwordless"
+  but reads as "complicated".
+- **Message match break:** clicking "Open LP Account" or `?lane=investor`
+  changes only the headline. The `lane` is stored in `localStorage`
+  (`gvpn:intent`) and **never sent to the server** — `register()` posts only
+  `{email, name, turnstileToken, ref_code}` (`RegisterPage.jsx:204`), so the
+  14-day investor trial wired to `role === 'investor'` in `auth.ts:310` is
+  **unreachable from the public funnel**. Everyone is created as `partner`.
+- **`?next=` is ignored.** `AcceptInvitePage.jsx:51` sends new users to
+  `/register?next=/projects/invitations/accept?token=…`; RegisterPage reads
+  `ref`, `lane`, `product`, `email` — never `next` — and the post-signup
+  redirect is hard-coded to `/onboarding/chat`. The invitation is lost.
+- **Turnstile hard gate:** "Continue" is `disabled` until the widget resolves
+  (`RegisterPage.jsx:390`). Script blocked → polling gives up after ~10 s
+  (`T19` cap) and the user is stuck with a permanently disabled button and
+  **no error message**.
+- **Enter key does nothing.** Inputs aren't in a `<form>` and have no
+  `onKeyDown` submit (login page has one; register doesn't).
+- **No `autocomplete` attributes** (`name`, `email`) → no browser autofill on
+  the two fields that could be zero-typing.
+- **4-segment progress bar** promises a long flow, and then jumps 1→3 (step 2
+  is retired dead code), which reads as broken.
+- **No trust elements:** no Terms/Privacy link, no "free" statement, no
+  "no spam" note, no social proof near the button.
+*Friction:* HIGH.
+*Fixes:* exact copy below in §D; kill dead steps 2 & 4 (`totpData` has no
+setter — step 4 can never render); show a visible fallback if Turnstile fails
+to load ("Verification couldn't load — disable your ad blocker or use the
+email link option"); pass `lane`→`role` and honor `next`.
+
+### Stage 3 — "Check Your Email" (`RegisterPage.jsx step 3`)
+*What the user sees:* "We've sent a verification link to {email}", resend
+button (60 s cooldown, 3/hour server cap), "Use a different email".
+*Likely objection:* "It never arrived." Delivery is synchronous via the Gmail
+API with a legacy fallback sender; the code history (`auth.ts:201-224`)
+documents real incidents of "email_sent: true" with nothing delivered. Spam
+placement for a cold `axal.vc` sender is likely for exactly the invited-
+audience domains (corporate LPs).
+*Friction:* HIGH — this is a full stop with an external dependency.
+*Additional defect:* the resend endpoint **un-verifies** a user whose email
+was verified but whose TOTP was unfinished (`auth.ts:441` sets
+`email_verified = false`), forcing a full re-loop for anyone who stalled at
+the authenticator step and later hits "Resend".
+*Fixes:* add "Check your spam folder — sender is …" line; offer magic-link as
+the primary verification (one click = verified **and** signed in); add an
+"Open Gmail / Open Outlook" deep-link button; monitor `email_sent:false`
+rates (§F).
+
+### Stage 4 — `/verify-email` → TOTP setup (`VerifyEmailPage.jsx`)
+*What the user sees:* after three sequential API calls behind a bare
+"Loading..." screen: "Email verified successfully!" then immediately **"Set Up
+Authenticator"** — QR code, base32 secret, per-app manual instructions, and a
+"Go to Sign In" button.
+*Likely objections & defects:*
+- **"I don't have an authenticator app."** This is the cliff. No install
+  links, no `otpauth://` deep link. On the phone (where the email was
+  opened), scanning the on-screen QR is physically impossible — the only path
+  is copy secret → switch app → add account manually → switch back.
+- **No enrollment check.** "Go to Sign In" navigates to `/login` without ever
+  asking for a 6-digit code (`confirmVerification`, line 126). If the scan
+  didn't take, the failure surfaces later as "Invalid TOTP code" at login,
+  with no way back except re-registering.
+- **Recovery codes are generated but never shown.** `/setup-totp` returns
+  `recovery_codes` (`auth.ts:577`) and they can never be retrieved again; the
+  only UI that displays them is RegisterPage step 4, which is dead code
+  (`totpData` is `useState(null)` with no setter, `RegisterPage.jsx:15`). The
+  login page even advertises "Recovery codes also work here" — codes the user
+  has never seen. This guarantees future lockouts → support load → dead
+  accounts.
+- Clicking the email link a second time (second tab, link re-open) consumes /
+  rotates the token → "Verification Failed → Register Again" loop.
+*Friction:* VERY HIGH — this stage combined with Stage 5 is where I would
+expect the majority of qualified losses.
+*Fixes:* if TOTP stays: add `otpauth://` "Open in authenticator" button on
+mobile; verify a code inline before leaving the page; render recovery codes
+(the finished UI already exists in dead step 4 — port it); add app-store
+install links. If TOTP becomes optional (recommended): this page becomes
+"You're verified — you're in", with TOTP offered in Settings → Security.
+
+### Stage 5 — `/login` first sign-in (`LoginPage.jsx`)
+*What the user sees:* email (blank again), "Authenticator code" 6-digit
+field, a **second Turnstile**, then Sign in. Passkey and Google buttons
+below.
+*Likely objections & defects:*
+- Re-typing the email they typed 2 minutes ago (no carry-over from
+  verification; `VerifyEmailPage` even has the email in state and discards
+  it).
+- Sign-in button is disabled until both Turnstile **and** 6 digits are
+  present — same silent Turnstile trap as register.
+- Passkey sign-in exists, but there's no passkey **enrollment** during
+  signup, so it's a button that can't work for a new user.
+- For signed partners from `PartnerOnboardPage` this screen is a hard dead
+  end: their account was created by deal-activation with no TOTP
+  (`partnerDeals.ts:260`), so login answers *"Account not set up for TOTP
+  authentication"* and nothing on the page tells them what to do. (Magic
+  link would sign them straight in — it's just not exposed.)
+*Friction:* HIGH.
+*Fixes:* auto-login after successful TOTP verification at enrollment (mint
+the session server-side when the code is confirmed — the RegisterPage dead
+code did exactly this via `verify()`); prefill email via query param; add
+magic-link entry point; passkey enrollment offer right after first login.
+
+### Stage 6 — Forced onboarding chat (`/onboarding/chat`, App.jsx gate :891-924)
+*What the user sees:* a full-screen chatbot ("Tell us about yourself…
+5–8 quick questions"), no skip, sidebar/app hidden; every URL bounces back
+here until they answer ≥1 question and press Save; then a hard reload into
+`/studio?profile_pending=1`.
+*Likely objection:* "I just did all that to talk to a bot that says an admin
+will review me?" Also: users arriving via project invites or `?next=` links
+are held here while their actual goal (the invitation) is dropped.
+*Friction:* MEDIUM-HIGH (post-signup, but it's where "activated" is decided).
+*Fixes:* make it skippable ("I'll do this later"); or run it as a side panel
+over a live dashboard; honor `next` before the gate; replace "admin will
+review and propose a partnership agreement" with an immediate,
+role-appropriate first win.
+
+### Special path — Google OAuth (register/login)
+Good: skips email verification AND TOTP enrollment entirely (Task #51) — the
+proof that low-assurance first sessions are already accepted policy. Bad:
+(a) button renders only after a runtime probe of `/auth/google/start` — if
+`GOOGLE_AUTH_CLIENT_ID` isn't configured in production, **no social login
+exists at all** and nobody notices (verify this in prod!); (b) new Google
+signups are hard-routed to `/onboarding/chat` (`auth_google.ts:640`),
+dropping any `redirect`/invite context; (c) no Apple/LinkedIn — LinkedIn is
+conspicuous by absence given the audience and the existing LinkedIn identity
+columns in `/me`.
+
+### Special path — Partner invitation wizard (`PartnerOnboardPage.jsx`)
+Excellent pattern up to the end: token IS the auth, 6–10 adaptive questions,
+skippable questions, proposals, e-sign. Then it breaks: "Sign in to Partner
+Portal" → `/login` → TOTP dead end (above). The wizard also asks
+"What's your full legal name?" as question 1 — the admin already typed
+their name when creating the invite (`recipient_name`); prefill and confirm
+instead of asking.
+
+---
+
+## C. Form reduction plan
+
+| Field / step | Verdict | Rationale |
+|---|---|---|
+| Email (register) | **Keep** | The only truly essential field. Add `autocomplete="email"`, `inputmode="email"`. |
+| Full Name (register) | **Postpone** | Not needed to create an account; Google path derives it from the profile, magic-link path derives a placeholder (`auth.ts:985`). Ask at onboarding or first profile edit. If kept, split-second cost is low — but it's still one more required validation that can error. |
+| Turnstile (register) | **Keep, but fail-visible** | Legit bot defense; must never silently disable the CTA. Show fallback copy + magic-link alternative when the widget doesn't load. |
+| Email verification (link click) | **Merge into sign-in** | Replace "verify then separately log in" with the existing magic-link flow: one click both verifies and creates the session. |
+| TOTP enrollment (QR, secret, app install) | **Postpone (make optional)** | The infrastructure for deferred TOTP already exists: `email_only` assurance sessions with a 7-day step-up deadline and `requireStepUp()` gating on sensitive routes. Prompt enrollment at first sensitive action or via the step-up nag, not at signup. |
+| Recovery-codes acknowledgment | **Postpone with TOTP** | Belongs wherever TOTP enrollment happens — but it must actually be *shown* (today it never is). |
+| 6-digit code at first login | **Remove** (auto-login on enrollment) | If the user just proved code possession at enrollment, mint the session then and there. |
+| Second email entry at login | **Remove** | Prefill / carry over. |
+| Turnstile at login | **Keep** (server requires it) | But same fail-visible rule. |
+| Onboarding chat (≥1 answer, mandatory) | **Postpone / make skippable** | Role classification is valuable but should not block an invited user's task. Persist partial answers; allow "Skip for now". |
+| Partner wizard Q1 "full legal name" | **Remove** (prefill from invite) | Admin already entered it. |
+| Partner wizard Q2/Q3 (org, title — optional) | **Keep** (skippable already) | Fine as-is; "Skip" button exists. |
+| Lane/role selection | **Keep, but wire it up** | `?lane=` should map to a server-side `role` at register so investor trials and role routing actually engage. |
+
+**Shortest possible form:** one email field + Turnstile + "Continue with
+Google". Everything else after the user is inside.
+
+---
+
+## D. Prioritized fixes
+
+| # | Issue | Why it hurts conversion | Proposed change | Impact | Effort | Priority |
+|---|---|---|---|---|---|---|
+| 1 | Magic-link sign-in fully built server-side, no UI (`api.magicStart` unused) | Whole verify→TOTP→login gauntlet is unnecessary for first entry | Add "Email me a sign-in link" to `/login` and make it the primary path on `/register` | Very high | Low (UI only) | **P0 — high impact / easy** |
+| 2 | Signed partners can't log in ("Account not set up for TOTP authentication") | Kills the *highest-intent* users at the finish line, after contract signature | On deal activation send a magic link ("Access your Partner Portal"); or swap the wizard's final CTA to trigger `magicStart(recipient_email)` | Very high (for invited cohort) | Low | **P0 — high impact / easy** |
+| 3 | Recovery codes generated but never displayed (dead RegisterPage step 4; VerifyEmailPage omits them) | Future lockouts, support tickets, abandoned accounts; login copy references codes users never saw | Port the finished recovery-codes block from RegisterPage step 4 into VerifyEmailPage (or the settings TOTP enrolment) | High (retention) | Low | **P0 — correctness bug** |
+| 4 | `?next=` ignored by register + Google-signup redirect | Invited users lose the invitation; team invites leak into a generic chatbot | Read `next` in RegisterPage, thread through verification (store alongside `gvpn:intent`), honor after onboarding gate; pass `redirect` for `newSignup` in `auth_google.ts` | High | Medium | **P1 — high impact / harder** |
+| 5 | TOTP mandatory before first session (email path) | The single largest structural cliff | Make TOTP a step-up factor (infra exists: `assurance_level='email_only'`, 7-day step-up); enroll at first sensitive action | Very high | Medium (mostly policy + removing gates) | **P1 — high impact / harder** |
+| 6 | Turnstile failure silently disables CTA (register + login) | Users with blockers/corporate proxies can never join and never learn why | On the 50-attempt timeout, show inline error + magic-link fallback | Medium-high (affects a minority totally) | Low | **P1** |
+| 7 | No auto-login after TOTP enrollment; no code check on VerifyEmailPage | Extra login screen; broken scans discovered too late | Add inline 6-digit confirm on VerifyEmailPage that mints the session (RegisterPage dead `verify()` shows the pattern) | High | Medium | **P1** |
+| 8 | `lane`/`role` never sent to server; investor trial unreachable | Message-match break; "Open LP Account" creates a generic partner account; trial CAC wasted | Pass `role` derived from `lane` in `api.register` payload (backend already accepts `role`) | Medium | Low | **P1** |
+| 9 | Mandatory onboarding chat gate with admin-review payoff | Post-completion disappointment; blocks invited users' tasks | Add "Skip for now"; move admin-review language to a passive banner; deliver a first win on /studio | Medium | Low-medium | **P2** |
+| 10 | "TOTP" jargon + KYC/KYB/NDA copy on landing | Anxiety before the form | Copy changes (below) | Medium | Trivial | **P2** |
+| 11 | Resend un-verifies stalled-at-TOTP users (`auth.ts:441`) | Loops users back to the start | Only reset `email_verified` when it was already false; otherwise reissue setup token alone | Medium | Low | **P2** |
+| 12 | No `autocomplete`/`inputmode`/Enter-submit on register | Mobile typing tax | `<form onSubmit>`, `autocomplete="name"/"email"`, `inputmode="email"` | Low-medium | Trivial | **P2** |
+| 13 | iOS zoom on focus (inputs are 14 px `text-sm`) | Janky mobile form experience | ≥16 px font on inputs at mobile breakpoints (or `text-base` on auth inputs) | Low-medium | Trivial | **P2** |
+| 14 | 4-segment progress bar jumps 1→3; dead steps 2/4 in RegisterPage | Looks broken; dead code confuses maintenance | Two segments (Account → Verify) or none; delete dead code | Low | Trivial | **P3** |
+| 15 | No Terms/Privacy/free-ness reassurance near CTA | Trust gap on a finance product | One line under CTA (copy below) | Low-medium | Trivial | **P3** |
+| 16 | Google button existence depends on runtime probe; no Apple/LinkedIn | If prod env var is missing, zero social login, silently | Alert/monitor on probe failures; consider LinkedIn OAuth for this audience | Medium (unknown until verified) | Low to verify | **P3 (verify now)** |
+
+### Exact copy recommendations
+
+- Register subhead, replace *"Join the Global Venture Partner Network. We use
+  TOTP for secure, passwordless authentication."* with:
+  **"Free to join. No password to remember — we'll email you a secure
+  sign-in link."**
+- Under the CTA add: *"By continuing you agree to our [Terms] and
+  [Privacy Policy]. We'll only email you about your account."*
+- "Check Your Email" screen, add: *"It can take a minute. Check spam for
+  mail from **support@axal.vc**."* plus **[Open Gmail] [Open Outlook]**
+  buttons.
+- Landing "How it works" step 2, replace *"KYC, KYB, accreditation, and
+  NDAs — only where the activity actually requires it"* with:
+  **"Browse and match with just your email — verification comes later, only
+  when you invest or sign."**
+- Login helper for the partner dead end (until fixed): map the
+  `'Account not set up for TOTP authentication'` error to *"Your account
+  doesn't have an authenticator yet — request a sign-in link instead"* with a
+  magic-link button.
+- CTA button: keep "Continue" (good), but Google button should read
+  **"Continue with Google — fastest"** while it genuinely skips two stages.
+
+---
+
+## E. A/B test roadmap (ranked by expected impact)
+
+| # | Test | Hypothesis | Why it may work | Difficulty | Expected impact |
+|---|---|---|---|---|---|
+| 1 | **Magic-link-first signup** vs. current | Replacing verify+TOTP+login with one emailed link lifts registration→first-session ≥40% | Removes 2 app switches and ~6 actions; backend already shipped & hardened | Low (UI) | Very high |
+| 2 | **TOTP optional (step-up later)** vs. mandatory | Deferring authenticator enrollment to first sensitive action lifts verified→active ≥30% with no measurable security incident increase | `email_only` assurance + 7-day step-up already enforce safety server-side | Medium | Very high |
+| 3 | **Auto-login after enrollment** (code confirmed on VerifyEmailPage mints session) vs. bounce to /login | Removing the second login screen lifts enrolled→active by 10-20% | Every removed screen retains a fraction; dead code already implements it | Medium | High |
+| 4 | **Invite deep-link continuity** (`next` honored end-to-end) vs. status quo | Invited users who land on their invitation target after signup activate 2× more | Task completion is the motivation that got them through | Medium | High (invited cohort) |
+| 5 | **Google-first button order** (Google on top, email second) | Social-first ordering lifts total completion 10-15% | Google path already skips both cliffs; make the cheap path the default path | Trivial | High |
+| 6 | **Skippable onboarding chat** vs. forced | "Skip for now" reduces post-login abandonment without materially reducing profile completion (nag later) | Forced gates convert task-driven users into bounces | Low | Medium-high |
+| 7 | **Name field removed** (email-only form) vs. name+email | One-field form lifts form-start→submit 5-10% | Fewer decisions, fewer validations; name collected in onboarding | Low | Medium |
+| 8 | **Trust strip under CTA** (Terms/free/no-spam + member count from the live stats API) vs. none | Reassurance lifts submit rate ~5% on cold traffic | Finance product + personal data = above-average anxiety | Trivial | Medium |
+| 9 | **Landing "Get verified" copy reframe** | Removing KYC/KYB/NDA from pre-signup copy lifts landing→register CTR | Anticipated paperwork suppresses starts | Trivial | Medium |
+| 10 | **Turnstile fallback UX** (visible error + magic-link alternative) vs. silent disable | Recovers the blocked-script segment (measure it first — could be 2-10%) | Currently those users convert at exactly 0% | Low | Medium (segment-dependent) |
+| 11 | **Passkey enrollment right after first login** ("Use Face ID next time") | Passkey offer converts 20%+ of new users and halves their future login friction | Login passkey support already shipped; enrollment is the missing half | Medium | Medium (retention) |
+| 12 | **Lane-aware register page** (role sent to server, lane-specific value bullets + correct trial) vs. generic | Message-matched form lifts lane-CTA cohort completion | Scent preservation; investor trial finally activates | Low | Medium |
+
+Guardrail metrics for all tests: bot-account rate (Turnstile failures,
+`turnstile_failed` logs), support tickets, step-up completion within 7 days
+(for tests 1-2).
+
+---
+
+## F. Tracking plan
+
+**Current state: there is no client-side analytics at all.** No GA/PostHog/
+Plausible/Amplitude anywhere in `frontend/`. The server writes
+`activity_logs` rows (`user_registered`, `email_verified`, `user_login`,
+`turnstile_failed`, `user_signup_magic`…), which allow a coarse
+account-level funnel, but nothing observes the screens where users are lost
+(form starts, field errors, Turnstile failures, TOTP abandonment, resends).
+You cannot manage this funnel until this exists.
+
+### Minimal event plan (one table / one endpoint, ~15 events)
+
+Common properties on every event: `anonymous_id` (cookie), `session_id`,
+`device` (mobile/desktop), `referrer`, `utm_*`, `ref_code`, `lane`,
+`invite_type` (partner/project/event/none), `ts`.
+
+| Event | Fired when | Key props |
+|---|---|---|
+| `landing_viewed` | LandingPage mount | — |
+| `signup_viewed` | RegisterPage mount | `prefilled_email` (bool) |
+| `signup_started` | first keystroke in any field | field name |
+| `turnstile_ready` / `turnstile_failed_client` | widget render / 50-poll timeout | latency ms |
+| `signup_submitted` | Continue clicked | validation_errors[] |
+| `signup_succeeded` / `signup_failed` | API response | error code, `email_sent` flag |
+| `google_signup_clicked` | — | — |
+| `verify_email_shown` | step 3 render | — |
+| `verify_resend_clicked` | — | attempt # |
+| `verify_link_opened` | VerifyEmailPage mount | minutes since signup |
+| `totp_setup_shown` | totp_setup status | — |
+| `totp_setup_abandoned` | pagehide without "Go to Sign In" | seconds on page |
+| `login_viewed` / `login_submitted` / `login_succeeded` / `login_failed` | — | error code (esp. `not set up for TOTP`), used_recovery_code |
+| `onboarding_chat_shown` / `_message_sent` / `_saved` / `_abandoned` | — | message count |
+| `first_dashboard_view` | /studio first render post-signup | minutes since `signup_submitted` |
+
+### Funnel metrics to stand up (in order of urgency)
+
+1. **Page-to-page conversion:** landing→register viewed→submitted→verify
+   link opened→TOTP done→first login→chat saved→dashboard. One number per
+   edge, split by **device** and **cohort** (`invite_type`, `ref_code`,
+   `lane`, utm).
+2. **Email verification completion + latency:** % of `signup_succeeded` that
+   reach `verify_link_opened`, and the time distribution; alert when
+   `email_sent:false` (already returned by the API — log it!) exceeds ~1%.
+3. **Error rate by field/step:** validation failures on submit, API error
+   codes at login (the `'Account not set up for TOTP'` count is the partner
+   dead-end meter), Turnstile client failures.
+4. **TOTP abandonment:** `totp_setup_shown` without a subsequent
+   `login_succeeded` within 24 h — this is the cliff's exact height.
+5. **Time to complete:** median `signup_submitted` → `first_dashboard_view`
+   (expect this to be brutal today; it's the headline number for the
+   magic-link test).
+6. **Resend & backtracking:** resend clicks per verification, "Use a
+   different email" clicks, repeated `signup_submitted` for the same
+   `anonymous_id` (rage-retry proxy). True rage-click/session-replay can come
+   later via PostHog/Clarity if wanted — not required for the first pass.
+7. **Server-side reconciliation:** daily counts from `activity_logs`
+   (`user_registered` vs `email_verified` vs first `user_login`) as ground
+   truth against the client events; today this query is the only funnel you
+   have — run it immediately for a baseline while the client events ship.
+
+Implementation note: a `POST /api/track` route on the worker writing into a
+D1 `funnel_events` table (batched, sampled if needed) keeps everything
+first-party — consistent with the existing no-third-party posture and the
+cookie-consent setup. Remember to respect the consent state in
+`lib/cookieConsent.js`.
+
+---
+
+## What I could not see (and would sharpen this audit)
+
+- Production env config: is `VITE_TURNSTILE_SITE_KEY` set on Pages? Is
+  `GOOGLE_AUTH_CLIENT_ID` configured (i.e., does the Google button actually
+  render in prod)? Each silently reshapes the funnel.
+- Deliverability data for `support@axal.vc` / the Gmail-API sender (SPF/
+  DKIM/DMARC, spam placement).
+- The actual outreach-invitation email copy for the "lots of invitations"
+  campaign, and which link it points at (`/register`, `/partners/onboard`,
+  or an event page) — the fixes above cover all three, but prioritization
+  depends on the mix.
+- Any real numbers: D1 `activity_logs` counts of `user_registered` vs
+  `email_verified` vs `user_login` would confirm which cliff dominates
+  within a day.
