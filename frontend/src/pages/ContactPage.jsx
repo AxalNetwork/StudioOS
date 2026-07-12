@@ -3,6 +3,7 @@ import { Mail, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
 import { request } from '../lib/api';
+import { loadTurnstile } from '../lib/turnstile';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
@@ -41,6 +42,7 @@ export default function ContactPage() {
       });
     };
 
+    loadTurnstile().catch(() => {});
     if (typeof window.turnstile === 'undefined') {
       // Cap polling at 50 attempts (~10s) so a blocked Turnstile script
       // (ad blocker, offline) doesn't leak an interval per mount.

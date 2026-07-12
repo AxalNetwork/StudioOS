@@ -4,7 +4,7 @@ import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirecte
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
-import SpinoutLabListener from './components/SpinoutLabListener';
+const SpinoutLabListener = lazy(() => import('./components/SpinoutLabListener'));
 import SafeMount from './components/SafeMount';
 import CookieConsent from './components/CookieConsent';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
@@ -18,7 +18,7 @@ import { SIDEBAR_GROUPS, defaultOpenGroups, filterItemsByTier, hasTier, hasInves
 import PaywallModal, { openPaywall } from './components/PaywallModal';
 import { Lock as LockIcon } from 'lucide-react';
 import { api } from './lib/api';
-import SpinoutLabSidebar from './components/SpinoutLabSidebar';
+const SpinoutLabSidebar = lazy(() => import('./components/SpinoutLabSidebar'));
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
 // renders synchronously on first paint. It marks itself a no-auth-redirect
 // surface on mount; a lazy chunk could load AFTER the background settings 401
@@ -200,12 +200,17 @@ const AdvisorResearchWorkspace = lazy(() => import('./pages/advisor/research/Adv
 // Engagements, Performance).
 const PartnerOperationsWorkspace = lazy(() => import('./pages/partner/operations/PartnerOperationsWorkspace'));
 const GrowthWorkspace = lazy(() => import('./pages/growth/GrowthWorkspace'));
-import InactivityWarningModal from './components/InactivityWarningModal';
-import NotificationBell from './components/NotificationBell';
-import CommandPalette from './components/CommandPalette';
-import StepUpModal from './components/StepUpModal';
-import InstallPrompt from './components/InstallPrompt';
-import KeyboardShortcutsOverlay from './components/KeyboardShortcutsOverlay';
+const SectionScaffold = lazy(() => import('./components/SectionScaffold'));
+// Authenticated-shell widgets — lazy so they leave the entry chunk. They only
+// ever render inside ProtectedLayout (logged-in users), so a logged-out visitor
+// hitting the landing page never downloads them. Each render site below is
+// wrapped in its own <Suspense fallback> so fetching a chunk can't blank the app.
+const InactivityWarningModal = lazy(() => import('./components/InactivityWarningModal'));
+const NotificationBell = lazy(() => import('./components/NotificationBell'));
+const CommandPalette = lazy(() => import('./components/CommandPalette'));
+const StepUpModal = lazy(() => import('./components/StepUpModal'));
+const InstallPrompt = lazy(() => import('./components/InstallPrompt'));
+const KeyboardShortcutsOverlay = lazy(() => import('./components/KeyboardShortcutsOverlay'));
 import useInactivityTimeout from './hooks/useInactivityTimeout';
 
 // Phase B · Prompt 5 — sidebar groups now live in `frontend/src/sidebarConfig.js`.
@@ -743,7 +748,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               </button>
             </div>
             {inSpinoutLab ? (
-              <SpinoutLabSidebar onNavigate={closeOnMobileNav} />
+              <Suspense fallback={<div className="flex-1" />}>
+                <SpinoutLabSidebar onNavigate={closeOnMobileNav} />
+              </Suspense>
             ) : (
               <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} />
             )}
@@ -805,7 +812,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 </span>
               )}
               <div className="flex items-center gap-1 ml-auto">
-                <NotificationBell userId={user?.id} />
+                <Suspense fallback={<span className="inline-block w-9 h-9" />}>
+                  <NotificationBell userId={user?.id} />
+                </Suspense>
                 <button className="text-gray-600 dark:text-gray-300 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
                   <Menu size={20} />
                 </button>
@@ -817,16 +826,18 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           </main>
         </div>
       </div>
-      <InactivityWarningModal
-        open={warningOpen}
-        secondsLeft={secondsLeft}
-        onStay={stayLoggedIn}
-        onLogout={logoutNow}
-      />
-      <CommandPalette />
-      <KeyboardShortcutsOverlay />
-      <InstallPrompt />
-      <StepUpModal />
+      <Suspense fallback={null}>
+        <InactivityWarningModal
+          open={warningOpen}
+          secondsLeft={secondsLeft}
+          onStay={stayLoggedIn}
+          onLogout={logoutNow}
+        />
+        <CommandPalette />
+        <KeyboardShortcutsOverlay />
+        <InstallPrompt />
+        <StepUpModal />
+      </Suspense>
     </ViewModeContext.Provider>
   );
 }
@@ -1481,9 +1492,9 @@ function AppInner() {
           Bare section paths redirect to their first tab so every workspace is
           reachable by direct URL and by clicking the sidebar. */}
       <Route path="/advisor/network" element={<Navigate to="/advisor/network/introductions" replace />} />
-      <Route path="/advisor/network/introductions" element={guard(['admin', 'advisor'], <AdvisorNetworkWorkspace />)} />
-      <Route path="/advisor/network/relationships" element={guard(['admin', 'advisor'], <AdvisorNetworkWorkspace />)} />
-      <Route path="/advisor/network/organizations" element={guard(['admin', 'advisor'], <AdvisorNetworkWorkspace />)} />
+      <Route path="/advisor/network/introductions" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorNetworkWorkspace />)} />
+      <Route path="/advisor/network/relationships" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorNetworkWorkspace />)} />
+      <Route path="/advisor/network/organizations" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorNetworkWorkspace />)} />
       <Route path="/advisor/advisory" element={<Navigate to="/advisor/advisory/opportunities" replace />} />
       <Route path="/advisor/advisory/opportunities" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/clients" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
@@ -1491,11 +1502,11 @@ function AppInner() {
       <Route path="/advisor/advisory/delivery" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/contracts" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/research" element={<Navigate to="/advisor/research/market" replace />} />
-      <Route path="/advisor/research/market" element={guard(['admin', 'advisor'], <AdvisorResearchWorkspace />)} />
-      <Route path="/advisor/research/companies" element={guard(['admin', 'advisor'], <AdvisorResearchWorkspace />)} />
-      <Route path="/advisor/research/documents" element={guard(['admin', 'advisor'], <AdvisorResearchWorkspace />)} />
-      <Route path="/advisor/research/ai" element={guard(['admin', 'advisor'], <AdvisorResearchWorkspace />)} />
-      <Route path="/advisor/research/news" element={guard(['admin', 'advisor'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research/market" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research/companies" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research/documents" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research/ai" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research/news" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorResearchWorkspace />)} />
       <Route path="/partner/operations" element={<Navigate to="/partner/operations/overview" replace />} />
       <Route path="/partner/operations/overview" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
       <Route path="/partner/operations/capabilities" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
@@ -1509,13 +1520,24 @@ function AppInner() {
       <Route path="/advisor/growth" element={<Navigate to="/advisor/growth/talent" replace />} />
       <Route path="/advisor/growth/talent" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
       <Route path="/advisor/growth/customers" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
+      <Route path="/advisor/growth/partnerships" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
       <Route path="/advisor/growth/capital" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
       <Route path="/advisor/growth/experts" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
       <Route path="/partner/growth" element={<Navigate to="/partner/growth/talent" replace />} />
       <Route path="/partner/growth/talent" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
       <Route path="/partner/growth/customers" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
+      <Route path="/partner/growth/partnerships" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
       <Route path="/partner/growth/capital" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
       <Route path="/partner/growth/experts" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
+      {/* Investor lifecycle sections scaffolded now — nav + route live; the
+          working surface is filled in later. Investor-scoped (admin can view). */}
+      <Route path="/pipeline/screening" element={guard(['admin', 'investor'], <SectionScaffold title="Screening" description="Evaluate and qualify inbound deals before they advance to the investment committee." planned={['Screening scorecards and qualification criteria', 'Auto-scored fit against your thesis and mandate', 'Screening notes, flags, and pass / advance decisions', 'Handoff into the commit stage']} />)} />
+      <Route path="/pipeline/commit" element={guard(['admin', 'investor'], <SectionScaffold title="Commit" description="Investment-committee decisions and the path to a signed commitment." planned={['IC memos, votes, and decision records', 'Term sheet and commitment tracking', 'Conditions to close and approvals', 'Handoff into transactions']} />)} />
+      <Route path="/pipeline/transactions" element={guard(['admin', 'investor'], <SectionScaffold title="Transactions" description="Execute and track closed deals from wire to confirmation." planned={['Closing checklists and wire tracking', 'Executed documents and signatures', 'Cap-table and ownership updates', 'Transaction history and audit trail']} />)} />
+      <Route path="/portfolio/performance" element={guard(['admin', 'investor'], <SectionScaffold title="Portfolio Performance" description="Track returns, valuations, and portfolio-level performance over time." planned={['IRR, MOIC, and TVPI by company and fund', 'Valuation history and mark-ups', 'Cohort and vintage comparisons', 'Benchmarks and performance attribution']} />)} />
+      <Route path="/portfolio/growth" element={guard(['admin', 'investor'], <SectionScaffold title="Portfolio Growth" description="Support and accelerate growth across your portfolio companies." planned={['Growth initiatives and value-creation plans', 'Talent, customer, and capital introductions', 'KPIs and milestone tracking', 'Portfolio-wide growth benchmarks']} />)} />
+      <Route path="/funds/performance" element={guard(['admin', 'investor'], <SectionScaffold title="Fund Performance" description="Fund-level returns, capital deployment, and LP-facing performance." planned={['Fund IRR, DPI, RVPI, and TVPI', 'Capital deployment and pacing', 'J-curve and NAV over time', 'LP-ready performance summaries']} />)} />
+      <Route path="/funds/accounting" element={guard(['admin', 'investor'], <SectionScaffold title="Fund Accounting" description="Fund financials, capital accounts, and accounting workflows." planned={['Capital accounts and allocations by LP', 'Management fee and carry calculations', 'Expense tracking and financial statements', 'Audit and reconciliation support']} />)} />
       {/* Task #1 — Contacts merged into the unified Network page. The legacy
           /contacts route now redirects into the Contacts tab. */}
       <Route path="/contacts" element={<Navigate to="/network?tab=contacts" replace />} />
@@ -1618,6 +1640,19 @@ function GlobalPaywallMount() {
   return <PaywallModal user={user} />;
 }
 
+// Founder-only global listener — lazy + gated on auth so a logged-out visitor
+// (e.g. the landing page) never downloads its chunk. The `spinout-lab:advanced`
+// events it reacts to are only ever dispatched by authenticated founder actions.
+function GlobalSpinoutLabListenerMount() {
+  const { user } = useAuth();
+  if (!user) return null;
+  return (
+    <Suspense fallback={null}>
+      <SpinoutLabListener />
+    </Suspense>
+  );
+}
+
 // Task #2 (DD) — Direct-URL guard for /docs/admin/* paths.
 // Non-admins (and anonymous visitors) get a Not Found screen with no
 // hint that admin docs exist. Admins are redirected to the hash-
@@ -1657,7 +1692,7 @@ export default function App() {
             SafeMount error boundary so a regression in one widget
             degrades to "that one widget is missing" instead of "the
             whole app is gone". */}
-        <SafeMount name="SpinoutLabListener"><SpinoutLabListener /></SafeMount>
+        <SafeMount name="SpinoutLabListener"><GlobalSpinoutLabListenerMount /></SafeMount>
         <SafeMount name="GlobalPaywallMount"><GlobalPaywallMount /></SafeMount>
         <SafeMount name="CookieConsent"><CookieConsent /></SafeMount>
       </SettingsProvider>

@@ -6,6 +6,7 @@ import { ArrowLeft, Copy, Check, Mail, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { track } from '../lib/funnel';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
+import { loadTurnstile } from '../lib/turnstile';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
@@ -149,6 +150,7 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (!TURNSTILE_SITE_KEY || !turnstileRef.current || step !== 1) return;
+    loadTurnstile().catch(() => {});
     if (typeof window.turnstile === 'undefined') {
       // T19 — Cap the polling at 50 attempts (~10s). Without this bound the
       // loop runs forever if the Turnstile script never loads (network

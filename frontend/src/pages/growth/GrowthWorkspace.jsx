@@ -10,10 +10,11 @@
 // UI shell only — tab pages render mock data (see src/data/growth.js).
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { Rocket, Users, Building2, Banknote, GraduationCap } from 'lucide-react';
+import { Rocket, Users, Building2, Banknote, GraduationCap, Handshake } from 'lucide-react';
 import WorkspaceTabs, { WorkspaceHeader } from '../../components/WorkspaceTabs';
 import TalentPage from './TalentPage';
 import CustomersPage from './CustomersPage';
+import PartnershipsPage from './PartnershipsPage';
 import CapitalPage from './CapitalPage';
 import ExpertsPage from './ExpertsPage';
 
@@ -24,15 +25,18 @@ export default function GrowthWorkspace() {
 
   const active = pathname.includes('/customers')
     ? 'customers'
-    : pathname.includes('/capital')
-      ? 'capital'
-      : pathname.includes('/experts')
-        ? 'experts'
-        : 'talent';
+    : pathname.includes('/partnerships')
+      ? 'partnerships'
+      : pathname.includes('/capital')
+        ? 'capital'
+        : pathname.includes('/experts')
+          ? 'experts'
+          : 'talent';
 
   const tabs = [
     { to: `${prefix}/growth/talent`, label: 'Talent', icon: Users },
     { to: `${prefix}/growth/customers`, label: 'Customers', icon: Building2 },
+    { to: `${prefix}/growth/partnerships`, label: 'Partnerships', icon: Handshake },
     { to: `${prefix}/growth/capital`, label: 'Capital', icon: Banknote },
     { to: `${prefix}/growth/experts`, label: 'Experts', icon: GraduationCap },
   ];
@@ -47,6 +51,7 @@ export default function GrowthWorkspace() {
       <WorkspaceTabs tabs={tabs} />
       {active === 'talent' && <TalentPage />}
       {active === 'customers' && <CustomersPage />}
+      {active === 'partnerships' && <PartnershipsPage />}
       {active === 'capital' && <CapitalPage />}
       {active === 'experts' && <ExpertsPage />}
     </div>

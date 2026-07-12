@@ -32,7 +32,19 @@ export default defineConfig({
     outDir: path.resolve(__dirname, '../docs'),
     emptyOutDir: true,
     rollupOptions: {
-      output: {},
+      output: {
+        // Keep the React runtime (react, react-dom, router, scheduler) in one
+        // stable, long-cached chunk so it survives app-code redeploys and is
+        // shared across every route. Everything else keeps Rollup's automatic
+        // per-import code-splitting so route/feature chunks stay independent.
+        manualChunks(id) {
+          if (id.includes('node_modules') &&
+              /[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) {
+            return 'react-vendor';
+          }
+          return undefined;
+        },
+      },
     },
   },
   server: {

@@ -307,14 +307,20 @@ export const SIDEBAR_GROUPS = {
     { key: 'engage', label: 'Engage', items: [
       { to: '/partner/office-hours', icon: Calendar, label: 'My Office Hours' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
-      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/partners'] },
       { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
     ]},
-    // Task — Partner Operations workspace. Each item deep-links to its own tab
-    // route; `match` keeps the row active across the tab and its sub-route so the
-    // group highlights correctly regardless of which tab is open.
+    // Network — Introductions, Relationships, Organizations. Reuses the shared
+    // Network workspace (also used by advisors); the standalone "Network" link
+    // that used to live in Engage is folded into this group's three tabs.
+    { key: 'network', label: 'Network', items: [
+      { to: '/advisor/network/introductions', icon: Sparkles, label: 'Introductions' },
+      { to: '/advisor/network/relationships', icon: Users, label: 'Relationships', match: ['/advisor/network/relationships', '/network', '/relationships', '/partners'] },
+      { to: '/advisor/network/organizations', icon: Globe, label: 'Organizations' },
+    ]},
+    // Partner Operations workspace. Each item deep-links to its own tab route;
+    // `match` keeps the row active across the tab and its sub-route.
     { key: 'operations', label: 'Operations', items: [
       { to: '/partner/operations/overview', icon: LayoutDashboard, label: 'Overview', match: ['/partner/operations/overview'] },
       { to: '/partner/operations/capabilities', icon: Package, label: 'Capabilities', match: ['/partner/operations/capabilities'] },
@@ -322,11 +328,23 @@ export const SIDEBAR_GROUPS = {
       { to: '/partner/operations/engagements', icon: Handshake, label: 'Engagements', match: ['/partner/operations/engagements'] },
       { to: '/partner/operations/performance', icon: TrendingUp, label: 'Performance', match: ['/partner/operations/performance'] },
     ]},
-    // Growth — market-matching / resource-discovery workspace (Talent, Customers,
-    // Capital, Experts). One nav entry opens the tabbed workspace; the four areas
-    // live as tabs inside the page, not as separate sidebar rows.
+    // Growth — market-matching workspace surfaced as five tabs (Talent,
+    // Customers, Partnerships, Capital, Experts). Each row deep-links to its tab.
     { key: 'growth', label: 'Growth', items: [
-      { to: '/partner/growth/talent', icon: Rocket, label: 'Growth', match: ['/partner/growth'] },
+      { to: '/partner/growth/talent', icon: Users, label: 'Talent' },
+      { to: '/partner/growth/customers', icon: Briefcase, label: 'Customers' },
+      { to: '/partner/growth/partnerships', icon: Handshake, label: 'Partnerships' },
+      { to: '/partner/growth/capital', icon: DollarSign, label: 'Capital' },
+      { to: '/partner/growth/experts', icon: Brain, label: 'Experts' },
+    ]},
+    // Research — Market, Companies, AI Research, Documents, News. Reuses the
+    // shared Research workspace (also used by advisors).
+    { key: 'research', label: 'Research', items: [
+      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
+      { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
+      { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
+      { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
+      { to: '/advisor/research/news', icon: Send, label: 'News' },
     ]},
     // Task #4 — the former "Earn" group held only "Referrals" (/refer), which
     // has moved into Settings (/settings/referrals); /refer redirects there.
@@ -366,37 +384,47 @@ export const SIDEBAR_GROUPS = {
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/products', icon: Package, label: 'Products' },
     ]},
-    { key: 'sourcing', label: 'Sourcing', items: [
+    // Task — investor sidebar restructured around the investment lifecycle IA:
+    // Network → Pipeline → Portfolio → Funds → Research. Network & Research
+    // reuse the shared workspaces (also used by advisors). Sidebar-level change
+    // only: every prior route stays registered and URL-reachable. Surfaces
+    // trimmed from the nav (still reachable by direct URL): /pipeline (Pipeline
+    // Board), /matches, /watchlist, /scoring, /due-diligence, /market-intel,
+    // /portfolio/risk-matrix, /ic, /legal-capital, /portfolio/positions,
+    // /lp-portal, /funds/capital-calls, /portfolio/reserves,
+    // /portfolio/waterfall, /liquidity.
+    { key: 'network', label: 'Network', items: [
+      { to: '/advisor/network/introductions', icon: Sparkles, label: 'Introductions' },
+      { to: '/advisor/network/relationships', icon: Users, label: 'Relationships', match: ['/advisor/network/relationships', '/network', '/relationships', '/contacts'] },
+      { to: '/advisor/network/organizations', icon: Globe, label: 'Organizations' },
+    ]},
+    { key: 'pipeline', label: 'Pipeline', items: [
       { to: '/deals', icon: Handshake, label: 'Deal Flow', requiredInvestorTier: 'professional' },
-      { to: '/pipeline', icon: Layers, label: 'Pipeline Board', requiredInvestorTier: 'professional' },
-      { to: '/matches', icon: Sparkles, label: 'AI Matches' },
-      { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
+      { to: '/pipeline/screening', icon: Target, label: 'Screening' },
+      { to: '/pipeline/commit', icon: Gavel, label: 'Commit' },
+      { to: '/pipeline/transactions', icon: DollarSign, label: 'Transactions' },
     ]},
-    { key: 'diligence', label: 'Diligence', items: [
-      { to: '/scoring', icon: Target, label: 'Scoring Engine' },
-      { to: '/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
-      { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
-      { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
+    { key: 'portfolio', label: 'Portfolio', items: [
+      { to: '/portfolio/health', icon: Briefcase, label: 'Companies' },
+      { to: '/portfolio/performance', icon: TrendingUp, label: 'Performance' },
+      { to: '/portfolio/updates', icon: FileBarChart, label: 'Reporting' },
+      { to: '/portfolio/growth', icon: Rocket, label: 'Growth' },
     ]},
-    { key: 'commit', label: 'Commit', items: [
-      { to: '/ic', icon: Gavel, label: 'IC Decisions' },
-      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
-      { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
+    { key: 'funds', label: 'Funds', items: [
+      { to: '/funds', icon: Wallet, label: 'Fund Management' },
+      { to: '/lp-reports', icon: UserCircle, label: 'LP Management' },
+      { to: '/funds/performance', icon: Activity, label: 'Performance' },
+      { to: '/funds/accounting', icon: Scale, label: 'Accounting' },
     ]},
-    { key: 'support', label: 'Support', items: [
-      { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
-      { to: '/portfolio/updates', icon: Inbox, label: 'Company Updates' },
-      { to: '/portfolio/positions', icon: PieIcon, label: 'Cap Table' },
-      { to: '/lp-portal', icon: Wallet, label: 'My LP Portal' },
-      { to: '/lp-reports', icon: FileBarChart, label: 'LP Reporting' },
-      { to: '/funds/capital-calls', icon: PhoneCall, label: 'Capital Calls' },
-      { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
-      { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
-      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
+    { key: 'research', label: 'Research', items: [
+      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
+      { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
+      { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
+      { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
+      { to: '/advisor/research/news', icon: Send, label: 'News' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust & Identity' },
-      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
       // "Integrations" merged into Settings (/settings/integrations); the

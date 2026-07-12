@@ -10,6 +10,7 @@ import PublicNav from '../../components/PublicNav';
 import PublicFooter from '../../components/PublicFooter';
 import { jobsPublic } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import { loadTurnstile } from '../../lib/turnstile';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 const MAX_RESUME_BYTES = 5 * 1024 * 1024;
@@ -95,6 +96,7 @@ export default function PublicJobDetailPage() {
         theme: 'auto',
       });
     };
+    loadTurnstile().catch(() => {});
     if (typeof window.turnstile === 'undefined') {
       let attempts = 0;
       interval = setInterval(() => {
