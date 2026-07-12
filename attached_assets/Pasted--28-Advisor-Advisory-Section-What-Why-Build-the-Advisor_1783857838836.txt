@@ -1,0 +1,34 @@
+#28 - Advisor Advisory Section
+What & Why
+Build the Advisory section — the heart of the Advisor profile — covering the full advisory lifecycle from opportunity to delivery to contracts. This is the genuinely new section (no investor equivalent), replacing the shell stubs with tab-organized workspaces and realistic placeholder data.
+Done looks like
+* Opportunities reads like a pipeline workspace with stages as tabs — Leads, Discovery Calls, Proposals, Won, Lost — surfacing the spec's fields per stage: lead pipeline/status/source, service interest, opportunity value, qualification score, notes; discovery call schedule/participants/company context/challenges/goals/needs assessment/budget/timeline/AI summary/next steps; proposal builder (scope, services, deliverables, pricing, versions, approval status); won (client/engagement/contract creation, onboarding); lost (reason, competitor, budget, timing, follow-up date). Records open a detail panel.
+* Clients reads like an account workspace: Client List (active/past/strategic, status, value, revenue), company profiles (overview, industry, business model, products, markets, stage, funding, revenue, challenges, goals), engagement history/timeline (first engagement, contracts, meetings, deliverables, milestones, decisions, renewals), and health (engagement score, satisfaction, goal progress, responsiveness, renewal probability, expansion opportunities).
+* Engagements reads like a delivery workspace with the five delivery models as tabs — Projects, Retainers, Advisory Boards, Fractional Roles, Workshops — each showing its spec fields (scope/objectives/timeline/tasks/milestones/deliverables/progress; monthly scope/hours/fee/usage/renewal/capacity; board membership/meetings/agendas/recommendations/decisions/materials; role definition/responsibilities/time allocation/reporting/performance; workshop type/agenda/participants/materials/outcomes/feedback).
+* Delivery reads like meeting notes and artifacts: Sessions (meetings, notes, decisions, action items, follow-ups, recordings, AI summaries) and Deliverables (reports, strategy decks, financial models, research, templates, playbooks).
+* Contracts reads like document and billing management: Proposals, Statements of Work, Advisory Agreements, NDAs, Invoices, Renewals — with statuses and a detail panel.
+* Every tab, filter, and detail panel renders with mock data — no blank views and no console errors.
+Out of scope
+* Real backend/API wiring, document generation/e-sign, and real billing — mock data only.
+* The App shell, sidebar, and routing (delivered by the Advisor shell foundation task).
+* Network and Research sections (separate tasks).
+Steps
+1. Opportunities — Build the pipeline workspace with stage tabs and the spec's per-stage fields, plus an opportunity detail panel.
+2. Clients — Build the account workspace: client list with segments/status/value, company profile, engagement history/timeline, and a health scorecard.
+3. Engagements — Build the delivery-models workspace with a tab per model and its spec fields; records open a detail panel.
+4. Delivery — Build the sessions and deliverables/artifacts views (notes, decisions, action items, AI summaries; reports, decks, models, templates, playbooks).
+5. Contracts — Build the commercial-documents workspace (proposals, SOWs, agreements, NDAs, invoices, renewals) with statuses and a detail panel.
+6. Mock data — Seed a dedicated advisor Advisory data module with realistic, deterministic placeholder records, structured to be swapped for live data later.
+7. Verify — Click through every tab, filter, and detail panel across all five pages; confirm no blank states or console errors.
+Architectural constraints
+* Reuse the shared section kit (components/section); keep advisor code under its own pages/advisor/advisory/ and data/advisor/ files.
+* Deterministic mock data only: demo "today" is 2026-07-11; no Date.now, Math.random, or zero-argument new Date().
+Relevant files
+* frontend/src/pages/investor/pipeline/DealFlowPage.jsx
+* frontend/src/pages/investor/portfolio/CompaniesPage.jsx
+* frontend/src/components/section/index.js
+* frontend/src/data/investor/pipeline.js
+Dependencies
+Advisor profile shell: sidebar, routes, and page stubs
+
+Open task
