@@ -4,7 +4,7 @@ import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirecte
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
-import SpinoutLabListener from './components/SpinoutLabListener';
+const SpinoutLabListener = lazy(() => import('./components/SpinoutLabListener'));
 import SafeMount from './components/SafeMount';
 import CookieConsent from './components/CookieConsent';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
@@ -18,7 +18,7 @@ import { SIDEBAR_GROUPS, defaultOpenGroups, filterItemsByTier, hasTier, hasInves
 import PaywallModal, { openPaywall } from './components/PaywallModal';
 import { Lock as LockIcon } from 'lucide-react';
 import { api } from './lib/api';
-import SpinoutLabSidebar from './components/SpinoutLabSidebar';
+const SpinoutLabSidebar = lazy(() => import('./components/SpinoutLabSidebar'));
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
 // renders synchronously on first paint. It marks itself a no-auth-redirect
 // surface on mount; a lazy chunk could load AFTER the background settings 401
@@ -200,12 +200,16 @@ const AdvisorResearchWorkspace = lazy(() => import('./pages/advisor/research/Adv
 // Engagements, Performance).
 const PartnerOperationsWorkspace = lazy(() => import('./pages/partner/operations/PartnerOperationsWorkspace'));
 const GrowthWorkspace = lazy(() => import('./pages/growth/GrowthWorkspace'));
-import InactivityWarningModal from './components/InactivityWarningModal';
-import NotificationBell from './components/NotificationBell';
-import CommandPalette from './components/CommandPalette';
-import StepUpModal from './components/StepUpModal';
-import InstallPrompt from './components/InstallPrompt';
-import KeyboardShortcutsOverlay from './components/KeyboardShortcutsOverlay';
+// Authenticated-shell widgets — lazy so they leave the entry chunk. They only
+// ever render inside ProtectedLayout (logged-in users), so a logged-out visitor
+// hitting the landing page never downloads them. Each render site below is
+// wrapped in its own <Suspense fallback> so fetching a chunk can't blank the app.
+const InactivityWarningModal = lazy(() => import('./components/InactivityWarningModal'));
+const NotificationBell = lazy(() => import('./components/NotificationBell'));
+const CommandPalette = lazy(() => import('./components/CommandPalette'));
+const StepUpModal = lazy(() => import('./components/StepUpModal'));
+const InstallPrompt = lazy(() => import('./components/InstallPrompt'));
+const KeyboardShortcutsOverlay = lazy(() => import('./components/KeyboardShortcutsOverlay'));
 import useInactivityTimeout from './hooks/useInactivityTimeout';
 
 // Phase B · Prompt 5 — sidebar groups now live in `frontend/src/sidebarConfig.js`.
@@ -743,7 +747,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               </button>
             </div>
             {inSpinoutLab ? (
-              <SpinoutLabSidebar onNavigate={closeOnMobileNav} />
+              <Suspense fallback={<div className="flex-1" />}>
+                <SpinoutLabSidebar onNavigate={closeOnMobileNav} />
+              </Suspense>
             ) : (
               <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} />
             )}
@@ -805,7 +811,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 </span>
               )}
               <div className="flex items-center gap-1 ml-auto">
-                <NotificationBell userId={user?.id} />
+                <Suspense fallback={<span className="inline-block w-9 h-9" />}>
+                  <NotificationBell userId={user?.id} />
+                </Suspense>
                 <button className="text-gray-600 dark:text-gray-300 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
                   <Menu size={20} />
                 </button>
@@ -817,16 +825,18 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           </main>
         </div>
       </div>
-      <InactivityWarningModal
-        open={warningOpen}
-        secondsLeft={secondsLeft}
-        onStay={stayLoggedIn}
-        onLogout={logoutNow}
-      />
-      <CommandPalette />
-      <KeyboardShortcutsOverlay />
-      <InstallPrompt />
-      <StepUpModal />
+      <Suspense fallback={null}>
+        <InactivityWarningModal
+          open={warningOpen}
+          secondsLeft={secondsLeft}
+          onStay={stayLoggedIn}
+          onLogout={logoutNow}
+        />
+        <CommandPalette />
+        <KeyboardShortcutsOverlay />
+        <InstallPrompt />
+        <StepUpModal />
+      </Suspense>
     </ViewModeContext.Provider>
   );
 }
@@ -1618,6 +1628,19 @@ function GlobalPaywallMount() {
   return <PaywallModal user={user} />;
 }
 
+// Founder-only global listener — lazy + gated on auth so a logged-out visitor
+// (e.g. the landing page) never downloads its chunk. The `spinout-lab:advanced`
+// events it reacts to are only ever dispatched by authenticated founder actions.
+function GlobalSpinoutLabListenerMount() {
+  const { user } = useAuth();
+  if (!user) return null;
+  return (
+    <Suspense fallback={null}>
+      <SpinoutLabListener />
+    </Suspense>
+  );
+}
+
 // Task #2 (DD) — Direct-URL guard for /docs/admin/* paths.
 // Non-admins (and anonymous visitors) get a Not Found screen with no
 // hint that admin docs exist. Admins are redirected to the hash-
@@ -1657,7 +1680,7 @@ export default function App() {
             SafeMount error boundary so a regression in one widget
             degrades to "that one widget is missing" instead of "the
             whole app is gone". */}
-        <SafeMount name="SpinoutLabListener"><SpinoutLabListener /></SafeMount>
+        <SafeMount name="SpinoutLabListener"><GlobalSpinoutLabListenerMount /></SafeMount>
         <SafeMount name="GlobalPaywallMount"><GlobalPaywallMount /></SafeMount>
         <SafeMount name="CookieConsent"><CookieConsent /></SafeMount>
       </SettingsProvider>

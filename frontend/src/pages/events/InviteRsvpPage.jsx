@@ -10,6 +10,7 @@ import AxalCheckout from '../../components/AxalCheckout';
 import { eventsPublic, events } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuthSync';
 import { reportError } from '../../lib/log';
+import { loadTurnstile } from '../../lib/turnstile';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
@@ -92,6 +93,7 @@ export default function InviteRsvpPage() {
         theme: 'auto',
       });
     };
+    loadTurnstile().catch(() => {});
     if (typeof window.turnstile === 'undefined') {
       let attempts = 0;
       interval = setInterval(() => {

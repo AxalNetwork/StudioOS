@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { track } from '../lib/funnel';
 import { storePendingNext } from '../lib/pendingNext';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
+import { loadTurnstile } from '../lib/turnstile';
 
 // Single-page sign-in: email + authenticator code + Cloudflare Turnstile.
 // SMS is intentionally NOT offered as a primary sign-in factor — it lives
@@ -195,6 +196,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!TURNSTILE_SITE_KEY || !turnstileRef.current) return;
+    loadTurnstile().catch(() => {});
     if (typeof window.turnstile === 'undefined') {
       // Cap polling at 50 attempts (~10s) so a blocked Turnstile script
       // doesn't leak intervals.

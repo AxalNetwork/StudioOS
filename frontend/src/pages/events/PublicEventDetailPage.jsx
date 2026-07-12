@@ -9,6 +9,7 @@ import PublicFooter from '../../components/PublicFooter';
 import AxalCheckout from '../../components/AxalCheckout';
 import { eventsPublic } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import { loadTurnstile } from '../../lib/turnstile';
 
 function formatMoney(cents, currency) {
   const amt = (Number(cents) || 0) / 100;
@@ -119,6 +120,7 @@ export default function PublicEventDetailPage() {
         theme: 'auto',
       });
     };
+    loadTurnstile().catch(() => {});
     if (typeof window.turnstile === 'undefined') {
       let attempts = 0;
       interval = setInterval(() => {
