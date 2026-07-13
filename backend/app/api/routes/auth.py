@@ -470,6 +470,18 @@ def confirm_verify_email(req: ConfirmVerifyRequest, session: Session = Depends(g
             ))
     session.commit()
 
+    # Task #12 — claim any off-platform introductions addressed to this email
+    # (and adopt the matching admin-created investor profile) now that the
+    # account owner has proven control of the address.
+    try:
+        from backend.app.api.routes.network_introductions import (
+            claim_offplatform_introductions,
+        )
+        claim_offplatform_introductions(session, user)
+    except Exception as exc:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger(__name__).warning("network intro claim-on-verify failed: %s", exc)
+
     return {
         "verified": True,
         "email": user.email,

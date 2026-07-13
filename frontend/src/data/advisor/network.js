@@ -31,9 +31,12 @@ export const INTRODUCTION_CATEGORIES = [
 ];
 
 // ---------------------------------------------------------------------------
-// Organizations — company profiles for the Organizations tab. Each carries the
-// modules the profile detail panel renders: leadership, employees, funding
-// history, ownership, locations, and documents.
+// LEGACY DEMO DATA — Introductions tab only.
+// The Network > Organizations tab now loads real VC funds / deep-tech investors
+// from the backend `/api/organizations` API (see OrganizationsPage.jsx). This
+// array is retained solely because the out-of-scope Introductions tab
+// (IntroductionsPage.jsx via organizationById) still uses it as a demo org
+// directory. Do not add new consumers — use the API instead.
 // ---------------------------------------------------------------------------
 export const ORGANIZATIONS = [
   {

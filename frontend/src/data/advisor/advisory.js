@@ -51,7 +51,9 @@ export function pct(v) {
 export const OPPORTUNITY_STAGES = [
   { id: 'leads', label: 'Leads', tone: 'gray' },
   { id: 'discovery', label: 'Discovery Calls', tone: 'blue' },
+  { id: 'qualified', label: 'Qualified Opportunities', tone: 'blue' },
   { id: 'proposals', label: 'Proposals', tone: 'amber' },
+  { id: 'negotiations', label: 'Negotiations', tone: 'amber' },
   { id: 'won', label: 'Won', tone: 'emerald' },
   { id: 'lost', label: 'Lost', tone: 'rose' },
 ];
@@ -104,6 +106,45 @@ export const OPPORTUNITIES = [
     },
   },
   {
+    id: 'opp-q1', company: 'Cirrus Data', contact: 'Helen Zhou', role: 'CEO',
+    stage: 'qualified', service: 'GTM strategy sprint', value: 52000, source: 'Referral — advisor network',
+    status: 'Qualified', qualificationScore: 84, industry: 'Data infrastructure',
+    createdDate: daysAgo(17),
+    qualified: {
+      budgetConfirmed: true, budget: '$45K–$60K', decisionTimeline: 'Decision within 3 weeks',
+      criteriaMet: ['Clear budget authority', 'Executive sponsor engaged', 'Defined success metrics', 'Timeline aligned with our capacity'],
+      stakeholders: ['Helen Zhou (CEO — economic buyer)', 'Raj Patel (VP Growth — champion)'],
+      fitRationale: 'Strong fit: founder-led sales plateauing at $4M ARR, ready to invest in a repeatable GTM motion, and the champion has run advisory engagements before.',
+      nextSteps: ['Scope proposal draft', 'Confirm start date with CEO'],
+    },
+  },
+  {
+    id: 'opp-q2', company: 'Trellis Health', contact: 'Omar Haddad', role: 'Founder & CEO',
+    stage: 'qualified', service: 'Fundraising readiness', value: 58000, source: 'Warm intro — investor',
+    status: 'Qualified', qualificationScore: 80, industry: 'Digital health',
+    createdDate: daysAgo(20),
+    qualified: {
+      budgetConfirmed: true, budget: '$50K–$65K', decisionTimeline: 'Board sign-off by end of month',
+      criteriaMet: ['Budget approved by board', 'Raising in next two quarters', 'Champion identified', 'Metrics narrative gap confirmed'],
+      stakeholders: ['Omar Haddad (Founder — economic buyer)', 'Lena Cross (CFO — technical evaluator)'],
+      fitRationale: 'Series A health startup raising a Series B; needs positioning and an investor operating cadence — directly in our wheelhouse.',
+      nextSteps: ['Send scoping questionnaire', 'Draft engagement outline'],
+    },
+  },
+  {
+    id: 'opp-q3', company: 'Forge Analytics', contact: 'Iris Bennett', role: 'COO',
+    stage: 'qualified', service: 'Enterprise sales advisory', value: 46000, source: 'Event — SaaS Growth Summit',
+    status: 'Qualified', qualificationScore: 77, industry: 'Data analytics',
+    createdDate: daysAgo(13),
+    qualified: {
+      budgetConfirmed: false, budget: '$40K–$50K (pending)', decisionTimeline: 'Decision in 4–6 weeks',
+      criteriaMet: ['Executive sponsor engaged', 'Clear pain around sales scaling', 'Timeline realistic'],
+      stakeholders: ['Iris Bennett (COO — champion)', 'Devon Park (Head of Sales — user)'],
+      fitRationale: 'Good fit on need, but budget authority still being confirmed with the CEO before a proposal can go out.',
+      nextSteps: ['Confirm budget authority', 'Align on scope with COO'],
+    },
+  },
+  {
     id: 'opp-5', company: 'Beacon Fintech', contact: 'James Whitfield', role: 'COO',
     stage: 'proposals', service: 'Advisory board seat + quarterly reviews', value: 72000, source: 'Referral — existing client',
     status: 'Proposal sent', qualificationScore: 88, industry: 'FinTech',
@@ -132,6 +173,34 @@ export const OPPORTUNITIES = [
       pricing: [
         { item: 'Fundraising sprint (8 weeks)', amount: 55000 },
       ],
+    },
+  },
+  {
+    id: 'opp-n1', company: 'Halcyon Cloud', contact: 'Victor Nunes', role: 'CEO',
+    stage: 'negotiations', service: 'GTM advisory retainer', value: 84000, source: 'Referral — existing client',
+    status: 'In negotiation', qualificationScore: 87, industry: 'Cloud infrastructure',
+    createdDate: daysAgo(25),
+    negotiations: {
+      proposalVersion: 'v2', probability: 70, expectedClose: daysFromNow(9),
+      termsDiscussed: ['12-month retainer at $7K/mo', 'Monthly strategy reviews', 'Quarterly board attendance'],
+      stickingPoints: ['Wants a 3-month opt-out clause', 'Requesting an additional workshop in scope'],
+      concessions: ['Offered a reduced onboarding fee', 'Flexible on meeting cadence'],
+      notes: 'Aligned on value and price; final terms hinge on the opt-out clause and one added workshop.',
+      nextSteps: ['Send revised terms sheet', 'Schedule final call with CEO'],
+    },
+  },
+  {
+    id: 'opp-n2', company: 'Kestrel Mobility', contact: 'Amara Singh', role: 'Founder',
+    stage: 'negotiations', service: 'Fundraising sprint', value: 56000, source: 'Warm intro — portfolio founder',
+    status: 'Verbal agreement', qualificationScore: 83, industry: 'Mobility',
+    createdDate: daysAgo(22),
+    negotiations: {
+      proposalVersion: 'v1', probability: 85, expectedClose: daysFromNow(4),
+      termsDiscussed: ['8-week fixed-fee sprint', 'Weekly investor pipeline reviews', 'Deck rebuild included'],
+      stickingPoints: ['Payment split across two milestones'],
+      concessions: ['Agreed to 50/50 milestone billing'],
+      notes: 'Verbal yes from founder; awaiting counter-signature on the terms sheet.',
+      nextSteps: ['Send countersigned agreement', 'Confirm kickoff date'],
     },
   },
   {
@@ -211,6 +280,12 @@ export const CLIENTS = [
       challenges: ['Scaling GTM beyond founder-led sales', 'Improving net revenue retention'],
       goals: ['Reach $10M ARR', 'Launch mid-market motion'],
     },
+    contacts: [
+      { name: 'Aisha Bello', title: 'CEO', email: 'aisha@meridian.io', phone: '+1 415 555 0142', role: 'Economic buyer', primary: true },
+      { name: 'Daniel Okoro', title: 'VP Sales', email: 'daniel@meridian.io', phone: '+1 415 555 0187', role: 'Champion', primary: false },
+      { name: 'Mei Chen', title: 'Head of RevOps', email: 'mei@meridian.io', role: 'Technical', primary: false },
+      { name: 'Sara Lund', title: 'Chief of Staff', email: 'sara@meridian.io', role: 'Primary', primary: false },
+    ],
     history: [
       { date: daysAgo(210), type: 'engagement', label: 'First engagement — GTM diagnostic' },
       { date: daysAgo(150), type: 'contract', label: 'Signed 12-month advisory retainer' },
@@ -234,6 +309,11 @@ export const CLIENTS = [
       challenges: ['Regulatory expansion into new states', 'Margin pressure on payments'],
       goals: ['Launch lending product', 'Improve unit economics'],
     },
+    contacts: [
+      { name: 'James Whitfield', title: 'COO', email: 'james@beaconfin.com', phone: '+1 212 555 0110', role: 'Economic buyer', primary: true },
+      { name: 'Nora Patel', title: 'CEO', email: 'nora@beaconfin.com', phone: '+1 212 555 0133', role: 'Primary', primary: false },
+      { name: 'Kwame Asare', title: 'Head of Compliance', email: 'kwame@beaconfin.com', role: 'Technical', primary: false },
+    ],
     history: [
       { date: daysAgo(95), type: 'engagement', label: 'First engagement — strategy review' },
       { date: daysAgo(80), type: 'meeting', label: 'Leadership offsite facilitation' },
@@ -255,6 +335,11 @@ export const CLIENTS = [
       challenges: ['Retention of first-time buyers', 'Unclear product roadmap priorities'],
       goals: ['Define 2-quarter roadmap', 'Improve repeat-purchase rate'],
     },
+    contacts: [
+      { name: 'Ryan Cole', title: 'Founder', email: 'ryan@atlascommerce.co', phone: '+1 646 555 0175', role: 'Economic buyer', primary: true },
+      { name: 'Bianca Rossi', title: 'Head of Product', email: 'bianca@atlascommerce.co', role: 'Champion', primary: false },
+      { name: 'Theo Vance', title: 'Lead Engineer', email: 'theo@atlascommerce.co', role: 'Technical', primary: false },
+    ],
     history: [
       { date: daysAgo(15), type: 'engagement', label: 'Product strategy project — kickoff' },
       { date: daysAgo(15), type: 'contract', label: 'SOW signed' },
@@ -275,6 +360,11 @@ export const CLIENTS = [
       challenges: ['Churn in enterprise segment (resolved)'],
       goals: ['Reduce churn (achieved)'],
     },
+    contacts: [
+      { name: 'Grace Lin', title: 'VP Customer Success', email: 'grace@summitlogistics.com', phone: '+1 312 555 0198', role: 'Champion', primary: true },
+      { name: 'Paul Mercer', title: 'CEO', email: 'paul@summitlogistics.com', role: 'Economic buyer', primary: false },
+      { name: 'Hannah Kim', title: 'Head of Product', email: 'hannah@summitlogistics.com', role: 'Technical', primary: false },
+    ],
     history: [
       { date: daysAgo(420), type: 'engagement', label: 'First engagement — retention project' },
       { date: daysAgo(300), type: 'deliverable', label: 'Delivered churn-reduction playbook' },
@@ -296,6 +386,11 @@ export const CLIENTS = [
       challenges: ['Series B narrative', 'Metrics storytelling'],
       goals: ['Close $12M Series B', 'Build investor process'],
     },
+    contacts: [
+      { name: 'Marco Diaz', title: 'Founder', email: 'marco@lumenrobotics.ai', phone: '+1 408 555 0121', role: 'Economic buyer', primary: true },
+      { name: 'Yuki Tanaka', title: 'CTO', email: 'yuki@lumenrobotics.ai', role: 'Technical', primary: false },
+      { name: 'Elena Ross', title: 'VP Finance', email: 'elena@lumenrobotics.ai', phone: '+1 408 555 0166', role: 'Champion', primary: false },
+    ],
     history: [
       { date: daysAgo(140), type: 'engagement', label: 'First engagement — board advisory' },
       { date: daysAgo(90), type: 'meeting', label: 'Board meeting preparation' },
@@ -473,6 +568,93 @@ export const SESSIONS = [
       { label: 'Deliver lending GTM memo', owner: 'You', due: daysAgo(28), done: true },
     ],
     followUps: ['Advisory board proposal'],
+  },
+];
+
+// Consulting Sessions — structured advisory sessions (strategy workshops, 1:1
+// advisory, deep dives) with objectives, key topics, outcomes and recommendations.
+export const CONSULTING_SESSIONS = [
+  {
+    id: 'cons-1', client: 'Meridian SaaS', title: 'Mid-market GTM strategy workshop',
+    date: daysAgo(5), duration: '3 hrs', format: 'Strategy workshop', status: 'Completed',
+    summary: 'Worked through the mid-market ICP, packaging, and sales motion with the leadership team; landed a clear phase-one plan.',
+    objectives: ['Define the mid-market ICP', 'Design the sales motion', 'Agree phase-one priorities'],
+    keyTopics: ['ICP segmentation', 'Pricing and packaging', 'Sales-team structure', 'Enablement needs'],
+    outcomes: ['Locked mid-market ICP', 'Chose a hybrid inbound + outbound motion', 'Prioritized enablement over new hires'],
+    recommendations: ['Ship the mid-market playbook before hiring', 'Run a 60-day pilot with two AEs', 'Instrument funnel metrics first'],
+  },
+  {
+    id: 'cons-2', client: 'Lumen Robotics', title: 'Series B narrative deep dive',
+    date: daysAgo(11), duration: '2 hrs', format: 'Deep dive', status: 'Completed',
+    summary: 'Rebuilt the fundraising narrative from an engineering story into a market-pull story and stress-tested the metrics appendix.',
+    objectives: ['Reframe the narrative around market pull', 'Pressure-test the metrics story'],
+    keyTopics: ['Market sizing', 'Traction narrative', 'Competitive moat', 'Investor objections'],
+    outcomes: ['New narrative arc agreed', 'Identified three metrics gaps to close'],
+    recommendations: ['Lead with market pull, not tech', 'Add a cohort-retention slide', 'Prepare answers to top five investor objections'],
+  },
+  {
+    id: 'cons-3', client: 'Beacon Fintech', title: 'Lending launch 1:1 advisory',
+    date: daysAgo(2), duration: '60 min', format: '1:1 advisory', status: 'Completed',
+    summary: 'One-on-one with the COO on sequencing the lending launch given regulatory constraints.',
+    objectives: ['Sequence the lending launch', 'De-risk the regulatory path'],
+    keyTopics: ['State-by-state rollout', 'Compliance dependencies', 'Pilot design'],
+    outcomes: ['Agreed a single-state pilot first', 'Defined go/no-go criteria'],
+    recommendations: ['Pilot in one state before expansion', 'Stand up a compliance checklist', 'Set a 90-day review gate'],
+  },
+  {
+    id: 'cons-4', client: 'Atlas Commerce', title: 'Roadmap prioritization workshop',
+    date: daysFromNow(6), duration: 'Half day', format: 'Strategy workshop', status: 'Scheduled',
+    summary: 'Upcoming workshop to turn discovery findings into a prioritized two-quarter roadmap.',
+    objectives: ['Prioritize the two-quarter roadmap', 'Align the team on criteria'],
+    keyTopics: ['Prioritization framework', 'Retention initiatives', 'Resourcing tradeoffs'],
+    outcomes: [],
+    recommendations: [],
+  },
+];
+
+// Action Plans — client-tied plans with an owner, progress, and item checklist.
+export const ACTION_PLANS = [
+  {
+    id: 'plan-1', client: 'Meridian SaaS', title: 'Mid-market launch plan',
+    objective: 'Stand up a repeatable mid-market GTM motion within one quarter.',
+    status: 'In progress', owner: 'Aisha Bello', progress: 55, dueDate: daysFromNow(45),
+    items: [
+      { label: 'Finalize mid-market ICP', owner: 'You', due: daysAgo(3), done: true, status: 'Done' },
+      { label: 'Ship mid-market playbook', owner: 'You', due: daysFromNow(7), done: false, status: 'In progress' },
+      { label: 'Draft AE hiring plan', owner: 'Aisha Bello', due: daysFromNow(14), done: false, status: 'Not started' },
+      { label: 'Instrument funnel metrics', owner: 'Mei Chen', due: daysFromNow(21), done: false, status: 'Not started' },
+    ],
+  },
+  {
+    id: 'plan-2', client: 'Lumen Robotics', title: 'Series B readiness plan',
+    objective: 'Be fully raise-ready with narrative, materials, and pipeline in six weeks.',
+    status: 'In progress', owner: 'Marco Diaz', progress: 40, dueDate: daysFromNow(30),
+    items: [
+      { label: 'Approve new narrative arc', owner: 'Marco Diaz', due: daysAgo(4), done: true, status: 'Done' },
+      { label: 'Rebuild deck v2', owner: 'You', due: daysFromNow(5), done: false, status: 'In progress' },
+      { label: 'Close metrics gaps', owner: 'Elena Ross', due: daysFromNow(12), done: false, status: 'In progress' },
+      { label: 'Build investor pipeline', owner: 'You', due: daysFromNow(20), done: false, status: 'Not started' },
+    ],
+  },
+  {
+    id: 'plan-3', client: 'Beacon Fintech', title: 'Lending pilot plan',
+    objective: 'Launch a compliant single-state lending pilot with clear go/no-go gates.',
+    status: 'Not started', owner: 'James Whitfield', progress: 10, dueDate: daysFromNow(60),
+    items: [
+      { label: 'Select pilot state', owner: 'James Whitfield', due: daysFromNow(7), done: false, status: 'In progress' },
+      { label: 'Complete compliance checklist', owner: 'Kwame Asare', due: daysFromNow(21), done: false, status: 'Not started' },
+      { label: 'Define go/no-go criteria', owner: 'You', due: daysFromNow(28), done: false, status: 'Not started' },
+    ],
+  },
+  {
+    id: 'plan-4', client: 'Atlas Commerce', title: 'Retention improvement plan',
+    objective: 'Lift first-time-buyer retention through onboarding and repeat-purchase work.',
+    status: 'Completed', owner: 'Ryan Cole', progress: 100, dueDate: daysAgo(5),
+    items: [
+      { label: 'Map onboarding drop-off', owner: 'You', due: daysAgo(30), done: true, status: 'Done' },
+      { label: 'Launch repeat-purchase incentive', owner: 'Bianca Rossi', due: daysAgo(12), done: true, status: 'Done' },
+      { label: 'Review pilot results', owner: 'Ryan Cole', due: daysAgo(5), done: true, status: 'Done' },
+    ],
   },
 ];
 

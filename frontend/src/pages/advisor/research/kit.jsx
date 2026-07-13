@@ -29,10 +29,14 @@ const BADGE_TONE = {
   high: 'emerald', medium: 'blue', low: 'gray',
   // sentiment
   positive: 'emerald', neutral: 'gray', negative: 'rose',
-  // exit type
-  ipo: 'emerald', 'm&a': 'blue', spac: 'amber',
   // confidentiality
   public: 'emerald', internal: 'blue', confidential: 'rose',
+  // competitor tier
+  direct: 'rose', adjacent: 'amber', emerging_tier: 'blue',
+  // customer relationship
+  client: 'emerald', prospect: 'amber',
+  // partner tier
+  strategic: 'violet', preferred: 'blue',
 };
 
 export function Badge({ children, tone }) {

@@ -114,6 +114,8 @@ async def lifespan(app: FastAPI):
             ensure_compliance_reminder_runs_table,
             ensure_wellbeing_tables,
             ensure_user_handle_column,
+            ensure_network_introductions_tables,
+            ensure_organizations_table,
         )
         ensure_brand_landing_columns()
         logger.info("StudioOS migrations: brand landing columns ensured")
@@ -208,6 +210,15 @@ async def lifespan(app: FastAPI):
         # Task #40 — founder wellbeing pulse + resource directory.
         ensure_wellbeing_tables()
         logger.info("StudioOS migrations: wellbeing tables ensured")
+        # Task #12 — secure introductions & matching flow tables.
+        ensure_network_introductions_tables()
+        logger.info("StudioOS migrations: network introductions tables ensured")
+        # Task #16 — Organizations directory (real VC funds / deep-tech investors).
+        ensure_organizations_table()
+        logger.info("StudioOS migrations: organizations table ensured")
+        from backend.app.services.organizations_import import bootstrap_organizations
+        bootstrap_organizations()
+        logger.info("StudioOS seed: organizations directory bootstrapped")
         # Task #55 — public profile handle column + backfill.
         ensure_user_handle_column()
         logger.info("StudioOS migrations: user.handle column ensured")
@@ -494,6 +505,9 @@ from backend.app.api.routes import search as _search  # noqa: E402
 app.include_router(_search.router, prefix="/api")
 from backend.app.api.routes import onboarding as _onboarding  # noqa: E402
 app.include_router(_onboarding.router, prefix="/api")
+# Task #16 — Organizations directory (Network > Organizations) read API.
+from backend.app.api.routes import organizations as _organizations  # noqa: E402
+app.include_router(_organizations.router, prefix="/api")
 from backend.app.api.routes import profiling as _profiling  # noqa: E402
 app.include_router(_profiling.router, prefix="/api")
 from backend.app.api.routes import kyc as _kyc  # noqa: E402
@@ -504,6 +518,10 @@ app.include_router(_brand.router, prefix="/api")
 # Task #38 — dev-only parity shims (Skills profile + Payouts/network).
 from backend.app.api.routes import skills as _skills  # noqa: E402
 app.include_router(_skills.router, prefix="/api")
+# Task #12 — secure introductions & matching flow (distinct namespace from the
+# credits-based /api/introductions worker system).
+from backend.app.api.routes import network_introductions as _network_intros  # noqa: E402
+app.include_router(_network_intros.router, prefix="/api")
 from backend.app.api.routes import network as _network  # noqa: E402
 app.include_router(_network.router, prefix="/api")
 

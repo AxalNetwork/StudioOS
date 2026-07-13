@@ -337,6 +337,127 @@ function FitCard({ state, className }) {
   return <CardShell title="Your Axal VC Fit & values" icon={Sparkles} className={className}>{body}</CardShell>;
 }
 
+// ── Axal VC Fit & Values v2 (weighted 6-outcome decision) ────────────────────
+// Task #19 — the v2 decision layers the three profile layers (6 Axal values incl.
+// ambition, the 6-archetype set incl. Scout/Steward, and the weighted fit rubric)
+// into a single 6-outcome decision graph per persona, plus validation flags.
+// Read live from api.bestFit.me() → data.fit_v2 (see services/fitV2Decision.ts).
+const V2_SEV = {
+  flag: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700',
+  warn: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700',
+  info: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600',
+};
+const clampPct = (n) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+
+function V2DecisionBlock({ p, primary }) {
+  const b = FIT_BAND[p.band] || FIT_BAND.no;
+  const outcomes = Array.isArray(p.outcomes) ? p.outcomes : [];
+  const validation = Array.isArray(p.validation) ? p.validation : [];
+  return (
+    <div className={`rounded-lg border border-gray-200 dark:border-gray-700 p-3 ${primary ? 'ring-1 ring-violet-500/50' : ''}`}>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <span className="text-sm font-semibold capitalize text-gray-900 dark:text-gray-100">{humanize(p.persona)}</span>
+        <span className="flex items-center gap-2">
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${b.cls}`}>{p.band_label || b.label}</span>
+          <span className="text-base font-bold text-gray-900 dark:text-gray-100">{Math.round(Number(p.overall_score) || 0)}<span className="text-xs font-normal text-gray-500 dark:text-gray-400">/100</span></span>
+        </span>
+      </div>
+      <ul className="space-y-1.5">
+        {outcomes.map((o) => {
+          const pct = clampPct(o.score);
+          return (
+            <li key={o.key}>
+              <div className="flex items-center justify-between text-xs mb-0.5">
+                <span className={`${o.answered ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}`}>{o.label}</span>
+                <span className="text-gray-400 dark:text-gray-500">{o.answered ? `${pct}` : '—'}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                <div className="h-full bg-violet-500 dark:bg-violet-400 transition-all" style={{ width: `${o.answered ? pct : 0}%` }} />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {p.archetype && p.archetype.slug && (
+        <p className={`${SUB} mt-2`}>
+          Archetype: <span className="font-medium text-gray-700 dark:text-gray-300">{p.archetype.label}</span>
+          {p.archetype.confidence != null && ` · ${Math.round(Number(p.archetype.confidence) * 100)}% conf.`}
+        </p>
+      )}
+      {validation.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {validation.map((v) => (
+            <li key={v.key} className={`text-[11px] px-2 py-1 rounded border ${V2_SEV[v.severity] || V2_SEV.info}`} title={v.note}>
+              {v.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function FitV2Card({ state, className }) {
+  const { data, error } = state;
+  let body;
+  if (error) {
+    body = <ErrorNote>Couldn’t load your Fit v2 decision. {error}</ErrorNote>;
+  } else if (!data) {
+    body = <div className="py-4 flex justify-center text-gray-400"><Loader2 className="animate-spin" size={18} /></div>;
+  } else {
+    const v2 = data.fit_v2 || null;
+    const values = Array.isArray(v2?.values) ? v2.values : [];
+    const personas = Array.isArray(v2?.personas) ? v2.personas : [];
+    const valuesWithSignal = values.filter((v) => Number(v.confidence) > 0);
+    if (valuesWithSignal.length === 0 && personas.length === 0) {
+      body = (
+        <Nudge>
+          <p className="font-medium text-gray-700 dark:text-gray-200">Your v2 fit decision unlocks with signal</p>
+          <p className="mt-1">
+            The <strong>Axal VC Fit &amp; Values v2</strong> model weighs six values (incl. ambition), your archetype,
+            and role capability into a single decision. Keep answering the advisor’s fit questions to reveal it.
+          </p>
+        </Nudge>
+      );
+    } else {
+      body = (
+        <div className="space-y-4">
+          {personas.length > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {personas.map((p) => (
+                <V2DecisionBlock key={p.persona} p={p} primary={v2.primary_persona === p.persona} />
+              ))}
+            </div>
+          )}
+          {valuesWithSignal.length > 0 && (
+            <div>
+              <p className={`${SUB} mb-2`}>Six Axal values</p>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                {values.map((v) => {
+                  const pct = clampPct((Number(v.score) || 0) * 100);
+                  const measured = Number(v.confidence) > 0;
+                  return (
+                    <li key={v.value_key}>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="capitalize text-gray-700 dark:text-gray-300">{v.label || humanize(v.value_key)}</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{measured ? `${pct}%` : '—'}</span>
+                      </div>
+                      <div className="mt-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                        <div className="h-full bg-violet-500 dark:bg-violet-400" style={{ width: `${measured ? pct : 0}%` }} />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+      );
+    }
+  }
+  return <CardShell title="Axal VC Fit & Values v2" icon={Sparkles} className={className}>{body}</CardShell>;
+}
+
 // ── Match range (counts + teaser free; full list gated) ───────────────────────
 const MATCH_BAND = {
   strong: { label: 'Strong', cls: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' },
@@ -546,6 +667,7 @@ export default function ProfileFitSection({ className = '' }) {
         <ArchetypeCard state={results} fitState={fit} className="lg:col-span-2" />
         <CompletionCard state={progress} className="md:col-span-1 lg:col-span-2" />
         <FitCard state={fit} className="md:col-span-1 lg:col-span-4" />
+        <FitV2Card state={fit} className="md:col-span-2 lg:col-span-6" />
         <MatchSummaryCard className="md:col-span-2 lg:col-span-4" />
         <BookConsultationCard className="md:col-span-2 lg:col-span-2" />
       </div>

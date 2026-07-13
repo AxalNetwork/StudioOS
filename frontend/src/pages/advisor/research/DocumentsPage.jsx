@@ -1,20 +1,24 @@
 import React, { useMemo, useState } from 'react';
-import { FileText, FileSpreadsheet, FileSignature, File, BookOpen, Download, Eye } from 'lucide-react';
+import { FileText, LayoutTemplate, File, BookOpen, ClipboardList, Download, Eye, Presentation, StickyNote, FileSignature, Sparkles } from 'lucide-react';
 import { DOCUMENTS, DOCUMENT_TYPES, formatDay } from '../../../data/advisor/research';
 import {
   SearchInput, FilterChips, SlideOver, Section, Field, Badge, EmptyState, Chip,
+  AiSampleBanner,
 } from './kit';
 
-// Documents — a searchable knowledge library across document types (pitch decks,
-// investment memos, PDFs, contracts, research papers) with search + type filter
+// Documents — a searchable knowledge library across document types (research
+// papers, PDFs, frameworks, templates, playbooks) with search + type filter
 // and a detail panel per document.
 
 const TYPE_ICON = {
-  deck: FileSpreadsheet,
-  memo: FileText,
-  pdf: File,
-  contract: FileSignature,
   paper: BookOpen,
+  pdf: File,
+  framework: LayoutTemplate,
+  template: FileText,
+  playbook: ClipboardList,
+  deck: Presentation,
+  memo: StickyNote,
+  contract: FileSignature,
 };
 const typeLabel = (id) => DOCUMENT_TYPES.find((t) => t.id === id)?.label || id;
 
@@ -22,6 +26,7 @@ export default function DocumentsPage() {
   const [q, setQ] = useState('');
   const [type, setType] = useState('all');
   const [id, setId] = useState(null);
+  const [aiQ, setAiQ] = useState('');
 
   const filters = useMemo(() => ([
     { id: 'all', label: 'All', count: DOCUMENTS.length },
@@ -30,18 +35,39 @@ export default function DocumentsPage() {
 
   const rows = useMemo(() => {
     const term = q.trim().toLowerCase();
+    const aiTerm = aiQ.trim().toLowerCase();
     return DOCUMENTS.filter((d) => {
       if (type !== 'all' && d.type !== type) return false;
-      if (!term) return true;
-      return [d.title, d.author, d.summary, ...(d.tags || [])].some((v) => String(v).toLowerCase().includes(term));
+      const haystack = [d.title, d.author, d.summary, ...(d.tags || [])].map((v) => String(v).toLowerCase());
+      if (term && !haystack.some((v) => v.includes(term))) return false;
+      if (aiTerm && !haystack.some((v) => v.includes(aiTerm))) return false;
+      return true;
     });
-  }, [q, type]);
+  }, [q, type, aiQ]);
 
   const sel = DOCUMENTS.find((x) => x.id === id) || null;
   const SelIcon = sel ? (TYPE_ICON[sel.type] || File) : File;
 
   return (
     <div className="space-y-4">
+      {/* AI Search — sample semantic search over the document library. */}
+      <div className="rounded-xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/50 dark:bg-violet-950/20 p-3 space-y-2">
+        <div className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2">
+          <Sparkles size={16} className="text-violet-500 flex-shrink-0" />
+          <input
+            value={aiQ}
+            onChange={(e) => setAiQ(e.target.value)}
+            placeholder="AI Search — ask across the document library…"
+            className="flex-1 bg-transparent text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none"
+          />
+          {aiQ && (
+            <button onClick={() => setAiQ('')} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Clear</button>
+          )}
+        </div>
+        {aiQ.trim() && (
+          <AiSampleBanner>Sample AI search — matching documents shown below; results are illustrative, not model-generated.</AiSampleBanner>
+        )}
+      </div>
       <SearchInput value={q} onChange={setQ} placeholder="Search documents, tags, authors…" />
       <FilterChips options={filters} value={type} onChange={setType} />
       {rows.length === 0 ? <EmptyState>No documents match your filters.</EmptyState> : (

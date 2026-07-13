@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { Calendar, Plus, Trash2, CheckCircle, Star, X, Loader2, UserCircle } from 'lucide-react';
 import { api } from '../lib/api';
 import PageExplainer from '../components/PageExplainer';
+import ProfileFitSection from '../components/profile/ProfileFitSection';
 
 function StarPicker({ rating, onChange }) {
   return (
@@ -383,6 +384,9 @@ export default function OfficeHoursPage() {
           </div>
         )}
       </div>
+
+      {/* Task #19 — surface the Axal VC Fit & Values (incl. v2) profile on the advisor home. */}
+      <ProfileFitSection />
 
       {reviewing && (
         <AdvisorReviewModal booking={reviewing}

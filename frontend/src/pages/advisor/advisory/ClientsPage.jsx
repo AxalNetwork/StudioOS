@@ -5,7 +5,7 @@ import {
 } from '../../../data/advisor/advisory';
 import {
   FilterChips, StatCard, SlideOver, Section, Field, StatusBadge, BulletList,
-  ProgressBar, Timeline, RowCard, EmptyState, Chip,
+  ProgressBar, Timeline, RowCard, EmptyState, Chip, Avatar,
 } from './kit';
 
 // Clients — account workspace. Segmented client list; each opens a detail panel
@@ -118,6 +118,26 @@ function ClientDetail({ client, onClose }) {
           <Field label="Products"><div className="flex flex-wrap gap-1.5 mt-1">{p.products.map((pr) => <Chip key={pr}>{pr}</Chip>)}</div></Field>
         </div>
       </Section>
+
+      {client.contacts && client.contacts.length > 0 && (
+        <Section title="Contacts">
+          <div className="rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
+            {client.contacts.map((c) => (
+              <div key={c.email} className="flex items-center gap-3 p-3">
+                <Avatar name={c.name} size={36} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{c.name}</span>
+                    <Chip tone={c.primary ? 'violet' : 'gray'}>{c.role}</Chip>
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.title}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.email}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
 
       <Section title="Challenges"><BulletList items={p.challenges} tone="rose" /></Section>
       <Section title="Goals"><BulletList items={p.goals} tone="emerald" /></Section>

@@ -810,6 +810,16 @@ class Investor(SQLModel, table=True):
     accreditation_basis: Optional[str] = None     # income | net_worth | entity | knowledgeable_employee
     accreditation_verified_at: Optional[datetime] = None
     accreditation_verified_by: Optional[int] = Field(default=None, foreign_key="users.id")
+    # Task #12 — secure introductions. Admins can create investor profiles for
+    # people not yet on the platform (user_id stays NULL). These columns carry
+    # the display info surfaced to a founder requesting an intro. `contact_email`
+    # is PRIVATE — it is never returned in any API response until the two sides
+    # are mutually connected; the branded off-platform invite is sent to it.
+    display_name: Optional[str] = None
+    company: Optional[str] = None
+    headline: Optional[str] = None
+    photo_url: Optional[str] = None
+    contact_email: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -1628,6 +1638,80 @@ class CofounderConnection(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
+# Task #12 — Secure introductions & matching flow
+# ---------------------------------------------------------------------------
+class NetworkIntroduction(SQLModel, table=True):
+    """A privacy-preserving introduction request between two parties.
+
+    Core invariant (enforced server-side in the router DTO, NOT just the UI):
+    neither side's private contact details (email) are revealed to the other
+    until BOTH have accepted and the row reaches status `connected`.
+
+    The recipient is either:
+      * on-platform  — `recipient_user_id` set (a registered User), or
+      * off-platform — `recipient_investor_id` points at an admin-created
+        `Investor` profile whose `user_id` is NULL; `off_platform=True` and the
+        branded invite is emailed to `recipient_email` with a single-use
+        tokenized review link.
+
+    Status machine:
+        pending → invited → viewed → accepted/declined → connected
+        (any non-terminal state may lapse to `expired`).
+
+    `initiator_accepted` is True at creation (requesting == accepting); the row
+    becomes `connected` once `recipient_accepted` also flips True.
+    """
+    __tablename__ = "network_introductions"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    initiator_user_id: int = Field(foreign_key="users.id", index=True)
+    recipient_user_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
+    recipient_investor_id: Optional[int] = Field(default=None, foreign_key="investors.id", index=True)
+    off_platform: bool = Field(default=False, index=True)
+    # Display info — SAFE to surface pre-connection.
+    recipient_name: str
+    recipient_company: Optional[str] = None
+    recipient_headline: Optional[str] = None
+    recipient_photo_url: Optional[str] = None
+    # PRIVATE — never returned pre-connection. For off-platform recipients this
+    # is the address the invite is emailed to; for on-platform recipients we
+    # read the live User.email instead and this stays NULL.
+    recipient_email: Optional[str] = None
+    # The intro note written by the initiator (shown to the recipient).
+    draft_message: Optional[str] = None
+    status: str = Field(default="pending", index=True)
+    initiator_accepted: bool = Field(default=True)
+    recipient_accepted: bool = Field(default=False)
+    # Single-use tokenized review link for off-platform recipients. We store
+    # only the SHA-256 hash, never the raw token (same pattern as references).
+    invite_token_hash: Optional[str] = Field(default=None, index=True)
+    invite_token_expires: Optional[datetime] = None
+    invite_used_at: Optional[datetime] = None
+    email_sent: bool = Field(default=False)
+    email_sent_at: Optional[datetime] = None
+    viewed_at: Optional[datetime] = None
+    accepted_at: Optional[datetime] = None
+    declined_at: Optional[datetime] = None
+    connected_at: Optional[datetime] = None
+    expired_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class NetworkIntroMessage(SQLModel, table=True):
+    """A message in a connected introduction thread. Messaging is unlocked
+    only once the parent introduction reaches status `connected` — enforced
+    in the router, so a pre-connection party can never post or read here."""
+    __tablename__ = "network_intro_messages"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    introduction_id: int = Field(foreign_key="network_introductions.id", index=True)
+    sender_user_id: int = Field(foreign_key="users.id", index=True)
+    body: str
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+# ---------------------------------------------------------------------------
 # Task #44 — Portfolio health score + predictive failure
 # ---------------------------------------------------------------------------
 class PortfolioHealthSnapshot(SQLModel, table=True):
@@ -1918,3 +2002,46 @@ class Incorporation(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     paid_at: Optional[datetime] = None
+
+
+# ---------------------------------------------------------------------------
+# Task #16 — Organizations directory (Network > Organizations)
+# Real VC funds / deep-tech investors imported from the two uploaded CSV
+# directories, replacing the old hardcoded frontend demo array. These rows
+# are investor/fund profiles (not portfolio companies), so the model captures
+# fund/investor fields; list/dict fields are stored as JSON TEXT for
+# SQLite/Postgres portability and parsed in the API DTO.
+# ---------------------------------------------------------------------------
+class Organization(SQLModel, table=True):
+    __tablename__ = "organizations"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    name: str = Field(index=True)
+    # Stable lowercased-alphanumeric dedup key (from name). UNIQUE so the
+    # import can upsert and merge an org that appears in both source files.
+    normalized_key: str = Field(unique=True, index=True)
+    website: Optional[str] = None
+    linkedin: Optional[str] = None
+    # VC / CVC / PE / Angel / Accelerator / Family Office / VC Fund / ...
+    org_type: Optional[str] = Field(default=None, index=True)
+    hq_country: Optional[str] = Field(default=None, index=True)
+    parent_company: Optional[str] = None
+    # Free-text sector focus (Euro file) kept verbatim for the profile.
+    sector_focus_text: Optional[str] = None
+    # Normalized sector tags (from the deep-tech file's x-marked columns).
+    sector_tags_json: str = "[]"
+    fund_size: Optional[str] = None            # e.g. "€ 60m" / "$265M" (currency varies → text)
+    fund_number: Optional[str] = None          # roman numeral (Euro file '#')
+    latest_fund_date: Optional[str] = None
+    notable_lps: Optional[str] = None
+    stage_focus_json: str = "[]"               # ["Pre-seed","Seed","Series A","Series B+"]
+    min_ticket: Optional[str] = None
+    max_ticket: Optional[str] = None
+    region_focus_json: str = "[]"              # ["Europe","USA",...]
+    deep_tech_only: Optional[bool] = None
+    dt_deal_count: Optional[str] = None
+    additional_focus: Optional[str] = None
+    yearly_raised_json: str = "{}"             # {"2024":"€ 60m", ...} (Euro file)
+    source: str = Field(default="euro_vc", index=True)  # euro_vc | deep_tech | both
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)

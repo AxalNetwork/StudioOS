@@ -1,0 +1,59 @@
+This is not entirely what I expected. Please redesign the Introductions experience so it feels like a Tinder-style professional matching app, not a directory.
+
+Important:
+- Profile email and all contact information must be private and never shown in public profile views.
+- The current layout should not show profiles on the right side like it does now.
+- The experience should show only people, not organizations, in Introductions.
+- Users should be able to filter who they want to connect with.
+
+Matching logic should be based on:
+- Shared values
+- Shared objectives
+- Question-bank answers like growth, fundraising, legal, GTM, product, etc.
+- Complementary skills
+- Archetypes already implemented in the last tasks
+- Axal VC fit scoring and logic
+
+Each generated profile should include:
+- Name
+- Role
+- Companies
+- Location
+- Specializations
+- Skills
+- Values
+- Archetype
+- Trust score
+- Axal VC fit graph
+- A short reason why this person is a fit
+
+Interaction flow:
+- Each profile should have Connect and Not now buttons.
+- When a user taps Connect, the other person should get a notification to accept or decline.
+- If both users accept, the match should appear in Introductions.
+- If one person declines, it should stay pending or be shown accordingly.
+
+Plans and credits:
+- Users should have a limited number of connects on free and paid plans.
+- Users should also be able to earn connect credits through the Referral program.
+- Connect limits and credits must be enforced in the UI and backend.
+
+UX requirements:
+- Make this people-first and matchmaking-focused.
+- Remove any public exposure of email or contact details.
+- Add filters for location, role, specialization, values, archetype, trust score, and VC fit score.
+- Keep the experience clean, modern, and centered on compatible people rather than a contact database.
+
+Implementation:
+- Use the existing codebase structure.
+- Preserve the archetype logic already built.
+- Integrate the matching flow cleanly into the current app.
+- Use proper branches and PRs if needed.
+- Claude-built logic can be used where relevant.
+
+Acceptance criteria:
+- Introductions feels like a curated professional matching app.
+- Profiles are people-only and privacy-safe.
+- Connect requests require mutual acceptance.
+- Filters and credits work correctly.
+- The UI no longer looks like a directory with company cards mixed in.

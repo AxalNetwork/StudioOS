@@ -11,13 +11,15 @@
 //     global /legalcap list, which is not filtered per-LP).
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Banknote, FileBarChart, Landmark, PhoneCall, RefreshCw } from 'lucide-react';
+import { Banknote, Calculator, FileBarChart, Landmark, PhoneCall, RefreshCw, TrendingUp } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
 import WorkspaceTabs, { WorkspaceHeader } from '../components/WorkspaceTabs';
 import LockedPreview from '../components/LockedPreview';
 import { AdminFundsView } from './FundsPage';
 import LPReportingPage from './LPReportingPage';
+import FundPerformancePage from './FundPerformancePage';
+import FundAccountingPage from './FundAccountingPage';
 
 const fmtMoney = (v) => (v == null || v === '' ? '—' : `$${Number(v).toLocaleString()}`);
 const fmtDate = (v) => (v ? String(v).slice(0, 10) : '—');
@@ -132,7 +134,11 @@ export default function FundOpsWorkspace() {
   const { pathname } = useLocation();
   const { role } = useAuth();
   const isAdmin = role === 'admin';
-  const active = pathname.includes('/lp-reports')
+  const active = pathname.includes('/performance')
+    ? 'performance'
+    : pathname.includes('/accounting')
+    ? 'accounting'
+    : pathname.includes('/lp-reports')
     ? 'reports'
     : pathname.includes('/capital-calls')
     ? 'calls'
@@ -140,6 +146,8 @@ export default function FundOpsWorkspace() {
 
   const tabs = [
     { to: '/funds', label: 'Funds admin', icon: Banknote },
+    { to: '/funds/performance', label: 'Performance', icon: TrendingUp },
+    { to: '/funds/accounting', label: 'Accounting', icon: Calculator },
     { to: '/lp-reports', label: 'LP Reporting', icon: FileBarChart },
     { to: '/funds/capital-calls', label: 'Capital Calls', icon: PhoneCall },
   ];
@@ -165,6 +173,8 @@ export default function FundOpsWorkspace() {
             <FundsAdminTeaser />
           </LockedPreview>
         ))}
+      {active === 'performance' && <FundPerformancePage embedded />}
+      {active === 'accounting' && <FundAccountingPage embedded />}
       {active === 'reports' && <LPReportingPage embedded />}
       {active === 'calls' && <CapitalCallsPanel isAdmin={isAdmin} />}
     </div>

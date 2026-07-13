@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
-import { Search, Send, GitCompare, Map, FileBarChart } from 'lucide-react';
+import { Search, Send, Grid2x2, Map, FileBarChart, GitCompare } from 'lucide-react';
 import {
-  AI_TABS, AI_SEARCH_SAMPLE, AI_ANALYST_SAMPLES, COMPARABLES_SAMPLE,
-  MARKET_MAPS, COMPANY_REPORTS, money, formatDay,
+  AI_TABS, AI_SEARCH_SAMPLE, AI_ANALYST_SAMPLES, SWOT_SAMPLES,
+  MARKET_MAPS, COMPANY_REPORTS, COMPARABLES, money, formatDay,
 } from '../../../data/advisor/research';
 import {
-  SubTabs, SlideOver, Section, Field, Badge, BulletList, AiSampleBanner,
+  SubTabs, SlideOver, Section, Field, Badge, GrowthPct, BulletList, AiSampleBanner,
   SampleTag, Chip,
 } from './kit';
 
 // AI Research — clearly-labelled sample AI surfaces. Nothing here is generated
 // from live data; every surface carries a "sample output" marker so it can't be
 // mistaken for a real model response. Sub-tabs: AI Search, AI Analyst,
-// Comparable Companies, Market Maps, Company Reports.
+// SWOT Analysis, Market Maps, Company Reports.
 
 export default function AIResearchPage() {
   const [tab, setTab] = useState('search');
@@ -22,8 +22,57 @@ export default function AIResearchPage() {
       {tab === 'search' && <AiSearchView />}
       {tab === 'analyst' && <AiAnalystView />}
       {tab === 'comparables' && <ComparablesView />}
+      {tab === 'swot' && <SwotView />}
       {tab === 'maps' && <MarketMapsView />}
       {tab === 'reports' && <ReportsView />}
+    </div>
+  );
+}
+
+function ComparablesView() {
+  return (
+    <div className="space-y-4">
+      <AiSampleBanner>Sample comparable-company sets — illustrative only, not generated from live data.</AiSampleBanner>
+      <div className="space-y-4">
+        {COMPARABLES.map((c) => (
+          <div key={c.id} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <GitCompare size={16} className="text-violet-500" />
+              <span className="font-semibold text-gray-900 dark:text-gray-100">{c.target}</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">· {c.sector}</span>
+              <SampleTag />
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{c.basis}</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400">
+                    <th className="text-left px-3 py-2 font-medium">Peer</th>
+                    <th className="text-right px-3 py-2 font-medium">Valuation</th>
+                    <th className="hidden sm:table-cell text-right px-3 py-2 font-medium">Revenue</th>
+                    <th className="text-right px-3 py-2 font-medium">Growth</th>
+                    <th className="text-right px-3 py-2 font-medium">Multiple</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {c.peers.map((p) => (
+                    <tr key={p.name} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
+                      <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{p.name}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">{money(p.valuation)}</td>
+                      <td className="hidden sm:table-cell px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">{money(p.revenue)}</td>
+                      <td className="px-3 py-2 text-right"><GrowthPct value={p.growth} /></td>
+                      <td className="px-3 py-2 text-right tabular-nums text-violet-600 dark:text-violet-300">{p.multiple}x</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-3 rounded-lg bg-violet-50/70 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900/50 px-3 py-2 text-sm text-violet-900 dark:text-violet-200">
+              {c.takeaway}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -86,40 +135,40 @@ function AiAnalystView() {
   );
 }
 
-function ComparablesView() {
-  const c = COMPARABLES_SAMPLE;
+function SwotView() {
   return (
     <div className="space-y-4">
-      <AiSampleBanner>Sample comparable-company set — illustrative only.</AiSampleBanner>
-      <FakeInput value={`Comparable companies for: ${c.base}`} icon={GitCompare} cta="Find" ctaIcon={GitCompare} />
-      <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400">
-              <th className="text-left px-4 py-2.5 font-medium">Company</th>
-              <th className="text-left px-4 py-2.5 font-medium">Stage</th>
-              <th className="text-right px-4 py-2.5 font-medium">Valuation</th>
-              <th className="hidden sm:table-cell text-right px-4 py-2.5 font-medium">Growth</th>
-              <th className="hidden sm:table-cell text-right px-4 py-2.5 font-medium">Rev multiple</th>
-            </tr>
-          </thead>
-          <tbody>
-            {c.peers.map((p) => {
-              const base = p.name === c.base;
-              return (
-                <tr key={p.name} className={`border-b border-gray-100 dark:border-gray-800 last:border-0 ${base ? 'bg-violet-50/60 dark:bg-violet-950/30' : ''}`}>
-                  <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-gray-100">
-                    {p.name} {base && <Badge tone="violet">Base</Badge>}
-                  </td>
-                  <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300">{p.stage}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-gray-700 dark:text-gray-300">{money(p.valuation)}</td>
-                  <td className="hidden sm:table-cell px-4 py-2.5 text-right tabular-nums text-emerald-600">+{p.growth}%</td>
-                  <td className="hidden sm:table-cell px-4 py-2.5 text-right tabular-nums text-gray-600 dark:text-gray-300">{p.revenueMultiple}x</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <AiSampleBanner>Sample SWOT analysis — illustrative only, not generated from live data.</AiSampleBanner>
+      <FakeInput value="Run a SWOT analysis on a practice, client, or vendor…" icon={Grid2x2} cta="Analyze" ctaIcon={Grid2x2} />
+      <div className="space-y-4">
+        {SWOT_SAMPLES.map((s) => (
+          <div key={s.id} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Grid2x2 size={16} className="text-violet-500" />
+              <span className="font-semibold text-gray-900 dark:text-gray-100">{s.subject}</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">· {s.context}</span>
+              <SampleTag />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="rounded-lg border border-gray-100 dark:border-gray-800 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-2">Strengths</div>
+                <BulletList items={s.strengths} tone="emerald" />
+              </div>
+              <div className="rounded-lg border border-gray-100 dark:border-gray-800 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-rose-500 dark:text-rose-400 mb-2">Weaknesses</div>
+                <BulletList items={s.weaknesses} tone="rose" />
+              </div>
+              <div className="rounded-lg border border-gray-100 dark:border-gray-800 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400 mb-2">Opportunities</div>
+                <BulletList items={s.opportunities} tone="blue" />
+              </div>
+              <div className="rounded-lg border border-gray-100 dark:border-gray-800 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400 mb-2">Threats</div>
+                <BulletList items={s.threats} tone="gray" />
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

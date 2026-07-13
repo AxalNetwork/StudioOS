@@ -19,11 +19,12 @@ const STATUS_TONE = {
   // in-flight / neutral-positive
   'in progress': 'blue', 'in review': 'blue', 'under review': 'blue', sent: 'blue',
   scheduled: 'blue', processing: 'blue', onboarding: 'blue', 'call scheduled': 'blue',
-  medium: 'blue',
+  medium: 'blue', qualified: 'blue', 'verbal agreement': 'blue',
   // pending / attention
   proposed: 'amber', 'awaiting signature': 'amber', 'awaiting reply': 'amber',
   'proposal sent': 'amber', draft: 'amber', upcoming: 'amber', pending: 'amber',
   new: 'amber', 'needs assessment done': 'amber', 'kickoff complete': 'amber',
+  'in negotiation': 'amber', 'not started': 'gray',
   // negative
   lost: 'rose', 'closed lost': 'rose', overdue: 'rose', low: 'rose',
 };
@@ -88,6 +89,7 @@ export function BulletList({ items, tone = 'gray' }) {
   }
   const dot = {
     gray: 'bg-gray-400', emerald: 'bg-emerald-500', rose: 'bg-rose-400', violet: 'bg-violet-500',
+    blue: 'bg-blue-500', amber: 'bg-amber-500',
   }[tone] || 'bg-gray-400';
   return (
     <ul className="space-y-1.5">

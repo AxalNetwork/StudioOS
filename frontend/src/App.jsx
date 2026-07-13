@@ -88,6 +88,7 @@ const SpinoutLabPage = lazy(() => import('./pages/SpinoutLabPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
+const NetworkIntroReviewPage = lazy(() => import('./pages/NetworkIntroReviewPage'));
 const RecoverPage = lazy(() => import('./pages/RecoverPage'));
 const ESignPage = lazy(() => import('./pages/ESignPage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
@@ -120,7 +121,6 @@ const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
 const MatchesPage = lazy(() => import('./pages/MatchesPage'));
 const StudioOpsPage = lazy(() => import('./pages/StudioOpsPage'));
 const NetworkEffectsPage = lazy(() => import('./pages/NetworkEffectsPage'));
-const PipelinePage = lazy(() => import('./pages/PipelinePage'));
 const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
 const SpinOutsPage = lazy(() => import('./pages/SpinOutsPage'));
@@ -151,6 +151,7 @@ const MonitoringPage = lazy(() => import('./pages/MonitoringPage'));
 const LiquidityPage = lazy(() => import('./pages/LiquidityPage'));
 const FundOpsWorkspace = lazy(() => import('./pages/FundOpsWorkspace'));
 const PortfolioWorkspace = lazy(() => import('./pages/PortfolioWorkspace'));
+const PipelineWorkspace = lazy(() => import('./pages/PipelineWorkspace'));
 const FundModelingWorkspace = lazy(() => import('./pages/FundModelingWorkspace'));
 const LPPortalPage = lazy(() => import('./pages/LPPortalPage'));
 const InvestorPricingPage = lazy(() => import('./pages/InvestorPricingPage'));
@@ -200,7 +201,6 @@ const AdvisorResearchWorkspace = lazy(() => import('./pages/advisor/research/Adv
 // Engagements, Performance).
 const PartnerOperationsWorkspace = lazy(() => import('./pages/partner/operations/PartnerOperationsWorkspace'));
 const GrowthWorkspace = lazy(() => import('./pages/growth/GrowthWorkspace'));
-const SectionScaffold = lazy(() => import('./components/SectionScaffold'));
 // Authenticated-shell widgets — lazy so they leave the entry chunk. They only
 // ever render inside ProtectedLayout (logged-in users), so a logged-out visitor
 // hitting the landing page never downloads them. Each render site below is
@@ -1274,6 +1274,7 @@ function AppInner() {
       <Route path="/register" element={<AuthScreen user={user} clearSession={clearSession}><RegisterPage /></AuthScreen>} />
       <Route path="/login" element={<AuthScreen user={user} clearSession={clearSession}><LoginPage /></AuthScreen>} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/network-intro/:token" element={<NetworkIntroReviewPage />} />
       {/* Task #50 — Lost-TOTP recovery. Catch-all subroute so /auth/recover,
           /auth/recover/email and /auth/recover/attest all land here. */}
       <Route path="/auth/recover" element={<RecoverPage />} />
@@ -1492,9 +1493,9 @@ function AppInner() {
           Bare section paths redirect to their first tab so every workspace is
           reachable by direct URL and by clicking the sidebar. */}
       <Route path="/advisor/network" element={<Navigate to="/advisor/network/introductions" replace />} />
-      <Route path="/advisor/network/introductions" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorNetworkWorkspace />)} />
-      <Route path="/advisor/network/relationships" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorNetworkWorkspace />)} />
-      <Route path="/advisor/network/organizations" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorNetworkWorkspace />)} />
+      <Route path="/advisor/network/introductions" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorNetworkWorkspace />)} />
+      <Route path="/advisor/network/relationships" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorNetworkWorkspace />)} />
+      <Route path="/advisor/network/organizations" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorNetworkWorkspace />)} />
       <Route path="/advisor/advisory" element={<Navigate to="/advisor/advisory/opportunities" replace />} />
       <Route path="/advisor/advisory/opportunities" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/clients" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
@@ -1502,11 +1503,12 @@ function AppInner() {
       <Route path="/advisor/advisory/delivery" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/contracts" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/research" element={<Navigate to="/advisor/research/market" replace />} />
-      <Route path="/advisor/research/market" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorResearchWorkspace />)} />
-      <Route path="/advisor/research/companies" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorResearchWorkspace />)} />
-      <Route path="/advisor/research/documents" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorResearchWorkspace />)} />
-      <Route path="/advisor/research/ai" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorResearchWorkspace />)} />
-      <Route path="/advisor/research/news" element={guard(['admin', 'advisor', 'investor', 'partner'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research/market" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research/companies" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research/funds" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research/documents" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research/ai" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research/news" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
       <Route path="/partner/operations" element={<Navigate to="/partner/operations/overview" replace />} />
       <Route path="/partner/operations/overview" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
       <Route path="/partner/operations/capabilities" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
@@ -1529,15 +1531,24 @@ function AppInner() {
       <Route path="/partner/growth/partnerships" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
       <Route path="/partner/growth/capital" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
       <Route path="/partner/growth/experts" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
-      {/* Investor lifecycle sections scaffolded now — nav + route live; the
-          working surface is filled in later. Investor-scoped (admin can view). */}
-      <Route path="/pipeline/screening" element={guard(['admin', 'investor'], <SectionScaffold title="Screening" description="Evaluate and qualify inbound deals before they advance to the investment committee." planned={['Screening scorecards and qualification criteria', 'Auto-scored fit against your thesis and mandate', 'Screening notes, flags, and pass / advance decisions', 'Handoff into the commit stage']} />)} />
-      <Route path="/pipeline/commit" element={guard(['admin', 'investor'], <SectionScaffold title="Commit" description="Investment-committee decisions and the path to a signed commitment." planned={['IC memos, votes, and decision records', 'Term sheet and commitment tracking', 'Conditions to close and approvals', 'Handoff into transactions']} />)} />
-      <Route path="/pipeline/transactions" element={guard(['admin', 'investor'], <SectionScaffold title="Transactions" description="Execute and track closed deals from wire to confirmation." planned={['Closing checklists and wire tracking', 'Executed documents and signatures', 'Cap-table and ownership updates', 'Transaction history and audit trail']} />)} />
-      <Route path="/portfolio/performance" element={guard(['admin', 'investor'], <SectionScaffold title="Portfolio Performance" description="Track returns, valuations, and portfolio-level performance over time." planned={['IRR, MOIC, and TVPI by company and fund', 'Valuation history and mark-ups', 'Cohort and vintage comparisons', 'Benchmarks and performance attribution']} />)} />
-      <Route path="/portfolio/growth" element={guard(['admin', 'investor'], <SectionScaffold title="Portfolio Growth" description="Support and accelerate growth across your portfolio companies." planned={['Growth initiatives and value-creation plans', 'Talent, customer, and capital introductions', 'KPIs and milestone tracking', 'Portfolio-wide growth benchmarks']} />)} />
-      <Route path="/funds/performance" element={guard(['admin', 'investor'], <SectionScaffold title="Fund Performance" description="Fund-level returns, capital deployment, and LP-facing performance." planned={['Fund IRR, DPI, RVPI, and TVPI', 'Capital deployment and pacing', 'J-curve and NAV over time', 'LP-ready performance summaries']} />)} />
-      <Route path="/funds/accounting" element={guard(['admin', 'investor'], <SectionScaffold title="Fund Accounting" description="Fund financials, capital accounts, and accounting workflows." planned={['Capital accounts and allocations by LP', 'Management fee and carry calculations', 'Expense tracking and financial statements', 'Audit and reconciliation support']} />)} />
+      {/* Task #7 — Founder Growth reuses the shared GrowthWorkspace under a
+          /founder/growth/* prefix (mirrors the advisor/partner growth routes). */}
+      <Route path="/founder/growth" element={<Navigate to="/founder/growth/talent" replace />} />
+      <Route path="/founder/growth/talent" element={guard(['admin', 'founder'], <GrowthWorkspace />)} />
+      <Route path="/founder/growth/customers" element={guard(['admin', 'founder'], <GrowthWorkspace />)} />
+      <Route path="/founder/growth/partnerships" element={guard(['admin', 'founder'], <GrowthWorkspace />)} />
+      <Route path="/founder/growth/capital" element={guard(['admin', 'founder'], <GrowthWorkspace />)} />
+      <Route path="/founder/growth/experts" element={guard(['admin', 'founder'], <GrowthWorkspace />)} />
+      {/* Task #5 — investor lifecycle sections now live. Pipeline stages render
+          the tabbed PipelineWorkspace; portfolio/funds analytics render as tabs
+          within their existing workspaces. Investor-scoped (admin can view). */}
+      <Route path="/pipeline/screening" element={guard(['admin', 'investor'], <PipelineWorkspace />)} />
+      <Route path="/pipeline/commit" element={guard(['admin', 'investor'], <PipelineWorkspace />)} />
+      <Route path="/pipeline/transactions" element={guard(['admin', 'investor'], <PipelineWorkspace />)} />
+      <Route path="/portfolio/performance" element={guard(['admin', 'investor'], <PortfolioWorkspace />)} />
+      <Route path="/portfolio/growth" element={guard(['admin', 'investor'], <PortfolioWorkspace />)} />
+      <Route path="/funds/performance" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
+      <Route path="/funds/accounting" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
       {/* Task #1 — Contacts merged into the unified Network page. The legacy
           /contacts route now redirects into the Contacts tab. */}
       <Route path="/contacts" element={<Navigate to="/network?tab=contacts" replace />} />
@@ -1557,7 +1568,7 @@ function AppInner() {
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
       <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=studio-ops" replace /> : <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />
-      <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], <PipelinePage />)} />
+      <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], <PipelineWorkspace />)} />
       {/* Task #1 — unified Network page (Contacts + Introductions +
           Relationships tabs). The legacy /relationships route redirects into
           the Relationships tab. Advisors are included so the Introductions

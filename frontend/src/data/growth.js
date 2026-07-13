@@ -121,6 +121,153 @@ export const CUSTOMER_TARGETS = [
 ];
 
 // ---------------------------------------------------------------------------
+// PARTNERSHIPS — strategic, technology, reseller, and distribution partnerships.
+// Modules: Strategic Partners, Technology Partners, Resellers, Distribution.
+// ---------------------------------------------------------------------------
+export const PARTNERSHIP_MODULES = [
+  { id: 'strategic', name: 'Strategic Partners', desc: 'Joint go-to-market & co-selling' },
+  { id: 'technology', name: 'Technology Partners', desc: 'Integrations & platform alliances' },
+  { id: 'resellers', name: 'Resellers', desc: 'Value-added resale channel' },
+  { id: 'distribution', name: 'Distribution', desc: 'Distributors & market reach' },
+];
+
+export const PARTNERSHIP_PIPELINE = [
+  'Identified', 'Outreach', 'Evaluating', 'Negotiating', 'Active', 'Paused',
+];
+
+export const PARTNERSHIPS = [
+  {
+    id: 'p1', module: 'strategic', name: 'Salesforce', type: 'Co-sell alliance', partnerType: 'Strategic',
+    stage: 'Active', fitScore: 94, region: 'North America', markets: 'Enterprise SaaS',
+    description: 'Joint go-to-market motion targeting mid-market and enterprise CRM accounts.',
+    valueSummary: 'Co-selling agreement with shared account plans and quarterly business reviews.',
+    dealsInfluenced: 18, pipelineValue: 2400000, pointOfContact: 'Rachel Okonkwo (Alliances Director)',
+    since: '2024-02-10', lastTouch: '2026-01-12', status: 'Active',
+    benefits: ['Co-sell into installed base', 'Marketplace listing', 'Joint QBRs with named reps'],
+    nextSteps: ['Finalize FY co-marketing budget', 'Launch two joint webinars', 'Expand into EMEA territory'],
+  },
+  {
+    id: 'p2', module: 'strategic', name: 'Deloitte Digital', type: 'Implementation alliance', partnerType: 'Strategic',
+    stage: 'Negotiating', fitScore: 87, region: 'Global', markets: 'Financial Services · Enterprise',
+    description: 'Systems-integrator partnership to deliver services around the platform.',
+    valueSummary: 'SI-led deployments unlocking large regulated accounts with delivery capacity.',
+    dealsInfluenced: 6, pipelineValue: 1800000, pointOfContact: 'James Whitfield (Partner)',
+    since: '2025-06-01', lastTouch: '2026-01-08', status: 'In negotiation',
+    benefits: ['Delivery capacity at scale', 'Access to regulated accounts', 'Co-branded reference architecture'],
+    nextSteps: ['Sign master services agreement', 'Certify first delivery pod', 'Agree joint account list'],
+  },
+  {
+    id: 'p3', module: 'strategic', name: 'HubSpot', type: 'Ecosystem partner', partnerType: 'Strategic',
+    stage: 'Evaluating', fitScore: 79, region: 'North America · EMEA', markets: 'SMB · Mid-market',
+    description: 'App-ecosystem and co-marketing alliance targeting HubSpot customer base.',
+    valueSummary: 'Ecosystem co-marketing and shared demand generation into SMB segment.',
+    dealsInfluenced: 3, pipelineValue: 520000, pointOfContact: 'Nina Alvarez (Partner Manager)',
+    since: '2025-10-15', lastTouch: '2025-12-20', status: 'Evaluating fit',
+    benefits: ['Co-marketing reach', 'Shared demand-gen programs', 'App directory placement'],
+    nextSteps: ['Complete partner tier application', 'Scope first co-marketing campaign'],
+  },
+  {
+    id: 'p4', module: 'technology', name: 'Snowflake', type: 'Data integration', partnerType: 'Technology',
+    stage: 'Active', fitScore: 92, region: 'Global', markets: 'Data & Analytics',
+    integration: 'Native connector + secure data sharing', apiCoverage: 'Full read/write via connector',
+    description: 'Native data-warehouse integration enabling secure data sharing.',
+    valueSummary: 'Technology alliance with certified connector and joint solution briefs.',
+    dealsInfluenced: 11, pipelineValue: 1350000, pointOfContact: 'Derek Sun (Tech Alliances)',
+    since: '2024-09-01', lastTouch: '2026-01-05', status: 'Active',
+    benefits: ['Certified native connector', 'Joint solution briefs', 'Marketplace co-listing'],
+    nextSteps: ['Ship v2 connector', 'Publish reference benchmark', 'Add reverse-ETL support'],
+  },
+  {
+    id: 'p5', module: 'technology', name: 'Stripe', type: 'Payments integration', partnerType: 'Technology',
+    stage: 'Active', fitScore: 90, region: 'Global', markets: 'Fintech · Commerce',
+    integration: 'Embedded billing & payments', apiCoverage: 'Billing, invoicing, webhooks',
+    description: 'Embedded payments and billing integration for platform monetization.',
+    valueSummary: 'Deep payments integration surfaced in partner directory and docs.',
+    dealsInfluenced: 8, pipelineValue: 640000, pointOfContact: 'Elena Marsh (Partnerships)',
+    since: '2024-11-20', lastTouch: '2025-12-18', status: 'Active',
+    benefits: ['Embedded billing', 'Directory listing', 'Shared onboarding docs'],
+    nextSteps: ['Add usage-based billing', 'Localize checkout for EU'],
+  },
+  {
+    id: 'p6', module: 'technology', name: 'Datadog', type: 'Observability integration', partnerType: 'Technology',
+    stage: 'Evaluating', fitScore: 74, region: 'North America', markets: 'DevOps · Enterprise IT',
+    integration: 'Metrics & tracing export', apiCoverage: 'Metrics API, log pipeline',
+    description: 'Observability integration exporting platform telemetry to Datadog.',
+    valueSummary: 'Technology alliance to instrument deployments for enterprise ops teams.',
+    dealsInfluenced: 2, pipelineValue: 210000, pointOfContact: 'Owen Pratt (ISV Program)',
+    since: '2025-11-05', lastTouch: '2025-12-11', status: 'Evaluating fit',
+    benefits: ['Prebuilt dashboards', 'Trace correlation', 'ISV program co-marketing'],
+    nextSteps: ['Complete integration tile', 'Submit to marketplace review'],
+  },
+  {
+    id: 'p7', module: 'resellers', name: 'CloudBridge VAR', type: 'Value-added reseller', partnerType: 'Reseller',
+    stage: 'Active', fitScore: 88, region: 'EMEA', markets: 'Mid-market IT Services',
+    channel: 'Value-added reseller', territory: 'UK · Ireland · Benelux', marginTier: 'Gold (25%)',
+    description: 'Regional VAR reselling with implementation and support wrap.',
+    valueSummary: 'Reseller agreement with margin tiering and deal-registration protection.',
+    dealsInfluenced: 14, pipelineValue: 980000, pointOfContact: 'Sophie Laurent (Channel Director)',
+    since: '2024-04-18', lastTouch: '2026-01-09', status: 'Active',
+    benefits: ['Deal registration', 'Gold margin tier', 'Local implementation coverage'],
+    nextSteps: ['Renew annual reseller agreement', 'Certify two new engineers', 'Expand into DACH'],
+  },
+  {
+    id: 'p8', module: 'resellers', name: 'Meridian Solutions', type: 'Value-added reseller', partnerType: 'Reseller',
+    stage: 'Outreach', fitScore: 71, region: 'North America', markets: 'Public Sector',
+    channel: 'Value-added reseller', territory: 'US Federal · State/Local', marginTier: 'Silver (18%)',
+    description: 'Public-sector focused reseller with government procurement vehicles.',
+    valueSummary: 'Channel path into public sector via established procurement contracts.',
+    dealsInfluenced: 0, pipelineValue: 300000, pointOfContact: 'Grant Feldman (VP Channels)',
+    since: '2025-12-01', lastTouch: '2025-12-22', status: 'Initial outreach',
+    benefits: ['GSA schedule access', 'Public-sector expertise', 'Compliance support'],
+    nextSteps: ['Complete partner onboarding', 'Map first three agency opportunities'],
+  },
+  {
+    id: 'p9', module: 'resellers', name: 'Apex Channel Group', type: 'Managed service reseller', partnerType: 'Reseller',
+    stage: 'Evaluating', fitScore: 76, region: 'APAC', markets: 'Managed Services',
+    channel: 'MSP reseller', territory: 'Australia · Singapore', marginTier: 'Silver (18%)',
+    description: 'MSP reselling the platform bundled into managed offerings.',
+    valueSummary: 'Recurring-revenue channel via managed-service bundles in APAC.',
+    dealsInfluenced: 1, pipelineValue: 260000, pointOfContact: 'Wei Tan (Alliances Lead)',
+    since: '2025-09-28', lastTouch: '2025-12-15', status: 'Evaluating fit',
+    benefits: ['Recurring MSP bundles', 'APAC coverage', 'Managed support tier'],
+    nextSteps: ['Define bundle pricing', 'Run enablement bootcamp'],
+  },
+  {
+    id: 'p10', module: 'distribution', name: 'TechData (TD SYNNEX)', type: 'Global distributor', partnerType: 'Distributor',
+    stage: 'Negotiating', fitScore: 85, region: 'Global', markets: 'IT Distribution',
+    channel: 'Two-tier distribution', territory: 'Global (multi-region)', reachEstimate: '20K+ downstream partners',
+    description: 'Global distributor providing scaled reach to downstream resellers.',
+    valueSummary: 'Two-tier distribution unlocking thousands of downstream reseller partners.',
+    dealsInfluenced: 4, pipelineValue: 1650000, pointOfContact: 'Marcus Reed (Vendor Alliances)',
+    since: '2025-07-14', lastTouch: '2026-01-06', status: 'In negotiation',
+    benefits: ['Access to 20K+ resellers', 'Logistics & billing at scale', 'Multi-region coverage'],
+    nextSteps: ['Sign distribution agreement', 'Load SKUs into catalog', 'Launch partner enablement portal'],
+  },
+  {
+    id: 'p11', module: 'distribution', name: 'Ingram Micro', type: 'Global distributor', partnerType: 'Distributor',
+    stage: 'Identified', fitScore: 68, region: 'Global', markets: 'IT Distribution · Cloud Marketplace',
+    channel: 'Cloud marketplace distribution', territory: 'North America · LATAM', reachEstimate: '35K+ resellers',
+    description: 'Cloud-marketplace distribution to broaden reseller and cloud reach.',
+    valueSummary: 'Marketplace-led distribution expanding reach across the Americas.',
+    dealsInfluenced: 0, pipelineValue: 0, pointOfContact: 'Unassigned',
+    since: '2026-01-02', lastTouch: '2026-01-02', status: 'Newly identified',
+    benefits: ['Cloud marketplace reach', 'LATAM expansion path', 'Established logistics'],
+    nextSteps: ['Request partner program intro', 'Assess marketplace fit'],
+  },
+  {
+    id: 'p12', module: 'distribution', name: 'Pax8', type: 'Cloud distributor', partnerType: 'Distributor',
+    stage: 'Paused', fitScore: 62, region: 'North America · EMEA', markets: 'Cloud MSP Distribution',
+    channel: 'Cloud distribution', territory: 'US · UK', reachEstimate: '30K MSPs',
+    description: 'Cloud distributor focused on the MSP segment; engagement paused.',
+    valueSummary: 'MSP-focused cloud distribution paused pending product-market readiness.',
+    dealsInfluenced: 0, pipelineValue: 0, pointOfContact: 'Hannah Voss (Vendor Onboarding)',
+    since: '2025-05-20', lastTouch: '2025-10-30', status: 'Paused',
+    benefits: ['MSP marketplace', 'Automated provisioning', 'Billing consolidation'],
+    nextSteps: ['Revisit after multi-tenant GA', 'Reconfirm program requirements'],
+  },
+];
+
+// ---------------------------------------------------------------------------
 // CAPITAL — fundraising & financial resources. Modules: Investor Introductions,
 // VC Firms, Angel Investors, Family Offices, Grants.
 // ---------------------------------------------------------------------------

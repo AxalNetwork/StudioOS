@@ -20,8 +20,13 @@ import ExpertsPage from './ExpertsPage';
 
 export default function GrowthWorkspace() {
   const { pathname } = useLocation();
-  // Role-aware prefix so the same workspace works under both profiles.
-  const prefix = pathname.startsWith('/partner') ? '/partner' : '/advisor';
+  // Role-aware prefix so the same workspace works under every profile that
+  // exposes Growth (founder, partner, advisor).
+  const prefix = pathname.startsWith('/founder')
+    ? '/founder'
+    : pathname.startsWith('/partner')
+      ? '/partner'
+      : '/advisor';
 
   const active = pathname.includes('/customers')
     ? 'customers'

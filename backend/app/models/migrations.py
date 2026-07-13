@@ -2314,3 +2314,167 @@ def ensure_brand_landing_columns() -> None:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_brand_landing_columns: index %s: %s", name, exc)
         session.commit()
+
+
+def ensure_network_introductions_tables() -> None:
+    """Task #12 — Secure introductions & matching flow.
+
+    Idempotently:
+      * creates `network_introductions` (the intro/match records) + indexes
+      * creates `network_intro_messages` (connected-thread messaging) + index
+      * adds display/contact columns to `investors` so admins can create
+        profiles for people not yet on the platform (off-platform recipients)
+
+    Safe on every boot.
+    """
+    intro_ddl = """
+    CREATE TABLE IF NOT EXISTS network_introductions (
+        id SERIAL PRIMARY KEY,
+        uid VARCHAR UNIQUE NOT NULL,
+        initiator_user_id INTEGER NOT NULL REFERENCES users(id),
+        recipient_user_id INTEGER REFERENCES users(id),
+        recipient_investor_id INTEGER REFERENCES investors(id),
+        off_platform BOOLEAN DEFAULT FALSE NOT NULL,
+        recipient_name VARCHAR NOT NULL,
+        recipient_company VARCHAR,
+        recipient_headline VARCHAR,
+        recipient_photo_url VARCHAR,
+        recipient_email VARCHAR,
+        draft_message TEXT,
+        status VARCHAR DEFAULT 'pending' NOT NULL,
+        initiator_accepted BOOLEAN DEFAULT TRUE NOT NULL,
+        recipient_accepted BOOLEAN DEFAULT FALSE NOT NULL,
+        invite_token_hash VARCHAR,
+        invite_token_expires TIMESTAMP,
+        invite_used_at TIMESTAMP,
+        email_sent BOOLEAN DEFAULT FALSE NOT NULL,
+        email_sent_at TIMESTAMP,
+        viewed_at TIMESTAMP,
+        accepted_at TIMESTAMP,
+        declined_at TIMESTAMP,
+        connected_at TIMESTAMP,
+        expired_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )
+    """
+    msg_ddl = """
+    CREATE TABLE IF NOT EXISTS network_intro_messages (
+        id SERIAL PRIMARY KEY,
+        uid VARCHAR UNIQUE NOT NULL,
+        introduction_id INTEGER NOT NULL REFERENCES network_introductions(id),
+        sender_user_id INTEGER NOT NULL REFERENCES users(id),
+        body TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )
+    """
+    investor_cols = (
+        ("display_name", "VARCHAR"),
+        ("company", "VARCHAR"),
+        ("headline", "VARCHAR"),
+        ("photo_url", "VARCHAR"),
+        ("contact_email", "VARCHAR"),
+    )
+    indexes = (
+        ("ix_network_introductions_uid", "network_introductions", "uid"),
+        ("ix_network_introductions_initiator", "network_introductions", "initiator_user_id"),
+        ("ix_network_introductions_recipient", "network_introductions", "recipient_user_id"),
+        ("ix_network_introductions_investor", "network_introductions", "recipient_investor_id"),
+        ("ix_network_introductions_status", "network_introductions", "status"),
+        ("ix_network_introductions_token", "network_introductions", "invite_token_hash"),
+        ("ix_network_intro_messages_intro", "network_intro_messages", "introduction_id"),
+    )
+    with Session(engine) as session:
+        for ddl in (intro_ddl, msg_ddl):
+            try:
+                # Justification: static DDL literal, no user input interpolated.
+                session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_network_introductions_tables: CREATE failed: %s", exc)
+                session.rollback()
+        for col, ddl in investor_cols:
+            try:
+                # Justification: f-string interpolates static schema identifiers
+                # from a local list, dev-only FastAPI not exposed to user input.
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                    f"ALTER TABLE investors ADD COLUMN IF NOT EXISTS {col} {ddl}"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_network_introductions_tables: investors.%s: %s", col, exc)
+        for name, table, expr in indexes:
+            try:
+                # Justification: f-string interpolates static literals from a
+                # local list, dev-only FastAPI not exposed to user input.
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                    f"CREATE INDEX IF NOT EXISTS {name} ON {table}({expr})"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_network_introductions_tables: index %s: %s", name, exc)
+        session.commit()
+
+
+def ensure_organizations_table() -> None:
+    """Task #16 — create the `organizations` directory table + indexes.
+
+    Idempotent (CREATE TABLE / INDEX IF NOT EXISTS). `init_db()` also creates
+    the table from SQLModel metadata on a fresh DB; this keeps existing dev/
+    preview DBs in sync and guarantees the supporting indexes exist for the
+    searchable/paginated list endpoint.
+    """
+    table_ddl = """
+        CREATE TABLE IF NOT EXISTS organizations (
+            id BIGSERIAL PRIMARY KEY,
+            uid TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            normalized_key TEXT UNIQUE NOT NULL,
+            website TEXT,
+            linkedin TEXT,
+            org_type TEXT,
+            hq_country TEXT,
+            parent_company TEXT,
+            sector_focus_text TEXT,
+            sector_tags_json TEXT NOT NULL DEFAULT '[]',
+            fund_size TEXT,
+            fund_number TEXT,
+            latest_fund_date TEXT,
+            notable_lps TEXT,
+            stage_focus_json TEXT NOT NULL DEFAULT '[]',
+            min_ticket TEXT,
+            max_ticket TEXT,
+            region_focus_json TEXT NOT NULL DEFAULT '[]',
+            deep_tech_only BOOLEAN,
+            dt_deal_count TEXT,
+            additional_focus TEXT,
+            yearly_raised_json TEXT NOT NULL DEFAULT '{}',
+            source TEXT NOT NULL DEFAULT 'euro_vc',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """
+    indexes = (
+        ("ix_organizations_name", "name"),
+        ("ix_organizations_normalized_key", "normalized_key"),
+        ("ix_organizations_org_type", "org_type"),
+        ("ix_organizations_hq_country", "hq_country"),
+        ("ix_organizations_source", "source"),
+    )
+    with Session(engine) as session:
+        try:
+            # Justification: static DDL literal, no user input interpolated.
+            session.exec(text(table_ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            session.rollback()
+            logger.warning("ensure_organizations_table: CREATE failed: %s", exc)
+        for name, expr in indexes:
+            try:
+                # Justification: f-string interpolates static literals from a
+                # local list, dev-only FastAPI not exposed to user input.
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                    f"CREATE INDEX IF NOT EXISTS {name} ON organizations({expr})"
+                ))
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                session.rollback()
+                logger.warning("ensure_organizations_table: index %s: %s", name, exc)

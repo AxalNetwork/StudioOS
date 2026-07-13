@@ -6,6 +6,7 @@ import { Handshake, DollarSign, CheckCircle, Clock, TrendingUp, PieChart, Users,
 import { useAuth } from '../hooks/useAuthSync';
 import { useToast } from '../components/useToast';
 import InvestorQuotaBars from '../components/InvestorQuotaBars';
+import ProfileFitSection from '../components/profile/ProfileFitSection';
 
 const statusColors = {
   applied: 'bg-blue-100 text-blue-700',
@@ -291,6 +292,11 @@ export default function PartnerPortal() {
           )}
         </>
       )}
+
+      {/* Task #19 — surface the Axal VC Fit & Values (incl. v2) profile on the partner home. */}
+      <div className="mt-8">
+        <ProfileFitSection />
+      </div>
     </div>
   );
 }

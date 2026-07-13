@@ -99,6 +99,36 @@ export function archetypesForPersona(persona: FitPersona): ArchetypeDefinition[]
 }
 
 // ---------------------------------------------------------------------------
+// Task #19 — Axal Fit & Values v2. Two additional cross-persona archetypes
+// (Scout, Steward) layered on top of each persona's v1 set, giving the v2
+// decision engine a 6-archetype space. Additive: the v1 `ARCHETYPES` map,
+// `classifyArchetype`, and their unit test are untouched — only the v2 path
+// (classifyArchetypeV2 + services/fitV2Decision.ts) reads these.
+// ---------------------------------------------------------------------------
+const SCOUT_DEF: ArchetypeDefinition = {
+  slug: 'scout', label: 'The Scout',
+  tagline: 'Finds the opening before the map is drawn.',
+  centroid: C(1, 5, 4, 1), // visionary + connector explorer; low process, low hands-on build
+};
+const STEWARD_DEF: ArchetypeDefinition = {
+  slug: 'steward', label: 'The Steward',
+  tagline: 'Protects what matters and compounds it patiently.',
+  centroid: C(4, 1, 3, 5), // operator + builder; reliable, low-ego, durable
+};
+
+export const ARCHETYPES_V2: Record<FitPersona, ArchetypeDefinition[]> = {
+  founder: [...FOUNDER_ARCHETYPES, SCOUT_DEF, STEWARD_DEF],
+  investor: [...INVESTOR_ARCHETYPES, SCOUT_DEF, STEWARD_DEF],
+  partner: [...PARTNER_ARCHETYPES, SCOUT_DEF, STEWARD_DEF],
+  advisor: [...ADVISOR_ARCHETYPES, SCOUT_DEF, STEWARD_DEF],
+  coach: [...ADVISOR_ARCHETYPES, SCOUT_DEF, STEWARD_DEF],
+};
+
+export function archetypesForPersonaV2(persona: FitPersona): ArchetypeDefinition[] {
+  return ARCHETYPES_V2[persona] ?? [];
+}
+
+// ---------------------------------------------------------------------------
 // Pure classification.
 // ---------------------------------------------------------------------------
 function clamp(n: number, lo: number, hi: number): number {
@@ -168,6 +198,71 @@ export function classifyArchetype(
     confidence,
     trait_scores: echoed,
   };
+}
+
+/**
+ * Task #19 — v2 nearest-centroid classification over the 6-archetype v2 set
+ * (persona v1 set + Scout + Steward). Identical method to classifyArchetype;
+ * only the centroid set differs. Kept separate so the v1 classifier + its unit
+ * test stay frozen.
+ */
+export function classifyArchetypeV2(
+  persona: FitPersona,
+  traitScores: TraitScores,
+): ArchetypeClassification | null {
+  const defs = archetypesForPersonaV2(persona);
+  if (defs.length === 0) return null;
+  const answeredTraits = ARCHETYPE_TRAITS.filter((t) => Number.isFinite(traitScores[t] as number));
+  if (answeredTraits.length === 0) return null;
+
+  const ranked = defs
+    .map((def) => {
+      let sumSq = 0;
+      for (const t of answeredTraits) {
+        const d = clamp(traitScores[t] as number, 0, 5) - def.centroid[t];
+        sumSq += d * d;
+      }
+      return { def, distance: Math.sqrt(sumSq / answeredTraits.length) };
+    })
+    .sort((a, b) => a.distance - b.distance);
+
+  const winner = ranked[0];
+  const runnerUp = ranked[1] ?? null;
+  const margin = runnerUp ? round2(runnerUp.distance - winner.distance) : 0;
+  const coverage = answeredTraits.length / ARCHETYPE_TRAITS.length;
+  const separation = clamp(margin / 2.5, 0, 1);
+  const confidence = round2(clamp(0.6 * coverage + 0.4 * separation, 0, 1));
+
+  const echoed: TraitScores = {};
+  for (const t of answeredTraits) echoed[t] = round2(clamp(traitScores[t] as number, 0, 5));
+
+  return {
+    slug: winner.def.slug,
+    label: winner.def.label,
+    tagline: winner.def.tagline,
+    distance: round2(winner.distance),
+    runner_up_slug: runnerUp ? runnerUp.def.slug : null,
+    margin,
+    traits_covered: answeredTraits.length,
+    confidence,
+    trait_scores: echoed,
+  };
+}
+
+/**
+ * Task #19 — load a persona's answered archetype-trait 0..5 scores (means per
+ * trait) from field_sources. Exposed so services/fitV2Decision.ts can classify
+ * with the v2 archetype set without re-implementing the loaders.
+ */
+export async function loadPersonaTraitScores(
+  env: Env,
+  userId: number,
+  persona: FitPersona,
+): Promise<TraitScores> {
+  const entries = traitQuestionsFor(persona);
+  if (entries.length === 0) return {};
+  const answered = await loadAnsweredScores(env, userId, entries.map((e) => e.question_id));
+  return aggregateTraits(entries, answered);
 }
 
 /** Deterministic one-line narrative for the scorecard. */

@@ -24,7 +24,7 @@ export default function OpportunitiesPage() {
   }, []);
 
   const stats = useMemo(() => {
-    const open = OPPORTUNITIES.filter((o) => ['leads', 'discovery', 'proposals'].includes(o.stage));
+    const open = OPPORTUNITIES.filter((o) => ['leads', 'discovery', 'qualified', 'proposals', 'negotiations'].includes(o.stage));
     const openValue = open.reduce((a, o) => a + (o.value || 0), 0);
     const won = byStage.won || [];
     const lost = byStage.lost || [];
@@ -41,7 +41,7 @@ export default function OpportunitiesPage() {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Open opportunities" value={stats.openCount} hint="Leads · Discovery · Proposals" />
+        <StatCard label="Open opportunities" value={stats.openCount} hint="Leads · Discovery · Qualified · Proposals · Negotiations" />
         <StatCard label="Open pipeline value" value={money(stats.openValue)} hint="Weighted by list price" />
         <StatCard label="Win rate" value={`${stats.winRate}%`} hint="Won of decided" />
         <StatCard label="Won value" value={money(stats.wonValue)} hint="Closed-won this view" />
@@ -106,7 +106,9 @@ function OpportunityDetail({ opp, onClose }) {
       )}
 
       {opp.discovery && <DiscoveryBlock d={opp.discovery} />}
+      {opp.qualified && <QualifiedBlock q={opp.qualified} />}
       {opp.proposal && <ProposalBlock p={opp.proposal} />}
+      {opp.negotiations && <NegotiationBlock n={opp.negotiations} />}
       {opp.won && <WonBlock w={opp.won} />}
       {opp.lost && <LostBlock l={opp.lost} />}
     </SlideOver>
@@ -134,6 +136,55 @@ function DiscoveryBlock({ d }) {
       </Section>
       <Section title="AI summary"><AiSample>{d.aiSummary}</AiSample></Section>
       <Section title="Next steps"><BulletList items={d.nextSteps} tone="violet" /></Section>
+    </>
+  );
+}
+
+function QualifiedBlock({ q }) {
+  return (
+    <>
+      <Section title="Qualification">
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Budget confirmed">
+            <StatusBadge status={q.budgetConfirmed ? 'Confirmed' : 'Pending'} />
+          </Field>
+          <Field label="Budget">{q.budget}</Field>
+          <Field label="Decision timeline">{q.decisionTimeline}</Field>
+        </div>
+      </Section>
+      <Section title="Criteria met"><BulletList items={q.criteriaMet} tone="emerald" /></Section>
+      <Section title="Stakeholders">
+        <div className="flex flex-wrap gap-1.5">
+          {q.stakeholders.map((s) => <Chip key={s}>{s}</Chip>)}
+        </div>
+      </Section>
+      <Section title="Fit rationale">
+        <p className="text-sm text-gray-700 dark:text-gray-300">{q.fitRationale}</p>
+      </Section>
+      <Section title="Next steps"><BulletList items={q.nextSteps} tone="violet" /></Section>
+    </>
+  );
+}
+
+function NegotiationBlock({ n }) {
+  return (
+    <>
+      <Section title="Negotiation">
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Proposal version">{n.proposalVersion}</Field>
+          <Field label="Probability">{n.probability}%</Field>
+          <Field label="Expected close">
+            <span className="inline-flex items-center gap-1"><Calendar size={12} /> {formatDay(n.expectedClose)} · {formatRelativeDay(n.expectedClose)}</span>
+          </Field>
+        </div>
+      </Section>
+      <Section title="Terms being discussed"><BulletList items={n.termsDiscussed} tone="violet" /></Section>
+      <Section title="Sticking points"><BulletList items={n.stickingPoints} tone="rose" /></Section>
+      <Section title="Concessions offered"><BulletList items={n.concessions} tone="emerald" /></Section>
+      <Section title="Notes">
+        <p className="text-sm text-gray-700 dark:text-gray-300">{n.notes}</p>
+      </Section>
+      <Section title="Next steps"><BulletList items={n.nextSteps} tone="violet" /></Section>
     </>
   );
 }

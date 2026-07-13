@@ -5,8 +5,8 @@ import {
   SearchInput, FilterChips, SlideOver, Section, Badge, EmptyState, Chip,
 } from './kit';
 
-// News — a categorized news feed (Industry, Portfolio, Competitor, Funding,
-// Acquisitions, IPO) with category filtering, search, and a detail panel.
+// News — a categorized news feed (Industry News, Client News, Funding, M&A,
+// Regulations) with category filtering, search, and a detail panel.
 
 const catLabel = (id) => NEWS_CATEGORIES.find((c) => c.id === id)?.label || id;
 
