@@ -1463,7 +1463,7 @@ _DEFAULT_USER_SETTINGS = {
 }
 
 _ALLOWED_VISIBILITY = {"public", "network", "private"}
-_ALLOWED_THEME = {"light", "dark"}
+_ALLOWED_THEME = {"light", "dark", "system"}
 _ALLOWED_DENSITY = {"comfy", "compact"}
 _ALLOWED_SIDEBAR = {"expanded", "collapsed"}
 _ALLOWED_DIGEST = {"off", "daily", "weekly", "monthly"}
