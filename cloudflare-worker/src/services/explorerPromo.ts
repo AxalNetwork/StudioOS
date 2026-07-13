@@ -196,7 +196,10 @@ export async function redeemExplorerPromo(env: Env, userId: number, rawCode: str
     unlockDays: row.unlock_days,
   });
 
-  const redeemedAt = new Date().toISOString();
+  const redeemedRow = await env.DB.prepare(
+    `SELECT redeemed_at FROM explorer_promo_codes WHERE id = ?`,
+  ).bind(row.id).first<{ redeemed_at: string | null }>();
+  const redeemedAt = redeemedRow?.redeemed_at ?? new Date().toISOString();
   const licenseExpiresAt = new Date(Date.now() + row.unlock_days * 86_400_000).toISOString();
   return {
     ok: true,
