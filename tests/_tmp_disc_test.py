@@ -1,4 +1,4 @@
-import test_network_introductions as T
+from . import test_network_introductions as T
 def test_discover_endpoints():
     viewer = T._mk_user(role=T.UserRole.FOUNDER, email="viewer@axal.vc", name="Vera Viewer")
     T._mk_user(role=T.UserRole.INVESTOR, email="u2@axal.vc", name="Ivan Investor")
