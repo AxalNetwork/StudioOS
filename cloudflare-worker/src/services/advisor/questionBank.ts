@@ -82,6 +82,75 @@ export interface FitMeasures {
   red_flag?: { key: string; at_or_below: number };
 }
 
+// ---------------------------------------------------------------------------
+// Fit v2 — three-layer methodology (Values / Archetypes / Skills) with a
+// six-outcome decision rubric. Additive: every field below is absent on all
+// v1 questions. v2 items keep the v1 delivery fields (input_kind/options/
+// validate/measures) so the conversational advisor, stateMachine, and v1
+// scorers keep working; the richer v2 semantics (per-option loads, validation
+// pairs, evidence gates) live under `fit_v2` and are consumed only by
+// services/fitDecision.ts and the staged /fit flow.
+// See design/AXAL_VC_FIT_V2_METHODOLOGY.md.
+// ---------------------------------------------------------------------------
+
+export type FitV2Kind =
+  | 'likert'              // 0..5 self-rating → chat input_kind 'scale'
+  | 'forced_choice'       // pick 1 of 2-4 options, per-option loads → 'select'
+  | 'sjt'                 // situational judgment, keyed options → 'select'
+  | 'tradeoff'            // bipolar forced choice → 'select'
+  | 'rank_order'          // rank all options; response = ordered keys → 'select'
+  | 'multi_select'        // choose all that apply → 'multi'
+  | 'behavioral_evidence' // STAR-style free text, min length → 'long'
+  | 'confidence_check';   // self-calibration 0..5, never scores a dimension → 'scale'
+
+export type FitV2Module = 'values' | 'archetypes' | 'skills' | 'validation' | 'context' | 'role';
+export type FitV2Stage = 'context' | 'values' | 'archetypes' | 'skills' | 'validation';
+
+// Role contexts the staged flow can assess against. Decoupled from users.role:
+// any user may run any context. The two contexts without a v1 FitPersona
+// (internal_hire / portfolio_talent) are staged-only — their ids do NOT match
+// FIT_ID_RE, so the whole v1 pipeline ignores them by construction.
+export type FitRoleContext =
+  | 'founder' | 'investor' | 'operator' | 'advisor'
+  | 'internal_hire' | 'portfolio_talent';
+
+export interface FitV2OptionLoad {
+  key: string;                       // stable option key persisted as the raw answer
+  label: string;                     // user-facing copy (mirrored into Question.options)
+  loads?: Record<string, number>;    // trait/value/skill slug → 0..5 level this choice implies
+  score?: number;                    // 0..5 contribution to the item's primary dimension
+  flag?: string;                     // red-flag key this choice fires (v1 RED_FLAGS vocab)
+}
+
+export interface FitV2Spec {
+  module: FitV2Module;
+  stage: FitV2Stage;
+  /** MVP core subset (~50/role). The staged flow defaults to core and can opt
+   *  into the full bank. */
+  mvp_core?: boolean;
+  /** Conversational subset: items the Personal Advisor chat also serves.
+   *  Deliberately small and non-duplicative — v1 fit banks already probe the
+   *  5 shared values + 4 shared traits directly, so chat_core marks only the
+   *  net-new signal (tradeoffs, forced choices, ambition, scout/steward). */
+  chat_core?: boolean;
+  kind: FitV2Kind;
+  /** Staged-flow renderer hint (chat degrades via input_kind). */
+  ui?: 'slider' | 'dilemma' | 'sjt' | 'card_sort' | 'reflection' | 'pills';
+  options_v2?: FitV2OptionLoad[];    // forced_choice / sjt / tradeoff / rank_order / multi_select
+  value_key?: string;                // one of fitDecision FIT_V2_VALUES (incl. 'ambition')
+  trait?: string;                    // one of fitDecision FIT_V2_TRAITS (incl. scout|steward)
+  skill_v2?: { slug: string; weight?: number };      // fitv2_* priority-skill slug
+  rubric_v2?: { category: string; weight?: number }; // v2 role-template rubric category
+  /** Question id this item cross-checks. Reverse-keyed unless stated. */
+  validation_pair?: string;
+  reverse_scored?: boolean;
+  evidence?: { required?: boolean; min_len?: number; probe: 'example' | 'metric' | 'reference' };
+  /** Reviewer-facing interpretation copy (admin surfaces only — stripped from
+   *  the public /api/fit/config payload alongside loads). */
+  signal_notes?: { strong?: string; weak?: string; contradiction?: string };
+  followup_prompts?: string[];       // probing prompts for reviewers / live conversations
+}
+
 export interface Question {
   id: string;
   persona: Persona;
@@ -119,6 +188,8 @@ export interface Question {
   // Task #19 — Best-Fit. Present only on `fit.*` questions; tags what the 0..5
   // answer measures so axalFit + the write-router can route + score it.
   measures?: FitMeasures;
+  // Fit v2 — present only on `fit.<prefix>.v2_*` questions (see FitV2Spec).
+  fit_v2?: FitV2Spec;
 }
 
 // Task #5 (CH) — per-persona size targets enforced by the drift CI
@@ -218,11 +289,23 @@ import { FIT_INVESTOR_BANK } from './banks/fit_investor.ts';
 import { FIT_PARTNER_BANK } from './banks/fit_partner.ts';
 import { FIT_ADVISOR_BANK } from './banks/fit_advisor.ts';
 import { FIT_COACH_BANK } from './banks/fit_coach.ts';
+// Fit v2 — three-layer decision banks (values/archetypes/skills/validation +
+// role add-ons). Registered like the v1 fit banks: visible to questionById,
+// kept out of banks.manifest.json (routed by the generic fit-v2 write-router
+// branch, not per-id). Only the chat_core slice rides the conversation.
+import { FITV2_FOUNDER_BANK } from './banks/fitV2_founder.ts';
+import { FITV2_INVESTOR_BANK } from './banks/fitV2_investor.ts';
+import { FITV2_PARTNER_BANK } from './banks/fitV2_partner.ts';
+import { FITV2_ADVISOR_BANK } from './banks/fitV2_advisor.ts';
+import { FITV2_INTERNAL_HIRE_BANK } from './banks/fitV2_internal_hire.ts';
+import { FITV2_PORTFOLIO_TALENT_BANK } from './banks/fitV2_portfolio_talent.ts';
 
 export type BankName =
   | 'newFounderSpinout' | 'existingFounder'
   | 'investor' | 'operatingPartner' | 'advisor' | 'admin' | 'explorer'
-  | 'fitFounder' | 'fitInvestor' | 'fitPartner' | 'fitAdvisor' | 'fitCoach';
+  | 'fitFounder' | 'fitInvestor' | 'fitPartner' | 'fitAdvisor' | 'fitCoach'
+  | 'fitV2Founder' | 'fitV2Investor' | 'fitV2Partner' | 'fitV2Advisor'
+  | 'fitV2InternalHire' | 'fitV2PortfolioTalent';
 
 export const BANKS: Record<BankName, Question[]> = {
   newFounderSpinout: NEW_FOUNDER_SPINOUT_BANK,
@@ -237,6 +320,12 @@ export const BANKS: Record<BankName, Question[]> = {
   fitPartner:        FIT_PARTNER_BANK,
   fitAdvisor:         FIT_ADVISOR_BANK,
   fitCoach:          FIT_COACH_BANK,
+  fitV2Founder:         FITV2_FOUNDER_BANK,
+  fitV2Investor:        FITV2_INVESTOR_BANK,
+  fitV2Partner:         FITV2_PARTNER_BANK,
+  fitV2Advisor:         FITV2_ADVISOR_BANK,
+  fitV2InternalHire:    FITV2_INTERNAL_HIRE_BANK,
+  fitV2PortfolioTalent: FITV2_PORTFOLIO_TALENT_BANK,
 };
 
 export function bankByName(name: BankName): Question[] {
@@ -253,10 +342,13 @@ export function bankFor(persona: Persona, ctx?: { spinoutLabActive?: boolean }):
     // Task #19 — append the persona's Best-Fit bank so the conversational
     // profiling questions are delivered inline (importance:'low' → trailing).
     // Advisor carries both advisor + coach fit banks (coach has no advisor role).
-    case 'founder':  return [...(ctx?.spinoutLabActive ? BANKS.newFounderSpinout : BANKS.existingFounder), ...BANKS.fitFounder];
-    case 'investor': return [...BANKS.investor, ...BANKS.fitInvestor];
-    case 'partner':  return [...BANKS.operatingPartner, ...BANKS.fitPartner];
-    case 'advisor':   return [...BANKS.advisor, ...BANKS.fitAdvisor, ...BANKS.fitCoach];
+    // Fit v2 — additionally append the small chat_core slice of the persona's
+    // v2 bank (tradeoffs / forced choices / net-new dimensions only; the full
+    // v2 bank lives in the staged /fit flow). Trailing importance:'low' like v1.
+    case 'founder':  return [...(ctx?.spinoutLabActive ? BANKS.newFounderSpinout : BANKS.existingFounder), ...BANKS.fitFounder, ...fitV2ChatSlice(BANKS.fitV2Founder)];
+    case 'investor': return [...BANKS.investor, ...BANKS.fitInvestor, ...fitV2ChatSlice(BANKS.fitV2Investor)];
+    case 'partner':  return [...BANKS.operatingPartner, ...BANKS.fitPartner, ...fitV2ChatSlice(BANKS.fitV2Partner)];
+    case 'advisor':   return [...BANKS.advisor, ...BANKS.fitAdvisor, ...BANKS.fitCoach, ...fitV2ChatSlice(BANKS.fitV2Advisor)];
     case 'admin':    return BANKS.admin;
     case 'explorer': return BANKS.explorer;
     default:         return [];
@@ -289,6 +381,68 @@ export function fitMeasuresIndex(): FitMeasureEntry[] {
     }
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Fit v2 registry — see FitV2Spec above and services/fitDecision.ts.
+//
+// Id scheme: `fit.<prefix>.v2_<key>`. The five v1 prefixes double-match
+// FIT_ID_RE, so those items ride the existing rails (field_sources raw
+// persistence, v1 recompute triggers, profiling completion) for free; the two
+// staged-only prefixes (internal_hire / portfolio_talent) match ONLY this
+// regex and are therefore invisible to the entire v1 pipeline.
+// ---------------------------------------------------------------------------
+
+export const FIT_V2_ID_RE =
+  /^fit\.(founder|investor|partner|advisor|coach|internal_hire|portfolio_talent)\.v2_/;
+
+/** role_context → v2 bank. `operator` maps onto the `partner` id prefix. */
+const FIT_V2_BANK_BY_ROLE: Record<string, BankName> = {
+  founder: 'fitV2Founder',
+  investor: 'fitV2Investor',
+  operator: 'fitV2Partner',
+  advisor: 'fitV2Advisor',
+  internal_hire: 'fitV2InternalHire',
+  portfolio_talent: 'fitV2PortfolioTalent',
+};
+
+export function fitV2BankFor(roleContext: string, opts?: { coreOnly?: boolean }): Question[] {
+  const name = FIT_V2_BANK_BY_ROLE[roleContext];
+  if (!name) return [];
+  const bank = BANKS[name];
+  if (opts?.coreOnly) return bank.filter((q) => q.fit_v2?.mvp_core);
+  return bank;
+}
+
+/** The conversational slice: explicitly flagged, deliberately small. */
+export function fitV2ChatSlice(bank: Question[]): Question[] {
+  return bank.filter((q) => q.fit_v2?.chat_core);
+}
+
+export const FIT_V2_STAGE_ORDER: FitV2Stage[] = [
+  'context', 'values', 'archetypes', 'skills', 'validation',
+];
+
+export const FIT_V2_STAGE_LABELS: Record<FitV2Stage, string> = {
+  context: 'Context',
+  values: 'Values',
+  archetypes: 'Operating style',
+  skills: 'Skills',
+  validation: 'Consistency & evidence',
+};
+
+/** Bucket a v2 bank into ordered stages for the staged flow / progress rail. */
+export function fitV2Stages(bank: Question[]): Array<{ key: FitV2Stage; label: string; ids: string[] }> {
+  const groups = new Map<FitV2Stage, string[]>();
+  for (const k of FIT_V2_STAGE_ORDER) groups.set(k, []);
+  for (const q of bank) {
+    const stage = q.fit_v2?.stage;
+    if (!stage) continue;
+    groups.get(stage)!.push(q.id);
+  }
+  return FIT_V2_STAGE_ORDER
+    .map((key) => ({ key, label: FIT_V2_STAGE_LABELS[key], ids: groups.get(key)! }))
+    .filter((g) => g.ids.length > 0);
 }
 
 // ---------------------------------------------------------------------------

@@ -177,6 +177,9 @@ const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage'));
 const RoadmapPage = lazy(() => import('./pages/RoadmapPage'));
 const MetricsPage = lazy(() => import('./pages/MetricsPage'));
 const SignalsPage = lazy(() => import('./pages/SignalsPage'));
+// Fit v2 — staged three-layer assessment (values/archetypes/skills → decision).
+const FitAssessmentPage = lazy(() => import('./pages/fit/FitAssessmentPage'));
+const FitResultsPage = lazy(() => import('./pages/fit/FitResultsPage'));
 const CapTablePage = lazy(() => import('./pages/CapTablePage'));
 const MarketplacePage = lazy(() => import('./pages/MarketplacePage'));
 const FounderMarketplacePage = lazy(() => import('./pages/FounderMarketplacePage'));
@@ -1320,6 +1323,10 @@ function AppInner() {
       {/* Signals — founder decision engine over public-market evidence. Shared
           by Founder + Advisor modes (mode changes ordering + copy only). */}
       <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SignalsPage user={user} />)} />
+      {/* Fit v2 — staged assessment + results. Open to every signed-in role
+          incl. 'exploring' (the assessment is a core part of their Studio). */}
+      <Route path="/fit" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <FitAssessmentPage />)} />
+      <Route path="/fit/results" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <FitResultsPage />)} />
       <Route path="/build/captable" element={guard(['admin', 'founder', 'partner', 'investor'], <CapTablePage />)} />
       <Route path="/marketplace" element={guard(['admin', 'founder', 'partner', 'investor'], <MarketplacePage user={user} />)} />
       {/* Task #2 — Founder Marketplace merges the Service Catalogue (/services) and

@@ -18,7 +18,8 @@
  */
 import type { Env } from '../../types';
 import type { User } from '../../types';
-import { questionById, mapRoleAnswer, DYNAMIC_ID_RE, FIT_ID_RE } from './questionBank.ts';
+import { questionById, mapRoleAnswer, DYNAMIC_ID_RE, FIT_ID_RE, FIT_V2_ID_RE } from './questionBank.ts';
+import { normalizeV2Answer } from '../fitDecision.ts';
 import { ensureTaxonomyVersionColumns, getTaxonomyVersion } from '../taxonomyVersion.ts';
 
 export type WriteStatus = 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop' | 'needs_evidence' | 'invalid';
@@ -605,6 +606,104 @@ async function routeFitAnswer(
   return { status: 'saved', saved_to };
 }
 
+/** skills.id for a fitv2_* slug (Fit v2 priority skills, migration 151 seed). */
+async function resolveSkillIdBySlug(env: Env, slug: string): Promise<number | null> {
+  const row = await env.DB.prepare(
+    `SELECT id FROM skills WHERE slug = ? AND is_active = 1 LIMIT 1`,
+  ).bind(slug).first<{ id: number }>().catch(() => null);
+  return row?.id ?? null;
+}
+
+const FIT_V2_INVALID_HINT: Record<string, string> = {
+  likert: 'Please answer with a whole number from 0 (not at all) to 5 (completely).',
+  confidence_check: 'Please answer with a whole number from 0 (not at all) to 5 (completely).',
+  forced_choice: 'Please pick one of the listed options.',
+  sjt: 'Please pick one of the listed options.',
+  tradeoff: 'Please pick one of the listed options.',
+  rank_order: 'Please rank the options (comma-separated), or pick the one most like you.',
+  multi_select: 'Please pick at least one of the listed options.',
+  behavioral_evidence: 'A few sentences with one concrete, real example — names, numbers, or dates help.',
+};
+
+/**
+ * Fit v2 answer routing. Accepts every v2 kind (option keys/labels, rankings,
+ * comma-joined multi-selects, evidence text, 0..5 ratings), validates the
+ * shape via fitDecision.normalizeV2Answer, and fans out the STRUCTURED side
+ * writes. The raw answer string itself is persisted to field_sources by the
+ * calling route (advisor.ts / fit.ts) — that raw store is what the v2 engine
+ * scores from, so this fan-out is display/profile enrichment, not the source
+ * of truth:
+ *   - likert `value_key`  → axal_values upsert (raw/5) — incl. the v2-only
+ *     `ambition` key (no schema constraint; v1 UI simply doesn't render it)
+ *   - likert `skill_v2` self-ratings (no weight override) → user_skills row
+ *     keyed by the fitv2_* slug — skipped gracefully when the 151 seed is
+ *     absent, the engine never depends on it
+ * Choice/rank/evidence kinds carry no structured write (the engine reads the
+ * raw store); like v1 rubric-only answers they still report `saved` against
+ * field_sources.
+ */
+async function routeFitV2Answer(
+  env: Env,
+  user: User,
+  q: NonNullable<ReturnType<typeof questionById>>,
+  value: string,
+): Promise<WriteResult> {
+  const v2 = q.fit_v2;
+  if (!v2) return { status: 'noop' };
+
+  const norm = normalizeV2Answer(q, value);
+  if (!norm) {
+    return {
+      status: 'invalid',
+      error: 'schema_validation_failed',
+      hint: FIT_V2_INVALID_HINT[v2.kind] || 'That answer does not match the question format.',
+      evidence_kind: v2.kind === 'behavioral_evidence' ? 'citation' : 'numeric',
+      field: q.id,
+      open_url: q.page_target || undefined,
+    };
+  }
+
+  let saved_to: WriteResult['saved_to'] | undefined;
+  try {
+    if (v2.value_key && v2.kind === 'likert' && norm.score != null) {
+      await env.DB.prepare(
+        `INSERT INTO axal_values (user_id, value_key, score, confidence, updated_at)
+           VALUES (?, ?, ?, 1, datetime('now'))
+         ON CONFLICT(user_id, value_key) DO UPDATE SET
+           score = excluded.score,
+           confidence = excluded.confidence,
+           updated_at = excluded.updated_at`,
+      ).bind(user.id, v2.value_key, norm.score / 5).run();
+      saved_to = { table: 'axal_values', column: 'score', id: user.id };
+    }
+
+    if (
+      v2.skill_v2 && v2.skill_v2.weight == null &&
+      v2.kind === 'likert' && norm.score != null && norm.score > 0
+    ) {
+      const skillId = await resolveSkillIdBySlug(env, v2.skill_v2.slug);
+      if (skillId != null) {
+        await ensureTaxonomyVersionColumns(env);
+        const tv = await getTaxonomyVersion(env);
+        await env.DB.prepare(
+          `INSERT INTO user_skills (user_id, skill_id, self_level, taxonomy_version, updated_at)
+             VALUES (?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(user_id, skill_id) DO UPDATE SET
+             self_level = excluded.self_level,
+             taxonomy_version = excluded.taxonomy_version,
+             updated_at = excluded.updated_at`,
+        ).bind(user.id, skillId, Math.round(norm.score), tv).run();
+        if (!saved_to) saved_to = { table: 'user_skills', column: 'self_level', id: user.id };
+      }
+    }
+  } catch (e) {
+    return { status: 'failed', error: (e as Error).message };
+  }
+
+  if (!saved_to) saved_to = { table: 'field_sources', column: 'evidence_text', id: user.id };
+  return { status: 'saved', saved_to };
+}
+
 // ---------------------------------------------------------------------------
 // Explorer bank — Problem/Challenge Discovery (see banks/explorer.ts).
 // Every id is `explorer.<track>.<section>.<leaf>`; CONTEXT/CHALLENGES/
@@ -675,6 +774,14 @@ export async function routeAnswer(
   if (!q) return { status: 'failed', error: 'unknown question_id' };
   const value = String(rawValue ?? '').trim();
   if (!value) return { status: 'skipped' };
+
+  // Fit v2 — routed BEFORE the v1 fit branch: five-persona v2 ids
+  // (`fit.founder.v2_*`) match BOTH regexes, and the v2 branch must win so
+  // choice/rank/evidence kinds are normalized per their v2 spec instead of
+  // being rejected by the v1 integer-0..5 gate.
+  if (q.fit_v2 && FIT_V2_ID_RE.test(questionId)) {
+    return routeFitV2Answer(env, user, q, value);
+  }
 
   // Task #19 — Best-Fit. Conversational fit answers (0..5 scale) are routed
   // BEFORE the persona branches below: a `fit.founder.*` question carries

@@ -207,6 +207,9 @@ import adminBestFit from './routes/admin_bestfit';
 // Task #9 — Admin review queue for 'exploring' users (binding e-sign + role assignment).
 import adminExploring from './routes/admin_exploring';
 import bestFitSelf from './routes/best_fit';
+// Fit v2 — staged three-layer assessment (values/archetypes/skills → decision).
+import fitRoutes from './routes/fit';
+import adminFit from './routes/admin_fit';
 // T3 — Reserve allocation + waterfall simulator (Task #46 port).
 import fundSimulatorRoutes from './routes/fund_simulator';
 import { processQueueBatch } from './services/queueWorker';
@@ -694,7 +697,10 @@ app.route('/api/admin/best-fit', adminBestFit);
 // Task #9 — Exploring-users review queue. Mount BEFORE the catch-all
 // /api/admin so /api/admin/exploring/* resolves here. requireAdmin per-route.
 app.route('/api/admin/exploring', adminExploring);
+// Fit v2 — admin review/calibration. Mount BEFORE the catch-all /api/admin.
+app.route('/api/admin/fit', adminFit);
 app.route('/api/best-fit', bestFitSelf);
+app.route('/api/fit', fitRoutes);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);

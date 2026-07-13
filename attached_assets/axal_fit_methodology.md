@@ -1,5 +1,11 @@
 # Axal Fit — Methodology
 
+> **Fit v2 exists.** The three-layer decision methodology (Values /
+> Archetypes / Skills → six-outcome rubric, staged `/fit` flow, reviewer
+> overrides) is documented in `design/AXAL_VC_FIT_V2_METHODOLOGY.md` and
+> implemented in `services/fitDecision.ts` + `services/fitRoles.ts`. It is
+> an ADDITIVE layer: everything in THIS document keeps running unchanged.
+
 > **Status: canonical & code-verified.** Every weight, threshold, band, value,
 > skill axis, spectrum, and red flag in this document is reproduced verbatim
 > from the as-built engine. This is the human-readable companion to the scoring

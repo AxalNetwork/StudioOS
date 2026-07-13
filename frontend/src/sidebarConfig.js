@@ -65,6 +65,8 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/products', icon: Package, label: 'Products' },
+      // Fit v2 — staged three-layer assessment (match keeps /fit/results lit).
+      { to: '/fit', icon: Scale, label: 'Fit Assessment', match: ['/fit', '/fit/results'] },
     ]},
     { key: 'admin', label: 'Admin', items: [
       { to: '/admin', icon: Shield, label: 'Admin Console' },
@@ -183,6 +185,8 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/products', icon: Package, label: 'Products' },
+      // Fit v2 — staged three-layer assessment (match keeps /fit/results lit).
+      { to: '/fit', icon: Scale, label: 'Fit Assessment', match: ['/fit', '/fit/results'] },
     ]},
     { key: 'build', label: 'Build', items: [
       // Command Center merges four founder Build destinations — Founder Portal
@@ -296,6 +300,8 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/products', icon: Package, label: 'Products' },
+      // Fit v2 — staged three-layer assessment (match keeps /fit/results lit).
+      { to: '/fit', icon: Scale, label: 'Fit Assessment', match: ['/fit', '/fit/results'] },
     ]},
     { key: 'sourcing', label: 'Sourcing', items: [
       { to: '/services', icon: Package, label: 'My Services' },
@@ -383,6 +389,8 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/products', icon: Package, label: 'Products' },
+      // Fit v2 — staged three-layer assessment (match keeps /fit/results lit).
+      { to: '/fit', icon: Scale, label: 'Fit Assessment', match: ['/fit', '/fit/results'] },
     ]},
     // Task — investor sidebar restructured around the investment lifecycle IA:
     // Network → Pipeline → Portfolio → Funds → Research. Network & Research
@@ -442,6 +450,8 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
       { to: '/products', icon: Package, label: 'Products' },
+      // Fit v2 — staged three-layer assessment (match keeps /fit/results lit).
+      { to: '/fit', icon: Scale, label: 'Fit Assessment', match: ['/fit', '/fit/results'] },
     ]},
     { key: 'workspaces', label: 'Workspaces', items: [
       { to: '/advisor/network/introductions', icon: Network, label: 'Network', match: ['/advisor/network'] },
@@ -477,6 +487,8 @@ export const SIDEBAR_GROUPS = {
       // Explorer completion incentive — where the one-time 30-day-license
       // promo code from the Personal Advisor gets redeemed.
       { to: '/products', icon: Package, label: 'Products' },
+      // Fit v2 — explorers are a core assessment audience.
+      { to: '/fit', icon: Scale, label: 'Fit Assessment', match: ['/fit', '/fit/results'] },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/profile', icon: UserCircle, label: 'My Profile' },

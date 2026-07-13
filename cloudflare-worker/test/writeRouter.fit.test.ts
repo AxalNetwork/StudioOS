@@ -23,7 +23,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 
 import { routeAnswer } from '../src/services/advisor/writeRouter.ts';
-import { bankFor, fitMeasuresIndex, type FitMeasureEntry } from '../src/services/advisor/questionBank.ts';
+import { bankFor, fitMeasuresIndex, fitV2BankFor, type FitMeasureEntry, type Question } from '../src/services/advisor/questionBank.ts';
 import type { Env, User } from '../src/types';
 
 // ── Minimal D1 adapter over node:sqlite ────────────────────────────────────
@@ -199,4 +199,102 @@ test('routeAnswer: non-integer / out-of-range fit answers are invalid', async ()
     assert.equal(res.status, 'invalid', `expected '${bad}' to be invalid`);
     assert.equal(res.error, 'schema_validation_failed');
   }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// Fit v2 — the routeFitV2Answer branch (runs BEFORE the v1 fit branch).
+// ════════════════════════════════════════════════════════════════════════════
+
+const FOUNDER_V2 = fitV2BankFor('founder', { coreOnly: false });
+function v2Item(pick: (q: Question) => boolean): Question {
+  const q = FOUNDER_V2.find((x) => x.fit_v2 && pick(x));
+  assert.ok(q, 'expected a founder v2 item matching the predicate');
+  return q!;
+}
+
+test('v2: ambition likert writes axal_values under the new key (raw/5)', async () => {
+  const env = makeEnv();
+  const q = v2Item((x) => x.fit_v2!.value_key === 'ambition' && x.fit_v2!.kind === 'likert' && !x.fit_v2!.reverse_scored);
+  const res = await routeAnswer(env, USER, q.id, '4');
+  assert.equal(res.status, 'saved');
+  assert.equal(res.saved_to?.table, 'axal_values');
+  const row = await env.DB.prepare(
+    `SELECT score, confidence FROM axal_values WHERE user_id = ? AND value_key = 'ambition'`,
+  ).bind(USER.id).first<{ score: number; confidence: number }>();
+  assert.ok(row, 'expected an ambition axal_values row');
+  assert.equal(row!.score, 0.8);
+  assert.equal(row!.confidence, 1);
+});
+
+test('v2: tradeoff answers accept option key OR label; junk is invalid with a hint', async () => {
+  const env = makeEnv();
+  const q = v2Item((x) => x.fit_v2!.kind === 'tradeoff' && x.fit_v2!.value_key === 'integrity');
+  const opt = q.fit_v2!.options_v2![0];
+
+  const byKey = await routeAnswer(env, USER, q.id, opt.key);
+  assert.equal(byKey.status, 'saved');
+  assert.equal(byKey.saved_to?.table, 'field_sources'); // choice kinds carry no structured write
+
+  const byLabel = await routeAnswer(env, USER, q.id, opt.label);
+  assert.equal(byLabel.status, 'saved');
+
+  const junk = await routeAnswer(env, USER, q.id, 'not-an-option');
+  assert.equal(junk.status, 'invalid');
+  assert.ok(junk.hint, 'invalid v2 answers carry a user-facing hint');
+});
+
+test('v2: skill self-rating writes user_skills by fitv2_* slug; recency probes and a missing seed do not', async () => {
+  const env = makeEnv();
+  // Seed one fitv2 priority-skill row (migration 151 shape).
+  await env.DB.prepare(
+    `INSERT INTO skills (slug, category_slug, label, display_order) VALUES ('fitv2_product_thinking', 'product', 'Product Thinking', 904)`,
+  ).bind().run();
+
+  const self = v2Item((x) => x.fit_v2!.kind === 'likert' && x.fit_v2!.skill_v2?.slug === 'fitv2_product_thinking' && x.fit_v2!.skill_v2?.weight == null);
+  const res = await routeAnswer(env, USER, self.id, '4');
+  assert.equal(res.status, 'saved');
+  const row = await env.DB.prepare(
+    `SELECT us.self_level FROM user_skills us JOIN skills s ON s.id = us.skill_id
+      WHERE us.user_id = ? AND s.slug = 'fitv2_product_thinking'`,
+  ).bind(USER.id).first<{ self_level: number }>();
+  assert.ok(row, 'expected a user_skills row keyed by the fitv2 slug');
+  assert.equal(row!.self_level, 4);
+
+  // Recency probes carry a weight override → engine-only, no user_skills write.
+  const recency = v2Item((x) => x.fit_v2!.kind === 'likert' && x.fit_v2!.skill_v2?.weight != null);
+  const res2 = await routeAnswer(env, USER, recency.id, '5');
+  assert.equal(res2.status, 'saved');
+  const count = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM user_skills WHERE user_id = ?`,
+  ).bind(USER.id).first<{ n: number }>();
+  assert.equal(count!.n, 1, 'recency answers must not add user_skills rows');
+
+  // A self-rating whose seed row is absent degrades to field_sources-only.
+  const other = v2Item((x) => x.fit_v2!.kind === 'likert' && x.fit_v2!.skill_v2?.slug === 'fitv2_diligence' && x.fit_v2!.skill_v2?.weight == null);
+  const res3 = await routeAnswer(env, USER, other.id, '3');
+  assert.equal(res3.status, 'saved');
+  assert.equal(res3.saved_to?.table, 'field_sources');
+});
+
+test('v2: behavioral evidence enforces a minimum length', async () => {
+  const env = makeEnv();
+  const q = v2Item((x) => x.fit_v2!.kind === 'behavioral_evidence' && x.fit_v2!.value_key === 'integrity');
+  const short = await routeAnswer(env, USER, q.id, 'we shipped it');
+  assert.equal(short.status, 'invalid');
+  const long = await routeAnswer(env, USER, q.id,
+    'In March 2025 I returned a $40k retainer to a client after we missed the agreed scope, told the board the mistake was my call, and rebuilt the plan with them over two weeks.');
+  assert.equal(long.status, 'saved');
+});
+
+test('v2: staged-only prefixes (internal_hire) route through the v2 branch too', async () => {
+  const env = makeEnv();
+  const bank = fitV2BankFor('internal_hire', { coreOnly: false });
+  const q = bank.find((x) => x.fit_v2?.value_key === 'ambition' && x.fit_v2?.kind === 'likert' && !x.fit_v2?.reverse_scored);
+  assert.ok(q);
+  const res = await routeAnswer(env, USER, q!.id, '5');
+  assert.equal(res.status, 'saved');
+  const row = await env.DB.prepare(
+    `SELECT score FROM axal_values WHERE user_id = ? AND value_key = 'ambition'`,
+  ).bind(USER.id).first<{ score: number }>();
+  assert.equal(row!.score, 1);
 });

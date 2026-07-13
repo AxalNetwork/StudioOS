@@ -1081,3 +1081,76 @@ CREATE TABLE IF NOT EXISTS admin_consultation_bookings (
 );
 CREATE INDEX IF NOT EXISTS idx_consultation_bookings_user   ON admin_consultation_bookings (user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_consultation_bookings_status ON admin_consultation_bookings (status, requested_at);
+
+-- ============================================================
+-- Fit v2 (migration 151) — staged sessions, append-only decisions,
+-- reviewer overrides. See services/fitDecision.ts + design/AXAL_VC_FIT_V2_METHODOLOGY.md.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS fit_sessions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid             TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role_context    TEXT NOT NULL,
+    bank_version    TEXT NOT NULL DEFAULT 'v2.0',
+    core_only       INTEGER NOT NULL DEFAULT 1,
+    status          TEXT NOT NULL DEFAULT 'in_progress',
+    current_stage   TEXT NOT NULL DEFAULT 'context',
+    conversation_id INTEGER REFERENCES advisor_conversations(id),
+    progress_json   TEXT,
+    decision_id     INTEGER,
+    source          TEXT NOT NULL DEFAULT 'staged',
+    started_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    submitted_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_fit_sessions_user ON fit_sessions (user_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_fit_sessions_role ON fit_sessions (user_id, role_context, started_at);
+
+CREATE TABLE IF NOT EXISTS fit_decisions (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid                 TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
+    user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    session_id          INTEGER REFERENCES fit_sessions(id),
+    role_context        TEXT NOT NULL,
+    bank_version        TEXT NOT NULL DEFAULT 'v2.0',
+    engine_version      TEXT NOT NULL DEFAULT 'v2.0',
+    outcome             TEXT NOT NULL,
+    culture_score       REAL NOT NULL DEFAULT 0,
+    role_score          REAL NOT NULL DEFAULT 0,
+    archetype_primary   TEXT,
+    archetype_secondary TEXT,
+    archetype_margin    REAL NOT NULL DEFAULT 0,
+    confidence          REAL NOT NULL DEFAULT 0,
+    evidence_quality    REAL NOT NULL DEFAULT 0,
+    coverage_json       TEXT,
+    values_json         TEXT,
+    skills_json         TEXT,
+    rubric_json         TEXT,
+    gaps_json           TEXT,
+    flags_json          TEXT,
+    contradictions_json TEXT,
+    narrative           TEXT,
+    computed_by         INTEGER REFERENCES users(id),
+    computed_at         TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_fit_decisions_latest ON fit_decisions (user_id, role_context, computed_at);
+CREATE INDEX IF NOT EXISTS idx_fit_decisions_review ON fit_decisions (outcome, computed_at);
+
+CREATE TABLE IF NOT EXISTS fit_reviews (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    decision_id           INTEGER NOT NULL REFERENCES fit_decisions(id) ON DELETE CASCADE,
+    subject_user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reviewer_id           INTEGER NOT NULL REFERENCES users(id),
+    evidence_ratings_json TEXT,
+    override_outcome      TEXT,
+    override_reason       TEXT,
+    requires_followup     INTEGER NOT NULL DEFAULT 0,
+    followup_json         TEXT,
+    notes                 TEXT,
+    status                TEXT NOT NULL DEFAULT 'open',
+    created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at            TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (decision_id, reviewer_id)
+);
+CREATE INDEX IF NOT EXISTS idx_fit_reviews_subject ON fit_reviews (subject_user_id, created_at);

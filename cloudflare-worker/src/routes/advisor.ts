@@ -391,8 +391,11 @@ async function getActiveConversation(env: Env, user: User): Promise<Conversation
 async function getLatestConversation(env: Env, user: User): Promise<ConversationRow | null> {
   // Latest of any state — used by /progress so completed users still
   // see 100% on the dashboard ring instead of falling back to zero.
+  // Fit v2 — the hidden staged-assessment conversation (state='fit_v2',
+  // created by routes/fit.ts) is excluded so it can never hijack the
+  // dashboard progress ring or the /answered envelope.
   return await env.DB.prepare(
-    "SELECT * FROM advisor_conversations WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+    "SELECT * FROM advisor_conversations WHERE user_id = ? AND state != 'fit_v2' ORDER BY id DESC LIMIT 1",
   ).bind(user.id).first<ConversationRow>();
 }
 

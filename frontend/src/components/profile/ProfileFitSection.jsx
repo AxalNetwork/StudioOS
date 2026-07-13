@@ -23,6 +23,7 @@ import SkillRadar from '../play/SkillRadar';
 import ValuesRadial from '../play/ValuesRadial';
 import { openPaywall } from '../PaywallModal';
 import { archetypeMeta, iconFor, humanize } from '../../lib/assessmentMeta';
+import FitDecisionCard from '../fit/FitDecisionCard';
 
 const CARD = 'rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5';
 const H = 'text-sm font-semibold text-gray-900 dark:text-gray-100';
@@ -546,6 +547,8 @@ export default function ProfileFitSection({ className = '' }) {
         <ArchetypeCard state={results} fitState={fit} className="lg:col-span-2" />
         <CompletionCard state={progress} className="md:col-span-1 lg:col-span-2" />
         <FitCard state={fit} className="md:col-span-1 lg:col-span-4" />
+        {/* Fit v2 — latest three-layer decision (self-loading; clean empty state). */}
+        <FitDecisionCard className="md:col-span-2 lg:col-span-2" />
         <MatchSummaryCard className="md:col-span-2 lg:col-span-4" />
         <BookConsultationCard className="md:col-span-2 lg:col-span-2" />
       </div>

@@ -7,6 +7,7 @@
 import {
   Compass, Rocket, Ruler, Zap, Flag, Award, Medal, Sparkles, Trophy, Star,
   Mic, Network, Ticket, Target, Handshake, TrendingUp, Users, ClipboardCheck,
+  Gauge, Radar, Shield,
 } from 'lucide-react';
 
 // Value spectrums are bipolar (−2..+2). `low` = negative pole, `high` = positive
@@ -141,6 +142,8 @@ const ICONS = {
   // Task #45 — role archetype icons.
   target: Target, handshake: Handshake, 'trending-up': TrendingUp,
   users: Users, 'clipboard-check': ClipboardCheck,
+  // Fit v2 — six-archetype icons.
+  gauge: Gauge, radar: Radar, shield: Shield,
 };
 export function iconFor(name) {
   return ICONS[String(name || '').toLowerCase()] || Sparkles;
@@ -155,6 +158,44 @@ export function humanize(slug) {
 
 export function valueLabel(slug) { return VALUE_SPECTRUMS[slug]?.label || humanize(slug); }
 export function skillLabel(slug) { return SKILL_AXES[slug] || humanize(slug); }
+
+// Fit v2 — the six operating archetypes (plain slugs, no persona prefix;
+// mirrors services/fitRoles.ts FIT_V2_TRAIT_SPECS + the fitDecision centroids).
+// Assigned onto ARCHETYPES so archetypeMeta() resolves both vocabularies; the
+// prefixed persona sets above use fo_/inv_/pt_/mt_ keys, so nothing collides.
+Object.assign(ARCHETYPES, {
+  builder: {
+    label: 'The Builder', tagline: 'Creates from zero; bias to ship.',
+    description: 'Prototype-first reasoning and hands-on making. Watch: breadth over finish.',
+    icon: 'ruler', accent: '#f97316',
+  },
+  visionary: {
+    label: 'The Visionary', tagline: 'Frames the future others execute.',
+    description: 'Sees leverage points and sequencing early. Watch: narrative outrunning action.',
+    icon: 'compass', accent: '#8b5cf6',
+  },
+  connector: {
+    label: 'The Connector', tagline: 'Wins through people and momentum.',
+    description: 'Mobilizes networks, sells the future, unblocks socially. Watch: overpromising.',
+    icon: 'users', accent: '#0ea5e9',
+  },
+  operator: {
+    label: 'The Operator', tagline: 'Systems, cadence, reliability.',
+    description: 'Turns chaos into a machine that ships. Watch: over-process in ambiguity.',
+    icon: 'gauge', accent: '#10b981',
+  },
+  scout: {
+    label: 'The Scout', tagline: 'Finds the signal before the crowd.',
+    description: 'Explores frontiers and synthesizes across domains. Watch: novelty-chasing.',
+    icon: 'radar', accent: '#eab308',
+  },
+  steward: {
+    label: 'The Steward', tagline: 'Protects quality, trust, and downside.',
+    description: 'Craft and durability first; catches the risk others miss. Watch: veto energy.',
+    icon: 'shield', accent: '#64748b',
+  },
+});
+
 export function archetypeMeta(slug) { return ARCHETYPES[slug] || null; }
 
 // ── XP / level curve (mirrors assessmentScoring.ts::levelForXp) ──────────────

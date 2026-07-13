@@ -14,6 +14,7 @@ import {
 import { api } from '../../lib/api';
 import SkillRadar from '../../components/play/SkillRadar';
 import { archetypeMeta, iconFor, valueLabel, skillLabel, humanize } from '../../lib/assessmentMeta';
+import FitReviewPanel from '../../components/admin/FitReviewPanel';
 
 const STATUSES = ['requested', 'confirmed', 'completed', 'cancelled'];
 const STATUS_CLS = {
@@ -429,6 +430,10 @@ function ReportViewer({ userId }) {
 
 export default function AdminBestFitPage() {
   const [selectedUserId, setSelectedUserId] = useState(null);
+  // Fit v2 — the console gains a second tab: the three-layer decision review
+  // queue (evidence ratings, overrides, follow-ups). v1 report pane untouched.
+  const [tab, setTab] = useState('consultations');
+  const TAB = 'rounded-lg px-3 py-1.5 text-sm font-medium';
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5">
       <div className="flex items-center gap-2">
@@ -436,16 +441,40 @@ export default function AdminBestFitPage() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Best-Fit Console</h1>
       </div>
       <p className="text-sm text-gray-500 dark:text-gray-400 -mt-3">
-        Review consultation requests and open any user’s full Best-Fit report — skills, values, Axal Fit, matches, and spin-out risk.
+        Review consultation requests, open any user’s full Best-Fit report, and run Fit v2 decision reviews.
       </p>
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        <div className="xl:col-span-1">
-          <ConsultationQueue selectedUserId={selectedUserId} onSelect={setSelectedUserId} />
-        </div>
-        <div className="xl:col-span-2">
-          <ReportViewer userId={selectedUserId} />
-        </div>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => setTab('consultations')}
+          className={`${TAB} ${tab === 'consultations'
+            ? 'bg-violet-600 text-white dark:bg-violet-500'
+            : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+        >
+          Consultations &amp; Report
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('fitv2')}
+          className={`${TAB} ${tab === 'fitv2'
+            ? 'bg-violet-600 text-white dark:bg-violet-500'
+            : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+        >
+          Fit v2 Review
+        </button>
       </div>
+      {tab === 'consultations' ? (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+          <div className="xl:col-span-1">
+            <ConsultationQueue selectedUserId={selectedUserId} onSelect={setSelectedUserId} />
+          </div>
+          <div className="xl:col-span-2">
+            <ReportViewer userId={selectedUserId} />
+          </div>
+        </div>
+      ) : (
+        <FitReviewPanel />
+      )}
     </div>
   );
 }

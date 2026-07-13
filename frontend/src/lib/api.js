@@ -2601,6 +2601,38 @@ export const api = {
     me: () => request('/best-fit/me'),
   },
 
+  // Fit v2 — staged three-layer assessment (values / archetypes / skills →
+  // six-outcome decision). Worker: routes/fit.ts + routes/admin_fit.ts.
+  fit: {
+    config: (role, full) =>
+      request(`/fit/config${role ? `?role=${encodeURIComponent(role)}${full ? '&full=1' : ''}` : full ? '?full=1' : ''}`),
+    startSession: (data) => request('/fit/sessions', { method: 'POST', body: JSON.stringify(data || {}) }),
+    sessionCurrent: (role) => request(`/fit/sessions/current${role ? `?role=${encodeURIComponent(role)}` : ''}`),
+    session: (uid) => request(`/fit/sessions/${encodeURIComponent(uid)}`),
+    submitAnswers: (uid, answers, stage) =>
+      request(`/fit/sessions/${encodeURIComponent(uid)}/answers`, {
+        method: 'POST',
+        body: JSON.stringify(stage ? { answers, stage } : { answers }),
+      }),
+    submit: (uid) => request(`/fit/sessions/${encodeURIComponent(uid)}/submit`, { method: 'POST', body: '{}' }),
+    decisionsMe: (role) => request(`/fit/decisions/me${role ? `?role=${encodeURIComponent(role)}` : ''}`),
+    resultsMe: (role) => request(`/fit/results/me${role ? `?role=${encodeURIComponent(role)}` : ''}`),
+    adminQueue: (params = {}) => {
+      const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+      return request(`/admin/fit/queue${q ? `?${q}` : ''}`);
+    },
+    adminUserDecisions: (userId) => request(`/admin/fit/users/${encodeURIComponent(userId)}/decisions`),
+    adminDecision: (id) => request(`/admin/fit/decisions/${encodeURIComponent(id)}`),
+    adminReview: (id, data) =>
+      request(`/admin/fit/decisions/${encodeURIComponent(id)}/review`, { method: 'POST', body: JSON.stringify(data) }),
+    adminRecompute: (userId, role) =>
+      request(`/admin/fit/users/${encodeURIComponent(userId)}/recompute`, {
+        method: 'POST',
+        body: JSON.stringify({ role_context: role }),
+      }),
+    adminCalibration: () => request('/admin/fit/calibration'),
+  },
+
   // Competitor Analysis — in-house crawl + Workers AI synthesis (no paid APIs).
   competitors: {
     analyze: (data) => request('/competitors/analyze', { method: 'POST', body: JSON.stringify(data || {}) }),
