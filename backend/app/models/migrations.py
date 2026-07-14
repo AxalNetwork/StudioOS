@@ -1437,6 +1437,90 @@ def ensure_matching_tables() -> None:
                 session.rollback()
 
 
+def ensure_intro_network_tables() -> None:
+    """Dev parity for the credits-based Network → Introductions propositions.
+
+    Production (``cloudflare-worker/src/routes/introductions.ts`` +
+    ``services/introductions.ts``) stores curated warm-intro propositions in
+    ``intro_propositions`` and a credit ledger in ``intro_credit_ledger`` (D1 /
+    SQLite). The dev FastAPI backend has neither, so ``/api/introductions/*``
+    404s and the Introductions panel renders a red "Not found" error.
+
+    This mirrors the worker's two tables in Postgres so the ported endpoints in
+    ``routes/introductions.py`` can generate propositions and round-trip
+    accept/decline + credit spends in the local preview. Idempotent; Postgres
+    DDL. Distinct from ``ensure_network_introductions_tables`` (Task #12), which
+    backs the separate privacy-preserving ``/network-introductions`` flow.
+    """
+    statements = (
+        """
+        CREATE TABLE IF NOT EXISTS intro_propositions (
+            id SERIAL PRIMARY KEY,
+            uid TEXT UNIQUE NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            target_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status VARCHAR NOT NULL DEFAULT 'pending',
+            score REAL NOT NULL DEFAULT 0,
+            breakdown_json TEXT,
+            source VARCHAR NOT NULL DEFAULT 'matching',
+            expires_at TIMESTAMP,
+            responded_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_intro_props_pair "
+        "ON intro_propositions(user_id, target_user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_intro_props_user_status "
+        "ON intro_propositions(user_id, status, created_at)",
+        """
+        CREATE TABLE IF NOT EXISTS intro_credit_ledger (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            delta INTEGER NOT NULL,
+            bucket VARCHAR NOT NULL,
+            kind VARCHAR NOT NULL,
+            source_ref VARCHAR NOT NULL,
+            note TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_intro_ledger_idem "
+        "ON intro_credit_ledger(user_id, kind, source_ref)",
+        "CREATE INDEX IF NOT EXISTS idx_intro_ledger_user "
+        "ON intro_credit_ledger(user_id, created_at)",
+        # Investor → founder warm-intro requests (worker Task #6 W-1 parity).
+        # Backs POST /introductions/request + GET /introductions{,/quota}.
+        """
+        CREATE TABLE IF NOT EXISTS investor_introductions (
+            id SERIAL PRIMARY KEY,
+            uid TEXT UNIQUE NOT NULL,
+            investor_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            founder_user_id INTEGER,
+            founder_id INTEGER,
+            project_id INTEGER,
+            message TEXT,
+            status VARCHAR NOT NULL DEFAULT 'pending',
+            quarter VARCHAR NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_investor_intros_user "
+        "ON investor_introductions(investor_user_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_investor_intros_quarter "
+        "ON investor_introductions(investor_user_id, quarter)",
+    )
+    with Session(engine) as session:
+        for ddl in statements:
+            try:
+                # Justification: static schema identifiers only, no user input;
+                # dev-only FastAPI backend.
+                session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_intro_network_tables: statement failed: %s", exc)
+                session.rollback()
+
+
 def ensure_calendar_tables() -> None:
     """Task #56 — Unified calendar layer. Idempotent.
 

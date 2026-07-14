@@ -115,6 +115,7 @@ async def lifespan(app: FastAPI):
             ensure_wellbeing_tables,
             ensure_user_handle_column,
             ensure_network_introductions_tables,
+            ensure_intro_network_tables,
             ensure_organizations_table,
         )
         ensure_brand_landing_columns()
@@ -213,6 +214,9 @@ async def lifespan(app: FastAPI):
         # Task #12 — secure introductions & matching flow tables.
         ensure_network_introductions_tables()
         logger.info("StudioOS migrations: network introductions tables ensured")
+        # Credits-based Introductions propositions dev parity (worker-only in prod).
+        ensure_intro_network_tables()
+        logger.info("StudioOS migrations: intro network (propositions/credits) tables ensured")
         # Task #16 — Organizations directory (real VC funds / deep-tech investors).
         ensure_organizations_table()
         logger.info("StudioOS migrations: organizations table ensured")
@@ -522,6 +526,8 @@ app.include_router(_skills.router, prefix="/api")
 # credits-based /api/introductions worker system).
 from backend.app.api.routes import network_introductions as _network_intros  # noqa: E402
 app.include_router(_network_intros.router, prefix="/api")
+from backend.app.api.routes import introductions as _introductions  # noqa: E402
+app.include_router(_introductions.router, prefix="/api")
 from backend.app.api.routes import network as _network  # noqa: E402
 app.include_router(_network.router, prefix="/api")
 
