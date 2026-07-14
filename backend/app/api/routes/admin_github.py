@@ -261,8 +261,9 @@ async def github_webhook(
         # `action` is already allowlisted above, but strip CR/LF before logging
         # so untrusted webhook input can never forge log lines (log injection).
         safe_action = str(action).replace("\r", "").replace("\n", "")
+        safe_issue_number = str(issue_number).replace("\r", "").replace("\n", "")
         logger.info("GitHub webhook: ticket #%s → %s (issue #%s %s)",
-                    ticket.id, new_status, issue_number, safe_action)
+                    ticket.id, new_status, safe_issue_number, safe_action)
         return {"ok": True, "updated": True, "ticket_id": ticket.id, "status": new_status}
 
     return {"ok": True, "updated": False, "ticket_id": ticket.id, "status": new_status}
