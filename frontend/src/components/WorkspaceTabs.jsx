@@ -20,7 +20,7 @@ export default function WorkspaceTabs({ tabs }) {
   const location = useLocation();
   const navigate = useNavigate();
   return (
-    <div className="flex items-center gap-1 border-b border-gray-200 dark:border-gray-800 mb-6 overflow-x-auto [&>button]:whitespace-nowrap">
+    <div className="flex items-center gap-1 border-b border-gray-200 dark:border-gray-800 mb-6 overflow-x-auto no-scrollbar [&>button]:whitespace-nowrap">
       {tabs.map((t) => {
         const Icon = t.icon;
         const isActive = t.match

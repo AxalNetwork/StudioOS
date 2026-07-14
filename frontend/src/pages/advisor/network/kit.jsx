@@ -151,7 +151,7 @@ export function StatCard({ label, value, hint }) {
 // Small in-page tab strip (distinct from the workspace-level WorkspaceTabs).
 export function SubTabs({ tabs, value, onChange }) {
   return (
-    <div className="flex gap-1 border-b border-gray-200 dark:border-gray-800 overflow-x-auto [&>button]:whitespace-nowrap">
+    <div className="flex gap-1 border-b border-gray-200 dark:border-gray-800 overflow-x-auto no-scrollbar [&>button]:whitespace-nowrap">
       {tabs.map((t) => {
         const Icon = t.icon;
         const active = value === t.id;

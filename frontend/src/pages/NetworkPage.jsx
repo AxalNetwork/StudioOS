@@ -51,7 +51,7 @@ export default function NetworkPage() {
       </div>
 
       {tabs.length > 1 && (
-        <div className="flex gap-1 border-b border-gray-200 overflow-x-auto [&>button]:whitespace-nowrap dark:border-gray-800">
+        <div className="flex gap-1 border-b border-gray-200 overflow-x-auto no-scrollbar [&>button]:whitespace-nowrap dark:border-gray-800">
           {tabs.map((t) => {
             const Icon = t.icon;
             const active = activeTab === t.id;
