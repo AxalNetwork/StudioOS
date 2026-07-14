@@ -5,7 +5,7 @@ import {
   MARKET_MAPS, COMPANY_REPORTS, COMPARABLES, money, formatDay,
 } from '../../../data/advisor/research';
 import {
-  SubTabs, SlideOver, Section, Field, Badge, GrowthPct, BulletList, AiSampleBanner,
+  SubTabs, SlideOver, Section, Badge, GrowthPct, BulletList, AiSampleBanner,
   SampleTag, Chip,
 } from './kit';
 

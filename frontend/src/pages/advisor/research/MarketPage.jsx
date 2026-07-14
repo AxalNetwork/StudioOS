@@ -5,7 +5,7 @@ import {
   money, formatDay,
 } from '../../../data/advisor/research';
 import {
-  SubTabs, StatCard, SlideOver, Section, Field, Badge, TrendValue, GrowthPct,
+  SubTabs, SlideOver, Section, Badge, TrendValue, GrowthPct,
   BulletList, RowCard, EmptyState, Chip,
 } from './kit';
 

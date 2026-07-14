@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Building2, Quote, Trophy, FileText, Calendar, Sparkles, MessageSquare,
 } from 'lucide-react';

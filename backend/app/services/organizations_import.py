@@ -54,7 +54,7 @@ DT_SECTOR_COLS = [
 _ROMAN_RE = re.compile(r"^[IVXLCDM]+$", re.IGNORECASE)
 # Regional-indicator flag emoji + variation selectors / zero-width joiners.
 _FLAG_RE = re.compile(
-    "[\U0001F1E6-\U0001F1FF\U0000FE0F\U0000200D\U0001F3F4\U000E0000-\U000E007F]"
+    "[\U0001F1E6-\U0001F1FF\U0000FE0F\U0000200D\U0001F3F4\U000E0020-\U000E007F]"
 )
 
 

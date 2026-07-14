@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
   MapPin, Mail, Users, Sparkles, Lock, Send, Check, X, Clock, ShieldCheck,
-  UserPlus, MessageSquare, Loader2, SlidersHorizontal, Award, Zap, Heart,
+  MessageSquare, Loader2, SlidersHorizontal, Award, Zap, Heart,
   Layers, RefreshCw, Star,
 } from 'lucide-react';
 import {

@@ -6,7 +6,7 @@ import {
 } from '../../../data/advisor/research';
 import {
   SubTabs, SearchInput, FilterChips, SlideOver, Section, Field, Badge,
-  GrowthPct, TrendValue, BulletList, EmptyState, Chip,
+  TrendValue, BulletList, EmptyState, Chip,
 } from './kit';
 
 // Companies — filterable/searchable company databases across five datasets:

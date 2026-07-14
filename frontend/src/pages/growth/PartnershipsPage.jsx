@@ -3,7 +3,7 @@
 // Partners, Resellers, Distribution. Each partner opens a detail panel with the
 // partnership brief, pipeline stage, key fields, benefits, and next steps.
 import React from 'react';
-import { Handshake, MapPin, TrendingUp, Building2, Users } from 'lucide-react';
+import { Handshake, MapPin, TrendingUp, Building2 } from 'lucide-react';
 import {
   GrowthResourceView, RowCard, Chip, Section, Field, MatchBadge, PipelineStrip, BulletList, money,
 } from './kit';

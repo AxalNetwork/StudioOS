@@ -6,7 +6,7 @@ import {
 } from '../../../data/advisor/research';
 import {
   SubTabs, SearchInput, FilterChips, SlideOver, Section, Field, Badge,
-  BulletList, EmptyState, Chip,
+  EmptyState, Chip,
 } from './kit';
 
 // Funds — research fund directory. Distinct from the investor Funds operations
