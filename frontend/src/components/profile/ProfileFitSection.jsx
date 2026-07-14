@@ -193,7 +193,7 @@ function ArchetypeCard({ state, fitState, className }) {
 }
 
 // ── Completion % ──────────────────────────────────────────────────────────────
-function CompletionCard({ state, className }) {
+function CompletionBody({ state }) {
   const { data, error } = state;
   let body;
   if (error) {
@@ -252,7 +252,7 @@ function CompletionCard({ state, className }) {
       );
     }
   }
-  return <CardShell title="Axal VC Fit & values" icon={UserCircle} className={className}>{body}</CardShell>;
+  return body;
 }
 
 // ── Fit + Axal-5 (self: api.bestFit.me) ──────────────────────────────────────
@@ -263,7 +263,7 @@ const FIT_BAND = {
   no: { label: 'No', cls: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600' },
 };
 
-function FitCard({ state, className }) {
+function FitBody({ state }) {
   const { data, error } = state;
   let body;
   if (error) {
@@ -334,7 +334,23 @@ function FitCard({ state, className }) {
       );
     }
   }
-  return <CardShell title="Your Axal VC Fit & values" icon={Sparkles} className={className}>{body}</CardShell>;
+  return body;
+}
+
+// ── Merged card: profiling completion + fit scorecard in one shell ───────────
+// Task — the Studio home previously showed two near-identical cards ("Axal VC
+// Fit & values" progress + "Your Axal VC Fit & values" scorecard). They are now
+// merged into a single card titled "Your Axal VC Fit & values".
+function FitCard({ progressState, fitState, className }) {
+  return (
+    <CardShell title="Your Axal VC Fit & values" icon={Sparkles} className={className}>
+      <div className="space-y-4">
+        <CompletionBody state={progressState} />
+        <div className="border-t border-gray-200 dark:border-gray-700" />
+        <FitBody state={fitState} />
+      </div>
+    </CardShell>
+  );
 }
 
 // ── Axal VC Fit & Values v2 (weighted 6-outcome decision) ────────────────────
@@ -665,8 +681,7 @@ export default function ProfileFitSection({ className = '' }) {
         <SkillsRadarCard state={radar} className="lg:col-span-2" />
         <ValuesLeanCard state={values} className="lg:col-span-2" />
         <ArchetypeCard state={results} fitState={fit} className="lg:col-span-2" />
-        <CompletionCard state={progress} className="md:col-span-1 lg:col-span-2" />
-        <FitCard state={fit} className="md:col-span-1 lg:col-span-4" />
+        <FitCard progressState={progress} fitState={fit} className="md:col-span-2 lg:col-span-6" />
         <FitV2Card state={fit} className="md:col-span-2 lg:col-span-6" />
         <MatchSummaryCard className="md:col-span-2 lg:col-span-4" />
         <BookConsultationCard className="md:col-span-2 lg:col-span-2" />
