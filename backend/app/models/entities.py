@@ -156,6 +156,20 @@ class Deal(SQLModel, table=True):
     amount: Optional[float] = None
     # Growth & Expansion Track — Task 2: 'spin_out' (default) | 'growth_sprint'
     track_type: str = Field(default="spin_out", index=True)
+    # Task #4 — Deal Flow term fields (see ensure_deal_flow_tables()).
+    target_raise: Optional[float] = None
+    capital_committed: Optional[float] = Field(default=0)
+    minimum_check: Optional[float] = None
+    valuation_cap: Optional[float] = None
+    carry_pct: Optional[float] = None
+    management_fee_pct: Optional[float] = None
+    instrument: Optional[str] = None
+    spv_jurisdiction: Optional[str] = None
+    closing_deadline: Optional[str] = None
+    website: Optional[str] = None
+    description: Optional[str] = None
+    lead_partner_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    stage_changed_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

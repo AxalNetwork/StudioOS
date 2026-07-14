@@ -46,6 +46,7 @@ const PartnersPage = lazy(() => import('./pages/PartnersPage'));
 const CapitalPage = lazy(() => import('./pages/CapitalPage'));
 const TicketsPage = lazy(() => import('./pages/TicketsPage'));
 const DealsPage = lazy(() => import('./pages/DealsPage'));
+const DealRoomPage = lazy(() => import('./pages/DealRoomPage'));
 const FounderPortal = lazy(() => import('./pages/FounderPortal'));
 const PartnerPortal = lazy(() => import('./pages/PartnerPortal'));
 const PartnerDealPortal = lazy(() => import('./pages/PartnerDealPortal'));
@@ -1423,6 +1424,7 @@ function AppInner() {
           Advisor's one-time 30-day-license codes get redeemed). */}
       <Route path="/products" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'], <DealsPage />)} />
+      <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder'], <DealRoomPage />)} />
       <Route path="/market-intel" element={guard(['admin', 'partner', 'investor'], <MarketIntelPage />)} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <AdvisoryPage />)} />
       {/* Team Building consolidation (Build › Team). Founders reach Advisor/

@@ -407,12 +407,58 @@ CREATE TABLE IF NOT EXISTS deals (
     amount REAL,
     hubspot_deal_id TEXT,
     sf_opportunity_id TEXT,
+    -- Task #4 — Deal Flow term fields (see migration 151_deal_flow.sql).
+    target_raise REAL,
+    capital_committed REAL DEFAULT 0,
+    minimum_check REAL,
+    valuation_cap REAL,
+    carry_pct REAL,
+    management_fee_pct REAL,
+    instrument TEXT,
+    spv_jurisdiction TEXT,
+    closing_deadline TEXT,
+    website TEXT,
+    description TEXT,
+    lead_partner_id INTEGER REFERENCES users(id),
+    stage_changed_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_deals_project ON deals(project_id);
 CREATE INDEX IF NOT EXISTS idx_deals_sf_opp ON deals(sf_opportunity_id);
+
+-- Task #4 — investor capital commitments recorded from the Deal Room.
+CREATE TABLE IF NOT EXISTS commitments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
+    deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+    investor_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    amount REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'withdrawn')),
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_commitments_deal ON commitments(deal_id);
+CREATE INDEX IF NOT EXISTS idx_commitments_investor ON commitments(investor_user_id);
+
+-- Task #4 — admin-issued investor invitations to a deal.
+CREATE TABLE IF NOT EXISTS deal_invitations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
+    deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+    investor_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    invited_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    message TEXT,
+    email_opt_in INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'invited' CHECK (status IN ('invited', 'interested', 'passed')),
+    responded_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_deal_invites_pair ON deal_invitations(deal_id, investor_user_id);
+CREATE INDEX IF NOT EXISTS idx_deal_invites_investor ON deal_invitations(investor_user_id, status);
 
 CREATE TABLE IF NOT EXISTS lp_investors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

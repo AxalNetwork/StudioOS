@@ -117,6 +117,7 @@ async def lifespan(app: FastAPI):
             ensure_network_introductions_tables,
             ensure_intro_network_tables,
             ensure_organizations_table,
+            ensure_deal_flow_tables,
         )
         ensure_brand_landing_columns()
         logger.info("StudioOS migrations: brand landing columns ensured")
@@ -219,6 +220,8 @@ async def lifespan(app: FastAPI):
         logger.info("StudioOS migrations: intro network (propositions/credits) tables ensured")
         # Task #16 — Organizations directory (real VC funds / deep-tech investors).
         ensure_organizations_table()
+        ensure_deal_flow_tables()
+        logger.info("StudioOS migrations: deal-flow tables ensured")
         logger.info("StudioOS migrations: organizations table ensured")
         from backend.app.services.organizations_import import bootstrap_organizations
         bootstrap_organizations()

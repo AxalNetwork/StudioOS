@@ -2562,3 +2562,88 @@ def ensure_organizations_table() -> None:
             except Exception as exc:  # noqa: BLE001
                 session.rollback()
                 logger.warning("ensure_organizations_table: index %s: %s", name, exc)
+
+
+def ensure_deal_flow_tables() -> None:
+    """Deal Flow (Task #4): add deal-term columns to `deals` and create the
+    `commitments` + `deal_invitations` tables. Mirrors the production D1
+    migration so `/api/deals/*` (funnel, detail, commitments, invitations)
+    round-trips in the dev preview. Idempotent Postgres DDL.
+    """
+    deal_columns = (
+        "target_raise DOUBLE PRECISION",
+        "capital_committed DOUBLE PRECISION DEFAULT 0",
+        "minimum_check DOUBLE PRECISION",
+        "valuation_cap DOUBLE PRECISION",
+        "carry_pct DOUBLE PRECISION",
+        "management_fee_pct DOUBLE PRECISION",
+        "instrument VARCHAR",
+        "spv_jurisdiction VARCHAR",
+        "closing_deadline VARCHAR",
+        "website VARCHAR",
+        "description TEXT",
+        "lead_partner_id INTEGER",
+        "stage_changed_at TIMESTAMP",
+    )
+    tables = (
+        """
+        CREATE TABLE IF NOT EXISTS commitments (
+            id SERIAL PRIMARY KEY,
+            uid TEXT UNIQUE NOT NULL,
+            deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+            investor_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            amount DOUBLE PRECISION NOT NULL,
+            status VARCHAR NOT NULL DEFAULT 'pending',
+            notes TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_commitments_deal ON commitments(deal_id)",
+        "CREATE INDEX IF NOT EXISTS idx_commitments_investor ON commitments(investor_user_id)",
+        """
+        CREATE TABLE IF NOT EXISTS deal_invitations (
+            id SERIAL PRIMARY KEY,
+            uid TEXT UNIQUE NOT NULL,
+            deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+            investor_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            invited_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            message TEXT,
+            email_opt_in BOOLEAN NOT NULL DEFAULT FALSE,
+            status VARCHAR NOT NULL DEFAULT 'invited',
+            responded_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_deal_invites_pair ON deal_invitations(deal_id, investor_user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_deal_invites_investor ON deal_invitations(investor_user_id, status)",
+    )
+    with Session(engine) as session:
+        for col in deal_columns:
+            try:
+                # Justification: static DDL literals from a local tuple, no
+                # user input; dev-only FastAPI backend.
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                    f"ALTER TABLE deals ADD COLUMN IF NOT EXISTS {col}"
+                ))
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                session.rollback()
+                logger.warning("ensure_deal_flow_tables: column %s: %s", col, exc)
+        # Backfill stage_changed_at for pre-existing rows so days-in-stage is
+        # sensible on first boot.
+        try:
+            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                "UPDATE deals SET stage_changed_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP) WHERE stage_changed_at IS NULL"
+            ))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            session.rollback()
+            logger.warning("ensure_deal_flow_tables: backfill stage_changed_at: %s", exc)
+        for ddl in tables:
+            try:
+                # Justification: static DDL literals, no user input; dev-only.
+                session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                session.rollback()
+                logger.warning("ensure_deal_flow_tables: statement failed: %s", exc)

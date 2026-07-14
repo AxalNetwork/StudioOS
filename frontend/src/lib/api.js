@@ -716,6 +716,42 @@ export const api = {
   dealroomJoin: (id) => request(`/deals/${id}/dealroom/join`, { method: 'POST' }),
   dealroomLeave: (id) => request(`/deals/${id}/dealroom/leave`, { method: 'DELETE' }),
 
+  // Task #4 — Deal Flow: funnel aggregates, admin drafting, Deal Room
+  // (documents / data room / commitments / activity) and investor invitations.
+  dealFunnel: () => request('/deals/funnel'),
+  draftDeal: (data) => request('/deals/draft', { method: 'POST', body: JSON.stringify(data) }),
+  advanceDeal: (id) => request(`/deals/${id}/advance`, { method: 'POST' }),
+  dealLeadPartners: () => request('/deals/lead-partners'),
+  dealInvestorOptions: () => request('/deals/investors'),
+  dealDocuments: (id) => request(`/deals/${id}/documents`),
+  // Data-room zip is a file download. FastAPI (dev preview) authenticates via
+  // the Bearer header only — a plain <a> click can't set that — so fetch the
+  // blob with auth headers and trigger a client-side download.
+  downloadDataRoom: async (id) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`${BASE}/deals/${id}/data-room`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error('Failed to download data room');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `data-room-deal-${id}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+  dealCommitments: (id) => request(`/deals/${id}/commitments`),
+  createCommitment: (id, data) => request(`/deals/${id}/commitments`, { method: 'POST', body: JSON.stringify(data) }),
+  dealActivity: (id) => request(`/deals/${id}/activity`),
+  dealInvitations: (id) => request(`/deals/${id}/invitations`),
+  createDealInvitations: (id, data) => request(`/deals/${id}/invitations`, { method: 'POST', body: JSON.stringify(data) }),
+  myDealInvitations: () => request('/deals/invitations/mine'),
+  respondDealInvitation: (id, response) => request(`/deals/${id}/invitations/respond`, { method: 'POST', body: JSON.stringify({ response }) }),
+
   listUsers: (role) => request(`/users${role ? `?role=${role}` : ''}`),
   createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
 
