@@ -5,7 +5,7 @@ import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
 import {
-  Eye, Search, Plus, ArrowRight, X, Loader2, Check, ThumbsUp, ThumbsDown,
+  Eye, Search, Plus, ArrowRight, X, Loader2, ThumbsUp, ThumbsDown,
   ChevronUp, ChevronDown, TrendingUp, ArrowUpRight,
 } from 'lucide-react';
 
