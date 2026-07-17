@@ -221,6 +221,8 @@ import catalog, { adminCatalog } from './routes/catalog';
 import adminStripe from './routes/admin_stripe';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 import payments from './routes/payments';
+// One-time CART ORDER surface (combined PaymentIntent for one_time SKUs).
+import orders from './routes/orders';
 // Products page — explorer promo status + $0 redemption (catalog + paid
 // checkout reuse /api/catalog + /api/payments above).
 import products from './routes/products';
@@ -519,6 +521,11 @@ app.get('/api/payments/config', async (c) => {
 // cards via Stripe Elements without ever seeing the Stripe secret key. Sibling
 // of /api/billing so SKUs resolve through the same catalog mirror.
 app.route('/api/payments', payments);
+
+// One-time CART ORDER surface. Combined PaymentIntent for a cart of one_time
+// SKUs; fulfilment (webhook or /confirm) grants user_products + invoice/email.
+// Sibling of /api/payments so SKUs resolve through the same catalog mirror.
+app.route('/api/orders', orders);
 
 // Products page — explorer promo status + $0 redemption. Sibling of
 // /api/payments; paid checkout on the same page flows through the payments

@@ -118,6 +118,7 @@ async def lifespan(app: FastAPI):
             ensure_intro_network_tables,
             ensure_organizations_table,
             ensure_deal_flow_tables,
+            ensure_orders_tables,
         )
         ensure_brand_landing_columns()
         logger.info("StudioOS migrations: brand landing columns ensured")
@@ -222,6 +223,9 @@ async def lifespan(app: FastAPI):
         ensure_organizations_table()
         ensure_deal_flow_tables()
         logger.info("StudioOS migrations: deal-flow tables ensured")
+        # Task #8 — commerce cart/checkout tables + users.stripe_customer_id.
+        ensure_orders_tables()
+        logger.info("StudioOS migrations: orders/commerce tables ensured")
         logger.info("StudioOS migrations: organizations table ensured")
         from backend.app.services.organizations_import import bootstrap_organizations
         bootstrap_organizations()
@@ -533,6 +537,9 @@ from backend.app.api.routes import introductions as _introductions  # noqa: E402
 app.include_router(_introductions.router, prefix="/api")
 from backend.app.api.routes import network as _network  # noqa: E402
 app.include_router(_network.router, prefix="/api")
+# Task #8 — redesigned Products page: catalog, payments, cart orders, webhook.
+from backend.app.api.routes import commerce as _commerce  # noqa: E402
+app.include_router(_commerce.router, prefix="/api")
 
 # --- Public landing page HTML (Task #4 parity) ----------------------------
 # The dev backend serves HTML directly for /landing/:slug and

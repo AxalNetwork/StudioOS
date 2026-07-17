@@ -1813,6 +1813,18 @@ async function handleStripeEvent(
         });
         return;
       }
+      // One-time CART ORDER fulfilment. The PI carries metadata.kind='cart_order'
+      // + order_ref; mark the order paid, grant user_products, record the promo
+      // redemption, render the invoice and email the buyer. Idempotent on the
+      // order_ref (fulfilOrder no-ops once the order is already paid), so a
+      // Stripe webhook retry can never double-fulfil.
+      if (meta.kind === 'cart_order') {
+        const orderRef = (meta.order_ref || '').trim();
+        if (!orderRef) return;
+        const { fulfilOrder } = await import('../services/orders');
+        await fulfilOrder(env, orderRef);
+        return;
+      }
       // Task #6 — embedded-terminal incorporation fee. The invoice's PI carries
       // metadata.kind='incorporation' + incorporation_id; mark the order paid and
       // advance the filing workflow (enqueues the packet pipeline). Idempotent.

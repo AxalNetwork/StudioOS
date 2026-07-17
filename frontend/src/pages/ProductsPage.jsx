@@ -1,25 +1,36 @@
-// Products — in-house storefront on the Stripe-backed catalog.
+// Products — in-house storefront on the Stripe-backed catalog (redesigned).
 //
-// Three surfaces on one page:
-//   1. Promo redemption — the one-time 30-day-license codes the Personal
-//      Advisor issues when an exploring user completes their needs bank
-//      (worker: /api/products/promo + /api/products/redeem). Redemption is
-//      $0 and never touches Stripe; the confirmation renders as a $0.00
-//      billing receipt. `?code=` (from the chat CTA) prefills the input.
-//   2. Catalog — the mirrored Stripe catalog (/api/catalog/products),
-//      purchased in-app through the embedded AxalCheckout component (Stripe
-//      Elements, no redirect). AxalCheckout has its own promo field for
-//      Stripe-native discount codes.
-//   3. Active licenses — the caller's current feature unlocks so a freshly
-//      redeemed 30-day license is visible immediately.
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+// Surfaces on one page:
+//   1. Header + promo-redemption box (PRESERVED — the one-time 30-day-license
+//      codes the Personal Advisor issues; $0, never touches Stripe).
+//   2. Sticky billing toggle + cart bar (count badge, Review & Checkout).
+//   3. Catalog grid with audience tabs. Catalog-driven billing: each product
+//      shows only the cycles that have a real Stripe price.
+//   4. One-time cart drawer (right slide-over) with promo validation + VAT.
+//   5. Product slide-over (details, deep-linkable via /products/:productId).
+//   6. Active-licenses surface (PRESERVED).
+//   7. Admin-only "Add Product" button + modal (reuses adminCatalog create).
+//
+// Prices ALWAYS come from GET /catalog/products — never hardcoded, never
+// client-computed. Subscriptions bypass the cart (one-click Stripe via the
+// slide-over); one-time items go through the cart → /checkout.
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import {
   Package, Ticket, CheckCircle2, AlertTriangle, Loader2, X, BadgeCheck, Receipt,
-  Sparkles,
+  Sparkles, Plus,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
 import AxalCheckout from '../components/AxalCheckout';
+import { useCart } from '../components/products/useCart';
+import BillingCartBar from '../components/products/BillingCartBar';
+import CartDrawer from '../components/products/CartDrawer';
+import ProductCard from '../components/products/ProductCard';
+import ProductSlideOver from '../components/products/ProductSlideOver';
+import {
+  formatMoney, formatDate, AUDIENCE_FILTERS, priceCycle,
+} from '../components/products/productsShared';
 
 const REDEEM_REASONS = {
   not_found: "That code isn't valid. Check for typos — codes look like AXAL-XXXX-XXXX.",
@@ -27,40 +38,7 @@ const REDEEM_REASONS = {
   expired: 'This code has expired.',
 };
 
-// Audience filter chips. Mirrors AUDIENCE_CATEGORIES in
-// cloudflare-worker/src/services/catalog.ts — kept as a local fallback (not
-// fetched) so the filter bar renders instantly, before the catalog response
-// (which also carries `audience_categories`) comes back.
-const AUDIENCE_FILTERS = [
-  { value: 'founders', label: 'For Founders' },
-  { value: 'investors_lps', label: 'For Investors / LPs' },
-  { value: 'service_partners', label: 'For Service Partners' },
-  { value: 'advisors', label: 'For Advisors' },
-  { value: 'legal_services', label: 'Legal Services' },
-];
-
-function formatMoney(cents, currency) {
-  const amt = (Number(cents) || 0) / 100;
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency', currency: (currency || 'usd').toUpperCase(),
-    }).format(amt);
-  } catch {
-    return `${amt.toFixed(2)} ${(currency || 'USD').toUpperCase()}`;
-  }
-}
-
-function formatDate(iso) {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-  } catch {
-    return iso;
-  }
-}
-
-// Shared billing-confirmation receipt for both the $0 promo path and paid
-// checkout. `lines` = [{ label, value }].
+// ------- Shared billing-confirmation receipt (PRESERVED) -------
 function BillingReceipt({ title, lines, total, note, onClose }) {
   return (
     <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 p-4">
@@ -91,11 +69,10 @@ function BillingReceipt({ title, lines, total, note, onClose }) {
   );
 }
 
-// Promo redemption card. Pre-renders the caller's issued code state so the
-// page is useful even without the ?code= deep link from the advisor chat.
+// ------- Promo redemption card (PRESERVED) -------
 function PromoRedeemCard({ initialCode, onRedeemed }) {
   const [code, setCode] = useState(initialCode || '');
-  const [myPromo, setMyPromo] = useState(null);       // issued (maybe redeemed) promo
+  const [myPromo, setMyPromo] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [confirmation, setConfirmation] = useState(null);
@@ -106,8 +83,6 @@ function PromoRedeemCard({ initialCode, onRedeemed }) {
       .then((r) => {
         if (cancelled) return;
         setMyPromo(r?.promo || null);
-        // Convenience: an issued, unredeemed code prefills the input when
-        // the deep link didn't supply one.
         if (!initialCode && r?.promo && !r.promo.redeemed_at) setCode(r.promo.code);
       })
       .catch(() => { /* endpoint missing (dev backend) — hide silently */ });
@@ -199,38 +174,23 @@ function PromoRedeemCard({ initialCode, onRedeemed }) {
   );
 }
 
-// Introduction credit packs — fixed platform SKUs (10 / 100 / 1000) for the
-// Network › Introductions feature. Fetched from /api/introductions/packs;
-// this local fallback keeps the section rendering if that call fails.
+// ------- Introduction packs (PRESERVED) -------
 const INTRO_PACK_FALLBACK = [
   { key: 'intro_10', credits: 10, amount_cents: 4900, currency: 'usd', label: '10 introductions', blurb: 'A focused batch of warm intros for the current push.' },
   { key: 'intro_100', credits: 100, amount_cents: 39900, currency: 'usd', label: '100 introductions', blurb: 'A quarter of serious relationship building.' },
   { key: 'intro_1000', credits: 1000, amount_cents: 299000, currency: 'usd', label: '1,000 introductions', blurb: 'Firm-scale allocation for teams and funds.' },
 ];
 
-// Buy flow: mint the PaymentIntent for the chosen pack, then render the
-// embedded AxalCheckout against its client_secret. Credits are granted by
-// the Stripe webhook (idempotent on the intent id), so the receipt tells the
-// buyer they'll appear in Network › Introductions momentarily.
 function IntroPacksSection({ onReceipt }) {
   const [packs, setPacks] = useState(INTRO_PACK_FALLBACK);
-  const [buying, setBuying] = useState(null);   // { pack, clientSecret }
+  const [buying, setBuying] = useState(null);
   const [pendingKey, setPendingKey] = useState(null);
   const [error, setError] = useState(null);
-  const sectionRef = useRef(null);
 
   useEffect(() => {
     api.introPacks()
       .then((r) => { if (Array.isArray(r?.packs) && r.packs.length) setPacks(r.packs); })
       .catch(() => { /* fallback list stands */ });
-  }, []);
-
-  // /products#introduction-packs deep link (from the Introductions tab CTA) —
-  // the section mounts after data loads, so scroll explicitly.
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.location.hash === '#introduction-packs') {
-      sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
   }, []);
 
   const buy = useCallback(async (pack) => {
@@ -248,14 +208,14 @@ function IntroPacksSection({ onReceipt }) {
   }, []);
 
   return (
-    <div ref={sectionRef} id="introduction-packs" className="rounded-xl border border-violet-200 dark:border-violet-900 bg-white dark:bg-gray-900 p-4 scroll-mt-6">
+    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
       <div className="flex items-center gap-2">
         <Sparkles size={16} className="text-violet-600 dark:text-violet-400" />
         <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Introduction packs</h2>
       </div>
       <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-        Top up your Network › Introductions balance. One credit = one accepted warm introduction;
-        purchased credits never expire and stack on your monthly allowance.
+        Top up your Network › Introductions balance. Purchased credits never expire and stack on
+        your monthly allowance.
       </p>
       <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
         {packs.map((p) => (
@@ -288,11 +248,7 @@ function IntroPacksSection({ onReceipt }) {
             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               Checkout — {buying.pack.label}
             </h3>
-            <button
-              onClick={() => setBuying(null)}
-              className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-              title="Cancel checkout"
-            >
+            <button onClick={() => setBuying(null)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" title="Cancel checkout">
               <X size={16} />
             </button>
           </div>
@@ -319,39 +275,86 @@ function IntroPacksSection({ onReceipt }) {
   );
 }
 
-function pickDisplayPrice(product) {
-  const prices = Array.isArray(product?.prices) ? product.prices : [];
-  return prices.find((p) => p && p.active !== false) || prices[0] || null;
-}
+// ------- Admin "Add Product" modal (reuses adminCatalog create) -------
+function AddProductModal({ onClose, onCreated }) {
+  const [form, setForm] = useState({ name: '', kind: 'subscription', description: '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
 
-function priceLabel(price) {
-  if (!price || price.unit_amount == null) return 'Contact us';
-  const base = formatMoney(price.unit_amount, price.currency);
-  const interval = price.recurring?.interval;
-  return interval ? `${base}/${interval}` : base;
-}
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy || !form.name.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const meta = {};
+      if (form.kind === 'incorporation') meta.kind = 'incorporation';
+      else if (form.kind === 'session') meta.kind = 'session';
+      else if (form.kind === 'alacarte') { meta.kind = 'alacarte'; meta.feature_key = ''; meta.unlock_days = ''; }
+      if (form.description.trim()) meta.description = form.description.trim();
+      await api.adminCatalogCreateProduct({ name: form.name.trim(), kind: form.kind, metadata: meta });
+      onCreated?.();
+      onClose();
+    } catch (e2) {
+      const details = e2?.data?.details;
+      setError(details ? details.join('; ') : (e2?.message || 'Create failed'));
+    } finally {
+      setBusy(false);
+    }
+  };
 
-function ProductCard({ product, onBuy }) {
-  const price = pickDisplayPrice(product);
-  const description = product.metadata?.description || '';
   return (
-    <div className="flex flex-col rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
-      <div className="flex items-center gap-2">
-        <Package size={16} className="text-violet-600 dark:text-violet-400 flex-shrink-0" />
-        <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">{product.name}</h3>
-      </div>
-      {description && (
-        <p className="mt-1.5 text-xs text-gray-600 dark:text-gray-400 line-clamp-3">{description}</p>
-      )}
-      <div className="mt-auto pt-3 flex items-center justify-between gap-2">
-        <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{priceLabel(price)}</span>
-        <button
-          onClick={() => onBuy(product, price)}
-          disabled={!price?.id}
-          className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium disabled:opacity-50"
-        >
-          Buy
-        </button>
+    <div onClick={onClose} className="fixed inset-0 z-[85] bg-gray-900/50 flex items-start justify-center p-6 overflow-y-auto" style={{ animation: 'mrdFade .18s ease' }}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-6 mt-16">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Add product</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"><X size={18} /></button>
+        </div>
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Name</label>
+            <input
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              autoFocus
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              placeholder="e.g. Founder — Growth"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Kind</label>
+            <select
+              value={form.kind}
+              onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500"
+            >
+              <option value="subscription">Subscription</option>
+              <option value="incorporation">Incorporation</option>
+              <option value="session">Session</option>
+              <option value="alacarte">À la carte</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Description</label>
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              rows={3}
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              placeholder="Short summary shown on the card."
+            />
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Add prices, edit or archive this product from the Admin › Catalog panel.
+          </p>
+          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800">Cancel</button>
+            <button type="submit" disabled={busy || !form.name.trim()} className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium disabled:opacity-50 inline-flex items-center gap-1.5">
+              {busy && <Loader2 size={14} className="animate-spin" />} Create
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -359,14 +362,22 @@ function ProductCard({ product, onBuy }) {
 
 export default function ProductsPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { productId } = useParams();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const deepLinkCode = searchParams.get('code') || '';
 
+  const cart = useCart();
   const [products, setProducts] = useState(null);   // null = loading
   const [catalogError, setCatalogError] = useState(null);
   const [unlocks, setUnlocks] = useState([]);
-  const [checkout, setCheckout] = useState(null);   // { product, price }
   const [paidReceipt, setPaidReceipt] = useState(null);
   const [audienceFilter, setAudienceFilter] = useState('all');
+  const [globalCycle, setGlobalCycle] = useState('monthly');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [toast, setToast] = useState('');
 
   const refreshUnlocks = useCallback(() => {
     api.alacarteUnlocks()
@@ -374,34 +385,68 @@ export default function ProductsPage() {
       .catch(() => { /* dev backend without the route — hide */ });
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadCatalog = useCallback(() => {
     api.catalogProducts()
-      .then((r) => {
-        if (cancelled) return;
-        setProducts((r?.products || []).filter((p) => p.active !== false));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setProducts([]);
-        setCatalogError(e?.message || 'Could not load the catalog.');
-      });
-    refreshUnlocks();
-    return () => { cancelled = true; };
-  }, [refreshUnlocks]);
+      .then((r) => setProducts((r?.products || []).filter((p) => p.active !== false)))
+      .catch((e) => { setProducts([]); setCatalogError(e?.message || 'Could not load the catalog.'); });
+  }, []);
 
-  const onPaidSuccess = useCallback((result) => {
-    const { product, price } = checkout || {};
+  useEffect(() => {
+    loadCatalog();
+    refreshUnlocks();
+  }, [loadCatalog, refreshUnlocks]);
+
+  const showToast = useCallback((msg) => {
+    setToast(msg);
+    window.clearTimeout(showToast._t);
+    showToast._t = window.setTimeout(() => setToast(''), 2000);
+  }, []);
+
+  // Deep-linked product for the slide-over. When /products/:productId is hit
+  // directly, open the panel pre-open once the catalog resolves.
+  const openProduct = useMemo(
+    () => (productId && products ? products.find((p) => p.id === productId) || null : null),
+    [productId, products],
+  );
+
+  const handleOpenProduct = useCallback((product) => {
+    navigate(`/products/${encodeURIComponent(product.id)}`);
+  }, [navigate]);
+
+  const handleCloseProduct = useCallback(() => {
+    navigate('/products');
+  }, [navigate]);
+
+  // Add a one-time item to the cart.
+  const addToCart = useCallback((product, price) => {
+    cart.add({
+      price_id: price.id,
+      product_id: product.id,
+      name: product.name,
+      currency: price.currency,
+      unit_amount: price.unit_amount,
+      cycle: priceCycle(price),
+    });
+    showToast(`${product.name} added to your order`);
+  }, [cart, showToast]);
+
+  // Subscription one-click success (from the slide-over embedded checkout).
+  const onSubscribed = useCallback(({ product, price, result }) => {
     setPaidReceipt({
-      product_name: product?.name || 'Purchase',
+      product_name: product?.name || 'Subscription',
       amount_cents: result?.free ? 0 : (price?.unit_amount ?? null),
       currency: price?.currency || 'usd',
       when: new Date().toISOString(),
       free: !!result?.free,
     });
-    setCheckout(null);
+    navigate('/products');
     refreshUnlocks();
-  }, [checkout, refreshUnlocks]);
+  }, [navigate, refreshUnlocks]);
+
+  const goCheckout = useCallback(() => {
+    setDrawerOpen(false);
+    navigate('/checkout');
+  }, [navigate]);
 
   const visibleProducts = useMemo(() => {
     if (!products) return products;
@@ -465,24 +510,55 @@ export default function ProductsPage() {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {visibleProducts.map((p) => (
-          <ProductCard key={p.id} product={p} onBuy={(product, price) => { setPaidReceipt(null); setCheckout({ product, price }); }} />
+          <ProductCard
+            key={p.id}
+            product={p}
+            globalCycle={globalCycle}
+            onOpen={handleOpenProduct}
+            onAddToCart={addToCart}
+            onBuySubscription={(product) => handleOpenProduct(product)}
+          />
         ))}
       </div>
     );
-  }, [products, visibleProducts, catalogError]);
+  }, [products, visibleProducts, catalogError, globalCycle, handleOpenProduct, addToCart]);
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-          <Package size={22} className="text-violet-600 dark:text-violet-400" /> Products
-        </h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          Licenses, sessions and add-ons — purchased in-app, or unlocked with a promo code.
-        </p>
+      {/* Slide-over / drawer animations (scoped inline — global CSS untouched). */}
+      <style>{`
+        @keyframes mrdFade { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes mrdSlide { from { transform: translateX(100%) } to { transform: translateX(0) } }
+        @keyframes mrdPop { 0% { transform: scale(.96); opacity: 0 } 100% { transform: scale(1); opacity: 1 } }
+      `}</style>
+
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <Package size={22} className="text-violet-600 dark:text-violet-400" /> Products
+          </h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            Licenses, sessions and add-ons — purchased in-app, or unlocked with a promo code.
+          </p>
+        </div>
+        {isAdmin && (
+          <button
+            onClick={() => setShowAddProduct(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium"
+          >
+            <Plus size={15} /> Add Product
+          </button>
+        )}
       </div>
 
       <PromoRedeemCard initialCode={deepLinkCode} onRedeemed={refreshUnlocks} />
+
+      <BillingCartBar
+        cycle={globalCycle}
+        onCycleChange={setGlobalCycle}
+        cart={cart}
+        onOpenDrawer={() => setDrawerOpen(true)}
+      />
 
       <IntroPacksSection onReceipt={(r) => setPaidReceipt(r)} />
 
@@ -521,30 +597,6 @@ export default function ProductsPage() {
         />
       )}
 
-      {checkout && (
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
-          <div className="flex items-center justify-between gap-2 mb-3">
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Checkout — {checkout.product.name}
-            </h2>
-            <button
-              onClick={() => setCheckout(null)}
-              className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-              title="Cancel checkout"
-            >
-              <X size={16} />
-            </button>
-          </div>
-          <AxalCheckout
-            priceId={checkout.price?.id}
-            description={checkout.product.name}
-            submitLabel="Pay now"
-            onSuccess={onPaidSuccess}
-            onError={() => { /* AxalCheckout renders its own inline error state */ }}
-          />
-        </div>
-      )}
-
       <div>
         <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Catalog</h2>
@@ -552,6 +604,33 @@ export default function ProductsPage() {
         </div>
         {grid}
       </div>
+
+      <CartDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        cart={cart}
+        appliedPromo={cart.promo}
+        onPromoChange={cart.setPromo}
+        onCheckout={goCheckout}
+      />
+
+      <ProductSlideOver
+        product={openProduct}
+        globalCycle={globalCycle}
+        onClose={handleCloseProduct}
+        onAddToCart={addToCart}
+        onSubscribed={onSubscribed}
+      />
+
+      {showAddProduct && (
+        <AddProductModal onClose={() => setShowAddProduct(false)} onCreated={loadCatalog} />
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] bg-gray-900 text-white px-5 py-3 rounded-xl text-sm font-medium shadow-2xl flex items-center gap-2" style={{ animation: 'mrdPop .2s ease' }}>
+          <CheckCircle2 size={16} className="text-violet-400" /> {toast}
+        </div>
+      )}
     </div>
   );
 }

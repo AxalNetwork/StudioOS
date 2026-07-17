@@ -2647,3 +2647,112 @@ def ensure_deal_flow_tables() -> None:
             except Exception as exc:  # noqa: BLE001
                 session.rollback()
                 logger.warning("ensure_deal_flow_tables: statement failed: %s", exc)
+
+
+def ensure_orders_tables() -> None:
+    """Task #8 — commerce cart/checkout tables + users.stripe_customer_id.
+
+    Idempotent (CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS).
+    Backs the redesigned Products page cart + one-time checkout flow.
+    Tables: orders, user_products, promo_redemptions, feature_unlocks,
+    intro_credit_ledger. See .local/tasks/products-cart-contract.md.
+    """
+    tables = (
+        """
+        CREATE TABLE IF NOT EXISTS orders (
+            id TEXT PRIMARY KEY,
+            order_ref TEXT UNIQUE NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status VARCHAR NOT NULL DEFAULT 'pending',
+            currency VARCHAR NOT NULL DEFAULT 'usd',
+            subtotal_cents INTEGER NOT NULL DEFAULT 0,
+            discount_cents INTEGER NOT NULL DEFAULT 0,
+            vat_cents INTEGER NOT NULL DEFAULT 0,
+            total_cents INTEGER NOT NULL DEFAULT 0,
+            promo_code TEXT,
+            billing_country TEXT,
+            payment_intent_id TEXT,
+            items_json TEXT NOT NULL DEFAULT '[]',
+            invoice_number TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            paid_at TIMESTAMP
+        )
+        """,
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_payment_intent ON orders(payment_intent_id) WHERE payment_intent_id IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS ix_orders_user ON orders(user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_orders_status ON orders(status)",
+        """
+        CREATE TABLE IF NOT EXISTS user_products (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            order_ref TEXT REFERENCES orders(order_ref),
+            product_id TEXT,
+            price_id TEXT,
+            kind TEXT,
+            label TEXT,
+            quantity INTEGER NOT NULL DEFAULT 1,
+            activated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_user_products_user ON user_products(user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_user_products_order ON user_products(order_ref)",
+        # Idempotent fulfilment: one entitlement row per (order, price). Guards
+        # against double-grant if /orders/confirm and the webhook race.
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_products_order_price ON user_products(order_ref, price_id)",
+        """
+        CREATE TABLE IF NOT EXISTS promo_redemptions (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            code TEXT NOT NULL,
+            order_ref TEXT,
+            price_id TEXT,
+            discount_cents INTEGER NOT NULL DEFAULT 0,
+            redeemed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_promo_redemptions_user ON promo_redemptions(user_id)",
+        # Idempotent fulfilment: one redemption row per order.
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_promo_redemptions_order ON promo_redemptions(order_ref) WHERE order_ref IS NOT NULL",
+        """
+        CREATE TABLE IF NOT EXISTS feature_unlocks (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            feature_key TEXT NOT NULL,
+            price_id TEXT,
+            payment_intent_id TEXT,
+            activated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_feature_unlocks_user ON feature_unlocks(user_id)",
+        """
+        CREATE TABLE IF NOT EXISTS intro_credit_ledger (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            delta INTEGER NOT NULL DEFAULT 0,
+            reason TEXT,
+            payment_intent_id TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_intro_credit_ledger_user ON intro_credit_ledger(user_id)",
+    )
+    with Session(engine) as session:
+        try:
+            session.exec(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR"
+            ))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            session.rollback()
+            logger.warning("ensure_orders_tables: users.stripe_customer_id add failed: %s", exc)
+        for ddl in tables:
+            try:
+                # Justification: static DDL literals from a local tuple, no
+                # user input; dev-only FastAPI backend.
+                session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                session.rollback()
+                logger.warning("ensure_orders_tables: statement failed: %s", exc)

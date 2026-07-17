@@ -1127,3 +1127,49 @@ CREATE TABLE IF NOT EXISTS admin_consultation_bookings (
 );
 CREATE INDEX IF NOT EXISTS idx_consultation_bookings_user   ON admin_consultation_bookings (user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_consultation_bookings_status ON admin_consultation_bookings (status, requested_at);
+
+-- ---------------------------------------------------------------------------
+-- One-time CART ORDER support (products cart/checkout). A cart order combines
+-- one or more `one_time` catalog SKUs into a SINGLE combined PaymentIntent.
+-- Prices come from the mirrored Stripe catalog (stripe_products); VAT (5% UAE)
+-- and promo discounts are recomputed server-side. Mirrored as
+-- sql/migrations/152_cart_orders.sql so it can be applied to remote D1 with a
+-- single wrangler call. Bootstrapped at runtime by
+-- services/orders.ts::ensureOrdersSchema so dev/preview D1 self-heals.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS orders (
+    id                TEXT PRIMARY KEY,
+    order_ref         TEXT NOT NULL UNIQUE,
+    user_id           INTEGER NOT NULL REFERENCES users(id),
+    status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'failed')),
+    currency          TEXT NOT NULL DEFAULT 'usd',
+    subtotal_cents    INTEGER NOT NULL DEFAULT 0,
+    discount_cents    INTEGER NOT NULL DEFAULT 0,
+    vat_cents         INTEGER NOT NULL DEFAULT 0,
+    total_cents       INTEGER NOT NULL DEFAULT 0,
+    promo_code        TEXT,
+    billing_country   TEXT,
+    payment_intent_id TEXT,
+    items_json        TEXT NOT NULL DEFAULT '[]',
+    invoice_number    TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    paid_at           TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_pi
+    ON orders(payment_intent_id) WHERE payment_intent_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS user_products (
+    id           TEXT PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id),
+    order_ref    TEXT NOT NULL REFERENCES orders(order_ref),
+    product_id   TEXT,
+    price_id     TEXT,
+    kind         TEXT,
+    label        TEXT,
+    quantity     INTEGER NOT NULL DEFAULT 1,
+    activated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_user_products_user  ON user_products(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_products_order ON user_products(order_ref);

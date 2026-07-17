@@ -354,7 +354,7 @@ const DYNAMIC_PROMPTS: Record<Persona, string[]> = {
     'Which relationship in your network is most underused relative to its potential?',
   ],
   advisor: [
-    'Across the founders you advisor, what mistake do you find yourself flagging over and over?',
+    'Across the founders you advise, what mistake do you find yourself flagging over and over?',
     'What advice do you give that founders most often resist — and are usually wrong to?',
     'Where do you feel least confident giving guidance right now?',
   ],

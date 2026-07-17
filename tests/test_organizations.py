@@ -61,9 +61,15 @@ def _seed():
         s.commit()
 
 
+def _is_seeded() -> bool:
+    with Session(engine) as s:
+        return s.query(Organization).first() is not None
+
+
 @pytest.fixture(scope="module")
 def client():
-    _seed()
+    if not _is_seeded():
+        _seed()
     app = FastAPI()
     app.include_router(orgs_route.router, prefix="/api")
     app.dependency_overrides[get_session] = lambda: (yield from _session())

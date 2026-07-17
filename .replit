@@ -90,6 +90,7 @@ run = ["bash", "run-deploy.sh"]
 GOOGLE_REDIRECT_URI = "https://developers.google.com/oauthplayground"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME = "StudioOS"
+DEV_EMAIL_OVERRIDE = "dev-orders@axal.vc"
 
 [userenv.development]
 

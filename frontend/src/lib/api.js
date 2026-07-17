@@ -2059,6 +2059,44 @@ export const api = {
   productsRedeem: (code) =>
     request('/products/redeem', { method: 'POST', body: JSON.stringify({ code }) }),
 
+  // ---------- One-time cart order (checkout) ----------
+  // Runtime Stripe publishable key (mirror of stripe.js fetch — exposed here so
+  // pages/components can reuse it via the api surface). → { publishable_key }.
+  paymentsConfig: () => request('/payments/config'),
+  // Create/refresh ONE combined PaymentIntent for a cart of one-time items.
+  // Body: { items:[{price_id, quantity}], promo_code?, billing_country?, nonce? }
+  // → { client_secret, payment_intent_id, order_ref, currency, subtotal,
+  //     discount_cents, vat_cents, total, free, items:[...] }.
+  createOrderIntent: (body) =>
+    request('/orders/intent', { method: 'POST', body: JSON.stringify(body || {}) }),
+  // Belt-and-suspenders fulfilment after Stripe confirmation.
+  // Body: { payment_intent_id } → { order:<Order> } | 409 { error:'not_paid', status }.
+  confirmOrder: (payment_intent_id) =>
+    request('/orders/confirm', { method: 'POST', body: JSON.stringify({ payment_intent_id }) }),
+  // Owner-only order fetch → { order:<Order> } | 404.
+  getOrder: (orderRef) => request(`/orders/${encodeURIComponent(orderRef)}`),
+  // Owner's orders, most recent first → { orders:[<Order>] }.
+  myOrders: () => request('/orders/mine'),
+  // Authenticated PDF invoice download (bearer-only fetch → Blob). NEVER use a
+  // plain <a href> — the endpoint requires the Authorization header.
+  orderInvoiceBlob: async (orderRef) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api/orders/${encodeURIComponent(orderRef)}/invoice`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      let detail = res.statusText || 'Invoice download failed';
+      try { const err = await res.json(); detail = err?.error || err?.detail || detail; } catch { /* non-JSON */ }
+      const e = new Error(detail);
+      e.status = res.status;
+      throw e;
+    }
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `${orderRef}.pdf`;
+    return { blob, url: URL.createObjectURL(blob), filename };
+  },
+
   // ---------- Task #7 (W-2) — Investor paywall (3-tier: free / pro / inst) ----------
   // Mirrors `/api/billing/investor/*` + `/api/investor-seats/*` +
   // `/api/introductions/quota`. The 402 `{required, message, …}` shape from

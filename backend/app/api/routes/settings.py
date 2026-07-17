@@ -1178,7 +1178,7 @@ def regenerate_recovery_codes(
         raise HTTPException(status_code=400, detail="TOTP is not configured for this account")
     if not pyotp.TOTP(user.password_hash).verify(payload.totp_code or "", valid_window=1):
         raise HTTPException(status_code=401, detail="Invalid current TOTP code")
-    plain = [_generate_recovery_code() for _ in range(8)]
+    plain = [_generate_recovery_code() for _ in range(10)]
     hashes = [_hash_token(c) for c in plain]
     session.exec(
         text("UPDATE users SET totp_recovery_codes = :j WHERE id = :uid").bindparams(
@@ -1463,7 +1463,7 @@ _DEFAULT_USER_SETTINGS = {
 }
 
 _ALLOWED_VISIBILITY = {"public", "network", "private"}
-_ALLOWED_THEME = {"light", "dark"}
+_ALLOWED_THEME = {"light", "dark", "system"}
 _ALLOWED_DENSITY = {"comfy", "compact"}
 _ALLOWED_SIDEBAR = {"expanded", "collapsed"}
 _ALLOWED_DIGEST = {"off", "daily", "weekly", "monthly"}

@@ -140,6 +140,9 @@ const PublicJobDetailPage = lazy(() => import('./pages/jobs/PublicJobDetailPage'
 const PricingPage = lazy(() => import('./pages/PricingPage'));
 // Products — in-house catalog + checkout + explorer promo redemption.
 const ProductsPage = lazy(() => import('./pages/ProductsPage'));
+// Products one-time cart checkout + post-checkout confirmation.
+const CheckoutPage = lazy(() => import('./pages/CheckoutPage'));
+const CheckoutConfirmationPage = lazy(() => import('./pages/CheckoutConfirmationPage'));
 // Audience product pages (For Founders / Investors & LPs / Service Partners /
 // Advisors) — one data-driven component rendered per slug from
 // data/productPages.js; footer links live in components/PublicFooter.jsx.
@@ -1423,6 +1426,11 @@ function AppInner() {
           every signed-in role incl. 'exploring' (that's where the Personal
           Advisor's one-time 30-day-license codes get redeemed). */}
       <Route path="/products" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
+      {/* Product slide-over deep link — same page, pre-opens the detail panel. */}
+      <Route path="/products/:productId" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
+      {/* One-time cart checkout + post-checkout confirmation (auth-protected). */}
+      <Route path="/checkout" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutPage />)} />
+      <Route path="/checkout/confirmation" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutConfirmationPage />)} />
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'], <DealsPage />)} />
       <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder'], <DealRoomPage />)} />
       <Route path="/market-intel" element={guard(['admin', 'partner', 'investor'], <MarketIntelPage />)} />
