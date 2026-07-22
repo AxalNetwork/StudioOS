@@ -119,6 +119,7 @@ async def lifespan(app: FastAPI):
             ensure_organizations_table,
             ensure_deal_flow_tables,
             ensure_orders_tables,
+            ensure_spinout_lab_tables,
         )
         ensure_brand_landing_columns()
         logger.info("StudioOS migrations: brand landing columns ensured")
@@ -226,6 +227,8 @@ async def lifespan(app: FastAPI):
         # Task #8 — commerce cart/checkout tables + users.stripe_customer_id.
         ensure_orders_tables()
         logger.info("StudioOS migrations: orders/commerce tables ensured")
+        ensure_spinout_lab_tables()
+        logger.info("StudioOS migrations: spinout lab tables ensured")
         logger.info("StudioOS migrations: organizations table ensured")
         from backend.app.services.organizations_import import bootstrap_organizations
         bootstrap_organizations()
@@ -451,7 +454,9 @@ app.include_router(activity.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 
 from backend.app.api.routes import csp_report as _csp_report  # noqa: E402
+from backend.app.api.routes import spinout_lab as _spinout_lab  # noqa: E402
 app.include_router(_csp_report.router, prefix="/api")
+app.include_router(_spinout_lab.router, prefix="/api")
 # --- Backoffice routers (Security Item #6: Cloudflare Zero Trust perimeter)
 # Every router below is admin/internal and gets an extra perimeter check via
 # `require_cf_access`. When CF_ACCESS_TEAM_DOMAIN / CF_ACCESS_AUD are unset

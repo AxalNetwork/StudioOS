@@ -142,6 +142,13 @@ class User(SQLModel, table=True):
     linkedin_email: Optional[str] = None
     linkedin_name: Optional[str] = None
     linkedin_connected_at: Optional[datetime] = None
+    # Spin-Out Lab — dev-parity mirror of the Worker's columns (see
+    # cloudflare-worker/src/routes/spinout_lab.ts). 1/0 ints to match the
+    # Worker's D1 shape and the frontend's `user.spinout_lab_active === 1`.
+    spinout_lab_active: Optional[int] = Field(default=0)
+    spinout_lab_week: Optional[int] = Field(default=0)
+    spinout_lab_started_at: Optional[datetime] = None
+    is_incorporated: Optional[int] = Field(default=0)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

@@ -2649,6 +2649,41 @@ def ensure_deal_flow_tables() -> None:
                 logger.warning("ensure_deal_flow_tables: statement failed: %s", exc)
 
 
+def ensure_spinout_lab_tables() -> None:
+    """Spin-Out Lab dev-parity schema — mirrors the production Worker's
+    columns and milestones table (cloudflare-worker/src/routes/spinout_lab.ts)
+    so the /api/spinout-lab routes work against the dev Postgres too.
+    Idempotent (ADD COLUMN IF NOT EXISTS / CREATE TABLE IF NOT EXISTS).
+    """
+    stmts = (
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS spinout_lab_active INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS spinout_lab_week INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS spinout_lab_started_at TIMESTAMP",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_incorporated INTEGER DEFAULT 0",
+        """
+        CREATE TABLE IF NOT EXISTS spinout_lab_milestones (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            week INTEGER NOT NULL,
+            milestone_key TEXT NOT NULL,
+            completed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, milestone_key)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_spinout_lab_milestones_user ON spinout_lab_milestones(user_id)",
+    )
+    with Session(engine) as session:
+        for ddl in stmts:
+            try:
+                # Justification: static DDL literals from a local tuple, no
+                # user input; dev-only FastAPI backend.
+                session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                session.rollback()
+                logger.warning("ensure_spinout_lab_tables: statement failed: %s", exc)
+
+
 def ensure_orders_tables() -> None:
     """Task #8 — commerce cart/checkout tables + users.stripe_customer_id.
 

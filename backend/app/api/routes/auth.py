@@ -750,6 +750,11 @@ def get_me(user: User = Depends(get_current_user)):
         "kyc_status": getattr(user, "kyc_status", None) or "not_started",
         # 'limited' = browse-only access without KYC (admin grant). Null = normal.
         "access_level": getattr(user, "access_level", None),
+        # Spin-Out Lab flags — mirror the Worker's /auth/me shape so the
+        # frontend's `user.spinout_lab_active === 1` sidebar swap works in dev.
+        "spinout_lab_active": int(getattr(user, "spinout_lab_active", 0) or 0),
+        "spinout_lab_week": int(getattr(user, "spinout_lab_week", 0) or 0),
+        "is_incorporated": int(getattr(user, "is_incorporated", 0) or 0),
     }
 
 
