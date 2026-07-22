@@ -1,0 +1,35 @@
+#13 - Spin-Out Lab integration + PR #167 merge
+What & Why
+Two connected goals: (1) merge the Claude Code work from GitHub PR #167 (branch claude/sidebar-nav-integration-ue2xao, commit 0ab60db0b52e39396b61b3d919516ce98e8c95b6) — the MVP Scope prioritization system (feature list, added-value rating, effort rating, planning summary, roadmap-to-cycle handoff) for the Spin-Out Lab Roadmap module; and (2) fully integrate the Spin-Out Lab into the Founder and Explorer sidebars, with the Spin-Out Lab as a single page containing all its features (Profiling, Scoring Engine, Co-founder Match/Agreement, Customer Discovery, Brand & Landing Page, Pitch Deck Builder, Cap Table, Incorporate, Capital, Revenue, Use of Funds, Office Hours, Advisors, Roadmap). The attached HTML exports in attached_assets/*_1784750524689.html document the intended feature set and design.
+Done looks like
+* Founder sidebar and Explorer (exploring) sidebar both show a Spin-Out Lab entry that navigates to a single unified Spin-Out Lab page.
+* The Spin-Out Lab page exposes all lab features from one place (existing routes keep working — no removed functionality).
+* The MVP Scope prioritization UI (feature list with added-value + effort ratings, planning summary, cycle handoff) renders inside the Roadmap module using existing Axal visual language.
+* The PR #167 changes are applied with a review of every changed file before touching anything; conflicts surfaced and resolved explicitly, not silently overwritten.
+* App builds and dev server runs cleanly; existing tests pass.
+* NOT deployed — stop after integration and validation; user approves before any deploy.
+Out of scope
+* Deploying to production (explicitly forbidden until user approval).
+* Restructuring unrelated codebase areas, changing design tokens/layout components not touched by the PR.
+* Investor/advisor sidebar changes.
+Critical constraints
+* Git topology: origin/main history was replaced (gitsafe); PR branches likely share NO merge base with main and a normal git merge will be unmergeable. First fetch the branch and check git merge-base. If no merge base, apply the PR's changes onto main (cherry-pick with -x, or apply the diff file-by-file), preserving commit messages/authorship where possible. Never force-push or discard history.
+* Diff every incoming file against the current version before applying; flag naming collisions, duplicate components, schema/data-model conflicts (e.g. new fields like addedValueRating, effortRating, priorityReason, linkedObjective, linkedMilestone, cycleAssigned) and reconcile in BOTH backends if server-side (FastAPI dev + Cloudflare Worker prod stay in parity).
+* If the PR diff and the attached HTML exports disagree, ask the user which is source of truth.
+* Report back: branch/PR merged, files added/modified/removed, conflicts + resolutions, missing secrets/migrations, build/test status.
+Steps
+1. Fetch & inspect PR #167 — Fetch claude/sidebar-nav-integration-ue2xao, list the full diff vs main, summarize changes at a high level before touching anything.
+2. Reconcile & apply — Map incoming files to destinations, diff against current versions, resolve conflicts explicitly, apply commits preserving authorship (cherry-pick or patch given the no-merge-base topology).
+3. Sidebar integration — Add Spin-Out Lab entries to the Founder and Explorer sidebar groups, wiring to the unified Spin-Out Lab page.
+4. Unified Spin-Out Lab page — Ensure the Spin-Out Lab page surfaces all features in one place, with the MVP Scope prioritization inside the Roadmap module; register any new routes/components/state.
+5. Data model & parity — Reflect any new fields in shared types and in both backends (FastAPI + Worker) with any needed migrations; list missing env vars/secrets.
+6. Validate — Build, run dev server, run existing tests, verify the Roadmap prioritization UI, feature list, ratings, planning summary, cycle handoff, and founder/explorer navigation render and function. Do NOT deploy.
+Relevant files
+* frontend/src/sidebarConfig.js
+* frontend/src/App.jsx
+* frontend/src/components/SpinoutLabSidebar.jsx
+* frontend/src/pages/SpinoutLabPage.jsx
+* frontend/src/pages/RoadmapPage.jsx
+* frontend/src/data/roadmap.js
+* frontend/src/hooks/useSpinoutLabState.js
+* attached_assets/Spin-Out_Lab_Workspace.dc_1784750524689.html
