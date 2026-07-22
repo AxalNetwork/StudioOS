@@ -1,0 +1,226 @@
+Yes — at this stage, the right move is a **platform-integration prompt**, not another feature-design prompt. Since you already have the generated files, HTML, README, and implementation artifacts, the Replit prompt should tell it to merge Spin-Out Lab into the existing Axal VC codebase as a production integration project, not rebuild from scratch.[1]
+
+## Replit prompt
+
+Paste this into Replit:
+
+**Integrate the entire Spin-Out Lab into the existing Axal VC platform codebase as a production-ready product surface, using the existing platform architecture, design system, authentication, routing, database patterns, and deployment conventions. Do not rebuild the platform from scratch. Treat this as an in-place integration project.**
+
+### Context
+
+I already have the full Spin-Out Lab implementation package produced from design/dev work, including files such as:
+- HTML screens and/or prototype views
+- README / implementation notes
+- feature definitions
+- module structures
+- copy and workflow logic
+- UI artifacts and supporting files
+
+Your task is to integrate all of that into the **existing Axal VC platform**, not create a parallel app.
+
+Spin-Out Lab should become a native product area inside Axal VC with consistent navigation, shared components, existing auth/session handling, current database models where possible, and shared styling conventions.
+
+### Primary objective
+
+Create a full integration plan and then implement Spin-Out Lab as a first-class area of the Axal VC platform so it works as part of the current founder workflow and existing product shell.
+
+### Critical constraints
+
+- Do **not** overwrite or break the existing platform.
+- Do **not** rebuild shared infrastructure if equivalent platform primitives already exist.
+- Reuse the current:
+  - layout shell
+  - navigation
+  - auth
+  - user/workspace model
+  - styling system
+  - database access layer
+  - API conventions
+  - environment configuration
+  - deployment pipeline
+- Treat provided files as source material to be translated into production platform code.
+- If a provided HTML file is static/prototype-only, convert it into proper app pages/components in the existing stack.
+- Preserve current Axal VC visual consistency and information architecture.
+
+### What I want you to do
+
+#### 1. Audit the current codebase first
+Before making changes:
+- inspect the full repo structure
+- identify framework and runtime
+- identify routing approach
+- identify component system
+- identify styling approach
+- identify data layer / ORM / DB access
+- identify auth/session patterns
+- identify existing dashboard/workspace patterns
+- identify how existing product modules are structured
+
+Then produce a short integration plan before coding.
+
+#### 2. Audit the Spin-Out Lab source files
+Review all provided Spin-Out Lab files and classify them into:
+- pages
+- reusable UI components
+- workflow modules
+- data models
+- static prototype assets
+- docs / README instructions
+- implementation notes needing translation into real code
+
+Map each source artifact into the most appropriate place in the existing platform.
+
+#### 3. Create an integration architecture
+Integrate Spin-Out Lab as a native platform section with:
+- founder-facing workspace area
+- module index / progress view
+- week-based or phase-based navigation where appropriate
+- support for feature modules such as roadmap, MVP scope, co-founder match, agreements, cap table, and related workflow tools
+- state and progress persistence per founder / workspace
+
+Use the existing product shell and nav patterns so Spin-Out Lab feels embedded, not bolted on.
+
+#### 4. Convert prototype files into platform code
+For any provided HTML/prototype screens:
+- convert them into framework-native pages/components
+- extract reusable cards, badges, progress blocks, tables, lists, and action bars
+- wire them into real platform routes
+- connect them to shared layout and styling tokens
+- avoid iframe embedding unless absolutely necessary
+
+#### 5. Preserve the product logic
+Spin-Out Lab is not just UI — it includes workflow logic.
+Implement the product logic represented in the files, including:
+- module progress
+- phase/week unlock logic
+- dependencies between modules
+- founder decision states
+- preview modes where relevant
+- action flows such as share/export/copy link/investor preview
+- module-to-module feed relationships where applicable
+
+#### 6. Data modeling and persistence
+Create or extend the necessary data structures for Spin-Out Lab inside the existing platform.
+
+Support, where relevant:
+- lab workspaces
+- founder progress
+- module completion state
+- module outputs and decisions
+- roadmap items
+- MVP scope items
+- co-founder match entities
+- agreements / linked downstream outputs
+- investor preview state
+- audit timestamps
+
+Prefer extending existing user/workspace entities instead of inventing disconnected models.
+
+#### 7. Admin-safe implementation
+Make the integration production-safe:
+- no destructive schema changes without migration safety
+- no hardcoded secrets
+- no duplicate auth logic
+- no duplicate environment handling
+- no orphan routes
+- no mock-only data left in production paths unless clearly isolated as seed/demo mode
+
+#### 8. UX requirements
+The integrated result should feel like one coherent Axal VC product.
+Requirements:
+- retain the premium founder-operating-system feel
+- preserve clean strategic UI rather than generic SaaS templates
+- keep module cards, progress states, and structured decision tooling
+- ensure mobile responsiveness and desktop usability
+- maintain accessible semantics and solid empty/loading/error states
+
+#### 9. Implementation sequence
+Work in this order:
+1. audit current codebase
+2. summarize integration plan
+3. scaffold routes and data structures
+4. convert and integrate shared components
+5. implement main Spin-Out Lab index/workspace
+6. integrate modules one by one
+7. wire persistence and progress logic
+8. clean up styling inconsistencies
+9. test for broken imports/routes/types
+10. provide final summary of what was integrated
+
+#### 10. Deliverables
+I want you to:
+- implement the integration directly in the repo
+- show what files were created/updated
+- explain how Spin-Out Lab now fits inside the existing platform
+- list any assumptions or TODOs
+- flag any source artifacts that could not be integrated cleanly and why
+
+### Coding instructions
+
+- Follow the existing codebase conventions exactly.
+- Match naming conventions already used in the project.
+- Prefer incremental edits over large rewrites.
+- Reuse existing components before creating new ones.
+- If there are duplicate design patterns between Spin-Out Lab files and the platform, normalize them into shared components.
+- Keep logic separated from presentation.
+- Keep code modular and readable.
+- Add comments only where necessary to explain integration-specific decisions.
+- If the repo has TypeScript, use proper types throughout.
+- If the repo has a DB schema or ORM, create clean migrations and typed models.
+- If there are tests already, update or add tests where appropriate.
+
+### Output format while working
+
+As you work:
+1. first give me a concise repo audit
+2. then the integration plan
+3. then start implementing
+4. after implementation, summarize:
+   - routes added
+   - components added
+   - models added or changed
+   - files migrated from prototype/static form into platform-native form
+   - remaining TODOs
+
+### Important product framing
+
+Treat Spin-Out Lab as:
+- a structured founder execution system
+- part of the Axal VC platform
+- a native workflow layer, not a standalone microsite
+- something that should connect naturally to the rest of the founder and investor product surfaces
+
+Do not produce a disconnected “lab app.”
+Build it as an integrated Axal VC product area.
+
+## Optional stronger version
+
+If you want, use this slightly more forceful version instead:
+
+**“I have already finished the design/dev generation for Spin-Out Lab and now need full repo integration. Audit the existing Axal VC platform, map the provided Spin-Out Lab files into the current architecture, convert any static HTML into framework-native pages/components, wire persistence and progress logic, and integrate the whole system as a first-class platform area without rebuilding the app from scratch.”**[1]
+
+## Add this if your repo is messy
+
+If the current codebase is a bit fragmented, add this block at the end:
+
+**“If the current platform contains inconsistencies, do not pause at the first ambiguity. Make the best integration decision based on existing patterns, preserve backward compatibility where possible, and document assumptions clearly at the end.”**[1]
+
+## What this prompt is trying to force
+
+This prompt pushes Replit to do four things that matter for you:
+
+- **Audit first** so it does not blindly dump files into the repo.
+- **Translate prototypes into production code** instead of hosting static mockups.
+- **Reuse existing platform primitives** so Spin-Out Lab feels native.
+- **Implement workflow/data logic** so this becomes a working product surface rather than a visual layer.[1]
+
+## Recommended add-on
+
+If you have a folder containing all Claude outputs, prepend one sentence:
+
+**“All Spin-Out Lab source materials are already present in the repo or available in an import folder; locate them first and treat them as the implementation source.”**[1]
+
+If you want, I can also turn this into a **stack-specific Replit prompt** for your likely setup, for example React/Next.js + Supabase, Cloudflare-oriented TypeScript, or a more generic Node full-stack integration prompt.
+
+Sources
+[1] Screenshot-2026-07-21-at-12.42.03-AM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/cab8d565-6f8a-4c19-82ad-e84fb734d5da/Screenshot-2026-07-21-at-12.42.03-AM.jpeg?AWSAccessKeyId=ASIA2F3EMEYEX77F3QLY&Signature=G0p4bVZjlaGI%2FtHnAbJU1cYZkP0%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEBIaCXVzLWVhc3QtMSJHMEUCIQDJuQiBY9QBKgivhS7lEiWfdcE6vZ10r5hG%2FLk2NKG7RQIgPfoGjdLrstsG0AQp3Tv5J2I5%2BQgMhhIuDvDGMWjgyJsq%2FAQI2%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDJO7vK6QduQYWygDoirQBJ4tUBHz0LpT3cE3BjV9ysjIgT4UIc5OvURl52V7I2hDAZIKiihEx9ISsmkkmz35egz1aZ7w62sFvzMmr09MFnZVGtT3HTHIlBLLob6ObNyI1%2Fa%2BpKdbwaLe3%2Bqlx%2FfidGdi8gH32OMO6FU0XFG6cS6iSVHFzKPCtpODECf2UpXBsezMBncQPt9Q%2BsvZeEDRFab5bq6GkwLcwr3wnrk%2FfCSV5zRS9mF%2B17uTJWgFkb990hV65gaq3PfbbrgwzAW1H4oLQ4pC0tHd4r47XxDvDcJIz1l8U5IqJP82OlUTPAgrSA89X6npL0eL9gHc%2FJsnUCn1ZIQ%2FHWwxG4fte%2Bv%2BCHhlA3SAkbhKEDjh7kK95GDpKreUmOchAx%2FiIsg34l%2FvAXH45Yd42DJiHKyOfd8jbh0IcG7GPWYMvN0JDmwXVJiyvhkQDUITDi45Qcdd9%2BWn%2BPKfhaRgE6arf0DrDV%2B77hb3GL8mhSGX%2FXrEqz1X1qkPYjFFwsqUatTTBne951TPpnUATdmDLgaIqEAbFcjP4CTlOCfLJA3vVJUtBDbJdjFkTX7Fj8M9wY3QScZ8WDO2M4%2Bil7o5XluLjxDjUkmvYVGOtOge79Co2iO%2BKCOFHz9R9p12MGHXZS4pysynLZeY07TXu8aYIkXhQqsIjmHAGP2ldN9hde6bX8IekgPbpXqUyahWQkZhnynd1TcbJb1klWLbHuFFdjF7rJL8e6o0NsI6T91wGofZw8FCPAYyJ5wo934NnLdC8q5hbmZm2%2ByQdugtvaByhOMizyovF1SlyakwyfqD0wY6mAF7pRv15jGlN7eGwN5sIheURN5kQl6An8M0FakMk9zRiN47%2FpJL66P7TDU0SHqkJcdSG8mePLbTVtdL%2F5nLWCdq0ZiytiSLoDQwsQFu2ix%2FIzpJvb4MRofyUu134sadAerButDIL6t47zlMt9ZumQSUJR3jGDR8C7VTGFqhBypDxBBwfxxQOIQdNpipsvHHvLTaL%2FyEok04dQ%3D%3D&Expires=1784744732
