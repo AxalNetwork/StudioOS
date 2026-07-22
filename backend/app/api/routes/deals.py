@@ -1,4 +1,5 @@
 import io
+import logging
 import zipfile
 import uuid as _uuid
 from datetime import datetime
@@ -8,6 +9,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import text as _sql
 from sqlmodel import Session, select
+
+logger = logging.getLogger("studioos.deals")
 
 from backend.app.database import get_session
 from backend.app.models.entities import Deal, Project, Partner, User, Document
@@ -312,7 +315,7 @@ def update_deal(deal_id: int, data: DealUpdate, session: Session = Depends(get_s
                     channels=("in_app", "email", "slack"),
                 )
         except Exception:
-            pass
+            logger.debug("best-effort notification failed", exc_info=True)
     return _serialize_deal(deal, session)
 
 
@@ -483,7 +486,7 @@ def create_commitment(deal_id: int, data: CommitmentCreate, session: Session = D
                 channels=("in_app", "email"),
             )
     except Exception:
-        pass
+        logger.debug("best-effort notification failed", exc_info=True)
     return {"ok": True, "uid": uid, "capital_committed": deal.capital_committed}
 
 
@@ -595,7 +598,7 @@ def create_invitations(deal_id: int, data: InvitationCreate, session: Session = 
                 channels=tuple(channels),
             )
         except Exception:
-            pass
+            logger.debug("best-effort notification failed", exc_info=True)
     return {"ok": True, "invited": created}
 
 
@@ -633,5 +636,5 @@ def respond_invitation(deal_id: int, data: InvitationRespond, session: Session =
                 channels=("in_app",),
             )
     except Exception:
-        pass
+        logger.debug("best-effort notification failed", exc_info=True)
     return {"ok": True, "status": resp}

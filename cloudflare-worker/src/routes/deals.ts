@@ -142,7 +142,7 @@ deals.post('/', async (c) => {
 // Task #4 — Admin-only "Draft Deal": create a fully-specified deal.
 // ---------------------------------------------------------------------------
 deals.post('/draft', async (c) => {
-  const user = await requireAdmin(c);
+  await requireAdmin(c);
   const data = await c.req.json();
   const sql = getSQL(c.env);
   const p = await sql`SELECT id FROM projects WHERE id = ${data.project_id}`;

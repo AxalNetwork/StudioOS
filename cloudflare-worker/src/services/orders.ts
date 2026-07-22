@@ -225,10 +225,6 @@ export async function priceCart(
   return { lines, subtotal, currency: currency ?? 'usd' };
 }
 
-function isPriceError(v: PricedCart | PriceError): v is PriceError {
-  return (v as PriceError).error !== undefined;
-}
-
 // ---------------------------------------------------------------------------
 // Promo — validate against the cart. Percent applies to subtotal; amount_off
 // capped at subtotal. Uses the first line's product for the allow-list check.

@@ -20,8 +20,6 @@ export function daysFromNow(n) {
 export const TODAY_STR = fmt(TODAY);
 
 // ── Stage 1: Screening ─────────────────────────────────────────────────────
-const SCORECARD_CRITERIA = ['Market', 'Team', 'Traction', 'Thesis Fit', 'Moat', 'Timing'];
-
 export const SCREENING_DEALS = [
   {
     id: 'scr-001',

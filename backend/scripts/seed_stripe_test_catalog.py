@@ -37,7 +37,7 @@ def call(key, method, path, data=None):
     if body is not None:
         req.add_header("Content-Type", "application/x-www-form-urlencoded")
     try:
-        with urllib.request.urlopen(req) as r:
+        with urllib.request.urlopen(req) as r:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected -- host pinned to api.stripe.com above
             return json.loads(r.read())
     except urllib.error.HTTPError as e:
         print("HTTP", e.code, e.read().decode()[:500], file=sys.stderr)

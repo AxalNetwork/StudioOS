@@ -72,7 +72,7 @@ def _customer_for(session: Session, user: User) -> str:
         try:
             session.rollback()
         except Exception:
-            pass
+            logger.debug("customer lookup rollback failed (already closed)")
     cust = sc.get_or_create_customer(user.email, user.name, existing)
     if cust and cust != existing:
         try:

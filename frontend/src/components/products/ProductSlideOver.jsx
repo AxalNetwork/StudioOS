@@ -4,11 +4,11 @@
 // Stripe checkout (AxalCheckout with the selected price_id); one-time products
 // add to the cart.
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Package, CheckCircle2, Loader2 } from 'lucide-react';
+import { X, Package, CheckCircle2 } from 'lucide-react';
 import AxalCheckout from '../AxalCheckout';
 import {
   formatMoney, availableCycles, pricesByCycle, cycleUnitLabel, productDescription,
-  isSubscriptionProduct, priceCycle,
+  priceCycle,
 } from './productsShared';
 
 const CYCLE_LABELS = { monthly: 'Monthly', yearly: 'Yearly', onetime: 'One-time' };
@@ -35,7 +35,6 @@ export default function ProductSlideOver({ product, globalCycle, onClose, onAddT
   const effectiveCycle = cycles.includes(selected) ? selected : cycles[0];
   const price = by[effectiveCycle] || null;
   const description = productDescription(product);
-  const isSub = isSubscriptionProduct(product);
   const showToggle = cycles.length > 1;
   const isOneTime = price && priceCycle(price) === 'onetime';
 

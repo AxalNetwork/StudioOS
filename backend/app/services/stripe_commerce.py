@@ -318,7 +318,7 @@ def get_or_create_customer(email: str, name: Optional[str] = None,
             if not cust.get("deleted"):
                 return cust["id"]
         except StripeError:
-            pass
+            logger.debug("get_or_create_customer: stored customer id no longer valid")
     # Search for an existing customer by email first (idempotent-ish).
     try:
         found = _request("GET", "/customers", {"email": email, "limit": 1})
@@ -326,7 +326,7 @@ def get_or_create_customer(email: str, name: Optional[str] = None,
         if data:
             return data[0]["id"]
     except StripeError:
-        pass
+        logger.debug("get_or_create_customer: email lookup failed; creating new customer")
     created = _request(
         "POST", "/customers",
         {"email": email, "name": name or email},
