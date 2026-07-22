@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Check, Loader2, Rocket, Sparkles, ArrowRight, BookOpen } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
 import { deckReadinessState } from '../lib/deckReadiness';
@@ -175,6 +175,101 @@ const EXPLAINER_CARDS = [
     ),
   },
 ];
+
+// Task #13 — Spin-Out Lab as a single unified page. When the lab isn't
+// active for an authed user (founder or explorer), we no longer bounce to
+// '/': we render this hub exposing every Lab feature grouped by sprint week,
+// so the whole program is reachable from one place.
+const HUB_WEEKS = [
+  {
+    week: 1,
+    title: 'Idea & Customer',
+    blurb: 'Define the problem, ICP and market — talk to real customers.',
+    tools: [
+      { to: '/projects', label: 'Startups', blurb: 'Create and manage your venture profile.' },
+      { to: '/customer-discovery', label: 'Customer Discovery', blurb: 'Log interviews, extract pains and quotes.' },
+      { to: '/market-intel', label: 'Market Intelligence', blurb: 'TAM/SAM/SOM, sector compass, investor signals.' },
+    ],
+  },
+  {
+    week: 2,
+    title: 'Solution & Roadmap',
+    blurb: 'Scope the MVP, set 90-day OKRs, draft brand and deck v1.',
+    tools: [
+      { to: '/build/roadmap', label: 'Roadmap & MVP Scope', blurb: '90-day OKRs plus value-ranked MVP prioritization.' },
+      { to: '/build/brand', label: 'Brand Builder', blurb: 'Name shortlists, palette, brand v1.' },
+      { to: '/build/deck', label: 'Pitch Deck Builder', blurb: 'Deck v1 assembled from your module data.' },
+    ],
+  },
+  {
+    week: 3,
+    title: 'Validate & Team',
+    blurb: 'Score venture readiness, match with advisors, decide the co-founder track.',
+    tools: [
+      { to: '/scoring', label: 'Scoring', blurb: 'Venture-readiness score across 6 dimensions.' },
+      { to: '/advisors', label: 'Advisors', blurb: 'Matched by expertise, availability and time zone.' },
+      { to: '/office-hours', label: 'Office Hours', blurb: 'Book time with operators and advisors.' },
+      { to: '/cofounder', label: 'Co-founder Match', blurb: 'Find or formalize your co-founding team.' },
+    ],
+  },
+  {
+    week: 4,
+    title: 'Incorporate & Capital',
+    blurb: 'Incorporate, vest, file 83(b), sign agreements, lock the ask.',
+    tools: [
+      { to: '/incorporate', label: 'Incorporate', blurb: 'Delaware C-Corp default; other jurisdictions supported.' },
+      { to: '/build/captable', label: 'Cap Table', blurb: 'Ownership, vesting and dilution scenarios.' },
+      { to: '/incorporate/83b', label: 'Section 83(b)', blurb: 'Election filing, generated and tracked.' },
+      { to: '/incorporate/cofounder-agreement', label: 'Cofounder Agreement', blurb: 'Signed roles, equity and vesting.' },
+      { to: '/capital', label: 'Capital', blurb: 'SAFEs, the ask, and investor introductions.' },
+      { to: '/compliance', label: 'Compliance', blurb: 'KYC and bad-actor checks before any wire.' },
+    ],
+  },
+];
+
+function LabHub() {
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-10 space-y-8">
+      <header>
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-violet-100 border border-violet-200 rounded-full text-[11px] text-violet-700 font-medium mb-3">
+          <Rocket size={11} /> Spin-Out Lab
+        </div>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">The 28-day venture pipeline</h1>
+        <p className="text-sm text-gray-600 mt-2 max-w-2xl dark:text-gray-400">
+          Everything the Lab unlocks, in one place — from first customer interview to incorporation.
+          Each week of the sprint opens the tools below; you can explore any of them right now.
+        </p>
+      </header>
+
+      {HUB_WEEKS.map((w) => (
+        <section key={w.week} aria-label={`Week ${w.week} — ${w.title}`}>
+          <div className="flex items-baseline gap-2 mb-3">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-violet-600">Week {w.week}</span>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{w.title}</h2>
+            <span className="text-xs text-gray-500 hidden sm:inline">{w.blurb}</span>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {w.tools.map((t) => (
+              <Link
+                key={t.to}
+                to={t.to}
+                className="group bg-white border border-gray-200 rounded-xl p-4 hover:border-violet-300 hover:shadow-sm transition dark:bg-gray-900 dark:border-gray-800"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-gray-900 group-hover:text-violet-700 dark:text-gray-100">{t.label}</span>
+                  <ArrowRight size={13} className="text-gray-300 group-hover:text-violet-500" />
+                </div>
+                <div className="text-xs text-gray-600 mt-1 leading-relaxed dark:text-gray-400">{t.blurb}</div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ))}
+
+      <ExplainerCards />
+    </div>
+  );
+}
 
 function ExplainerCards() {
   return (
@@ -688,16 +783,13 @@ export default function SpinoutLabPage() {
   const [completing, setCompleting] = useState(null);
   const [completeError, setCompleteError] = useState('');
   const [exiting, setExiting] = useState(false);
-  const [errored, setErrored] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const next = await spinoutLab.state();
       setState(next);
-      setErrored(false);
     } catch (e) {
       reportError('spinout-lab:state', e);
-      setErrored(true);
     } finally {
       setLoading(false);
     }
@@ -731,22 +823,21 @@ export default function SpinoutLabPage() {
     );
   }
 
-  // Lab is off and the user never started it (and isn't freshly incorporated
-  // via Week 4 auto-exit) → bounce to standard dashboard. We treat
-  // `is_incorporated && !active && state exists` as "just finished Week 4"
-  // and show the success state instead.
+  // Task #13 — Lab is off and the user never started it (and isn't freshly
+  // incorporated via Week 4 auto-exit) → show the unified Lab hub (all
+  // features on one page) instead of the old bounce to '/'. The /spinout-lab
+  // sidebar entries (founder + exploring) land here.
   if (!state) {
-    if (errored) return <Navigate to="/" replace />;
-    return <Navigate to="/" replace />;
+    return <LabHub />;
   }
 
   if (!state.active) {
     // If user.spinout_lab_active was 1 in cached auth but server says off,
-    // they just finished Week 4 → show success. Otherwise bounce.
+    // they just finished Week 4 → show success. Otherwise show the hub.
     const wasActive =
       user?.spinout_lab_active === 1 ||
       (state.is_incorporated && (state.milestones || []).some((m) => m.key === 'incorporation_completed'));
-    if (!wasActive) return <Navigate to="/" replace />;
+    if (!wasActive) return <LabHub />;
 
     const onContinue = async () => {
       setExiting(true);

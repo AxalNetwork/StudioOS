@@ -5,6 +5,7 @@ import { Plus, Trash2, AlertCircle, Save, X, Target, ArrowRight, FolderPlus } fr
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
+import MvpScopePanel from '../components/MvpScopePanel';
 
 const COLUMNS = [
   { key: 'now', label: 'Now', tone: 'border-violet-300 bg-violet-50' },
@@ -262,6 +263,8 @@ export default function RoadmapPage({ embedded = false }) {
         })}
       </div>
       )}
+
+      {hasProjects && <MvpScopePanel projectId={projectId} />}
 
       {editing && <OkrModal value={editing} onChange={setEditing} onSave={handleSave} onClose={() => setEditing(null)} />}
     </div>

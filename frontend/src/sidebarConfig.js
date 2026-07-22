@@ -206,6 +206,10 @@ export const SIDEBAR_GROUPS = {
       // /founder route redirects founders to /build/command-center anyway, so
       // it never rests in the URL.
       { to: '/build/command-center', icon: LayoutGrid, label: 'Command Center', match: ['/build/command-center', '/execution', '/studio-ops', '/spinouts', '/spin-outs', '/projects', '/pipeline', '/build/roadmap'] },
+      // Task #13 — Spin-Out Lab as a first-class founder destination: one
+      // page exposing the whole 28-day program (hub when the lab is off,
+      // sprint dashboard when it's active).
+      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       { to: '/signals', icon: Radar, label: 'Signals' },
       // Team Building — consolidates the former "Find a Advisor" (Validate),
       // "Find a Co-founder" (Validate) and "Jobs" (Launch) items into one
@@ -546,6 +550,9 @@ export const SIDEBAR_GROUPS = {
   exploring: [
     { key: 'home', label: 'Home', items: [
       { to: '/exploring', icon: LayoutDashboard, label: 'Studio', highlight: true },
+      // Task #13 — surface the Spin-Out Lab program to explorers so they can
+      // see the full 28-day pipeline before committing.
+      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       // Explorer completion incentive — where the one-time 30-day-license
       // promo code from the Personal Advisor gets redeemed.
       { to: '/products', icon: Package, label: 'Products' },

@@ -1335,6 +1335,30 @@ class OKR(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class MvpFeature(SQLModel, table=True):
+    """Task #13 — Spin-Out Lab MVP Scope prioritization (Roadmap module).
+
+    A value-ranked feature list per project. `added_value` drives the derived
+    scope tier and cycle assignment (High → Core / active cycle, Medium → v2 /
+    next-cycle candidate, Low → out of scope / deferred) — priority is derived,
+    not chosen. Mirrors cloudflare-worker/src/routes/progress.ts mvp-scope
+    routes; keep the two in parity.
+    """
+    __tablename__ = "mvp_features"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True, index=True)
+    project_id: int = Field(foreign_key="projects.id", index=True)
+    title: str
+    added_value: str = Field(default="Medium", index=True)   # High | Medium | Low
+    effort: str = "M"                                         # S | M | L | XL
+    priority_reason: Optional[str] = None
+    delivery_status: str = "Backlog"  # Backlog | In Progress | Review | Done | Blocked
+    sort_order: int = 0
+    created_by: Optional[int] = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class MetricsSnapshot(SQLModel, table=True):
     __tablename__ = "metrics_snapshots"
     id: Optional[int] = Field(default=None, primary_key=True)

@@ -898,6 +898,11 @@ export const api = {
   updateOkr: (id, data) => request(`/progress/roadmap/okr/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   moveOkr: (id, kanban_status, sort_order = 0) => request(`/progress/roadmap/okr/${id}/move`, { method: 'POST', body: JSON.stringify({ kanban_status, sort_order }) }),
   deleteOkr: (id) => request(`/progress/roadmap/okr/${id}`, { method: 'DELETE' }),
+  // Task #13 — MVP Scope prioritization (value-ranked feature planning).
+  listMvpFeatures: (projectId) => request(`/progress/mvp-scope/${projectId}`),
+  createMvpFeature: (projectId, data) => request(`/progress/mvp-scope/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  updateMvpFeature: (id, data) => request(`/progress/mvp-scope/feature/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteMvpFeature: (id) => request(`/progress/mvp-scope/feature/${id}`, { method: 'DELETE' }),
   listMetricsSnapshots: (projectId) => request(`/progress/metrics/${projectId}`),
   createMetricsSnapshot: (projectId, data) => request(`/progress/metrics/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   deleteMetricsSnapshot: (id) => request(`/progress/metrics/${id}`, { method: 'DELETE' }),

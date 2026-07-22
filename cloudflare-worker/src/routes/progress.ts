@@ -1119,6 +1119,212 @@ progress.post('/roadmap/okr/:id/move', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// MVP Scope — value-ranked feature prioritization (Task #13, Roadmap module).
+// Priority is derived, not chosen: High value → Core / active cycle,
+// Medium → v2 / next-cycle candidate, Low → out of scope / deferred.
+// Mirrors backend/app/api/routes/progress.py mvp-scope routes.
+// ---------------------------------------------------------------------------
+const MVP_VALUES = new Set(['High', 'Medium', 'Low']);
+const MVP_EFFORTS = new Set(['S', 'M', 'L', 'XL']);
+const MVP_STATUSES = new Set(['Backlog', 'In Progress', 'Review', 'Done', 'Blocked']);
+
+interface MvpRow {
+  id: number;
+  project_id: number;
+  title: string;
+  added_value: string;
+  effort: string;
+  priority_reason: string | null;
+  delivery_status: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Lazy bootstrap so the route works even before migration 153 runs in prod.
+let mvpSchemaReady = false;
+async function ensureMvpSchema(env: Env): Promise<void> {
+  if (mvpSchemaReady) return;
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS mvp_features (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       project_id INTEGER NOT NULL,
+       title TEXT NOT NULL,
+       added_value TEXT NOT NULL DEFAULT 'Medium',
+       effort TEXT NOT NULL DEFAULT 'M',
+       priority_reason TEXT,
+       delivery_status TEXT NOT NULL DEFAULT 'Backlog',
+       sort_order INTEGER NOT NULL DEFAULT 0,
+       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+     )`,
+  ).run();
+  await env.DB.prepare(
+    `CREATE INDEX IF NOT EXISTS idx_mvp_features_project_order
+       ON mvp_features (project_id, sort_order)`,
+  ).run();
+  mvpSchemaReady = true;
+}
+
+function mvpDerived(value: string): { scope_tier: string; cycle_assigned: string } {
+  if (value === 'High') return { scope_tier: 'Core', cycle_assigned: 'Active cycle' };
+  if (value === 'Medium') return { scope_tier: 'v2', cycle_assigned: 'Next cycle candidate' };
+  return { scope_tier: 'Out of scope', cycle_assigned: 'Deferred from MVP' };
+}
+
+function serializeMvp(r: MvpRow) {
+  return {
+    id: r.id,
+    project_id: r.project_id,
+    title: r.title,
+    added_value: r.added_value,
+    effort: r.effort,
+    priority_reason: r.priority_reason,
+    delivery_status: r.delivery_status,
+    sort_order: r.sort_order,
+    ...mvpDerived(r.added_value),
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+  };
+}
+
+const MVP_SELECT =
+  `SELECT id, project_id, title, added_value, effort, priority_reason,
+          delivery_status, sort_order, created_at, updated_at
+     FROM mvp_features`;
+
+type MvpBody = {
+  title: string;
+  addedValue: string;
+  effort: string;
+  priorityReason: string | null;
+  deliveryStatus: string;
+  sortOrder: number;
+};
+
+function parseMvpBody(body: Record<string, unknown> | null): MvpBody | { error: string } {
+  if (!body || typeof body !== 'object') return { error: 'Body required' };
+  const title = (asStringOrNull(body.title) || '').trim();
+  if (!title) return { error: 'title is required' };
+  const addedValue = asStringOrNull(body.added_value) || 'High';
+  if (!MVP_VALUES.has(addedValue)) {
+    return { error: `added_value must be one of ${[...MVP_VALUES].sort().join(', ')}` };
+  }
+  const effort = asStringOrNull(body.effort) || 'M';
+  if (!MVP_EFFORTS.has(effort)) {
+    return { error: `effort must be one of ${[...MVP_EFFORTS].sort().join(', ')}` };
+  }
+  const deliveryStatus = asStringOrNull(body.delivery_status) || 'Backlog';
+  if (!MVP_STATUSES.has(deliveryStatus)) {
+    return { error: `delivery_status must be one of ${[...MVP_STATUSES].sort().join(', ')}` };
+  }
+  const priorityReason = (asStringOrNull(body.priority_reason) || '').trim() || null;
+  const sortOrder = toNumberOr(body.sort_order, 0);
+  return { title, addedValue, effort, priorityReason, deliveryStatus, sortOrder };
+}
+
+progress.get('/mvp-scope/:projectId', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+
+  const project = await loadProject(c.env, projectId);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanView(project, user);
+
+  await ensureMvpSchema(c.env);
+  const { results } = await c.env.DB.prepare(
+    `${MVP_SELECT} WHERE project_id = ? ORDER BY sort_order, id`,
+  ).bind(projectId).all<MvpRow>();
+
+  return c.json({ project_id: projectId, features: (results || []).map(serializeMvp) });
+});
+
+progress.post('/mvp-scope/:projectId', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+
+  const project = await loadProject(c.env, projectId);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+
+  const raw = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+  const parsed = parseMvpBody(raw);
+  if ('error' in parsed) return c.json({ detail: parsed.error }, 400);
+
+  await ensureMvpSchema(c.env);
+  const nowIso = new Date().toISOString();
+  const res = await c.env.DB.prepare(
+    `INSERT INTO mvp_features
+       (project_id, title, added_value, effort, priority_reason,
+        delivery_status, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    projectId, parsed.title, parsed.addedValue, parsed.effort, parsed.priorityReason,
+    parsed.deliveryStatus, parsed.sortOrder, nowIso, nowIso,
+  ).run();
+
+  const newId = lastInsertId(res);
+  const row = await c.env.DB.prepare(`${MVP_SELECT} WHERE id = ?`)
+    .bind(newId).first<MvpRow>();
+  return c.json(serializeMvp(row as MvpRow));
+});
+
+progress.put('/mvp-scope/feature/:id', async (c) => {
+  const user = await requireAuth(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
+
+  await ensureMvpSchema(c.env);
+  const existing = await c.env.DB.prepare(
+    'SELECT id, project_id FROM mvp_features WHERE id = ?',
+  ).bind(id).first<{ id: number; project_id: number }>();
+  if (!existing) return c.json({ detail: 'Feature not found' }, 404);
+
+  const project = await loadProject(c.env, existing.project_id);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+
+  const raw = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+  const parsed = parseMvpBody(raw);
+  if ('error' in parsed) return c.json({ detail: parsed.error }, 400);
+
+  await c.env.DB.prepare(
+    `UPDATE mvp_features
+        SET title = ?, added_value = ?, effort = ?, priority_reason = ?,
+            delivery_status = ?, sort_order = ?, updated_at = ?
+      WHERE id = ?`,
+  ).bind(
+    parsed.title, parsed.addedValue, parsed.effort, parsed.priorityReason,
+    parsed.deliveryStatus, parsed.sortOrder, new Date().toISOString(), id,
+  ).run();
+
+  const row = await c.env.DB.prepare(`${MVP_SELECT} WHERE id = ?`)
+    .bind(id).first<MvpRow>();
+  return c.json(serializeMvp(row as MvpRow));
+});
+
+progress.delete('/mvp-scope/feature/:id', async (c) => {
+  const user = await requireAuth(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
+
+  await ensureMvpSchema(c.env);
+  const existing = await c.env.DB.prepare(
+    'SELECT id, project_id FROM mvp_features WHERE id = ?',
+  ).bind(id).first<{ id: number; project_id: number }>();
+  if (!existing) return c.json({ detail: 'Feature not found' }, 404);
+
+  const project = await loadProject(c.env, existing.project_id);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanEdit(project, user);
+
+  await c.env.DB.prepare('DELETE FROM mvp_features WHERE id = ?').bind(id).run();
+  return c.json({ deleted: id });
+});
+
+// ---------------------------------------------------------------------------
 // Signals — minimal port of FastAPI's /signals/:project_id aggregator.
 //
 // DiscoveryPage refreshes call this in parallel with /discovery/:projectId
