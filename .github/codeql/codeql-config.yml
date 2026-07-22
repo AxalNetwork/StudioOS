@@ -12,3 +12,7 @@ name: "Axal StudioOS CodeQL config"
 paths-ignore:
   - docs
   - attached_assets
+  # Generated dc-runtime bundle + imported .dc.html document pages and their
+  # uploads. NOT hand-written source (support.js header: "GENERATED ... do
+  # not edit"); fixes belong in dc-runtime/src, not the bundle.
+  - spin-out-lab-pipeline

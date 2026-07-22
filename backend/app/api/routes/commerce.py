@@ -487,7 +487,7 @@ def order_intent(body: OrderIntentBody, session: Session = Depends(get_session),
 
         # Stable order_ref per (user+items+promo+nonce) via idempotency hash.
         items_sig = ",".join(f"{i['price_id']}:{i['quantity']}" for i in items)
-        sig = hashlib.sha1(
+        sig = hashlib.sha256(
             f"{items_sig}|{body.promo_code or ''}|{body.billing_country or ''}".encode()
         ).hexdigest()
         idem_nonce = body.nonce or ""
@@ -651,7 +651,10 @@ def _send_order_email(session: Session, order_ref: str, user_id: int) -> None:
                 sender_label="Axal Ventures",
             )
         else:
-            logger.info("ORDER EMAIL (no provider): to=%s ref=%s", email, order_ref)
+            # Strip CR/LF so untrusted values can never forge log lines.
+            safe_email = str(email).replace("\r", "").replace("\n", "")
+            safe_ref = str(order_ref).replace("\r", "").replace("\n", "")
+            logger.info("ORDER EMAIL (no provider): to=%s ref=%s", safe_email, safe_ref)
     except Exception as exc:  # noqa: BLE001
         logger.warning("_send_order_email failed: %s", exc)
 

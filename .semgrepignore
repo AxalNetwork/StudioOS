@@ -13,3 +13,8 @@
 # Pasted attachments (Pasted-*.txt, decks, docs) — meta/prompt text and
 # example values, not live secrets or real code.
 /attached_assets/
+
+# Generated dc-runtime bundle (support.js: "GENERATED — do not edit") plus
+# imported .dc.html document pages and their uploads. Fixes belong in
+# dc-runtime/src, not in the committed bundle.
+/spin-out-lab-pipeline/

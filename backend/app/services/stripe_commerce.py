@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 import urllib.parse
 from typing import Any, Dict, List, Optional, Tuple
@@ -27,6 +28,16 @@ logger = logging.getLogger("studioos.stripe_commerce")
 
 STRIPE_API_BASE = "https://api.stripe.com/v1"
 STRIPE_VERSION = "2023-10-16"
+
+# Relative Stripe API path: `/segment/segment?k=v` with a conservative charset.
+# Blocks `..`, `//host`, `#`, CR/LF and anything else that could steer the
+# request away from STRIPE_API_BASE.
+_SAFE_PATH_RE = re.compile(r"/[A-Za-z0-9_/\-]*(\?[A-Za-z0-9_\-=&.%\[\]]*)?")
+
+
+def _log_safe(value: str) -> str:
+    """Strip CR/LF so untrusted values can never forge log lines."""
+    return str(value).replace("\r", "").replace("\n", "")
 
 # Audience categories surfaced on the Products page. Mirrors the contract's
 # Audience enum: founders|investors_lps|service_partners|advisors|legal_services.
@@ -124,6 +135,12 @@ def _request(
     }
     if idempotency_key:
         headers["Idempotency-Key"] = idempotency_key
+    # SSRF guard: `path` is always built in this module, but interpolated ids
+    # can come from request payloads. Restrict to a safe relative API path so
+    # a crafted id can never redirect the request (e.g. via `..`, `//host`,
+    # `?`, `#`, or CR/LF) outside the pinned Stripe API base.
+    if not _SAFE_PATH_RE.fullmatch(path):
+        raise StripeError(400, f"Invalid Stripe API path: {path!r}", "invalid_path")
     url = f"{STRIPE_API_BASE}{path}"
     try:
         with httpx.Client(timeout=30.0) as client:
@@ -136,7 +153,7 @@ def _request(
                     method, url, headers=headers, content=body
                 )
     except httpx.HTTPError as exc:
-        logger.exception("stripe_commerce: HTTP error %s %s", method, path)
+        logger.exception("stripe_commerce: HTTP error %s %s", method, _log_safe(path))
         raise StripeError(502, f"Stripe request failed: {exc}", "network") from exc
     if resp.status_code >= 400:
         try:
@@ -146,7 +163,8 @@ def _request(
             code = err.get("code") or err.get("type")
         except Exception:  # noqa: BLE001
             msg, code = resp.text, None
-        logger.warning("stripe_commerce: %s %s -> %s %s", method, path, resp.status_code, msg)
+        logger.warning("stripe_commerce: %s %s -> %s %s",
+                       method, _log_safe(path), resp.status_code, _log_safe(str(msg)))
         raise StripeError(resp.status_code, msg, code)
     return resp.json()
 

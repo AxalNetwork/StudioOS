@@ -23,10 +23,14 @@ API = "https://api.stripe.com/v1"
 
 def call(key, method, path, data=None):
     url = f"{API}{path}"
+    # SSRF guard: paths in this script are hardcoded, but keep the request
+    # pinned to the Stripe API host regardless of how `path` is built.
+    if not urllib.parse.urlparse(url).netloc == "api.stripe.com":
+        raise ValueError(f"refusing non-Stripe URL: {url!r}")
     body = None
     if data is not None:
         body = urllib.parse.urlencode(data, doseq=True).encode()
-    req = urllib.request.Request(url, data=body, method=method)
+    req = urllib.request.Request(url, data=body, method=method)  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
     req.add_header("Authorization", f"Bearer {key}")
     # Pin an API version where /promotion_codes still accepts `coupon`.
     req.add_header("Stripe-Version", "2023-10-16")
