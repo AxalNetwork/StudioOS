@@ -400,7 +400,7 @@ export default function CheckoutPage() {
               options={{ clientSecret, appearance: buildAppearance(isDark) }}
             >
               <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                <input type="checkbox" checked={savePm} onChange={(e) => setSavePm(e.target.checked)} className="rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+                <input type="checkbox" checked={savePm} onChange={(e) => setSavePm(e.target.checked)} className="rounded border-gray-300 dark:border-gray-700 text-violet-600 focus:ring-violet-500" />
                 Save this payment method for future purchases
               </label>
               <PaymentForm

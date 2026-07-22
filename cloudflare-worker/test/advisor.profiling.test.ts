@@ -31,19 +31,19 @@ import {
 // axalFit/bestFit signal), but the completion card is scoped to the primary
 // advisor bank so a advisor's effort is comparable to other personas (Task #41).
 const EXPECTED: Record<string, number> = {
-  founder: 32,
-  investor: 28,
-  partner: 27,
-  advisor: 29, // advisor primary bank — coach bank excluded from the completion card
+  founder: 33,
+  investor: 29,
+  partner: 28,
+  advisor: 30, // advisor primary bank — coach bank excluded from the completion card
 };
 
 // Every persona's profiling bank must offer all four modules with enough
 // questions to satisfy each module's confidence floor (Task #45).
 const EXPECTED_SECTIONS: Record<string, Record<string, number>> = {
-  founder:  { skills: 7, work_values: 5, archetype: 4, axal_fit: 16 },
-  investor: { skills: 5, work_values: 5, archetype: 4, axal_fit: 14 },
-  partner:  { skills: 5, work_values: 4, archetype: 4, axal_fit: 14 },
-  advisor:   { skills: 5, work_values: 4, archetype: 4, axal_fit: 16 },
+  founder:  { skills: 7, work_values: 5, archetype: 4, axal_fit: 17 },
+  investor: { skills: 5, work_values: 5, archetype: 4, axal_fit: 15 },
+  partner:  { skills: 5, work_values: 4, archetype: 4, axal_fit: 15 },
+  advisor:   { skills: 5, work_values: 4, archetype: 4, axal_fit: 17 },
 };
 
 test('profilingBankFor returns the fit.* bank sized per persona', () => {
@@ -122,7 +122,7 @@ test('advisor completion card is scoped to the primary bank, but coach is still 
   // so a advisor reaches "Profiling complete" with the same effort as other
   // personas (17, == partner) instead of ~double (was 34).
   const card = profilingBankFor('advisor' as Persona);
-  assert.equal(card.length, 29);
+  assert.equal(card.length, 30);
   assert.ok(card.some((q) => q.id.startsWith('fit.advisor.')), 'card must contain the advisor fit bank');
   assert.ok(card.every((q) => !q.id.startsWith('fit.coach.')), 'coach questions must NOT count toward the advisor card');
 

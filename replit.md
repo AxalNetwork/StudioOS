@@ -6,6 +6,19 @@ API-first Venture Studio OS — manages startup lifecycle from intake to portfol
 > - `frontend/public/CHANGELOG-user.md` — the in-app Docs → "What's new" page. Plain-English, no task IDs, no file paths, no code. Write it for the people using the platform.
 > Any user-facing change needs a line in BOTH. Do not date task entries in the technical file.
 
+## Replit Dev Setup (one-time, already done)
+
+The following steps were completed when this project was imported into Replit:
+
+1. **Frontend dependencies installed** — `cd frontend && npm install` (installs Vite, React, Tailwind, etc. into `frontend/node_modules/`).
+2. **`JWT_SECRET` added to Replit Secrets** — required; the dev backend (`backend/app/api/routes/auth.py`) raises `RuntimeError` at import time if unset.
+3. **Workflows verified running**:
+   - `Backend API` — `UV_PROJECT_ENVIRONMENT=.venv uv run uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload` (port 8000)
+   - `Start application` — `cd frontend && npm run dev` (port 5000, proxies `/api` → 8000)
+4. **`postgresql-16` module restored** in `.replit` (was accidentally removed during import; dev backend uses a local SQLite file via SQLModel, but the module is kept for parity).
+
+If you clone or fork this repl, repeat steps 1–2.
+
 ## Run & Operate
 - **Dev**: `npm run dev` (frontend) + `python backend/main.py` (FastAPI, dev-only).
 - **Build**: `npm run build` · **Deploy (prod)**: `npm run deploy` (Cloudflare Worker)

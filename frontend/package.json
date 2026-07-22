@@ -19,7 +19,7 @@
     "fuse.js": "^7.4.2",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
-    "lucide-react": "^1.23.0",
+    "lucide-react": "^1.24.0",
     "pptxgenjs": "^4.0.1",
     "qrcode": "^1.5.4",
     "react": "^19.2.7",
@@ -36,7 +36,7 @@
     "@tailwindcss/vite": "^4.3.2",
     "@vitejs/plugin-react": "^6.0.2",
     "tailwindcss": "^4.0.0",
-    "vite": "^8.1.3"
+    "vite": "^8.1.4"
   },
   "overrides": {
     "postcss": "^8.5.10"

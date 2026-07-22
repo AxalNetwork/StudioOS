@@ -94,14 +94,28 @@ function makeEnv(): { env: Env; raw: DatabaseSync } {
   const DB = {
     prepare(sql: string) {
       let bound: unknown[] = [];
+      // node:sqlite binds bare positional args to placeholder OCCURRENCES, not
+      // placeholder NUMBERS, so a reused `?1` (D1 supports it) under-binds and
+      // throws "column index out of range". Expand numbered placeholders into
+      // plain `?` per occurrence and duplicate the bound values to match.
+      const expand = () => {
+        if (!/\?\d+/.test(sql)) return { sql, args: bound };
+        const args: unknown[] = [];
+        const rewritten = sql.replace(/\?(\d+)/g, (_m, n) => {
+          args.push(bound[Number(n) - 1]);
+          return '?';
+        });
+        return { sql: rewritten, args };
+      };
       const stmt = {
         bind(...vals: unknown[]) { bound = vals; return stmt; },
         async run() {
-          const info = db.prepare(sql).run(...(bound as any[]));
+          const { sql: q, args } = expand();
+          const info = db.prepare(q).run(...(args as any[]));
           return { success: true, meta: { changes: Number(info.changes) } } as any;
         },
-        async first<T = any>() { return (db.prepare(sql).get(...(bound as any[])) ?? null) as T | null; },
-        async all<T = any>() { return { results: db.prepare(sql).all(...(bound as any[])) as T[] } as any; },
+        async first<T = any>() { const { sql: q, args } = expand(); return (db.prepare(q).get(...(args as any[])) ?? null) as T | null; },
+        async all<T = any>() { const { sql: q, args } = expand(); return { results: db.prepare(q).all(...(args as any[])) as T[] } as any; },
       };
       return stmt;
     },
