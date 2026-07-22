@@ -192,6 +192,10 @@ export const SIDEBAR_GROUPS = {
   founder: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      // Spin-Out Lab — the 4-week founder venture-build program. Sits directly
+      // under Studio so the live sprint tracker (/spinout-lab, SpinoutLabPage)
+      // is always one click from Home.
+      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'build', label: 'Build', items: [
@@ -546,6 +550,10 @@ export const SIDEBAR_GROUPS = {
   exploring: [
     { key: 'home', label: 'Home', items: [
       { to: '/exploring', icon: LayoutDashboard, label: 'Studio', highlight: true },
+      // Spin-Out Lab — surfaced directly under Studio so exploring users can
+      // discover the founder venture-build program (its Apply CTA is the main
+      // Explorer → founder conversion path).
+      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       // Explorer completion incentive — where the one-time 30-day-license
       // promo code from the Personal Advisor gets redeemed.
       { to: '/products', icon: Package, label: 'Products' },
