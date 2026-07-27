@@ -39,17 +39,17 @@ cryptography==49.0.0
     #   http-ece
     #   py-vapid
     #   pywebpush
-fastapi==0.139.0
+fastapi==0.139.2
     # via repl-nix-workspace
 frozenlist==1.8.0
     # via
     #   aiohttp
     #   aiosignal
-google-api-core==2.31.0
+google-api-core==2.32.0
     # via google-api-python-client
 google-api-python-client==2.198.0
     # via repl-nix-workspace
-google-auth==2.55.2
+google-auth==2.56.0
     # via
     #   google-api-core
     #   google-api-python-client
@@ -121,7 +121,7 @@ pydantic==2.13.4
     #   fastapi
     #   repl-nix-workspace
     #   sqlmodel
-pydantic-core==2.46.4
+pydantic-core==2.47.0
     # via pydantic
 pyjwt==2.13.0
     # via repl-nix-workspace
@@ -175,5 +175,5 @@ urllib3==2.7.0
     # via requests
 uvicorn==0.51.0
     # via repl-nix-workspace
-yarl==1.24.2
+yarl==1.24.5
     # via aiohttp
