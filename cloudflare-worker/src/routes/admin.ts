@@ -944,6 +944,78 @@ admin.post('/users/:user_id/notes', async (c) => {
 
 // POST /api/admin/users/:user_id/resend-verification — re-send the email
 // verification link for users who haven't completed verification.
+// Task #7 — Spin-Out Lab cohort admission. Lazy column ensure mirrors
+// ensureProfileColumns above (duplicate-column errors are expected).
+let spinoutAdmissionSchemaMigrated = false;
+async function ensureSpinoutAdmissionColumns(env: Env): Promise<void> {
+  if (spinoutAdmissionSchemaMigrated) return;
+  const stmts = [
+    `ALTER TABLE users ADD COLUMN spinout_lab_admitted INTEGER DEFAULT 0`,
+    `ALTER TABLE users ADD COLUMN spinout_lab_cohort TEXT`,
+    `ALTER TABLE users ADD COLUMN registration_product TEXT`,
+  ];
+  for (const s of stmts) {
+    try { await env.DB.prepare(s).run(); } catch {}
+  }
+  spinoutAdmissionSchemaMigrated = true;
+}
+
+// POST /api/admin/users/:user_id/spinout-admit — admit a founder to the
+// next Spin-Out Lab cohort. Sets the admitted flag + cohort label and
+// sends the branded "You're in" email linking to /spinout-lab. Idempotent:
+// re-admitting an already-admitted user just refreshes the cohort label
+// and does NOT re-send the email.
+admin.post('/users/:user_id/spinout-admit', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const userId = parseInt(c.req.param('user_id'));
+  if (!Number.isFinite(userId)) return c.json({ error: 'Invalid user_id' }, 400);
+  const body = (await c.req.json().catch(() => ({}))) as { cohort?: unknown };
+  const cohort = (typeof body.cohort === 'string' && body.cohort.trim()) || 'Cohort 3';
+
+  await ensureSpinoutAdmissionColumns(c.env);
+  const target: any = await c.env.DB.prepare(
+    `SELECT id, email, name, role, spinout_lab_admitted, spinout_lab_active, is_incorporated FROM users WHERE id = ?`
+  ).bind(userId).first();
+  if (!target) return c.json({ error: 'User not found' }, 404);
+  if (target.role === 'admin') return c.json({ error: 'Admins cannot be admitted to the Lab' }, 400);
+  if (Number(target.is_incorporated) === 1) {
+    return c.json({ error: 'User is already incorporated — the Lab is a pre-incorporation sprint' }, 409);
+  }
+
+  const alreadyAdmitted = Number(target.spinout_lab_admitted) === 1;
+  await c.env.DB.prepare(
+    `UPDATE users SET spinout_lab_admitted = 1, spinout_lab_cohort = ? WHERE id = ?`
+  ).bind(cohort, userId).run();
+
+  let emailed = false;
+  if (!alreadyAdmitted) {
+    try {
+      const { send } = await import('../services/email/send');
+      const labUrl = `${(c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '')}/spinout-lab`;
+      const r = await send(c.env, 'spinout_admitted', target.email, {
+        name: target.name || 'there',
+        cohort_label: cohort,
+        lab_url: labUrl,
+      }, { userId: target.id, ctaUrl: labUrl });
+      emailed = !!r?.ok;
+    } catch (e) {
+      console.error('[admin/spinout-admit] email send failed', e);
+    }
+  }
+
+  try {
+    const adminHash = await hashEmail(adminUser.email);
+    const targetHash = await hashEmail(target.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
+    ).bind('spinout_lab_admitted',
+      `Admin ${adminUser.name} admitted user_id=${target.id} (email_hash=${targetHash}) to Spin-Out Lab ${cohort}${alreadyAdmitted ? ' (already admitted — cohort refreshed, no email)' : emailed ? '' : ' (email send failed)'}`,
+      adminHash, adminUser.id).run();
+  } catch {}
+
+  return c.json({ ok: true, cohort, already_admitted: alreadyAdmitted, emailed });
+});
+
 admin.post('/users/:user_id/resend-verification', async (c) => {
   const adminUser = await requireAdmin(c);
   const userId = parseInt(c.req.param('user_id'));

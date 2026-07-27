@@ -1429,6 +1429,10 @@ export const api = {
   },
   adminUpdateNotes: (userId, admin_notes) => request(`/admin/users/${userId}/notes`, { method: 'POST', body: JSON.stringify({ admin_notes }) }),
   adminResendVerification: (userId) => request(`/admin/users/${userId}/resend-verification`, { method: 'POST' }),
+  // Task #7 — admit a founder to the next Spin-Out Lab cohort (sends the
+  // "You're in" email from the Worker; dev backend sets flags only).
+  adminSpinoutAdmit: (userId, cohort) =>
+    request(`/admin/users/${userId}/spinout-admit`, { method: 'POST', body: JSON.stringify(cohort ? { cohort } : {}) }),
 
   integrationsAvailable: () => request('/integrations/available'),
   // Crunchbase enrichment (Task #3, 2026-05-10) — growth tier, requires

@@ -144,6 +144,9 @@ def _state(session: Session, user: User) -> dict:
             for r in rows
         ],
         "unlocked_features": _unlocked_through(week),
+        # Task #7 — cohort admission (Worker parity).
+        "admitted": int(getattr(user, "spinout_lab_admitted", 0) or 0) == 1,
+        "cohort": getattr(user, "spinout_lab_cohort", None),
     }
 
 

@@ -378,6 +378,23 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
     text: `Hi {{name}},\n\nYou just unlocked "{{milestone_name}}" in the Spin-Out Lab. Open the next step: {{lab_url}}`,
     html: `<p>Hi {{name}},</p><p>You just unlocked <strong>{{milestone_name}}</strong> in the Spin-Out Lab.</p><p><a href="{{{lab_url}}}" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Next step</a></p>`,
   }),
+  // Task #7 — cohort admission. vars: name, cohort_label, lab_url
+  spinout_admitted: t({
+    key: 'spinout_admitted', category: 'spinout', severity: 'info',
+    replyTo: 'support@axal.vc',
+    subject: "You're in — welcome to the Spin-Out Lab ({{cohort_label}})",
+    text: `Hi {{name}},\n\nCongratulations — you've been admitted to the Spin-Out Lab ({{cohort_label}}).\n\nOver the next 30 days you'll go from idea to incorporated: customer discovery, MVP scope, venture-readiness scoring, and Delaware C-Corp formation — with advisors and warm investor introductions along the way.\n\nStart Week 1 here:\n{{lab_url}}\n\nSee you inside,\nThe Axal team`,
+    html: `<h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">You're in 🎉</h1>
+<p style="font-size:14px;color:#6b7280;margin:0 0 20px;line-height:1.6;">Hi {{name}}, congratulations — you've been admitted to the <strong style="color:#111827;">Spin-Out Lab</strong> ({{cohort_label}}).</p>
+<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:14px;padding:18px 20px;margin:0 0 24px;">
+  <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#7c3aed;font-weight:600;margin:0 0 6px;">The next 30 days</div>
+  <div style="font-size:14px;color:#111827;line-height:1.6;">Idea → customer discovery → MVP scope → venture-readiness score → Delaware C-Corp → warm investor introductions.</div>
+</div>
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:0 0 24px;">
+  <a href="{{{lab_url}}}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;padding:16px 28px;border-radius:14px;">Start Week 1</a>
+</td></tr></table>
+<p style="font-size:13px;color:#6b7280;margin:0;line-height:1.6;">Sign in with this email address and you'll land straight in your founder workspace.</p>`,
+  }),
   // vars: name, dashboard_url
   spinout_graduated: t({
     key: 'spinout_graduated', category: 'spinout', severity: 'info',

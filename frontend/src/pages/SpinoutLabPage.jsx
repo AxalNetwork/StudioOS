@@ -238,6 +238,54 @@ function DeckReadinessCard() {
   );
 }
 
+// Task #7 — "You're in" celebration for admitted-but-not-started founders.
+// Rendered on /spinout-lab (sidebar stays); the CTA calls the existing
+// start endpoint and hands over to the workspace Dashboard.
+function CongratulationsScreen({ cohort, onStart, starting, startError }) {
+  return (
+    <div className="min-h-[100dvh] bg-[#F8F8FA] dark:bg-gray-950 font-sans text-gray-900 dark:text-gray-100 flex items-center justify-center px-6 py-16">
+      <div className="max-w-[620px] w-full text-center">
+        <div className="rounded-[24px] p-10 md:p-14 text-white relative overflow-hidden mb-6" style={{ background: 'radial-gradient(1200px 400px at 12% -20%,rgba(139,92,246,.5),transparent 60%),linear-gradient(115deg,#1e1b3a 0%,#2a1d54 55%,#3b1d6e 100%)' }}>
+          <div className="relative z-10">
+            <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center">
+              <FlaskConical size={30} className="text-violet-300" />
+            </div>
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 border border-white/20 text-[12.5px] font-semibold text-[#ede9fe] mb-4">
+              Spin-Out Lab · {cohort || 'Next cohort'}
+            </div>
+            <h1 className="m-0 text-[40px] leading-[1.05] font-black tracking-[-0.03em] text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(90deg,#fff,#c4b5fd)', WebkitBackgroundClip: 'text' }}>
+              Congratulations — you're in.
+            </h1>
+            <p className="mt-4 mb-8 text-[16px] text-[#cbc4e8] font-medium leading-relaxed">
+              You've been admitted to the Spin-Out Lab. Over the next 30 days you'll go
+              from idea to incorporated — customer discovery, MVP scope,
+              venture-readiness scoring, and Delaware C-Corp formation.
+            </p>
+            <button
+              type="button"
+              onClick={onStart}
+              disabled={starting}
+              className="inline-flex items-center gap-2 bg-white dark:bg-gray-100 text-violet-900 font-bold text-[16px] px-8 py-4 rounded-2xl hover:bg-violet-50 dark:hover:bg-white transition-colors disabled:opacity-60"
+            >
+              {starting ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : <ArrowRight size={18} aria-hidden="true" />}
+              Start Week 1
+            </button>
+          </div>
+        </div>
+        {startError && (
+          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3 px-4 dark:bg-red-950/30 dark:border-red-900 dark:text-red-400">
+            {startError}
+          </div>
+        )}
+        <p className="text-[13px] text-gray-500 dark:text-gray-400">
+          Week 1 opens your founder workspace: the 4-week program timeline, your
+          deliverables checklist, and every Lab tool as it unlocks.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function Dashboard({ state, onComplete, completing, completeError }) {
   const week = Math.max(1, Math.min(4, state.week || 1));
   const completedKeys = new Set((state.milestones || []).map((m) => m.key));
@@ -260,7 +308,7 @@ function Dashboard({ state, onComplete, completing, completeError }) {
               <h1 className="m-0 text-3xl font-extrabold tracking-tight">Spin-Out Lab</h1>
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" style={{animation: 'wsPulse 2s infinite'}}></span>
-                Cohort 3 · Active
+                {state.cohort || 'Cohort 3'} · Active
               </span>
             </div>
             <p className="mt-2.5 ml-[52px] text-[15px] text-gray-500 dark:text-gray-400">From idea to incorporated in 30 days. Started {startedAtStr}.</p>
@@ -470,6 +518,8 @@ export default function SpinoutLabPage() {
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState(null);
   const [completeError, setCompleteError] = useState("");
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -502,6 +552,33 @@ export default function SpinoutLabPage() {
       <div className="min-h-[60vh] flex items-center justify-center text-gray-500">
         <Loader2 className="animate-spin mr-2" size={18} /> Loading your sprint…
       </div>
+    );
+  }
+
+  // Task #7 — admitted-but-not-started founders see the "You're in"
+  // celebration; Start Week 1 flips the lab on via the existing endpoint.
+  if (state && !state.active && state.admitted && !state.is_incorporated) {
+    const onStart = async () => {
+      setStarting(true);
+      setStartError("");
+      try {
+        const next = await spinoutLab.start();
+        setState(next);
+        try { await refresh({ force: true }); } catch { /* no-op */ }
+      } catch (e) {
+        setStartError(e?.message || "Could not start the Lab — please try again");
+        reportError("spinout-lab:start", e);
+      } finally {
+        setStarting(false);
+      }
+    };
+    return (
+      <CongratulationsScreen
+        cohort={state.cohort}
+        onStart={onStart}
+        starting={starting}
+        startError={startError}
+      />
     );
   }
 

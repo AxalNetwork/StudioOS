@@ -409,6 +409,24 @@ export default function AdminPage({ onImpersonate }) {
     try { await api.adminSetAccessLevel(user.id, null); loadAll(); }
     catch (e) { alert(e.message || 'Failed to revoke limited access'); }
   };
+  // Task #7 — admit a founder to the next Spin-Out Lab cohort. Sends the
+  // "You're in" email (production Worker; dev backend sets flags only).
+  const handleSpinoutAdmit = async (user) => {
+    const cohort = window.prompt(
+      `Admit ${user.name || user.email} to the Spin-Out Lab?\n\n` +
+      `They'll receive a congratulations email linking to axal.vc/spinout-lab ` +
+      `and see the "You're in" screen on their next visit.\n\nCohort label:`,
+      'Cohort 3'
+    );
+    if (cohort === null) return;
+    try {
+      const res = await api.adminSpinoutAdmit(user.id, cohort.trim() || undefined);
+      alert(res?.already_admitted
+        ? `Already admitted — cohort refreshed to ${res.cohort} (no email re-sent).`
+        : `Admitted to ${res?.cohort || 'the Lab'}${res?.emailed ? ' — email sent.' : ' — email not sent (dev or send failure).'}`);
+      loadAll();
+    } catch (e) { alert(e.message || 'Failed to admit'); }
+  };
   const handleRoleChange = async (user, newRole) => {
     if (newRole === user.role) return;
     const labels = { admin: 'Admin', founder: 'Founder', partner: 'Partner', investor: 'Investor', advisor: 'Advisor', exploring: 'Exploring' };
@@ -583,6 +601,14 @@ export default function AdminPage({ onImpersonate }) {
                                 className="px-2.5 py-1.5 text-xs bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg font-medium transition-colors flex items-center gap-1"
                                 title="Remove limited access. User will be redirected to KYC.">
                                 Revoke Limited
+                              </button>
+                            )}
+                            {/* Task #7 — Spin-Out Lab admission. Admins excluded. */}
+                            {u.role !== 'admin' && (
+                              <button onClick={() => handleSpinoutAdmit(u)}
+                                className="px-2.5 py-1.5 text-xs bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg font-medium transition-colors flex items-center gap-1"
+                                title="Admit to the next Spin-Out Lab cohort — sends the congratulations email">
+                                Admit to Lab
                               </button>
                             )}
                             <button onClick={() => handleImpersonate(u.id)}

@@ -2660,6 +2660,10 @@ def ensure_spinout_lab_tables() -> None:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS spinout_lab_week INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS spinout_lab_started_at TIMESTAMP",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_incorporated INTEGER DEFAULT 0",
+        # Task #7 — cohort admission (mirrors Worker migration 154).
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS spinout_lab_admitted INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS spinout_lab_cohort TEXT",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_product TEXT",
         """
         CREATE TABLE IF NOT EXISTS spinout_lab_milestones (
             id SERIAL PRIMARY KEY,

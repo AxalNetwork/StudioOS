@@ -246,7 +246,7 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
 auth.post('/register', safe('register', 'Registration failed. Please try again in a moment, or contact support if the problem persists.', async (c) => {
   const parsed = await readJson(c);
   if (!parsed.ok) return parsed.res;
-  const { email, name, role, turnstileToken, ref_code, defer_email } = parsed.body;
+  const { email, name, role, turnstileToken, ref_code, defer_email, product } = parsed.body;
   if (!email || !name) return c.json({ error: 'Email and name required' }, 400);
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   if (!emailRe.test(String(email).trim())) return c.json({ error: 'Please enter a valid email address' }, 400);
@@ -295,6 +295,12 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
     // suggested role for the admin review queue, never applied directly.
     await ensureExploringSchema(c.env);
     await sql`UPDATE users SET name = ${name}, role = 'exploring' WHERE id = ${user.id}`;
+    // Task #7 — persist the ?product= registration intent (e.g.
+    // 'spinout-lab') so applicants are identifiable in the admin queue.
+    // try/caught: column arrives with migration 154.
+    if (product === 'spinout-lab') {
+      try { await sql`UPDATE users SET registration_product = ${product} WHERE id = ${user.id}`; } catch {}
+    }
     try { await upsertSuggestedRole(c.env, user.id, role || null); } catch (e) { console.error('[auth] suggested-role upsert failed', e); }
     await sql.end();
     // Phase 0.1: investors embed under their own entity bucket; partners stay legacy.
@@ -326,6 +332,11 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   // and (for the investor lane) the trial window.
   await ensureExploringSchema(c.env);
   const [user] = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${name}, 'exploring', false) RETURNING *`;
+  // Task #7 — persist the ?product= registration intent (see the
+  // existing-user branch above). try/caught: column arrives with 154.
+  if (product === 'spinout-lab') {
+    try { await sql`UPDATE users SET registration_product = ${product} WHERE id = ${user.id}`; } catch {}
+  }
   try { await upsertSuggestedRole(c.env, user.id, role || null); } catch (e) { console.error('[auth] suggested-role upsert failed', e); }
   // Task #6 (W-1) — investor signups get a 14-day Professional trial.
   // Cron in index.ts at 04:25 UTC downgrades expired trials to free.

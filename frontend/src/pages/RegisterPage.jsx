@@ -235,7 +235,7 @@ export default function RegisterPage() {
       // that edge case, but the user isn't.
       if (!(TURNSTILE_SITE_KEY && turnstileFailed)) {
         try {
-          await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, defer_email: true, role: laneRole });
+          await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, defer_email: true, role: laneRole, product: productIntent || undefined });
         } catch (e) {
           if (!/already registered/i.test(e?.message || '')) throw e;
         }
@@ -267,7 +267,7 @@ export default function RegisterPage() {
       // and unlocked by `/api/profiling/save` (auth-bound). Register sends
       // the verification email immediately and jumps straight to the
       // "Check Your Email" step; the chatbot runs after the user logs in.
-      const res = await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, role: laneRole });
+      const res = await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, role: laneRole, product: productIntent || undefined });
       // Task #2 — funnel: email_sent:false is the audit's silent-drop-off
       // signal (provider outage / misconfig) — alert threshold documented in
       // ANALYTICS_FUNNEL.md.

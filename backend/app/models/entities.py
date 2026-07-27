@@ -149,6 +149,10 @@ class User(SQLModel, table=True):
     spinout_lab_week: Optional[int] = Field(default=0)
     spinout_lab_started_at: Optional[datetime] = None
     is_incorporated: Optional[int] = Field(default=0)
+    # Task #7 — cohort admission (mirrors Worker migration 154).
+    spinout_lab_admitted: Optional[int] = Field(default=0)
+    spinout_lab_cohort: Optional[str] = None
+    registration_product: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

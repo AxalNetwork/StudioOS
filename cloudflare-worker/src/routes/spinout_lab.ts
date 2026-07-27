@@ -227,8 +227,21 @@ spinoutLab.get('/state', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
   const state = await getLabState(sql, user.id);
+  // Task #7 — admission fields. Queried at the wire layer (not inside
+  // getLabState) so the pure-logic test harness's exact-SELECT mocks stay
+  // untouched, and try/caught so databases predating migration 154 still
+  // answer (admitted=false).
+  let admitted = false;
+  let cohort: string | null = null;
+  try {
+    const rows = (await sql`
+      SELECT spinout_lab_admitted, spinout_lab_cohort FROM users WHERE id = ${user.id}
+    `) as Array<{ spinout_lab_admitted: number | null; spinout_lab_cohort: string | null }>;
+    admitted = Number(rows[0]?.spinout_lab_admitted ?? 0) === 1;
+    cohort = rows[0]?.spinout_lab_cohort ?? null;
+  } catch { /* columns not yet migrated */ }
   await sql.end();
-  return c.json(state);
+  return c.json({ ...state, admitted, cohort });
 });
 
 spinoutLab.post('/start', async (c) => {

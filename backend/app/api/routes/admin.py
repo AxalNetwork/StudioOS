@@ -486,6 +486,41 @@ def update_notes(
     return {"ok": True, "admin_notes": target.admin_notes or ""}
 
 
+# Task #7 — Spin-Out Lab cohort admission (dev parity with the Worker's
+# POST /api/admin/users/:id/spinout-admit). The dev backend has no email
+# pipeline, so the admission email is skipped here — flags only.
+@router.post("/users/{user_id}/spinout-admit")
+def admin_spinout_admit(
+    user_id: int,
+    body: dict = None,
+    session: Session = Depends(get_session),
+    admin: User = Depends(require_admin),
+):
+    target = session.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.role == "admin":
+        raise HTTPException(status_code=400, detail="Admins cannot be admitted to the Lab")
+    if int(target.is_incorporated or 0) == 1:
+        raise HTTPException(
+            status_code=409,
+            detail="User is already incorporated — the Lab is a pre-incorporation sprint",
+        )
+    cohort = ((body or {}).get("cohort") or "").strip() or "Cohort 3"
+    already_admitted = int(target.spinout_lab_admitted or 0) == 1
+    target.spinout_lab_admitted = 1
+    target.spinout_lab_cohort = cohort
+    session.add(target)
+    session.add(ActivityLog(
+        action="spinout_lab_admitted",
+        details=f"Admin {admin.name} admitted {target.email} to Spin-Out Lab {cohort}"
+        + (" (already admitted — cohort refreshed)" if already_admitted else " (dev: no email sent)"),
+        actor=admin.email,
+    ))
+    session.commit()
+    return {"ok": True, "cohort": cohort, "already_admitted": already_admitted, "emailed": False}
+
+
 @router.post("/users/{user_id}/resend-verification")
 def admin_resend_verification(
     user_id: int,

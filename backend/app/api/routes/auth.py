@@ -93,6 +93,9 @@ class RegisterRequest(BaseModel):
     name: str
     role: str = Field("partner", pattern="^(founder|partner|investor|advisor)$")
     ref_code: Optional[str] = None
+    # Task #7 — registration intent (?product=spinout-lab) persisted so
+    # Spin-Out Lab applicants are identifiable in the admin queue.
+    product: Optional[str] = None
     # Phase C4 — honeypot. Real users never see/fill this field; bots that
     # autofill every input will set it. Non-empty value = bot, drop request.
     # Pydantic v2 disallows leading-underscore field names, so the
@@ -318,6 +321,9 @@ def register(req: RegisterRequest, request: Request, session: Session = Depends(
             raise HTTPException(status_code=409, detail="Email already registered")
         existing.name = req.name
         existing.role = req.role
+        # Task #7 — persist the Spin-Out Lab registration intent.
+        if req.product == "spinout-lab":
+            existing.registration_product = req.product
         # Only set referrer if not already attributed (first valid wins)
         if referrer_id and not existing.referrer_partner_id:
             existing.referrer_partner_id = referrer_id
@@ -340,6 +346,8 @@ def register(req: RegisterRequest, request: Request, session: Session = Depends(
         email_verified=False,
         referrer_partner_id=referrer_id,
         referrer_code_used=ref_code_norm,
+        # Task #7 — persist the Spin-Out Lab registration intent.
+        registration_product=req.product if req.product == "spinout-lab" else None,
     )
     session.add(user)
     session.commit()
