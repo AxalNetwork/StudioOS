@@ -1267,7 +1267,11 @@ function AppInner() {
 <RouteErrorBoundary>
 <Routes>
       <Route path="/" element={user ? <Navigate to={ROLE_DEFAULT_PATH[user.role] || '/studio'} replace /> : <LandingPage />} />
-      <Route path="/spinout-lab" element={<SpinoutLabPage />} />
+      {/* /spinout-lab doubles as a public marketing page (logged out) and the
+          founder Lab workspace (logged in). Logged-in visitors get the normal
+          app shell — sidebar and all — like every other authenticated page;
+          logged-out visitors get the bare marketing surface. */}
+      <Route path="/spinout-lab" element={user ? authOnly(<SpinoutLabPage />) : <SpinoutLabPage />} />
       {/* Audience product pages — public marketing surface. */}
       <Route path="/for-founders" element={<ProductAudiencePage slug="founders" />} />
       <Route path="/for-investors" element={<ProductAudiencePage slug="investors" />} />
