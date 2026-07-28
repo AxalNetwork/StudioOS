@@ -1,0 +1,1 @@
+import"./rolldown-runtime-aKtaBQYM.js";import{g as e,n as t}from"./react-vendor-D8wmft4r.js";import{t as n}from"./KycVerification-jJ08wn_z.js";e();var r=t();function i(){return(0,r.jsx)(n,{})}export{i as default};

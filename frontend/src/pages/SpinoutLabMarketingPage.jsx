@@ -3,17 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Check, Rocket, Circle, Lock } from 'lucide-react';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
-import { PIPELINE_PHASES, PHASE_THEMES, DELIVERABLES, TRACKER_BOARD, MILESTONE_LABELS as LAB_MILESTONE_LABELS } from './SpinoutLabPage';
-
-const APPLY_HREF = '/register?lane=founder&product=spinout-lab';
-const CONTACT_HREF = 'mailto:hello@axal.vc?subject=Spin-Out%20Lab';
-
-const ALUMNI = [
-  { initials: 'AB', bg: 'bg-violet-100 dark:bg-violet-900', ink: 'text-violet-700 dark:text-violet-200', name: 'Arborline', sector: 'Climate · MRV', cohort: 2, raised: '$450K pre-seed', outcome: 'Closed pre-seed · Now on AngelList' },
-  { initials: 'PX', bg: 'bg-blue-100 dark:bg-blue-900', ink: 'text-blue-700 dark:text-blue-200', name: 'Pyxis Health', sector: 'Digital health', cohort: 2, raised: '$1.1M seed', outcome: 'Seed led by Foundry Group' },
-  { initials: 'KT', bg: 'bg-teal-100 dark:bg-teal-900', ink: 'text-teal-700 dark:text-teal-200', name: 'Kettle', sector: 'Fintech · SMB', cohort: 1, raised: '$600K pre-seed', outcome: 'Pre-seed · 3 angel checks' },
-  { initials: 'MR', bg: 'bg-amber-100 dark:bg-amber-900', ink: 'text-amber-700 dark:text-amber-200', name: 'Meridian Robotics', sector: 'Industrial AI', cohort: 1, raised: '$250K angel', outcome: 'Bridge round · Revenue positive' },
-];
+import { PIPELINE_PHASES, PHASE_THEMES, DELIVERABLES, TRACKER_BOARD, MILESTONE_LABELS as LAB_MILESTONE_LABELS, GraduatesSection, ApplyCtaSection, LAB_APPLY_HREF as APPLY_HREF, LAB_CONTACT_HREF as CONTACT_HREF } from './SpinoutLabPage';
 
 export default function SpinoutLabMarketingPage() {
   return (
@@ -199,44 +189,10 @@ export default function SpinoutLabMarketingPage() {
         </section>
 
         {/* ALUMNI */}
-        <section className="mb-12">
-          <div className="flex items-baseline justify-between mb-5">
-            <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em]">Graduate companies.</h2>
-            <span className="text-[12.5px] text-gray-400">Select a company to view its profile</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {ALUMNI.map((a, i) => (
-              <button type="button" key={i} className="text-left bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-4 shadow-sm hover:border-violet-300 hover:shadow-lg dark:hover:border-violet-700 transition-all -translate-y-0 hover:-translate-y-1 block w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2">
-                <div className="flex items-center justify-between mb-3.5">
-                  <div className={`w-11 h-11 rounded-[11px] font-extrabold text-[15px] flex items-center justify-center ${a.bg} ${a.ink}`}>{a.initials}</div>
-                  <span className="tabular-nums text-[11px] font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/50 border border-violet-100 dark:border-violet-800/50 rounded-full px-2.5 py-1">Cohort {a.cohort}</span>
-                </div>
-                <div className="text-[15px] font-bold text-gray-900 dark:text-gray-100">{a.name}</div>
-                <div className="text-[12px] text-gray-400 mb-3.5">{a.sector}</div>
-                <div className="tabular-nums text-[19px] font-extrabold tracking-[-.01em]">{a.raised}</div>
-                <div className="text-[12px] text-gray-500 mt-1 leading-[1.4]">{a.outcome}</div>
-                <div className="mt-3.5 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center gap-1.5 text-[12px] font-semibold text-violet-600 dark:text-violet-400">
-                  View profile <span className="text-[13px]" aria-hidden="true">→</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
+        <GraduatesSection />
 
         {/* APPLICATION CTA */}
-        <section className="rounded-[20px] p-10 text-center relative overflow-hidden text-white" style={{ background: 'radial-gradient(900px 300px at 85% 120%,rgba(196,181,253,.35),transparent 60%),linear-gradient(115deg,#5b21b6,#7c3aed)' }}>
-          <h2 className="m-0 text-[32px] font-black tracking-[-.03em]">Apply to Cohort 4.</h2>
-          <p className="tabular-nums my-3 mb-6 text-[15px] text-[#e9d5ff]">Applications close August 1, 2026. 8 spots available.</p>
-          <div className="flex gap-3 justify-center flex-wrap">
-            <Link to={APPLY_HREF} className="h-11 px-5.5 rounded-[11px] bg-white text-[#6d28d9] text-[14px] font-bold flex items-center gap-2 hover:bg-gray-50 transition-colors">
-              Apply Now <span className="text-[16px]" aria-hidden="true">→</span>
-            </Link>
-            <a href={CONTACT_HREF} className="h-11 px-5.5 rounded-[11px] border border-white/40 bg-transparent text-white text-[14px] font-semibold flex items-center hover:bg-white/10 transition-colors">
-              Talk to a Program Manager
-            </a>
-          </div>
-          <p className="mt-6 text-[12px] text-[#c4b5fd]">Spin-Out Lab is open to all Meridian users. Acceptance is selective. No equity taken by Meridian.</p>
-        </section>
+        <ApplyCtaSection />
 
       </main>
       <PublicFooter />

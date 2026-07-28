@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Loader2, ArrowRight, FlaskConical, Globe, Circle, Lock } from "lucide-react";
+import { Check, Loader2, ArrowRight, FlaskConical, Globe, Circle, Lock, FileText, BadgeCheck } from "lucide-react";
 import { api, spinoutLab } from "../lib/api";
 import { deckReadinessState } from "../lib/deckReadiness";
 import { useAuth } from "../hooks/useAuthSync";
@@ -134,6 +134,78 @@ export const TRACKER_BOARD = [
     { initials: 'VD', name: 'Verda', desc: 'Clinical trial matching', day: 'Day 29', bg: 'bg-pink-200 dark:bg-pink-900', ink: 'text-pink-800 dark:text-pink-200', advisor: 'Leo Park', advInit: 'LP' }
   ] }
 ];
+
+// Reference-design shared content (Spin-Out Lab.dc.html): graduate alumni
+// cards, jurisdiction chips, and the application CTA. Shared with
+// SpinoutLabMarketingPage so both surfaces stay in lockstep.
+export const LAB_APPLY_HREF = '/register?lane=founder&product=spinout-lab';
+export const LAB_CONTACT_HREF = 'mailto:hello@axal.vc?subject=Spin-Out%20Lab';
+const BRIEF_HREF = 'mailto:hello@axal.vc?subject=Spin-Out%20Lab%20Program%20Brief';
+
+export const LAB_ALUMNI = [
+  { initials: 'AB', bg: 'bg-violet-100 dark:bg-violet-900', ink: 'text-violet-700 dark:text-violet-200', name: 'Arborline', sector: 'Climate · MRV', cohort: 2, raised: '$450K pre-seed', outcome: 'Closed pre-seed · Now on AngelList' },
+  { initials: 'PX', bg: 'bg-blue-100 dark:bg-blue-900', ink: 'text-blue-700 dark:text-blue-200', name: 'Pyxis Health', sector: 'Digital health', cohort: 2, raised: '$1.1M seed', outcome: 'Seed led by Foundry Group' },
+  { initials: 'KT', bg: 'bg-teal-100 dark:bg-teal-900', ink: 'text-teal-700 dark:text-teal-200', name: 'Kettle', sector: 'Fintech · SMB', cohort: 1, raised: '$600K pre-seed', outcome: 'Pre-seed · 3 angel checks' },
+  { initials: 'MR', bg: 'bg-amber-100 dark:bg-amber-900', ink: 'text-amber-700 dark:text-amber-200', name: 'Meridian Robotics', sector: 'Industrial AI', cohort: 1, raised: '$250K angel', outcome: 'Bridge round · Revenue positive' },
+  { initials: 'SV', bg: 'bg-pink-100 dark:bg-pink-900', ink: 'text-pink-700 dark:text-pink-200', name: 'Solvent', sector: 'Dev tools', cohort: 1, raised: '$820K seed', outcome: 'Seed · YC W26 admit' },
+  { initials: 'GL', bg: 'bg-indigo-100 dark:bg-indigo-900', ink: 'text-indigo-700 dark:text-indigo-200', name: 'Glassline', sector: 'Prop-tech', cohort: 2, raised: '$300K pre-seed', outcome: 'Pre-seed · Piloting 4 REITs' },
+];
+
+export const LAB_JURISDICTIONS = [
+  { key: 'de', label: 'Delaware, USA' },
+  { key: 'wy', label: 'Wyoming, USA' },
+  { key: 'sg', label: 'Singapore', soon: true },
+  { key: 'uk', label: 'London, UK', soon: true },
+  { key: 'ee', label: 'Estonia', soon: true },
+  { key: 'ae', label: 'Dubai, UAE', soon: true },
+  { key: 'ca', label: 'Alberta, Canada', soon: true },
+];
+
+export function GraduatesSection() {
+  return (
+    <section className="mb-12">
+      <div className="flex items-baseline justify-between mb-5">
+        <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em]">Graduate companies.</h2>
+        <span className="text-[12.5px] text-gray-400">Select a company to view its profile</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {LAB_ALUMNI.map((a, i) => (
+          <button type="button" key={i} className="text-left bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-4 shadow-sm hover:border-violet-300 hover:shadow-lg dark:hover:border-violet-700 transition-all -translate-y-0 hover:-translate-y-1 block w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2">
+            <div className="flex items-center justify-between mb-3.5">
+              <div className={`w-11 h-11 rounded-[11px] font-extrabold text-[15px] flex items-center justify-center ${a.bg} ${a.ink}`}>{a.initials}</div>
+              <span className="tabular-nums text-[11px] font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/50 border border-violet-100 dark:border-violet-800/50 rounded-full px-2.5 py-1">Cohort {a.cohort}</span>
+            </div>
+            <div className="text-[15px] font-bold text-gray-900 dark:text-gray-100">{a.name}</div>
+            <div className="text-[12px] text-gray-400 mb-3.5">{a.sector}</div>
+            <div className="tabular-nums text-[19px] font-extrabold tracking-[-.01em]">{a.raised}</div>
+            <div className="text-[12px] text-gray-500 mt-1 leading-[1.4]">{a.outcome}</div>
+            <div className="mt-3.5 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center gap-1.5 text-[12px] font-semibold text-violet-600 dark:text-violet-400">
+              View profile <span className="text-[13px]" aria-hidden="true">→</span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function ApplyCtaSection() {
+  return (
+    <section className="rounded-[20px] p-10 text-center relative overflow-hidden text-white" style={{ background: 'radial-gradient(900px 300px at 85% 120%,rgba(196,181,253,.35),transparent 60%),linear-gradient(115deg,#5b21b6,#7c3aed)' }}>
+      <h2 className="m-0 text-[32px] font-black tracking-[-.03em]">Apply to Cohort 4.</h2>
+      <p className="tabular-nums my-3 mb-6 text-[15px] text-[#e9d5ff]">Applications close August 1, 2026. 8 spots available.</p>
+      <div className="flex gap-3 justify-center flex-wrap">
+        <Link to={LAB_APPLY_HREF} className="h-11 px-5.5 rounded-[11px] bg-white dark:bg-gray-100 text-[#6d28d9] text-[14px] font-bold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white transition-colors">
+          Apply Now <span className="text-[16px]" aria-hidden="true">→</span>
+        </Link>
+        <a href={LAB_CONTACT_HREF} className="h-11 px-5.5 rounded-[11px] border border-white/40 bg-transparent text-white text-[14px] font-semibold flex items-center hover:bg-white/10 transition-colors">
+          Talk to a Program Manager
+        </a>
+      </div>
+      <p className="mt-6 text-[12px] text-[#c4b5fd]">Spin-Out Lab is open to all Meridian users. Acceptance is selective. No equity taken by Meridian.</p>
+    </section>
+  );
+}
 
 function DeckReadinessCard() {
   const [preview, setPreview] = useState(null);
@@ -293,6 +365,9 @@ function Dashboard({ state, onComplete, completing, completeError }) {
   
   const startedAt = state.started_at;
   const startedAtStr = startedAt ? new Date(startedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "Recently";
+  // Reference design: Delaware + Wyoming selectable, the rest "Soon".
+  // Client-side selection only — incorporation itself is Delaware-first.
+  const [jurisdiction, setJurisdiction] = useState('de');
 
   return (
     <div className="min-h-[100dvh] bg-[#F8F8FA] dark:bg-gray-950 font-sans text-gray-900 dark:text-gray-100 flex flex-col">
@@ -313,6 +388,14 @@ function Dashboard({ state, onComplete, completing, completeError }) {
             </div>
             <p className="mt-2.5 ml-[52px] text-[15px] text-gray-500 dark:text-gray-400">From idea to incorporated in 30 days. Started {startedAtStr}.</p>
           </div>
+          <div className="flex gap-2.5 items-center">
+            <a href={BRIEF_HREF} className="h-10 px-4 rounded-[10px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 text-[13.5px] font-semibold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+              <FileText size={15} aria-hidden="true" /> Download Program Brief
+            </a>
+            <a href={LAB_CONTACT_HREF} className="h-10 px-4 rounded-[10px] bg-violet-600 text-white text-[13.5px] font-semibold flex items-center gap-2 shadow-sm shadow-violet-500/30 hover:bg-violet-700 transition-colors">
+              Apply to Next Cohort <span className="text-[15px]" aria-hidden="true">→</span>
+            </a>
+          </div>
         </div>
 
         {/* JURISDICTION SELECTOR */}
@@ -322,13 +405,26 @@ function Dashboard({ state, onComplete, completing, completeError }) {
             <span className="text-[13px] font-bold text-gray-900 dark:text-gray-100">Incorporation jurisdiction</span>
           </div>
           <div className="flex gap-1.5 flex-wrap">
-            <button className="h-[34px] px-3 rounded-lg bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 border border-violet-200 dark:border-violet-500/30 text-[13px] font-semibold">Delaware C-Corp</button>
-            <button disabled className="h-[34px] px-3 rounded-lg bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800 text-[13px] font-semibold opacity-60 flex items-center gap-1.5">
-              UK Ltd <span className="text-[9px] font-bold uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded px-1.5 py-0.5">Soon</span>
-            </button>
-            <button disabled className="h-[34px] px-3 rounded-lg bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800 text-[13px] font-semibold opacity-60 flex items-center gap-1.5">
-              French SAS <span className="text-[9px] font-bold uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded px-1.5 py-0.5">Soon</span>
-            </button>
+            {LAB_JURISDICTIONS.map((j) => (
+              j.soon ? (
+                <button key={j.key} disabled className="h-[34px] px-3 rounded-lg bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800 text-[13px] font-semibold opacity-60 flex items-center gap-1.5">
+                  {j.label} <span className="text-[9px] font-bold uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded px-1.5 py-0.5">Soon</span>
+                </button>
+              ) : (
+                <button
+                  key={j.key}
+                  type="button"
+                  onClick={() => setJurisdiction(j.key)}
+                  className={`h-[34px] px-3 rounded-lg text-[13px] font-semibold transition-colors border ${
+                    jurisdiction === j.key
+                      ? 'bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-500/30'
+                      : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  {j.label}
+                </button>
+              )
+            ))}
           </div>
           <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto hidden md:inline">Entity & equity filing update across the program →</span>
         </div>
@@ -437,6 +533,10 @@ function Dashboard({ state, onComplete, completing, completeError }) {
           
           <DeckReadinessCard />
 
+          <p className="mt-4 mb-0 text-[12.5px] text-gray-400 flex items-center gap-2">
+            <BadgeCheck size={16} className="flex-none text-violet-500" aria-hidden="true" />
+            All Spin-Out Lab graduates receive a verified "Spin-Out Lab Alumni" badge on their Meridian founder profile.
+          </p>
         </section>
 
         {/* WHAT YOU LEAVE WITH */}
@@ -506,6 +606,12 @@ function Dashboard({ state, onComplete, completing, completeError }) {
             </div>
           </div>
         </section>
+
+        {/* GRADUATE COMPANIES */}
+        <GraduatesSection />
+
+        {/* APPLICATION CTA */}
+        <ApplyCtaSection />
 
       </main>
     </div>
