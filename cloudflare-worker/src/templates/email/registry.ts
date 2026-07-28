@@ -395,6 +395,36 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
 </td></tr></table>
 <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.6;">Sign in with this email address and you'll land straight in your founder workspace.</p>`,
   }),
+  // Cohort application confirmation. vars: name, company_name, cohort_label
+  spinout_application_received: t({
+    key: 'spinout_application_received', category: 'spinout', severity: 'info',
+    replyTo: 'support@axal.vc', alwaysSend: true,
+    subject: 'Application received — Spin-Out Lab ({{cohort_label}})',
+    text: `Hi {{name}},\n\nWe've received your Spin-Out Lab application for {{company_name}} ({{cohort_label}}).\n\nWhat happens next:\n1. Application review — a program manager reviews within 5 business days.\n2. Founder interview — a 30-minute call to align on scope and readiness.\n3. Cohort onboarding — accepted founders start at the Validate gate on day one.\n\nNo equity taken by Meridian. Acceptance is selective.\n\nThe Axal team`,
+    html: `<h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">Application received</h1>
+<p style="font-size:14px;color:#6b7280;margin:0 0 20px;line-height:1.6;">Hi {{name}}, we've received your <strong style="color:#111827;">Spin-Out Lab</strong> application for <strong style="color:#111827;">{{company_name}}</strong> ({{cohort_label}}).</p>
+<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:14px;padding:18px 20px;margin:0 0 24px;">
+  <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#7c3aed;font-weight:600;margin:0 0 10px;">What happens next</div>
+  <div style="font-size:14px;color:#111827;line-height:1.8;">1. <strong>Application review</strong> — a program manager reviews within 5 business days.<br/>2. <strong>Founder interview</strong> — a 30-minute call to align on scope and readiness.<br/>3. <strong>Cohort onboarding</strong> — accepted founders start at the Validate gate on day one.</div>
+</div>
+<p style="font-size:13px;color:#6b7280;margin:0;line-height:1.6;">No equity taken by Meridian. Acceptance is selective.</p>`,
+  }),
+  // Cohort application refusal. vars: name, company_name, cohort_label, next_cohort_label, apply_url
+  spinout_refused: t({
+    key: 'spinout_refused', category: 'spinout', severity: 'info',
+    replyTo: 'support@axal.vc', alwaysSend: true,
+    subject: 'Your Spin-Out Lab application — {{cohort_label}}',
+    text: `Hi {{name}},\n\nThank you for applying to the Spin-Out Lab ({{cohort_label}}) with {{company_name}}. After careful review, we weren't able to offer you a spot in this cohort — spots are limited and acceptance is selective.\n\nThis is not the end of the road. Founders often strengthen their idea and get in on the next try. We'd love to see you re-apply for {{next_cohort_label}}:\n{{apply_url}}\n\nKeep building,\nThe Axal team`,
+    html: `<h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">About your application</h1>
+<p style="font-size:14px;color:#6b7280;margin:0 0 20px;line-height:1.6;">Hi {{name}}, thank you for applying to the <strong style="color:#111827;">Spin-Out Lab</strong> ({{cohort_label}}) with <strong style="color:#111827;">{{company_name}}</strong>. After careful review, we weren't able to offer you a spot in this cohort — spots are limited and acceptance is selective.</p>
+<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:14px;padding:18px 20px;margin:0 0 24px;">
+  <div style="font-size:14px;color:#111827;line-height:1.6;">This is not the end of the road — founders often strengthen their idea and get in on the next try. We'd love to see you re-apply for <strong>{{next_cohort_label}}</strong>.</div>
+</div>
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:0 0 24px;">
+  <a href="{{{apply_url}}}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;padding:16px 28px;border-radius:14px;">Re-apply for {{next_cohort_label}}</a>
+</td></tr></table>
+<p style="font-size:13px;color:#6b7280;margin:0;line-height:1.6;">Keep building — the Axal team.</p>`,
+  }),
   // vars: name, dashboard_url
   spinout_graduated: t({
     key: 'spinout_graduated', category: 'spinout', severity: 'info',

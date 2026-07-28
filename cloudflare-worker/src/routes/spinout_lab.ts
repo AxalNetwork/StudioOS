@@ -223,6 +223,55 @@ export async function exitLab(sql: Sql, userId: number): Promise<LabState> {
 // Wire handlers — thin wrappers around the pure logic above.
 // ---------------------------------------------------------------------------
 
+// Cohort applications — lazy table ensure (mirrors migration 155) so
+// databases that haven't run the migration yet still answer.
+let applicationsSchemaEnsured = false;
+async function ensureApplicationsTable(env: Env): Promise<void> {
+  if (applicationsSchemaEnsured) return;
+  try {
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS spinout_applications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        company_name TEXT NOT NULL,
+        idea TEXT NOT NULL,
+        incorporated TEXT NOT NULL DEFAULT 'no',
+        stage TEXT,
+        jurisdiction TEXT,
+        cohort TEXT NOT NULL DEFAULT 'Cohort 4',
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        decided_at TEXT
+      )`,
+    ).run();
+  } catch { /* ignore */ }
+  applicationsSchemaEnsured = true;
+}
+
+type ApplicationRow = {
+  id: number;
+  company_name: string;
+  incorporated: string;
+  stage: string | null;
+  jurisdiction: string | null;
+  cohort: string;
+  status: string;
+  created_at: string;
+  decided_at: string | null;
+};
+
+async function latestApplication(env: Env, userId: number): Promise<ApplicationRow | null> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT id, company_name, incorporated, stage, jurisdiction, cohort, status, created_at, decided_at
+       FROM spinout_applications WHERE user_id = ? ORDER BY id DESC LIMIT 1`,
+    ).bind(userId).first<ApplicationRow>();
+    return row ?? null;
+  } catch {
+    return null; // table not yet migrated
+  }
+}
+
 spinoutLab.get('/state', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
@@ -241,7 +290,81 @@ spinoutLab.get('/state', async (c) => {
     cohort = rows[0]?.spinout_lab_cohort ?? null;
   } catch { /* columns not yet migrated */ }
   await sql.end();
-  return c.json({ ...state, admitted, cohort });
+  const application = await latestApplication(c.env, user.id);
+  return c.json({ ...state, admitted, cohort, application });
+});
+
+// POST /apply — submit a cohort application. Signed-in founders only, so no
+// contact fields: name/email come from the account. Sends a confirmation
+// email (failures logged, never block the submission). One pending
+// application at a time; re-apply is allowed after a refusal.
+type ApplyBody = {
+  company_name?: unknown;
+  idea?: unknown;
+  incorporated?: unknown;
+  stage?: unknown;
+  jurisdiction?: unknown;
+  cohort?: unknown;
+};
+
+spinoutLab.post('/apply', async (c) => {
+  const user = await requireAuth(c);
+  // Founder and Explorer accounts may apply — the Lab is exactly how an
+  // explorer graduates into a founder-track company.
+  if (!['founder', 'exploring'].includes((user.role || '').toLowerCase())) {
+    return c.json({ error: 'Only founder and explorer accounts can apply to the Lab' }, 403);
+  }
+  const body = (await c.req.json().catch(() => ({}))) as ApplyBody;
+  const company = (typeof body.company_name === 'string' ? body.company_name : '').trim().slice(0, 200);
+  const idea = (typeof body.idea === 'string' ? body.idea : '').trim().slice(0, 4000);
+  if (!company) return c.json({ error: 'Company / working name is required' }, 400);
+  if (!idea) return c.json({ error: 'Please describe your idea or project' }, 400);
+  const incorporated = (typeof body.incorporated === 'string' && body.incorporated.toLowerCase() === 'yes') ? 'yes' : 'no';
+  const stage = (typeof body.stage === 'string' ? body.stage : '').trim().slice(0, 100) || null;
+  const jurisdiction = (typeof body.jurisdiction === 'string' ? body.jurisdiction : '').trim().slice(0, 100) || null;
+  const cohort = ((typeof body.cohort === 'string' && body.cohort.trim()) || 'Cohort 4').slice(0, 50);
+
+  await ensureApplicationsTable(c.env);
+  try {
+    const u = await c.env.DB.prepare(
+      `SELECT spinout_lab_admitted FROM users WHERE id = ?`,
+    ).bind(user.id).first<{ spinout_lab_admitted: number | null }>();
+    if (Number(u?.spinout_lab_admitted ?? 0) === 1) {
+      return c.json({ error: 'You are already admitted to the Lab' }, 409);
+    }
+  } catch { /* admission columns not yet migrated */ }
+  const existing = await latestApplication(c.env, user.id);
+  if (existing && existing.status === 'pending') {
+    return c.json({ error: 'You already have an application in review' }, 409);
+  }
+
+  // Conditional insert — the NOT EXISTS guard makes "one pending application
+  // per user" atomic, so concurrent submissions can't both pass the pre-check.
+  const ins = await c.env.DB.prepare(
+    `INSERT INTO spinout_applications (user_id, company_name, idea, incorporated, stage, jurisdiction, cohort)
+     SELECT ?, ?, ?, ?, ?, ?, ?
+     WHERE NOT EXISTS (
+       SELECT 1 FROM spinout_applications WHERE user_id = ? AND status = 'pending'
+     )`,
+  ).bind(user.id, company, idea, incorporated, stage, jurisdiction, cohort, user.id).run();
+  if ((ins.meta?.changes ?? 1) === 0) {
+    return c.json({ error: 'You already have an application in review' }, 409);
+  }
+
+  let emailed = false;
+  try {
+    const { send } = await import('../services/email/send');
+    const r = await send(c.env, 'spinout_application_received', user.email, {
+      name: user.name || 'there',
+      company_name: company,
+      cohort_label: cohort,
+    }, { userId: user.id });
+    emailed = !!r?.ok;
+  } catch (e) {
+    console.error('[spinout-lab/apply] confirmation email failed', e);
+  }
+
+  return c.json({ ok: true, emailed, application: await latestApplication(c.env, user.id) });
 });
 
 spinoutLab.post('/start', async (c) => {

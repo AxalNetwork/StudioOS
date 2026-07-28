@@ -2675,6 +2675,25 @@ def ensure_spinout_lab_tables() -> None:
         )
         """,
         "CREATE INDEX IF NOT EXISTS ix_spinout_lab_milestones_user ON spinout_lab_milestones(user_id)",
+        # Cohort applications (mirrors Worker migration 155). One row per
+        # submission; founders may re-apply after a refusal.
+        """
+        CREATE TABLE IF NOT EXISTS spinout_applications (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            company_name TEXT NOT NULL,
+            idea TEXT NOT NULL,
+            incorporated TEXT NOT NULL DEFAULT 'no',
+            stage TEXT,
+            jurisdiction TEXT,
+            cohort TEXT NOT NULL DEFAULT 'Cohort 4',
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            decided_at TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_spinout_applications_user ON spinout_applications(user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_spinout_applications_status ON spinout_applications(status)",
     )
     with Session(engine) as session:
         for ddl in stmts:

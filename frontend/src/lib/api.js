@@ -111,6 +111,9 @@ export async function request(path, options = {}) {
           || currentPath === '/register'
           || currentPath === '/verify-email'
           || currentPath === '/spinout-lab'
+          // Printable Program Brief — public brochure page; /spinout-lab/apply
+          // is intentionally NOT listed (auth-only, a 401 there should bounce).
+          || currentPath === '/spinout-lab/brief'
           // Audience product pages (For Founders / Investors & LPs / Service
           // Partners / Advisors) — public marketing surfaces. A background
           // settings/me 401 for an anonymous visitor must not bounce them to
@@ -1433,6 +1436,11 @@ export const api = {
   // "You're in" email from the Worker; dev backend sets flags only).
   adminSpinoutAdmit: (userId, cohort) =>
     request(`/admin/users/${userId}/spinout-admit`, { method: 'POST', body: JSON.stringify(cohort ? { cohort } : {}) }),
+  // Spin-Out Lab cohort application review queue. Accept → admitted flags +
+  // "You're in" email; refuse → encouragement-to-re-apply email (Worker).
+  adminSpinoutApplications: () => request('/admin/spinout-applications'),
+  adminSpinoutDecide: (appId, decision) =>
+    request(`/admin/spinout-applications/${appId}/decide`, { method: 'POST', body: JSON.stringify({ decision }) }),
 
   integrationsAvailable: () => request('/integrations/available'),
   // Crunchbase enrichment (Task #3, 2026-05-10) — growth tier, requires
@@ -3142,6 +3150,9 @@ export const spinoutLab = {
       body: JSON.stringify({ milestone_key }),
     }),
   exit: () => request('/spinout-lab/exit', { method: 'POST' }),
+  // Cohort application — signed-in founders only; contact info comes from
+  // the account. Sends a confirmation email (production Worker).
+  apply: (data) => request('/spinout-lab/apply', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 // Task #39 — Event engine. `events` covers the authenticated host/attendee

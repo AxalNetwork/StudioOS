@@ -140,7 +140,6 @@ export const TRACKER_BOARD = [
 // SpinoutLabMarketingPage so both surfaces stay in lockstep.
 export const LAB_APPLY_HREF = '/register?lane=founder&product=spinout-lab';
 export const LAB_CONTACT_HREF = 'mailto:hello@axal.vc?subject=Spin-Out%20Lab';
-const BRIEF_HREF = 'mailto:hello@axal.vc?subject=Spin-Out%20Lab%20Program%20Brief';
 
 export const LAB_ALUMNI = [
   { initials: 'AB', bg: 'bg-violet-100 dark:bg-violet-900', ink: 'text-violet-700 dark:text-violet-200', name: 'Arborline', sector: 'Climate · MRV', cohort: 2, raised: '$450K pre-seed', outcome: 'Closed pre-seed · Now on AngelList' },
@@ -189,13 +188,13 @@ export function GraduatesSection() {
   );
 }
 
-export function ApplyCtaSection() {
+export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
   return (
     <section className="rounded-[20px] p-10 text-center relative overflow-hidden text-white" style={{ background: 'radial-gradient(900px 300px at 85% 120%,rgba(196,181,253,.35),transparent 60%),linear-gradient(115deg,#5b21b6,#7c3aed)' }}>
       <h2 className="m-0 text-[32px] font-black tracking-[-.03em]">Apply to Cohort 4.</h2>
       <p className="tabular-nums my-3 mb-6 text-[15px] text-[#e9d5ff]">Applications close August 1, 2026. 8 spots available.</p>
       <div className="flex gap-3 justify-center flex-wrap">
-        <Link to={LAB_APPLY_HREF} className="h-11 px-5.5 rounded-[11px] bg-white dark:bg-gray-100 text-[#6d28d9] text-[14px] font-bold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white transition-colors">
+        <Link to={applyHref} className="h-11 px-5.5 rounded-[11px] bg-white dark:bg-gray-100 text-[#6d28d9] text-[14px] font-bold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white transition-colors">
           Apply Now <span className="text-[16px]" aria-hidden="true">→</span>
         </Link>
         <a href={LAB_CONTACT_HREF} className="h-11 px-5.5 rounded-[11px] border border-white/40 bg-transparent text-white text-[14px] font-semibold flex items-center hover:bg-white/10 transition-colors">
@@ -389,12 +388,12 @@ function Dashboard({ state, onComplete, completing, completeError }) {
             <p className="mt-2.5 ml-[52px] text-[15px] text-gray-500 dark:text-gray-400">From idea to incorporated in 30 days. Started {startedAtStr}.</p>
           </div>
           <div className="flex gap-2.5 items-center">
-            <a href={BRIEF_HREF} className="h-10 px-4 rounded-[10px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 text-[13.5px] font-semibold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+            <Link to="/spinout-lab/brief" data-testid="download-program-brief" className="h-10 px-4 rounded-[10px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 text-[13.5px] font-semibold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
               <FileText size={15} aria-hidden="true" /> Download Program Brief
-            </a>
-            <a href={LAB_CONTACT_HREF} className="h-10 px-4 rounded-[10px] bg-violet-600 text-white text-[13.5px] font-semibold flex items-center gap-2 shadow-sm shadow-violet-500/30 hover:bg-violet-700 transition-colors">
+            </Link>
+            <Link to="/spinout-lab/apply" data-testid="apply-next-cohort" className="h-10 px-4 rounded-[10px] bg-violet-600 text-white text-[13.5px] font-semibold flex items-center gap-2 shadow-sm shadow-violet-500/30 hover:bg-violet-700 transition-colors">
               Apply to Next Cohort <span className="text-[15px]" aria-hidden="true">→</span>
-            </a>
+            </Link>
           </div>
         </div>
 
@@ -611,7 +610,7 @@ function Dashboard({ state, onComplete, completing, completeError }) {
         <GraduatesSection />
 
         {/* APPLICATION CTA */}
-        <ApplyCtaSection />
+        <ApplyCtaSection applyHref="/spinout-lab/apply" />
 
       </main>
     </div>

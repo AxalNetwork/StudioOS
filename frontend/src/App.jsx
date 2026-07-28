@@ -86,6 +86,8 @@ const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCa
 const ApiBridgePage = lazy(() => import('./pages/ApiBridgePage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const SpinoutLabPage = lazy(() => import('./pages/SpinoutLabPage'));
+const SpinoutLabApplyPage = lazy(() => import('./pages/SpinoutLabApplyPage'));
+const SpinoutLabBriefPage = lazy(() => import('./pages/SpinoutLabBriefPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
@@ -1272,6 +1274,14 @@ function AppInner() {
           app shell — sidebar and all — like every other authenticated page;
           logged-out visitors get the bare marketing surface. */}
       <Route path="/spinout-lab" element={user ? authOnly(<SpinoutLabPage />) : <SpinoutLabPage />} />
+      {/* Cohort application form — signed-in founders only (contact info
+          comes from the account); logged-out visitors are sent to register
+          with the spinout-lab product intent. */}
+      <Route path="/spinout-lab/apply" element={user ? authOnly(<SpinoutLabApplyPage />) : <Navigate to="/register?lane=founder&product=spinout-lab" replace />} />
+      {/* Printable Program Brief — deliberately rendered OUTSIDE the app
+          shell (even when logged in) so "Save as PDF" prints a clean
+          brochure with no sidebar/nav. Public: it's marketing collateral. */}
+      <Route path="/spinout-lab/brief" element={<SpinoutLabBriefPage />} />
       {/* Audience product pages — public marketing surface. */}
       <Route path="/for-founders" element={<ProductAudiencePage slug="founders" />} />
       <Route path="/for-investors" element={<ProductAudiencePage slug="investors" />} />

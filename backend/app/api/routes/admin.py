@@ -1,6 +1,7 @@
 import jwt
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
 from sqlmodel import Session, select
 from backend.app.database import get_session
 from backend.app.models.entities import (
@@ -519,6 +520,79 @@ def admin_spinout_admit(
     ))
     session.commit()
     return {"ok": True, "cohort": cohort, "already_admitted": already_admitted, "emailed": False}
+
+
+# Spin-Out Lab cohort applications — review queue + accept/refuse decisions
+# (dev parity with the Worker's /admin/spinout-applications routes; no
+# email pipeline in dev, so decision emails are skipped — flags only).
+@router.get("/spinout-applications")
+def admin_spinout_applications(
+    session: Session = Depends(get_session),
+    admin: User = Depends(require_admin),
+):
+    rows = session.exec(text(
+        """SELECT a.id, a.user_id, u.name, u.email, a.company_name, a.idea,
+                  a.incorporated, a.stage, a.jurisdiction, a.cohort, a.status,
+                  a.created_at, a.decided_at
+           FROM spinout_applications a
+           JOIN users u ON u.id = a.user_id
+           ORDER BY CASE WHEN a.status = 'pending' THEN 0 ELSE 1 END,
+                    a.created_at DESC
+           LIMIT 200"""
+    )).all()
+    return {"applications": [
+        {
+            "id": r[0], "user_id": r[1], "name": r[2], "email": r[3],
+            "company_name": r[4], "idea": r[5], "incorporated": r[6],
+            "stage": r[7], "jurisdiction": r[8], "cohort": r[9], "status": r[10],
+            "created_at": r[11].isoformat() if hasattr(r[11], "isoformat") else str(r[11]),
+            "decided_at": r[12].isoformat() if hasattr(r[12], "isoformat") else (str(r[12]) if r[12] else None),
+        }
+        for r in rows
+    ]}
+
+
+@router.post("/spinout-applications/{app_id}/decide")
+def admin_spinout_decide(
+    app_id: int,
+    body: dict = None,
+    session: Session = Depends(get_session),
+    admin: User = Depends(require_admin),
+):
+    decision = ((body or {}).get("decision") or "").strip().lower()
+    if decision not in ("accepted", "refused"):
+        raise HTTPException(status_code=400, detail="decision must be 'accepted' or 'refused'")
+    row = session.exec(text(
+        "SELECT id, user_id, cohort, status FROM spinout_applications WHERE id = :aid"
+    ).bindparams(aid=app_id)).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Application not found")
+    if row[3] != "pending":
+        raise HTTPException(status_code=409, detail=f"Application already {row[3]}")
+    target = session.get(User, row[1])
+    if not target:
+        raise HTTPException(status_code=404, detail="Applicant user not found")
+
+    # Guarded update — WHERE status='pending' makes the decision atomic, so
+    # two admins deciding at once can't both trigger side effects.
+    result = session.exec(text(
+        "UPDATE spinout_applications SET status = :st, decided_at = CURRENT_TIMESTAMP "
+        "WHERE id = :aid AND status = 'pending'"
+    ).bindparams(st=decision, aid=app_id))
+    if getattr(result, "rowcount", 1) == 0:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="Application was already decided")
+    if decision == "accepted":
+        target.spinout_lab_admitted = 1
+        target.spinout_lab_cohort = row[2] or "Cohort 4"
+        session.add(target)
+    session.add(ActivityLog(
+        action=f"spinout_application_{decision}",
+        details=f"Admin {admin.name} {decision} Spin-Out Lab application #{app_id} from {target.email} (dev: no email sent)",
+        actor=admin.email,
+    ))
+    session.commit()
+    return {"ok": True, "status": decision, "emailed": False}
 
 
 @router.post("/users/{user_id}/resend-verification")

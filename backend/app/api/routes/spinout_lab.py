@@ -147,6 +147,37 @@ def _state(session: Session, user: User) -> dict:
         # Task #7 — cohort admission (Worker parity).
         "admitted": int(getattr(user, "spinout_lab_admitted", 0) or 0) == 1,
         "cohort": getattr(user, "spinout_lab_cohort", None),
+        # Cohort application (latest submission, if any).
+        "application": _latest_application(session, user.id),
+    }
+
+
+def _latest_application(session: Session, user_id: int) -> Optional[dict]:
+    try:
+        row = session.exec(
+            text(
+                """SELECT id, company_name, incorporated, stage, jurisdiction,
+                          cohort, status, created_at, decided_at
+                   FROM spinout_applications
+                   WHERE user_id = :uid
+                   ORDER BY created_at DESC, id DESC
+                   LIMIT 1"""
+            ).bindparams(uid=user_id)
+        ).first()
+    except Exception:  # table not yet migrated
+        return None
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "company_name": row[1],
+        "incorporated": row[2],
+        "stage": row[3],
+        "jurisdiction": row[4],
+        "cohort": row[5],
+        "status": row[6],
+        "created_at": row[7].isoformat() if hasattr(row[7], "isoformat") else str(row[7]),
+        "decided_at": row[8].isoformat() if hasattr(row[8], "isoformat") else (str(row[8]) if row[8] else None),
     }
 
 
@@ -219,6 +250,66 @@ def record_milestone(
     session.add(user)
     session.commit()
     return _state(session, user)
+
+
+class ApplyRequest(BaseModel):
+    company_name: str = ""
+    idea: str = ""
+    incorporated: str = "no"  # 'no' | 'yes'
+    stage: str = ""
+    jurisdiction: str = ""
+    cohort: str = "Cohort 4"
+
+
+@router.post("/apply")
+def apply_to_cohort(
+    req: ApplyRequest,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Submit a cohort application. Signed-in founders only — contact info
+    comes from the account. Dev parity with the Worker's POST /apply; the
+    dev backend has no email pipeline, so the confirmation email is skipped.
+    """
+    company = (req.company_name or "").strip()
+    idea = (req.idea or "").strip()
+    if not company:
+        raise HTTPException(status_code=400, detail="Company / working name is required")
+    if not idea:
+        raise HTTPException(status_code=400, detail="Please describe your idea or project")
+    # Founder and Explorer accounts may apply — the Lab is exactly how an
+    # explorer graduates into a founder-track company.
+    if (getattr(user, "role", "") or "").lower() not in ("founder", "exploring"):
+        raise HTTPException(status_code=403, detail="Only founder and explorer accounts can apply to the Lab")
+    if int(getattr(user, "spinout_lab_admitted", 0) or 0) == 1:
+        raise HTTPException(status_code=409, detail="You are already admitted to the Lab")
+    existing = _latest_application(session, user.id)
+    if existing and existing["status"] == "pending":
+        raise HTTPException(status_code=409, detail="You already have an application in review")
+    incorporated = "yes" if (req.incorporated or "").strip().lower() == "yes" else "no"
+    cohort = (req.cohort or "").strip() or "Cohort 4"
+    # Conditional insert — the NOT EXISTS guard makes "one pending application
+    # per user" atomic at the DB level, so two concurrent submissions can't
+    # both slip past the pre-check above.
+    result = session.exec(
+        text(
+            """INSERT INTO spinout_applications
+               (user_id, company_name, idea, incorporated, stage, jurisdiction, cohort)
+               SELECT :uid, :co, :idea, :inc, :st, :ju, :ch
+               WHERE NOT EXISTS (
+                 SELECT 1 FROM spinout_applications
+                 WHERE user_id = :uid AND status = 'pending'
+               )"""
+        ).bindparams(
+            uid=user.id, co=company[:200], idea=idea[:4000],
+            inc=incorporated, st=(req.stage or "").strip()[:100] or None,
+            ju=(req.jurisdiction or "").strip()[:100] or None, ch=cohort[:50],
+        )
+    )
+    session.commit()
+    if getattr(result, "rowcount", 1) == 0:
+        raise HTTPException(status_code=409, detail="You already have an application in review")
+    return {"ok": True, "emailed": False, "application": _latest_application(session, user.id)}
 
 
 @router.post("/exit")

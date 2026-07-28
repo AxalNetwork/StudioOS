@@ -1016,6 +1016,113 @@ admin.post('/users/:user_id/spinout-admit', async (c) => {
   return c.json({ ok: true, cohort, already_admitted: alreadyAdmitted, emailed });
 });
 
+// Spin-Out Lab cohort applications — review queue + accept/refuse.
+// GET  /spinout-applications           → pending first, newest first
+// POST /spinout-applications/:id/decide {decision:'accepted'|'refused'}
+//   accepted → sets admitted flags on the user + sends the spinout_admitted
+//              email whose CTA links to /spinout-lab (workspace access)
+//   refused  → sends the spinout_refused email encouraging a re-apply for
+//              the next cohort
+admin.get('/spinout-applications', async (c) => {
+  await requireAdmin(c);
+  let applications: unknown[] = [];
+  try {
+    const rs = await c.env.DB.prepare(
+      `SELECT a.id, a.user_id, u.name, u.email, a.company_name, a.idea,
+              a.incorporated, a.stage, a.jurisdiction, a.cohort, a.status,
+              a.created_at, a.decided_at
+       FROM spinout_applications a
+       JOIN users u ON u.id = a.user_id
+       ORDER BY CASE WHEN a.status = 'pending' THEN 0 ELSE 1 END,
+                a.created_at DESC
+       LIMIT 200`,
+    ).all();
+    applications = rs.results ?? [];
+  } catch { /* table not yet migrated → empty queue */ }
+  return c.json({ applications });
+});
+
+admin.post('/spinout-applications/:app_id/decide', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const appId = parseInt(c.req.param('app_id'));
+  if (!Number.isFinite(appId)) return c.json({ error: 'Invalid application id' }, 400);
+  const body = (await c.req.json().catch(() => ({}))) as { decision?: unknown };
+  const decision = (typeof body.decision === 'string' ? body.decision : '').trim().toLowerCase();
+  if (decision !== 'accepted' && decision !== 'refused') {
+    return c.json({ error: "decision must be 'accepted' or 'refused'" }, 400);
+  }
+
+  const app: any = await c.env.DB.prepare(
+    `SELECT a.id, a.user_id, a.company_name, a.cohort, a.status,
+            u.email, u.name, u.role, u.is_incorporated
+     FROM spinout_applications a JOIN users u ON u.id = a.user_id
+     WHERE a.id = ?`,
+  ).bind(appId).first();
+  if (!app) return c.json({ error: 'Application not found' }, 404);
+  if (app.status !== 'pending') return c.json({ error: `Application already ${app.status}` }, 409);
+
+  // Guarded update — WHERE status='pending' makes the decision atomic, so two
+  // admins deciding at once can't both trigger emails/admission side effects.
+  const upd = await c.env.DB.prepare(
+    `UPDATE spinout_applications SET status = ?, decided_at = datetime('now') WHERE id = ? AND status = 'pending'`,
+  ).bind(decision, appId).run();
+  if ((upd.meta?.changes ?? 1) === 0) {
+    return c.json({ error: 'Application was already decided' }, 409);
+  }
+
+  const cohort = app.cohort || 'Cohort 4';
+  const appUrl = (c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+  let emailed = false;
+  if (decision === 'accepted') {
+    await ensureSpinoutAdmissionColumns(c.env);
+    await c.env.DB.prepare(
+      `UPDATE users SET spinout_lab_admitted = 1, spinout_lab_cohort = ? WHERE id = ?`,
+    ).bind(cohort, app.user_id).run();
+    try {
+      const { send } = await import('../services/email/send');
+      const labUrl = `${appUrl}/spinout-lab`;
+      const r = await send(c.env, 'spinout_admitted', app.email, {
+        name: app.name || 'there',
+        cohort_label: cohort,
+        lab_url: labUrl,
+      }, { userId: app.user_id, ctaUrl: labUrl });
+      emailed = !!r?.ok;
+    } catch (e) {
+      console.error('[admin/spinout-decide] accept email failed', e);
+    }
+  } else {
+    // Next cohort label: "Cohort 4" → "Cohort 5"; fall back gracefully.
+    const m = /^Cohort (\d+)$/.exec(cohort);
+    const nextCohort = m ? `Cohort ${Number(m[1]) + 1}` : 'the next cohort';
+    try {
+      const { send } = await import('../services/email/send');
+      const applyUrl = `${appUrl}/spinout-lab/apply`;
+      const r = await send(c.env, 'spinout_refused', app.email, {
+        name: app.name || 'there',
+        company_name: app.company_name,
+        cohort_label: cohort,
+        next_cohort_label: nextCohort,
+        apply_url: applyUrl,
+      }, { userId: app.user_id, ctaUrl: applyUrl });
+      emailed = !!r?.ok;
+    } catch (e) {
+      console.error('[admin/spinout-decide] refusal email failed', e);
+    }
+  }
+
+  try {
+    const adminHash = await hashEmail(adminUser.email);
+    const targetHash = await hashEmail(app.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    ).bind(`spinout_application_${decision}`,
+      `Admin ${adminUser.name} ${decision} Spin-Out Lab application #${appId} for user_id=${app.user_id} (email_hash=${targetHash}, ${cohort})${emailed ? '' : ' (email send failed)'}`,
+      adminHash, adminUser.id).run();
+  } catch {}
+
+  return c.json({ ok: true, status: decision, emailed });
+});
+
 admin.post('/users/:user_id/resend-verification', async (c) => {
   const adminUser = await requireAdmin(c);
   const userId = parseInt(c.req.param('user_id'));
