@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Lock } from 'lucide-react';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
-import { PIPELINE_PHASES, PHASE_THEMES, DELIVERABLES, TRACKER_BOARD, GraduatesSection, ApplyCtaSection, LAB_APPLY_HREF as APPLY_HREF, LAB_CONTACT_HREF as CONTACT_HREF } from './SpinoutLabPage';
+import { PIPELINE_PHASES, PHASE_THEMES, DELIVERABLES, CohortTrackerSection, GraduatesSection, ApplyCtaSection, LAB_APPLY_HREF as APPLY_HREF, LAB_CONTACT_HREF as CONTACT_HREF } from './SpinoutLabPage';
 
 export default function SpinoutLabMarketingPage() {
   return (
@@ -126,57 +126,8 @@ export default function SpinoutLabMarketingPage() {
           </div>
         </section>
 
-        {/* ACTIVE COHORT TRACKER */}
-        <section className="mb-12">
-          <div className="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-            <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em]">Active cohort.</h2>
-            <span className="inline-flex items-center gap-1.5 text-[12.5px] text-gray-500">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" style={{animation: 'wsPulse 2s infinite'}}></span>Live tracker
-            </span>
-          </div>
-          <p className="m-0 mb-4 text-[13.5px] text-gray-500 tabular-nums">Cohort 3 · Started July 1, 2026 · 6 companies</p>
-
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-4 shadow-sm">
-            <div className="overflow-x-auto no-scrollbar">
-              <div className="grid grid-cols-5 gap-3.5 min-w-[820px]">
-                {TRACKER_BOARD.map((col, i) => (
-                  <div key={i}>
-                    <div className={`flex items-center justify-between px-1 pb-2.5 border-b-2 mb-3 ${col.accent}`}>
-                      <span className="text-[12.5px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">{col.name}</span>
-                      <span className="tabular-nums text-[11.5px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-800 dark:text-gray-500 rounded-md px-2 py-0.5">{col.count}</span>
-                    </div>
-                    <div className="flex flex-col gap-2.5 min-h-[40px]">
-                      {col.cards.map((c, ci) => (
-                        <div key={ci} className="bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-xl p-3 hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm transition-all cursor-pointer">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className={`w-8 h-8 rounded-lg flex-none font-extrabold text-[12px] flex items-center justify-center ${c.bg} ${c.ink}`}>
-                              {c.initials}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-[13px] font-bold whitespace-nowrap overflow-hidden text-ellipsis">{c.name}</div>
-                              <div className="text-[11px] text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{c.desc}</div>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className={`tabular-nums text-[11px] font-bold rounded-md px-2 py-1 ${col.tint}`}>
-                              {c.day}
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10.5px] text-gray-400">Lead</span>
-                              <div title={c.advisor} className="w-[22px] h-[22px] rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-bold text-[9.5px] flex items-center justify-center">
-                                {c.advInit}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+        {/* ACTIVE COHORT TRACKER — live data */}
+        <CohortTrackerSection />
 
         {/* ALUMNI */}
         <GraduatesSection />

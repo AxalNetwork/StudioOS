@@ -181,6 +181,181 @@ def _latest_application(session: Session, user_id: int) -> Optional[dict]:
     }
 
 
+@router.get("/graduates")
+def list_graduates(session: Session = Depends(get_session)):
+    """Public (no auth) — powers the "Graduate companies." section, which
+    also renders on the logged-out marketing page.
+
+    A graduate is a user with the week-4 `incorporation_completed`
+    milestone on record — the strongest completion signal (the /exit
+    escape hatch flips is_incorporated without finishing the sprint, so it
+    does NOT count). Company facts come from the founder's project; the
+    cohort application's working name is the fallback. The dev projects
+    table has no funding columns, so `raised`/`last_round` are null here
+    (the production Worker fills them from projects.total_funding /
+    last_funding_round).
+    """
+    try:
+        rows = session.exec(
+            text(
+                """SELECT m.user_id, m.completed_at, u.spinout_lab_cohort,
+                          p.uid, p.name, p.sector, p.stage, p.status
+                   FROM spinout_lab_milestones m
+                   JOIN users u ON u.id = m.user_id
+                   LEFT JOIN projects p ON p.founder_id = u.founder_id
+                   WHERE m.milestone_key = 'incorporation_completed'
+                   ORDER BY m.completed_at DESC, p.id ASC"""
+            )
+        ).all()
+    except Exception:  # tables predate the Lab migrations
+        return []
+    # One card per graduate. Founders can have several projects — prefer the
+    # first one whose public profile will actually resolve
+    # (GET /public/startup/{handle} 404s archived/rejected/intake projects).
+    by_user: dict = {}
+    order: list = []
+    for r in rows:
+        user_id = r[0]
+        status = (str(r[7]) if r[7] is not None else "").lower()
+        linkable = bool(r[3]) and status not in ("archived", "rejected", "intake")
+        entry = {
+            "name": r[4],
+            "sector": r[5],
+            "stage": r[6],
+            "cohort": r[2],
+            "uid": r[3] if linkable else None,
+            "graduated_at": r[1].isoformat() if hasattr(r[1], "isoformat") else str(r[1]),
+            "raised": None,
+            "last_round": None,
+        }
+        existing = by_user.get(user_id)
+        if existing is None:
+            by_user[user_id] = entry
+            order.append(user_id)
+        elif existing["uid"] is None and entry["uid"]:
+            by_user[user_id] = entry  # upgrade to the publicly linkable project
+    out = []
+    for user_id in order:
+        entry = by_user[user_id]
+        if not entry["name"]:
+            app = _latest_application(session, user_id)
+            entry["name"] = (app or {}).get("company_name")
+        if not entry["name"]:
+            continue  # nothing real to show for this graduate
+        out.append(entry)
+        if len(out) >= 12:
+            break
+    return out
+
+
+@router.get("/cohort")
+def list_cohort(session: Session = Depends(get_session)):
+    """Public (no auth) — powers the "Active cohort." live tracker, which
+    also renders on the logged-out marketing page.
+
+    Returns company-level facts only (working name, sector, week, day) —
+    never founder names, emails, or ids. Members are users currently in the
+    sprint (`spinout_lab_active = 1`); recent graduates (the week-4
+    `incorporation_completed` milestone within the last 45 days) fill the
+    final column. Answers [] when tables predate the Lab migrations.
+    """
+    members = []
+
+    def _company(row_name, user_id):
+        name = row_name
+        if not name:
+            app = _latest_application(session, user_id)
+            name = (app or {}).get("company_name")
+        return name
+
+    try:
+        active_rows = session.exec(
+            text(
+                """SELECT u.id, u.spinout_lab_week, u.spinout_lab_started_at,
+                          u.spinout_lab_cohort, p.name, p.sector
+                   FROM users u
+                   LEFT JOIN projects p ON p.founder_id = u.founder_id
+                   WHERE u.spinout_lab_active = 1
+                   ORDER BY u.spinout_lab_started_at ASC NULLS LAST, p.id ASC"""
+            )
+        ).all()
+    except Exception:  # tables predate the Lab migrations
+        return []
+    seen = set()
+    for r in active_rows:
+        user_id = r[0]
+        if user_id in seen:  # several projects: keep the first
+            continue
+        seen.add(user_id)
+        name = _company(r[4], user_id)
+        if not name:
+            continue
+        started = r[2]
+        week = max(1, min(4, int(r[1] or 1)))
+        day = min(SPRINT_DAYS, _days_since(started) + 1)
+        members.append(
+            {
+                "name": name,
+                "sector": r[5],
+                "cohort": r[3],
+                "status": "active",
+                "week": week,
+                "day": day,
+                "started_at": started.isoformat() if hasattr(started, "isoformat") else (str(started) if started else None),
+            }
+        )
+        if len(members) >= 24:
+            break
+
+    # Recent graduates fill the final ("Incorporated") column.
+    try:
+        grad_rows = session.exec(
+            text(
+                """SELECT m.user_id, m.completed_at, u.spinout_lab_started_at,
+                          u.spinout_lab_cohort, p.name, p.sector
+                   FROM spinout_lab_milestones m
+                   JOIN users u ON u.id = m.user_id
+                   LEFT JOIN projects p ON p.founder_id = u.founder_id
+                   WHERE m.milestone_key = 'incorporation_completed'
+                     AND m.completed_at >= NOW() - INTERVAL '45 days'
+                   ORDER BY m.completed_at DESC, p.id ASC"""
+            )
+        ).all()
+    except Exception:
+        grad_rows = []
+    grad_seen = set()
+    for r in grad_rows:
+        user_id = r[0]
+        if user_id in grad_seen or user_id in seen:
+            continue
+        grad_seen.add(user_id)
+        name = _company(r[4], user_id)
+        if not name:
+            continue
+        completed, started = r[1], r[2]
+        day = None
+        if started is not None and completed is not None:
+            try:
+                delta = (completed - started).total_seconds()
+                day = max(1, int(delta // 86_400) + 1)
+            except Exception:
+                day = None
+        members.append(
+            {
+                "name": name,
+                "sector": r[5],
+                "cohort": r[3],
+                "status": "graduated",
+                "week": 5,
+                "day": day,
+                "started_at": started.isoformat() if hasattr(started, "isoformat") else (str(started) if started else None),
+            }
+        )
+        if len(grad_seen) >= 8:
+            break
+    return members
+
+
 @router.get("/state")
 def get_state(
     user: User = Depends(get_current_user),

@@ -201,7 +201,7 @@ export default function SpinoutLabApplyPage() {
                 >
                   {submitting ? <Loader2 className="animate-spin" size={16} /> : <>Submit Application <span className="text-[16px]" aria-hidden="true">→</span></>}
                 </button>
-                <p className="m-0 text-center text-[12.5px] text-gray-400">No equity taken by Meridian. Acceptance is selective.</p>
+                <p className="m-0 text-center text-[12.5px] text-gray-400">No equity taken by Axal VC. Acceptance is selective.</p>
               </div>
             </form>
           ) : (

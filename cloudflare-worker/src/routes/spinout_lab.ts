@@ -397,4 +397,215 @@ spinoutLab.post('/exit', async (c) => {
   return c.json(state);
 });
 
+// GET /graduates — PUBLIC (deliberately no requireAuth): powers the
+// "Graduate companies." section, which also renders on the logged-out
+// marketing page. A graduate is a user with the week-4
+// `incorporation_completed` milestone on record — the strongest completion
+// signal (the /exit escape hatch flips is_incorporated without finishing
+// the sprint, so it does NOT count). Company facts come from the founder's
+// project; the cohort application's working name is the fallback. Never
+// throws — answers [] when tables predate the Lab migrations. Exposes only
+// company-level facts (no founder emails/ids).
+type GraduateRow = {
+  user_id: number;
+  completed_at: string | null;
+  cohort: string | null;
+  uid: string | null;
+  name: string | null;
+  sector: string | null;
+  stage: string | null;
+  status: string | null;
+  total_funding: number | null;
+  last_funding_round: string | null;
+};
+
+spinoutLab.get('/graduates', async (c) => {
+  let rows: GraduateRow[] = [];
+  try {
+    const res = await c.env.DB.prepare(
+      `SELECT m.user_id, m.completed_at, u.spinout_lab_cohort AS cohort,
+              p.uid, p.name, p.sector, p.stage, p.status, p.total_funding, p.last_funding_round
+       FROM spinout_lab_milestones m
+       JOIN users u ON u.id = m.user_id
+       LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
+       WHERE m.milestone_key = 'incorporation_completed'
+       ORDER BY m.completed_at DESC, p.id ASC`,
+    ).all<GraduateRow>();
+    rows = res.results ?? [];
+  } catch {
+    return c.json([]);
+  }
+  type GraduateCard = {
+    name: string | null;
+    sector: string | null;
+    stage: string | null;
+    cohort: string | null;
+    uid: string | null;
+    graduated_at: string | null;
+    raised: number | null;
+    last_round: string | null;
+  };
+  // One card per graduate. Founders can have several projects — prefer the
+  // first one whose public profile will actually resolve
+  // (public.ts GET /startup/:handle 404s archived/rejected/intake projects).
+  const byUser = new Map<number, GraduateCard>();
+  const order: number[] = [];
+  for (const r of rows) {
+    const linkable =
+      !!r.uid && !['archived', 'rejected', 'intake'].includes(String(r.status || '').toLowerCase());
+    const entry: GraduateCard = {
+      name: r.name ?? null,
+      sector: r.sector ?? null,
+      stage: r.stage ?? null,
+      cohort: r.cohort ?? null,
+      uid: linkable ? r.uid : null,
+      graduated_at: r.completed_at ?? null,
+      raised: r.total_funding ?? null,
+      last_round: r.last_funding_round ?? null,
+    };
+    const existing = byUser.get(r.user_id);
+    if (!existing) {
+      byUser.set(r.user_id, entry);
+      order.push(r.user_id);
+    } else if (existing.uid === null && entry.uid) {
+      byUser.set(r.user_id, entry); // upgrade to the publicly linkable project
+    }
+  }
+  const out: GraduateCard[] = [];
+  for (const userId of order) {
+    const entry = byUser.get(userId)!;
+    if (!entry.name) {
+      entry.name = (await latestApplication(c.env, userId))?.company_name ?? null;
+    }
+    if (!entry.name) continue; // nothing real to show for this graduate
+    out.push(entry);
+    if (out.length >= 12) break;
+  }
+  return c.json(out);
+});
+
+// GET /cohort — PUBLIC (deliberately no requireAuth): powers the "Active
+// cohort." live tracker, which also renders on the logged-out marketing
+// page. Returns company-level facts only (working name, sector, week, day)
+// — never founder names, emails, or ids. Members are users currently in
+// the sprint (`spinout_lab_active = 1`); recent graduates (week-4
+// `incorporation_completed` within the last 45 days) fill the final
+// column. Never throws — answers [] when tables predate the Lab
+// migrations.
+type CohortActiveRow = {
+  user_id: number;
+  week: number | null;
+  started_at: string | null;
+  cohort: string | null;
+  name: string | null;
+  sector: string | null;
+};
+
+type CohortGradRow = {
+  user_id: number;
+  completed_at: string | null;
+  started_at: string | null;
+  cohort: string | null;
+  name: string | null;
+  sector: string | null;
+};
+
+type CohortMember = {
+  name: string;
+  sector: string | null;
+  cohort: string | null;
+  status: 'active' | 'graduated';
+  week: number;
+  day: number | null;
+  started_at: string | null;
+};
+
+spinoutLab.get('/cohort', async (c) => {
+  const parseTs = (s: string | null | undefined): number | null => {
+    if (!s) return null;
+    const ms = Date.parse(s.replace(' ', 'T') + (s.includes('Z') ? '' : 'Z'));
+    return Number.isFinite(ms) ? ms : null;
+  };
+  const companyName = async (rowName: string | null, userId: number): Promise<string | null> =>
+    rowName ?? ((await latestApplication(c.env, userId))?.company_name ?? null);
+
+  const members: CohortMember[] = [];
+  const seen = new Set<number>();
+
+  let activeRows: CohortActiveRow[] = [];
+  try {
+    const res = await c.env.DB.prepare(
+      `SELECT u.id AS user_id, u.spinout_lab_week AS week,
+              u.spinout_lab_started_at AS started_at, u.spinout_lab_cohort AS cohort,
+              p.name, p.sector
+       FROM users u
+       LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
+       WHERE u.spinout_lab_active = 1
+       ORDER BY u.spinout_lab_started_at ASC, p.id ASC`,
+    ).all<CohortActiveRow>();
+    activeRows = res.results ?? [];
+  } catch {
+    return c.json([]);
+  }
+  for (const r of activeRows) {
+    if (seen.has(r.user_id)) continue; // several projects: keep the first
+    seen.add(r.user_id);
+    const name = await companyName(r.name, r.user_id);
+    if (!name) continue;
+    const week = Math.max(1, Math.min(4, Number(r.week ?? 1) || 1));
+    members.push({
+      name,
+      sector: r.sector ?? null,
+      cohort: r.cohort ?? null,
+      status: 'active',
+      week,
+      day: Math.min(SPRINT_DAYS, daysSince(r.started_at) + 1),
+      started_at: r.started_at ?? null,
+    });
+    if (members.length >= 24) break;
+  }
+
+  // Recent graduates fill the final ("Incorporated") column.
+  let gradRows: CohortGradRow[] = [];
+  try {
+    const res = await c.env.DB.prepare(
+      `SELECT m.user_id, m.completed_at, u.spinout_lab_started_at AS started_at,
+              u.spinout_lab_cohort AS cohort, p.name, p.sector
+       FROM spinout_lab_milestones m
+       JOIN users u ON u.id = m.user_id
+       LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
+       WHERE m.milestone_key = 'incorporation_completed'
+         AND datetime(m.completed_at) >= datetime('now', '-45 days')
+       ORDER BY m.completed_at DESC, p.id ASC`,
+    ).all<CohortGradRow>();
+    gradRows = res.results ?? [];
+  } catch {
+    gradRows = [];
+  }
+  const gradSeen = new Set<number>();
+  for (const r of gradRows) {
+    if (gradSeen.has(r.user_id) || seen.has(r.user_id)) continue;
+    gradSeen.add(r.user_id);
+    const name = await companyName(r.name, r.user_id);
+    if (!name) continue;
+    const startMs = parseTs(r.started_at);
+    const doneMs = parseTs(r.completed_at);
+    const day =
+      startMs !== null && doneMs !== null && doneMs >= startMs
+        ? Math.max(1, Math.floor((doneMs - startMs) / 86_400_000) + 1)
+        : null;
+    members.push({
+      name,
+      sector: r.sector ?? null,
+      cohort: r.cohort ?? null,
+      status: 'graduated',
+      week: 5,
+      day,
+      started_at: r.started_at ?? null,
+    });
+    if (gradSeen.size >= 8) break;
+  }
+  return c.json(members);
+});
+
 export default spinoutLab;

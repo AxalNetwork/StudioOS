@@ -1,40 +1,17 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, Loader2, ArrowRight, FlaskConical, Globe, Circle, Lock, FileText, BadgeCheck } from "lucide-react";
-import { api, spinoutLab } from "../lib/api";
-import { deckReadinessState } from "../lib/deckReadiness";
+import { spinoutLab } from "../lib/api";
 import { useAuth } from "../hooks/useAuthSync";
 import { reportError } from "../lib/log";
 import SpinoutLabMarketingPage from "./SpinoutLabMarketingPage";
 
-const WEEK_MILESTONES = {
-  1: ["project_created", "customer_interview_logged_1", "customer_interview_logged_2", "customer_interview_logged_3"],
-  2: ["okrs_created", "brand_basics_filled", "pitch_deck_drafted"],
-  3: ["scoring_run_completed", "advisor_meeting_booked", "cofounder_request_sent"],
-  4: ["incorporation_completed"],
-};
-
-export const MILESTONE_LABELS = {
-  project_created: "Create your first startup",
-  customer_interview_logged_1: "Log customer interview #1",
-  customer_interview_logged_2: "Log customer interview #2",
-  customer_interview_logged_3: "Log customer interview #3",
-  okrs_created: "Set your quarter OKRs",
-  brand_basics_filled: "Fill in brand basics",
-  pitch_deck_drafted: "Draft your pitch deck",
-  scoring_run_completed: "Run the AI scoring engine",
-  advisor_meeting_booked: "Book an advisor meeting",
-  cofounder_request_sent: "Send a co-founder request",
-  incorporation_completed: "Complete incorporation",
-};
-
 // Pipeline cards mirror the "Spin-Out Lab" design handoff
 // (attached_assets/Spin-Out_Lab.dc_*.html): five compact phases with the
-// program's descriptive items — NOT the live milestone checklist. Live
-// milestone tracking (WEEK_MILESTONES + Complete actions) renders in the
-// gate-checklist strip below the pipeline so card heights stay even and
-// the section stacks cleanly on small screens. Items default to Delaware
-// wording; pipelineItemsFor() swaps the jurisdiction-specific lines.
+// program's descriptive items. Milestones auto-complete from real product
+// actions (lib/spinoutLabHooks.js) — there is no manual checklist on this
+// page. Items default to Delaware wording; pipelineItemsFor() swaps the
+// jurisdiction-specific lines.
 export const PIPELINE_PHASES = [
   {
     name: "Validate", days: "Days 1–5",
@@ -157,23 +134,16 @@ export const DELIVERABLES = [
   { icon: <DIconBadge />, name: "Verified Badge", desc: "Spin-Out Lab Alumni badge for your profile." }
 ];
 
-export const TRACKER_BOARD = [
-  { name: 'VALIDATE', count: 1, accent: 'border-violet-500', tint: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300', cards: [
-    { initials: 'HL', name: 'Halyard', desc: 'Ops copilot for shipyards', day: 'Day 4', bg: 'bg-violet-200 dark:bg-violet-900', ink: 'text-violet-800 dark:text-violet-200', advisor: 'Rae Osei', advInit: 'RO' }
-  ] },
-  { name: 'STRUCTURE', count: 1, accent: 'border-blue-500', tint: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300', cards: [
-    { initials: 'CS', name: 'Cindershift', desc: 'Wildfire risk models', day: 'Day 9', bg: 'bg-blue-200 dark:bg-blue-900', ink: 'text-blue-800 dark:text-blue-200', advisor: 'Marcus Lin', advInit: 'ML' }
-  ] },
-  { name: 'BUILD', count: 2, accent: 'border-teal-500', tint: 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300', cards: [
-    { initials: 'TS', name: 'Tessella', desc: 'Composable data grids', day: 'Day 14', bg: 'bg-teal-200 dark:bg-teal-900', ink: 'text-teal-800 dark:text-teal-200', advisor: 'Priya Nair', advInit: 'PN' },
-    { initials: 'NB', name: 'Northbeam', desc: 'Grid-scale battery ops', day: 'Day 16', bg: 'bg-emerald-200 dark:bg-emerald-900', ink: 'text-emerald-800 dark:text-emerald-200', advisor: 'Sam Ortiz', advInit: 'SO' }
-  ] },
-  { name: 'PITCH', count: 1, accent: 'border-amber-500', tint: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300', cards: [
-    { initials: 'QL', name: 'Quill', desc: 'AI contract review', day: 'Day 22', bg: 'bg-amber-200 dark:bg-amber-900', ink: 'text-amber-800 dark:text-amber-200', advisor: 'Dana Whit', advInit: 'DW' }
-  ] },
-  { name: 'FUNDED', count: 1, accent: 'border-pink-500', tint: 'bg-pink-100 text-pink-700 dark:bg-pink-900/50 dark:text-pink-300', cards: [
-    { initials: 'VD', name: 'Verda', desc: 'Clinical trial matching', day: 'Day 29', bg: 'bg-pink-200 dark:bg-pink-900', ink: 'text-pink-800 dark:text-pink-200', advisor: 'Leo Park', advInit: 'LP' }
-  ] }
+// Active-cohort tracker columns — LIVE data from GET /spinout-lab/cohort
+// (public; the section renders on the logged-out marketing page too). Only
+// the column theming below is presentational: weeks 1-4 map to the first
+// four columns; recent graduates fill "Incorporated".
+const TRACKER_COLUMNS = [
+  { key: 1, name: 'VALIDATE', accent: 'border-violet-500', tint: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300' },
+  { key: 2, name: 'STRUCTURE', accent: 'border-blue-500', tint: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' },
+  { key: 3, name: 'BUILD', accent: 'border-teal-500', tint: 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300' },
+  { key: 4, name: 'PITCH & FUND', accent: 'border-amber-500', tint: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' },
+  { key: 5, name: 'INCORPORATED', accent: 'border-pink-500', tint: 'bg-pink-100 text-pink-700 dark:bg-pink-900/50 dark:text-pink-300' },
 ];
 
 // Reference-design shared content (Spin-Out Lab.dc.html): graduate alumni
@@ -182,14 +152,44 @@ export const TRACKER_BOARD = [
 export const LAB_APPLY_HREF = '/register?lane=founder&product=spinout-lab';
 export const LAB_CONTACT_HREF = 'mailto:hello@axal.vc?subject=Spin-Out%20Lab';
 
-export const LAB_ALUMNI = [
-  { initials: 'AB', bg: 'bg-violet-100 dark:bg-violet-900', ink: 'text-violet-700 dark:text-violet-200', name: 'Arborline', sector: 'Climate · MRV', cohort: 2, raised: '$450K pre-seed', outcome: 'Closed pre-seed · Now on AngelList' },
-  { initials: 'PX', bg: 'bg-blue-100 dark:bg-blue-900', ink: 'text-blue-700 dark:text-blue-200', name: 'Pyxis Health', sector: 'Digital health', cohort: 2, raised: '$1.1M seed', outcome: 'Seed led by Foundry Group' },
-  { initials: 'KT', bg: 'bg-teal-100 dark:bg-teal-900', ink: 'text-teal-700 dark:text-teal-200', name: 'Kettle', sector: 'Fintech · SMB', cohort: 1, raised: '$600K pre-seed', outcome: 'Pre-seed · 3 angel checks' },
-  { initials: 'MR', bg: 'bg-amber-100 dark:bg-amber-900', ink: 'text-amber-700 dark:text-amber-200', name: 'Meridian Robotics', sector: 'Industrial AI', cohort: 1, raised: '$250K angel', outcome: 'Bridge round · Revenue positive' },
-  { initials: 'SV', bg: 'bg-pink-100 dark:bg-pink-900', ink: 'text-pink-700 dark:text-pink-200', name: 'Solvent', sector: 'Dev tools', cohort: 1, raised: '$820K seed', outcome: 'Seed · YC W26 admit' },
-  { initials: 'GL', bg: 'bg-indigo-100 dark:bg-indigo-900', ink: 'text-indigo-700 dark:text-indigo-200', name: 'Glassline', sector: 'Prop-tech', cohort: 2, raised: '$300K pre-seed', outcome: 'Pre-seed · Piloting 4 REITs' },
+// Graduate cards are LIVE data — GET /spinout-lab/graduates (public; the
+// section renders on the logged-out marketing page too). Only the avatar
+// color themes below are presentational.
+const GRAD_AVATAR_THEMES = [
+  { bg: 'bg-violet-100 dark:bg-violet-900', ink: 'text-violet-700 dark:text-violet-200' },
+  { bg: 'bg-blue-100 dark:bg-blue-900', ink: 'text-blue-700 dark:text-blue-200' },
+  { bg: 'bg-teal-100 dark:bg-teal-900', ink: 'text-teal-700 dark:text-teal-200' },
+  { bg: 'bg-amber-100 dark:bg-amber-900', ink: 'text-amber-700 dark:text-amber-200' },
+  { bg: 'bg-pink-100 dark:bg-pink-900', ink: 'text-pink-700 dark:text-pink-200' },
+  { bg: 'bg-indigo-100 dark:bg-indigo-900', ink: 'text-indigo-700 dark:text-indigo-200' },
 ];
+
+function gradInitials(name) {
+  const words = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return '?';
+  return words.slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+}
+
+function fmtRaised(n) {
+  const v = Number(n);
+  if (n == null || !Number.isFinite(v) || v <= 0) return null;
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(v % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (v >= 1_000) return `$${Math.round(v / 1_000)}K`;
+  return `$${Math.round(v)}`;
+}
+
+function gradDateLabel(iso) {
+  if (!iso) return null;
+  const d = new Date(String(iso).replace(' ', 'T'));
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+}
+
+function gradCohortLabel(cohort) {
+  if (cohort == null || cohort === '') return 'Alumni';
+  const s = String(cohort).trim();
+  return /^\d+$/.test(s) ? `Cohort ${s}` : s;
+}
 
 export const LAB_JURISDICTIONS = [
   { key: 'de', label: 'Delaware, USA' },
@@ -202,29 +202,218 @@ export const LAB_JURISDICTIONS = [
 ];
 
 export function GraduatesSection() {
+  // null = loading, 'error' = fetch failed, [] = no graduates yet
+  const [grads, setGrads] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    spinoutLab
+      .graduates()
+      .then((r) => {
+        if (alive) setGrads(Array.isArray(r) ? r : []);
+      })
+      .catch((e) => {
+        reportError('spinout-lab:graduates', e);
+        if (alive) setGrads('error');
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   return (
     <section className="mb-12">
       <div className="flex items-baseline justify-between mb-5">
         <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em]">Graduate companies.</h2>
-        <span className="text-[12.5px] text-gray-400">Select a company to view its profile</span>
+        {Array.isArray(grads) && grads.length > 0 && (
+          <span className="text-[12.5px] text-gray-400">Select a company to view its profile</span>
+        )}
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {LAB_ALUMNI.map((a, i) => (
-          <button type="button" key={i} className="text-left bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-4 shadow-sm hover:border-violet-300 hover:shadow-lg dark:hover:border-violet-700 transition-all -translate-y-0 hover:-translate-y-1 block w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2">
-            <div className="flex items-center justify-between mb-3.5">
-              <div className={`w-11 h-11 rounded-[11px] font-extrabold text-[15px] flex items-center justify-center ${a.bg} ${a.ink}`}>{a.initials}</div>
-              <span className="tabular-nums text-[11px] font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/50 border border-violet-100 dark:border-violet-800/50 rounded-full px-2.5 py-1">Cohort {a.cohort}</span>
+      {grads === null && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" aria-hidden="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-4 shadow-sm animate-pulse">
+              <div className="w-11 h-11 rounded-[11px] bg-gray-100 dark:bg-gray-800 mb-3.5" />
+              <div className="h-3.5 w-2/5 rounded bg-gray-100 dark:bg-gray-800 mb-2" />
+              <div className="h-3 w-3/5 rounded bg-gray-100 dark:bg-gray-800" />
             </div>
-            <div className="text-[15px] font-bold text-gray-900 dark:text-gray-100">{a.name}</div>
-            <div className="text-[12px] text-gray-400 mb-3.5">{a.sector}</div>
-            <div className="tabular-nums text-[19px] font-extrabold tracking-[-.01em]">{a.raised}</div>
-            <div className="text-[12px] text-gray-500 mt-1 leading-[1.4]">{a.outcome}</div>
-            <div className="mt-3.5 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center gap-1.5 text-[12px] font-semibold text-violet-600 dark:text-violet-400">
-              View profile <span className="text-[13px]" aria-hidden="true">→</span>
-            </div>
-          </button>
-        ))}
+          ))}
+        </div>
+      )}
+      {grads === 'error' && (
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-6 text-[13px] text-gray-500 dark:text-gray-400">
+          Couldn't load graduate companies right now — please try again later.
+        </div>
+      )}
+      {Array.isArray(grads) && grads.length === 0 && (
+        <div className="bg-white dark:bg-gray-900 border border-dashed border-gray-300 dark:border-gray-700 rounded-[16px] p-8 text-center">
+          <div className="text-[14px] font-bold text-gray-700 dark:text-gray-300 mb-1">No graduates yet.</div>
+          <div className="text-[12.5px] text-gray-500 dark:text-gray-400">
+            Companies appear here automatically when their founders complete the 4-week sprint.
+          </div>
+        </div>
+      )}
+      {Array.isArray(grads) && grads.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {grads.map((g, i) => {
+            const t = GRAD_AVATAR_THEMES[i % GRAD_AVATAR_THEMES.length];
+            const raised = fmtRaised(g.raised);
+            const gradDate = gradDateLabel(g.graduated_at);
+            const cardBody = (
+              <>
+                <div className="flex items-center justify-between mb-3.5">
+                  <div className={`w-11 h-11 rounded-[11px] font-extrabold text-[15px] flex items-center justify-center ${t.bg} ${t.ink}`}>{gradInitials(g.name)}</div>
+                  <span className="tabular-nums text-[11px] font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/50 border border-violet-100 dark:border-violet-800/50 rounded-full px-2.5 py-1">{gradCohortLabel(g.cohort)}</span>
+                </div>
+                <div className="text-[15px] font-bold text-gray-900 dark:text-gray-100">{g.name}</div>
+                <div className="text-[12px] text-gray-400 mb-3.5">{g.sector || 'Spin-Out Lab graduate'}</div>
+                <div className="tabular-nums text-[19px] font-extrabold tracking-[-.01em]">
+                  {raised ? `${raised} raised` : 'Incorporated'}
+                </div>
+                <div className="text-[12px] text-gray-500 mt-1 leading-[1.4]">
+                  {g.last_round ? `Last round: ${g.last_round}` : gradDate ? `Graduated ${gradDate}` : 'Completed the 4-week sprint'}
+                </div>
+                {g.uid && (
+                  <div className="mt-3.5 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center gap-1.5 text-[12px] font-semibold text-violet-600 dark:text-violet-400">
+                    View profile <span className="text-[13px]" aria-hidden="true">→</span>
+                  </div>
+                )}
+              </>
+            );
+            const cardClass = 'text-left bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-4 shadow-sm block w-full';
+            return g.uid ? (
+              <Link
+                key={g.uid}
+                to={`/startups/${encodeURIComponent(g.uid)}`}
+                className={`${cardClass} hover:border-violet-300 hover:shadow-lg dark:hover:border-violet-700 transition-all -translate-y-0 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2`}
+              >
+                {cardBody}
+              </Link>
+            ) : (
+              <div key={`${g.name}-${i}`} className={cardClass}>
+                {cardBody}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function CohortTrackerSection() {
+  // null = loading, 'error' = fetch failed, [] = no active cohort
+  const [members, setMembers] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    spinoutLab
+      .cohort()
+      .then((r) => {
+        if (alive) setMembers(Array.isArray(r) ? r : []);
+      })
+      .catch((e) => {
+        reportError('spinout-lab:cohort', e);
+        if (alive) setMembers('error');
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const list = Array.isArray(members) ? members : [];
+  const active = list.filter((m) => m.status === 'active');
+  // Subtitle facts are derived from the live members — no invented numbers.
+  const cohortLabel = gradCohortLabel(active.find((m) => m.cohort)?.cohort ?? null);
+  const earliestStart = active
+    .map((m) => (m.started_at ? new Date(String(m.started_at).replace(' ', 'T')) : null))
+    .filter((d) => d && !Number.isNaN(d.getTime()))
+    .sort((a, b) => a - b)[0];
+
+  return (
+    <section className="mb-12">
+      <div className="flex items-baseline justify-between flex-wrap gap-2 mb-1">
+        <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em]">Active cohort.</h2>
+        {active.length > 0 && (
+          <span className="inline-flex items-center gap-1.5 text-[12.5px] text-gray-500">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" style={{ animation: 'wsPulse 2s infinite' }}></span>Live tracker
+          </span>
+        )}
       </div>
+      {active.length > 0 && (
+        <p className="m-0 mb-4 text-[13.5px] text-gray-500 tabular-nums">
+          {cohortLabel !== 'Alumni' ? `${cohortLabel} · ` : ''}
+          {earliestStart ? `Started ${earliestStart.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })} · ` : ''}
+          {active.length} {active.length === 1 ? 'company' : 'companies'}
+        </p>
+      )}
+      {members === null && (
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-4 shadow-sm mt-4 animate-pulse" aria-hidden="true">
+          <div className="grid grid-cols-5 gap-3.5">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i}>
+                <div className="h-3 rounded bg-gray-100 dark:bg-gray-800 mb-3" />
+                <div className="h-16 rounded-xl bg-gray-50 dark:bg-gray-800/50" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {members === 'error' && (
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-6 mt-4 text-[13px] text-gray-500 dark:text-gray-400">
+          Couldn't load the cohort tracker right now — please try again later.
+        </div>
+      )}
+      {Array.isArray(members) && members.length === 0 && (
+        <div className="bg-white dark:bg-gray-900 border border-dashed border-gray-300 dark:border-gray-700 rounded-[16px] p-8 mt-4 text-center">
+          <div className="text-[14px] font-bold text-gray-700 dark:text-gray-300 mb-1">No cohort in session right now.</div>
+          <div className="text-[12.5px] text-gray-500 dark:text-gray-400">
+            Companies appear here in real time while their founders run the 4-week sprint.
+          </div>
+        </div>
+      )}
+      {Array.isArray(members) && members.length > 0 && (
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-4 shadow-sm">
+          <div className="overflow-x-auto no-scrollbar">
+            <div className="grid grid-cols-5 gap-3.5 min-w-[820px]">
+              {TRACKER_COLUMNS.map((col) => {
+                const cards = list.filter((m) => (m.status === 'graduated' ? 5 : m.week) === col.key);
+                return (
+                  <div key={col.key}>
+                    <div className={`flex items-center justify-between px-1 pb-2.5 border-b-2 mb-3 ${col.accent}`}>
+                      <span className="text-[12.5px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">{col.name}</span>
+                      <span className="tabular-nums text-[11.5px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-800 dark:text-gray-500 rounded-md px-2 py-0.5">{cards.length}</span>
+                    </div>
+                    <div className="flex flex-col gap-2.5 min-h-[40px]">
+                      {cards.map((m, ci) => {
+                        const t = GRAD_AVATAR_THEMES[list.indexOf(m) % GRAD_AVATAR_THEMES.length];
+                        return (
+                          <div key={`${m.name}-${ci}`} className="bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-xl p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className={`w-8 h-8 rounded-lg flex-none font-extrabold text-[12px] flex items-center justify-center ${t.bg} ${t.ink}`}>
+                                {gradInitials(m.name)}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-[13px] font-bold whitespace-nowrap overflow-hidden text-ellipsis">{m.name}</div>
+                                <div className="text-[11px] text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{m.sector || 'In the sprint'}</div>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className={`tabular-nums text-[11px] font-bold rounded-md px-2 py-1 ${col.tint}`}>
+                                {m.status === 'graduated' ? (m.day ? `Done in ${m.day}d` : 'Incorporated') : `Day ${m.day}`}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -244,109 +433,6 @@ export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
       </div>
       <p className="mt-6 text-[12px] text-[#c4b5fd]">Spin-Out Lab is open to all Meridian users. Acceptance is selective. No equity taken by Meridian.</p>
     </section>
-  );
-}
-
-function DeckReadinessCard() {
-  const [preview, setPreview] = useState(null);
-  const [previewLoading, setPreviewLoading] = useState(true);
-
-  const fetchPreview = useCallback((isAlive, { showLoading = false } = {}) => {
-    if (showLoading) setPreviewLoading(true);
-    return api
-      .listProjects()
-      .then((r) => {
-        const list = Array.isArray(r) ? r : r?.projects || [];
-        const projectId = list[0]?.id;
-        if (!projectId) throw Object.assign(new Error("no-project"), { silent: true });
-        return api.spinoutDeckPreview(projectId);
-      })
-      .then((r) => {
-        if (!isAlive()) return;
-        setPreview({ gaps: Array.isArray(r?.gaps) ? r.gaps : [], draft: !!r?.draft, programDay: Number.isFinite(r?.program_day) ? r.program_day : null });
-      })
-      .catch((e) => {
-        if (!isAlive()) return;
-        setPreview(null);
-        if (e?.status !== 402 && !e?.silent) reportError("spinout-lab:deck-preview", e);
-      })
-      .finally(() => { if (isAlive() && showLoading) setPreviewLoading(false); });
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    fetchPreview(() => alive, { showLoading: true }).finally(() => { if (alive) setPreviewLoading(false); });
-    return () => { alive = false; };
-  }, [fetchPreview]);
-
-  useEffect(() => {
-    let alive = true;
-    let inFlight = false;
-    const refreshPreview = () => {
-      if (!alive || inFlight) return;
-      inFlight = true;
-      fetchPreview(() => alive).finally(() => { inFlight = false; });
-    };
-    window.addEventListener("spinout-lab:advanced", refreshPreview);
-    window.addEventListener("focus", refreshPreview);
-    return () => {
-      alive = false;
-      window.removeEventListener("spinout-lab:advanced", refreshPreview);
-      window.removeEventListener("focus", refreshPreview);
-    };
-  }, [fetchPreview]);
-
-  const readiness = deckReadinessState({ previewLoading, deckPreview: preview });
-  if (readiness === "hidden") return null;
-
-  const dayLabel = preview?.programDay != null ? `Day ${preview.programDay} of 28` : null;
-
-  if (readiness === "loading") {
-    return (
-      <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mt-4">
-        <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Checking Demo Day deck…
-      </div>
-    );
-  }
-  if (readiness === "gaps") {
-    return (
-      <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:bg-amber-950/30 dark:border-amber-900">
-        <div className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-1">
-          Demo Day deck is {preview.gaps.length} items from ready
-        </div>
-        <ul className="space-y-1 mb-2">
-          {preview.gaps.slice(0, 3).map((g, i) => (
-            <li key={i} className="text-xs text-amber-800 dark:text-amber-300 flex gap-2"><span aria-hidden="true">•</span><span>{g}</span></li>
-          ))}
-          {preview.gaps.length > 3 && <li className="text-[11px] text-amber-700/70 dark:text-amber-400/70">+{preview.gaps.length - 3} more</li>}
-        </ul>
-        <Link to="/build/deck?method_id=axal_spinout_demoday" className="text-xs font-semibold text-amber-700 hover:text-amber-900 dark:text-amber-400">Open deck builder →</Link>
-      </div>
-    );
-  }
-  if (readiness === "draft") {
-    return (
-      <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:bg-amber-950/30 dark:border-amber-900">
-        <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
-          <div className="flex items-center gap-2 text-sm font-semibold text-amber-900 dark:text-amber-200">
-            <Check className="w-4 h-4" aria-hidden="true" /> Every deck section is filled
-          </div>
-          <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200/70 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
-            Draft
-          </span>
-        </div>
-        <div className="text-[11px] text-amber-700/80 dark:text-amber-400/80">
-          {dayLabel
-            ? `Still in the Lab (${dayLabel}), so exports are marked as a draft until you finish the 28-day program.`
-            : "Your program isn’t complete yet, so exports are marked as a draft."}
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:bg-emerald-950/30 dark:border-emerald-900 flex items-center gap-2 text-sm font-semibold text-emerald-900 dark:text-emerald-200">
-      <Check className="w-4 h-4" aria-hidden="true" /> Demo Day deck is ready
-    </div>
   );
 }
 
@@ -398,7 +484,7 @@ function CongratulationsScreen({ cohort, onStart, starting, startError }) {
   );
 }
 
-function Dashboard({ state, onComplete, completing, completeError }) {
+function Dashboard({ state }) {
   const week = Math.max(1, Math.min(4, state.week || 1));
   const completedKeys = new Set((state.milestones || []).map((m) => m.key));
   const isIncorporated = completedKeys.has("incorporation_completed");
@@ -547,48 +633,10 @@ function Dashboard({ state, onComplete, completing, completeError }) {
               );
             })}
           </div>
-          {/* GATE CHECKLIST — live milestone tracking for the current week.
-              Lives below the pipeline (not inside the phase cards) so the
-              cards stay compact like the design handoff. */}
-          {!isIncorporated && (WEEK_MILESTONES[week] || []).length > 0 && (
-            <div data-testid="gate-checklist" className="mt-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4 px-5 shadow-sm">
-              <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
-                <span className="text-[13.5px] font-extrabold tracking-[-.01em]">
-                  Gate checklist · {{ 1: "Validate", 2: "Structure", 3: "Build", 4: "Pitch & Fund" }[week] || `Week ${week}`}
-                </span>
-                <span className="text-[11.5px] text-gray-400">Complete these to pass the gate and advance</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {WEEK_MILESTONES[week].map((m) => {
-                  const done = completedKeys.has(m);
-                  return done ? (
-                    <span key={m} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400">
-                      <Check size={13} strokeWidth={3} aria-hidden="true" /> {MILESTONE_LABELS[m] || m}
-                    </span>
-                  ) : (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => onComplete(m)}
-                      disabled={completing === m}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-violet-300 hover:text-violet-700 dark:hover:border-violet-600 dark:hover:text-violet-300 transition-colors disabled:opacity-60"
-                    >
-                      {completing === m ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : <Circle size={13} aria-hidden="true" />}
-                      {MILESTONE_LABELS[m] || m} <span className="text-[10.5px] font-bold uppercase tracking-wide text-violet-500">Complete</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          {completeError && (
-            <div className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3 px-4 dark:bg-red-950/30 dark:border-red-900 dark:text-red-400">
-              {completeError}
-            </div>
-          )}
-          
-          <DeckReadinessCard />
-
+          {/* Sprint-progress widgets (gate checklist + Demo Day deck card)
+              were removed at the user's request. Milestones still
+              auto-complete from real product actions (lib/spinoutLabHooks.js);
+              deck readiness lives on the deck builder itself. */}
           <p className="mt-4 mb-0 text-[12.5px] text-gray-400 flex items-center gap-2">
             <BadgeCheck size={16} className="flex-none text-violet-500" aria-hidden="true" />
             All Spin-Out Lab graduates receive a verified "Spin-Out Lab Alumni" badge on their Meridian founder profile.
@@ -611,57 +659,8 @@ function Dashboard({ state, onComplete, completing, completeError }) {
           </div>
         </section>
 
-        {/* ACTIVE COHORT TRACKER */}
-        <section className="mb-12">
-          <div className="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-            <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em]">Active cohort.</h2>
-            <span className="inline-flex items-center gap-1.5 text-[12.5px] text-gray-500">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" style={{animation: 'wsPulse 2s infinite'}}></span>Live tracker
-            </span>
-          </div>
-          <p className="m-0 mb-4 text-[13.5px] text-gray-500 tabular-nums">Cohort 3 · Started July 1, 2026 · 6 companies</p>
-
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-4 shadow-sm">
-            <div className="overflow-x-auto no-scrollbar">
-              <div className="grid grid-cols-5 gap-3.5 min-w-[820px]">
-                {TRACKER_BOARD.map((col, i) => (
-                  <div key={i}>
-                    <div className={`flex items-center justify-between px-1 pb-2.5 border-b-2 mb-3 ${col.accent}`}>
-                      <span className="text-[12.5px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">{col.name}</span>
-                      <span className="tabular-nums text-[11.5px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-800 dark:text-gray-500 rounded-md px-2 py-0.5">{col.count}</span>
-                    </div>
-                    <div className="flex flex-col gap-2.5 min-h-[40px]">
-                      {col.cards.map((c, ci) => (
-                        <div key={ci} className="bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-xl p-3">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className={`w-8 h-8 rounded-lg flex-none font-extrabold text-[12px] flex items-center justify-center ${c.bg} ${c.ink}`}>
-                              {c.initials}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-[13px] font-bold whitespace-nowrap overflow-hidden text-ellipsis">{c.name}</div>
-                              <div className="text-[11px] text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{c.desc}</div>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className={`tabular-nums text-[11px] font-bold rounded-md px-2 py-1 ${col.tint}`}>
-                              {c.day}
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10.5px] text-gray-400">Lead</span>
-                              <div title={c.advisor} className="w-[22px] h-[22px] rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-bold text-[9.5px] flex items-center justify-center">
-                                {c.advInit}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+        {/* ACTIVE COHORT TRACKER — live data */}
+        <CohortTrackerSection />
 
         {/* GRADUATE COMPANIES */}
         <GraduatesSection />
@@ -678,8 +677,6 @@ export default function SpinoutLabPage() {
   const { user, refresh } = useAuth();
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [completing, setCompleting] = useState(null);
-  const [completeError, setCompleteError] = useState("");
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState("");
 
@@ -748,42 +745,5 @@ export default function SpinoutLabPage() {
   // In the real app, user is redirected once incorporated, but we keep rendering Dashboard 
   // since it handles both states visually.
 
-  const onComplete = async (key) => {
-    setCompleting(key);
-    setCompleteError("");
-    try {
-      const next = await spinoutLab.complete(key);
-      setState(next);
-      try {
-        window.dispatchEvent(
-          new CustomEvent("spinout-lab:advanced", {
-            detail: { state: next, milestoneKey: key },
-          }),
-        );
-      } catch {
-        /* no-op */
-      }
-      if (!next.active) {
-        try {
-          await refresh({ force: true });
-        } catch {
-          /* no-op */
-        }
-      }
-    } catch (e) {
-      setCompleteError(e?.message || "Could not mark milestone complete");
-      reportError("spinout-lab:complete", e);
-    } finally {
-      setCompleting(null);
-    }
-  };
-
-  return (
-    <Dashboard
-      state={state || {}}
-      onComplete={onComplete}
-      completing={completing}
-      completeError={completeError}
-    />
-  );
+  return <Dashboard state={state || {}} />;
 }
