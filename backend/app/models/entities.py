@@ -101,6 +101,10 @@ class UserRole(str, Enum):
     PARTNER = "partner"      # service providers (legal, accounting, design, recruiting, GTM, etc.)
     INVESTOR = "investor"    # capital allocators (LP / VC / Angel / Scout). Phase 0.1 split.
     ADVISOR = "advisor"        # Task #35 — operator-advisors offering office hours / 1:1 guidance.
+    EXPLORING = "exploring"    # Task #9 — holding state after onboarding chat, before an admin
+                               # assigns the final role. Exists in the production Worker/D1 schema;
+                               # added here (plus `ALTER TYPE userrole ADD VALUE 'EXPLORING'` in
+                               # Postgres) so dev can host real exploring accounts for parity.
 
 
 class User(SQLModel, table=True):

@@ -672,6 +672,7 @@ def dev_quick_login(
 
     from backend.app.services.demo_seed import (
         DEMO_ADMIN_EMAIL,
+        DEMO_EXPLORING_EMAIL,
         DEMO_FOUNDER_EMAIL,
         DEMO_INVESTOR_EMAIL,
     )
@@ -679,6 +680,7 @@ def dev_quick_login(
         DEMO_INVESTOR_EMAIL.lower(),
         DEMO_FOUNDER_EMAIL.lower(),
         DEMO_ADMIN_EMAIL.lower(),
+        DEMO_EXPLORING_EMAIL.lower(),
     }
     target_email = (req.email or DEMO_INVESTOR_EMAIL).strip().lower()
     if target_email not in ALLOWED:

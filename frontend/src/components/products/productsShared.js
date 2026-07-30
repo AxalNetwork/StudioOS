@@ -107,3 +107,103 @@ export const AUDIENCE_FILTERS = [
   { value: 'advisors', label: 'For Advisors' },
   { value: 'legal_services', label: 'Legal Services' },
 ];
+
+// ---------- Profile-bundle presentation (Products redesign) ----------
+// Colored role badges per the design handoff (Products.dc).
+export const PROFILE_BADGES = {
+  founders: { label: 'Founder', text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-600/10' },
+  investors_lps: { label: 'Investor / LP', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-600/10' },
+  advisors: { label: 'Advisor', text: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-600/10' },
+  service_partners: { label: 'Service Partner', text: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-600/10' },
+  legal_services: { label: 'Legal Services', text: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-600/10' },
+};
+
+export function profileForProduct(product) {
+  const cats = Array.isArray(product?.categories) ? product.categories : [];
+  const key = ['founders', 'investors_lps', 'advisors', 'service_partners', 'legal_services']
+    .find((k) => cats.includes(k));
+  return key ? { key, ...PROFILE_BADGES[key] } : null;
+}
+
+// Static design copy for the profile-bundle cards (feature bullets + persona,
+// from the design handoff). Prices are NEVER taken from here — they always
+// come from the live catalog. Keyed by exact product name; a catalog product
+// without an entry falls back to its own description.
+export const BUNDLE_CONTENT = {
+  'Founder — Growth': {
+    persona: 'Pre-seed and seed-stage founders building their first cap table and preparing for institutional outreach.',
+    features: [
+      'Build and share a live cap table with prospective investors',
+      'Prepare institutional outreach with a guided data room',
+      'Warm introductions to seed-stage funds',
+      'Track every investor conversation in one pipeline',
+      'Verified founder badge on your profile',
+      'Portfolio profile surfaced to matched investors',
+    ],
+  },
+  'Founder — Studio': {
+    persona: 'Repeat founders and studio operators managing multiple portfolio companies and advisory relationships.',
+    features: [
+      'Manage multiple portfolio companies from one account',
+      'Track advisory relationships with equity records',
+      'Priority matching across the studio network',
+      'Team seats for operators and analysts',
+      'Consolidated deal flow across ventures',
+      'Dedicated partnerships desk',
+    ],
+  },
+  'Investor — Professional': {
+    persona: 'Angels and emerging managers deploying $250K–$2M annually across direct deals and syndicates.',
+    features: [
+      'Verified investor badge',
+      'Full deal flow access across sectors',
+      'Portfolio tracking for up to 50 deals',
+      'Direct messaging with founders',
+      'Participate in SPV syndicates as a named LP',
+      'Priority matching in introductions',
+    ],
+  },
+  'Investor — Institutional': {
+    persona: 'Family offices, fund managers, and institutional LPs managing multi-vehicle portfolios at scale.',
+    features: [
+      'Everything in Professional',
+      'Multi-vehicle portfolio tracking, unlimited deals',
+      'Dedicated coverage and onboarding',
+      'Co-investment and syndicate lead tools',
+      'Team seats with role permissions',
+      'API access to portfolio data',
+    ],
+  },
+  'Advisor': {
+    persona: 'Operators and executives building a structured advisory portfolio with equity tracking and founder access.',
+    features: [
+      'Build a structured advisory portfolio with equity tracking',
+      'Verified advisor badge',
+      'Founder access and warm introductions',
+      'Track vesting and advisory agreements',
+      'Priority matching to relevant founders',
+    ],
+  },
+  'Service Partner': {
+    persona: 'Law firms, accountants, and service providers seeking deal-qualified referrals from verified founders and funds.',
+    features: [
+      'Deal-qualified referrals from verified founders and funds',
+      'Verified service partner badge',
+      'Listed in the Axal partner directory',
+      'Direct inbound from matched clients',
+      'Track your referral pipeline and outcomes',
+    ],
+  },
+};
+
+export const MOST_POPULAR_BUNDLE = 'Investor — Professional';
+
+// A "profile bundle" is a role subscription (Founder/Investor/Advisor/Partner
+// tiers). Detected from catalog metadata (tier markers) or by having design
+// copy above; every other product renders in "Add-ons & services".
+export function isBundleProduct(product) {
+  const meta = product?.metadata || {};
+  const kind = product?.kind || meta.kind;
+  if (kind !== 'subscription') return false;
+  return Boolean(meta.tier || meta.investor_tier || BUNDLE_CONTENT[product?.name]);
+}

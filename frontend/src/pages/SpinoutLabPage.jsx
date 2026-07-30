@@ -28,43 +28,84 @@ export const MILESTONE_LABELS = {
   incorporation_completed: "Complete incorporation",
 };
 
+// Pipeline cards mirror the "Spin-Out Lab" design handoff
+// (attached_assets/Spin-Out_Lab.dc_*.html): five compact phases with the
+// program's descriptive items — NOT the live milestone checklist. Live
+// milestone tracking (WEEK_MILESTONES + Complete actions) renders in the
+// gate-checklist strip below the pipeline so card heights stay even and
+// the section stacks cleanly on small screens. Items default to Delaware
+// wording; pipelineItemsFor() swaps the jurisdiction-specific lines.
 export const PIPELINE_PHASES = [
   {
-    name: "Validate", days: "Days 1–7",
-    backendWeek: 1,
-    milestones: WEEK_MILESTONES[1],
-    tools: [ { label: "Startups", to: "/projects" }, { label: "Customer Discovery", to: "/customer-discovery" }, { label: "Market Intelligence", to: "/market-intel" } ],
-    color: "violet"
+    name: "Validate", days: "Days 1–5",
+    backendWeek: 1, color: "violet",
+    items: [
+      "Problem/solution definition workshop",
+      "Market sizing and TAM analysis",
+      "Competitor landscape mapping",
+      "Go/no-go decision gate",
+    ],
   },
   {
-    name: "Structure", days: "Days 8–14",
-    backendWeek: 2,
-    milestones: WEEK_MILESTONES[2],
-    tools: [ { label: "Roadmap & MVP", to: "/build/roadmap" }, { label: "Brand Builder", to: "/build/brand" }, { label: "Pitch Deck Builder", to: "/build/deck" } ],
-    color: "blue"
+    name: "Structure", days: "Days 6–12",
+    backendWeek: 2, color: "blue",
+    // items[0] and items[2] are jurisdiction-specific — see pipelineItemsFor().
+    items: [
+      "Delaware C-Corp incorporation",
+      "Co-founder equity split and vesting schedule",
+      "83(b) election filing",
+      "IP assignment agreements",
+    ],
   },
   {
-    name: "Build", days: "Days 15–21",
-    backendWeek: 3,
-    milestones: WEEK_MILESTONES[3],
-    tools: [ { label: "Scoring", to: "/scoring" }, { label: "Advisors", to: "/advisors" }, { label: "Office Hours", to: "/office-hours" }, { label: "Co-founder Match", to: "/cofounder" } ],
-    color: "teal"
+    name: "Build", days: "Days 13–19",
+    backendWeek: 3, color: "teal",
+    items: [
+      "MVP scope definition",
+      "Prototype or landing page live",
+      "First design sprint (3 days)",
+      "Advisor onboarding (1–2 advisors)",
+    ],
   },
   {
-    name: "Pitch", days: "Days 22–26",
-    backendWeek: 4,
-    milestones: [],
-    tools: [ { label: "Capital", to: "/capital" } ],
-    color: "amber"
+    name: "Pitch", days: "Days 20–25",
+    backendWeek: 4, color: "amber",
+    items: [
+      "Pitch deck (12 slides, venture-standard)",
+      "Financial model (3-year projection)",
+      "Cap table modeling",
+      "Warm intro prep with partner network",
+    ],
   },
   {
-    name: "Fund", days: "Days 27–30",
-    backendWeek: 4,
-    milestones: WEEK_MILESTONES[4],
-    tools: [ { label: "Incorporate", to: "/incorporate" }, { label: "Cap Table", to: "/build/captable" }, { label: "Section 83(b)", to: "/incorporate/83b" }, { label: "Cofounder Agreement", to: "/incorporate/cofounder-agreement" }, { label: "Compliance", to: "/compliance" }, { label: "KYC", to: "/kyc" } ],
-    color: "pink"
-  }
+    name: "Fund", days: "Days 26–30",
+    backendWeek: 4, color: "pink",
+    items: [
+      "Partner pitch sessions (3–5 investors)",
+      "Term sheet review support",
+      "First close or bridge round",
+      "Graduate: venture-ready company",
+    ],
+  },
 ];
+
+// Jurisdiction-specific wording for the Structure phase (design handoff:
+// juris.incLine / juris.filingInc). Only selectable jurisdictions need
+// entries; anything else falls back to the Delaware default items.
+const JURISDICTION_PIPELINE_LINES = {
+  de: { incLine: "Delaware C-Corp incorporation", filingLine: "83(b) election filing" },
+  wy: { incLine: "Wyoming C-Corp incorporation", filingLine: "83(b) election filing" },
+};
+
+export function pipelineItemsFor(phase, jurisdictionKey) {
+  if (phase.name !== "Structure") return phase.items;
+  const j = JURISDICTION_PIPELINE_LINES[jurisdictionKey];
+  if (!j) return phase.items;
+  const items = [...phase.items];
+  items[0] = j.incLine;
+  items[2] = j.filingLine;
+  return items;
+}
 
 export const PHASE_THEMES = {
   violet: {
@@ -488,32 +529,14 @@ function Dashboard({ state, onComplete, completing, completeError }) {
                     <span className={`tabular-nums self-start whitespace-nowrap px-[9px] py-[3px] rounded-[7px] text-[11px] font-bold mb-[13px] ${t.chip} ${t.ink}`}>
                       {p.days}
                     </span>
-                    <ul className="m-0 p-0 list-none flex flex-col gap-2 mb-4">
-                      {p.milestones.map((m) => {
-                         const done = completedKeys.has(m);
-                         return (
-                           <li key={m} className="flex gap-2 text-[12.5px] leading-[1.35] text-gray-700 dark:text-gray-300">
-                             <span className={`flex-none font-bold ${t.ink}`} aria-hidden="true">·</span>
-                             <span className="flex-1 flex flex-col gap-1.5">
-                               <span className={done ? "line-through opacity-60" : ""}>{MILESTONE_LABELS[m] || m}</span>
-                               {isActive && !done && (
-                                 <button type="button" onClick={() => onComplete(m)} disabled={completing === m} className={`self-start text-[11px] font-semibold px-2.5 py-1 rounded-md border bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-1.5 ${t.ink} ${t.border} disabled:opacity-60`}>
-                                    {completing === m ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : <Check size={12} aria-hidden="true" />} Complete
-                                 </button>
-                               )}
-                             </span>
-                           </li>
-                         );
-                      })}
+                    <ul className="m-0 p-0 list-none flex flex-col gap-2">
+                      {pipelineItemsFor(p, jurisdiction).map((d) => (
+                        <li key={d} className="flex gap-2 text-[12.5px] leading-[1.35] text-gray-700 dark:text-gray-300">
+                          <span className={`flex-none font-bold ${t.ink}`} aria-hidden="true">·</span>
+                          <span>{d}</span>
+                        </li>
+                      ))}
                     </ul>
-                    <div className={`mt-auto flex flex-col gap-1.5 border-t pt-3 ${t.border}`}>
-                       {p.tools.map((tool) => (
-                         <Link key={tool.label} to={tool.to} className={`flex items-center justify-between text-[11.5px] font-semibold px-2.5 py-2 rounded-lg transition-colors bg-white/60 dark:bg-gray-900/50 hover:bg-white dark:hover:bg-gray-800 border ${t.border} ${t.ink}`}>
-                            <span>{tool.label}</span>
-                            <ArrowRight size={12} aria-hidden="true" />
-                         </Link>
-                       ))}
-                    </div>
                   </div>
                   {i < PIPELINE_PHASES.length - 1 && (
                     <div className="w-[26px] flex-none hidden lg:flex items-center justify-center text-violet-300 dark:text-violet-800">
@@ -524,6 +547,40 @@ function Dashboard({ state, onComplete, completing, completeError }) {
               );
             })}
           </div>
+          {/* GATE CHECKLIST — live milestone tracking for the current week.
+              Lives below the pipeline (not inside the phase cards) so the
+              cards stay compact like the design handoff. */}
+          {!isIncorporated && (WEEK_MILESTONES[week] || []).length > 0 && (
+            <div data-testid="gate-checklist" className="mt-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4 px-5 shadow-sm">
+              <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
+                <span className="text-[13.5px] font-extrabold tracking-[-.01em]">
+                  Gate checklist · {{ 1: "Validate", 2: "Structure", 3: "Build", 4: "Pitch & Fund" }[week] || `Week ${week}`}
+                </span>
+                <span className="text-[11.5px] text-gray-400">Complete these to pass the gate and advance</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {WEEK_MILESTONES[week].map((m) => {
+                  const done = completedKeys.has(m);
+                  return done ? (
+                    <span key={m} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400">
+                      <Check size={13} strokeWidth={3} aria-hidden="true" /> {MILESTONE_LABELS[m] || m}
+                    </span>
+                  ) : (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => onComplete(m)}
+                      disabled={completing === m}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-violet-300 hover:text-violet-700 dark:hover:border-violet-600 dark:hover:text-violet-300 transition-colors disabled:opacity-60"
+                    >
+                      {completing === m ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : <Circle size={13} aria-hidden="true" />}
+                      {MILESTONE_LABELS[m] || m} <span className="text-[10.5px] font-bold uppercase tracking-wide text-violet-500">Complete</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {completeError && (
             <div className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3 px-4 dark:bg-red-950/30 dark:border-red-900 dark:text-red-400">
               {completeError}

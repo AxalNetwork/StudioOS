@@ -27,9 +27,10 @@ import { useCart } from '../components/products/useCart';
 import BillingCartBar from '../components/products/BillingCartBar';
 import CartDrawer from '../components/products/CartDrawer';
 import ProductCard from '../components/products/ProductCard';
+import BundleCard from '../components/products/BundleCard';
 import ProductSlideOver from '../components/products/ProductSlideOver';
 import {
-  formatMoney, formatDate, AUDIENCE_FILTERS, priceCycle,
+  formatMoney, formatDate, AUDIENCE_FILTERS, priceCycle, isBundleProduct,
 } from '../components/products/productsShared';
 
 const REDEEM_REASONS = {
@@ -128,69 +129,68 @@ function PromoRedeemCard({ initialCode, onRedeemed }) {
   }
 
   const alreadyRedeemed = myPromo?.redeemed_at;
+  if (alreadyRedeemed) {
+    return (
+      <p className="mt-3 text-[13px] text-gray-500 dark:text-gray-400">
+        <BadgeCheck size={14} className="inline mr-1 -mt-0.5 text-emerald-600 dark:text-emerald-400" />
+        Your code <span className="font-mono font-medium text-gray-700 dark:text-gray-300">{myPromo.code}</span> was
+        redeemed on {formatDate(myPromo.redeemed_at)} — the {myPromo.license_label.toLowerCase()} is active.
+      </p>
+    );
+  }
   return (
-    <div className="rounded-xl border border-violet-200 dark:border-violet-900 bg-violet-50/60 dark:bg-violet-950/30 p-4">
-      <div className="flex items-center gap-2 text-violet-800 dark:text-violet-200 font-semibold text-sm">
-        <Ticket size={16} /> Redeem a promo code
+    <div className="mt-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+        <div className="relative">
+          <Ticket size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={code}
+            onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') redeem(); }}
+            placeholder="AXAL-XXXX-XXXX"
+            spellCheck={false}
+            className="w-full sm:w-[250px] h-10 rounded-[10px] border border-gray-900/[.14] dark:border-gray-700 bg-white dark:bg-gray-900 pl-9 pr-3 text-[13px] font-mono tracking-wide text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+            data-testid="promo-input"
+          />
+        </div>
+        <button
+          onClick={redeem}
+          disabled={busy || !code.trim()}
+          className="inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-[10px] border border-violet-600/25 bg-violet-600/[.06] hover:bg-violet-600/[.12] text-violet-600 dark:text-violet-400 text-[13px] font-semibold disabled:opacity-50"
+          data-testid="promo-redeem"
+        >
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+          Redeem code
+        </button>
       </div>
-      {alreadyRedeemed ? (
-        <p className="mt-2 text-sm text-violet-900/80 dark:text-violet-100/80">
-          <BadgeCheck size={14} className="inline mr-1 -mt-0.5" />
-          Your code <span className="font-mono font-medium">{myPromo.code}</span> was redeemed
-          on {formatDate(myPromo.redeemed_at)} — the {myPromo.license_label.toLowerCase()} is active.
+      {error ? (
+        <p className="mt-2 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+          <AlertTriangle size={12} /> {error}
         </p>
       ) : (
-        <>
-          <p className="mt-1.5 text-sm text-violet-900/80 dark:text-violet-100/80">
-            Completed your Personal Advisor profile? Enter the one-time code from the chat to
-            activate your free 30-day license.
-          </p>
-          <div className="mt-3 flex flex-col sm:flex-row gap-2">
-            <input
-              value={code}
-              onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null); }}
-              onKeyDown={(e) => { if (e.key === 'Enter') redeem(); }}
-              placeholder="AXAL-XXXX-XXXX"
-              spellCheck={false}
-              className="flex-1 rounded-lg border border-violet-300 dark:border-violet-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-mono tracking-wide text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
-            />
-            <button
-              onClick={redeem}
-              disabled={busy || !code.trim()}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium disabled:opacity-50"
-            >
-              {busy ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-              Redeem
-            </button>
-          </div>
-          {error && (
-            <p className="mt-2 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-              <AlertTriangle size={12} /> {error}
-            </p>
-          )}
-        </>
+        <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+          Completed your Personal Advisor profile? Enter the one-time code from the chat to
+          activate your free 30-day license.
+        </p>
       )}
     </div>
   );
 }
 
 // ------- Introduction packs (PRESERVED) -------
-const INTRO_PACK_FALLBACK = [
-  { key: 'intro_10', credits: 10, amount_cents: 4900, currency: 'usd', label: '10 introductions', blurb: 'A focused batch of warm intros for the current push.' },
-  { key: 'intro_100', credits: 100, amount_cents: 39900, currency: 'usd', label: '100 introductions', blurb: 'A quarter of serious relationship building.' },
-  { key: 'intro_1000', credits: 1000, amount_cents: 299000, currency: 'usd', label: '1,000 introductions', blurb: 'Firm-scale allocation for teams and funds.' },
-];
-
+// Prices come exclusively from GET /network/intro-packs — no client-side
+// fallback amounts. If the endpoint is unavailable the section says so
+// instead of showing stale numbers.
 function IntroPacksSection({ onReceipt }) {
-  const [packs, setPacks] = useState(INTRO_PACK_FALLBACK);
+  const [packs, setPacks] = useState(null); // null = loading, [] = unavailable
   const [buying, setBuying] = useState(null);
   const [pendingKey, setPendingKey] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     api.introPacks()
-      .then((r) => { if (Array.isArray(r?.packs) && r.packs.length) setPacks(r.packs); })
-      .catch(() => { /* fallback list stands */ });
+      .then((r) => setPacks(Array.isArray(r?.packs) ? r.packs : []))
+      .catch(() => setPacks([]));
   }, []);
 
   const buy = useCallback(async (pack) => {
@@ -208,28 +208,48 @@ function IntroPacksSection({ onReceipt }) {
   }, []);
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
-      <div className="flex items-center gap-2">
-        <Sparkles size={16} className="text-violet-600 dark:text-violet-400" />
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Introduction packs</h2>
+    <section>
+      <div className="mb-3.5">
+        <h2 className="text-[19px] font-bold tracking-[-.01em] text-gray-900 dark:text-gray-100">Introduction packs</h2>
+        <p className="mt-0.5 text-[13px] text-gray-500 dark:text-gray-400">
+          Top up your Network › Introductions balance. Purchased credits never expire and stack on
+          your monthly allowance.
+        </p>
       </div>
-      <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-        Top up your Network › Introductions balance. Purchased credits never expire and stack on
-        your monthly allowance.
-      </p>
-      <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {packs.map((p) => (
-          <div key={p.key} className="flex flex-col rounded-lg border border-gray-200 dark:border-gray-800 p-3">
-            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{p.label}</div>
-            <p className="mt-0.5 text-[11px] text-gray-600 dark:text-gray-400">{p.blurb}</p>
-            <div className="mt-auto pt-3 flex items-center justify-between gap-2">
-              <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                {formatMoney(p.amount_cents, p.currency)}
+      {packs === null && (
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-6">
+          <Loader2 size={15} className="animate-spin" /> Loading packs…
+        </div>
+      )}
+      {packs !== null && packs.length === 0 && (
+        <p className="text-sm text-gray-500 dark:text-gray-400 py-6">
+          Introduction packs are unavailable right now — check back soon.
+        </p>
+      )}
+      <div className="grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+        {(packs || []).map((p) => (
+          <div key={p.key} className="flex flex-col bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-[18px] shadow-sm transition-shadow hover:shadow-md">
+            <div className="flex items-start gap-[11px]">
+              <span className="flex-shrink-0 inline-flex w-9 h-9 rounded-[10px] bg-violet-600/[.09] text-violet-600 dark:text-violet-400 items-center justify-center">
+                <Sparkles size={17} />
               </span>
+              <div>
+                <div className="text-[14.5px] font-bold text-gray-900 dark:text-gray-100">{p.label}</div>
+                <p className="mt-1 text-[12.5px] leading-[1.4] text-gray-500 dark:text-gray-400">{p.blurb}</p>
+              </div>
+            </div>
+            <div className="mt-auto pt-4 flex items-center justify-between gap-2.5">
+              <div className="flex items-baseline gap-1">
+                <span className="tabular-nums text-xl font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100">
+                  {formatMoney(p.amount_cents, p.currency)}
+                </span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">one-time</span>
+              </div>
               <button
                 onClick={() => buy(p)}
                 disabled={pendingKey === p.key}
-                className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium disabled:opacity-50"
+                className="h-9 px-[15px] rounded-[9px] bg-violet-600 hover:bg-violet-700 text-white text-[12.5px] font-semibold disabled:opacity-50"
+                data-testid={`intro-pack-buy-${p.key}`}
               >
                 {pendingKey === p.key ? <Loader2 size={12} className="inline animate-spin" /> : 'Buy'}
               </button>
@@ -243,7 +263,7 @@ function IntroPacksSection({ onReceipt }) {
         </p>
       )}
       {buying && (
-        <div className="mt-4 rounded-lg border border-gray-200 dark:border-gray-800 p-3">
+        <div className="mt-4 rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
           <div className="flex items-center justify-between gap-2 mb-3">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               Checkout — {buying.pack.label}
@@ -271,7 +291,7 @@ function IntroPacksSection({ onReceipt }) {
           />
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -409,16 +429,33 @@ export default function ProductsPage() {
     [productId, products],
   );
 
+  // How the product modal was opened: carries the bundle card's license
+  // quantity and whether to reveal the embedded checkout immediately
+  // (Subscribe button). Cleared on close and on plain deep links.
+  const [modalIntent, setModalIntent] = useState(null);
+
   const handleOpenProduct = useCallback((product) => {
+    setModalIntent(null);
+    navigate(`/products/${encodeURIComponent(product.id)}`);
+  }, [navigate]);
+
+  const handlePreviewBundle = useCallback((product, { qty } = {}) => {
+    setModalIntent({ qty: qty || 1, checkout: false });
+    navigate(`/products/${encodeURIComponent(product.id)}`);
+  }, [navigate]);
+
+  const handleSubscribeBundle = useCallback((product, { qty } = {}) => {
+    setModalIntent({ qty: qty || 1, checkout: true });
     navigate(`/products/${encodeURIComponent(product.id)}`);
   }, [navigate]);
 
   const handleCloseProduct = useCallback(() => {
+    setModalIntent(null);
     navigate('/products');
   }, [navigate]);
 
   // Add a one-time item to the cart.
-  const addToCart = useCallback((product, price) => {
+  const addToCart = useCallback((product, price, qty = 1) => {
     cart.add({
       price_id: price.id,
       product_id: product.id,
@@ -426,12 +463,14 @@ export default function ProductsPage() {
       currency: price.currency,
       unit_amount: price.unit_amount,
       cycle: priceCycle(price),
-    });
+    }, qty);
     showToast(`${product.name} added to your order`);
   }, [cart, showToast]);
 
-  // Subscription one-click success (from the slide-over embedded checkout).
+  // Subscription one-click success (from the modal's embedded checkout).
+  // Clear the modal intent so back/deep-link reopens never resume checkout.
   const onSubscribed = useCallback(({ product, price, result }) => {
+    setModalIntent(null);
     setPaidReceipt({
       product_name: product?.name || 'Subscription',
       amount_cents: result?.free ? 0 : (price?.unit_amount ?? null),
@@ -448,83 +487,56 @@ export default function ProductsPage() {
     navigate('/checkout');
   }, [navigate]);
 
-  const visibleProducts = useMemo(() => {
-    if (!products) return products;
-    if (audienceFilter === 'all') return products;
-    return products.filter((p) => Array.isArray(p.categories) && p.categories.includes(audienceFilter));
-  }, [products, audienceFilter]);
+  // Split the live catalog into the prototype's two sections: role
+  // subscriptions ("Profile bundles") and everything else ("Add-ons &
+  // services"). The audience filter applies to the add-ons grid only.
+  const bundles = useMemo(
+    () => (products || []).filter(isBundleProduct),
+    [products],
+  );
+  const addons = useMemo(
+    () => (products || []).filter((p) => !isBundleProduct(p)),
+    [products],
+  );
+  const visibleAddons = useMemo(() => {
+    if (audienceFilter === 'all') return addons;
+    return addons.filter((p) => Array.isArray(p.categories) && p.categories.includes(audienceFilter));
+  }, [addons, audienceFilter]);
 
   const filterBar = useMemo(() => {
-    if (products === null || products.length === 0) return null;
+    if (products === null || addons.length === 0) return null;
+    const pill = (active) => `px-3.5 py-[7px] rounded-full text-[12.5px] font-semibold border transition-colors ${
+      active
+        ? 'bg-[#14142B] dark:bg-gray-100 border-transparent text-white dark:text-gray-900'
+        : 'bg-white dark:bg-gray-900 border-gray-900/10 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+    }`;
     return (
       <div className="flex flex-wrap gap-2">
-        <button
-          onClick={() => setAudienceFilter('all')}
-          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-            audienceFilter === 'all'
-              ? 'bg-violet-600 border-violet-600 text-white'
-              : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-violet-300'
-          }`}
-        >
+        <button onClick={() => setAudienceFilter('all')} className={pill(audienceFilter === 'all')}>
           All
         </button>
         {AUDIENCE_FILTERS.map((f) => (
-          <button
-            key={f.value}
-            onClick={() => setAudienceFilter(f.value)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-              audienceFilter === f.value
-                ? 'bg-violet-600 border-violet-600 text-white'
-                : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-violet-300'
-            }`}
-          >
+          <button key={f.value} onClick={() => setAudienceFilter(f.value)} className={pill(audienceFilter === f.value)}>
             {f.label}
           </button>
         ))}
       </div>
     );
-  }, [products, audienceFilter]);
+  }, [products, addons, audienceFilter]);
 
-  const grid = useMemo(() => {
-    if (products === null) {
-      return (
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-8 justify-center">
-          <Loader2 size={16} className="animate-spin" /> Loading catalog…
-        </div>
-      );
-    }
-    if (products.length === 0) {
-      return (
-        <p className="text-sm text-gray-500 dark:text-gray-400 py-8 text-center">
-          {catalogError || 'No products are available right now — check back soon.'}
-        </p>
-      );
-    }
-    if (visibleProducts.length === 0) {
-      return (
-        <p className="text-sm text-gray-500 dark:text-gray-400 py-8 text-center">
-          No products match this filter yet.
-        </p>
-      );
-    }
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {visibleProducts.map((p) => (
-          <ProductCard
-            key={p.id}
-            product={p}
-            globalCycle={globalCycle}
-            onOpen={handleOpenProduct}
-            onAddToCart={addToCart}
-            onBuySubscription={(product) => handleOpenProduct(product)}
-          />
-        ))}
-      </div>
-    );
-  }, [products, visibleProducts, catalogError, globalCycle, handleOpenProduct, addToCart]);
+  const loadingState = products === null && (
+    <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-10 justify-center">
+      <Loader2 size={16} className="animate-spin" /> Loading catalog…
+    </div>
+  );
+  const emptyState = products !== null && products.length === 0 && (
+    <p className="text-sm text-gray-500 dark:text-gray-400 py-10 text-center">
+      {catalogError || 'No products are available right now — check back soon.'}
+    </p>
+  );
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="max-w-[1240px] space-y-7">
       {/* Slide-over / drawer animations (scoped inline — global CSS untouched). */}
       <style>{`
         @keyframes mrdFade { from { opacity: 0 } to { opacity: 1 } }
@@ -533,13 +545,15 @@ export default function ProductsPage() {
       `}</style>
 
       <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <Package size={22} className="text-violet-600 dark:text-violet-400" /> Products
+        <div className="min-w-0">
+          <h1 className="text-[32px] leading-tight font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100 flex items-center gap-2.5">
+            <Package size={26} className="text-violet-600 dark:text-violet-400" /> Products
           </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Licenses, sessions and add-ons — purchased in-app, or unlocked with a promo code.
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 max-w-2xl">
+            One clear catalog — profile bundles, introduction packs, and add-ons. Purchased
+            in-app, or unlocked with a promo code.
           </p>
+          <PromoRedeemCard initialCode={deepLinkCode} onRedeemed={refreshUnlocks} />
         </div>
         {isAdmin && (
           <button
@@ -551,34 +565,12 @@ export default function ProductsPage() {
         )}
       </div>
 
-      <PromoRedeemCard initialCode={deepLinkCode} onRedeemed={refreshUnlocks} />
-
       <BillingCartBar
         cycle={globalCycle}
         onCycleChange={setGlobalCycle}
         cart={cart}
         onOpenDrawer={() => setDrawerOpen(true)}
       />
-
-      <IntroPacksSection onReceipt={(r) => setPaidReceipt(r)} />
-
-      {unlocks.length > 0 && (
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <BadgeCheck size={15} className="text-emerald-600 dark:text-emerald-400" /> Active licenses
-          </h2>
-          <ul className="mt-2 space-y-1">
-            {unlocks.map((u) => (
-              <li key={u.feature_key} className="text-xs text-gray-700 dark:text-gray-300 flex justify-between gap-4">
-                <span className="font-mono">{u.feature_key}</span>
-                <span className="text-gray-500 dark:text-gray-400">
-                  {u.expires_at ? `until ${formatDate(u.expires_at)}` : 'permanent'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       {paidReceipt && (
         <BillingReceipt
@@ -597,13 +589,84 @@ export default function ProductsPage() {
         />
       )}
 
-      <div>
-        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Catalog</h2>
-          {filterBar}
+      {loadingState}
+      {emptyState}
+
+      {bundles.length > 0 && (
+        <section>
+          <div className="mb-3.5">
+            <h2 className="text-[19px] font-bold tracking-[-.01em] text-gray-900 dark:text-gray-100">Profile bundles</h2>
+            <p className="mt-0.5 text-[13px] text-gray-500 dark:text-gray-400">
+              Role-based subscriptions — pick the profile that matches how you use Axal.
+            </p>
+          </div>
+          <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+            {bundles.map((p) => (
+              <BundleCard
+                key={p.id}
+                product={p}
+                globalCycle={globalCycle}
+                onPreview={handlePreviewBundle}
+                onSubscribe={handleSubscribeBundle}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <IntroPacksSection onReceipt={(r) => setPaidReceipt(r)} />
+
+      {(addons.length > 0 || (products !== null && products.length > 0)) && (
+        <section>
+          <div className="flex items-end justify-between gap-3 mb-3.5 flex-wrap">
+            <div>
+              <h2 className="text-[19px] font-bold tracking-[-.01em] text-gray-900 dark:text-gray-100">Add-ons &amp; services</h2>
+              <p className="mt-0.5 text-[13px] text-gray-500 dark:text-gray-400">
+                Incorporations, intelligence and standalone services — one-time or recurring.
+              </p>
+            </div>
+            {filterBar}
+          </div>
+          {visibleAddons.length > 0 ? (
+            <div className="grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
+              {visibleAddons.map((p) => (
+                <ProductCard
+                  key={p.id}
+                  product={p}
+                  globalCycle={globalCycle}
+                  onOpen={handleOpenProduct}
+                  onAddToCart={addToCart}
+                  onBuySubscription={(product) => handleOpenProduct(product)}
+                />
+              ))}
+            </div>
+          ) : (
+            products !== null && products.length > 0 && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 py-8 text-center">
+                No products match this filter yet.
+              </p>
+            )
+          )}
+        </section>
+      )}
+
+      {unlocks.length > 0 && (
+        <div className="rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <BadgeCheck size={15} className="text-emerald-600 dark:text-emerald-400" /> Active licenses
+          </h2>
+          <ul className="mt-2 space-y-1">
+            {unlocks.map((u) => (
+              <li key={u.feature_key} className="text-xs text-gray-700 dark:text-gray-300 flex justify-between gap-4">
+                <span className="font-mono">{u.feature_key}</span>
+                <span className="text-gray-500 dark:text-gray-400">
+                  {u.expires_at ? `until ${formatDate(u.expires_at)}` : 'permanent'}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
-        {grid}
-      </div>
+      )}
 
       <CartDrawer
         open={drawerOpen}
@@ -620,6 +683,8 @@ export default function ProductsPage() {
         onClose={handleCloseProduct}
         onAddToCart={addToCart}
         onSubscribed={onSubscribed}
+        initialQty={modalIntent?.qty || 1}
+        initialCheckout={Boolean(modalIntent?.checkout)}
       />
 
       {showAddProduct && (

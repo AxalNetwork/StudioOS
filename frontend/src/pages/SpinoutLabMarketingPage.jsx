@@ -1,9 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Check, Rocket, Circle, Lock } from 'lucide-react';
+import { ArrowRight, Lock } from 'lucide-react';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
-import { PIPELINE_PHASES, PHASE_THEMES, DELIVERABLES, TRACKER_BOARD, MILESTONE_LABELS as LAB_MILESTONE_LABELS, GraduatesSection, ApplyCtaSection, LAB_APPLY_HREF as APPLY_HREF, LAB_CONTACT_HREF as CONTACT_HREF } from './SpinoutLabPage';
+import { PIPELINE_PHASES, PHASE_THEMES, DELIVERABLES, TRACKER_BOARD, GraduatesSection, ApplyCtaSection, LAB_APPLY_HREF as APPLY_HREF, LAB_CONTACT_HREF as CONTACT_HREF } from './SpinoutLabPage';
 
 export default function SpinoutLabMarketingPage() {
   return (
@@ -90,24 +90,14 @@ export default function SpinoutLabMarketingPage() {
                     <span className={`tabular-nums self-start whitespace-nowrap px-[9px] py-[3px] rounded-[7px] text-[11px] font-bold mb-[13px] ${t.chip} ${t.ink}`}>
                       {p.days}
                     </span>
-                    <ul className="m-0 p-0 list-none flex flex-col gap-2 mb-4">
-                      {p.milestones.map((m) => (
-                         <li key={m} className="flex gap-2 text-[12.5px] leading-[1.35] text-gray-700 dark:text-gray-300">
+                    <ul className="m-0 p-0 list-none flex flex-col gap-2">
+                      {p.items.map((d) => (
+                         <li key={d} className="flex gap-2 text-[12.5px] leading-[1.35] text-gray-700 dark:text-gray-300">
                            <span className={`flex-none font-bold ${t.ink}`} aria-hidden="true">·</span>
-                           <span className="flex-1 flex flex-col gap-1.5">{LAB_MILESTONE_LABELS[m] || m.replace(/_/g, ' ')}</span>
+                           <span>{d}</span>
                          </li>
                       ))}
                     </ul>
-                    {p.tools && p.tools.length > 0 && (
-                      <div className={`mt-auto flex flex-col gap-1.5 border-t pt-3 border-gray-100 dark:border-gray-800`}>
-                         {p.tools.map((tool) => (
-                           <Link key={tool.label} to={tool.to} className={`flex items-center justify-between text-[11.5px] font-semibold px-2.5 py-2 rounded-lg transition-colors bg-gray-50/50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-400`}>
-                              <span>{tool.label}</span>
-                              <ArrowRight size={12} aria-hidden="true" />
-                           </Link>
-                         ))}
-                      </div>
-                    )}
                   </div>
                   {i < PIPELINE_PHASES.length - 1 && (
                     <div className="w-[26px] flex-none hidden lg:flex items-center justify-center text-gray-300 dark:text-gray-700">

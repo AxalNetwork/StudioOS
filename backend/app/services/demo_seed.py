@@ -59,6 +59,15 @@ DEMO_FOUNDER_NAME = "Demo Founder"
 DEMO_ADMIN_EMAIL = "demo-admin@axal.test"
 DEMO_ADMIN_NAME = "Demo Admin"
 
+# Dev-only exploring-state account so the holding-state experience (the
+# /exploring dashboard, Spin-Out Lab applications from an explorer, and the
+# /admin/exploring review queue) is testable with a REAL 'exploring' role.
+# The admin "View as: Exploring" toggle is a frontend-only preview — the JWT
+# still carries role=admin, so server-side role gates (e.g. the Lab apply
+# endpoint) correctly refuse it. This account exercises the real path.
+DEMO_EXPLORING_EMAIL = "demo-exploring@axal.test"
+DEMO_EXPLORING_NAME = "Demo Explorer"
+
 DEMO_PROJECT_NAME = "Demo Trust Center Co."
 DEMO_PROJECT_SECTOR = "AI"
 DEMO_PROJECT_STAGE = "seed"
@@ -114,14 +123,22 @@ def seed_demo_investor_and_founder() -> None:
                 name=DEMO_ADMIN_NAME,
                 role=UserRole.ADMIN,
             )
+            exploring_user = _ensure_user(
+                session,
+                email=DEMO_EXPLORING_EMAIL,
+                name=DEMO_EXPLORING_NAME,
+                role=UserRole.EXPLORING,
+            )
             founder_row = _ensure_founder_row(session, founder_user)
             project = _ensure_project(session, founder_row)
             _ensure_deal(session, project)
-            _ensure_onboarding_complete(session, investor, founder_user, admin_user)
+            _ensure_onboarding_complete(
+                session, investor, founder_user, admin_user, exploring_user
+            )
             session.commit()
             logger.info(
-                "demo_seed: ready (investor_user_id=%s, founder_user_id=%s, admin_user_id=%s, project_id=%s)",
-                investor.id, founder_user.id, admin_user.id, project.id,
+                "demo_seed: ready (investor_user_id=%s, founder_user_id=%s, admin_user_id=%s, exploring_user_id=%s, project_id=%s)",
+                investor.id, founder_user.id, admin_user.id, exploring_user.id, project.id,
             )
     except Exception as exc:  # noqa: BLE001
         logger.warning("demo_seed: skipped due to error: %s", exc)

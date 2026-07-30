@@ -120,6 +120,7 @@ async def lifespan(app: FastAPI):
             ensure_deal_flow_tables,
             ensure_orders_tables,
             ensure_spinout_lab_tables,
+            ensure_exploring_role_enum,
         )
         ensure_brand_landing_columns()
         logger.info("StudioOS migrations: brand landing columns ensured")
@@ -227,6 +228,10 @@ async def lifespan(app: FastAPI):
         # Task #8 — commerce cart/checkout tables + users.stripe_customer_id.
         ensure_orders_tables()
         logger.info("StudioOS migrations: orders/commerce tables ensured")
+        # Task #9 parity — userrole enum must include EXPLORING before the
+        # demo seeder tries to create demo-exploring@axal.test.
+        ensure_exploring_role_enum()
+        logger.info("StudioOS migrations: exploring role enum ensured")
         ensure_spinout_lab_tables()
         logger.info("StudioOS migrations: spinout lab tables ensured")
         logger.info("StudioOS migrations: organizations table ensured")
