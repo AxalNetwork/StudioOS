@@ -11,6 +11,7 @@ import TrustScoreBadge from '../components/TrustScoreBadge';
 // the network roster via /admin?tab=network-profiles. The standalone
 // /admin/network-profiles route stays wired for direct deep-links.
 import AdminNetworkProfiles from './admin/AdminNetworkProfiles';
+import AdminSpinoutLab from './admin/AdminSpinoutLab';
 import AdminTemplates from './admin/AdminTemplates';
 import AdminForms from './admin/AdminForms';
 
@@ -193,7 +194,7 @@ const ADMIN_SECTIONS = [
   { value: 'users', label: 'Users', Icon: Users },
   { value: 'profiles', label: 'Partner Profiles', Icon: Briefcase },
   { value: 'kyc', label: 'KYC Queue', Icon: ShieldCheck },
-  { value: 'lab-applications', label: 'Lab Applications', Icon: FlaskConical },
+  { value: 'lab-applications', label: 'Spin-Out Lab', Icon: FlaskConical },
   { value: 'legal', label: 'Legal', Icon: FileText },
   { value: 'personas', label: 'Personas', Icon: Sparkles },
   { value: 'directory', label: 'Directory', Icon: Sparkles },
@@ -207,116 +208,10 @@ const ADMIN_SECTIONS = [
 ];
 const ADMIN_SECTION_VALUES = new Set(ADMIN_SECTIONS.map(s => s.value));
 
-// Spin-Out Lab cohort application review queue. Accept → the founder gets
-// admitted flags + the "You're in" email (production Worker; dev sets flags
-// only); refuse → an encouragement-to-re-apply email for the next cohort.
-function LabApplicationsPanel() {
-  const [apps, setApps] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [deciding, setDeciding] = useState(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.adminSpinoutApplications();
-      setApps(res?.applications || []);
-    } catch (e) {
-      reportError('AdminPage:labApplications', e);
-      setApps([]);
-    } finally { setLoading(false); }
-  }, []);
-  useEffect(() => { load(); }, [load]);
-
-  const decide = async (app, decision) => {
-    const verb = decision === 'accepted' ? 'Accept' : 'Refuse';
-    const ok = window.confirm(
-      `${verb} ${app.name || app.email}'s application for "${app.company_name}" (${app.cohort})?\n\n` +
-      (decision === 'accepted'
-        ? `They'll be admitted to the Lab and receive the "You're in" email with a link to their Spin-Out Lab workspace.`
-        : `They'll receive an email encouraging them to re-apply for the next cohort.`)
-    );
-    if (!ok) return;
-    setDeciding(app.id);
-    try {
-      const res = await api.adminSpinoutDecide(app.id, decision);
-      alert(`Application ${decision}.${res?.emailed ? ' Email sent.' : ' Email not sent (dev or send failure).'}`);
-      load();
-    } catch (e) { alert(e.message || 'Failed to decide'); }
-    finally { setDeciding(null); }
-  };
-
-  const pending = apps.filter(a => a.status === 'pending');
-  const decided = apps.filter(a => a.status !== 'pending');
-
-  if (loading) return <div className="text-gray-500 text-center py-16">Loading applications…</div>;
-
-  const Card = ({ app }) => (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4" data-testid={`lab-application-${app.id}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-bold text-gray-900 dark:text-gray-100">{app.company_name}</span>
-            <span className="text-[11px] font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/50 border border-violet-100 dark:border-violet-800/50 rounded-full px-2 py-0.5">{app.cohort}</span>
-            {app.status !== 'pending' && (
-              <span className={`text-[11px] font-bold rounded-full px-2 py-0.5 border ${app.status === 'accepted' ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/40 border-emerald-200 dark:border-emerald-800/50' : 'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/40 border-red-200 dark:border-red-800/50'}`}>{app.status}</span>
-            )}
-          </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{app.name} · {app.email}</div>
-          <div className="text-xs text-gray-400 mt-0.5">
-            {app.incorporated === 'yes' ? 'Already incorporated' : 'Not yet incorporated'}
-            {app.stage ? ` · ${app.stage}` : ''}{app.jurisdiction ? ` · ${app.jurisdiction}` : ''}
-            {app.created_at ? ` · ${new Date(app.created_at).toLocaleDateString()}` : ''}
-          </div>
-          <p className="text-sm text-gray-700 dark:text-gray-300 mt-2 whitespace-pre-wrap">{app.idea}</p>
-        </div>
-        {app.status === 'pending' && (
-          <div className="flex gap-2 shrink-0">
-            <button
-              onClick={() => decide(app, 'accepted')}
-              disabled={deciding === app.id}
-              data-testid={`lab-application-accept-${app.id}`}
-              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5"
-            >
-              <Check size={13} /> Accept
-            </button>
-            <button
-              onClick={() => decide(app, 'refused')}
-              disabled={deciding === app.id}
-              data-testid={`lab-application-refuse-${app.id}`}
-              className="px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5"
-            >
-              <X size={13} /> Refuse
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  return (
-    <div data-testid="admin-lab-applications-panel">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Spin-Out Lab applications</h2>
-        <button onClick={load} className="text-xs font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1.5"><RefreshCw size={13} /> Refresh</button>
-      </div>
-      {pending.length === 0 && decided.length === 0 && (
-        <div className="text-gray-500 text-center py-16 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">No applications yet.</div>
-      )}
-      {pending.length > 0 && (
-        <div className="space-y-3 mb-8">
-          <div className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">{pending.length} pending review</div>
-          {pending.map(a => <Card key={a.id} app={a} />)}
-        </div>
-      )}
-      {decided.length > 0 && (
-        <div className="space-y-3">
-          <div className="text-xs font-bold uppercase tracking-wider text-gray-400">Decided</div>
-          {decided.map(a => <Card key={a.id} app={a} />)}
-        </div>
-      )}
-    </div>
-  );
-}
+// Task #102 — the old inline LabApplicationsPanel was replaced by the full
+// Spin-Out Lab admin dashboard (applications inbox + cohort participants +
+// workspace access) in ./admin/AdminSpinoutLab, rendered as the
+// 'lab-applications' tab below and standalone at /admin/spinout-lab.
 
 // Dropdown replacing the old horizontal tab row. Closes on selection, outside
 // click, and Escape; full light/dark support. Preserves the `admin-page` and
@@ -587,7 +482,7 @@ export default function AdminPage({ onImpersonate }) {
         <div data-testid="admin-network-profiles-panel"><AdminNetworkProfiles /></div>
       )}
 
-      {tab === 'lab-applications' && <LabApplicationsPanel />}
+      {tab === 'lab-applications' && <AdminSpinoutLab onImpersonate={onImpersonate} />}
       {tab === 'legal' && <div data-testid="admin-legal-panel"><LegalPanel /></div>}
       {tab === 'personas' && <PersonasPanel />}
       {tab === 'directory' && <div data-testid="admin-directory-panel"><DirectoryPanel /></div>}

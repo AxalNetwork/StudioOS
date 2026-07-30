@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, createContext, useContext, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
 import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
@@ -61,6 +61,8 @@ const AdminTeam = lazy(() => import('./pages/admin/AdminTeam'));
 const ExploringDashboard = lazy(() => import('./pages/ExploringDashboard'));
 const AdminExploring = lazy(() => import('./pages/admin/AdminExploring'));
 const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
+// Task #102 — Spin-Out Lab admin dashboard (applications + participants).
+const AdminSpinoutLab = lazy(() => import('./pages/admin/AdminSpinoutLab'));
 const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'));
 const AdminX = lazy(() => import('./pages/admin/AdminX'));
 // Task #3 — Assessment admin authoring + analytics surface.
@@ -1081,10 +1083,18 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   );
 }
 
-function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImpersonating }) {
+function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImpersonating, impersonationTargetRef }) {
   const effectiveRole = isImpersonating ? user?.role : ((realUser || user)?.role === 'admin' ? viewMode : user?.role);
   if (!allowedRoles.includes(effectiveRole)) {
-    const defaultPath = ROLE_DEFAULT_PATH[effectiveRole] || '/studio';
+    // Task #102 — impersonation handoff. When an admin starts impersonating
+    // from an admin-only route (e.g. /admin/spinout-lab → "Open workspace"),
+    // this guard re-renders with the impersonated role BEFORE the caller's
+    // own navigation lands, and its redirect wins the transition race. If a
+    // target path is pending, redirect THERE instead of the role default.
+    // Read-only here (render must stay pure — StrictMode double-renders);
+    // the AppInner effect clears the ref after the state settles.
+    const pendingTarget = isImpersonating ? impersonationTargetRef?.current : null;
+    const defaultPath = pendingTarget || ROLE_DEFAULT_PATH[effectiveRole] || '/studio';
     return <Navigate to={defaultPath} replace />;
   }
   return children;
@@ -1132,6 +1142,7 @@ function AppInner() {
 
   const isImpersonating = !!realUser;
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
@@ -1140,7 +1151,18 @@ function AppInner() {
     navigate(defaultPath);
   };
 
-  const handleImpersonate = (token, impersonatedUser) => {
+  // Task #102 — optional `targetPath` lets callers land somewhere specific
+  // (e.g. the admin Spin-Out Lab dashboard opens the founder's /spinout-lab
+  // workspace) instead of the role's default page.
+  //
+  // The navigation itself is DEFERRED to the effect below: navigate() is
+  // transition-wrapped in React Router, so calling it here loses the race
+  // against RoleGuard, whose urgent re-render (admin route + now-founder
+  // user) issues its own <Navigate> to the role default path. Navigating
+  // after the impersonation state commits — from an ancestor effect that
+  // runs AFTER RoleGuard's — makes our destination win deterministically.
+  const pendingImpersonationPathRef = useRef(null);
+  const handleImpersonate = (token, impersonatedUser, targetPath) => {
     const currentUser = safeReadJSON('user');
     const currentToken = localStorage.getItem('token');
     localStorage.setItem('realUser', JSON.stringify(currentUser));
@@ -1151,13 +1173,34 @@ function AppInner() {
     setUser(impersonatedUser);
     setViewMode(impersonatedUser.role);
     localStorage.setItem('viewMode', impersonatedUser.role);
-    navigate(ROLE_DEFAULT_PATH[impersonatedUser.role] || '/studio');
+    pendingImpersonationPathRef.current =
+      targetPath || ROLE_DEFAULT_PATH[impersonatedUser.role] || '/studio';
     // T20 — bypass the 5-min /me throttle so the impersonated session is
     // immediately reconciled against the server (KYC, access_level, etc.).
     refresh({ force: true });
   };
 
+  // Navigate once the impersonation state has committed. The ref is NOT
+  // cleared here: async state updates (e.g. the forced /me re-sync
+  // resolving) can trigger urgent re-renders while the location change is
+  // still a pending transition — RoleGuard then re-renders on the OLD
+  // admin route and issues another redirect. As long as the ref survives,
+  // every such redirect keeps pointing at the target instead of the role
+  // default. Cleared by the arrival effect below once the URL settles.
+  useEffect(() => {
+    if (realUser && pendingImpersonationPathRef.current) {
+      navigate(pendingImpersonationPathRef.current, { replace: true });
+    }
+  }, [realUser, navigate]);
+
+  useEffect(() => {
+    if (pendingImpersonationPathRef.current && location.pathname === pendingImpersonationPathRef.current) {
+      pendingImpersonationPathRef.current = null;
+    }
+  }, [location.pathname]);
+
   const exitImpersonation = () => {
+    pendingImpersonationPathRef.current = null;
     const origToken = localStorage.getItem('realToken');
     const origUser = safeReadJSON('realUser');
     localStorage.setItem('token', origToken);
@@ -1255,7 +1298,7 @@ function AppInner() {
 
   const guard = (roles, component) => (
     <RequireAuth {...authProps}>
-      <RoleGuard user={user} allowedRoles={roles} viewMode={viewMode} realUser={realUser} isImpersonating={isImpersonating}>
+      <RoleGuard user={user} allowedRoles={roles} viewMode={viewMode} realUser={realUser} isImpersonating={isImpersonating} impersonationTargetRef={pendingImpersonationPathRef}>
         {component}
       </RoleGuard>
     </RequireAuth>
@@ -1368,6 +1411,9 @@ function AppInner() {
       {/* Task #9 — exploring-users review queue (binding e-sign + role assignment). */}
       <Route path="/admin/exploring" element={guard(['admin'], <AdminExploring />)} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
+      {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
+          as the AdminPage 'lab-applications' tab). */}
+      <Route path="/admin/spinout-lab" element={guard(['admin'], <AdminSpinoutLab standalone onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/telegram" element={guard(['admin'], <AdminTelegram />)} />
       <Route path="/admin/x" element={guard(['admin'], <AdminX />)} />
       <Route path="/admin/assessment" element={guard(['admin'], <AdminAssessment />)} />
