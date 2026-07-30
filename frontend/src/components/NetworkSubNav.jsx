@@ -18,7 +18,7 @@ export default function NetworkSubNav({ className = '' }) {
     <div className={`border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur ${className}`}>
       <nav
         aria-label="Network sections"
-        className="max-w-6xl mx-auto px-6 flex items-center gap-1 overflow-x-auto"
+        className="max-w-6xl mx-auto px-6 flex items-center gap-1 overflow-x-auto no-scrollbar"
       >
         <span className="mr-3 shrink-0 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
           Network

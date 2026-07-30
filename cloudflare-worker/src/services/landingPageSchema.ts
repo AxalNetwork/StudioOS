@@ -55,6 +55,12 @@ export async function ensureLandingPageBrandKitColumns(env: Env): Promise<void> 
     `ALTER TABLE landing_pages ADD COLUMN template_kit TEXT`,
     // Task #3 — per-template editable content blocks (JSON).
     `ALTER TABLE landing_pages ADD COLUMN content_json TEXT`,
+    // Multi-page sites (Task #2). The ALTER only heals fresh-ish DBs that
+    // missed migration 144; the one-page UNIQUE(project_id) on pre-144 tables
+    // can only be removed by 144's rebuild (SQLite can't drop a column-level
+    // UNIQUE), so multi-page INSERTs on an unmigrated DB fail loudly with a
+    // UNIQUE error rather than silently misbehaving.
+    `ALTER TABLE landing_pages ADD COLUMN page_slug TEXT NOT NULL DEFAULT 'home'`,
   ];
   for (const s of alters) {
     try { await env.DB.prepare(s).run(); } catch { /* column exists / table absent */ }
@@ -63,6 +69,8 @@ export async function ensureLandingPageBrandKitColumns(env: Env): Promise<void> 
   for (const idx of [
     `CREATE INDEX IF NOT EXISTS idx_landing_preview_token ON landing_pages(preview_token)`,
     `CREATE INDEX IF NOT EXISTS idx_waitlist_audience ON waitlist_signups(project_id, audience)`,
+    // Multi-page sites (Task #2) — page slugs are unique per project.
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_landing_project_page ON landing_pages(project_id, page_slug)`,
   ]) {
     try { await env.DB.prepare(idx).run(); } catch { /* already exists */ }
   }

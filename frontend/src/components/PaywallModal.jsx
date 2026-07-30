@@ -12,6 +12,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Lock, Check, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
+import QuotaCard from './QuotaCard';
 
 // Task #4 (ID) — Exported so the public /pricing page can derive its
 // feature lists from the same source-of-truth instead of duplicating
@@ -204,6 +205,11 @@ export default function PaywallModal({ user }) {
         </div>
 
         <div className="overflow-y-auto flex-1">
+        {isInvestorMode && (
+          <div className="px-5 sm:px-6 pt-5">
+            <QuotaCard user={{ role: 'investor' }} />
+          </div>
+        )}
         <div className={`grid gap-4 p-5 sm:p-6 ${tiersToShow.length > 1 ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}>
           {tiersToShow.map((tier) => {
             const plan = TIER_PLANS[tier];

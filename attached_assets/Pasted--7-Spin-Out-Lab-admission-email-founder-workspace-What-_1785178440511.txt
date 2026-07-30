@@ -1,0 +1,167 @@
+#7 - Spin-Out Lab admission email & founder workspace
+What & Why
+When a founder is admitted to a new Spin-Out Lab cohort, they should get a congratulations email with a link to https://axal.vc/spinout-lab. Clicking it (while logged in) shows a congratulations screen; from there they start Week 1 in a full workspace — matching the uploaded design (Screenshot_2026-07-27_at_12.49.39_PM and the earlier Spin-Out Lab Workspace handoff): program timeline across the 4 weeks, active-week deliverables checklist, and the full grid of tool feature cards (Startups, Customer Discovery, Market Intel, Profiling, Roadmap, Brand & Landing Pages, Pitch Deck Builder, Studio Ops, Scoring, Advisors, Office Hours, Co-founder Match, MI Investor Signals, Revenue, Incorporate, Cap Table, Co-founder Agreement, Capital) with Active/Unlocked states and working links. Everything stays on /spinout-lab and keeps the left sidebar.
+Today there is no "admitted" state — users self-start the lab (spinout_lab_active flag, POST /api/spinout_lab/start in the Worker), and the product=spinout-lab registration intent is not persisted. An email template registry + queued Gmail send pipeline already exists in the Worker.
+Done looks like
+* An admin action admits a founder to the next cohort; the founder receives a branded "You're in" email linking to axal.vc/spinout-lab
+* An admitted (not yet started) founder who visits /spinout-lab while logged in sees a congratulations screen; clicking "Start Week 1" activates the lab
+* Active founders see the workspace from the design on /spinout-lab: header with cohort/week/day, 4-week program timeline with per-week status and tool chips, active-week deliverables list wired to real milestones, and the full tool-card grid with Active/Unlocked-by-week states, each card opening its working feature page
+* The Spin-Out Lab left sidebar remains on the page
+* Logged-out visitors clicking the email link land on login and return to /spinout-lab afterwards
+Out of scope
+* Building an applications/review pipeline (admission is a simple admin action + flag)
+* New feature pages — cards link to the existing tool routes only
+* Changes to the public/marketing /spinout-lab view shipped earlier
+Steps
+1. Admission state & admin trigger — Add an admitted flag (and cohort label) to users in the Worker schema; add an admin endpoint/UI action to admit a founder to the next cohort.
+2. Admission email — Add a spinout_admitted template to the Worker email registry and send it on admit with a deep link to /spinout-lab; persist the spinout-lab registration intent so applicants are identifiable.
+3. Congratulations screen — On /spinout-lab, show a celebration screen for admitted-but-not-started founders that starts Week 1 (calls the existing start endpoint) on click; redirect unauthenticated visitors through login back to /spinout-lab.
+4. Founder workspace UI — Rebuild the active-founder view of /spinout-lab to the workspace design: program timeline, active-week deliverables tied to the existing milestone model, and the complete tool-card grid with week-based Active/Unlocked states linking to existing feature routes; keep the SpinoutLabSidebar.
+5. Verify & ship — E2E test admitted/active/logged-out flows, then rebuild docs and redeploy the Worker in lockstep.
+Relevant files
+* frontend/src/pages/SpinoutLabPage.jsx
+* frontend/src/components/SpinoutLabSidebar.jsx
+* frontend/src/pages/RegisterPage.jsx
+* frontend/src/lib/api.js
+* cloudflare-worker/src/routes/spinout_lab.ts
+* cloudflare-worker/src/routes/auth.ts
+* cloudflare-worker/src/templates/email/registry.ts
+* cloudflare-worker/src/services/email/send.ts
+* attached_assets/Screenshot_2026-07-27_at_12.49.39_PM_1785149408837.png
+* attached_assets/Spin-Out_Lab_Workspace.dc_1784750511281.html  
+￼
+￼
+The Spin-Out lab, doesn't have the right page, that I initially asked for it. I attached you the files and asked you to integrate new the Spin-Out UI which you didn't: https://axal.vc/spinout-lab
+
+9 hours ago
+
+
+
+
+
+
+15 actions
+Logged-out view matches the handoff. Verifying the authenticated view next.
+
+
+
+
+
+
+11 actions
+The subagent's cleanup removed a useNavigate import that's still used — fixing now.
+
+
+
+
+
+
+34 actions
+The new Spin-Out Lab design is now live at axal.vc/spinout-lab. What happened and what's there now:
+* Applied your handoff design (Spin-Out_Lab.dc file) to both the logged-out and logged-in /spinout-lab views: cohort header with "Apply to Next Cohort", the dark violet "30 days" hero with program stat cards, the 5-phase gated pipeline (Validate → Structure → Build → Pitch → Fund), the "What you leave with" deliverables row, and the active-cohort tracker board.
+* All existing functionality was preserved — your real sprint progress drives the gate states (done / active / locked), milestone check-offs still work, and the tool links (Startups, Customer Discovery, Pitch Deck Builder, Scoring, Incorporate, Cap Table, etc.) are folded into their matching phase cards.
+* Verified logged-in and logged-out views end-to-end (including dark mode), ran a code review and fixed the issues it caught (progression logic, deck-draft state, missing links), rebuilt the frontend, and redeployed the Worker — confirmed live with a screenshot.
+One thing to flag: the pipeline gates now say "30 days" per the handoff, while the underlying program logic still tracks 4 weeks (28 days) of milestones mapped onto the 5 gates — the visuals follow your design, the data follows the existing backend model.
+
+Worked for 18 minutes
+
+Checkpoint made
+8 hours ago
+￼
+Then once New Founder are admitted in the new batch, they should receive an email, that they can click that will direct them to the axal.vc platform, if they're already logged in, they will receive congratulations screen, then they can click to work on the first week with the following workspace with every features cards integrated, and all feature pages working which I uploaded earlier, all of that always on the same page https://axal.vc/spinout-lab, also keep the sidebar on the left.
+8 hours ago
+
+
+
+
+
+
+7 actions
+I've drafted Task #7 (Cohort admission email + founder workspace on /spinout-lab). It covers the full flow you described, all on the same page with the left sidebar kept:
+1. Admission — an admin action admits a founder to the next cohort (new "admitted" status; today founders self-start, there's no admission concept yet).
+2. Email — the admitted founder gets a congratulations email through the existing platform email pipeline, linking to axal.vc/spinout-lab.
+3. Congratulations screen — a logged-in admitted founder who follows the link sees a celebration screen; clicking it starts Week 1. Logged-out founders go through sign-in and land back on the page.
+4. Workspace — the active-founder view becomes the workspace from your screenshot: the 4-week program timeline, the active week's deliverables checklist wired to real progress, and every tool card (Startups, Customer Discovery, Market Intel, Profiling, Roadmap, Brand & Landing Pages, Pitch Deck Builder, Studio Ops, Scoring, Advisors, Office Hours, Co-founder Match, Investor Signals, Revenue, Incorporate, Cap Table, Co-founder Agreement, Capital) with Active/Unlocked states linking to the existing working feature pages.
+5. Ship — end-to-end verification, then deploy so it's live on axal.vc.
+Review the draft in the tasks panel — once you accept it and assign it, the work can begin.
+
+Worked for 13 minutes
+
+Checkpoint made
+8 hours ago
+
+Started task
+Cohort admission email + founder workspace on /spinout-lab
+When a founder is admitted to a new Spin-Out Lab cohort, they should get a congratulations email with a link to https://axal.vc/spinout-lab. Clicking it (while logged in) shows a congratulations screen; from there they start Week 1 in a full workspace — matching the uploaded design (Screenshot_2026-07-27_at_12.49.39_PM and the earlier Spin-Out Lab Workspace handoff): program timeline across the 4 weeks, active-week deliverables checklist, and the full grid of tool feature cards (Startups, Customer Discovery, Market Intel, Profiling, Roadmap, Brand & Landing Pages, Pitch Deck Builder, Studio Ops, Scoring, Advisors, Office Hours, Co-founder Match, MI Investor Signals, Revenue, Incorporate, Cap Table, Co-founder Agreement, Capital) with Active/Unlocked states and working links. Everything stays on /spinout-lab and keeps the left sidebar.
+Today there is no "admitted" state — users self-start the lab (spinout_lab_active flag, POST /api/spinout_lab/start in the Worker), and the product=spinout-lab registration intent is not persisted. An email template registry + queued Gmail send pipeline already exists in the Worker.
+
+
+
+
+4 actions
+
+Worked for 1 minute
+You have the full workspace pre-programmed already here: https://github.com/AxalNetwork/StudioOS/blob/aa0e267ceddc577a48a282e3f96f4381132c49d7/spin-out-lab-pipeline/project/Spin-Out%20Lab%20Workspace.dc.html
+With all the files from the entire Spin-out lab: https://github.com/AxalNetwork/StudioOS/tree/aa0e267ceddc577a48a282e3f96f4381132c49d7/spin-out-lab-pipeline/project
+
+8 hours ago
+
+
+
+
+
+
+22 actions
+Now I'll implement. Starting with the Worker: admission schema + state fields.
+
+
+
+
+
+
+7 actions
+Adding the admin admit endpoint now.
+
+
+
+
+
+
+27 actions
+Now dev-backend parity so I can test locally.
+
+
+
+
+
+
+10 actions
+Now delegating the workspace UI rebuild to a design subagent with the fetched handoff.
+
+
+2 actions
+While the design subagent works, I'll verify the backend changes.
+
+
+
+
+
+
+41 actions
+Now dispatching the e2e tester for all three flows.
+
+
+
+
+
+
+9 actions
+The workspace looks great. Running the code review pass now.
+
+
+
+
+
+
+40 actions
+Now I'll recreate the git-data-API push script and ship all changes (source + rebuilt docs) to GitHub main.

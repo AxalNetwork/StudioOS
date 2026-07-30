@@ -51,6 +51,7 @@ import {
 import { routeAnswer } from '../src/services/advisor/writeRouter.ts';
 import { isAdvisorDisabled } from '../src/services/advisor/rollout.ts';
 import { gateToolCall, type ToolCallContext } from '../src/services/advisor/guardrails.ts';
+import { isToolName } from '../src/services/advisor/tools.ts';
 
 // ---------------------------------------------------------------------------
 // In-memory D1 mock — minimal SELECT/INSERT/UPDATE/PRAGMA surface.
@@ -540,6 +541,38 @@ test('gate: a bare keyword in a structural field (no grammar) passes', async () 
   // FROM clause is no longer treated as SQL.
   const res = await gateToolCall(GATE_ENV, gateCtx(), 'exploreDocs', { query: 'select a good template' });
   assert.equal(res.ok, true, res.detail);
+});
+
+// ---------------------------------------------------------------------------
+// Regression — Explorer onboarding deadlock. Exploring users (and any user
+// whose role maps to no persona) run the advisor as persona 'unknown' until
+// the role detector's own answer escapes that state. The writeAnswer gate
+// used to reject 'unknown' with persona_mismatch ("writeAnswer not available
+// for unknown"), so the detector answer that would unlock them could never
+// be written. writeAnswer must accept 'unknown'; privileged tools must not.
+// ---------------------------------------------------------------------------
+test('gate: writeAnswer is allowed for the unknown (role-detector) persona', async () => {
+  const res = await gateToolCall(GATE_ENV, gateCtx('unknown' as Persona), 'writeAnswer', {
+    question_id: 'role_detect.primary',
+    value: 'I am building a startup',
+  });
+  assert.equal(res.ok, true, res.detail);
+});
+
+test('gate: privileged tools stay blocked for the unknown persona', async () => {
+  for (const tool of ['scoreDeal', 'draftMemo', 'findInvestor', 'listMyTasks']) {
+    const res = await gateToolCall(GATE_ENV, gateCtx('unknown' as Persona), tool, {});
+    assert.equal(res.ok, false, `${tool} should be blocked for unknown`);
+    assert.equal(res.reason, 'persona_mismatch');
+  }
+});
+
+test('writeAnswer is NOT in the LLM tool registry (deterministic /answer path only)', () => {
+  // The 'unknown' allowlist entry above is safe partly BECAUSE writeAnswer
+  // can never be invoked via POST /tool or the chat tool loop — both dispatch
+  // through isToolName()/TOOL_REGISTRY, which exclude it. If writeAnswer is
+  // ever added to the registry, revisit the unknown-persona allowlist first.
+  assert.equal(isToolName('writeAnswer'), false);
 });
 
 test('gate: real injection in a scanned structural field is still blocked', async () => {

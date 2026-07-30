@@ -80,6 +80,8 @@ import adminContracts from './routes/admin_contracts';
 // Task #9 — Hardcoded IRS-style forms (SS-4, 8821, Faxed-EIN, Confirmation).
 import adminForms from './routes/admin_forms';
 import adminIntegrationKeys from './routes/admin_integration_keys';
+import adminGithub from './routes/admin_github';
+import githubWebhook from './routes/github';
 // Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
 import adminAdvisorAudit from './routes/admin_advisor_audit';
 import privateData from './routes/private-data';
@@ -136,7 +138,7 @@ import customerChat from './routes/customer_chat';
 // Task #8 (IH) — Data import + migration tools (Carta/AngelList CSV/Deck
 // PDF+PPTX/Investor portfolio/HubSpot pipeline/Universal CSV).
 import importsRoutes from './routes/imports';
-import brand, { renderLandingHtml, renderLandingPreview, renderTemplatePreview } from './routes/brand';
+import brand, { renderLandingHtml, renderLandingPreview, renderTemplatePreview, renderSitePage } from './routes/brand';
 import decks from './routes/decks';
 import competitors from './routes/competitors';
 import deckReviewer from './routes/deck_reviewer';
@@ -202,6 +204,8 @@ import assessmentRoutes from './routes/assessment';
 import adminAssessmentRoutes from './routes/admin_assessment';
 import consultations, { adminConsultations } from './routes/consultations';
 import adminBestFit from './routes/admin_bestfit';
+// Task #9 — Admin review queue for 'exploring' users (binding e-sign + role assignment).
+import adminExploring from './routes/admin_exploring';
 import bestFitSelf from './routes/best_fit';
 // T3 — Reserve allocation + waterfall simulator (Task #46 port).
 import fundSimulatorRoutes from './routes/fund_simulator';
@@ -217,10 +221,17 @@ import catalog, { adminCatalog } from './routes/catalog';
 import adminStripe from './routes/admin_stripe';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 import payments from './routes/payments';
+// One-time CART ORDER surface (combined PaymentIntent for one_time SKUs).
+import orders from './routes/orders';
+// Products page — explorer promo status + $0 redemption (catalog + paid
+// checkout reuse /api/catalog + /api/payments above).
+import products from './routes/products';
 import { Jobs } from './models/jobs';
 import { writeCronRunHistory } from './util/cronHistory';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
+// Task #9 — 'exploring' holding-state role (CHECK relax + user_role_review side table).
+import { ensureExploringSchema, exploringSchemaReady } from './services/exploringSchema';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
@@ -235,6 +246,7 @@ import lpReports from './routes/lp_reports';
 import portfolioUpdates from './routes/portfolio_updates';
 import positions from './routes/positions';
 import contacts from './routes/contacts';
+import track from './routes/track';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -428,6 +440,11 @@ app.post('/api/client-error', async (c) => {
   return c.body(null, 204);
 });
 
+// Task #2 — First-party signup-funnel event sink (batched, consent-gated on
+// the client, per-IP `track` rate-limit bucket). Same telemetry philosophy
+// as /api/client-error above: unauthenticated, best-effort, always 204.
+app.route('/api/track', track);
+
 // Real-time WebSocket fan-out (Durable Objects). Must stay at the edge.
 app.route('/api', realtime);
 
@@ -504,6 +521,16 @@ app.get('/api/payments/config', async (c) => {
 // cards via Stripe Elements without ever seeing the Stripe secret key. Sibling
 // of /api/billing so SKUs resolve through the same catalog mirror.
 app.route('/api/payments', payments);
+
+// One-time CART ORDER surface. Combined PaymentIntent for a cart of one_time
+// SKUs; fulfilment (webhook or /confirm) grants user_products + invoice/email.
+// Sibling of /api/payments so SKUs resolve through the same catalog mirror.
+app.route('/api/orders', orders);
+
+// Products page — explorer promo status + $0 redemption. Sibling of
+// /api/payments; paid checkout on the same page flows through the payments
+// surface above.
+app.route('/api/products', products);
 
 // Task #6 — Studio-tier paywall mounts. Wildcards run BEFORE the route
 // registration so a 402 short-circuits the handler. Bypass roles
@@ -617,6 +644,8 @@ app.route('/api/admin/contracts', adminContracts);
 // Task #9 — IRS-style forms catalog + PDF preview/download (admin-only).
 app.route('/api/admin/forms', adminForms);
 app.route('/api/admin/integration-keys', adminIntegrationKeys);
+app.route('/api/admin/github', adminGithub);
+app.route('/api/github', githubWebhook);
 app.route('/api/admin/advisor-audit', adminAdvisorAudit);
 // Task #10 (LD) — Admin team roster CRUD + photo upload. Mounted BEFORE
 // the generic /api/admin router so the more-specific prefix wins.
@@ -669,6 +698,9 @@ app.route('/api/admin/assessment', adminAssessmentRoutes);
 // the specific prefixes resolve here, not in the generic admin router.
 app.route('/api/admin/consultations', adminConsultations);
 app.route('/api/admin/best-fit', adminBestFit);
+// Task #9 — Exploring-users review queue. Mount BEFORE the catch-all
+// /api/admin so /api/admin/exploring/* resolves here. requireAdmin per-route.
+app.route('/api/admin/exploring', adminExploring);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
@@ -732,6 +764,11 @@ app.get('/landing/template-preview/:style', (c) => renderTemplatePreview(c.env, 
 app.get('/landing/:slug', async (c) => renderLandingHtml(c.env, c.req.param('slug'), c.get('cspNonce' as never) as string | undefined));
 // Task #4 — private preview URL for unpublished drafts (noindex).
 app.get('/landing/preview/:token', async (c) => renderLandingPreview(c.env, c.req.param('token'), c.get('cspNonce' as never) as string | undefined));
+// Task #2 — branded multi-page site URLs: /p/{startup}/{page} resolves the
+// editable site slug + page slug; /p/{startup} renders the site's home page.
+// Requires the axal.vc/p{,/*} apex routes in wrangler.toml (both blocks).
+app.get('/p/:site/:page', async (c) => renderSitePage(c.env, c.req.param('site'), c.req.param('page'), c.get('cspNonce' as never) as string | undefined));
+app.get('/p/:site', async (c) => renderSitePage(c.env, c.req.param('site'), null, c.get('cspNonce' as never) as string | undefined));
 // Task #15 — Cloudflare Access on sensitive R2 read endpoints. Soft no-op in
 // dev/preview; production wrangler secrets engage the gate. Per-route auth
 // checks (requireAdmin/requireAuth) still run as the inner perimeter.
@@ -934,10 +971,15 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
     // Every column, default, FK, UNIQUE/CHECK and (replayed) index is preserved
     // — nothing is hardcoded, so no founder/investor/subscription/PII/linkedin/
     // public-id data or index is lost the first time the rebuild commits.
+    // Latch-on-success only (mirrors ensureExploringSchema): a failed rebuild
+    // must retry on the next request in this isolate, or role changes to
+    // 'investor' 500 forever behind a permanently-set _investorSchemaReady.
+    let investorRebuildOk = true;
     try {
       await rebuildUsersRoleCheckForInvestor(env);
     } catch (e) {
-      console.warn('[boot] users role-CHECK rebuild skipped:', (e as Error).message);
+      investorRebuildOk = false;
+      console.warn('[boot] users role-CHECK investor rebuild failed (will retry next request):', (e as Error).message);
     }
     // Promote partner users with an LP record to investor; create investor row.
     try {
@@ -953,7 +995,7 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
     } catch (e) {
       console.warn('[boot] investor promote step skipped:', (e as Error).message);
     }
-    _investorSchemaReady = true;
+    if (investorRebuildOk) _investorSchemaReady = true;
   } catch (e) {
     console.error('[boot] ensureInvestorSchema failed:', (e as Error).message);
   }
@@ -971,8 +1013,14 @@ async function ensureAdvisorSchema(env: Env): Promise<void> {
   if (_advisorSchemaReady) return;
   try {
     // (a) relax the users.role CHECK so 'advisor' is accepted before any flip.
+    // Latch-on-success only (mirrors ensureExploringSchema): a failed rebuild
+    // must retry on the next request or advisor role changes 500 forever.
+    let advisorRebuildOk = true;
     try { await rebuildUsersRoleCheckForAdvisor(env); }
-    catch (e) { console.warn('[boot] users role-CHECK advisor rebuild skipped:', (e as Error).message); }
+    catch (e) {
+      advisorRebuildOk = false;
+      console.warn('[boot] users role-CHECK advisor rebuild failed (will retry next request):', (e as Error).message);
+    }
     // (b) structural renames — only when the old table exists and the new does not.
     const RENAMES: [string, string][] = [
       ['mentors', 'advisors'],
@@ -1012,7 +1060,7 @@ async function ensureAdvisorSchema(env: Env): Promise<void> {
     try { await env.DB.exec("UPDATE OR IGNORE field_sources SET question_id = 'advisor.' || substr(question_id, 8) WHERE question_id LIKE 'mentor.%'"); } catch {}
     // (g) rename the spinout-lab milestone key so existing week-3 progress is preserved.
     try { await env.DB.exec("UPDATE OR IGNORE spinout_lab_milestones SET milestone_key = 'advisor_meeting_booked' WHERE milestone_key = 'mentor_meeting_booked'"); } catch {}
-    _advisorSchemaReady = true;
+    if (advisorRebuildOk) _advisorSchemaReady = true;
   } catch (e) {
     console.error('[boot] ensureAdvisorSchema failed:', (e as Error).message);
   }
@@ -1070,6 +1118,13 @@ export default {
     }
     if (!_advisorSchemaReady && env.DB) {
       await ensureAdvisorSchema(env);
+    }
+    // Task #9 — relax the users.role CHECK for 'exploring' + create the
+    // user_role_review side table BEFORE any request can hit the
+    // /api/profiling/save holding-state flip. Same isolate-once pattern
+    // as the two ensures above.
+    if (!exploringSchemaReady() && env.DB) {
+      await ensureExploringSchema(env);
     }
     return app.fetch(request, env, ctx);
   },
@@ -1283,6 +1338,22 @@ export default {
               console.info(`[cron] personas digest scanned=${r.scanned} sent=${r.sent}`);
             }
           } catch (e) { console.error('[cron] personas digest failed', e); }
+        }
+        // Task #2 — funnel_events retention purge at 04:20 UTC. First-party
+        // funnel rows are pseudonymous but still subject to GDPR storage
+        // limitation; 180 days is ample for cohort comparisons (window is
+        // documented in ANALYTICS_FUNNEL.md alongside the manual purge SQL).
+        // Best-effort: a cold DB without the table just logs and moves on.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
+          try {
+            const r = await env.DB.prepare(
+              "DELETE FROM funnel_events WHERE created_at < datetime('now', '-180 days')",
+            ).run();
+            const purged = (r as any)?.meta?.changes || 0;
+            if (purged) console.info(`[cron] funnel_events purge deleted=${purged}`);
+          } catch (e) {
+            console.error('[cron] funnel_events purge failed', e);
+          }
         }
         // Task #5 (IE) — Daily KV snapshot to R2 at 02:00 UTC. D1
         // backup is taken separately by .github/workflows/backup-d1.yml

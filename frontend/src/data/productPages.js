@@ -19,10 +19,61 @@
  * concatenated) so the Tailwind v4 scanner keeps them in the bundle.
  */
 
-// Founder pricing mirrors data/pricing.js (Free / Growth ~$79 / Studio-Custom).
-// Investor pricing mirrors InvestorPricingPage (Free / Professional $149 /
-// Institutional). Partner + Advisor numbers are new but plausible and clearly
-// framed as "billed monthly, cancel anytime" like the rest of the surface.
+import { FOUNDER_TIERS, INVESTOR_TIERS } from './pricing';
+
+// Founder + Investor Starter/Pro plans are DERIVED from the shared pricing
+// source (`data/pricing.js`, itself sourced from PaywallModal.TIER_PLANS) so
+// the /pricing and /for-* surfaces can never drift on price or the core
+// feature list. Enterprise/Custom tiers and the whole Partner/Advisor surface
+// are hand-authored below (no backend catalog/paywall equivalent exists yet).
+//
+// Every quantitative claim is grounded in real enforcement:
+//   - Founder free-tier limits: middleware/requireTier.ts (FREE_TIER_LIMITS)
+//     and the Growth/Studio feature split in PaywallModal.TIER_PLANS.
+//   - Investor quotas: middleware/requireInvestorTier.ts (INVESTOR_QUOTAS —
+//     free 3 intros/qtr + 1 dealroom, pro 25 + 5, institutional 100 + ∞ + 4 seats).
+//   - Partner/Advisor: there is NO quota table in accountPlans.ts and no
+//     per-account offer/session cap enforced anywhere in the worker, so those
+//     plans carry NO hard numbers — differentiators are worded as capabilities,
+//     never as enforced limits.
+
+const tierById = (tiers, id) => {
+  const t = tiers.find((x) => x.id === id);
+  if (!t) throw new Error(`productPages: missing pricing tier "${id}"`);
+  return t;
+};
+
+/**
+ * Adapt a shared pricing tier (from FOUNDER_TIERS / INVESTOR_TIERS) into an
+ * audience-page plan card. The tier owns price + the canonical feature list;
+ * `overrides` layer page-specific positioning on top:
+ *   - id / name / blurb / cta / highlight / tagline / badge — plain overrides
+ *   - featureMeta: map a feature's text → { limit?, detail?, soon? } to enrich
+ *     the shared bullet without duplicating it
+ *   - extraFeatures: audience-specific bullets appended after the shared list
+ * Feature objects follow the { text, detail?, limit?, soon? } model rendered by
+ * PlanCard.
+ */
+function mapTierToProductPlan(tier, overrides = {}) {
+  const { featureMeta = {}, extraFeatures = [], ...rest } = overrides;
+  const price = tier.priceMonthly === 0 ? '$0' : `${tier.priceMonthly}`;
+  const period = tier.priceMonthly === 0 ? 'forever' : '/ month';
+  const features = [
+    ...tier.features.map((text) => ({ text, ...(featureMeta[text] || {}) })),
+    ...extraFeatures,
+  ];
+  return {
+    id: tier.id,
+    name: tier.name,
+    price,
+    period,
+    highlight: tier.highlight || false,
+    blurb: tier.tagline,
+    cta: tier.cta,
+    features,
+    ...rest,
+  };
+}
 
 export const PRODUCT_PAGES = {
   founders: {
@@ -101,40 +152,47 @@ export const PRODUCT_PAGES = {
       'Auto-matched investor intros ranked by thesis fit',
     ],
     plans: [
-      {
+      mapTierToProductPlan(tierById(FOUNDER_TIERS, 'free'), {
+        id: 'free',
         name: 'Starter',
-        price: '$0',
-        period: 'forever',
+        tagline: 'Validate an idea, free',
         blurb: 'Validate one idea end-to-end and build your public profile.',
         cta: { label: 'Start free', to: '/register?lane=founder&plan=free' },
-        features: [
-          { text: '1 active startup workspace' },
-          { text: 'Pitch deck builder' },
-          { text: 'Venture-readiness scoring (5 runs / mo)' },
-          { text: 'Public profile + referral link' },
-          { text: 'Community support' },
-        ],
-      },
-      {
+        featureMeta: {
+          '1 active startup': {
+            limit: '1 workspace',
+            detail: 'Free accounts run one active startup workspace at a time.',
+          },
+          'AI scoring (5 runs / month)': { limit: '5 runs / mo' },
+        },
+      }),
+      mapTierToProductPlan(tierById(FOUNDER_TIERS, 'growth'), {
+        id: 'pro',
         name: 'Pro',
-        price: '$79',
-        period: '/ month',
-        highlight: true,
+        tagline: 'For founders raising now',
+        badge: 'Raise-ready toolkit',
         blurb: 'For founders actively building toward a raise.',
         cta: { label: 'Start 14-day trial', to: '/register?lane=founder&plan=growth' },
-        features: [
-          { text: 'Unlimited workspaces + roadmap & brand builder' },
-          { text: 'Unlimited scoring runs' },
-          { text: 'Market Intelligence dashboards' },
-          { text: 'Raise pipeline + cap table + data room' },
-          { text: 'Eligible for warm investor introductions' },
+        featureMeta: {
+          'Unlimited projects': { detail: 'No cap on active startup workspaces.' },
+          'Cap-table scenarios + simulator': {
+            detail: 'Model dilution and round outcomes before you raise.',
+          },
+        },
+        extraFeatures: [
+          {
+            text: 'Eligible for warm investor introductions',
+            detail: 'Qualified Pro founders are introduced to investors under a three-way NDA.',
+          },
           { text: 'AI pitch deck reviewer', soon: true },
         ],
-      },
+      }),
       {
+        id: 'enterprise',
         name: 'Enterprise / Custom',
         price: 'Custom',
         period: '',
+        tagline: 'For studios & accelerators',
         blurb: 'Studios, accelerators and programs supporting many founders.',
         cta: { label: 'Talk to us', to: '/contact' },
         features: [
@@ -245,45 +303,56 @@ export const PRODUCT_PAGES = {
       'Automated co-invest & syndicate discovery across the network',
     ],
     plans: [
-      {
+      mapTierToProductPlan(tierById(INVESTOR_TIERS, 'free'), {
+        id: 'free',
         name: 'Starter',
-        price: '$0',
-        period: 'forever',
+        tagline: 'Browse the network, free',
         blurb: 'Browse deals and follow founders across the network.',
         cta: { label: 'Sign up free', to: '/register?lane=investor' },
-        features: [
-          { text: 'Public deal index' },
-          { text: 'Watch up to 10 companies' },
-          { text: 'Market Intelligence pulses (read-only)' },
-          { text: '3 warm intros / quarter' },
-          { text: 'Community office hours' },
+        featureMeta: {
+          'Watch up to 10 companies': { limit: '10 companies' },
+        },
+        extraFeatures: [
+          {
+            text: 'Warm intros to founders',
+            limit: '3 / quarter',
+            detail: 'Free accounts can request up to 3 warm introductions each quarter.',
+          },
         ],
-      },
-      {
+      }),
+      mapTierToProductPlan(tierById(INVESTOR_TIERS, 'professional'), {
+        id: 'pro',
         name: 'Pro',
-        price: '$149',
-        period: '/ month',
-        highlight: true,
+        tagline: 'Full deal flow',
+        badge: 'Full pipeline access',
         blurb: 'For active investors who want full deal flow.',
         cta: { label: 'Start 14-day trial', to: '/register?lane=investor&plan=professional' },
-        features: [
-          { text: 'Full pipeline browse + AI scoring' },
-          { text: '25 warm intros / quarter' },
-          { text: '5 concurrent deal rooms' },
-          { text: 'Founder reference checks' },
-          { text: 'Market Intelligence exports' },
+        featureMeta: {
+          '25 warm intros / quarter': { limit: '25 / quarter' },
+          'Up to 5 active deal rooms': {
+            limit: '5 rooms',
+            detail: 'Run up to 5 concurrent deal rooms with founders.',
+          },
+        },
+        extraFeatures: [
           { text: 'Thesis tracking with auto-alerts', soon: true },
         ],
-      },
+      }),
       {
+        id: 'enterprise',
         name: 'Enterprise / Custom',
         price: 'Custom',
         period: '',
+        tagline: 'For funds investing at scale',
         blurb: 'Funds, family offices and LPs investing at scale.',
         cta: { label: 'Talk to sales', to: '/demo?topic=investor' },
         features: [
-          { text: 'Unlimited deal rooms + 100 intros / quarter' },
-          { text: 'Colleague seats included' },
+          {
+            text: 'Unlimited deal rooms',
+            detail: 'Matches the Institutional tier — no concurrent deal-room cap.',
+          },
+          { text: 'Warm intros', limit: '100 / quarter' },
+          { text: 'Colleague seats included', limit: 'up to 4' },
           { text: 'LP reporting + peer benchmarks' },
           { text: 'Co-invest discovery' },
           { text: 'Priority support + onboarding' },
@@ -390,29 +459,36 @@ export const PRODUCT_PAGES = {
     ],
     plans: [
       {
+        id: 'free',
         name: 'Starter',
         price: '$0',
         period: 'forever',
+        tagline: 'Get listed, free',
         blurb: 'Get listed and start answering posted needs.',
         cta: { label: 'List for free', to: '/register?lane=partner' },
         features: [
           { text: 'Marketplace + directory listing' },
-          { text: 'Manage up to 3 service offers' },
+          { text: 'Publish and manage your service offers' },
           { text: 'Respond to Needs Board posts' },
           { text: 'Basic trust badge on verification' },
           { text: 'Stripe Connect payouts' },
         ],
       },
       {
+        id: 'pro',
         name: 'Pro',
         price: '$99',
         period: '/ month',
         highlight: true,
+        tagline: 'Inbound demand on tap',
+        badge: 'More reach & insight',
         blurb: 'For partners who want inbound demand on tap.',
         cta: { label: 'Start 14-day trial', to: '/register?lane=partner&plan=pro' },
         features: [
-          { text: 'Unlimited service offers' },
-          { text: 'Priority placement in search + directory' },
+          {
+            text: 'Priority placement in search + directory',
+            detail: 'Rank higher when founders browse the marketplace.',
+          },
           { text: 'Full partner analytics dashboard' },
           { text: 'Verified partner badge' },
           { text: 'Partner deal portal access' },
@@ -420,9 +496,11 @@ export const PRODUCT_PAGES = {
         ],
       },
       {
+        id: 'enterprise',
         name: 'Enterprise / Custom',
         price: 'Custom',
         period: '',
+        tagline: 'For firms & agencies',
         blurb: 'Firms and agencies scaling across the network.',
         cta: { label: 'Talk to us', to: '/contact' },
         features: [
@@ -532,9 +610,11 @@ export const PRODUCT_PAGES = {
     ],
     plans: [
       {
+        id: 'free',
         name: 'Starter',
         price: '$0',
         period: 'forever',
+        tagline: 'Publish a profile, free',
         blurb: 'Publish a profile and take founder matches.',
         cta: { label: 'Apply to advise', to: '/contact' },
         features: [
@@ -546,14 +626,20 @@ export const PRODUCT_PAGES = {
         ],
       },
       {
+        id: 'pro',
         name: 'Pro',
         price: '$29',
         period: '/ month',
         highlight: true,
+        tagline: 'More reach, better matches',
+        badge: 'Priority matching',
         blurb: 'For advisors who want more reach and better matches.',
         cta: { label: 'Talk to us', to: '/contact' },
         features: [
-          { text: 'Priority founder matching' },
+          {
+            text: 'Priority founder matching',
+            detail: 'Surface ahead of Starter advisors when founders search for expertise.',
+          },
           { text: 'Boosted directory visibility' },
           { text: 'Featured advisor placement' },
           { text: 'Engagement analytics', soon: true },
@@ -561,9 +647,11 @@ export const PRODUCT_PAGES = {
         ],
       },
       {
+        id: 'enterprise',
         name: 'Enterprise / Custom',
         price: 'Custom',
         period: '',
+        tagline: 'For advisory firms',
         blurb: 'Advisory firms and expert networks.',
         cta: { label: 'Talk to us', to: '/contact' },
         features: [

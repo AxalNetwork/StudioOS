@@ -35,6 +35,7 @@ from backend.app.models.entities import (
     Integration,
     Interview,
     MetricsSnapshot,
+    MvpFeature,
     OKR,
     PainGroup,
     PainGroupAlias,
@@ -121,7 +122,9 @@ def _ensure_lifecycle_columns(session: Session) -> None:
     before this feature landed. Postgres supports IF NOT EXISTS."""
     for col in ("lifecycle_stage", "lifecycle_manual_checks"):
         try:
-            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates a static column name from a local literal tuple, dev-only FastAPI not exposed to user input
+            # Justification: f-string interpolates a static column name from a local literal
+            # tuple, dev-only FastAPI not exposed to user input
+            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                 f"ALTER TABLE projects ADD COLUMN IF NOT EXISTS {col} VARCHAR"
             ))
             session.commit()
@@ -322,7 +325,9 @@ def update_lifecycle(
     if not sets:
         raise HTTPException(status_code=400, detail="Nothing to update")
 
-    session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- SET clause is built from static code-defined column assignments; all values are bound params, dev-only FastAPI not exposed to user input
+    # Justification: SET clause is built from static code-defined column assignments; all values
+    # are bound params, dev-only FastAPI not exposed to user input
+    session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
         f"UPDATE projects SET {', '.join(sets)} WHERE id = :pid"
     ), params=params)
     session.commit()
@@ -534,7 +539,9 @@ def _serialize_signup(r: Any) -> dict:
 
 
 def _load_customer_signup(session: Session, project_id: int, signup_id: int):
-    return session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- concatenates a module-constant SELECT with a static WHERE clause; all values are bound params, dev-only FastAPI not exposed to user input
+    # Justification: concatenates a module-constant SELECT with a static WHERE clause; all
+    # values are bound params, dev-only FastAPI not exposed to user input
+    return session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
         _WAITLIST_SELECT + " WHERE id = :sid AND project_id = :pid AND audience = 'customer'"
     ), params={"sid": signup_id, "pid": project_id}).mappings().first()
 
@@ -662,7 +669,9 @@ def list_waitlist_customers(
     p = _get_project_or_404(session, project_id)
     _ensure_can_view(p, user)
     _ensure_waitlist_crm_schema(session)
-    rows = session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- concatenates a module-constant SELECT with a static WHERE clause; all values are bound params, dev-only FastAPI not exposed to user input
+    # Justification: concatenates a module-constant SELECT with a static WHERE clause; all
+    # values are bound params, dev-only FastAPI not exposed to user input
+    rows = session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
         _WAITLIST_SELECT + " WHERE project_id = :pid AND audience = 'customer' "
         "ORDER BY created_at DESC, id DESC LIMIT 500"
     ), params={"pid": project_id}).mappings().all()
@@ -1061,6 +1070,146 @@ def delete_okr(
     session.delete(o)
     session.commit()
     return {"deleted": okr_id}
+
+
+# ---------------------------------------------------------------------------
+# MVP Scope — value-ranked feature prioritization (Task #13, Roadmap module)
+# ---------------------------------------------------------------------------
+# Priority is derived, not chosen: High value → Core / active cycle,
+# Medium → v2 / next-cycle candidate, Low → out of scope / deferred.
+# Mirror any change into cloudflare-worker/src/routes/progress.ts.
+MVP_VALUES = {"High", "Medium", "Low"}
+MVP_EFFORTS = {"S", "M", "L", "XL"}
+MVP_STATUSES = {"Backlog", "In Progress", "Review", "Done", "Blocked"}
+
+
+class MvpFeatureIn(BaseModel):
+    title: str
+    added_value: str = "High"
+    effort: str = "M"
+    priority_reason: Optional[str] = None
+    delivery_status: str = "Backlog"
+    sort_order: int = 0
+
+
+def _mvp_derived(value: str) -> dict:
+    if value == "High":
+        return {"scope_tier": "Core", "cycle_assigned": "Active cycle"}
+    if value == "Medium":
+        return {"scope_tier": "v2", "cycle_assigned": "Next cycle candidate"}
+    return {"scope_tier": "Out of scope", "cycle_assigned": "Deferred from MVP"}
+
+
+def _serialize_mvp(f: MvpFeature) -> dict:
+    return {
+        "id": f.id,
+        "uid": f.uid,
+        "project_id": f.project_id,
+        "title": f.title,
+        "added_value": f.added_value,
+        "effort": f.effort,
+        "priority_reason": f.priority_reason,
+        "delivery_status": f.delivery_status,
+        "sort_order": f.sort_order,
+        **_mvp_derived(f.added_value),
+        "created_at": f.created_at.isoformat() if f.created_at else None,
+        "updated_at": f.updated_at.isoformat() if f.updated_at else None,
+    }
+
+
+def _validate_mvp_body(body: MvpFeatureIn) -> None:
+    if not body.title or not body.title.strip():
+        raise HTTPException(status_code=400, detail="title is required")
+    if body.added_value not in MVP_VALUES:
+        raise HTTPException(status_code=400, detail=f"added_value must be one of {sorted(MVP_VALUES)}")
+    if body.effort not in MVP_EFFORTS:
+        raise HTTPException(status_code=400, detail=f"effort must be one of {sorted(MVP_EFFORTS)}")
+    if body.delivery_status not in MVP_STATUSES:
+        raise HTTPException(status_code=400, detail=f"delivery_status must be one of {sorted(MVP_STATUSES)}")
+
+
+@router.get("/mvp-scope/{project_id}")
+def list_mvp_features(
+    project_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    p = _get_project_or_404(session, project_id)
+    _ensure_can_view(p, user)
+    rows = session.exec(
+        select(MvpFeature)
+        .where(MvpFeature.project_id == project_id)
+        .order_by(MvpFeature.sort_order, MvpFeature.id)
+    ).all()
+    return {"project_id": project_id, "features": [_serialize_mvp(f) for f in rows]}
+
+
+@router.post("/mvp-scope/{project_id}")
+def create_mvp_feature(
+    project_id: int,
+    body: MvpFeatureIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    p = _get_project_or_404(session, project_id)
+    _ensure_can_edit(p, user)
+    _validate_mvp_body(body)
+    f = MvpFeature(
+        project_id=project_id,
+        title=body.title.strip(),
+        added_value=body.added_value,
+        effort=body.effort,
+        priority_reason=(body.priority_reason or "").strip() or None,
+        delivery_status=body.delivery_status,
+        sort_order=body.sort_order,
+        created_by=user.id,
+    )
+    session.add(f)
+    session.commit()
+    session.refresh(f)
+    return _serialize_mvp(f)
+
+
+@router.put("/mvp-scope/feature/{feature_id}")
+def update_mvp_feature(
+    feature_id: int,
+    body: MvpFeatureIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    f = session.get(MvpFeature, feature_id)
+    if not f:
+        raise HTTPException(status_code=404, detail="Feature not found")
+    p = _get_project_or_404(session, f.project_id)
+    _ensure_can_edit(p, user)
+    _validate_mvp_body(body)
+    f.title = body.title.strip()
+    f.added_value = body.added_value
+    f.effort = body.effort
+    f.priority_reason = (body.priority_reason or "").strip() or None
+    f.delivery_status = body.delivery_status
+    f.sort_order = body.sort_order
+    f.updated_at = datetime.utcnow()
+    session.add(f)
+    session.commit()
+    session.refresh(f)
+    return _serialize_mvp(f)
+
+
+@router.delete("/mvp-scope/feature/{feature_id}")
+def delete_mvp_feature(
+    feature_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    f = session.get(MvpFeature, feature_id)
+    if not f:
+        raise HTTPException(status_code=404, detail="Feature not found")
+    p = _get_project_or_404(session, f.project_id)
+    _ensure_can_edit(p, user)
+    session.delete(f)
+    session.commit()
+    return {"deleted": feature_id}
 
 
 # ---------------------------------------------------------------------------

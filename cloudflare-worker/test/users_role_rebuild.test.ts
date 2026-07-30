@@ -7,13 +7,14 @@
  * subscription/PII/LinkedIn data and every index the first time it committed. This
  * pins the loss-free contract so a future edit can't silently reintroduce it.
  *
- * Uses a REAL in-memory SQLite (node:sqlite) so DROP/RENAME, CHECK constraints,
+ * Uses a REAL in-memory SQLite (node:sqlite) so DROP/CREATE, CHECK constraints,
  * sqlite_master DDL and index replay behave exactly as in prod — a stub can't
- * prove a row/column/index actually survives a table rebuild. FK enforcement is
- * OFF to mirror D1 (which, per the rest of this suite, does not enforce FKs), so
- * this test does NOT validate FK constraint enforcement; it asserts data-level
- * reference continuity — the child rows still JOIN back to the same parent ids
- * after the rebuild.
+ * prove a row/column/index actually survives a table rebuild. Most tests run
+ * with FK enforcement OFF and assert data-level reference continuity (child
+ * rows still JOIN back to the same parent ids); D1 DOES enforce foreign keys
+ * (a prod rebuild died at commit with "FOREIGN KEY constraint failed"), so the
+ * dedicated D1-parity test below runs with enableForeignKeyConstraints: true
+ * to pin the deferred-FK behavior of the batch.
  *
  * Run with the strip-types loader (see package.json test:drift):
  *   node --experimental-strip-types --import ./cloudflare-worker/test/_ts-loader.mjs \
@@ -22,7 +23,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from '../src/util/usersRoleRebuild.ts';
+import {
+  rebuildUsersRoleCheckForInvestor,
+  rebuildUsersRoleCheckForAdvisor,
+  rebuildUsersRoleCheckForExploring,
+} from '../src/util/usersRoleRebuild.ts';
 
 function coerce(args: any[]): any[] {
   return args.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
@@ -79,8 +84,8 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
  * columns well beyond any 14-column base set (PII / billing / linkedin), a child
  * table with FK rows, and several user-defined indexes.
  */
-function seedLegacy() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+function seedLegacy(opts: { enforceFKs?: boolean } = {}) {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: opts.enforceFKs === true });
   db.exec(`
     CREATE TABLE users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,6 +128,27 @@ function seedLegacy() {
       (3, 'admin@x.com',  'Ada Admin',   'admin',   NULL,                  'pub_ada', NULL,      NULL,        NULL,     NULL);
     INSERT INTO founders (id, user_id, bio) VALUES (10, 1, 'building things');
     INSERT INTO limited_partners (id, user_id, email) VALUES (20, 2, 'partner@x.com');
+  `);
+  return db;
+}
+
+/**
+ * Prod regression (role-change 500): a VIEW over `users` (prod has
+ * `partner_summary`) made `ALTER TABLE users_new RENAME TO users` fail with
+ * "error in view partner_summary: no such table: main.users", rolling the
+ * whole rebuild back — so the legacy CHECK survived every deploy and any
+ * role change to investor/advisor/exploring 500'd at the UPDATE. Mirror that
+ * shape here.
+ */
+function seedLegacyWithView(opts: { enforceFKs?: boolean } = {}) {
+  const db = seedLegacy(opts);
+  db.exec(`
+    CREATE VIEW partner_summary AS
+      SELECT u.id, u.email, u.name, u.role,
+        (SELECT COUNT(*) FROM limited_partners lp WHERE lp.user_id = u.id) AS lp_count
+      FROM users u WHERE u.role = 'partner';
+    CREATE VIEW partner_summary_top AS
+      SELECT * FROM partner_summary WHERE lp_count > 0;
   `);
   return db;
 }
@@ -270,6 +296,85 @@ test('advisor rebuild is a no-op on a DB whose role CHECK already accepts adviso
   assert.equal(second.rebuilt, false, 'second run must be a no-op once advisor is accepted');
   const afterUsers = db.prepare('SELECT * FROM users ORDER BY id').all();
   assert.deepEqual(afterUsers, beforeUsers, 'a no-op run must not touch any data');
+});
+
+test('rebuild succeeds with views over users — views survive byte-identical and still work (prod partner_summary regression)', async () => {
+  const db = seedLegacyWithView();
+  const env: any = { DB: makeD1(db) };
+
+  const beforeUsers = db.prepare('SELECT * FROM users ORDER BY id').all();
+  const beforeViews = db.prepare(
+    "SELECT name, sql FROM sqlite_master WHERE type='view' ORDER BY name"
+  ).all();
+  const beforeSummary = db.prepare('SELECT * FROM partner_summary ORDER BY id').all();
+
+  // This is the exact call that failed on prod with
+  // "error in view partner_summary: no such table: main.users".
+  const r = await rebuildUsersRoleCheckForExploring(env);
+  assert.equal(r.rebuilt, true, 'the rebuild must not be aborted by views over users');
+
+  // The CHECK now admits 'exploring'.
+  const rebuiltDdl = (db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
+  ).get() as { sql: string }).sql;
+  assert.match(rebuiltDdl, /'exploring'/, "the rebuilt CHECK must now include 'exploring'");
+  db.prepare("UPDATE users SET role = 'exploring' WHERE id = 2").run();
+  assert.equal((db.prepare('SELECT role FROM users WHERE id = 2').get() as { role: string }).role, 'exploring');
+  db.prepare("UPDATE users SET role = 'partner' WHERE id = 2").run();
+
+  // No data lost.
+  assert.deepEqual(db.prepare('SELECT * FROM users ORDER BY id').all(), beforeUsers);
+
+  // Views survive with byte-identical DDL (including the view-on-view chain)…
+  const afterViews = db.prepare(
+    "SELECT name, sql FROM sqlite_master WHERE type='view' ORDER BY name"
+  ).all();
+  assert.deepEqual(afterViews, beforeViews, 'every view must be replayed byte-identical');
+
+  // …and still SELECT correctly against the rebuilt table.
+  assert.deepEqual(db.prepare('SELECT * FROM partner_summary ORDER BY id').all(), beforeSummary);
+  db.prepare('SELECT * FROM partner_summary_top').all(); // view-on-view still parses + runs
+});
+
+test('rebuild succeeds with FK enforcement ON (D1 parity) — deferred violations resolved by the copy-back', async () => {
+  // D1 DOES enforce foreign keys (the second prod failure was
+  // "FOREIGN KEY constraint failed ... D1 DB was reset and rolled back"):
+  // DROP TABLE users implicitly deletes every row, and each child row
+  // (founders/limited_partners) becomes a deferred violation that only an
+  // INSERT into a table literally named `users` can resolve before commit.
+  // This test runs with enableForeignKeyConstraints: true so that exact
+  // failure mode is reproduced locally — the old copy-into-users_new-then-
+  // RENAME sequence fails this test; the snapshot → recreate → copy-back
+  // sequence passes it.
+  const db = seedLegacyWithView({ enforceFKs: true });
+  const env: any = { DB: makeD1(db) };
+
+  const beforeUsers = db.prepare('SELECT * FROM users ORDER BY id').all();
+
+  const r = await rebuildUsersRoleCheckForExploring(env);
+  assert.equal(r.rebuilt, true, 'the rebuild must commit with FK enforcement on');
+
+  // No data lost, ids unchanged, child FKs still resolve.
+  assert.deepEqual(db.prepare('SELECT * FROM users ORDER BY id').all(), beforeUsers);
+  const founderJoin = db.prepare(
+    'SELECT u.email FROM founders f JOIN users u ON u.id = f.user_id WHERE f.id = 10'
+  ).get() as { email: string };
+  assert.equal(founderJoin.email, 'founder@x.com');
+
+  // The temp snapshot table must not survive the rebuild.
+  const tmp = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='users_rebuild_tmp'"
+  ).get();
+  assert.equal(tmp, undefined, 'the temp snapshot table must be dropped');
+
+  // The CHECK now admits 'exploring' and FK enforcement still works.
+  db.prepare("UPDATE users SET role = 'exploring' WHERE id = 2").run();
+  assert.equal((db.prepare('SELECT role FROM users WHERE id = 2').get() as { role: string }).role, 'exploring');
+  assert.throws(
+    () => db.prepare("INSERT INTO founders (user_id, bio) VALUES (999999, 'orphan')").run(),
+    /FOREIGN KEY|constraint/i,
+    'FK enforcement must still reject orphan child rows after the rebuild',
+  );
 });
 
 test('advisor and investor rebuilds compose — both roles accepted, still loss-free', async () => {

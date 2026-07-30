@@ -6,10 +6,23 @@ API-first Venture Studio OS — manages startup lifecycle from intake to portfol
 > - `frontend/public/CHANGELOG-user.md` — the in-app Docs → "What's new" page. Plain-English, no task IDs, no file paths, no code. Write it for the people using the platform.
 > Any user-facing change needs a line in BOTH. Do not date task entries in the technical file.
 
+## Replit Dev Setup (one-time, already done)
+
+The following steps were completed when this project was imported into Replit:
+
+1. **Frontend dependencies installed** — `cd frontend && npm install` (installs Vite, React, Tailwind, etc. into `frontend/node_modules/`).
+2. **`JWT_SECRET` added to Replit Secrets** — required; the dev backend (`backend/app/api/routes/auth.py`) raises `RuntimeError` at import time if unset.
+3. **Workflows verified running**:
+   - `Backend API` — `UV_PROJECT_ENVIRONMENT=.venv uv run uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload` (port 8000)
+   - `Start application` — `cd frontend && npm run dev` (port 5000, proxies `/api` → 8000)
+4. **`postgresql-16` module restored** in `.replit` (was accidentally removed during import; dev backend uses a local SQLite file via SQLModel, but the module is kept for parity).
+
+If you clone or fork this repl, repeat steps 1–2.
+
 ## Run & Operate
 - **Dev**: `npm run dev` (frontend) + `python backend/main.py` (FastAPI, dev-only).
 - **Build**: `npm run build` · **Deploy (prod)**: `npm run deploy` (Cloudflare Worker)
-- **D1 migrations auto-apply on deploy**: `npm run deploy` runs `predeploy` → `node scripts/migrate-d1.mjs --remote`, a forward-only runner that applies only the pending `cloudflare-worker/sql/migrations/*.sql` (in numeric order, deterministic on duplicate prefixes) and records each in the `schema_migrations` ledger. A failing migration aborts the deploy loudly (non-zero, names the file). Re-deploy with no new migrations = fast no-op. Other targets: `npm run d1:migrate:local` / `d1:migrate:preview`; audit-only `npm run d1:audit`; preview the plan with `node scripts/migrate-d1.mjs --remote --dry-run`. Needs Node 22+ (same `export PATH=…nodejs-22…/bin` as manual wrangler). **One-time baseline**: the existing prod DB was hand-migrated with no ledger, so the first run aborts and tells you to run `npm run d1:baseline` once — it applies the pending *idempotent* files and records the *non-idempotent* ones (the 57 ALTER/bare-INSERT files the audit flags) WITHOUT executing them (their effect is already present from hand-applies + `schema.sql`), printing each so you can verify. After baseline, deploys auto-apply only new migrations.
+- **D1 migrations auto-apply on deploy**: `npm run deploy` runs `predeploy` → `node scripts/migrate-d1.mjs --remote`, a forward-only runner that applies only the pending `cloudflare-worker/sql/migrations/*.sql` (in numeric order, deterministic on duplicate prefixes) and records each in the `schema_migrations` ledger. A failing migration aborts the deploy loudly (non-zero, names the file). Re-deploy with no new migrations = fast no-op. Other targets: `npm run d1:migrate:local` / `d1:migrate:preview`; audit-only `npm run d1:audit`; preview the plan with `node scripts/migrate-d1.mjs --remote --dry-run`. Needs Node 22+ (same `export PATH=…nodejs-22…/bin` as manual wrangler). **One-time baseline**: ✅ DONE (2026-07-08) — the prod ledger now holds all 149 files (idempotent ones executed, non-idempotent ones recorded-only; `funnel_events` + `user_role_review` PRAGMA-verified present). Deploys now auto-apply only new migrations. Note: `--dry-run` always prints the plan *assuming an empty ledger* — to see what's really pending, run the live runner (it prints "N already applied, M pending" before touching anything) or query `schema_migrations` directly.
 - **Typecheck**: runs inside `npm run test:drift` (`tsc --noEmit` in `cloudflare-worker/`; there is no standalone `npm run typecheck`) · **Drift check**: `npm run test:drift` (required pre-merge)
 - **Required env**: `JWT_SECRET`, `SCORING_HMAC_SECRET` (≥32 bytes, hard-required in prod), `AXAL_ENCRYPTION_SECRET` (falls back to JWT_SECRET), `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_CLAIM_EMAIL` (push).
 

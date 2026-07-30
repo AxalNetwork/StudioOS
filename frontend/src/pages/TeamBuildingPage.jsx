@@ -26,6 +26,7 @@ import { useAuth } from '../hooks/useAuthSync';
 import { hasTier } from '../sidebarConfig';
 import { openPaywall } from '../components/PaywallModal';
 import PageExplainer from '../components/PageExplainer';
+import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
 import AdvisorsPage from './AdvisorsPage';
 import CofounderPage from './CofounderPage';
 import MyJobsPage from './jobs/MyJobsPage';
@@ -64,27 +65,66 @@ function tabAllowed(tab, user) {
   return !tab.requiredTier || hasTier(user, tab.requiredTier);
 }
 
-// Shown in place of a gated feature. Keeps the destination discoverable while
-// routing the click through the shared PaywallModal, matching the locked-nav
-// behaviour from before the consolidation.
+// Static, non-interactive skeleton card used inside the blurred locked
+// preview. Deliberately fake: rendering the REAL embedded page here would
+// fire its mount-time fetches against tier-gated endpoints and put real
+// gated data in the DOM (trivially de-blurred via devtools).
+function PreviewCard({ seed }) {
+  const nameW = ['w-28', 'w-36', 'w-24'][seed % 3];
+  const lineW = ['w-full', 'w-4/5', 'w-11/12'][(seed + 1) % 3];
+  const tags = 2 + (seed % 3);
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex items-center gap-3">
+        <div className="h-9 w-9 rounded-full bg-violet-200 dark:bg-violet-900/50" />
+        <div className="space-y-1.5">
+          <div className={`h-3 ${nameW} rounded bg-gray-300 dark:bg-gray-700`} />
+          <div className="h-2.5 w-20 rounded bg-gray-200 dark:bg-gray-800" />
+        </div>
+      </div>
+      <div className={`mt-3 h-2.5 ${lineW} rounded bg-gray-200 dark:bg-gray-800`} />
+      <div className="mt-1.5 h-2.5 w-2/3 rounded bg-gray-200 dark:bg-gray-800" />
+      <div className="mt-3 flex gap-1.5">
+        {Array.from({ length: tags }).map((_, i) => (
+          <div key={i} className="h-4 w-14 rounded-full bg-violet-100 dark:bg-violet-900/40" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Shown in place of a gated feature: a blurred static preview of what the
+// section looks like (skeleton people-cards, never real data) with the
+// upgrade CTA overlaid, so founders see what they're unlocking instead of a
+// bare lock panel. The CTA routes through the same shared PaywallModal the
+// old locked nav rows used.
 function LockedTab({ tab }) {
   const tierLabel = TIER_LABEL[tab.requiredTier] || 'a higher';
   return (
-    <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-10 text-center">
-      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-300">
-        <Lock size={22} />
-      </span>
-      <h3 className="mt-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
-        {tab.label} is a {tierLabel} feature
-      </h3>
-      <p className="mx-auto mt-1 max-w-md text-sm text-gray-600 dark:text-gray-400">{tab.blurb}</p>
-      <button
-        type="button"
-        onClick={() => openPaywall(tab.requiredTier)}
-        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
-      >
-        <Sparkles size={16} /> Upgrade to {tierLabel}
-      </button>
+    <div className="relative overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
+      <div aria-hidden="true" className="pointer-events-none select-none blur-sm p-4 bg-gray-50 dark:bg-gray-950">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => <PreviewCard key={i} seed={i} />)}
+        </div>
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-gray-950/60">
+        <div className="mx-4 max-w-md rounded-xl border border-gray-200 bg-white p-6 text-center shadow-lg dark:border-gray-700 dark:bg-gray-900">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-300">
+            <Lock size={22} />
+          </span>
+          <h3 className="mt-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
+            {tab.label} is a {tierLabel} feature
+          </h3>
+          <p className="mx-auto mt-1 text-sm text-gray-600 dark:text-gray-400">{tab.blurb}</p>
+          <button
+            type="button"
+            onClick={() => openPaywall(tab.requiredTier)}
+            className="mt-5 inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+          >
+            <Sparkles size={16} /> Upgrade to {tierLabel}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -93,14 +133,14 @@ export default function TeamBuildingPage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Resolve the active tab from ?tab=, falling back to the first tab the user
-  // can actually access (so a free founder isn't dropped onto a paywall).
+  // Resolve the active tab from ?tab=. EVERYONE lands on Advisors by default,
+  // regardless of tier — a locked tab now shows a blurred preview + upgrade
+  // CTA instead of being skipped, so people-first framing wins over gating.
   const requested = searchParams.get('tab');
   const activeId = useMemo(() => {
     if (requested && TABS.some((t) => t.id === requested)) return requested;
-    const firstAllowed = TABS.find((t) => tabAllowed(t, user));
-    return (firstAllowed || TABS[TABS.length - 1]).id;
-  }, [requested, user]);
+    return 'advisor';
+  }, [requested]);
 
   const activeTab = TABS.find((t) => t.id === activeId) || TABS[0];
 
@@ -113,13 +153,21 @@ export default function TeamBuildingPage() {
   return (
     <div className="space-y-6" data-testid="team-building-page">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Team Building</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Your People</h1>
         <PageExplainer pageKey="team_building" />
         <p className="mt-1 max-w-3xl text-sm text-gray-600 dark:text-gray-400">
-          One place to build the team around your company — recruit advice from advisors,
-          find a co-founder, and hire for open roles.
+          The people who'll build this with you — advisors to pressure-test the plan,
+          a co-founder to share the load, and your first hires.
         </p>
       </div>
+
+      {/* Inbound co-founder leads captured on the founder's landing pages,
+          routed here so they're visible where the founder acts on them. */}
+      <IncomingLeadsStrip
+        audience="cofounder"
+        title="New co-founder leads"
+        blurb="People who reached out about co-founding via your landing pages."
+      />
 
       {/* Segmented tab bar. Deep-linkable via ?tab= and highlighted with the
           same violet accent the primary sidebar uses. */}

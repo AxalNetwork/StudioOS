@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Sparkles, Send } from 'lucide-react';
 import { api } from '../lib/api';
+import { track } from '../lib/funnel';
 import { useAuth } from '../hooks/useAuthSync';
 
 /**
@@ -23,12 +24,18 @@ export default function OnboardingChatPage() {
   const [input, setInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [skipping, setSkipping] = useState(false);
   const [error, setError] = useState('');
   const scrollRef = useRef(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, chatLoading]);
+
+  // Task #2 — funnel: onboarding chat reached (post-auth profiling gate).
+  useEffect(() => {
+    track('onboarding_chat_view');
+  }, []);
 
   const sendChat = async () => {
     const text = input.trim();
@@ -60,7 +67,12 @@ export default function OnboardingChatPage() {
     setSaving(true);
     setError('');
     try {
-      await api.profilingSave({ email, messages });
+      const saved = await api.profilingSave({ email, messages });
+      // Task #2 — funnel: completed = saved with ≥1 user answer. Flushed by
+      // the tracker's pagehide hook as the hard redirect below unloads.
+      track('onboarding_chat_complete', {
+        user_turns: messages.filter((m) => m.role === 'user').length,
+      });
       // Task #66 — full-page redirect (not SPA navigate). RequireAuth in
       // App.jsx fetches `onboarding_progress` inside a useEffect keyed on
       // `[user?.id]`; after save the user id hasn't changed, so a soft
@@ -69,10 +81,45 @@ export default function OnboardingChatPage() {
       // /onboarding/chat — re-mounting this component with an empty chat.
       // A hard reload remounts App.jsx so the effect re-runs and sees the
       // freshly-flipped `completed_at`.
-      window.location.assign('/studio?profile_pending=1');
+      //
+      // Task #9 — /save now returns the user's ACTUAL post-save role.
+      // Fresh signups land in the 'exploring' holding state → route them
+      // to the exploring dashboard, not /studio (which their role can't see).
+      window.location.assign(
+        saved?.role === 'exploring' ? '/exploring' : '/studio?profile_pending=1'
+      );
     } catch (e) {
       setError(e.message);
       setSaving(false);
+    }
+  };
+
+  // Task #1 — the chat is skippable. Saves whatever partial answers exist
+  // (zero user turns is fine — /api/profiling/save only requires a messages
+  // array) so the gate releases, then drops the user on the dashboard. They
+  // can finish profiling later; admins see the partial transcript meanwhile.
+  const skipForNow = async () => {
+    if (!email) {
+      setError('Session expired. Please sign in again.');
+      return;
+    }
+    setSkipping(true);
+    setError('');
+    try {
+      const saved = await api.profilingSave({ email, messages });
+      // Task #2 — funnel: skipped (partial/zero answers still persisted).
+      track('onboarding_chat_skip', {
+        user_turns: messages.filter((m) => m.role === 'user').length,
+      });
+      // Same hard-reload rationale as finish() above. Task #9 — skip also
+      // enters the 'exploring' holding state (suggested_role may be null;
+      // the Personal Advisor's role detector fills it in later).
+      window.location.assign(
+        saved?.role === 'exploring' ? '/exploring' : '/dashboard'
+      );
+    } catch (e) {
+      setError(e.message);
+      setSkipping(false);
     }
   };
 
@@ -135,13 +182,23 @@ export default function OnboardingChatPage() {
 
         <button
           onClick={finish}
-          disabled={saving || chatLoading}
+          disabled={saving || skipping || chatLoading}
           className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white transition-colors"
         >
           {saving ? 'Saving profile...' : 'Save & continue'}
         </button>
+        {/* Task #1 — skippable onboarding: never trap an invited user in the
+            chatbot. Partial answers are persisted; they can finish later. */}
+        <button
+          type="button"
+          onClick={skipForNow}
+          disabled={saving || skipping || chatLoading}
+          className="w-full mt-2 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-50 py-1.5 transition-colors"
+        >
+          {skipping ? 'Taking you to your dashboard…' : "Skip for now — I'll do this later"}
+        </button>
         <p className="text-[11px] text-gray-500 dark:text-gray-400 text-center mt-2">
-          An admin will review your profile and propose a Closing Binder.
+          Your answers help us tailor your workspace — you can update them anytime.
         </p>
       </div>
     </div>

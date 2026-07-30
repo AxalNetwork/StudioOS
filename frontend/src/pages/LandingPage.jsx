@@ -8,6 +8,7 @@ import {
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
+import { track } from '../lib/funnel';
 
 const THESIS_PILLS = ['AI', 'Blockchain', 'Quantum', 'Digital Infrastructure', 'Frontier Software'];
 
@@ -75,9 +76,9 @@ const HOW_IT_WORKS = [
   },
   {
     week: 'Step 2',
-    title: 'Get verified',
+    title: 'Get matched',
     icon: BadgeCheck,
-    desc: 'KYC, KYB, accreditation, and NDAs — only where the activity actually requires it.',
+    desc: 'Browse and match with just your email — verification comes later, only when you invest or sign.',
   },
   {
     week: 'Step 3',
@@ -292,6 +293,11 @@ function UpcomingEventsTeaser() {
 
 export default function LandingPage() {
   useForcedLightTheme();
+  // Task #2 — funnel: top of the signup funnel. First-touch attribution
+  // (utm_*, ref, lane…) is captured by the tracker itself on page load.
+  useEffect(() => {
+    track('landing_view');
+  }, []);
   return (
     <div className="min-h-screen bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100">
       <PublicNav />

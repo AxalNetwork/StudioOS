@@ -289,11 +289,13 @@ def browse(session: Session, viewer: User, *,
            remote_only: bool = False,
            limit: int = 50) -> list[dict]:
     """Return ranked, redacted candidate cards. Caller's own profile is
-    excluded. Closed connections are excluded from the feed."""
+    excluded. Closed connections are excluded from the feed.
+
+    Browse-first: a viewer WITHOUT a profile may still browse — their cards
+    come back unscored (match_score=None, empty match_reasons) because
+    scoring needs the viewer's own profile. Expressing interest still
+    requires a profile (see express_interest)."""
     viewer_profile = get_my_profile(session, viewer)
-    if viewer_profile is None:
-        # Caller hasn't opted in — let the route surface the right error.
-        raise PermissionError("viewer_has_no_profile")
 
     # Push as many filters as we can into SQL (commitment, remote_only)
     # so the in-memory step only handles the JSON-encoded list/text fields
@@ -367,10 +369,13 @@ def browse(session: Session, viewer: User, *,
             ]).lower()
             if q.lower() not in blob:
                 continue
-        score, why = _score_match(viewer_profile, p)
+        if viewer_profile is None:
+            score, why = None, []
+        else:
+            score, why = _score_match(viewer_profile, p)
         out.append((score, why, p))
 
-    out.sort(key=lambda t: (-t[0], t[2].id or 0))
+    out.sort(key=lambda t: (-(t[0] or 0), t[2].id or 0))
     cards: list[dict] = []
     for score, why, p in out[:limit]:
         card = serialize_profile_public(p, user_uid=user_uid_by_id.get(p.user_id))

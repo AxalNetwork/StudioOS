@@ -151,6 +151,14 @@ async function readJson(c: any): Promise<{ ok: boolean; body: any; res: any }> {
 // here so existing call sites (register/verify/login/referral) keep
 // working unchanged.
 import { hashEmail } from '../util/hashEmail';
+// Task #9 follow-up — every fresh signup now lands directly in the
+// 'exploring' holding state instead of the lane role (founder/partner/
+// investor) it used to get. ensureExploringSchema guarantees the
+// users.role CHECK admits 'exploring' before the INSERT; upsertSuggestedRole
+// records the marketing lane the visitor picked so the admin review queue
+// (routes/admin_exploring.ts) shows a suggestion immediately, before the
+// onboarding chatbot even runs.
+import { ensureExploringSchema, upsertSuggestedRole } from '../services/exploringSchema';
 
 async function checkRateLimit(env: Env, key: string, max: number, windowSec: number): Promise<boolean> {
   // Fail-CLOSED on any KV error (audit M1). These limiters guard sensitive
@@ -238,7 +246,7 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
 auth.post('/register', safe('register', 'Registration failed. Please try again in a moment, or contact support if the problem persists.', async (c) => {
   const parsed = await readJson(c);
   if (!parsed.ok) return parsed.res;
-  const { email, name, role, turnstileToken, ref_code, defer_email } = parsed.body;
+  const { email, name, role, turnstileToken, ref_code, defer_email, product } = parsed.body;
   if (!email || !name) return c.json({ error: 'Email and name required' }, 400);
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   if (!emailRe.test(String(email).trim())) return c.json({ error: 'Please enter a valid email address' }, 400);
@@ -281,7 +289,19 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
       await sql.end();
       return c.json({ error: 'Email already registered' }, 409);
     }
-    await sql`UPDATE users SET name = ${name}, role = ${role || 'partner'} WHERE id = ${user.id}`;
+    // Task #9 follow-up — an incomplete signup retrying /register lands
+    // in 'exploring' just like a brand-new account (see the fresh-INSERT
+    // branch below). The lane the visitor picked is recorded as the
+    // suggested role for the admin review queue, never applied directly.
+    await ensureExploringSchema(c.env);
+    await sql`UPDATE users SET name = ${name}, role = 'exploring' WHERE id = ${user.id}`;
+    // Task #7 — persist the ?product= registration intent (e.g.
+    // 'spinout-lab') so applicants are identifiable in the admin queue.
+    // try/caught: column arrives with migration 154.
+    if (product === 'spinout-lab') {
+      try { await sql`UPDATE users SET registration_product = ${product} WHERE id = ${user.id}`; } catch {}
+    }
+    try { await upsertSuggestedRole(c.env, user.id, role || null); } catch (e) { console.error('[auth] suggested-role upsert failed', e); }
     await sql.end();
     // Phase 0.1: investors embed under their own entity bucket; partners stay legacy.
     try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: role === 'investor' ? 'investor' : 'partner', id: user.id }); } catch {}
@@ -304,7 +324,20 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
     });
   }
 
-  const [user] = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${name}, ${role || 'partner'}, false) RETURNING *`;
+  // Task #9 follow-up — every fresh signup lands directly in 'exploring'
+  // (not the lane role) so it surfaces in the admin review queue from the
+  // moment the account exists. The chosen lane (founder/partner/investor)
+  // is preserved as the suggested_role via upsertSuggestedRole below, and
+  // is still used further down to seed lane-appropriate trust obligations
+  // and (for the investor lane) the trial window.
+  await ensureExploringSchema(c.env);
+  const [user] = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${name}, 'exploring', false) RETURNING *`;
+  // Task #7 — persist the ?product= registration intent (see the
+  // existing-user branch above). try/caught: column arrives with 154.
+  if (product === 'spinout-lab') {
+    try { await sql`UPDATE users SET registration_product = ${product} WHERE id = ${user.id}`; } catch {}
+  }
+  try { await upsertSuggestedRole(c.env, user.id, role || null); } catch (e) { console.error('[auth] suggested-role upsert failed', e); }
   // Task #6 (W-1) — investor signups get a 14-day Professional trial.
   // Cron in index.ts at 04:25 UTC downgrades expired trials to free.
   if (role === 'investor') {
@@ -336,7 +369,7 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   // user_id FK is the canonical link back to the account row when joins
   // are needed for support/analytics.
   const regEmailHash = await hashEmail(email);
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_registered', ${`registered as ${role || 'partner'} — pending email verification (email_hash=${regEmailHash})`}, ${regEmailHash}, ${user.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_registered', ${`registered (lane=${role || 'partner'}) — holding in exploring pending admin review — pending email verification (email_hash=${regEmailHash})`}, ${regEmailHash}, ${user.id})`;
   // Task #66 — seed the onboarding-chatbot gate row. The frontend
   // RequireAuth guard pins this user to /onboarding/chat until the
   // chatbot save flips completed_at. INSERT OR IGNORE so this is safe
@@ -427,24 +460,20 @@ auth.post('/resend-verification', async (c) => {
 
   const user = users[0];
 
-  const totpConfigured = await hasTotpConfigured(c.env, user.id);
-  if (user.email_verified && totpConfigured) {
+  // Task #11 — TOTP is optional, so "account complete" is email verification
+  // alone. A verified user gets the generic response and NOTHING is reset:
+  // the old code here un-verified already-verified accounts and cleared TOTP
+  // state for any user missing either flag, which let an anonymous POST with
+  // a victim's email nuke the authenticator a magic-link/Google user had
+  // enrolled from Settings.
+  if (user.email_verified) {
     return c.json({ message: genericMsg, email_sent: false, already_verified: true });
   }
 
-  if (!user.email_verified || !totpConfigured) {
-    try {
-      const sql = getSQL(c.env);
-      // Task #1 — clear half-finished TOTP state on resend so the user gets
-      // a fresh enrolment slot. We delete the auth_totp row directly (no
-      // password_hash mutation needed: it's already independent now).
-      await sql`UPDATE users SET email_verified = false WHERE id = ${user.id}`;
-      await sql.end();
-      try { await clearTotp(c.env, user.id); } catch (e) { console.error('[AUTH] clearTotp on resend failed', e); }
-    } catch (e: any) {
-      console.error(`[AUTH] resend reset failed for ${email}: ${e?.message || 'Unknown error'}`);
-    }
-  }
+  // Unverified ⇒ classic signup never completed (login requires a verified
+  // email, so this account has never signed in). Clear any half-finished
+  // TOTP enrolment so the fresh verification link starts from a clean slate.
+  try { await clearTotp(c.env, user.id); } catch (e) { console.error('[AUTH] clearTotp on resend failed', e); }
 
   try {
     const { sent, verificationUrl, tokenStored } = await sendVerification(c.env, email, user.name, user.id);
@@ -497,6 +526,14 @@ auth.post('/confirm-verify-email', safe('confirm-verify-email', 'Could not confi
   const { token } = parsed.body;
   if (!token) return c.json({ error: 'Token required' }, 400);
 
+  // Task #11 — this endpoint now mints a session, so it carries the same
+  // IP-keyed brute-force cap as GET /verify-email (shared bucket: both are
+  // steps of the same flow).
+  const confirmIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const allowedConfirmIp = await checkRateLimit(c.env, `verify-email-ip:${confirmIp}`, 10, 900);
+  if (!allowedConfirmIp) return c.json({ error: 'Too many verification attempts. Please try again in 15 minutes.' }, 429);
+
+  await ensureAuthBlockersSchema(c.env);
   const tokenHash = await hashToken(token);
   const sql = getSQL(c.env);
   const users = await sql`SELECT * FROM users WHERE verification_token = ${tokenHash}`;
@@ -507,6 +544,7 @@ auth.post('/confirm-verify-email', safe('confirm-verify-email', 'Could not confi
     await sql.end();
     return c.json({ error: 'Verification link has expired.' }, 400);
   }
+  if (Number(user.is_active ?? 1) === 0) { await sql.end(); return c.json({ error: 'Account is inactive' }, 403); }
 
   const setupToken = generateToken();
   const setupHash = await hashToken(setupToken);
@@ -516,9 +554,40 @@ auth.post('/confirm-verify-email', safe('confirm-verify-email', 'Could not confi
   // T22.1 — PII redaction: drop name/email from details; actor stores hash.
   const verifEmailHash = await hashEmail(user.email);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('email_verified', ${`email verified (email_hash=${verifEmailHash})`}, ${verifEmailHash}, ${user.id})`;
+
+  // Task #11 — TOTP is now optional, so email verification is the moment the
+  // user is "in". Mint a LOWER-assurance session exactly like /magic/verify:
+  // factor='email' + assurance_level='email_only' means requireFactor('totp')
+  // and requireStepUp() still gate sensitive routes (both fail closed on
+  // non-strong factors), and the 7-day session-scoped step_up_due_at drives
+  // the getCurrentUser auto-relock. Proof presented here (possession of the
+  // emailed verification link) is the same evidence class as a magic link.
+  const jti = crypto.randomUUID();
+  const jwtToken = await createJWT(c.env, user.id, user.email, user.role, undefined, jti);
+  const ua = (c.req.header('user-agent') || '').slice(0, 500);
+  const stepUpDue = new Date(Date.now() + MAGIC_STEP_UP_DAYS * 86400 * 1000).toISOString();
+  try {
+    await sql`INSERT INTO user_sessions (user_id, jti, user_agent, ip, factor, assurance_level, step_up_due_at)
+              VALUES (${user.id}, ${jti}, ${ua || null}, ${confirmIp === 'unknown' ? null : confirmIp.slice(0, 64)}, 'email', 'email_only', ${stepUpDue})`;
+  } catch (e) { console.error('[AUTH:confirm-verify-email] session insert failed', e); }
   await sql.end();
 
-  return c.json({ verified: true, email: user.email, name: user.name, setup_token: setupToken });
+  await revokeStaleCrossIdentitySession(c, user.id);
+  const csrfToken = generateCsrfToken();
+  setAuthCookies(c, jwtToken, csrfToken);
+
+  return c.json({
+    verified: true,
+    email: user.email,
+    name: user.name,
+    // Legacy back-compat: /setup-totp still accepts this one-shot token.
+    setup_token: setupToken,
+    // Session fields mirror POST /login so the SPA stores them identically.
+    token: jwtToken,
+    csrf_token: csrfToken,
+    user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    expires_in: 24 * 3600,
+  });
 }));
 
 auth.post('/setup-totp', safe('setup-totp', 'Could not set up authenticator. Please try again or request a new verification email.', async (c) => {
@@ -982,9 +1051,20 @@ auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in 
         user.email_verified = true;
       }
     } else {
-      const inserted = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${email.split('@')[0]}, 'founder', true) RETURNING *`;
+      // Task #9 follow-up — magic-link is also a first-time-signup surface
+      // (LoginPage's "Email me a sign-in link"), so it must land brand-new
+      // accounts in 'exploring' and route them through the onboarding
+      // chatbot + admin review, exactly like /register and Google.
+      await ensureExploringSchema(c.env);
+      const inserted = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${email.split('@')[0]}, 'exploring', true) RETURNING *`;
       user = inserted[0];
       newSignup = true;
+      try {
+        await c.env.DB.prepare(
+          `INSERT OR IGNORE INTO onboarding_progress (user_id, flow, step, total_steps, completed_at)
+           VALUES (?, 'chat', 0, 0, NULL)`
+        ).bind(user.id).run();
+      } catch (e) { console.error('[AUTH:magic-verify] onboarding_progress seed failed', e); }
     }
 
     const eh = await hashEmail(user.email);

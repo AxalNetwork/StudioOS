@@ -12,6 +12,10 @@ import {
 } from './admin.conversations.helpers';
 import { runTotpRemediation } from '../services/totpRemediation';
 import { assignFounderPublicId, assignPartnerPublicId, ensurePublicIdColumns } from '../services/publicIds';
+// Task #9 follow-up — lets the generic role-change endpoint move a user
+// INTO the 'exploring' holding state (e.g. demoting a partner back for
+// re-review). ensureExploringSchema guarantees the CHECK admits the value.
+import { ensureExploringSchema } from '../services/exploringSchema';
 
 const admin = new Hono<{ Bindings: Env }>();
 
@@ -940,6 +944,185 @@ admin.post('/users/:user_id/notes', async (c) => {
 
 // POST /api/admin/users/:user_id/resend-verification — re-send the email
 // verification link for users who haven't completed verification.
+// Task #7 — Spin-Out Lab cohort admission. Lazy column ensure mirrors
+// ensureProfileColumns above (duplicate-column errors are expected).
+let spinoutAdmissionSchemaMigrated = false;
+async function ensureSpinoutAdmissionColumns(env: Env): Promise<void> {
+  if (spinoutAdmissionSchemaMigrated) return;
+  const stmts = [
+    `ALTER TABLE users ADD COLUMN spinout_lab_admitted INTEGER DEFAULT 0`,
+    `ALTER TABLE users ADD COLUMN spinout_lab_cohort TEXT`,
+    `ALTER TABLE users ADD COLUMN registration_product TEXT`,
+  ];
+  for (const s of stmts) {
+    try { await env.DB.prepare(s).run(); } catch {}
+  }
+  spinoutAdmissionSchemaMigrated = true;
+}
+
+// POST /api/admin/users/:user_id/spinout-admit — admit a founder to the
+// next Spin-Out Lab cohort. Sets the admitted flag + cohort label and
+// sends the branded "You're in" email linking to /spinout-lab. Idempotent:
+// re-admitting an already-admitted user just refreshes the cohort label
+// and does NOT re-send the email.
+admin.post('/users/:user_id/spinout-admit', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const userId = parseInt(c.req.param('user_id'));
+  if (!Number.isFinite(userId)) return c.json({ error: 'Invalid user_id' }, 400);
+  const body = (await c.req.json().catch(() => ({}))) as { cohort?: unknown };
+  const cohort = (typeof body.cohort === 'string' && body.cohort.trim()) || 'Cohort 3';
+
+  await ensureSpinoutAdmissionColumns(c.env);
+  const target: any = await c.env.DB.prepare(
+    `SELECT id, email, name, role, spinout_lab_admitted, spinout_lab_active, is_incorporated FROM users WHERE id = ?`
+  ).bind(userId).first();
+  if (!target) return c.json({ error: 'User not found' }, 404);
+  if (target.role === 'admin') return c.json({ error: 'Admins cannot be admitted to the Lab' }, 400);
+  if (Number(target.is_incorporated) === 1) {
+    return c.json({ error: 'User is already incorporated — the Lab is a pre-incorporation sprint' }, 409);
+  }
+
+  const alreadyAdmitted = Number(target.spinout_lab_admitted) === 1;
+  await c.env.DB.prepare(
+    `UPDATE users SET spinout_lab_admitted = 1, spinout_lab_cohort = ? WHERE id = ?`
+  ).bind(cohort, userId).run();
+
+  let emailed = false;
+  if (!alreadyAdmitted) {
+    try {
+      const { send } = await import('../services/email/send');
+      const labUrl = `${(c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '')}/spinout-lab`;
+      const r = await send(c.env, 'spinout_admitted', target.email, {
+        name: target.name || 'there',
+        cohort_label: cohort,
+        lab_url: labUrl,
+      }, { userId: target.id, ctaUrl: labUrl });
+      emailed = !!r?.ok;
+    } catch (e) {
+      console.error('[admin/spinout-admit] email send failed', e);
+    }
+  }
+
+  try {
+    const adminHash = await hashEmail(adminUser.email);
+    const targetHash = await hashEmail(target.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
+    ).bind('spinout_lab_admitted',
+      `Admin ${adminUser.name} admitted user_id=${target.id} (email_hash=${targetHash}) to Spin-Out Lab ${cohort}${alreadyAdmitted ? ' (already admitted — cohort refreshed, no email)' : emailed ? '' : ' (email send failed)'}`,
+      adminHash, adminUser.id).run();
+  } catch {}
+
+  return c.json({ ok: true, cohort, already_admitted: alreadyAdmitted, emailed });
+});
+
+// Spin-Out Lab cohort applications — review queue + accept/refuse.
+// GET  /spinout-applications           → pending first, newest first
+// POST /spinout-applications/:id/decide {decision:'accepted'|'refused'}
+//   accepted → sets admitted flags on the user + sends the spinout_admitted
+//              email whose CTA links to /spinout-lab (workspace access)
+//   refused  → sends the spinout_refused email encouraging a re-apply for
+//              the next cohort
+admin.get('/spinout-applications', async (c) => {
+  await requireAdmin(c);
+  let applications: unknown[] = [];
+  try {
+    const rs = await c.env.DB.prepare(
+      `SELECT a.id, a.user_id, u.name, u.email, a.company_name, a.idea,
+              a.incorporated, a.stage, a.jurisdiction, a.cohort, a.status,
+              a.created_at, a.decided_at
+       FROM spinout_applications a
+       JOIN users u ON u.id = a.user_id
+       ORDER BY CASE WHEN a.status = 'pending' THEN 0 ELSE 1 END,
+                a.created_at DESC
+       LIMIT 200`,
+    ).all();
+    applications = rs.results ?? [];
+  } catch { /* table not yet migrated → empty queue */ }
+  return c.json({ applications });
+});
+
+admin.post('/spinout-applications/:app_id/decide', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const appId = parseInt(c.req.param('app_id'));
+  if (!Number.isFinite(appId)) return c.json({ error: 'Invalid application id' }, 400);
+  const body = (await c.req.json().catch(() => ({}))) as { decision?: unknown };
+  const decision = (typeof body.decision === 'string' ? body.decision : '').trim().toLowerCase();
+  if (decision !== 'accepted' && decision !== 'refused') {
+    return c.json({ error: "decision must be 'accepted' or 'refused'" }, 400);
+  }
+
+  const app: any = await c.env.DB.prepare(
+    `SELECT a.id, a.user_id, a.company_name, a.cohort, a.status,
+            u.email, u.name, u.role, u.is_incorporated
+     FROM spinout_applications a JOIN users u ON u.id = a.user_id
+     WHERE a.id = ?`,
+  ).bind(appId).first();
+  if (!app) return c.json({ error: 'Application not found' }, 404);
+  if (app.status !== 'pending') return c.json({ error: `Application already ${app.status}` }, 409);
+
+  // Guarded update — WHERE status='pending' makes the decision atomic, so two
+  // admins deciding at once can't both trigger emails/admission side effects.
+  const upd = await c.env.DB.prepare(
+    `UPDATE spinout_applications SET status = ?, decided_at = datetime('now') WHERE id = ? AND status = 'pending'`,
+  ).bind(decision, appId).run();
+  if ((upd.meta?.changes ?? 1) === 0) {
+    return c.json({ error: 'Application was already decided' }, 409);
+  }
+
+  const cohort = app.cohort || 'Cohort 4';
+  const appUrl = (c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+  let emailed = false;
+  if (decision === 'accepted') {
+    await ensureSpinoutAdmissionColumns(c.env);
+    await c.env.DB.prepare(
+      `UPDATE users SET spinout_lab_admitted = 1, spinout_lab_cohort = ? WHERE id = ?`,
+    ).bind(cohort, app.user_id).run();
+    try {
+      const { send } = await import('../services/email/send');
+      const labUrl = `${appUrl}/spinout-lab`;
+      const r = await send(c.env, 'spinout_admitted', app.email, {
+        name: app.name || 'there',
+        cohort_label: cohort,
+        lab_url: labUrl,
+      }, { userId: app.user_id, ctaUrl: labUrl });
+      emailed = !!r?.ok;
+    } catch (e) {
+      console.error('[admin/spinout-decide] accept email failed', e);
+    }
+  } else {
+    // Next cohort label: "Cohort 4" → "Cohort 5"; fall back gracefully.
+    const m = /^Cohort (\d+)$/.exec(cohort);
+    const nextCohort = m ? `Cohort ${Number(m[1]) + 1}` : 'the next cohort';
+    try {
+      const { send } = await import('../services/email/send');
+      const applyUrl = `${appUrl}/spinout-lab/apply`;
+      const r = await send(c.env, 'spinout_refused', app.email, {
+        name: app.name || 'there',
+        company_name: app.company_name,
+        cohort_label: cohort,
+        next_cohort_label: nextCohort,
+        apply_url: applyUrl,
+      }, { userId: app.user_id, ctaUrl: applyUrl });
+      emailed = !!r?.ok;
+    } catch (e) {
+      console.error('[admin/spinout-decide] refusal email failed', e);
+    }
+  }
+
+  try {
+    const adminHash = await hashEmail(adminUser.email);
+    const targetHash = await hashEmail(app.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    ).bind(`spinout_application_${decision}`,
+      `Admin ${adminUser.name} ${decision} Spin-Out Lab application #${appId} for user_id=${app.user_id} (email_hash=${targetHash}, ${cohort})${emailed ? '' : ' (email send failed)'}`,
+      adminHash, adminUser.id).run();
+  } catch {}
+
+  return c.json({ ok: true, status: decision, emailed });
+});
+
 admin.post('/users/:user_id/resend-verification', async (c) => {
   const adminUser = await requireAdmin(c);
   const userId = parseInt(c.req.param('user_id'));
@@ -1038,7 +1221,10 @@ admin.patch('/users/:userId/role', async (c) => {
   if (!role) {
     try { role = (await c.req.json()).role; } catch {}
   }
-  if (!role || !['admin', 'founder', 'partner', 'investor'].includes(role)) {
+  // Task #9 follow-up — 'exploring' is a valid destination role so admins
+  // can move a user (e.g. a partner) back into the holding state for
+  // re-review, from the same dropdown used for founder/partner/investor.
+  if (!role || !['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'].includes(role)) {
     return c.json({ error: `Invalid role: ${role}` }, 400);
   }
   // Security policy: admin promotion is NOT allowed via this endpoint.
@@ -1066,9 +1252,42 @@ admin.patch('/users/:userId/role', async (c) => {
       code: 'admin_demotion_disabled',
     }, 403);
   }
+  // Task #9 follow-up — a user already in 'exploring' can only be moved to
+  // founder/partner/investor/advisor through the binding-agreement-gated
+  // /api/admin/exploring/users/:id/assign-role flow, never this generic
+  // endpoint. Without this guard an admin could bypass the signed binding
+  // agreement requirement simply by using the Users table dropdown instead
+  // of the Exploring Users queue.
+  if (String(rows[0].role).toLowerCase() === 'exploring' && role !== 'exploring') {
+    await sql.end();
+    return c.json({
+      error: 'This user is in the exploring holding state. Assign their final role from the Exploring Users queue (requires a signed binding agreement).',
+      code: 'use_exploring_assign_role',
+    }, 409);
+  }
 
   const oldRole = rows[0].role;
+  if (role === 'exploring') await ensureExploringSchema(c.env);
   await sql`UPDATE users SET role = ${role} WHERE id = ${userId}`;
+
+  // Task #9 follow-up — moving a user INTO 'exploring' resets any stale
+  // assignment state from a prior review cycle so they reappear in the
+  // Exploring Users queue needing fresh review (not shown as already
+  // assigned). Suggested-role / binding-envelope history is left intact —
+  // an admin resending the binding agreement overwrites it anyway.
+  if (role === 'exploring') {
+    try {
+      await c.env.DB.prepare(
+        `INSERT INTO user_role_review (user_id, updated_at) VALUES (?, datetime('now'))
+         ON CONFLICT(user_id) DO UPDATE SET
+           role_confirmed = 0,
+           assigned_role = NULL,
+           assigned_by_user_id = NULL,
+           assigned_at = NULL,
+           updated_at = datetime('now')`
+      ).bind(userId).run();
+    } catch (e) { console.error('[admin/role-change] exploring review reset failed', (e as Error).message); }
+  }
 
   // Task #1 (DB) — when an admin promotes someone to founder/partner,
   // immediately allocate their public AXF-/AXP- id so it is visible

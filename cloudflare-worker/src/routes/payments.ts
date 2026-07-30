@@ -510,4 +510,42 @@ payments.get('/alacarte/unlocks', async (c) => {
   return c.json({ unlocks });
 });
 
+// ---------------------------------------------------------------------------
+// Network Introductions — credit-pack checkout.
+//
+//   POST /api/payments/intro-credits/intent  { pack, nonce? } → { client_secret, ... }
+//
+// Packs are platform-owned fixed SKUs (services/introductions.ts INTRO_PACKS:
+// 10 / 100 / 1000 credits) — no Stripe catalog dependency. The PaymentIntent
+// carries metadata.kind='intro_credits' + credits; the billing webhook
+// (payment_intent.succeeded) grants the purchased-bucket ledger rows
+// idempotently on the PI id.
+// ---------------------------------------------------------------------------
+payments.post('/intro-credits/intent', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureTierSchema(c.env);
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+
+  const body = (await c.req.json().catch(() => ({}))) as { pack?: string; nonce?: string };
+  const { INTRO_PACKS, isIntroPackKey } = await import('../services/introductions');
+  if (!isIntroPackKey(body.pack)) return c.json({ error: 'invalid_pack' }, 400);
+  const pack = INTRO_PACKS[body.pack];
+
+  const nonce = safeNonce(body.nonce);
+  const customer = await ensurePaymentsCustomer(c.env, user);
+  return createPaymentIntent(c, {
+    customer,
+    amount: pack.amount_cents,
+    currency: pack.currency,
+    idempotencyKey: `pi:${user.id}:intro_${body.pack}:${nonce}`,
+    user,
+    metadata: {
+      kind: 'intro_credits',
+      pack: body.pack,
+      credits: String(pack.credits),
+    },
+    description: `Introduction credits: ${pack.label}`,
+  });
+});
+
 export default payments;

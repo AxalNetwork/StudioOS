@@ -26,7 +26,9 @@ import {
   getCatalog,
   syncCatalog,
   isProductKind,
+  isAudienceCategory,
   PRODUCT_KINDS,
+  AUDIENCE_CATEGORIES,
   stripeMode,
   validateProductMetadata,
   createProduct,
@@ -52,9 +54,13 @@ catalog.get('/products', async (c) => {
     if (!isProductKind(kindParam)) return c.json({ error: 'invalid_kind' }, 400);
     kind = kindParam;
   }
+  const audienceParam = c.req.query('audience');
+  if (audienceParam !== undefined && !isAudienceCategory(audienceParam)) {
+    return c.json({ error: 'invalid_audience', allowed: AUDIENCE_CATEGORIES.map((a) => a.value) }, 400);
+  }
   try {
-    const products = await getCatalog(c.env, kind);
-    return c.json({ products });
+    const products = await getCatalog(c.env, kind, audienceParam || undefined);
+    return c.json({ products, audience_categories: AUDIENCE_CATEGORIES });
   } catch (e) {
     return c.json({ error: 'catalog_read_failed', detail: (e as Error).message }, 502);
   }
@@ -107,7 +113,7 @@ adminCatalog.get('/products', async (c) => {
   await requireAdmin(c);
   try {
     const products = await getCatalog(c.env);
-    return c.json({ products, mode: stripeMode(c.env) });
+    return c.json({ products, mode: stripeMode(c.env), audience_categories: AUDIENCE_CATEGORIES });
   } catch (e) {
     return c.json({ error: 'catalog_read_failed', detail: (e as Error).message }, 502);
   }

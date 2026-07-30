@@ -1,0 +1,164 @@
+# Product pages relabel/detail + multi-product cart checkout
+
+## Context
+
+The four audience marketing pages (`/for-founders`, `/for-investors`, `/for-service-partners`,
+`/for-advisors`) currently render generic, thin plan cards — plan names/prices/blurbs with short
+feature bullets that don't explain what's actually included or what limits apply. Separately, the
+user wants to be able to buy multiple product licenses in one checkout: e.g. subscribe their own
+account to several *different* personas at once (Founder + Investor + Advisor + Service-Partner),
+and/or buy multiple *seats* of the same persona plan (e.g. two Founder Pro licenses) to hand out to
+other people via email invite.
+
+Today: each of the 4 pages is driven by one shared data file and pure presentation component; there
+is a second, overlapping pricing data file for founders/investors with numbers that can drift from
+the marketing pages; and there is **no cart or multi-item checkout of any kind** anywhere in the
+codebase — every checkout call (Stripe PaymentIntent or Subscription) is single-SKU, and the one
+persona-subscription table (`account_subscriptions`) is keyed such that a user can't even hold two
+different *concurrent* persona subscriptions today, let alone multiple.
+
+This plan ships in two phases: **Phase 1** (page content/labeling) is low-risk, frontend-data-only,
+and ships independently first. **Phase 2** (cart + multi-item checkout) is a substantially larger
+backend lift touching a production D1 table and Stripe subscription/webhook logic — it proceeds in
+sequenced sub-steps after Phase 1 lands.
+
+---
+
+## Phase 1 — Relabel and add detail to the four product pages
+
+**Files:**
+- `frontend/src/data/productPages.js` — single source for all 4 pages (`PRODUCT_PAGES` keyed by
+  `founders`/`investors`/`service-partners`/`advisors`; each has `plans: [Starter, Pro,
+  Enterprise/Custom]`).
+- `frontend/src/pages/ProductAudiencePage.jsx` — shared presentation, incl. `PlanCard`.
+- `frontend/src/data/pricing.js` — separate source for `/pricing` and `/pricing/investor`, derived
+  from `PaywallModal.TIER_PLANS`; overlaps founder/investor numbers with `productPages.js`.
+
+**Ground the copy in real entitlements before writing it** — trace each plan's claimed
+features/limits to actual backend gating rather than inventing numbers:
+- Founder: `cloudflare-worker/src/middleware/requireTier.ts` + `PaywallModal.jsx`'s `TIER_PLANS`.
+- Investor: `cloudflare-worker/src/middleware/requireInvestorTier.ts`'s `INVESTOR_QUOTAS` (seats,
+  dealroom_max, intros/quarter — pull exact numbers, don't paraphrase).
+- Partner/Advisor: `cloudflare-worker/src/services/accountPlans.ts` has **no quota table** today —
+  grep partner/advisor routes for any enforced caps (e.g. "3 service offers"). If a claimed limit
+  in `productPages.js` isn't enforced anywhere in code, either drop the specific number or word it
+  as a soft guideline — don't imply enforcement that doesn't exist.
+
+**Data model changes (additive, non-breaking) to each plan object:**
+- `id`: stable slug (`free`/`pro`/`enterprise`) instead of keying off `name`.
+- `tagline`: one-line positioning, distinct from the existing `blurb`.
+- `badge`: optional pill surfacing the tier's single biggest differentiator (e.g. Investor Pro →
+  "Full pipeline access").
+- `features[]` upgraded from `{text, soon}` to `{text, detail?, limit?, soon?}` — `limit` for
+  quantitative caps ("5 runs / month"), `detail` for a one-line expansion. Render `limit` inline
+  after `text`; render `detail` via a zero-dependency `<details>` or `title` attribute (no new
+  tooltip lib).
+
+**Dedup with `pricing.js`:** change `productPages.js`'s founder/investor Starter/Pro plans to derive
+from the same source `pricing.js` already uses (`PaywallModal.TIER_PLANS` via `pricing.js`'s
+`FOUNDER_TIERS`/`INVESTOR_TIERS`), via a small adapter (`mapTierToProductPlan`) that layers the
+audience-page-specific blurb/CTA/badge on top of the shared price+feature-list. Enterprise/Custom
+tiers and all of Partner/Advisor stay hand-authored (no backend catalog/paywall equivalent exists
+for them yet). Don't merge `/pricing` and `/for-*` into one page — dedup at the data layer only.
+
+**`ProductAudiencePage.jsx` / `PlanCard` changes:** render the new `limit`/`detail`/`badge` fields;
+no changes needed to hero/benefits/FAQ sections.
+
+**Verification:** run the frontend dev server, visually check all 4 pages render correctly with the
+richer cards, run `npm run test:drift` (drift smoke test), confirm no broken links/CTAs.
+
+---
+
+## Phase 2 — Multi-product cart + checkout
+
+### Confirmed product rules
+- One account **can** hold concurrent subscriptions across **different** personas (Founder +
+  Investor + Advisor + Partner all at once).
+- One account **cannot** hold two subscriptions of the **same** persona for itself.
+- Buying multiple licenses of the *same* persona (e.g. two Founder Pro) is a **seat purchase**: the
+  buyer picks a quantity, pays once via a combined subscription, then invites people by email to
+  claim seats post-purchase — same shape as the existing investor-only seat model.
+- Checkout mechanic: **one combined Stripe Subscription with multiple `items[]`** (not sequential
+  intents), confirmed via the existing embedded Stripe Elements pattern (`AxalCheckout.jsx`).
+
+### Key blocking finding
+`account_subscriptions` (used for Partner/Advisor billing state, in `accountPlans.ts`) has
+`PRIMARY KEY(user_id)` — a user can only ever hold **one** `plan_group` row. This directly blocks
+"Partner + Advisor concurrently" and must be migrated before anything else in this phase. Founder
+and Investor already have independent state (`users.subscription_tier` vs `users.investor_tier`) so
+they don't have this problem.
+
+### 2a. Data model (D1 migrations, `cloudflare-worker/sql/`)
+- Migrate `account_subscriptions` → new shape keyed `UNIQUE(user_id, plan_group)` (surrogate
+  `id INTEGER PRIMARY KEY AUTOINCREMENT`), backfilled from the old table. Update every read/write in
+  `accountPlans.ts` and `billing.ts`'s `/plan/*` routes to take an explicit `plan_group` param.
+- New `persona_seats` table, modeled directly on the existing `investor_seats`
+  (`cloudflare-worker/sql/migrations/027_investor_paywall.sql` is the pattern reference):
+  `id, primary_user_id, plan_group, plan, seat_email, seat_user_id, subscription_id,
+  subscription_item_id, invited_at, accepted_at, revoked_at, invite_token`, unique on
+  `(primary_user_id, plan_group, seat_email)`. Keep `investor_seats` untouched/running in parallel
+  initially (don't migrate its data into the new table yet — lowest blast radius on the one seat
+  feature already in production).
+- Compute seat counts by querying `persona_seats` directly rather than adding new `users` columns
+  (repo is near D1's ~100-column cap on `users`, per existing code comments).
+- No DB table for the cart itself — it's ephemeral, pre-purchase, frontend-only (`localStorage`,
+  keyed per logged-in user).
+
+### 2b. Backend routes (worker) — build in this order
+1. **Refactor webhook fulfillment** in `billing.ts`'s `handleStripeEvent` into reusable per-persona
+   functions (`fulfilFounderItem`/`fulfilInvestorItem`/`fulfilPlanItem`) — pure refactor, no
+   behavior change, verified against existing single-item flows before adding anything new.
+2. **New `POST /api/billing/cart/checkout`** (new `cloudflare-worker/src/routes/cart.ts`, mounted
+   in `index.ts` alongside `billing`/`payments`/`investor_seats`). Body:
+   `{ items: [{ plan_group, plan, interval, quantity }] }`. Server-side, before calling Stripe:
+   reject duplicate `plan_group` "own subscription" entries, reject if the buyer already holds an
+   active subscription for that persona, reject `quantity > 1` on non-seat-eligible plans. Resolve
+   each item's Stripe price via the existing per-persona catalog lookups, then create **one**
+   Stripe Subscription with per-item `metadata` (`plan_group`, `kind`, `buyer_user_id`,
+   `is_seat_purchase`) — subscription-level `metadata.kind = 'cart'` as the new marker. Return
+   `{ client_secret, subscription_id }` (same shape `AxalCheckout.jsx` already accepts via its
+   `clientSecret` prop — **no changes needed to `AxalCheckout.jsx` itself**).
+3. **Webhook `isCart` branch**: when `metadata.kind === 'cart'`, iterate `items.data[]` and dispatch
+   each to the per-persona fulfillment functions from step 1. Seat-purchase items (`quantity > 1`)
+   don't touch the buyer's own subscription state — they only increase the buyer's seat capacity for
+   later invites. Verify empirically against a real Stripe test-mode webhook payload that item-level
+   metadata survives on `customer.subscription.created/updated` before relying on it.
+4. **New `cloudflare-worker/src/routes/persona_seats.ts`**, mirroring `investor_seats.ts`'s 4
+   endpoints (`GET /`, `POST /invite`, `POST /accept`, `DELETE /:id`) but parameterized by
+   `plan_group`, checking purchased seat capacity instead of a fixed tier cap, and on accept writing
+   to the correct target per persona (founder → `users.subscription_tier`; investor →
+   `users.investor_tier`, can delegate to existing investor logic; partner/advisor → upsert the
+   migrated `account_subscriptions` row).
+
+### 2c. Frontend
+- New `frontend/src/contexts/CartContext.jsx` (follow the existing provider convention used by
+  `SettingsContext`). State: line items `{plan_group, plan_id, interval, quantity, is_seat_purchase}`,
+  persisted to `localStorage`. `addItem` enforces the same constraints client-side as UX guard rails
+  (backend re-validates authoritatively).
+- `frontend/src/components/CartDrawer.jsx` — line items grouped by persona, quantity stepper only on
+  seat-eligible plans, subtotal from a lightweight price-preview call, "Checkout" CTA.
+- New `frontend/src/pages/CartCheckoutPage.jsx` (new route, mirrors how `/for-founders` etc. are
+  registered) — calls `cart/checkout`, renders `<AxalCheckout clientSecret={...} />` unchanged, on
+  success clears the cart and routes seat-purchase buyers into a "invite your team" step against the
+  new `persona_seats` invite endpoint.
+- `ProductAudiencePage.jsx`'s `PlanCard` CTA: logged-out → unchanged (`Link` to `/register`);
+  logged-in on a paid plan → "Add to cart" (+ "Buy now" shortcut to `/checkout`); Enterprise/Custom
+  stays `Link to="/contact"`. Add a quantity stepper only for plans flagged `seatEligible: true` in
+  `productPages.js`.
+
+### Risks to watch
+- Confirm Stripe subscription item metadata is actually present on the relevant webhook event
+  before the fulfillment design is finalized — fall back to a `GET /subscription_items/:id` lookup
+  if not.
+- The `account_subscriptions` migration touches a live production table backing real `/plan/checkout`
+  traffic — needs a careful backfill, not a naive rename; test partner/advisor billing end-to-end
+  after migrating before building anything on top of it.
+- Partner/Advisor Stripe catalog prices may not exist yet in production — verify via
+  `services/catalog.ts` before wiring real checkout to those personas; if missing, that's a
+  prerequisite, not part of this build.
+
+**Verification:** exercise the full flow in Stripe test mode — add Founder Pro + Investor Pro +
+2-seat Advisor Pro to cart, checkout, confirm one subscription with 3 items is created, confirm
+webhook fulfills all three (founder tier granted, investor tier granted, advisor seat capacity
+granted but advisor plan NOT granted to buyer), then use the seat invite endpoint to accept an
+advisor seat as a second test user and confirm their account gets advisor access.

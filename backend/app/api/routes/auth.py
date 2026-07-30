@@ -93,6 +93,9 @@ class RegisterRequest(BaseModel):
     name: str
     role: str = Field("partner", pattern="^(founder|partner|investor|advisor)$")
     ref_code: Optional[str] = None
+    # Task #7 — registration intent (?product=spinout-lab) persisted so
+    # Spin-Out Lab applicants are identifiable in the admin queue.
+    product: Optional[str] = None
     # Phase C4 — honeypot. Real users never see/fill this field; bots that
     # autofill every input will set it. Non-empty value = bot, drop request.
     # Pydantic v2 disallows leading-underscore field names, so the
@@ -318,6 +321,9 @@ def register(req: RegisterRequest, request: Request, session: Session = Depends(
             raise HTTPException(status_code=409, detail="Email already registered")
         existing.name = req.name
         existing.role = req.role
+        # Task #7 — persist the Spin-Out Lab registration intent.
+        if req.product == "spinout-lab":
+            existing.registration_product = req.product
         # Only set referrer if not already attributed (first valid wins)
         if referrer_id and not existing.referrer_partner_id:
             existing.referrer_partner_id = referrer_id
@@ -340,6 +346,8 @@ def register(req: RegisterRequest, request: Request, session: Session = Depends(
         email_verified=False,
         referrer_partner_id=referrer_id,
         referrer_code_used=ref_code_norm,
+        # Task #7 — persist the Spin-Out Lab registration intent.
+        registration_product=req.product if req.product == "spinout-lab" else None,
     )
     session.add(user)
     session.commit()
@@ -469,6 +477,18 @@ def confirm_verify_email(req: ConfirmVerifyRequest, session: Session = Depends(g
                 actor=user.email,
             ))
     session.commit()
+
+    # Task #12 — claim any off-platform introductions addressed to this email
+    # (and adopt the matching admin-created investor profile) now that the
+    # account owner has proven control of the address.
+    try:
+        from backend.app.api.routes.network_introductions import (
+            claim_offplatform_introductions,
+        )
+        claim_offplatform_introductions(session, user)
+    except Exception as exc:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger(__name__).warning("network intro claim-on-verify failed: %s", exc)
 
     return {
         "verified": True,
@@ -738,6 +758,11 @@ def get_me(user: User = Depends(get_current_user)):
         "kyc_status": getattr(user, "kyc_status", None) or "not_started",
         # 'limited' = browse-only access without KYC (admin grant). Null = normal.
         "access_level": getattr(user, "access_level", None),
+        # Spin-Out Lab flags — mirror the Worker's /auth/me shape so the
+        # frontend's `user.spinout_lab_active === 1` sidebar swap works in dev.
+        "spinout_lab_active": int(getattr(user, "spinout_lab_active", 0) or 0),
+        "spinout_lab_week": int(getattr(user, "spinout_lab_week", 0) or 0),
+        "is_incorporated": int(getattr(user, "is_incorporated", 0) or 0),
     }
 
 

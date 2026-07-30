@@ -111,6 +111,9 @@ export async function request(path, options = {}) {
           || currentPath === '/register'
           || currentPath === '/verify-email'
           || currentPath === '/spinout-lab'
+          // Printable Program Brief — public brochure page; /spinout-lab/apply
+          // is intentionally NOT listed (auth-only, a 401 there should bounce).
+          || currentPath === '/spinout-lab/brief'
           // Audience product pages (For Founders / Investors & LPs / Service
           // Partners / Advisors) — public marketing surfaces. A background
           // settings/me 401 for an anonymous visitor must not bounce them to
@@ -341,6 +344,23 @@ export const api = {
     body: JSON.stringify({ text }),
   }),
   health: () => request('/health'),
+
+  // Task #16 — Organizations directory (Network > Organizations). Real VC
+  // funds / deep-tech investors served from the backend `organizations` table.
+  listOrganizations: (params = {}) => {
+    const q = new URLSearchParams();
+    const set = (k, v) => { if (v != null && v !== '') q.set(k, String(v)); };
+    set('q', params.q);
+    set('type', params.type);
+    set('region', params.region);
+    set('source', params.source);
+    set('page', params.page);
+    set('page_size', params.page_size);
+    const qs = q.toString();
+    return request(`/organizations${qs ? `?${qs}` : ''}`);
+  },
+  getOrganizationFacets: () => request('/organizations/facets'),
+  getOrganization: (uid) => request(`/organizations/${encodeURIComponent(uid)}`),
 
   // Task #15 — Page header explainers (server-synced dismiss list).
   getExplainersDismissed: () => request('/settings/explainers'),
@@ -699,6 +719,42 @@ export const api = {
   dealroomJoin: (id) => request(`/deals/${id}/dealroom/join`, { method: 'POST' }),
   dealroomLeave: (id) => request(`/deals/${id}/dealroom/leave`, { method: 'DELETE' }),
 
+  // Task #4 — Deal Flow: funnel aggregates, admin drafting, Deal Room
+  // (documents / data room / commitments / activity) and investor invitations.
+  dealFunnel: () => request('/deals/funnel'),
+  draftDeal: (data) => request('/deals/draft', { method: 'POST', body: JSON.stringify(data) }),
+  advanceDeal: (id) => request(`/deals/${id}/advance`, { method: 'POST' }),
+  dealLeadPartners: () => request('/deals/lead-partners'),
+  dealInvestorOptions: () => request('/deals/investors'),
+  dealDocuments: (id) => request(`/deals/${id}/documents`),
+  // Data-room zip is a file download. FastAPI (dev preview) authenticates via
+  // the Bearer header only — a plain <a> click can't set that — so fetch the
+  // blob with auth headers and trigger a client-side download.
+  downloadDataRoom: async (id) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`${BASE}/deals/${id}/data-room`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error('Failed to download data room');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `data-room-deal-${id}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+  dealCommitments: (id) => request(`/deals/${id}/commitments`),
+  createCommitment: (id, data) => request(`/deals/${id}/commitments`, { method: 'POST', body: JSON.stringify(data) }),
+  dealActivity: (id) => request(`/deals/${id}/activity`),
+  dealInvitations: (id) => request(`/deals/${id}/invitations`),
+  createDealInvitations: (id, data) => request(`/deals/${id}/invitations`, { method: 'POST', body: JSON.stringify(data) }),
+  myDealInvitations: () => request('/deals/invitations/mine'),
+  respondDealInvitation: (id, response) => request(`/deals/${id}/invitations/respond`, { method: 'POST', body: JSON.stringify({ response }) }),
+
   listUsers: (role) => request(`/users${role ? `?role=${role}` : ''}`),
   createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
 
@@ -845,6 +901,11 @@ export const api = {
   updateOkr: (id, data) => request(`/progress/roadmap/okr/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   moveOkr: (id, kanban_status, sort_order = 0) => request(`/progress/roadmap/okr/${id}/move`, { method: 'POST', body: JSON.stringify({ kanban_status, sort_order }) }),
   deleteOkr: (id) => request(`/progress/roadmap/okr/${id}`, { method: 'DELETE' }),
+  // Task #13 — MVP Scope prioritization (value-ranked feature planning).
+  listMvpFeatures: (projectId) => request(`/progress/mvp-scope/${projectId}`),
+  createMvpFeature: (projectId, data) => request(`/progress/mvp-scope/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  updateMvpFeature: (id, data) => request(`/progress/mvp-scope/feature/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteMvpFeature: (id) => request(`/progress/mvp-scope/feature/${id}`, { method: 'DELETE' }),
   listMetricsSnapshots: (projectId) => request(`/progress/metrics/${projectId}`),
   createMetricsSnapshot: (projectId, data) => request(`/progress/metrics/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   deleteMetricsSnapshot: (id) => request(`/progress/metrics/${id}`, { method: 'DELETE' }),
@@ -1209,6 +1270,12 @@ export const api = {
   // Task #3 — Dry-run a provider auth call to verify configured credentials.
   adminTestIntegrationKeys: (provider) =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}/test`, { method: 'POST' }),
+  // GitHub ticket sync — admin config panel.
+  adminGetGithubConfig: () => request('/admin/github'),
+  adminSaveGithubConfig: (body) =>
+    request('/admin/github', { method: 'PUT', body: JSON.stringify(body || {}) }),
+  adminTestGithub: () => request('/admin/github/test', { method: 'POST' }),
+  adminDeleteGithubConfig: () => request('/admin/github', { method: 'DELETE' }),
   adminUpdateRole: (userId, role) => request(`/admin/users/${userId}/role?role=${role}`, { method: 'PATCH' }),
   adminToggleActive: (userId) => request(`/admin/users/${userId}/toggle-active`, { method: 'PATCH' }),
   // Set per-user access level. `level` is 'limited' (browse-only, no signing
@@ -1365,6 +1432,15 @@ export const api = {
   },
   adminUpdateNotes: (userId, admin_notes) => request(`/admin/users/${userId}/notes`, { method: 'POST', body: JSON.stringify({ admin_notes }) }),
   adminResendVerification: (userId) => request(`/admin/users/${userId}/resend-verification`, { method: 'POST' }),
+  // Task #7 — admit a founder to the next Spin-Out Lab cohort (sends the
+  // "You're in" email from the Worker; dev backend sets flags only).
+  adminSpinoutAdmit: (userId, cohort) =>
+    request(`/admin/users/${userId}/spinout-admit`, { method: 'POST', body: JSON.stringify(cohort ? { cohort } : {}) }),
+  // Spin-Out Lab cohort application review queue. Accept → admitted flags +
+  // "You're in" email; refuse → encouragement-to-re-apply email (Worker).
+  adminSpinoutApplications: () => request('/admin/spinout-applications'),
+  adminSpinoutDecide: (appId, decision) =>
+    request(`/admin/spinout-applications/${appId}/decide`, { method: 'POST', body: JSON.stringify({ decision }) }),
 
   integrationsAvailable: () => request('/integrations/available'),
   // Crunchbase enrichment (Task #3, 2026-05-10) — growth tier, requires
@@ -1435,6 +1511,20 @@ export const api = {
   },
   brandGetPreviewUrl: (projectId) => request(`/brand/landing/by-project/${projectId}/preview-url`),
   brandListTemplates: () => request('/brand/templates'),
+
+  // Task #2 — branded multi-page sites & saved templates.
+  brandGetSite: (projectId) => request(`/brand/site/by-project/${projectId}`),
+  brandSetSiteSlug: (projectId, slug) => request(`/brand/site/by-project/${projectId}`, { method: 'PUT', body: JSON.stringify({ slug }) }),
+  brandListPages: (projectId) => request(`/brand/landing/by-project/${projectId}/pages`),
+  brandCreatePage: (projectId, payload) => request(`/brand/landing/by-project/${projectId}/pages`, { method: 'POST', body: JSON.stringify(payload) }),
+  brandGetPage: (pageId) => request(`/brand/landing/pages/${pageId}`),
+  brandUpdatePage: (pageId, payload) => request(`/brand/landing/pages/${pageId}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  brandDeletePage: (pageId) => request(`/brand/landing/pages/${pageId}`, { method: 'DELETE' }),
+  brandPublishPage: (pageId, published) => request(`/brand/landing/pages/${pageId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
+  brandPagePreviewUrl: (pageId) => request(`/brand/landing/pages/${pageId}/preview-url`),
+  brandListCustomTemplates: () => request('/brand/custom-templates'),
+  brandSaveCustomTemplate: (name, fromPageId) => request('/brand/custom-templates', { method: 'POST', body: JSON.stringify({ name, from_page_id: fromPageId }) }),
+  brandDeleteCustomTemplate: (id) => request(`/brand/custom-templates/${id}`, { method: 'DELETE' }),
 
   // Task #25 — Pitch deck builder.
   deckGenerate: (projectId) => request('/decks/generate', { method: 'POST', body: JSON.stringify({ project_id: projectId }) }),
@@ -1807,6 +1897,12 @@ export const api = {
   confirmEmailChange: (token) => request('/settings/email-change/confirm', { method: 'POST', body: JSON.stringify({ token }) }),
   revokeEmailChange: (token) => request('/settings/email-change/revoke', { method: 'POST', body: JSON.stringify({ token }) }),
   repairTotp: (totp_code) => request('/settings/totp/repair', { method: 'POST', body: JSON.stringify({ totp_code }) }),
+  // Task #11 — first-time OPTIONAL authenticator enrolment (two-phase).
+  // start() proposes a secret (nothing persists server-side); confirm()
+  // round-trips the secret + a live 6-digit code, persists the enrolment,
+  // and upgrades the current session to full assurance in place.
+  enrolTotpStart: () => request('/settings/totp/enrol/start', { method: 'POST', body: JSON.stringify({}) }),
+  enrolTotpConfirm: (data) => request('/settings/totp/enrol/confirm', { method: 'POST', body: JSON.stringify(data) }),
   revokeAllSessions: () => request('/settings/sessions/revoke-all', { method: 'POST', body: JSON.stringify({}) }),
   requestAccountDeletion: () => request('/settings/account/delete-request', { method: 'POST', body: JSON.stringify({}) }),
   cancelAccountDeletion: () => request('/settings/account/delete-request/cancel', { method: 'POST', body: JSON.stringify({}) }),
@@ -1956,9 +2052,67 @@ export const api = {
   validatePromo: (body) =>
     request('/payments/promo/validate', { method: 'POST', body: JSON.stringify(body || {}) }),
   // Mirrored Stripe catalog (read). `kind` filters: subscription | incorporation
-  // | session | alacarte. Returns { products: [{ id, name, kind, prices: [...] }] }.
-  catalogProducts: (kind) =>
-    request(`/catalog/products${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`),
+  // | session | alacarte. `audience` filters: founders | investors_lps |
+  // service_partners | advisors | legal_services (a product may match more
+  // than one; the filter is applied server-side against each product's
+  // derived `categories`). Returns { products: [{ id, name, kind, categories,
+  // prices: [...] }], audience_categories: [{ value, label }] }.
+  catalogProducts: (kind, audience) => {
+    const params = new URLSearchParams();
+    if (kind) params.set('kind', kind);
+    if (audience) params.set('audience', audience);
+    const qs = params.toString();
+    return request(`/catalog/products${qs ? `?${qs}` : ''}`);
+  },
+
+  // ---------- Products page — explorer promo (30-day license codes) ----------
+  // The caller's issued one-time code (from completing the Explorer needs
+  // bank in the Personal Advisor): → { promo: { code, license_label,
+  // unlock_days, issued_at, expires_at, redeemed_at } | null }.
+  productsPromo: () => request('/products/promo'),
+  // Redeem it → { ok:true, confirmation: { code, license_label, unlock_days,
+  // amount_cents:0, currency, redeemed_at, license_expires_at } }
+  // | { ok:false, reason: 'not_found'|'already_redeemed'|'expired' } (400).
+  productsRedeem: (code) =>
+    request('/products/redeem', { method: 'POST', body: JSON.stringify({ code }) }),
+
+  // ---------- One-time cart order (checkout) ----------
+  // Runtime Stripe publishable key (mirror of stripe.js fetch — exposed here so
+  // pages/components can reuse it via the api surface). → { publishable_key }.
+  paymentsConfig: () => request('/payments/config'),
+  // Create/refresh ONE combined PaymentIntent for a cart of one-time items.
+  // Body: { items:[{price_id, quantity}], promo_code?, billing_country?, nonce? }
+  // → { client_secret, payment_intent_id, order_ref, currency, subtotal,
+  //     discount_cents, vat_cents, total, free, items:[...] }.
+  createOrderIntent: (body) =>
+    request('/orders/intent', { method: 'POST', body: JSON.stringify(body || {}) }),
+  // Belt-and-suspenders fulfilment after Stripe confirmation.
+  // Body: { payment_intent_id } → { order:<Order> } | 409 { error:'not_paid', status }.
+  confirmOrder: (payment_intent_id) =>
+    request('/orders/confirm', { method: 'POST', body: JSON.stringify({ payment_intent_id }) }),
+  // Owner-only order fetch → { order:<Order> } | 404.
+  getOrder: (orderRef) => request(`/orders/${encodeURIComponent(orderRef)}`),
+  // Owner's orders, most recent first → { orders:[<Order>] }.
+  myOrders: () => request('/orders/mine'),
+  // Authenticated PDF invoice download (bearer-only fetch → Blob). NEVER use a
+  // plain <a href> — the endpoint requires the Authorization header.
+  orderInvoiceBlob: async (orderRef) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api/orders/${encodeURIComponent(orderRef)}/invoice`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      let detail = res.statusText || 'Invoice download failed';
+      try { const err = await res.json(); detail = err?.error || err?.detail || detail; } catch { /* non-JSON */ }
+      const e = new Error(detail);
+      e.status = res.status;
+      throw e;
+    }
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `${orderRef}.pdf`;
+    return { blob, url: URL.createObjectURL(blob), filename };
+  },
 
   // ---------- Task #7 (W-2) — Investor paywall (3-tier: free / pro / inst) ----------
   // Mirrors `/api/billing/investor/*` + `/api/investor-seats/*` +
@@ -1984,6 +2138,78 @@ export const api = {
   // global PaywallModal does NOT auto-open — callers surface the limit inline.
   introductionsRequest: (data) =>
     request('/introductions/request', { method: 'POST', body: JSON.stringify(data || {}) }),
+
+  // ---------- Network Introductions (all user types) ----------
+  // Curated warm-intro propositions under Network › Introductions. Accepting
+  // spends ONE introduction credit; the worker returns 402
+  // {code:'intro_credits_exhausted', packs, buy_path} when the balance is
+  // empty — callers surface the buy-more flow inline (no PaywallModal).
+  introPropositions: ({ status, refresh } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    if (refresh) qs.set('refresh', '1');
+    const q = qs.toString();
+    return request(`/introductions/propositions${q ? `?${q}` : ''}`);
+  },
+  introAccept: (uid) =>
+    request(`/introductions/propositions/${encodeURIComponent(uid)}/accept`, { method: 'POST' }),
+  introDecline: (uid) =>
+    request(`/introductions/propositions/${encodeURIComponent(uid)}/decline`, { method: 'POST' }),
+  introCredits: () => request('/introductions/credits'),
+  introCreditHistory: () => request('/introductions/credits/history'),
+  introPacks: () => request('/introductions/packs'),
+  // Mint the PaymentIntent for a credit pack (10 / 100 / 1000); the returned
+  // client_secret feeds <AxalCheckout clientSecret={…}>. Fulfilment happens
+  // via the Stripe webhook, idempotent on the intent id.
+  introCreditsIntent: (pack, nonce) =>
+    request('/payments/intro-credits/intent', {
+      method: 'POST',
+      body: JSON.stringify({ pack, nonce }),
+    }),
+
+  // ---------- Secure Introductions (Task #12) ----------
+  // Privacy-preserving intro/matching flow. DISTINCT from the credits-based
+  // /introductions/* system above — this hits /network-introductions/*.
+  // Contact details are never returned by the server until both sides connect.
+  networkIntros: {
+    list: () => request('/network-introductions'),
+    get: (id) => request(`/network-introductions/${id}`),
+    create: (data) =>
+      request('/network-introductions', { method: 'POST', body: JSON.stringify(data || {}) }),
+    accept: (id) => request(`/network-introductions/${id}/accept`, { method: 'POST' }),
+    decline: (id) => request(`/network-introductions/${id}/decline`, { method: 'POST' }),
+    targets: (q) =>
+      request(`/network-introductions/targets${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+    // Task #24 — people-only matchmaking (Discover). Ranked candidate feed +
+    // per-plan connect-credit balance. `create` above spends a connect credit
+    // and returns 402 {code:'connect_credits_exhausted', ...} when exhausted.
+    candidates: (filters = {}) => {
+      const qs = new URLSearchParams();
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '' && v !== 0) qs.set(k, v);
+      });
+      const s = qs.toString();
+      return request(`/network-introductions/candidates${s ? `?${s}` : ''}`);
+    },
+    connectCredits: () => request('/network-introductions/connect-credits'),
+    createInvestorProfile: (data) =>
+      request('/network-introductions/investor-profiles', {
+        method: 'POST',
+        body: JSON.stringify(data || {}),
+      }),
+    messages: (id) => request(`/network-introductions/${id}/messages`),
+    sendMessage: (id, body) =>
+      request(`/network-introductions/${id}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({ body }),
+      }),
+    // Public tokenized review link (off-platform recipient — no auth needed).
+    invite: (token) => request(`/network-introductions/invite/${encodeURIComponent(token)}`),
+    inviteAccept: (token) =>
+      request(`/network-introductions/invite/${encodeURIComponent(token)}/accept`, { method: 'POST' }),
+    inviteDecline: (token) =>
+      request(`/network-introductions/invite/${encodeURIComponent(token)}/decline`, { method: 'POST' }),
+  },
 
   // ---------- Trust layer (Task #58) ----------
   // Task #4 (Y-2) — Trust Center v2 endpoints. The legacy
@@ -2379,6 +2605,13 @@ export const api = {
   contactPromote: (uid) => request(`/contacts/${uid}/promote`, { method: 'POST' }),
   raiseProspects: (projectId) => request(projectId ? `/contacts/raise-prospects?project_id=${projectId}` : '/contacts/raise-prospects'),
   raiseProspectUpdate: (id, data) => request(`/contacts/raise-prospects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  raiseProspectGet: (id) => request(`/contacts/raise-prospects/${id}`),
+  raiseProspectCreate: (data) => request('/contacts/raise-prospects', { method: 'POST', body: JSON.stringify(data) }),
+  raiseProspectsImport: (data) => request('/contacts/raise-prospects/import', { method: 'POST', body: JSON.stringify(data) }),
+  raiseRound: (projectId) => request(projectId ? `/contacts/raise-round?project_id=${projectId}` : '/contacts/raise-round'),
+  raiseRoundSave: (data) => request('/contacts/raise-round', { method: 'PUT', body: JSON.stringify(data) }),
+  raiseUpdates: (projectId) => request(projectId ? `/contacts/raise-updates?project_id=${projectId}` : '/contacts/raise-updates'),
+  raiseUpdateCreate: (data) => request('/contacts/raise-updates', { method: 'POST', body: JSON.stringify(data) }),
 
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {
@@ -2645,6 +2878,17 @@ export const adminTeam = {
   reorder: (order) => request('/admin/team/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
 };
 
+// Task #9 — Admin review queue for 'exploring' users (chat-onboarded,
+// awaiting binding agreement + final role assignment).
+export const adminExploring = {
+  list: ({ limit = 100, offset = 0 } = {}) =>
+    request(`/admin/exploring/users?limit=${limit}&offset=${offset}`),
+  sendBinding: (userId, payload = {}) =>
+    request(`/admin/exploring/users/${userId}/binding`, { method: 'POST', body: JSON.stringify(payload) }),
+  assignRole: (userId, role) =>
+    request(`/admin/exploring/users/${userId}/assign-role`, { method: 'POST', body: JSON.stringify({ role }) }),
+};
+
 // Task #1 — Admin advisor & partner network profiles (drives Spin-Out
 // Demo Day deck's Advisors & Network slide).
 export const adminNetworkProfiles = {
@@ -2906,6 +3150,9 @@ export const spinoutLab = {
       body: JSON.stringify({ milestone_key }),
     }),
   exit: () => request('/spinout-lab/exit', { method: 'POST' }),
+  // Cohort application — signed-in founders only; contact info comes from
+  // the account. Sends a confirmation email (production Worker).
+  apply: (data) => request('/spinout-lab/apply', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 // Task #39 — Event engine. `events` covers the authenticated host/attendee

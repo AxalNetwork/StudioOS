@@ -89,8 +89,14 @@ export function archetypeTraitRows(): FitRowSpec[] {
 }
 
 /**
- * The 5 Axal behavioral values, asked of every persona. Three carry a red-flag
+ * The Axal behavioral values, asked of every persona. Three carry a red-flag
  * probe that fires when the self-rating is at or below the threshold.
+ *
+ * Task #19 (Fit & Values v2) — a 6th value, `ambition`, is appended below. It is
+ * additive: v1 scoring (services/axalFit.ts AXAL_VALUES = 5) ignores it, while
+ * the v2 decision engine (services/fitV2Decision.ts) reads all 6. Because every
+ * persona bank calls this helper, `ambition` is measured for every account type
+ * with a single edit — no per-bank change needed.
  */
 export function axalValueRows(): FitRowSpec[] {
   return [
@@ -118,6 +124,13 @@ export function axalValueRows(): FitRowSpec[] {
       key: 'axal_collaboration',
       prompt: 'How readily do you share credit and put the mission ahead of being the one who is right?',
       measures: { axal_value: 'collaboration', red_flag: { key: 'ego_over_collaboration', at_or_below: 1 } },
+    },
+    // Task #19 (Fit & Values v2) — 6th Axal value. Drive/ambition to build
+    // something enduringly significant. Read only by services/fitV2Decision.ts.
+    {
+      key: 'axal_ambition',
+      prompt: 'How driven are you to build something genuinely significant — not just comfortable, but lasting and consequential?',
+      measures: { axal_value: 'ambition' },
     },
   ];
 }

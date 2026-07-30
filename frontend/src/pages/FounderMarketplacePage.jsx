@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search, MessageSquare, Inbox, Package, FileText, Handshake, ShieldCheck } from 'lucide-react';
+import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
 import {
   BrowseTab as ServicesBrowseTab,
   MineTab as OfferingsTab,
@@ -56,6 +57,16 @@ export default function FounderMarketplacePage({ user }) {
           engagements lifecycle.
         </p>
       </div>
+
+      {/* Inbound partner leads captured on the founder's landing pages, routed
+          to the marketplace destination. Founder/admin only. */}
+      {(isFounder || isAdmin) && (
+        <IncomingLeadsStrip
+          audience="partner"
+          title="New partner leads"
+          blurb="Partners who reached out via your landing pages."
+        />
+      )}
 
       <div className="border-b border-gray-200 flex gap-6 overflow-x-auto dark:border-gray-800">
         {tabs.map((t) => {

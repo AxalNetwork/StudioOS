@@ -107,6 +107,18 @@ const BUCKETS: Bucket[] = [
     test: (p, m) => m === 'POST' && p === '/api/client-error',
     scope: 'ip',
   },
+  // Task #2 — unauthenticated funnel-event sink (POST /api/track). Same
+  // philosophy as client_error: bounded per-IP so a runaway tab can't flood
+  // D1, fail-open because telemetry must never be the reason a request is
+  // rejected. Each request carries ≤20 events, so 60/min/IP caps a single
+  // source at ~1.2k rows/min worst case — negligible for D1.
+  {
+    name: 'track',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && p === '/api/track',
+    scope: 'ip',
+  },
   // 1000 req/min global burst protection
   {
     name: 'global',

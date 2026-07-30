@@ -1,0 +1,240 @@
+# Intermediary Onboarding Profile Plan
+
+## Context
+
+Currently, when users complete the onboarding wizard they're immediately assigned their designated role. However, there needs to be an intermediary holding period where:
+1. Admin can review the user's onboarding conversation
+2. Admin creates and sends a binding (partnership agreement)
+3. User signs the binding
+4. Only THEN does admin assign them their actual role
+
+During this intermediary "exploring" period, users need access to the unified Studio dashboard (same as all other users) with core features: Personal Advisor (for profiling), Documents hub, and Trust Center.
+
+This ensures no user bypasses admin review and prevents premature role assignment before legal agreements are signed.
+
+## Recommendation
+
+Create a new **"exploring"** role type as a temporary holding state. After users complete the initial onboarding wizard, they get assigned "exploring" role and see a unified Studio dashboard (same as all other users). 
+
+Meanwhile:
+- Admin reviews the onboarding conversation and user data
+- Admin creates a binding (partnership agreement) and sends it to user via e-signature flow
+- User signs binding
+- Admin then assigns the actual role (founder/investor/partner/advisor)
+
+During the exploring phase, users access: Personal Advisor (ongoing profiling), Documents, Trust Center.
+
+### Key Design Principles
+- **Admin-driven routing**: Not automatic—requires human review and legal agreement before role assignment
+- **Unified dashboard**: All exploring users see the same sidebar + features, regardless of origin
+- **Reuse existing infrastructure**: Partner binding flow (partner_invitations → binding → signature)
+- **Minimal schema changes**: Just add "exploring" to role enum; most infrastructure already exists
+
+---
+
+## Architecture
+
+### 1. Database Schema Changes
+
+**Add to `users` table:**
+```sql
+ALTER TABLE users ADD COLUMN role_confirmed BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN suggested_role TEXT;
+ALTER TABLE users ADD COLUMN onboarded_at TIMESTAMP;
+```
+
+**Update role enum** to include `exploring` as valid role type (in migration file)
+
+### 2. Profile Page Structure
+
+Create new page: `/studio/exploring` (Exploring Profile Dashboard)
+
+**Components to render:**
+- **ProfileCompletionHeader** - Shows "Complete Your Profile" prompt with progress (25% per section × 4)
+- **ProfileFitSection** - Display Skills Radar (8-axis) + Values lean + Archetype + Fit score
+  - Reuse existing: `ProfileFitSection.jsx` (already reads from api.radar.me(), api.values.getMe(), api.bestFit.me())
+- **PersonalAdvisor** - Embedded chat widget for ongoing profiling conversations
+- **SidebarFeatures** - Documents, Trust Center, Settings
+
+**Progress Tracking:**
+- Query `/api/advisor/progress` to check completion across 4 modules:
+  - `skills` → Skills Radar completion
+  - `work_values` → Values survey completion
+  - `archetype` → Archetype assessment completion
+  - `axal_fit` → Axal VC Fit survey completion
+
+### 3. Sidebar Navigation for "Exploring" Role
+
+Add to `/frontend/src/sidebarConfig.js`:
+```javascript
+exploring: [
+  {
+    key: 'home',
+    label: 'Home',
+    items: [{ label: 'Profile', path: '/studio/exploring', icon: 'User' }]
+  },
+  {
+    key: 'profile',
+    label: 'Your Profile',
+    items: [
+      { label: 'Skills & Values', path: '/studio/exploring', icon: 'Radar' },
+      { label: 'Archetype', path: '/studio/exploring', icon: 'Sparkles' },
+      { label: 'Fit Analysis', path: '/studio/exploring', icon: 'Target' }
+    ]
+  },
+  {
+    key: 'resources',
+    label: 'Resources',
+    items: [
+      { label: 'Documents', path: '/studio/documents', icon: 'FileText' },
+      { label: 'Trust Center', path: '/studio/trust', icon: 'Shield' }
+    ]
+  },
+  {
+    key: 'advisor',
+    label: 'Guidance',
+    items: [
+      { label: 'Personal Advisor', path: '/studio/advisor', icon: 'MessageSquare' }
+    ]
+  }
+]
+```
+
+### 4. Admin Review & Binding Flow
+
+**Admin Dashboard** (existing partner portal extended):
+- Admin can view list of exploring users with their onboarding conversation summaries
+- Admin creates binding/agreement for user (reuse partner_deals infrastructure)
+- Binding is sent to user via e-signature flow (existing: `/partner-onboarding/:token`)
+- Once signed, admin assigns actual role via new admin endpoint
+
+**New Endpoints:**
+- `POST /api/admin/users/{id}/create-binding` → Creates binding for exploring user
+  - Input: `{user_id, role: "founder"|"investor"|"partner"|"advisor"}`
+  - Output: Generates binding token, sends e-signature invite
+- `PATCH /api/admin/users/{id}/assign-role` → Assigns final role after binding signed
+  - Input: `{user_id, role: "founder"|"investor"|"partner"|"advisor"}`
+  - Output: Updates users.role, sets role_confirmed=true, triggers role-specific onboarding if needed
+
+**User Experience During Exploring:**
+1. User completes onboarding wizard → assigned "exploring" role → sees Studio dashboard
+2. User optionally completes Personal Advisor profiling (Skills Radar, Values, Archetype, Fit)
+3. Admin reviews user's conversation + profiling data
+4. Admin sends binding via e-signature
+5. User signs binding
+6. Admin assigns actual role
+7. User redirected to role-specific dashboard/onboarding
+
+---
+
+## Implementation Plan
+
+### Phase 1: Database & API (Backend)
+1. Create migration to add `exploring` role type to users.role enum
+2. Add `role_confirmed BOOLEAN DEFAULT FALSE` to users table (tracks if admin assigned final role)
+3. Create `POST /api/admin/users/{id}/create-binding` endpoint
+   - Validates user is in exploring role
+   - Creates partner_deals record with binding terms
+   - Generates e-signature token and sends invite
+4. Create `PATCH /api/admin/users/{id}/assign-role` endpoint
+   - Validates binding is signed
+   - Updates users.role to final role
+   - Sets role_confirmed = true
+   - Triggers post-role-assignment logic (onboarding wizard if needed)
+5. Ensure `/api/advisor/progress` works for exploring users (already modular)
+
+### Phase 2: Frontend Shell & Routing
+1. Update `App.jsx` route logic to handle "exploring" role
+2. Create route for exploring users: `/studio` (same dashboard as other roles)
+3. Update `sidebarConfig.js` to include "exploring" role config
+4. Ensure role-gating doesn't break for exploring users accessing Documents, Trust Center, Personal Advisor
+
+### Phase 3: UI Components (Mostly Reuse)
+1. Add "exploring" role to sidebarConfig with links to:
+   - Personal Advisor (`/studio/advisor`)
+   - Documents (`/studio/documents`)
+   - Trust Center (`/studio/trust`)
+2. Ensure `PersonalAdvisor.jsx` works with exploring role
+3. Ensure `TrustCenterPage.jsx` and Documents work with exploring role (likely no changes needed)
+
+### Phase 4: Admin Interface
+1. Create admin page: `/admin/exploring-users` to list all exploring users
+2. Show user's onboarding conversation summary
+3. Add button to "Create & Send Binding" → triggers Phase 1 endpoint
+4. Show binding status (pending signature, signed)
+5. Add button to "Assign Final Role" → triggers Phase 1 endpoint
+
+---
+
+## Critical Files to Modify
+
+| File | Changes |
+|------|---------|
+| `cloudflare-worker/sql/migrations/XXX_add_exploring_role.sql` | Add "exploring" to role enum, add role_confirmed column |
+| `cloudflare-worker/src/routes/auth.ts` or new `routes/admin.ts` | Add `/admin/users/{id}/create-binding` and `/admin/users/{id}/assign-role` endpoints |
+| `frontend/src/sidebarConfig.js` | Add "exploring" role config with Personal Advisor, Documents, Trust Center links |
+| `frontend/src/App.jsx` | Ensure exploring users route to `/studio` (unified dashboard) |
+| `backend/app/api/routes/admin.py` (optional) | Mirror admin endpoints for Replit dev if needed |
+| `frontend/src/pages/admin/ExploringUsersPage.jsx` | NEW: Admin page to view/manage exploring users & send bindings |
+
+---
+
+## Reusable Existing Code
+
+- **`ProfileFitSection.jsx`** - Renders Skills Radar + Values + Archetype + Fit (just embed it)
+- **`PersonalAdvisor.jsx`** - Conversational profiling UI (just embed it)
+- **`SkillRadar.jsx`** - 8-axis radar visualization (used by ProfileFitSection)
+- **`TrustCenterPage.jsx`** - Trust/KYC features (reuse as-is)
+- **`questionBank.ts`** - Question schema + registry (already has all 4 sections)
+- **`profilingModules.ts`** - Tracks completion across skills/values/archetype/fit (no changes needed)
+
+---
+
+## Verification & Testing
+
+1. **Database**:
+   - Run new migration, verify role=exploring is valid in enum
+   - Create test user with role=exploring
+   - Confirm role_confirmed=false initially
+
+2. **User in Exploring State**:
+   - User completes initial onboarding wizard
+   - Verify user is assigned role=exploring
+   - Login as exploring user
+   - Verify can access `/studio` (unified dashboard)
+   - Verify sidebar shows exploring-specific navigation (Personal Advisor, Documents, Trust Center)
+   - Open Personal Advisor, complete profiling modules (optional)
+
+3. **Admin Review**:
+   - Login as admin user
+   - Navigate to `/admin/exploring-users`
+   - Verify list shows all exploring users with onboarding summaries
+   - Can view user's profiling data (if completed)
+
+4. **Binding & Signature**:
+   - Admin clicks "Create & Send Binding" for exploring user
+   - Verify `POST /api/admin/users/{id}/create-binding` called successfully
+   - Verify binding created in partner_deals table
+   - Verify e-signature invite sent to user (or visible in admin UI)
+   - User signs binding (via existing e-signature flow)
+   - Verify binding marked as signed
+
+5. **Role Assignment**:
+   - Admin clicks "Assign Final Role" → selects "founder" (or other)
+   - Verify `PATCH /api/admin/users/{id}/assign-role` called
+   - Verify users.role updated to "founder"
+   - Verify users.role_confirmed = true
+   - User redirected to `/studio/founder` (or appropriate profile)
+   - Verify founder onboarding wizard appears if not yet completed
+
+---
+
+## Notes
+
+- The "exploring" role is temporary—it's a holding state until admin assigns final role (role_confirmed = false until transition)
+- Profiling (Skills Radar, Values, Archetype, Fit) is optional during exploring phase; users can start Personal Advisor conversations at any time
+- Admin must review onboarding conversation before creating binding (governance gate)
+- Binding reuses existing partner_deals infrastructure—same e-signature flow already tested
+- All exploring users see unified `/studio` dashboard regardless of their original onboarding path
+- Role assignment is admin-driven, not algorithmic, giving full control over placement
+- After role transition, all profiling data (skills, values, archetype) carries over to user's new profile

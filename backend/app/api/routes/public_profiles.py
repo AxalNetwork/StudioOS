@@ -500,8 +500,9 @@ def author_profile(user_id: int, session: Session = Depends(get_session)) -> dic
     socials_raw: dict[str, str] = {}
     try:
         socials_raw = _json.loads(getattr(user, "socials", None) or "{}") or {}
-    except Exception:
-        pass
+    except (ValueError, TypeError) as exc:
+        # Malformed socials JSON on the row — treat as no socials.
+        logger.debug("public profile: unparseable socials for user %s: %s", user_id, exc)
 
     location_parts = [p for p in [getattr(user, "city", None), getattr(user, "country", None)] if p]
     location = ", ".join(location_parts) or None
@@ -517,8 +518,9 @@ def author_profile(user_id: int, session: Session = Depends(get_session)) -> dic
         ).mappings().fetchone()
         if ext_row:
             company = ext_row["company"] or None
-    except Exception:
-        pass
+    except Exception as exc:
+        # Optional enrichment — user_profile_ext may not exist on older dev DBs.
+        logger.debug("public profile: company lookup failed for user %s: %s", user_id, exc)
 
     author_obj: dict[str, Any] = {
         "id": user.id,
@@ -554,8 +556,9 @@ def author_profile(user_id: int, session: Session = Depends(get_session)) -> dic
             tags_val: list[str] = []
             try:
                 tags_val = _json.loads(r["tags"] or "[]") or []
-            except Exception:
-                pass
+            except (ValueError, TypeError) as exc:
+                # Malformed tags JSON on the article row — render without tags.
+                logger.debug("public profile: unparseable tags on article %s: %s", r["id"], exc)
             items.append({
                 "id": r["id"],
                 "slug": r["slug"],
@@ -569,8 +572,10 @@ def author_profile(user_id: int, session: Session = Depends(get_session)) -> dic
                 "read_minutes": r["read_minutes"],
                 "excerpt": r["excerpt"] or None,
             })
-    except Exception:
-        pass
+    except Exception as exc:
+        # Articles table may be absent on older dev DBs — fall through to the
+        # empty-items 404 below rather than 500ing the public page.
+        logger.debug("public profile: article listing failed for user %s: %s", user_id, exc)
 
     if not items:
         raise HTTPException(status_code=404, detail="Not found")

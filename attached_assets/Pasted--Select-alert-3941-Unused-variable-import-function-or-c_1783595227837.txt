@@ -1,0 +1,144 @@
+
+Select alert #3941
+Unused variable, import, function or class
+Note
+#3941 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :106
+main
+
+Select alert #3940
+Unused variable, import, function or class
+Note
+#3940 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :106
+main
+
+Select alert #3939
+Unused variable, import, function or class
+Note
+#3939 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :105
+main
+
+Select alert #3938
+Unused variable, import, function or class
+Note
+#3938 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :105
+main
+
+Select alert #3937
+Unused variable, import, function or class
+Note
+#3937 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :104
+main
+
+Select alert #3936
+Unused variable, import, function or class
+Note
+#3936 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :104
+main
+
+Select alert #3935
+Unused variable, import, function or class
+Note
+#3935 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :103
+main
+
+Select alert #3934
+Unused variable, import, function or class
+Note
+#3934 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :102
+main
+
+Select alert #3933
+Unused variable, import, function or class
+Note
+#3933 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :102
+main
+
+Select alert #3932
+Unused variable, import, function or class
+Note
+#3932 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :101
+main
+
+Select alert #3931
+Unused variable, import, function or class
+Note
+#3931 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :100
+main
+
+Select alert #3930
+Unused variable, import, function or class
+Note
+#3930 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :99
+main
+
+Select alert #3929
+Unused variable, import, function or class
+Note
+#3929 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :98
+main
+
+Select alert #3928
+Unused variable, import, function or class
+Note
+#3928 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :98
+main
+
+Select alert #3927
+Unused variable, import, function or class
+Note
+#3927 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :97
+main
+
+Select alert #3926
+Unused variable, import, function or class
+Note
+#3926 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :97
+main
+
+Select alert #3925
+Unused variable, import, function or class
+Note
+#3925 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :96
+main
+
+Select alert #3924
+Unused variable, import, function or class
+Note
+#3924 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :96
+main
+
+Select alert #3923
+Unused variable, import, function or class
+Note
+#3923 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :95
+main
+
+Select alert #3922
+Unused variable, import, function or class
+Note
+#3922 opened yesterday • Detected by CodeQL in frontend/.../pages/BrandBuilderPage.jsx :95
+main
+
+Select alert #3911
+Empty except
+Note
+#3911 opened 2 days ago • Detected by CodeQL in backend/.../routes/public_profiles.py :572
+main
+
+Select alert #3910
+Empty except
+Note
+#3910 opened 2 days ago • Detected by CodeQL in backend/.../routes/public_profiles.py :557
+main
+
+Select alert #3909
+Empty except
+Note
+#3909 opened 2 days ago • Detected by CodeQL in backend/.../routes/public_profiles.py :520
+main
+
+Select alert #3908
+Empty except
+Note
+#3908 opened 2 days ago • Detected by CodeQL in backend/.../routes/public_profiles.py :503
+main

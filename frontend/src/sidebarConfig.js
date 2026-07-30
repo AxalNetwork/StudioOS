@@ -22,7 +22,7 @@ import {
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, LayoutGrid,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2, ShieldAlert,
-  Gavel, Inbox, FileBarChart, Radar,
+  Gavel, Inbox, FileBarChart, Radar, Wallet, PhoneCall,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -64,6 +64,7 @@ export const SIDEBAR_GROUPS = {
   admin: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'admin', label: 'Admin', items: [
       { to: '/admin', icon: Shield, label: 'Admin Console' },
@@ -73,6 +74,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/events', icon: Ticket, label: 'Event Admin' },
       { to: '/admin/jobs', icon: Briefcase, label: 'Job Board Admin' },
       { to: '/admin/circles', icon: Network, label: 'Communities Admin' },
+      // Task #9 — chat-onboarded users awaiting binding agreement + role assignment.
+      { to: '/admin/exploring', icon: UserCircle, label: 'Exploring Users' },
       { to: '/monitoring', icon: Activity, label: 'Monitoring' },
       { to: '/admin/telegram', icon: Send, label: 'Telegram Channels' },
       // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
@@ -125,6 +128,16 @@ export const SIDEBAR_GROUPS = {
       { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
       { to: '/partner/office-hours', icon: Calendar, label: 'Partner Office Hours' },
       { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing Review' },
+    ]},
+    // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
+    // the shared Research workspace (also used by advisors/investors/partners).
+    { key: 'research', label: 'Research', items: [
+      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
+      { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
+      { to: '/advisor/research/funds', icon: Wallet, label: 'Funds' },
+      { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
+      { to: '/advisor/research/news', icon: Send, label: 'News' },
+      { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
     ]},
     { key: 'more', label: 'More', items: [
       { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
@@ -179,6 +192,7 @@ export const SIDEBAR_GROUPS = {
   founder: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'build', label: 'Build', items: [
       // Command Center merges four founder Build destinations — Founder Portal
@@ -187,7 +201,15 @@ export const SIDEBAR_GROUPS = {
       // one tabbed page at /build/command-center. `match` keeps the row active
       // across every tab and every legacy deep-linked route (founders are
       // redirected from those routes into the matching ?tab= in App.jsx).
-      { to: '/build/command-center', icon: LayoutGrid, label: 'Command Center', match: ['/build/command-center', '/founder', '/execution', '/studio-ops', '/spinouts', '/spin-outs', '/projects', '/pipeline', '/build/roadmap'] },
+      // '/founder' is intentionally NOT in `match`: it would prefix-match the
+      // new /founder/growth/* routes and double-highlight this row. The bare
+      // /founder route redirects founders to /build/command-center anyway, so
+      // it never rests in the URL.
+      { to: '/build/command-center', icon: LayoutGrid, label: 'Command Center', match: ['/build/command-center', '/execution', '/studio-ops', '/spinouts', '/spin-outs', '/projects', '/pipeline', '/build/roadmap'] },
+      // Task #13 — Spin-Out Lab as a first-class founder destination: one
+      // page exposing the whole 28-day program (hub when the lab is off,
+      // sprint dashboard when it's active).
+      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       { to: '/signals', icon: Radar, label: 'Signals' },
       // Team Building — consolidates the former "Find a Advisor" (Validate),
       // "Find a Co-founder" (Validate) and "Jobs" (Launch) items into one
@@ -206,7 +228,36 @@ export const SIDEBAR_GROUPS = {
       // redirected from) the legacy /needs and /services routes (see App.jsx).
       { to: '/build/marketplace', icon: Package, label: 'Marketplace', match: ['/build/marketplace', '/needs', '/services'] },
       { to: '/advisory', icon: Brain, label: 'Advisory' },
-      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
+    ]},
+    // Task #7 — Network section mirrors the advisor/partner/investor profiles:
+    // three tabs (Introductions, Relationships, Organizations) served by the
+    // shared Network workspace under /advisor/network/*. This replaces the old
+    // single "Network" link that lived in Validate; the legacy /network,
+    // /relationships and /contacts routes keep the Relationships row active.
+    { key: 'network', label: 'Network', items: [
+      { to: '/advisor/network/introductions', icon: Sparkles, label: 'Introductions' },
+      { to: '/advisor/network/relationships', icon: Users, label: 'Relationships', match: ['/advisor/network/relationships', '/network', '/relationships', '/contacts'] },
+      { to: '/advisor/network/organizations', icon: Globe, label: 'Organizations' },
+    ]},
+    // Task #7 — Growth section mirrors the advisor/partner profiles: five tabs
+    // (Talent, Customers, Partnerships, Capital, Experts) served by the shared
+    // GrowthWorkspace under /founder/growth/*.
+    { key: 'growth', label: 'Growth', items: [
+      { to: '/founder/growth/talent', icon: Users, label: 'Talent' },
+      { to: '/founder/growth/customers', icon: Briefcase, label: 'Customers' },
+      { to: '/founder/growth/partnerships', icon: Handshake, label: 'Partnerships' },
+      { to: '/founder/growth/capital', icon: DollarSign, label: 'Capital' },
+      { to: '/founder/growth/experts', icon: Brain, label: 'Experts' },
+    ]},
+    // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
+    // the shared Research workspace (also used by advisors/investors/partners).
+    { key: 'research', label: 'Research', items: [
+      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
+      { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
+      { to: '/advisor/research/funds', icon: Wallet, label: 'Funds' },
+      { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
+      { to: '/advisor/research/news', icon: Send, label: 'News' },
+      { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
     ]},
     // Task #1 — RAISE Workspaces. Ten items collapsed into three workspaces that
     // compose the existing pages (Pitch/Capital/Legal Engine). The Pitch item is
@@ -291,6 +342,7 @@ export const SIDEBAR_GROUPS = {
   partner: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'sourcing', label: 'Sourcing', items: [
       { to: '/services', icon: Package, label: 'My Services' },
@@ -302,10 +354,45 @@ export const SIDEBAR_GROUPS = {
     { key: 'engage', label: 'Engage', items: [
       { to: '/partner/office-hours', icon: Calendar, label: 'My Office Hours' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
-      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/partners'] },
       { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
+    ]},
+    // Network — Introductions, Relationships, Organizations. Reuses the shared
+    // Network workspace (also used by advisors); the standalone "Network" link
+    // that used to live in Engage is folded into this group's three tabs.
+    { key: 'network', label: 'Network', items: [
+      { to: '/advisor/network/introductions', icon: Sparkles, label: 'Introductions' },
+      { to: '/advisor/network/relationships', icon: Users, label: 'Relationships', match: ['/advisor/network/relationships', '/network', '/relationships', '/partners'] },
+      { to: '/advisor/network/organizations', icon: Globe, label: 'Organizations' },
+    ]},
+    // Partner Operations workspace. Each item deep-links to its own tab route;
+    // `match` keeps the row active across the tab and its sub-route.
+    { key: 'operations', label: 'Operations', items: [
+      { to: '/partner/operations/overview', icon: LayoutDashboard, label: 'Overview', match: ['/partner/operations/overview'] },
+      { to: '/partner/operations/capabilities', icon: Package, label: 'Capabilities', match: ['/partner/operations/capabilities'] },
+      { to: '/partner/operations/portfolio', icon: Layers, label: 'Portfolio', match: ['/partner/operations/portfolio'] },
+      { to: '/partner/operations/engagements', icon: Handshake, label: 'Engagements', match: ['/partner/operations/engagements'] },
+      { to: '/partner/operations/performance', icon: TrendingUp, label: 'Performance', match: ['/partner/operations/performance'] },
+    ]},
+    // Growth — market-matching workspace surfaced as five tabs (Talent,
+    // Customers, Partnerships, Capital, Experts). Each row deep-links to its tab.
+    { key: 'growth', label: 'Growth', items: [
+      { to: '/partner/growth/talent', icon: Users, label: 'Talent' },
+      { to: '/partner/growth/customers', icon: Briefcase, label: 'Customers' },
+      { to: '/partner/growth/partnerships', icon: Handshake, label: 'Partnerships' },
+      { to: '/partner/growth/capital', icon: DollarSign, label: 'Capital' },
+      { to: '/partner/growth/experts', icon: Brain, label: 'Experts' },
+    ]},
+    // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
+    // the shared Research workspace (also used by advisors).
+    { key: 'research', label: 'Research', items: [
+      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
+      { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
+      { to: '/advisor/research/funds', icon: Wallet, label: 'Funds' },
+      { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
+      { to: '/advisor/research/news', icon: Send, label: 'News' },
+      { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
     ]},
     // Task #4 — the former "Earn" group held only "Referrals" (/refer), which
     // has moved into Settings (/settings/referrals); /refer redirects there.
@@ -343,44 +430,56 @@ export const SIDEBAR_GROUPS = {
   investor: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      { to: '/products', icon: Package, label: 'Products' },
     ]},
-    { key: 'sourcing', label: 'Sourcing', items: [
+    // Task — investor sidebar restructured around the investment lifecycle IA:
+    // Network → Pipeline → Portfolio → Funds → Research. Network & Research
+    // reuse the shared workspaces (also used by advisors). Sidebar-level change
+    // only: every prior route stays registered and URL-reachable. Surfaces
+    // trimmed from the nav (still reachable by direct URL): /pipeline (Pipeline
+    // Board), /matches, /watchlist, /scoring, /due-diligence, /market-intel,
+    // /portfolio/risk-matrix, /ic, /legal-capital, /portfolio/positions,
+    // /lp-portal, /funds/capital-calls, /portfolio/reserves,
+    // /portfolio/waterfall, /liquidity.
+    { key: 'network', label: 'Network', items: [
+      { to: '/advisor/network/introductions', icon: Sparkles, label: 'Introductions' },
+      { to: '/advisor/network/relationships', icon: Users, label: 'Relationships', match: ['/advisor/network/relationships', '/network', '/relationships', '/contacts'] },
+      { to: '/advisor/network/organizations', icon: Globe, label: 'Organizations' },
+    ]},
+    { key: 'pipeline', label: 'Pipeline', items: [
       { to: '/deals', icon: Handshake, label: 'Deal Flow', requiredInvestorTier: 'professional' },
-      { to: '/pipeline', icon: Layers, label: 'Pipeline Board', requiredInvestorTier: 'professional' },
-      { to: '/matches', icon: Sparkles, label: 'AI Matches' },
-      { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
+      { to: '/pipeline/screening', icon: Target, label: 'Screening' },
+      { to: '/pipeline/commit', icon: Gavel, label: 'Commit' },
+      { to: '/pipeline/transactions', icon: DollarSign, label: 'Transactions' },
     ]},
-    { key: 'diligence', label: 'Diligence', items: [
-      { to: '/scoring', icon: Target, label: 'Scoring Engine' },
-      { to: '/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
-      { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
-      { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
+    { key: 'portfolio', label: 'Portfolio', items: [
+      { to: '/portfolio/health', icon: Briefcase, label: 'Companies' },
+      { to: '/portfolio/performance', icon: TrendingUp, label: 'Performance' },
+      { to: '/portfolio/updates', icon: FileBarChart, label: 'Reporting' },
+      { to: '/portfolio/growth', icon: Rocket, label: 'Growth' },
     ]},
-    { key: 'commit', label: 'Commit', items: [
-      { to: '/ic', icon: Gavel, label: 'IC Decisions' },
-      { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
-      { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
+    { key: 'funds', label: 'Funds', items: [
+      { to: '/funds', icon: Wallet, label: 'Fund Management' },
+      { to: '/lp-reports', icon: UserCircle, label: 'LP Management' },
+      { to: '/funds/performance', icon: Activity, label: 'Performance' },
+      { to: '/funds/accounting', icon: Scale, label: 'Accounting' },
     ]},
-    { key: 'support', label: 'Support', items: [
-      { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
-      { to: '/portfolio/updates', icon: Inbox, label: 'Company Updates' },
-      { to: '/portfolio/positions', icon: PieIcon, label: 'Cap Table' },
-      { to: '/funds', icon: TrendingUp, label: 'Funds' },
-      { to: '/lp-reports', icon: FileBarChart, label: 'LP Reporting' },
-      { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
-      { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
-      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
+    { key: 'research', label: 'Research', items: [
+      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
+      { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
+      { to: '/advisor/research/funds', icon: Wallet, label: 'Funds' },
+      { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
+      { to: '/advisor/research/news', icon: Send, label: 'News' },
+      { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust & Identity' },
-      { to: '/advisors', icon: Users, label: 'Advisors' },
-      { to: '/partners', icon: Network, label: 'Partners' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
-      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       // "Integrations" merged into Settings (/settings/integrations); the
       // /integrations route redirects there. Removed from the investor nav.
-      { to: '/articles/draft', icon: FileText, label: 'Articles' },
+      // Advisors, Partners, Jobs and Articles were trimmed from the investor
+      // Account group — they remain reachable by URL for other roles.
       { to: '/activity', icon: Activity, label: 'Activity' },
       { to: '/docs', icon: BookOpen, label: 'Docs' },
       { to: '/tickets', icon: MessageSquare, label: 'Support' },
@@ -391,6 +490,40 @@ export const SIDEBAR_GROUPS = {
   advisor: [
     { key: 'home', label: 'Home', items: [
       { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
+      { to: '/products', icon: Package, label: 'Products' },
+    ]},
+    // Task #23 — each Advisor workspace is its own sidebar group so its
+    // sub-sections are visible directly (mirrors the founder/partner/investor
+    // profiles). This replaces the old single "Workspaces" group that collapsed
+    // each workspace into one link. Every route these single links pointed at is
+    // preserved as a sub-entry; `match` keeps the correct row active across the
+    // tab, its sub-routes, and legacy aliases.
+    { key: 'network', label: 'Network', items: [
+      { to: '/advisor/network/introductions', icon: Sparkles, label: 'Introductions' },
+      { to: '/advisor/network/relationships', icon: Users, label: 'Relationships', match: ['/advisor/network/relationships', '/network', '/relationships', '/contacts'] },
+      { to: '/advisor/network/organizations', icon: Globe, label: 'Organizations' },
+    ]},
+    { key: 'advisory', label: 'Advisory', items: [
+      { to: '/advisor/advisory/opportunities', icon: Target, label: 'Opportunities' },
+      { to: '/advisor/advisory/clients', icon: Users, label: 'Clients' },
+      { to: '/advisor/advisory/engagements', icon: Layers, label: 'Engagements' },
+      { to: '/advisor/advisory/delivery', icon: Package, label: 'Delivery' },
+      { to: '/advisor/advisory/contracts', icon: FileText, label: 'Contracts' },
+    ]},
+    { key: 'growth', label: 'Growth', items: [
+      { to: '/advisor/growth/talent', icon: Users, label: 'Talent' },
+      { to: '/advisor/growth/customers', icon: Briefcase, label: 'Customers' },
+      { to: '/advisor/growth/partnerships', icon: Handshake, label: 'Partnerships' },
+      { to: '/advisor/growth/capital', icon: DollarSign, label: 'Capital' },
+      { to: '/advisor/growth/experts', icon: Brain, label: 'Experts' },
+    ]},
+    { key: 'research', label: 'Research', items: [
+      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
+      { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
+      { to: '/advisor/research/funds', icon: Wallet, label: 'Funds' },
+      { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
+      { to: '/advisor/research/news', icon: Send, label: 'News' },
+      { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
     ]},
     { key: 'engagements', label: 'Engagements', items: [
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
@@ -405,6 +538,31 @@ export const SIDEBAR_GROUPS = {
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
       { to: '/activity', icon: Activity, label: 'Activity Log' },
       { to: '/docs', icon: BookOpen, label: 'Documentation' },
+      { to: '/settings', icon: SettingsIcon, label: 'Settings' },
+    ]},
+  ],
+
+  // Task #9 — 'exploring' holding state: chat-onboarded users awaiting the
+  // binding agreement + admin role assignment. Deliberately lean — the
+  // Studio (Personal Advisor + Profile & Fit) plus account basics only.
+  // An explicit group is REQUIRED here: the sidebar falls back to the
+  // founder nav for unknown roles, which exploring users must never see.
+  exploring: [
+    { key: 'home', label: 'Home', items: [
+      { to: '/exploring', icon: LayoutDashboard, label: 'Studio', highlight: true },
+      // Task #13 — surface the Spin-Out Lab program to explorers so they can
+      // see the full 28-day pipeline before committing.
+      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
+      // Explorer completion incentive — where the one-time 30-day-license
+      // promo code from the Personal Advisor gets redeemed.
+      { to: '/products', icon: Package, label: 'Products' },
+    ]},
+    { key: 'account', label: 'Account', items: [
+      { to: '/profile', icon: UserCircle, label: 'My Profile' },
+      { to: '/docs', icon: BookOpen, label: 'Documentation' },
+      { to: '/trust', icon: Lock, label: 'Trust Center' },
+      { to: '/activity', icon: Activity, label: 'Activity Log' },
+      { to: '/tickets', icon: MessageSquare, label: 'Support' },
       { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],

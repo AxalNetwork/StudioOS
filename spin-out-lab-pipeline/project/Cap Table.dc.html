@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}
+    .ct-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+    .ct-root.ct-embedded .ct-topbar{display:none!important}
+    .ct-card{background:#fff;border:1px solid #ececf1;border-radius:16px;box-shadow:0 1px 2px rgba(24,24,27,.04)}
+    .ct-qa{border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer}
+    .ct-qa:hover{border-color:#ececf1;background:#fff}
+    .ct-row:hover{background:#faf9fc}
+    .ct-sl{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:999px;outline:none;cursor:pointer}
+    .ct-sl::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid #7c3aed;box-shadow:0 1px 3px rgba(24,24,27,.2);cursor:grab}
+    .ct-sl::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid #7c3aed;cursor:grab}
+    @media (max-width:1080px){.ct-split{grid-template-columns:1fr!important}.ct-sim{grid-template-columns:1fr!important}}
+  
+    .ct-root.ct-embedded .ct-topline{display:none!important}
+  </style>
+</helmet>
+
+<div class="ct-root {{ embeddedClass }}" style="max-width:100%;margin:0 auto;padding:0 24px 120px">
+  <div class="ct-topline" style="height:3px;background:#7c3aed;border-radius:0 0 3px 3px"></div>
+
+  <!-- TOP BAR -->
+  <div class="ct-topbar" style="display:flex;align-items:center;justify-content:space-between;padding:18px 0 6px;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:14px;min-width:0">
+      <a href="#" onClick="{{ back }}" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:#71717a"><span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ icArrow }}"></span>Back to Workspace</a>
+      <span style="width:1px;height:20px;background:#e4e4e7"></span>
+      <span style="width:34px;height:34px;flex:none;border-radius:9px;background:#f5f3ff;color:#7c3aed;display:flex;align-items:center;justify-content:center;padding:7px" dangerouslySetInnerHTML="{{ icPie }}"></span>
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:9px">
+          <h1 style="margin:0;font-size:19px;font-weight:800;letter-spacing:-.02em">Cap Table</h1>
+          <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#166534;background:#dcfce7;padding:3px 9px;border-radius:999px"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ icCheck }}"></span>Active</span>
+        </div>
+        <div style="font-size:13px;color:#71717a;margin-top:2px">Live capitalization ledger, vesting, and dilution modeling — synced with Carta.</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:5px 11px;border-radius:999px;{{ cartaStyle }}"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ icSync }}"></span>{{ cartaLabel }}</span>
+      <span style="font-size:11px;font-weight:600;color:#7c3aed;background:#f5f3ff;border:1px solid #e4defb;padding:5px 11px;border-radius:999px">Unlocked · Wk 4</span>
+    </div>
+  </div>
+
+  <!-- QUICK ACTIONS -->
+  <div style="display:flex;gap:4px;padding:10px 0 18px;flex-wrap:wrap;align-items:center">
+    <button class="ct-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icShare }}"></span>Share</button>
+    <div style="position:relative">
+      <button onClick="{{ toggleExport }}" class="ct-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icDownload }}"></span>Export<span style="width:12px;height:12px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icChevD }}"></span></button>
+      <sc-if value="{{ exportMenuOpen }}">
+        <div style="position:absolute;top:38px;left:0;z-index:30;width:220px;background:#fff;border:1px solid #ececf1;border-radius:12px;box-shadow:0 12px 32px rgba(24,24,27,.16);padding:6px">
+          <button onClick="{{ closeExport }}" style="display:flex;width:100%;align-items:center;gap:10px;font-size:12.5px;font-weight:500;color:#3f3f46;background:transparent;border:none;border-radius:8px;padding:10px 11px;cursor:pointer;text-align:left"><span style="width:15px;height:15px;display:flex;color:#7c3aed" dangerouslySetInnerHTML="{{ icDeck }}"></span>Pitch Deck format</button>
+          <button onClick="{{ closeExport }}" style="display:flex;width:100%;align-items:center;gap:10px;font-size:12.5px;font-weight:500;color:#3f3f46;background:transparent;border:none;border-radius:8px;padding:10px 11px;cursor:pointer;text-align:left"><span style="width:15px;height:15px;display:flex;color:#0891b2" dangerouslySetInnerHTML="{{ icCsv }}"></span>Carta CSV</button>
+        </div>
+      </sc-if>
+    </div>
+    <button class="ct-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icCopy }}"></span>Copy link</button>
+    <button onClick="{{ openPreview }}" class="ct-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:#7c3aed;padding:7px 12px"><span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ icEye }}"></span>Preview as investor</button>
+  </div>
+
+  <!-- SPLIT: LEFT ledger / RIGHT summary -->
+  <div class="ct-split" style="display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start">
+
+    <!-- LEDGER -->
+    <div class="ct-card" style="padding:0;overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px 14px;flex-wrap:wrap;gap:12px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Ownership ledger · fully diluted</div>
+        <div style="display:flex;gap:6px">
+          <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
+            <button onClick="{{ f.onClick }}" style="font-size:11px;font-weight:600;padding:5px 11px;border-radius:999px;cursor:pointer;{{ f.style }}">{{ f.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;min-width:640px">
+          <thead>
+            <tr style="background:#faf9fc;border-top:1px solid #f0f0f3;border-bottom:1px solid #f0f0f3">
+              <sc-for list="{{ cols }}" as="c" hint-placeholder-count="6">
+                <th onClick="{{ c.onClick }}" style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#71717a;padding:11px 16px;text-align:{{ c.align }};cursor:pointer;white-space:nowrap">{{ c.label }}{{ c.arrow }}</th>
+              </sc-for>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ ledger }}" as="r" hint-placeholder-count="6">
+              <tr class="ct-row" style="border-bottom:1px solid #f4f4f5">
+                <td style="padding:13px 16px">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <span style="width:26px;height:26px;flex:none;border-radius:7px;background:{{ r.avatarBg }};color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ r.initials }}</span>
+                    <div style="flex:1"><div style="font-size:13px;font-weight:600;color:#1A202C">{{ r.name }}</div><div style="font-size:11px;color:#a1a1aa">{{ r.role }}</div></div>
+                    <sc-if value="{{ r.removable }}"><button onClick="{{ r.onRemove }}" title="Remove" style="width:22px;height:22px;flex:none;border-radius:6px;border:1px solid #ececf1;background:#fff;color:#a1a1aa;font-size:13px;line-height:1;cursor:pointer">×</button></sc-if>
+                  </div>
+                </td>
+                <td style="padding:13px 16px"><span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;{{ r.classStyle }}">{{ r.shareClass }}</span></td>
+                <td class="ct-mono" style="padding:13px 16px;text-align:right;font-size:12.5px;color:#3f3f46">{{ r.shares }}</td>
+                <td style="padding:13px 16px;text-align:right">
+                  <div style="display:flex;align-items:center;justify-content:flex-end;gap:9px">
+                    <div style="width:54px;height:6px;background:#f0f0f3;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ r.pctBar }};background:{{ r.color }};border-radius:999px"></div></div>
+                    <span class="ct-mono" style="font-size:12.5px;font-weight:600;color:#1A202C;width:46px;text-align:right">{{ r.pct }}</span>
+                  </div>
+                </td>
+                <td style="padding:13px 16px"><span style="font-size:11px;font-weight:500;color:{{ r.vestColor }}">{{ r.vesting }}</span></td>
+              </tr>
+            </sc-for>
+          </tbody>
+          <tfoot>
+            <tr style="background:#faf9fc;border-top:1px solid #f0f0f3">
+              <td style="padding:12px 16px;font-size:12px;font-weight:700;color:#3f3f46">Fully diluted total</td>
+              <td></td>
+              <td class="ct-mono" style="padding:12px 16px;text-align:right;font-size:12.5px;font-weight:700;color:#1A202C">{{ fdShares }}</td>
+              <td class="ct-mono" style="padding:12px 16px;text-align:right;font-size:12.5px;font-weight:700;color:#1A202C">100.0%</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 22px;border-top:1px solid #f0f0f3;flex-wrap:wrap;gap:10px">
+        <span style="font-size:11.5px;color:#a1a1aa">{{ changeLogNote }}</span>
+        <div style="display:flex;gap:8px">
+          <button onClick="{{ openAdd }}" style="font-size:11.5px;font-weight:600;color:#7c3aed;background:#f5f3ff;border:1px solid #e4defb;border-radius:8px;padding:7px 13px;cursor:pointer">+ Add stakeholder</button>
+          <button onClick="{{ pushCarta }}" style="font-size:11.5px;font-weight:600;color:#fff;background:#0891b2;border:none;border-radius:8px;padding:7px 13px;cursor:pointer">Push to Carta</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUMMARY CARDS -->
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="ct-card" style="padding:18px">
+        <div style="display:flex;justify-content:center;padding:2px 0 10px">
+          <svg viewBox="0 0 200 200" style="width:170px;height:170px">
+            <sc-for list="{{ donut }}" as="d" hint-placeholder-count="4"><path d="{{ d.path }}" fill="{{ d.color }}"></path></sc-for>
+            <text x="100" y="95" text-anchor="middle" font-size="11" fill="#a1a1aa" font-family="Inter" font-weight="600">Fully diluted</text>
+            <text x="100" y="116" text-anchor="middle" font-size="17" fill="#1A202C" font-family="Roboto Mono" font-weight="600">{{ fdSharesShort }}</text>
+          </svg>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ donutLegend }}" as="l" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#52525b"><span style="width:9px;height:9px;border-radius:3px;background:{{ l.color }}"></span>{{ l.name }}</span>
+              <span class="ct-mono" style="font-size:12px;font-weight:600;color:#1A202C">{{ l.pct }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <sc-for list="{{ summaryCards }}" as="s" hint-placeholder-count="4">
+        <div class="ct-card" style="padding:16px 18px">
+          <div style="font-size:11px;color:#a1a1aa">{{ s.label }}</div>
+          <div class="ct-mono" style="font-size:22px;font-weight:600;color:{{ s.color }};margin-top:4px">{{ s.value }}</div>
+          <div style="font-size:11px;color:#71717a;margin-top:3px">{{ s.sub }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- FOUNDER STOCK + VESTING -->
+  <div class="ct-card" style="padding:22px;margin-top:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Founder stock &amp; vesting</div>
+      <span style="font-size:11px;color:#a1a1aa">As of Jul 20, 2026 · 4-year vest / 1-year cliff</span>
+    </div>
+    <sc-for list="{{ founders }}" as="f" hint-placeholder-count="2">
+      <div style="padding:16px 0;border-top:1px solid #f4f4f5">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:11px">
+            <span style="width:30px;height:30px;border-radius:8px;background:{{ f.avatarBg }};color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ f.initials }}</span>
+            <div><div style="font-size:13.5px;font-weight:700">{{ f.name }}</div><div class="ct-mono" style="font-size:11.5px;color:#a1a1aa">{{ f.shares }} shares · {{ f.pct }} FD</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <sc-if value="{{ f.eightyThreeFlag }}"><span style="font-size:11px;font-weight:600;color:{{ f.flagColor }};background:{{ f.flagBg }};border:1px solid {{ f.flagBorder }};padding:4px 10px;border-radius:999px">{{ f.eightyThreeFlag }}</span></sc-if>
+            <sc-if value="{{ f.agreementFlag }}"><span style="font-size:11px;font-weight:600;color:#b45309;background:#fffbeb;border:1px solid #fde68a;padding:4px 10px;border-radius:999px">{{ f.agreementFlag }}</span></sc-if>
+          </div>
+        </div>
+        <div style="position:relative;height:30px">
+          <div style="position:absolute;top:9px;left:0;right:0;height:10px;background:#f0f0f3;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ f.vestedPct }};background:{{ f.avatarBg }};border-radius:999px"></div></div>
+          <div style="position:absolute;top:3px;left:{{ f.cliffLeft }};transform:translateX(-50%)"><div style="width:2px;height:22px;background:#dc2626"></div></div>
+          <div style="position:absolute;top:-4px;left:{{ f.vestedPct }};transform:translateX(-50%);font-size:9px;font-weight:700;color:{{ f.avatarBg }}" class="ct-mono">{{ f.vestedLabel }}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#a1a1aa;margin-top:2px">
+          <span>{{ f.startLabel }}</span><span style="color:#dc2626">↑ cliff {{ f.cliffLabel }}</span><span>{{ f.endLabel }} full vest</span>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- SAFE / NOTE TRACKER + OPTION POOL -->
+  <div class="ct-sim" style="display:grid;grid-template-columns:1.3fr 1fr;gap:20px;margin-top:20px;align-items:start">
+    <!-- SAFE -->
+    <div class="ct-card" style="padding:22px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">SAFE / note tracker</div>
+        <div style="display:flex;gap:4px;background:#f4f4f5;border-radius:8px;padding:3px">
+          <button onClick="{{ setConvCap }}" style="font-size:11px;font-weight:600;padding:5px 10px;border-radius:6px;border:none;cursor:pointer;{{ convCapStyle }}">Convert at cap</button>
+          <button onClick="{{ setConvNext }}" style="font-size:11px;font-weight:600;padding:5px 10px;border-radius:6px;border:none;cursor:pointer;{{ convNextStyle }}">Next round</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;min-width:460px">
+          <thead><tr style="border-bottom:1px solid #f0f0f3">
+            <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:8px 10px;text-align:left">Investor</th>
+            <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:8px 10px;text-align:right">Amount</th>
+            <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:8px 10px;text-align:right">Cap</th>
+            <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:8px 10px;text-align:right">Disc.</th>
+            <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:8px 10px;text-align:right">→ %</th>
+          </tr></thead>
+          <tbody>
+            <sc-for list="{{ safes }}" as="s" hint-placeholder-count="2">
+              <tr style="border-bottom:1px solid #f8f8fa">
+                <td style="padding:11px 10px"><div style="font-size:12.5px;font-weight:600">{{ s.investor }}</div><div style="font-size:10.5px;color:#a1a1aa">{{ s.mfn }} · {{ s.date }}</div></td>
+                <td class="ct-mono" style="padding:11px 10px;text-align:right;font-size:12px">{{ s.amount }}</td>
+                <td class="ct-mono" style="padding:11px 10px;text-align:right;font-size:12px;color:#71717a">{{ s.cap }}</td>
+                <td class="ct-mono" style="padding:11px 10px;text-align:right;font-size:12px;color:#71717a">{{ s.discount }}</td>
+                <td class="ct-mono" style="padding:11px 10px;text-align:right;font-size:12.5px;font-weight:600;color:#d97706">{{ s.convPct }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:14px;padding-top:14px;border-top:1px solid #f0f0f3">
+        <div><div style="font-size:11px;color:#a1a1aa">Total outstanding</div><div class="ct-mono" style="font-size:16px;font-weight:600;margin-top:2px">{{ safeTotal }}</div></div>
+        <div style="text-align:right"><div style="font-size:11px;color:#a1a1aa">Blended avg cap</div><div class="ct-mono" style="font-size:16px;font-weight:600;margin-top:2px">{{ safeBlendedCap }}</div></div>
+      </div>
+    </div>
+
+    <!-- OPTION POOL -->
+    <div class="ct-card" style="padding:22px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:14px">Option pool builder</div>
+      <div style="display:flex;align-items:baseline;gap:8px"><span class="ct-mono" style="font-size:32px;font-weight:600;color:#7c3aed">{{ poolPct }}%</span><span style="font-size:12px;color:#a1a1aa">post-money pool</span></div>
+      <input type="range" class="ct-sl" min="5" max="20" step="1" value="{{ poolRaw }}" onInput="{{ setPool }}" style="margin:14px 0 6px;background:linear-gradient(90deg,#7c3aed 0%,#7c3aed {{ poolSliderPct }},#f0f0f3 {{ poolSliderPct }},#f0f0f3 100%)">
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:#c4c4cc"><span>5%</span><span style="color:#16a34a">10–15% normal</span><span>20%</span></div>
+      <div style="font-size:11.5px;color:{{ poolWarnColor }};background:{{ poolWarnBg }};border:1px solid {{ poolWarnBorder }};border-radius:9px;padding:10px 12px;margin-top:14px;line-height:1.45">{{ poolWarn }}</div>
+      <div style="margin-top:14px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;margin-bottom:9px">Founder dilution from pool</div>
+        <sc-for list="{{ poolDilution }}" as="d" hint-placeholder-count="2">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">
+            <span style="font-size:12px;color:#52525b;width:80px;flex:none">{{ d.name }}</span>
+            <span class="ct-mono" style="font-size:11.5px;color:#a1a1aa">{{ d.before }}</span>
+            <span style="width:12px;height:12px;color:#c4c4cc;display:flex" dangerouslySetInnerHTML="{{ icArrowR }}"></span>
+            <span class="ct-mono" style="font-size:11.5px;font-weight:600;color:#1A202C">{{ d.after }}</span>
+            <span class="ct-mono" style="font-size:10.5px;color:#dc2626;margin-left:auto">{{ d.delta }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <!-- DILUTION SIMULATOR -->
+  <div class="ct-card" style="padding:22px;margin-top:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Dilution simulator</div>
+        <div style="font-size:12px;color:#71717a;margin-top:3px">Ownership across rounds · adjustable raise and valuation</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:9px">
+          <span style="font-size:11.5px;color:#71717a">Seed raise</span>
+          <span class="ct-mono" style="font-size:13px;font-weight:600;color:#7c3aed;width:52px">{{ seedLabel }}</span>
+          <input type="range" class="ct-sl" style="width:120px;background:linear-gradient(90deg,#7c3aed 0%,#7c3aed {{ seedSliderPct }},#f0f0f3 {{ seedSliderPct }},#f0f0f3 100%)" min="500000" max="4000000" step="250000" value="{{ seedRaise }}" onInput="{{ setSeed }}">
+        </div>
+        <button onClick="{{ saveScenario }}" style="font-size:11.5px;font-weight:600;color:#7c3aed;background:#f5f3ff;border:1px solid #e4defb;border-radius:8px;padding:7px 13px;cursor:pointer">Save scenario</button>
+      </div>
+    </div>
+
+    <!-- waterfall stacked columns -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:end;height:240px;padding:0 4px">
+      <sc-for list="{{ stages }}" as="st" hint-placeholder-count="4">
+        <div style="display:flex;flex-direction:column;height:100%;justify-content:flex-end">
+          <div style="display:flex;flex-direction:column;border-radius:8px;overflow:hidden;box-shadow:0 1px 2px rgba(24,24,27,.06)">
+            <sc-for list="{{ st.slices }}" as="sl" hint-placeholder-count="4">
+              <div style="height:{{ sl.h }};background:{{ sl.color }};min-height:1px;position:relative">
+                <sc-if value="{{ sl.showLabel }}"><span class="ct-mono" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff">{{ sl.pct }}</span></sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="text-align:center;margin-top:10px"><div style="font-size:12px;font-weight:700;color:#1A202C">{{ st.name }}</div><div class="ct-mono" style="font-size:10.5px;color:#a1a1aa">{{ st.sub }}</div></div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- exact table -->
+    <div style="overflow-x:auto;margin-top:20px">
+      <table style="width:100%;border-collapse:collapse;min-width:560px">
+        <thead><tr style="border-bottom:1px solid #f0f0f3">
+          <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:9px 12px;text-align:left">Stakeholder</th>
+          <sc-for list="{{ stages }}" as="st" hint-placeholder-count="4"><th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:9px 12px;text-align:right">{{ st.name }}</th></sc-for>
+        </tr></thead>
+        <tbody>
+          <sc-for list="{{ dilTable }}" as="r" hint-placeholder-count="4">
+            <tr style="border-bottom:1px solid #f8f8fa">
+              <td style="padding:10px 12px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:500;color:#3f3f46"><span style="width:9px;height:9px;border-radius:3px;background:{{ r.color }}"></span>{{ r.name }}</span></td>
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="4"><td class="ct-mono" style="padding:10px 12px;text-align:right;font-size:12px;color:{{ c.color }}">{{ c.v }}</td></sc-for>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- VESTING ACCELERATOR -->
+  <div class="ct-card" style="padding:22px;margin-top:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:12px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Vesting accelerator clause</div>
+      <div style="display:flex;gap:4px;background:#f4f4f5;border-radius:8px;padding:3px">
+        <button onClick="{{ setSingle }}" style="font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:6px;border:none;cursor:pointer;{{ singleStyle }}">Single-trigger</button>
+        <button onClick="{{ setDouble }}" style="font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:6px;border:none;cursor:pointer;{{ doubleStyle }}">Double-trigger</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:start" class="ct-sim">
+      <div>
+        <div style="font-size:13px;color:#52525b;line-height:1.55">{{ accelSummary }}</div>
+        <button onClick="{{ insertClause }}" style="font-size:12px;font-weight:600;color:#fff;background:#7c3aed;border:none;border-radius:8px;padding:9px 15px;cursor:pointer;margin-top:14px">Insert into Co-founder Agreement →</button>
+        <div style="font-size:11px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:9px 12px;margin-top:12px">Changing acceleration flags the Co-founder Agreement as <b>out of date — review required</b>.</div>
+      </div>
+      <div style="background:#faf9fc;border:1px solid #f0eefb;border-radius:12px;padding:16px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;margin-bottom:11px">If triggered today</div>
+        <sc-for list="{{ accelPreview }}" as="a" hint-placeholder-count="2">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0">
+            <span style="font-size:12.5px;color:#52525b">{{ a.name }}</span>
+            <span class="ct-mono" style="font-size:12.5px;font-weight:600;color:#7c3aed">+{{ a.accel }}</span>
+          </div>
+        </sc-for>
+        <div style="border-top:1px solid #ececf1;margin-top:8px;padding-top:10px;display:flex;align-items:center;justify-content:between"><span style="font-size:12px;color:#71717a;flex:1">Total immediately vested</span><span class="ct-mono" style="font-size:14px;font-weight:700;color:#1A202C">+{{ accelTotal }}</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- INVESTOR PREVIEW MODAL -->
+<sc-if value="{{ previewOpen }}">
+  <div onClick="{{ closePreview }}" style="position:fixed;inset:0;background:rgba(24,24,27,.45);z-index:70;display:flex;align-items:flex-start;justify-content:center;padding:32px 24px;overflow-y:auto;backdrop-filter:blur(2px)">
+    <div onClick="{{ stop }}" style="width:100%;max-width:880px;background:#fff;border-radius:18px;box-shadow:0 24px 60px rgba(24,24,27,.3);overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid #f0f0f3">
+        <div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;color:#7c3aed;display:flex" dangerouslySetInnerHTML="{{ icEye }}"></span><span style="font-size:14px;font-weight:700">Investor preview · Cap Table &amp; Ownership slide</span></div>
+        <button onClick="{{ closePreview }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#71717a;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:7px"><span style="display:flex" dangerouslySetInnerHTML="{{ icX }}"></span></button>
+      </div>
+      <div style="padding:26px 24px">
+        <div style="background:#0d0d12;border-radius:14px;padding:34px 36px;color:#fff">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:26px"><div style="font-size:22px;font-weight:800;letter-spacing:-.02em">Capitalization</div><div class="ct-mono" style="font-size:14px;color:#a78bfa">{{ fdShares }} FD shares</div></div>
+          <div style="display:grid;grid-template-columns:190px 1fr;gap:34px;align-items:center">
+            <svg viewBox="0 0 200 200" style="width:180px;height:180px">
+              <sc-for list="{{ donut }}" as="d" hint-placeholder-count="4"><path d="{{ d.path }}" fill="{{ d.color }}"></path></sc-for>
+              <text x="100" y="106" text-anchor="middle" font-size="20" fill="#fff" font-family="Roboto Mono" font-weight="600">{{ fdSharesShort }}</text>
+            </svg>
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <sc-for list="{{ donutLegend }}" as="l" hint-placeholder-count="4">
+                <div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span style="display:inline-flex;align-items:center;gap:9px;font-size:14px;font-weight:600"><span style="width:10px;height:10px;border-radius:3px;background:{{ l.color }}"></span>{{ l.name }}</span><span class="ct-mono" style="font-size:14px;color:#d4d4d8">{{ l.pct }}</span></div><div style="height:7px;background:rgba(255,255,255,.1);border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ l.pct }};background:{{ l.color }};border-radius:999px"></div></div></div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin:24px 0 10px">Dilution across rounds</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:end;height:170px">
+          <sc-for list="{{ stages }}" as="st" hint-placeholder-count="4">
+            <div style="display:flex;flex-direction:column;height:100%;justify-content:flex-end">
+              <div style="display:flex;flex-direction:column;border-radius:6px;overflow:hidden">
+                <sc-for list="{{ st.slices }}" as="sl" hint-placeholder-count="4"><div style="height:{{ sl.h }};background:{{ sl.color }};min-height:1px"></div></sc-for>
+              </div>
+              <div style="text-align:center;margin-top:8px;font-size:11px;font-weight:600;color:#3f3f46">{{ st.name }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<!-- ADD STAKEHOLDER MODAL -->
+<sc-if value="{{ addOpen }}">
+  <div onClick="{{ closeAdd }}" style="position:fixed;inset:0;background:rgba(24,24,27,.45);z-index:70;display:flex;align-items:flex-start;justify-content:center;padding:48px 24px;overflow-y:auto">
+    <div onClick="{{ stop }}" style="width:100%;max-width:440px;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(24,24,27,.3);overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #f0f0f3">
+        <div><div style="font-size:15px;font-weight:800;color:#1A202C">Add stakeholder</div><div style="font-size:11.5px;color:#a1a1aa">Enter equity manually — no Carta connection needed</div></div>
+        <button onClick="{{ closeAdd }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#71717a;cursor:pointer;font-size:16px;line-height:1">×</button>
+      </div>
+      <div style="padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;gap:8px">
+          <sc-for list="{{ kindOpts }}" as="k" hint-placeholder-count="2"><button onClick="{{ k.onClick }}" style="flex:1;height:34px;border-radius:8px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;{{ k.style }}">{{ k.label }}</button></sc-for>
+        </div>
+        <label style="display:block"><span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa">Name</span>
+          <input value="{{ af.name }}" onInput="{{ setAfName }}" placeholder="Jordan P." style="width:100%;margin-top:5px;height:38px;padding:0 12px;border:1px solid #e4e4e7;border-radius:9px;font-size:13px;color:#18181b;outline:none"></label>
+        <label style="display:block"><span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa">Role</span>
+          <input value="{{ af.role }}" onInput="{{ setAfRole }}" placeholder="{{ afRolePlaceholder }}" style="width:100%;margin-top:5px;height:38px;padding:0 12px;border:1px solid #e4e4e7;border-radius:9px;font-size:13px;color:#18181b;outline:none"></label>
+        <label style="display:block"><span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa">Shares</span>
+          <input value="{{ af.shares }}" onInput="{{ setAfShares }}" inputmode="numeric" placeholder="1,000,000" class="ct-mono" style="width:100%;margin-top:5px;height:38px;padding:0 12px;border:1px solid #e4e4e7;border-radius:9px;font-size:13px;color:#18181b;outline:none"></label>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;padding:16px 22px;border-top:1px solid #f0f0f3;background:#faf9fc">
+        <button onClick="{{ closeAdd }}" style="height:36px;padding:0 15px;border-radius:9px;border:1px solid #e4e4e7;background:#fff;color:#52525b;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Cancel</button>
+        <button onClick="{{ confirmAdd }}" style="height:36px;padding:0 18px;border-radius:9px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;{{ addDisabledStyle }}">Add to cap table</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:null,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { pool:11, seedRaise:2000000, conv:'cap', accel:'double', sortKey:'pct', sortDir:-1,
+    filter:'all', exportMenuOpen:false, previewOpen:false, carta:null, savedCount:0,
+    addOpen:false, af:{ name:'', role:'', shares:'', kind:'founders' },
+    founders:[
+      { name:'Guillaume L.', role:'CEO & Co-founder', initials:'GL', shares:4500000, start:'2025-05-15', filed83b:true, hasAgreement:true },
+      { name:'Maya R.', role:'CTO & Co-founder', initials:'MR', shares:4000000, start:'2025-06-01', filed83b:false, hasAgreement:false },
+    ],
+    advisors:[
+      { name:'Dr. Elena V.', role:'Advisor · Deep-tech', initials:'EV', shares:150000, start:'2026-06-01' },
+      { name:'Tomás B.', role:'Advisor · GTM', initials:'TB', shares:150000, start:'2026-06-15' },
+    ] };
+
+  ic(p,sw){ return { __html:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw||1.8}" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">${p}</svg>` }; }
+  arc(f0,f1,rOut,rIn){ const cx=100,cy=100; const P=(r,f)=>[cx+r*Math.sin(2*Math.PI*f),cy-r*Math.cos(2*Math.PI*f)];
+    const [x0,y0]=P(rOut,f0),[x1,y1]=P(rOut,f1),[x2,y2]=P(rIn,f1),[x3,y3]=P(rIn,f0); const laf=(f1-f0)>0.5?1:0;
+    return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${rOut} ${rOut} 0 ${laf} 1 ${x1.toFixed(2)} ${y1.toFixed(2)} L${x2.toFixed(2)} ${y2.toFixed(2)} A${rIn} ${rIn} 0 ${laf} 0 ${x3.toFixed(2)} ${y3.toFixed(2)} Z`; }
+  commas(n){ return Math.round(n).toLocaleString('en-US'); }
+  short(n){ return n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?Math.round(n/1e3)+'K':''+Math.round(n); }
+  money(n){ return n>=1e6?'$'+(n/1e6).toFixed(n%1e6?1:0)+'M':n>=1e3?'$'+Math.round(n/1e3)+'K':'$'+Math.round(n); }
+  vestFrac(startISO){ const start=new Date(startISO); const today=new Date(2026,6,20);
+    const mo=(today-start)/(1000*60*60*24*30.4375); if(mo<12) return 0; return Math.min(1, mo/48); }
+  monthsElapsed(startISO){ const start=new Date(startISO); const today=new Date(2026,6,20); return (today-start)/(1000*60*60*24*30.4375); }
+  fmtDate(d){ return d.toLocaleDateString('en-US',{month:'short',year:'2-digit'}); }
+
+  renderVals(){
+    const ic=(p,sw)=>this.ic(p,sw); const st=this.state;
+    const C={ founders:'#4f46e5', advisors:'#0891b2', pool:'#7c3aed', safe:'#d97706' };
+
+    // base grants (editable — founders/advisors live in state)
+    const foundersRaw=st.founders;
+    const advisorsRaw=st.advisors;
+    const founderShares=foundersRaw.reduce((s,f)=>s+f.shares,0);
+    const advisorShares=advisorsRaw.reduce((s,a)=>s+a.shares,0);
+    const issued=founderShares+advisorShares; // pre-pool common/advisor
+
+    // option pool: pct of post-money (post-pool, pre-SAFE)
+    const X=st.pool/100; const poolShares=X*issued/(1-X);
+    const preConvFD=issued+poolShares;
+
+    // SAFEs
+    const safesRaw=[
+      { investor:'Fathom Seed', amount:500000, cap:8000000, discount:0.20, mfn:true, date:'Jul 2026' },
+      { investor:'Angel syndicate', amount:250000, cap:10000000, discount:0, mfn:false, date:'Jul 2026' },
+    ];
+    const safeShares=safesRaw.map(s=>{ const price=s.cap/preConvFD; const priceDisc=s.discount?price*(1-s.discount):price; return s.amount/priceDisc; });
+    const totalSafeShares=safeShares.reduce((a,b)=>a+b,0);
+    const fdTotal=preConvFD+totalSafeShares;
+
+    // ledger rows
+    const grp=(shares)=>shares/fdTotal;
+    let ledgerRows=[];
+    foundersRaw.forEach((f,fi)=>{ const vf=this.vestFrac(f.start); ledgerRows.push({ type:'founders', removeKind:'founders', removeIdx:fi, name:f.name, role:f.role, initials:f.initials, avatarBg:C.founders,
+      shareClass:'Common', classStyle:'color:#3730a3;background:#eef2ff', shares:f.shares, pctNum:grp(f.shares)*100,
+      vestingNum:vf, vesting:(vf*100).toFixed(0)+'% vested', vestColor:vf>0?'#166534':'#d97706', color:C.founders }); });
+    advisorsRaw.forEach((a,ai)=>{ ledgerRows.push({ type:'advisors', removeKind:'advisors', removeIdx:ai, name:a.name, role:a.role, initials:a.initials, avatarBg:C.advisors,
+      shareClass:'Common', classStyle:'color:#155e75;background:#ecfeff', shares:a.shares, pctNum:grp(a.shares)*100,
+      vestingNum:0.5, vesting:'2-yr vest', vestColor:'#71717a', color:C.advisors }); });
+    ledgerRows.push({ type:'pool', name:'Option pool', role:'Unallocated ESOP', initials:'OP', avatarBg:C.pool,
+      shareClass:'Options', classStyle:'color:#5b21b6;background:#f5f3ff', shares:poolShares, pctNum:grp(poolShares)*100,
+      vestingNum:0, vesting:'0% allocated', vestColor:'#71717a', color:C.pool });
+    safesRaw.forEach((s,i)=>{ ledgerRows.push({ type:'investors', name:s.investor, role:'SAFE · '+this.money(s.amount), initials:s.investor.slice(0,2).toUpperCase(), avatarBg:C.safe,
+      shareClass:'SAFE', classStyle:'color:#92400e;background:#fffbeb', shares:safeShares[i], pctNum:grp(safeShares[i])*100,
+      vestingNum:1, vesting:'As-converted', vestColor:'#71717a', color:C.safe }); });
+
+    // filter + sort
+    if(st.filter!=='all') ledgerRows=ledgerRows.filter(r=>r.type===st.filter);
+    const sk=st.sortKey, dir=st.sortDir;
+    ledgerRows.sort((a,b)=>{ let av,bv; if(sk==='name'){av=a.name;bv=b.name;return dir*av.localeCompare(bv);} if(sk==='shares'){av=a.shares;bv=b.shares;} else {av=a.pctNum;bv=b.pctNum;} return dir*(av-bv); });
+    const ledger=ledgerRows.map(r=>({ ...r, shares:this.commas(r.shares), pct:r.pctNum.toFixed(1)+'%', pctBar:Math.min(100,r.pctNum)+'%',
+      removable: r.removeKind?true:false,
+      onRemove: r.removeKind?()=>{ const arr=st[r.removeKind].slice(); arr.splice(r.removeIdx,1); this.setState({ [r.removeKind]:arr, carta:null }); }:()=>{} }));
+
+    const filters=[['all','All'],['founders','Founders'],['advisors','Advisors'],['pool','Pool'],['investors','SAFEs']].map(([k,l])=>({
+      label:l, onClick:()=>this.setState({filter:k}),
+      style: st.filter===k?'color:#fff;background:#7c3aed;border:1px solid #7c3aed':'color:#71717a;background:#fff;border:1px solid #ececf1' }));
+    const arrowFor=(k)=> sk===k?(dir<0?' ↓':' ↑'):'';
+    const cols=[ {label:'Stakeholder',align:'left',k:'name'},{label:'Class',align:'left',k:null},{label:'Shares',align:'right',k:'shares'},{label:'Fully diluted',align:'right',k:'pct'},{label:'Vesting',align:'left',k:null} ]
+      .map(c=>({ label:c.label, align:c.align, arrow:c.k?arrowFor(c.k):'', onClick: c.k?()=>this.setState({sortKey:c.k, sortDir: sk===c.k? -dir : -1}):()=>{} }));
+
+    // donut (grouped)
+    const groups=[ {name:'Founders',color:C.founders,shares:founderShares},{name:'Advisors',color:C.advisors,shares:advisorShares},{name:'Option pool',color:C.pool,shares:poolShares},{name:'SAFE (as-conv.)',color:C.safe,shares:totalSafeShares} ];
+    let acc=0; const donut=groups.map(g=>{ const f0=acc,f1=acc+g.shares/fdTotal; acc=f1; return { path:this.arc(f0,Math.min(f1,0.9999),95,58), color:g.color }; });
+    const donutLegend=groups.map(g=>({ name:g.name, color:g.color, pct:(g.shares/fdTotal*100).toFixed(1)+'%' }));
+
+    // summary cards
+    const nextRaise=st.seedRaise; const nextPost=nextRaise/0.20; const nextDil=(nextRaise/nextPost*100);
+    const summaryCards=[
+      { label:'Shares outstanding', value:this.commas(issued), sub:'Common + advisor', color:'#1A202C' },
+      { label:'Fully-diluted shares', value:this.commas(fdTotal), sub:'Incl. pool + SAFEs', color:'#1A202C' },
+      { label:'Option pool utilization', value:'0 / '+this.short(poolShares), sub:st.pool+'% reserved · 0% granted', color:'#7c3aed' },
+      { label:'Outstanding SAFEs', value:this.money(safesRaw.reduce((s,x)=>s+x.amount,0)), sub:safesRaw.length+' instruments', color:'#d97706' },
+      { label:'Next-round dilution', value:'−'+nextDil.toFixed(0)+'%', sub:'Seed '+this.money(nextRaise)+' @ '+this.money(nextPost)+' post', color:'#dc2626' },
+    ];
+
+    // founder vesting detail
+    const founders=foundersRaw.map(f=>{ const vf=this.vestFrac(f.start); const start=new Date(f.start);
+      const end=new Date(start); end.setFullYear(end.getFullYear()+4); const cliff=new Date(start); cliff.setFullYear(cliff.getFullYear()+1);
+      const daysLeft=25; // 83b window from Jul 15 grant
+      return { name:f.name, initials:f.initials, avatarBg:C.founders, shares:this.commas(f.shares), pct:grp(f.shares).toFixed? (grp(f.shares)*100).toFixed(1)+'%':'',
+        vestedPct:(vf*100).toFixed(0)+'%', vestedLabel:(vf*100).toFixed(0)+'%',
+        cliffLeft:(1/4*100).toFixed(1)+'%', startLabel:this.fmtDate(start), cliffLabel:this.fmtDate(cliff), endLabel:this.fmtDate(end),
+        eightyThreeFlag: f.filed83b?'83(b) filed':('83(b) due · '+daysLeft+'d left'), flagColor:f.filed83b?'#166534':'#dc2626', flagBg:f.filed83b?'#dcfce7':'#fef2f2', flagBorder:f.filed83b?'#bbf7d0':'#fecaca',
+        agreementFlag: f.hasAgreement?'':'No agreement on file' }; });
+
+    // SAFE conversion preview
+    const nextPrice = nextPost/fdTotal; // $/sh at next round
+    const safes=safesRaw.map((s,i)=>{ let shares; if(st.conv==='cap'){ shares=safeShares[i]; } else { const price=Math.min(s.cap/preConvFD, nextPrice)*(s.discount?(1-s.discount):1); shares=s.amount/price; }
+      return { investor:s.investor, amount:this.money(s.amount), cap:this.money(s.cap), discount:s.discount?(s.discount*100)+'%':'—', mfn:s.mfn?'MFN':'No MFN', date:s.date, convPct:(shares/fdTotal*100).toFixed(1)+'%' }; });
+    const safeTotal=this.money(safesRaw.reduce((a,b)=>a+b.amount,0));
+    const blended=safesRaw.reduce((a,b)=>a+b.cap,0)/safesRaw.length;
+    const safeBlendedCap=this.money(blended);
+
+    // option pool dilution (founders before/after adding pool)
+    const preFDnoPool=issued+totalSafeSharesApprox(); function totalSafeSharesApprox(){ return totalSafeShares; }
+    const poolDilution=foundersRaw.map(f=>{ const before=f.shares/(issued+totalSafeShares)*100; const after=f.shares/fdTotal*100;
+      return { name:f.name.split(' ')[0], before:before.toFixed(1)+'%', after:after.toFixed(1)+'%', delta:'−'+(before-after).toFixed(1)+'pt' }; });
+    const poolNormal = st.pool>=10 && st.pool<=15;
+    const poolWarn = poolNormal ? 'Within the 10–15% investor-normal range. A standard pool signals room to hire without renegotiating at the next round.'
+      : st.pool<10 ? 'Below 10% — investors often require a top-up at the priced round, diluting founders further. Consider sizing up now.'
+      : 'Above 15% — larger than typical for pre-seed. Unallocated options dilute founders without yet attracting talent.';
+    const poolWarnColor=poolNormal?'#166534':'#b45309'; const poolWarnBg=poolNormal?'#f0fdf4':'#fffbeb'; const poolWarnBorder=poolNormal?'#bbf7d0':'#fde68a';
+
+    // dilution simulator — 4 stages
+    const seed=st.seedRaise; const seedPost=seed/0.20; // seed investor 20%
+    const seriesA=8000000; const aPost=40000000; // A investor 20%
+    // group fractions at current
+    let f_founders=founderShares/fdTotal, f_adv=advisorShares/fdTotal, f_pool=poolShares/fdTotal, f_inv=totalSafeShares/fdTotal;
+    const mkStage=(name,sub)=>({name,sub,founders:f_founders,adv:f_adv,pool:f_pool,inv:f_inv});
+    const stagesData=[ mkStage('Current','Post-SAFE') ];
+    // Seed: new investor seedFrac, pool top-up to 12%
+    let seedFrac=seed/seedPost; let poolTop=Math.max(0,0.12 - f_pool*(1-seedFrac));
+    let scale=1-seedFrac-poolTop; f_founders*=scale; f_adv*=scale; f_inv*=scale; f_pool=f_pool*scale+poolTop; f_inv+=seedFrac;
+    stagesData.push(mkStage('Seed', this.money(seed)+' @ '+this.money(seedPost)));
+    // Series A
+    let aFrac=seriesA/aPost; let poolTopA=Math.max(0,0.12 - f_pool*(1-aFrac)); let scaleA=1-aFrac-poolTopA;
+    f_founders*=scaleA; f_adv*=scaleA; f_inv*=scaleA; f_pool=f_pool*scaleA+poolTopA; f_inv+=aFrac;
+    stagesData.push(mkStage('Series A', this.money(seriesA)+' @ '+this.money(aPost)));
+    // Fully diluted future = same as Series A end here (show as summary col)
+    stagesData.push({ name:'Exit view', sub:'Post-A FD', founders:f_founders, adv:f_adv, pool:f_pool, inv:f_inv });
+
+    const stackDefs=[ ['founders',C.founders],['adv',C.advisors],['pool',C.pool],['inv',C.safe] ];
+    const stages=stagesData.map(sd=>({ name:sd.name, sub:sd.sub, slices:stackDefs.map(([k,color])=>{ const v=sd[k]*100; return { h:v.toFixed(2)+'%', color, pct:v.toFixed(0)+'%', showLabel: v>7 && k==='founders' }; }) }));
+    const dilRowDefs=[ ['Founders',C.founders,'founders'],['Advisors',C.advisors,'adv'],['Option pool',C.pool,'pool'],['Investors / SAFE',C.safe,'inv'] ];
+    const dilTable=dilRowDefs.map(([name,color,k])=>({ name, color, cells:stagesData.map((sd,i)=>({ v:(sd[k]*100).toFixed(1)+'%', color: k==='founders'&&i>0?'#dc2626':'#3f3f46' })) }));
+
+    // vesting accelerator
+    const isDouble=st.accel==='double';
+    const accelSummary = isDouble
+      ? 'Double-trigger: acceleration requires both (1) a change of control and (2) involuntary termination within 12 months. Standard for venture-backed founders — investor-friendly, protects the team without penalizing acquirers.'
+      : 'Single-trigger: unvested shares accelerate on a change of control alone. Founder-friendly but often repriced or removed by acquirers and investors, since it can complicate an acquisition.';
+    const accelPreview=foundersRaw.map(f=>{ const vf=this.vestFrac(f.start); const unvested=f.shares*(1-vf); const accel= isDouble? unvested : unvested; // amount that could accelerate
+      return { name:f.name.split(' ')[0], accel:this.commas(unvested)+' sh' }; });
+    const accelTotalNum=foundersRaw.reduce((s,f)=>s+f.shares*(1-this.vestFrac(f.start)),0);
+    const accelTotal=this.commas(accelTotalNum)+' sh';
+
+    const cartaSynced=!!st.carta;
+    return {
+      embeddedClass: this.props.embedded ? 'ct-embedded' : '',
+      icArrow:ic('<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>'),
+      icPie:ic('<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>'),
+      icCheck:ic('<polyline points="20 6 9 17 4 12"/>',2.4),
+      icSync:ic('<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>'),
+      icShare:ic('<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/>'),
+      icDownload:ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
+      icChevD:ic('<polyline points="6 9 12 15 18 9"/>',2.2),
+      icDeck:ic('<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>'),
+      icCsv:ic('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/>'),
+      icCopy:ic('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+      icEye:ic('<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>'),
+      icX:ic('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',2.2),
+      icArrowR:ic('<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',2.2),
+      cartaLabel: cartaSynced?('Carta · synced '+st.carta):'Carta · out of sync', cartaStyle: cartaSynced?'color:#166534;background:#dcfce7':'color:#b45309;background:#fffbeb',
+      filters, cols, ledger, fdShares:this.commas(fdTotal), fdSharesShort:this.short(fdTotal),
+      changeLogNote: cartaSynced?('Last change: option pool → '+st.pool+'% · '+st.carta):'Unsynced changes pending',
+      donut, donutLegend, summaryCards,
+      founders,
+      safes, safeTotal, safeBlendedCap,
+      convCapStyle: st.conv==='cap'?'background:#fff;color:#7c3aed;box-shadow:0 1px 2px rgba(0,0,0,.08)':'background:transparent;color:#71717a',
+      convNextStyle: st.conv==='next'?'background:#fff;color:#7c3aed;box-shadow:0 1px 2px rgba(0,0,0,.08)':'background:transparent;color:#71717a',
+      setConvCap:()=>this.setState({conv:'cap'}), setConvNext:()=>this.setState({conv:'next'}),
+      poolPct:st.pool, poolRaw:st.pool, poolSliderPct:((st.pool-5)/15*100).toFixed(1)+'%',
+      setPool:(e)=>this.setState({pool:parseInt(e.target.value,10),carta:null}),
+      poolWarn, poolWarnColor, poolWarnBg, poolWarnBorder, poolDilution,
+      seedRaise:st.seedRaise, seedLabel:this.money(st.seedRaise), seedSliderPct:((st.seedRaise-500000)/3500000*100).toFixed(1)+'%',
+      setSeed:(e)=>this.setState({seedRaise:parseInt(e.target.value,10)}),
+      saveScenario:()=>this.setState({savedCount:st.savedCount+1}),
+      stages, dilTable,
+      singleStyle: st.accel==='single'?'background:#fff;color:#7c3aed;box-shadow:0 1px 2px rgba(0,0,0,.08)':'background:transparent;color:#71717a',
+      doubleStyle: st.accel==='double'?'background:#fff;color:#7c3aed;box-shadow:0 1px 2px rgba(0,0,0,.08)':'background:transparent;color:#71717a',
+      setSingle:()=>this.setState({accel:'single'}), setDouble:()=>this.setState({accel:'double'}),
+      accelSummary, accelPreview, accelTotal, insertClause:()=>{},
+      exportMenuOpen:st.exportMenuOpen, toggleExport:()=>this.setState({exportMenuOpen:!st.exportMenuOpen}), closeExport:()=>this.setState({exportMenuOpen:false}),
+      previewOpen:st.previewOpen, openPreview:()=>this.setState({previewOpen:true,exportMenuOpen:false}), closePreview:()=>this.setState({previewOpen:false}),
+      pushCarta:()=>this.setState({carta:'just now'}),
+      openAdd:()=>this.setState({addOpen:true, af:{ name:'', role:'', shares:'', kind:'founders' }}),
+      closeAdd:()=>this.setState({addOpen:false}),
+      af:st.af,
+      afRolePlaceholder: st.af.kind==='advisors'?'Advisor · GTM':'CPO & Co-founder',
+      kindOpts:[['founders','Founder'],['advisors','Advisor']].map(([k,l])=>({ label:l, onClick:()=>this.setState({af:{...st.af,kind:k}}),
+        style: st.af.kind===k?'color:#fff;background:#7c3aed;border:1px solid #7c3aed':'color:#71717a;background:#fff;border:1px solid #ececf1' })),
+      setAfName:e=>this.setState({af:{...st.af,name:e.target.value}}),
+      setAfRole:e=>this.setState({af:{...st.af,role:e.target.value}}),
+      setAfShares:e=>this.setState({af:{...st.af,shares:e.target.value}}),
+      addDisabledStyle: (st.af.name.trim() && String(st.af.shares).replace(/[^0-9]/g,''))?'':'opacity:.5;pointer-events:none',
+      confirmAdd:()=>{ const a=st.af; const shares=parseInt(String(a.shares).replace(/[^0-9]/g,''),10)||0; if(!a.name.trim()||!shares) return;
+        const initials=a.name.trim().split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase();
+        const today=new Date().toISOString().slice(0,10);
+        const row = a.kind==='advisors'
+          ? { name:a.name.trim(), role:a.role.trim()||'Advisor', initials, shares, start:today }
+          : { name:a.name.trim(), role:a.role.trim()||'Co-founder', initials, shares, start:today, filed83b:false, hasAgreement:false };
+        const arr=st[a.kind].slice(); arr.push(row);
+        this.setState({ [a.kind]:arr, addOpen:false, carta:null }); },
+      stop:(e)=>e.stopPropagation(), back:(e)=>{e.preventDefault(); try{window.parent&&window.parent.postMessage({type:'ct-back'},'*');}catch(x){}},
+    };
+  }
+}
+</script>
+</body>
+</html>

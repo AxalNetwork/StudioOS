@@ -354,7 +354,7 @@ const DYNAMIC_PROMPTS: Record<Persona, string[]> = {
     'Which relationship in your network is most underused relative to its potential?',
   ],
   advisor: [
-    'Across the founders you advisor, what mistake do you find yourself flagging over and over?',
+    'Across the founders you advise, what mistake do you find yourself flagging over and over?',
     'What advice do you give that founders most often resist — and are usually wrong to?',
     'Where do you feel least confident giving guidance right now?',
   ],
@@ -362,6 +362,11 @@ const DYNAMIC_PROMPTS: Record<Persona, string[]> = {
     'Looking across the whole studio, what operational risk worries you most this quarter?',
     'If you could automate one recurring decision you make, which would it be?',
     'Where is the studio\u2019s process creating the most friction for founders today?',
+  ],
+  explorer: [
+    'Stepping back — of the paths you\u2019re weighing (founder, investor, advisor, partner), which pulls at you most, and why?',
+    'What would you need to see or learn in the next 90 days to commit to one direction?',
+    'What is the biggest unknown holding you back from choosing a path right now?',
   ],
   unknown: [
     'Anything else on your mind that we haven\u2019t covered yet?',

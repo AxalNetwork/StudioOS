@@ -107,13 +107,24 @@ function useVisualViewportStyle() {
   return style;
 }
 
-export default function PersonalAdvisor() {
+// Props (both optional — the Dashboard mount passes neither):
+//   disablePersistedFullscreen — non-Dashboard mounts (e.g. the Advisory
+//     page) set this so a `viewMode:'fullscreen'` persisted from the
+//     Dashboard doesn't auto-open the takeover overlay on load. The user
+//     can still maximize; the persisted viewMode is simply not read or
+//     written by such mounts (conversation_id stays shared — server-side).
+//   onAvailabilityChange(available: bool) — fired when we learn whether
+//     /api/advisor exists in this environment, so a host page can swap in
+//     a fallback surface instead of the card silently rendering null.
+export default function PersonalAdvisor({ disablePersistedFullscreen = false, onAvailabilityChange } = {}) {
   const { user } = useAuth();
   const persisted = useMemo(() => safeReadJSON(STORAGE_KEY, {}) || {}, []);
   // viewMode: 'normal' (embedded card) | 'fullscreen' (viewport takeover).
   // Migration: legacy persisted state used a `minimised` boolean (now
   // removed) — we ignore it and default to 'normal'.
-  const [viewMode, setViewMode] = useState(persisted.viewMode === 'fullscreen' ? 'fullscreen' : 'normal');
+  const [viewMode, setViewMode] = useState(
+    !disablePersistedFullscreen && persisted.viewMode === 'fullscreen' ? 'fullscreen' : 'normal',
+  );
   const [conversationId, setConversationId] = useState(persisted.conversation_id || null);
   const [persona, setPersona] = useState(null);
   const [question, setQuestion] = useState(null);     // public_question shape from server
@@ -162,8 +173,16 @@ export default function PersonalAdvisor() {
 
   // ---------- Persistence -------------------------------------------------
   useEffect(() => {
+    if (disablePersistedFullscreen) {
+      // Non-Dashboard mount: keep whatever viewMode the Dashboard persisted
+      // (don't stomp it with this mount's transient state) but still share
+      // the conversation pointer.
+      const prev = safeReadJSON(STORAGE_KEY, {}) || {};
+      safeWriteJSON(STORAGE_KEY, { viewMode: prev.viewMode || 'normal', conversation_id: conversationId });
+      return;
+    }
     safeWriteJSON(STORAGE_KEY, { viewMode, conversation_id: conversationId });
-  }, [viewMode, conversationId]);
+  }, [viewMode, conversationId, disablePersistedFullscreen]);
 
   // ---------- Server-driven progress (by_page / by_section / overall) ----
   const refreshProgress = useCallback(async () => {
@@ -187,11 +206,17 @@ export default function PersonalAdvisor() {
     } catch { setLabState(null); }
   }, []);
 
+  // Keep the latest availability callback in a ref so `bootstrap` (deps [])
+  // never goes stale if the host re-renders with a new function identity.
+  const availabilityRef = useRef(onAvailabilityChange);
+  useEffect(() => { availabilityRef.current = onAvailabilityChange; }, [onAvailabilityChange]);
+
   // ---------- Initial load ------------------------------------------------
   const bootstrap = useCallback(async () => {
     setLoadError(null);
     try {
       const r = await api.advisor.start();
+      availabilityRef.current?.(true);
       setConversationId(r.conversation_id || r.conversation_uid || null);
       setPersona(r.persona || null);
       setQuestion(r.next_question || r.next || null);
@@ -210,14 +235,32 @@ export default function PersonalAdvisor() {
           setAnsweredIds((hist?.answers || []).filter((a) => a.saved_status === 'saved').map((a) => a.question_id));
         } catch { /* non-fatal */ }
       }
+      // Explorer completion incentive — the worker attaches `promo_notice`
+      // for exploring users: an early "finish this and earn a 30-day
+      // license" pitch, or (state 'issued') a reminder carrying the
+      // still-unredeemed code with a Products CTA. Appended AFTER the
+      // history hydration so the functional update lands on top of it.
+      if (r.promo_notice?.message) {
+        const notice = {
+          role: 'assistant',
+          content: r.promo_notice.message,
+          promo_notice: true,
+          ...(r.promo_notice.route
+            ? { cta: { primary: { label: 'Redeem in Products', route: r.promo_notice.route } } }
+            : {}),
+        };
+        setMessages((m) => [...m, notice]);
+      }
     } catch (e) {
       // 404 → endpoint not mounted in this environment (dev FastAPI
       // backend doesn't host the advisor; worker-only feature). Hide
       // the card silently rather than rendering a confusing error.
       if (e?.status === 404) {
         setUnavailable(true);
+        availabilityRef.current?.(false);
         return;
       }
+      availabilityRef.current?.(true);
       setLoadError(e?.message || 'Could not load advisor');
     }
   }, []);
@@ -352,6 +395,27 @@ export default function PersonalAdvisor() {
         setMessages((m) => [...m, { role: 'assistant', content: `I couldn't save that — ${r.error}` }]);
       }
       setPendingEvidence(null);
+      // Explorer completion incentive — the turn that finished the needs
+      // bank carries the one-time promo code + recommendations summary.
+      // Rendered before any next question so the reward lands first; on
+      // reload the server-recorded announcement replays from history.
+      if (r.completion_payload?.promo_code) {
+        const cp = r.completion_payload;
+        const content = [
+          `🎉 That's your profile complete — thank you! As promised, here's your one-time promo code for a free ${String(cp.license_label || '30-day license').toLowerCase()}:`,
+          '',
+          cp.promo_code,
+          ...(cp.summary ? ['', cp.summary] : []),
+          '',
+          'Redeem it on the Products page — the confirmation will show a $0.00 total.',
+        ].join('\n');
+        setMessages((m) => [...m, {
+          role: 'assistant',
+          content,
+          completion: true,
+          cta: cp.cta || null,
+        }]);
+      }
       const next = r.next_question || r.next || null;
       setQuestion(next);
       setProgress(r.progress || progress);

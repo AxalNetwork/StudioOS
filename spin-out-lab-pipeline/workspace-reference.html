@@ -1,0 +1,1594 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Inter',system-ui,sans-serif;background:#F8F8FA;color:#18181b;-webkit-font-smoothing:antialiased}
+  .tnum{font-variant-numeric:tabular-nums}
+  a{color:#7c3aed;text-decoration:none}
+  a:hover{color:#6d28d9}
+  ::-webkit-scrollbar{height:8px;width:8px}
+  ::-webkit-scrollbar-thumb{background:#d4d4d8;border-radius:8px}
+  @keyframes wsPulse{0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,.45)}50%{box-shadow:0 0 0 5px rgba(124,58,237,0)}}
+  @keyframes wsGlow{0%,100%{box-shadow:0 0 0 1px rgba(124,58,237,.35),0 1px 2px rgba(24,24,27,.04)}50%{box-shadow:0 0 0 3px rgba(124,58,237,.18),0 1px 2px rgba(24,24,27,.04)}}
+  @keyframes wsFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .ws-lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:#a1a1aa}
+  .ws-scroll{scrollbar-width:thin}
+  @media (max-width:1080px){.ws-sidebar{display:none!important}.ws-main{padding-left:0!important}}
+  @media (max-width:1300px){.ws-toolsgrid{grid-template-columns:repeat(3,1fr)!important}}
+  @media (max-width:900px){.ws-weeks{grid-template-columns:repeat(2,1fr)!important}.ws-2col{grid-template-columns:1fr!important}.ws-locked{grid-template-columns:1fr!important}.ws-toolsgrid{grid-template-columns:repeat(2,1fr)!important}}
+  .ws-srcrow:hover .ws-srcrm{opacity:1!important}
+  .ws-qa:hover{border-color:#e4e4e7!important;color:#3f3f46!important}
+  @media (max-width:640px){.ws-drawer{position:fixed!important;top:auto!important;left:0!important;right:0!important;bottom:0!important;width:100%!important;max-height:90vh!important;border-radius:16px 16px 0 0!important}}
+</style>
+</helmet>
+
+<div style="display:flex;min-height:100vh;background:#F8F8FA">
+
+  <!-- SIDEBAR -->
+  <aside class="ws-sidebar" style="width:256px;flex:none;position:fixed;inset:0 auto 0 0;background:#fff;border-right:1px solid #ececf1;display:flex;flex-direction:column;z-index:20">
+    <div style="height:60px;flex:none;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid #f1f1f5">
+      <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px">M</div>
+      <div style="font-weight:700;font-size:15px;letter-spacing:-.01em">Meridian</div>
+    </div>
+    <nav class="ws-scroll" style="flex:1;overflow-y:auto;padding:14px 12px">
+      <sc-for list="{{ navGroups }}" as="group" hint-placeholder-count="3">
+        <div style="margin-bottom:18px">
+          <div class="ws-lbl" style="padding:0 10px;margin-bottom:6px">{{ group.label }}</div>
+          <sc-for list="{{ group.items }}" as="item" hint-placeholder-count="4">
+            <div onClick="{{ item.onClick }}" style="{{ item.style }}">
+              <span style="width:18px;height:18px;flex:none;display:flex;align-items:center;justify-content:center" dangerouslySetInnerHTML="{{ item.icon }}"></span>
+              <span>{{ item.name }}</span>
+              <sc-if value="{{ item.badge }}"><span style="margin-left:auto;font-size:10px;font-weight:700;background:#ede9fe;color:#6d28d9;border-radius:6px;padding:2px 6px">{{ item.badge }}</span></sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </nav>
+    <div style="flex:none;padding:12px;border-top:1px solid #f1f1f5;display:flex;align-items:center;gap:10px">
+      <div style="width:32px;height:32px;border-radius:50%;background:#ede9fe;color:#7c3aed;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center">GL</div>
+      <div style="line-height:1.2"><div style="font-size:13px;font-weight:600">Guillaume L.</div><div style="font-size:11px;color:#a1a1aa">Cohort 3 Founder</div></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="ws-main" style="flex:1;min-width:0;padding-left:256px">
+
+    <!-- GLOBAL NAV -->
+    <header style="height:60px;position:sticky;top:0;z-index:30;background:rgba(248,248,250,.85);backdrop-filter:blur(8px);border-bottom:1px solid #ececf1;display:flex;align-items:center;justify-content:space-between;padding:0 24px">
+      <div style="display:flex;align-items:center;gap:9px">
+        <div style="width:24px;height:24px;border-radius:7px;background:#ede9fe;display:flex;align-items:center;justify-content:center;color:#7c3aed" dangerouslySetInnerHTML="{{ flaskIcon }}"></div>
+        <span style="font-size:13.5px;font-weight:600;color:#3f3f46">Spin-Out Lab</span>
+        <span style="font-size:11px;font-weight:700;color:#047857;background:#ecfdf5;border:1px solid #d1fae5;border-radius:6px;padding:2px 7px">Accepted</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="width:34px;height:34px;border-radius:9px;border:1px solid #ececf1;background:#fff;display:flex;align-items:center;justify-content:center;color:#71717a" dangerouslySetInnerHTML="{{ bellIcon }}"></div>
+        <div style="width:34px;height:34px;border-radius:50%;background:#ede9fe;color:#7c3aed;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center">GL</div>
+      </div>
+    </header>
+
+    <!-- PAGE HEADER (sticky) -->
+    <sc-if value="{{ isWorkspace }}" hint-placeholder-val="{{ true }}">
+    <div style="position:sticky;top:60px;z-index:25;background:rgba(248,248,250,.92);backdrop-filter:blur(8px);border-bottom:1px solid #ececf1">
+      <div style="max-width:100%;margin:0 auto;padding:18px 24px 0">
+        <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:34px;height:34px;border-radius:10px;background:#ede9fe;display:flex;align-items:center;justify-content:center;color:#7c3aed" dangerouslySetInnerHTML="{{ flaskIcon }}"></div>
+              <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">Spin-Out Lab</h1>
+            </div>
+            <span class="tnum" style="font-size:12px;font-weight:600;color:#52525b;background:#fff;border:1px solid #ececf1;border-radius:8px;padding:5px 10px">Cohort 3 · Started July 1, 2026</span>
+            <span class="tnum" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#6d28d9;background:#f5f3ff;border:1px solid #ede9fe;border-radius:8px;padding:5px 10px"><span style="width:6px;height:6px;border-radius:50%;background:#7c3aed;animation:wsPulse 2s infinite"></span>Week 2 of 4 · Day 11</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:18px">
+            <div style="display:flex;align-items:center;gap:11px">
+              <div style="width:46px;height:46px;border-radius:50%;background:conic-gradient(#7c3aed 0% 100%,#e5e7eb 100% 100%);display:flex;align-items:center;justify-content:center;flex:none">
+                <div class="tnum" style="width:38px;height:38px;border-radius:50%;background:#F8F8FA;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800;color:#6d28d9;letter-spacing:-.02em">100%</div>
+              </div>
+              <div style="line-height:1.15"><div style="font-size:13px;font-weight:700;color:#27272a">All weeks unlocked</div><div class="tnum" style="font-size:12px;color:#71717a">19 days remaining</div></div>
+            </div>
+            <div style="width:1px;height:34px;background:#ececf1"></div>
+            <div style="display:flex;align-items:center;gap:9px">
+              <div style="width:34px;height:34px;border-radius:50%;background:#ede9fe;color:#7c3aed;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center">GL</div>
+              <span style="font-size:13px;font-weight:600;color:#27272a">Guillaume L.</span>
+            </div>
+          </div>
+        </div>
+        <!-- Segmented progress bar -->
+        <div style="display:flex;gap:6px;padding:16px 0 14px">
+          <sc-for list="{{ progressSegments }}" as="seg" hint-placeholder-count="4">
+            <div style="flex:1;display:flex;flex-direction:column;gap:5px">
+              <div style="height:7px;border-radius:99px;position:relative;overflow:hidden;background:{{ seg.track }}">
+                <div style="position:absolute;inset:0;width:{{ seg.fillW }};background:{{ seg.fill }};{{ seg.pulse }}"></div>
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:{{ seg.labelColor }}">
+                <sc-if value="{{ seg.showDot }}"><span style="width:5px;height:5px;border-radius:50%;background:#7c3aed;animation:wsPulse 2s infinite"></span></sc-if>
+                {{ seg.label }}
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    </sc-if>
+
+    <main style="max-width:{{ mainMaxW }};margin:0 auto;padding:28px 24px 120px">
+
+      <sc-if value="{{ isWorkspace }}" hint-placeholder-val="{{ true }}">
+      <!-- SECTION 1 — WEEK TIMELINE -->
+      <section style="margin-bottom:36px">
+        <div class="ws-lbl" style="margin-bottom:12px">Program timeline</div>
+        <div class="ws-weeks" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+          <sc-for list="{{ weeks }}" as="w" hint-placeholder-count="4">
+            <div onClick="{{ w.onOpen }}" title="{{ w.tooltip }}" style="border-radius:16px;background:#fff;border:1px solid {{ w.borderColor }};padding:16px;cursor:pointer;{{ w.cardExtra }};display:flex;flex-direction:column;transition:box-shadow .15s">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                <div>
+                  <div style="font-size:11px;font-weight:700;color:{{ w.accent }};text-transform:uppercase;letter-spacing:.04em">Week {{ w.num }}</div>
+                  <div style="font-size:15px;font-weight:700;color:#27272a;letter-spacing:-.01em">{{ w.name }}</div>
+                </div>
+                <span style="display:inline-flex;align-items:center;gap:5px;flex:none;font-size:10.5px;font-weight:700;border-radius:99px;padding:3px 9px;{{ w.badgeStyle }}"><span style="width:12px;height:12px;display:flex" dangerouslySetInnerHTML="{{ w.badgeIcon }}"></span>{{ w.badgeText }}</span>
+              </div>
+              <p style="margin:0 0 12px;font-size:12.5px;line-height:1.4;color:#71717a;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ w.summary }}</p>
+              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:11px">
+                <sc-for list="{{ w.deliverables }}" as="d" hint-placeholder-count="3">
+                  <span style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;border-radius:6px;padding:3px 7px;{{ d.style }}"><span style="width:10px;height:10px;display:flex" dangerouslySetInnerHTML="{{ d.icon }}"></span>{{ d.label }}</span>
+                </sc-for>
+              </div>
+              <div style="margin-top:auto;display:flex;flex-wrap:wrap;gap:5px;padding-top:11px;border-top:1px solid #f4f4f5">
+                <sc-for list="{{ w.features }}" as="f" hint-placeholder-count="4">
+                  <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;border-radius:6px;padding:3px 7px;{{ f.style }}"><sc-if value="{{ f.locked }}"><span style="width:9px;height:9px;display:flex" dangerouslySetInnerHTML="{{ lockMini }}"></span></sc-if>{{ f.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- SECTION 2A — SELECTED WEEK HEADER -->
+      <section style="margin-bottom:20px">
+        <div style="border-radius:16px;background:#fff;border:1px solid #ececf1;padding:24px;{{ activeWeek.cardAnim }};position:relative;overflow:hidden">
+          <div style="position:absolute;top:0;left:0;bottom:0;width:4px;background:{{ activeWeek.accent }}"></div>
+          <div style="display:flex;flex-wrap:wrap;gap:18px;justify-content:space-between;align-items:flex-start">
+            <div style="min-width:280px">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:6px">
+                <span style="font-size:10.5px;font-weight:700;border-radius:99px;padding:3px 9px;display:inline-flex;align-items:center;gap:5px;{{ activeWeek.pillStyle }}"><sc-if value="{{ activeWeek.isActive }}"><span style="width:5px;height:5px;border-radius:50%;background:#7c3aed;animation:wsPulse 2s infinite"></span></sc-if>{{ activeWeek.pillText }}</span>
+              </div>
+              <h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">{{ activeWeek.title }}</h2>
+              <p style="margin:7px 0 16px;font-size:14px;color:#71717a;max-width:520px">{{ activeWeek.subtitle }}</p>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <sc-for list="{{ activeStats }}" as="s" hint-placeholder-count="3">
+                  <span class="tnum" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#3f3f46;background:#fafafa;border:1px solid #eeeef2;border-radius:8px;padding:6px 11px"><span style="width:14px;height:14px;color:#7c3aed;display:flex" dangerouslySetInnerHTML="{{ s.icon }}"></span>{{ s.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button style="height:40px;padding:0 18px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px;box-shadow:0 1px 2px rgba(124,58,237,.4)" onClick="{{ activeWeek.cta1 }}">{{ activeWeek.cta1Label }} <span style="font-size:15px">→</span></button>
+              <button onClick="{{ activeWeek.cta2 }}" style="height:40px;padding:0 16px;border-radius:10px;border:1px solid #e4e4e7;background:#fff;color:#3f3f46;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px">{{ activeWeek.cta2Label }} <span style="font-size:15px">→</span></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 2 — TWO COLUMN -->
+      <section class="ws-2col" style="display:grid;grid-template-columns:1fr 2fr;gap:20px;margin-bottom:36px;align-items:start">
+
+        <!-- 2B DELIVERABLES -->
+        <div>
+          <div class="ws-lbl" style="margin-bottom:12px">{{ activeWeek.delivLabel }}</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ deliverableRows }}" as="d" hint-placeholder-count="5">
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:14px;padding:15px 16px;box-shadow:0 1px 2px rgba(24,24,27,.03);display:flex;gap:13px;align-items:flex-start">
+                <span style="width:20px;height:20px;flex:none;margin-top:1px;border-radius:6px;display:flex;align-items:center;justify-content:center;{{ d.boxStyle }}" dangerouslySetInnerHTML="{{ d.boxIcon }}"></span>
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                    <span style="font-size:14.5px;font-weight:600;color:#27272a">{{ d.name }}</span>
+                    <span style="font-size:10.5px;font-weight:600;border-radius:99px;padding:2px 8px;{{ d.tagStyle }}">{{ d.tag }}</span>
+                  </div>
+                  <sc-if value="{{ d.hasProgress }}">
+                    <div style="margin-top:9px;height:5px;border-radius:99px;background:#f1f1f5;overflow:hidden;max-width:220px"><div style="height:100%;width:{{ d.progress }};background:#7c3aed;border-radius:99px"></div></div>
+                  </sc-if>
+                </div>
+                <button onClick="{{ d.onOpen }}" style="flex:none;height:32px;padding:0 12px;border-radius:9px;border:1px solid #e4e4e7;background:#fff;color:#6d28d9;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px">{{ d.action }} <span style="font-size:13px">→</span></button>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- 2C TOOLS -->
+        <div>
+          <div class="ws-lbl" style="margin-bottom:12px">Your unlocked tools</div>
+          <sc-for list="{{ toolGroups }}" as="g" hint-placeholder-count="3">
+            <div style="margin-bottom:16px">
+              <sc-if value="{{ g.heading }}"><div style="font-size:11px;font-weight:600;color:#a1a1aa;margin-bottom:8px">{{ g.heading }}</div></sc-if>
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px" class="ws-toolsgrid">
+                <sc-for list="{{ g.tools }}" as="t" hint-placeholder-count="4">
+                  <div onClick="{{ t.onOpen }}" style="border-radius:13px;padding:13px;background:{{ t.bg }};border:1px solid {{ t.border }};{{ t.cursor }};display:flex;flex-direction:column;{{ t.opacity }}">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
+                      <div style="width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:6px;{{ t.iconStyle }}" dangerouslySetInnerHTML="{{ t.icon }}"></div>
+                      <sc-if value="{{ t.locked }}"><span style="width:14px;height:14px;color:#a1a1aa;display:flex" dangerouslySetInnerHTML="{{ lockMini }}"></span></sc-if>
+                    </div>
+                    <div style="font-size:12.5px;font-weight:700;color:{{ t.titleColor }};margin-bottom:2px">{{ t.name }}</div>
+                    <div style="font-size:11px;line-height:1.35;color:#a1a1aa;margin-bottom:10px;flex:1">{{ t.desc }}</div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+                      <span style="font-size:9.5px;font-weight:700;border-radius:6px;padding:2px 6px;{{ t.badgeStyle }}">{{ t.badge }}</span>
+                      <sc-if value="{{ t.active }}"><button onClick="{{ t.onOpen }}" style="height:26px;padding:0 10px;border-radius:7px;border:1px solid #e4e4e7;background:#fff;color:#6d28d9;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">Open →</button></sc-if>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- SECTION 3 — SCORECARD -->
+      <section style="margin-bottom:36px">
+        <div class="ws-lbl" style="margin-bottom:12px">30-day scorecard</div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(24,24,27,.03)">
+          <div class="ws-scroll" style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;min-width:720px">
+              <thead>
+                <tr style="background:#fafafa">
+                  <th style="text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;padding:12px 16px;border-bottom:1px solid #ececf1"></th>
+                  <sc-for list="{{ scoreCols }}" as="c" hint-placeholder-count="4">
+                    <th style="text-align:left;font-size:12px;font-weight:700;color:#27272a;padding:12px 16px;border-bottom:1px solid #ececf1;border-left:1px solid #f4f4f5">Week {{ c.num }}</th>
+                  </sc-for>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{ scoreRows }}" as="r" hint-placeholder-count="4">
+                  <tr>
+                    <td class="ws-lbl" style="padding:13px 16px;border-bottom:1px solid #f4f4f5;white-space:nowrap">{{ r.label }}</td>
+                    <sc-for list="{{ r.cells }}" as="cell" hint-placeholder-count="4">
+                      <td style="padding:13px 16px;border-bottom:1px solid #f4f4f5;border-left:1px solid #f4f4f5;vertical-align:top">
+                        <sc-if value="{{ cell.badge }}"><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;border-radius:99px;padding:3px 9px;{{ cell.badgeStyle }}"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ cell.icon }}"></span>{{ cell.text }}</span></sc-if>
+                        <sc-if value="{{ cell.bar }}">
+                          <div class="tnum" style="font-size:12.5px;font-weight:600;color:#3f3f46;margin-bottom:5px">{{ cell.text }}</div>
+                          <div style="height:6px;border-radius:99px;background:#f1f1f5;overflow:hidden;max-width:120px"><div style="height:100%;width:{{ cell.barW }};background:{{ cell.barColor }};border-radius:99px"></div></div>
+                        </sc-if>
+                        <sc-if value="{{ cell.plain }}"><span class="tnum" style="font-size:12.5px;font-weight:{{ cell.weight }};color:{{ cell.color }}">{{ cell.text }}</span></sc-if>
+                      </td>
+                    </sc-for>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px">
+          <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="3">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:14px;padding:16px 18px;box-shadow:0 1px 2px rgba(24,24,27,.03)">
+              <div class="ws-lbl" style="margin-bottom:6px">{{ k.label }}</div>
+              <div class="tnum" style="font-size:20px;font-weight:600;color:#18181b;letter-spacing:-.01em">{{ k.value }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- SECTION 4 — WEEK 1 SUMMARY -->
+      <section style="margin-bottom:36px">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;box-shadow:0 1px 2px rgba(24,24,27,.03);overflow:hidden">
+          <div onClick="{{ toggleWeek1 }}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;cursor:pointer">
+            <div style="display:flex;align-items:center;gap:11px">
+              <span style="width:22px;height:22px;border-radius:99px;background:#dcfce7;color:#16a34a;display:flex;align-items:center;justify-content:center;padding:4px" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+              <span style="font-size:14.5px;font-weight:700;color:#27272a">Week 1 Summary</span>
+              <span class="tnum" style="font-size:12px;color:#a1a1aa">Completed July 7, 2026</span>
+            </div>
+            <span style="width:18px;height:18px;color:#a1a1aa;display:flex;transition:transform .2s;{{ week1ChevronRot }}" dangerouslySetInnerHTML="{{ chevronIcon }}"></span>
+          </div>
+          <sc-if value="{{ week1Open }}">
+            <div style="padding:4px 20px 22px;border-top:1px solid #f4f4f5;animation:wsFade .2s ease">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:18px" class="ws-2col">
+                <div>
+                  <div class="ws-lbl" style="margin-bottom:8px">Startup record</div>
+                  <div style="display:flex;align-items:center;gap:10px;background:#fafafa;border:1px solid #eeeef2;border-radius:11px;padding:12px 14px">
+                    <div style="width:34px;height:34px;border-radius:9px;background:#ede9fe;color:#6d28d9;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center">NC</div>
+                    <div><div style="font-size:13.5px;font-weight:700;color:#27272a">NovaCraft AI</div><div style="font-size:11.5px;color:#a1a1aa">Startup record created · Day 2</div></div>
+                  </div>
+                  <div class="ws-lbl" style="margin:18px 0 8px">TAM / SAM</div>
+                  <div style="display:flex;gap:10px;margin-bottom:10px">
+                    <div class="tnum" style="flex:1;background:#fafafa;border:1px solid #eeeef2;border-radius:11px;padding:11px 14px"><div style="font-size:18px;font-weight:700;color:#18181b">$2.4B</div><div style="font-size:11px;color:#a1a1aa">TAM</div></div>
+                    <div class="tnum" style="flex:1;background:#fafafa;border:1px solid #eeeef2;border-radius:11px;padding:11px 14px"><div style="font-size:18px;font-weight:700;color:#18181b">$340M</div><div style="font-size:11px;color:#a1a1aa">SAM</div></div>
+                  </div>
+                  <div style="font-size:11.5px;color:#71717a;line-height:1.5">Sources: Gartner 2025 Workflow Automation Report · CB Insights SaaS Market Sizing Q1 2026</div>
+                  <div class="ws-lbl" style="margin:18px 0 8px">Personal advisor</div>
+                  <div style="display:flex;align-items:flex-start;gap:10px;background:#f5f3ff;border:1px solid #ede9fe;border-radius:11px;padding:12px 14px">
+                    <span style="width:16px;height:16px;flex:none;color:#7c3aed;margin-top:1px;display:flex" dangerouslySetInnerHTML="{{ sparkIcon }}"></span>
+                    <div style="font-size:12px;color:#52525b;line-height:1.45"><strong style="color:#27272a;font-weight:600">Active</strong> — Week 1 question bank complete. Now operating in Week 2 mode.</div>
+                  </div>
+                </div>
+                <div>
+                  <div class="ws-lbl" style="margin-bottom:8px">Interviews logged · 5</div>
+                  <div style="border:1px solid #eeeef2;border-radius:11px;overflow:hidden">
+                    <table style="width:100%;border-collapse:collapse">
+                      <thead><tr style="background:#fafafa"><th style="text-align:left;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;padding:8px 12px">Name</th><th style="text-align:left;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;padding:8px 12px">Date</th><th style="text-align:left;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;padding:8px 12px">Key insight</th></tr></thead>
+                      <tbody>
+                        <sc-for list="{{ interviews }}" as="iv" hint-placeholder-count="5">
+                          <tr style="border-top:1px solid #f4f4f5">
+                            <td style="font-size:12px;font-weight:600;color:#27272a;padding:9px 12px;white-space:nowrap">{{ iv.name }}</td>
+                            <td class="tnum" style="font-size:12px;color:#71717a;padding:9px 12px;white-space:nowrap">{{ iv.date }}</td>
+                            <td style="font-size:12px;color:#52525b;padding:9px 12px;line-height:1.35">{{ iv.insight }}</td>
+                          </tr>
+                        </sc-for>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </section>
+
+      <!-- SECTION 6 — LOCKED WEEK PREVIEWS -->
+      <section>
+        <div class="ws-lbl" style="margin-bottom:12px">Available — Weeks 3 & 4</div>
+        <div class="ws-locked" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <sc-for list="{{ lockedWeeks }}" as="lw" hint-placeholder-count="2">
+            <div style="position:relative;border-radius:16px;background:#fff;border:1px solid #ececf1;overflow:hidden;min-height:230px;cursor:pointer" onClick="{{ lw.onOpen }}">
+              <div style="padding:20px">
+                <div style="font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.04em">Week {{ lw.num }}</div>
+                <div style="font-size:16px;font-weight:700;color:#27272a;margin-bottom:12px">{{ lw.name }}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">
+                  <sc-for list="{{ lw.pills }}" as="p" hint-placeholder-count="5">
+                    <span style="font-size:10.5px;font-weight:600;color:#15803d;background:#f0fdf4;border:1px solid #dcfce7;border-radius:6px;padding:3px 8px">{{ p }}</span>
+                  </sc-for>
+                </div>
+                <div style="font-size:12px;color:#a1a1aa;line-height:1.45"><span style="font-weight:600;color:#71717a">You leave with:</span> {{ lw.deliverables }}</div>
+                <div style="margin-top:14px;font-size:12px;font-weight:600;color:#6d28d9">View week →</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+      </sc-if>
+
+      <!-- ===== TOOL PAGES ===== -->
+      <sc-if value="{{ isTool }}">
+      <div style="animation:wsFade .2s ease">
+        <sc-if value="{{ isEmbeddedTool }}">
+          <div style="height:3px;background:{{ currentTool.stripe }};border-radius:0 0 3px 3px;margin:0 0 16px"></div>
+          <div style="display:grid;grid-template-columns:auto auto 1fr;column-gap:14px;row-gap:6px;align-items:start;margin-bottom:20px">
+            <button onClick="{{ goWorkspace }}" style="grid-column:1;grid-row:1;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px 0 8px;border-radius:9px;border:1px solid #e4e4e7;background:#fff;color:#52525b;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer"><span style="font-size:15px">←</span> Back to Workspace</button>
+            <div style="grid-column:2;grid-row:1;width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:7px;{{ currentTool.iconStyle }}" dangerouslySetInnerHTML="{{ currentTool.icon }}"></div>
+            <div style="grid-column:3;grid-row:1;display:flex;align-items:center;gap:9px">
+              <h2 style="margin:0;font-size:19px;font-weight:800;letter-spacing:-.02em">{{ currentTool.name }}</h2>
+              <sc-if value="{{ currentTool.active }}" hint-placeholder-val="{{ true }}"><span style="font-size:10.5px;font-weight:700;color:#15803d;background:#dcfce7;border-radius:99px;padding:3px 9px">Active</span></sc-if>
+            </div>
+            <div style="grid-column:2 / 4;grid-row:2;font-size:13px;color:#71717a">{{ currentTool.desc }}</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ notEmbeddedTool }}">
+        <button onClick="{{ goWorkspace }}" style="display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px 0 8px;border-radius:9px;border:1px solid #e4e4e7;background:#fff;color:#52525b;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:20px"><span style="font-size:15px">←</span> Back to Workspace</button>
+
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;margin-bottom:24px">
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="width:46px;height:46px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:11px;{{ currentTool.iconStyle }}" dangerouslySetInnerHTML="{{ currentTool.icon }}"></div>
+            <div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">{{ currentTool.name }}</h2>
+                <sc-if value="{{ currentTool.active }}" hint-placeholder-val="{{ true }}"><span style="font-size:10.5px;font-weight:700;color:#15803d;background:#dcfce7;border-radius:99px;padding:3px 9px">Active</span></sc-if>
+                <sc-if value="{{ isMarket }}">
+                  <span onClick="{{ toggleMarketChecklist }}" style="position:relative;font-size:10.5px;font-weight:700;border-radius:99px;padding:3px 9px;cursor:pointer;background:{{ readinessColor.bg }};color:{{ readinessColor.fg }}">Market Intel {{ readinessPct }}% complete
+                    <sc-if value="{{ marketChecklistOpen }}">
+                      <div onClick="{{ stop }}" style="position:absolute;top:26px;left:0;z-index:40;width:280px;background:#fff;border:1px solid #ececf1;border-radius:14px;box-shadow:0 20px 50px -12px rgba(24,24,27,.3);padding:16px;cursor:default;text-align:left">
+                        <div style="font-size:13px;font-weight:800;color:#18181b;margin-bottom:10px">Market Intel Checklist</div>
+                        <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:12px">
+                          <sc-for list="{{ checklist }}" as="c" hint-placeholder-count="9">
+                            <div style="display:flex;align-items:center;gap:8px">
+                              <sc-if value="{{ c.done }}"><span style="width:14px;height:14px;flex:none;border-radius:50%;background:#dcfce7;color:#16a34a;display:flex;align-items:center;justify-content:center;padding:3px" dangerouslySetInnerHTML="{{ checkIcon }}"></span></sc-if>
+                              <sc-if value="{{ c.notDone }}"><span style="width:14px;height:14px;flex:none;border-radius:50%;border:1.5px solid #e4e4e7"></span></sc-if>
+                              <span style="font-size:11.5px;color:#3f3f46;font-weight:400">{{ c.label }}</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                        <div style="height:6px;border-radius:99px;background:#f1f1f5;overflow:hidden;margin-bottom:8px"><div style="height:100%;width:{{ readinessPct }}%;background:#7c3aed;border-radius:99px"></div></div>
+                        <div style="font-size:10.5px;color:#a1a1aa;margin-bottom:10px">Investor-ready threshold: 70%. You need {{ readinessRemaining }} more item(s).</div>
+                        <button onClick="{{ toggleMarketChecklist }}" style="width:100%;height:32px;border-radius:9px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Continue →</button>
+                      </div>
+                    </sc-if>
+                  </span>
+                </sc-if>
+                <sc-if value="{{ currentTool.locked }}"><span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;color:#a1a1aa;background:#f4f4f5;border-radius:99px;padding:3px 9px"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ lockMini }}"></span>Locked — Wk {{ currentTool.week }}</span></sc-if>
+              </div>
+              <p style="margin:4px 0 0;font-size:13.5px;color:#71717a">{{ currentTool.desc }}</p>
+            </div>
+          </div>
+          <span class="tnum" style="font-size:12px;font-weight:600;color:#a1a1aa;background:#fff;border:1px solid #ececf1;border-radius:8px;padding:6px 11px">{{ currentTool.weekPill }}</span>
+          <sc-if value="{{ isMarket }}"><button onClick="{{ openMarketDrawer }}" style="height:34px;padding:0 14px;border-radius:9px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Edit Market Data</button></sc-if>
+        </div>
+
+        <sc-if value="{{ showModuleBar }}">
+          <div style="margin:-8px 0 24px;max-width:520px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
+              <span style="font-size:11.5px;font-weight:600;color:#71717a">{{ currentTool.moduleDone }} of {{ currentTool.moduleTotal }} modules completed</span>
+              <span class="tnum" style="font-size:11.5px;font-weight:700;color:#a1a1aa">{{ currentTool.modulePct }}%</span>
+            </div>
+            <div style="height:5px;border-radius:99px;background:#ececf1;overflow:hidden"><div style="height:100%;width:{{ currentTool.modulePct }}%;background:#7c3aed;border-radius:99px"></div></div>
+          </div>
+        </sc-if>
+        </sc-if>
+
+        <!-- STARTUPS -->
+        <sc-if value="{{ isStartups }}">
+          <div style="animation:wsFade .2s ease">
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+              <button onClick="{{ startupPreview.open }}" style="height:34px;padding:0 14px;border-radius:9px;border:1px solid #e4defb;background:#f5f3ff;color:#6d28d9;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Preview as investor</button>
+              <button style="height:34px;padding:0 14px;border-radius:9px;border:1px solid #e4e4e7;background:#fff;color:#52525b;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Share</button>
+              <button style="height:34px;padding:0 14px;border-radius:9px;border:1px solid #e4e4e7;background:#fff;color:#52525b;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Edit</button>
+            </div>
+          <div style="background:linear-gradient(105deg,#faf7ff,#fff 60%);border:1px solid #ece7fb;border-radius:16px;padding:18px 22px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap">
+            <div style="min-width:200px">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a78bfa">30-day program · {{ prog.pct }} complete</div>
+              <div style="font-size:15px;font-weight:800;color:#27272a;margin-top:3px">Week {{ prog.week }} — {{ prog.phase }}</div>
+            </div>
+            <div style="flex:1;min-width:220px;max-width:520px">
+              <div style="display:flex;gap:6px">
+                <sc-for list="{{ prog.weeks }}" as="w" hint-placeholder-count="4">
+                  <div style="flex:1" title="{{ w.title }}">
+                    <div style="height:7px;border-radius:999px;background:{{ w.barColor }}"></div>
+                    <div style="font-size:10px;font-weight:600;color:{{ w.labelColor }};margin-top:5px;text-align:center">{{ w.label }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <button onClick="{{ prog.onContinue }}" style="height:38px;padding:0 16px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:7px">Continue Week {{ prog.week }} <span style="font-size:15px">→</span></button>
+          </div>
+
+          <div class="ws-2col" style="display:grid;grid-template-columns:1.15fr .85fr;gap:20px;align-items:start">
+            <!-- LEFT COLUMN -->
+            <div style="display:flex;flex-direction:column;gap:20px">
+              <!-- IDENTITY CARD -->
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px;box-shadow:0 1px 2px rgba(24,24,27,.03)">
+                <div style="display:flex;align-items:flex-start;gap:15px;margin-bottom:18px">
+                  <div style="width:56px;height:56px;flex:none;border-radius:14px;background:#ede9fe;color:#6d28d9;font-weight:800;font-size:19px;display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer" title="Upload logo">NC<span style="position:absolute;bottom:-4px;right:-4px;width:20px;height:20px;border-radius:50%;background:#fff;border:1px solid #e4e4e7;color:#7c3aed;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center">+</span></div>
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                      <h2 style="margin:0;font-size:20px;font-weight:800;color:#18181b;letter-spacing:-.02em">{{ profile.name }}</h2>
+                      <span style="font-size:10.5px;font-weight:700;color:#6d28d9;background:#f3effe;border-radius:99px;padding:3px 9px">{{ profile.stage }}</span>
+                    </div>
+                    <div style="font-size:13px;color:#52525b;margin-top:4px;line-height:1.45">{{ profile.tagline }}</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:11px">
+                      <sc-for list="{{ profile.tags }}" as="t" hint-placeholder-count="3">
+                        <span style="font-size:10.5px;font-weight:600;color:#52525b;background:#f4f4f5;border-radius:6px;padding:3px 9px">{{ t }}</span>
+                      </sc-for>
+                    </div>
+                  </div>
+                </div>
+                <div style="border-top:1px solid #f4f4f5;padding-top:14px">
+                  <div class="ws-lbl" style="margin-bottom:6px">Founding thesis</div>
+                  <div style="font-size:12.5px;color:#52525b;line-height:1.55">{{ profile.thesis }}</div>
+                </div>
+                <!-- FACTS STRIP -->
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:16px">
+                  <sc-for list="{{ facts }}" as="f" hint-placeholder-count="6">
+                    <div style="background:#fafafa;border:1px solid #eeeef2;border-radius:10px;padding:8px 12px;min-width:0">
+                      <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa">{{ f.k }}</div>
+                      <div style="font-size:12.5px;font-weight:600;color:#27272a;margin-top:2px">{{ f.v }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <!-- STATUS STRIP -->
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px;box-shadow:0 1px 2px rgba(24,24,27,.03)">
+                <div class="ws-lbl" style="margin-bottom:14px">Company readiness</div>
+                <div style="display:flex;flex-direction:column;gap:2px">
+                  <sc-for list="{{ statusChips }}" as="s" hint-placeholder-count="5">
+                    <div onClick="{{ s.onClick }}" style="display:flex;align-items:center;gap:12px;padding:12px 10px;border-radius:10px;cursor:{{ s.cursor }}" style-hover="background:#fafafa">
+                      <div style="flex:1;min-width:0">
+                        <div style="font-size:13px;font-weight:600;color:#27272a">{{ s.label }}</div>
+                        <div style="font-size:11.5px;color:#a1a1aa;margin-top:1px">{{ s.note }}</div>
+                      </div>
+                      <span style="font-size:10px;font-weight:700;border-radius:99px;padding:3px 10px;white-space:nowrap;{{ s.chipStyle }}">{{ s.state }}</span>
+                      <span style="width:14px;height:14px;flex:none;color:{{ s.arrowColor }};display:flex" dangerouslySetInnerHTML="{{ s.arrowIcon }}"></span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <!-- DATA ROOM PREVIEW -->
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px;box-shadow:0 1px 2px rgba(24,24,27,.03)">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+                  <div class="ws-lbl">Data room · {{ dataRoom.count }} documents</div>
+                  <button onClick="{{ dataRoom.onView }}" style="height:28px;padding:0 11px;border-radius:8px;border:1px solid #e4e4e7;background:#fff;color:#6d28d9;font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer">View data room</button>
+                </div>
+                <sc-for list="{{ dataRoom.docs }}" as="d" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid #f4f4f5">
+                    <span style="width:16px;height:16px;flex:none;color:{{ d.iconColor }};display:flex" dangerouslySetInnerHTML="{{ d.icon }}"></span>
+                    <div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600;color:#27272a">{{ d.name }}</div><div style="font-size:11px;color:#a1a1aa">{{ d.meta }}</div></div>
+                    <span style="font-size:10px;font-weight:700;border-radius:99px;padding:3px 9px;{{ d.chipStyle }}">{{ d.chip }}</span>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ dataRoom.hasMissing }}">
+                  <div style="display:flex;align-items:center;gap:9px;background:#fffaf0;border:1px solid #f9edd6;border-radius:11px;padding:11px 14px;margin-top:14px">
+                    <span style="width:14px;height:14px;flex:none;color:#b45309;display:flex" dangerouslySetInnerHTML="{{ lockMini }}"></span>
+                    <span style="font-size:11.5px;color:#92400e;line-height:1.4">{{ dataRoom.missingNote }}</span>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+
+            <!-- RIGHT COLUMN -->
+            <div style="display:flex;flex-direction:column;gap:20px">
+              <!-- FOUNDING TEAM -->
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px;box-shadow:0 1px 2px rgba(24,24,27,.03)">
+                <div class="ws-lbl" style="margin-bottom:14px">Founding team</div>
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <sc-for list="{{ founders }}" as="m" hint-placeholder-count="1">
+                    <div style="border:1px solid #f0f0f3;border-radius:13px;padding:15px">
+                      <div style="display:flex;align-items:flex-start;gap:12px">
+                        <div style="width:40px;height:40px;flex:none;border-radius:50%;background:{{ m.avatarBg }};color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center">{{ m.initials }}</div>
+                        <div style="flex:1;min-width:0">
+                          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:14px;font-weight:700;color:#27272a">{{ m.name }}</span><span style="font-size:10px;font-weight:600;color:{{ m.commitColor }};background:{{ m.commitBg }};border-radius:6px;padding:2px 7px">{{ m.commitment }}</span></div>
+                          <div style="font-size:12px;color:#71717a;margin-top:1px">{{ m.role }}</div>
+                          <div style="font-size:11.5px;color:#a1a1aa;margin-top:6px;line-height:1.45">{{ m.bio }}</div>
+                        </div>
+                        <div style="text-align:right;flex:none"><div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#a1a1aa">Equity</div><div class="tnum" style="font-size:13px;font-weight:700;color:#27272a;margin-top:2px">{{ m.equity }}</div></div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;align-items:center;gap:9px;background:#fafafa;border:1px solid #eeeef2;border-radius:11px;padding:11px 14px;margin-top:14px">
+                  <span style="font-size:11.5px;color:#71717a;line-height:1.4;flex:1">{{ coFounder.note }}</span>
+                </div>
+                <div style="display:flex;gap:9px;margin-top:12px">
+                  <button onClick="{{ coFounder.onMatch }}" style="flex:1;height:36px;border-radius:9px;border:1px solid #e4defb;background:#f5f3ff;color:#6d28d9;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Add co-founder</button>
+                  <button onClick="{{ coFounder.onSolo }}" style="flex:1;height:36px;border-radius:9px;border:1px solid #e4e4e7;background:#fff;color:#52525b;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Document solo path</button>
+                </div>
+              </div>
+
+              <!-- ACTIVITY / MILESTONE TIMELINE -->
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px;box-shadow:0 1px 2px rgba(24,24,27,.03)">
+                <div class="ws-lbl" style="margin-bottom:16px">Activity &amp; next milestone</div>
+                <div style="position:relative;padding-left:22px">
+                  <div style="position:absolute;left:5px;top:4px;bottom:16px;width:2px;background:#f0f0f3"></div>
+                  <sc-for list="{{ activity }}" as="a" hint-placeholder-count="4">
+                    <div style="position:relative;padding-bottom:16px">
+                      <span style="position:absolute;left:-22px;top:2px;width:12px;height:12px;border-radius:50%;background:{{ a.dotBg }};border:2px solid {{ a.dotBorder }}"></span>
+                      <div style="font-size:12.5px;font-weight:600;color:{{ a.titleColor }}">{{ a.title }}</div>
+                      <div style="font-size:11px;color:#a1a1aa;margin-top:1px">{{ a.time }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="background:#faf7ff;border:1px solid #ece7fb;border-radius:12px;padding:13px 15px;margin-top:4px">
+                  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a78bfa">Next required action</div>
+                  <div style="font-size:13px;font-weight:700;color:#27272a;margin-top:3px">{{ nextAction.title }}</div>
+                  <button onClick="{{ nextAction.onClick }}" style="margin-top:10px;height:32px;padding:0 13px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer">{{ nextAction.cta }} →</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <sc-if value="{{ startupPreview.isOpen }}">
+            <div onClick="{{ startupPreview.close }}" style="position:fixed;inset:0;background:rgba(24,24,27,.45);z-index:70;display:flex;align-items:flex-start;justify-content:center;padding:40px 24px;overflow-y:auto;backdrop-filter:blur(2px)">
+              <div onClick="{{ startupPreview.stop }}" style="width:100%;max-width:680px;background:#fff;border-radius:18px;box-shadow:0 24px 60px rgba(24,24,27,.3);overflow:hidden">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid #f0f0f3">
+                  <div style="display:flex;align-items:center;gap:9px"><span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#a78bfa">Investor preview</span><span style="font-size:14px;font-weight:700;color:#27272a">Company snapshot</span></div>
+                  <button onClick="{{ startupPreview.close }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#71717a;font-family:inherit;font-size:16px;line-height:1;cursor:pointer">×</button>
+                </div>
+                <div style="padding:26px 24px">
+                  <div style="display:flex;align-items:center;gap:15px;margin-bottom:20px">
+                    <div style="width:52px;height:52px;border-radius:13px;background:#ede9fe;color:#6d28d9;font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center">NC</div>
+                    <div><div style="font-size:19px;font-weight:800;color:#18181b;letter-spacing:-.02em">{{ profile.name }}</div><div style="font-size:12.5px;color:#71717a">{{ profile.tagline }}</div></div>
+                  </div>
+                  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">
+                    <sc-for list="{{ facts }}" as="f" hint-placeholder-count="6">
+                      <div style="background:#fafafa;border:1px solid #eeeef2;border-radius:10px;padding:10px 12px"><div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa">{{ f.k }}</div><div style="font-size:12.5px;font-weight:600;color:#27272a;margin-top:2px">{{ f.v }}</div></div>
+                    </sc-for>
+                  </div>
+                  <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;margin-bottom:8px">Founding thesis</div>
+                  <div style="font-size:13px;color:#3f3f46;line-height:1.55;margin-bottom:20px">{{ profile.thesis }}</div>
+                  <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;margin-bottom:10px">Team</div>
+                  <sc-for list="{{ founders }}" as="m" hint-placeholder-count="1">
+                    <div style="display:flex;align-items:center;gap:11px;padding:8px 0"><div style="width:34px;height:34px;border-radius:50%;background:{{ m.avatarBg }};color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center">{{ m.initials }}</div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:#27272a">{{ m.name }}</div><div style="font-size:11.5px;color:#a1a1aa">{{ m.role }} · {{ m.commitment }}</div></div><span class="tnum" style="font-size:12.5px;font-weight:700;color:#27272a">{{ m.equity }}</span></div>
+                  </sc-for>
+                  <div style="font-size:11.5px;color:#92400e;background:#fffaf0;border:1px solid #f9edd6;border-radius:11px;padding:11px 14px;margin-top:16px;line-height:1.4">Pre-formation company in the Axal VC Spin-Out Lab. Legal entity, cap table, and vesting finalize in Week 4.</div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+          </div>
+        </sc-if>
+
+        <!-- CUSTOMER DISCOVERY -->
+        <sc-if value="{{ isDiscovery }}">
+<!-- ...embedded tool panels (dc-import) omitted... -->
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { week1Open: false, advisorOpen: true, view: 'workspace', selectedWeekTab: 2,
+    logOpen: false, selectedInterview: null,
+    addFeatureOpen:false, featForm:{ title:'', value:'High', effort:'S', reason:'' }, customFeatures:[],
+    opsCadenceLocked:false, opsReviewDone:false,
+    capture: 'otter', extracted: false, newPain: '',
+    painPoints: ['Current tools don\u2019t handle async workflows','Price sensitivity at $200/mo','No single source of truth'],
+    quotes: ['',''], insight: '', icp: [], format: 'Video call', duration: '30 min',
+    nextSteps: [{t:'Send follow-up email',done:false},{t:'Schedule second interview',done:false},{t:'Add to prototype beta list',done:false}],
+    marketMethodOpen:false, marketDrawerOpen:false, marketChecklistOpen:false, miOpenRow:-1,
+    sourceAdding:false, newSourceTitle:'', newSourceType:'Report',
+    compAdding:false, compForm:{ name:'', cat:'Indirect', share:'', note:'', stage:'Seed' },
+    startupPreviewOpen:false,
+    tamM:2400, samM:340, somM:34,
+    marketForm:{ category:'Workflow automation software', geography:'Global', targetYear:'2026', methodology:'Top-down',
+      population:'480000', acv:'5000', tamOverride:'', samPct:'14', winRate:'8', runway:'18', capacity:'6',
+      cagr:'24', growthDriver:'AI-native workflow tooling adoption', maturity:'Growing', segFilter:['Distributed SaaS'] },
+    sourcesList:[ {title:'Gartner 2025 Workflow Automation Report', type:'Report', date:'Jul 10, 2026'}, {title:'CB Insights SaaS Market Sizing, Q1 2026', type:'Report', date:'Jul 12, 2026'} ],
+    competitors:[
+      {name:'Notion', cat:'Indirect', share:'18%', note:'General workspace, not workflow-native', stage:'Public'},
+      {name:'Zapier', cat:'Adjacent', share:'12%', note:'Integration-first, no async layer', stage:'Bootstrapped'},
+      {name:'Retool', cat:'Adjacent', share:'6%', note:'Internal tools, not team workflows', stage:'Series C'},
+      {name:'Linear', cat:'Indirect', share:'9%', note:'Issue tracking, narrow scope', stage:'Series C'},
+      {name:'Airtable', cat:'Indirect', share:'14%', note:'Database-first, heavy setup', stage:'Series F'},
+      {name:'Coda', cat:'Direct', share:'4%', note:'Closest overlap, weaker automation', stage:'Series D'},
+    ] };
+
+  animateMarketTo(targets){
+    clearInterval(this._marketTimer);
+    const start = { tamM:this.state.tamM, samM:this.state.samM, somM:this.state.somM };
+    const t0 = Date.now(), dur = 800;
+    this._marketTimer = setInterval(() => {
+      const p = Math.min(1, (Date.now()-t0)/dur);
+      const e = 1 - Math.pow(1-p, 3);
+      this.setState({
+        tamM: start.tamM + (targets.tamM-start.tamM)*e,
+        samM: start.samM + (targets.samM-start.samM)*e,
+        somM: start.somM + (targets.somM-start.somM)*e,
+      });
+      if (p===1) clearInterval(this._marketTimer);
+    }, 16);
+  }
+  recalcMarket(){
+    const f = this.state.marketForm;
+    const pop = parseFloat(f.population)||0, acv = parseFloat(f.acv)||0;
+    const tamCalc = (pop*acv)/1e6;
+    const tam = parseFloat(f.tamOverride)||tamCalc||this.state.tamM;
+    const sam = tam*((parseFloat(f.samPct)||14)/100);
+    const som = sam*((parseFloat(f.winRate)||8)/100)*2.2;
+    this.animateMarketTo({ tamM:tam, samM:sam, somM:som });
+    this.setState({ marketDrawerOpen:false });
+  }
+  setMF(key,val){ this.setState(s => ({ marketForm:{...s.marketForm,[key]:val} })); }
+  addSource(){
+    if (!this.state.newSourceTitle.trim()) { this.setState({sourceAdding:false}); return; }
+    this.setState(s => ({ sourcesList:[...s.sourcesList,{title:s.newSourceTitle,type:s.newSourceType,date:'Jul 17, 2026'}], sourceAdding:false, newSourceTitle:'' }));
+  }
+  removeSource(i){ this.setState(s => ({ sourcesList: s.sourcesList.filter((_,idx)=>idx!==i) })); }
+  addCompetitor(){ this.setState(s => ({ competitors:[...s.competitors,{name:'New competitor',cat:'Indirect',share:'N/A',note:'Add differentiation note',stage:'Unknown'}] })); }
+  setCompField(key,val){ this.setState(s => ({ compForm:{...s.compForm,[key]:val} })); }
+  confirmAddComp(){
+    const f=this.state.compForm; if(!f.name.trim()){ this.setState({compAdding:false}); return; }
+    const share=(f.share.trim()? (f.share.trim().endsWith('%')?f.share.trim():f.share.trim()+'%') : 'N/A');
+    this.setState(s => ({ competitors:[...s.competitors,{name:f.name.trim(),cat:f.cat,share,note:f.note.trim()||'—',stage:f.stage}], compAdding:false, compForm:{name:'',cat:'Indirect',share:'',note:'',stage:'Seed'} }));
+  }
+  removeCompetitor(i){ this.setState(s => ({ competitors: s.competitors.filter((_,idx)=>idx!==i) })); }
+  toggleSegFilter(name){ this.setState(s => { const has=s.marketForm.segFilter && s.marketForm.segFilter.includes(name); const cur = s.marketForm.segFilter||[]; return { marketForm:{...s.marketForm, segFilter: has ? cur.filter(n=>n!==name) : [...cur,name]} }; }); }
+
+  renderVals() {
+    const ic = (p, sw=1.7) => ({ __html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">${p}</svg>` });
+    const view = this.state.view;
+    const openTool = (k) => this.setState({ view: k }, () => window.scrollTo(0, 0));
+    const openWeek = (n) => openTool('week-'+n);
+    const goWorkspace = () => this.setState({ view: 'workspace' }, () => window.scrollTo(0, 0));
+    const check = ic('<path d="M20 6 9 17l-5-5"/>', 2.6);
+    const lock = ic('<rect x="4.5" y="10" width="15" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>');
+    const spark = ic('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>');
+
+    // ---- Sidebar ----
+    const navIcon = {
+      home: ic('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>'),
+      grid: ic('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
+      flask: ic('<path d="M9 3h6"/><path d="M10 3v6l-5 9a1.5 1.5 0 0 0 1.3 2.2h11.4A1.5 1.5 0 0 0 19 18l-5-9V3"/><path d="M7 15h10"/>'),
+      deals: ic('<path d="M3 6h18"/><path d="M6 6v13a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6"/><path d="M9 10h6"/>'),
+      cap: ic('<circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 4"/>'),
+      ops: ic('<path d="M3 3v18h18"/><path d="M7 15l3-4 3 3 5-7"/>'),
+      docs: ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+      people: ic('<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 11a3 3 0 0 0 0-6"/><path d="M21 20c0-2.5-1.3-4-3.5-4.6"/>'),
+      settings: ic('<circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.2a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 4.6 15H4a2 2 0 1 1 0-4h.2a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 11 4.6V4a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.6 1.6 0 0 0 21 11h.2a2 2 0 1 1 0 4H21"/>'),
+    };
+    const nav = (name, icon, active=false, badge=null, onClick=()=>{}) => ({ name, icon, badge, onClick,
+      style: `display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:9px;font-size:13.5px;font-weight:${active?600:500};margin-bottom:2px;cursor:pointer;${active?'background:#f5f3ff;color:#6d28d9':'color:#52525b'}` });
+    const navGroups = [
+      { label:'Workspace', items:[ nav('Dashboard', navIcon.home), nav('People', navIcon.people) ] },
+      { label:'Products', items:[ nav('All Products', navIcon.grid), nav('Spin-Out Lab', navIcon.flask, true, 'Wk 2', goWorkspace), nav('Deal Flow', navIcon.deals), nav('Studio Ops', navIcon.ops), nav('Cap Table', navIcon.cap) ] },
+      { label:'Resources', items:[ nav('Data Room', navIcon.docs), nav('Settings', navIcon.settings) ] },
+    ];
+
+    // ---- Progress segments ----
+    const seg = (label, state) => {
+      if (state === 'done') return { label, track:'#ede9fe', fill:'#7c3aed', fillW:'100%', pulse:'', labelColor:'#6d28d9', showDot:false };
+      if (state === 'active') return { label, track:'#ede9fe', fill:'#7c3aed', fillW:'50%', pulse:'animation:wsPulse 2s infinite', labelColor:'#6d28d9', showDot:true };
+      return { label, track:'#ede9fe', fill:'#ede9fe', fillW:'0%', pulse:'', labelColor:'#6d28d9', showDot:false };
+    };
+    const progressSegments = [ seg('Week 1','done'), seg('Week 2','active'), seg('Week 3','unlocked'), seg('Week 4','unlocked') ];
+
+    // ---- Week timeline cards ----
+    const chip = (label, done) => ({ label, icon: done ? check : ic('<circle cx="12" cy="12" r="8"/>'),
+      style: done ? 'background:#dcfce7;color:#15803d' : 'background:#f4f4f5;color:#a1a1aa' });
+    const feat = (label, locked) => ({ label, locked,
+      style: locked ? 'background:#f4f4f5;color:#a1a1aa;border:1px solid #eeeef2' : 'background:#f0fdf4;color:#15803d;border:1px solid #dcfce7' });
+    const toggleWeek = () => {};
+    const badge = {
+      done: { badgeText:'Completed', badgeIcon:check, badgeStyle:'background:#dcfce7;color:#15803d' },
+      active: { badgeText:'Active · D11', badgeIcon:ic('<circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/>'), badgeStyle:'background:#f5f3ff;color:#6d28d9' },
+      locked: { badgeText:'Unlocked', badgeIcon:check, badgeStyle:'background:#dcfce7;color:#15803d' },
+    };
+    const weeks = [
+      { num:1, name:'Idea & Customer', accent:'#16a34a', onToggle:toggleWeek, tooltip:'', ...badge.done,
+        borderColor:'#ececf1', cardExtra:'',
+        summary:'Define the problem and ICP. Run market sizing seed research. Talk to ≥5 customers and log every interview.',
+        deliverables:[chip('1 Startup',true),chip('5 interviews',true),chip('TAM sized',true)],
+         features:[feat('Startups',false),feat('Customer Discovery',false),feat('Market Intel',false),feat('Profiling',false)] },
+      { num:2, name:'Solution & Roadmap', accent:'#7c3aed', onToggle:toggleWeek, tooltip:'', ...badge.active,
+        borderColor:'#c4b5fd', cardExtra:'box-shadow:0 0 0 2px rgba(124,58,237,.18),0 1px 2px rgba(24,24,27,.04);animation:wsGlow 3s infinite',
+        summary:'Scope the MVP. Set 90-day OKRs. Draft brand v1. Draft pitch deck v1.',
+        deliverables:[chip('3+ OKRs',true),chip('Brand basics',false),chip('Pitch deck v1',false)],
+        features:[feat('Roadmap',false),feat('Brand & Landing Pages',false),feat('Pitch Deck',false),feat('Studio Ops',false)] },
+      { num:3, name:'Validate & Team', accent:'#0d9488', onToggle:toggleWeek, tooltip:'', ...badge.active,
+        borderColor:'#99f6e4', cardExtra:'box-shadow:0 0 0 2px rgba(13,148,136,.18),0 1px 2px rgba(24,24,27,.04);animation:wsGlow 3s infinite',
+        summary:'Run your first venture-readiness score. Match with advisors. Decide co-founder track.',
+        deliverables:[chip('Score',false),chip('Advisor cadence',false),chip('Co-founder',false)],
+        features:[feat('Scoring',false),feat('Advisors',false),feat('Office Hours',false),feat('Co-founder Match',false)] },
+      { num:4, name:'Incorporate & Capital', accent:'#7c3aed', onToggle:toggleWeek, tooltip:'', ...badge.active,
+        borderColor:'#c4b5fd', cardExtra:'box-shadow:0 0 0 2px rgba(124,58,237,.18),0 1px 2px rgba(24,24,27,.04);animation:wsGlow 3s infinite',
+        summary:'Incorporate the entity. Issue founder stock with vesting. File 83(b). Sign co-founder agreement.',
+        deliverables:[chip('C-Corp',false),chip('Cap table',false),chip('83(b)',false)],
+        features:[feat('Incorporate',false),feat('Cap Table',false),feat('83(b)',false),feat('Capital',false)] },
+    ];
+
+    // ---- 2A stats ----
+    const activeStats = [
+      { label:'Day 11 of 14', icon: ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>') },
+      { label:'1 of 5 tasks done', icon: check },
+      { label:'4 tools unlocked', icon: ic('<path d="M14.5 9.5 21 3m0 0h-4m4 0v4"/><path d="M10 6a4 4 0 1 0 4 4"/><circle cx="8" cy="16" r="4"/>') },
+    ];
+
+    // ---- 2B deliverables ----
+    const box = (done) => done
+      ? { boxStyle:'background:#22c55e;color:#fff', boxIcon:check }
+      : { boxStyle:'background:#fff;border:1.5px solid #d4d4d8', boxIcon:{__html:''} };
+    const tag = (t) => ({
+      'Done':'background:#dcfce7;color:#15803d',
+      'In Progress':'background:#f5f3ff;color:#6d28d9',
+      'Not Started':'background:#f4f4f5;color:#a1a1aa',
+    }[t]);
+    const drow = (done, name, tagText, action, progress, key) => ({ ...box(done), name, tag:tagText, tagStyle:tag(tagText), action, onOpen:()=>openTool(key),
+      hasProgress: progress!=null, progress: progress||'0%' });
+    const deliverableRows = [
+      drow(false, 'Scope the MVP', 'In Progress', 'Open Roadmap', '45%', 'roadmap'),
+      drow(true, 'Set 3+ OKRs (90-day)', 'Done', 'Open Roadmap', null, 'roadmap'),
+      drow(false, 'Design landing pages', 'Not Started', 'Open Brand & Landing Pages', null, 'brand'),
+      drow(false, 'Draft pitch deck v1', 'Not Started', 'Open Pitch Deck Builder', null, 'deck'),
+      drow(false, 'Studio Ops cadence set', 'Not Started', 'Open Studio Ops', null, 'ops'),
+    ];
+
+    // ---- 2C tools ----
+    const tIcon = {
+      startups: ic('<path d="M4 21V8l8-5 8 5v13"/><path d="M9 21v-6h6v6"/>'),
+      discovery: ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+      market: ic('<path d="M3 3v18h18"/><path d="M7 14l3-3 3 2 5-6"/>'),
+      revenue: ic('<path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'),
+      advisor: spark,
+      roadmap: ic('<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="12" r="1.5"/><circle cx="4" cy="18" r="1.5"/>'),
+      brand: ic('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.3"/><circle cx="15" cy="9" r="1.3"/><circle cx="15.5" cy="14" r="1.3"/>'),
+      deck: ic('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4M8 20h8"/>'),
+      ops: ic('<path d="M12 3v3m0 12v3m9-9h-3M6 12H3"/><circle cx="12" cy="12" r="4"/>'),
+      score: ic('<circle cx="12" cy="12" r="9"/><path d="M12 12l4-2"/>'),
+      advisors2: ic('<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 2.5-5 6-5s6 2 6 5"/><path d="M17 11a3 3 0 0 0 0-6"/>'),
+      hours: ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+      cofound: ic('<path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>'),
+      incorporate: ic('<path d="M4 21V8l8-5 8 5v13"/><path d="M9 21v-6h6v6"/>'),
+      cap: ic('<circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 4"/>'),
+      file83: ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+      capital: ic('<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'),
+    };
+    const active = (key, icon, name, desc, badgeText) => ({ icon, name, desc, active:true, locked:false, onOpen:()=>openTool(key),
+      bg:'#fff', border:'#ececf1', cursor:'cursor:pointer', opacity:'',
+      iconStyle:'background:#f5f3ff;color:#7c3aed', titleColor:'#27272a',
+      badge:badgeText, badgeStyle:'background:#dcfce7;color:#15803d' });
+    const locked = (key, icon, name, desc, wk) => ({ icon, name, desc, active:true, locked:false, onOpen:()=>openTool(key),
+      bg:'#fff', border:'#ececf1', cursor:'cursor:pointer', opacity:'',
+      iconStyle:'background:#f5f3ff;color:#7c3aed', titleColor:'#27272a',
+      badge:'Unlocked · Wk '+wk, badgeStyle:'background:#dcfce7;color:#15803d' });
+    const toolGroups = [
+      { heading:'Active — carried from Week 1', tools:[
+        active('startups',tIcon.startups,'Startups','Your company record and founding team','Active'),
+        active('discovery',tIcon.discovery,'Customer Discovery','Interview log and ICP tracker','Active'),
+        active('market',tIcon.market,'Market Intel','TAM/SAM research (read-only)','Active'),
+        active('advisor',tIcon.advisor,'Profiling','Skills, values, archetypes, and assessment progress','Active'),
+      ]},
+      { heading:'Active — Week 2 unlocks', tools:[
+        active('roadmap',tIcon.roadmap,'Roadmap','OKRs, milestones, and MVP scope','Active'),
+        active('brand',tIcon.brand,'Brand & Landing Pages','Create landing pages for your audience','Active'),
+        active('deck',tIcon.deck,'Pitch Deck Builder','Auto-assemble your venture pitch deck','Active'),
+        active('ops',tIcon.ops,'Studio Ops','Weekly cadence and accountability','Active'),
+      ]},
+      { heading:'Unlocked — Week 3', tools:[
+        locked('score',tIcon.score,'Scoring Engine','Venture-readiness diligence',3),
+        locked('advisors',tIcon.advisors2,'Advisors','Matched advisor network',3),
+        locked('hours',tIcon.hours,'Office Hours','Booked partner sessions',3),
+        locked('cofmatch',tIcon.cofound,'Co-founder Match','Co-founder sourcing',3),
+        locked('misignals',tIcon.market,'MI — Investor Signals','Full investor intelligence',3),
+        locked('revenue',tIcon.revenue,'Revenue','Real revenue & investor-ready proof',3),
+      ]},
+      { heading:'Unlocked — Week 4', tools:[
+        locked('incorporate',tIcon.incorporate,'Incorporate','Entity formation',4),
+        locked('captable',tIcon.cap,'Cap Table','Founder stock & vesting',4),
+        locked('cofagreement',tIcon.cofound,'Co-founder Agreement','Signed founder terms',4),
+        locked('capital',tIcon.capital,'Capital','Fundraise & introductions',4),
+        locked('usefunds',tIcon.capital,'Use of Funds','Allocation & budget plan',4),
+      ]},
+    ];
+
+    // ---- Section 3 scorecard ----
+    const scoreCols = [{num:1},{num:2},{num:3},{num:4}];
+    const bcell = (text, style, icon) => ({ badge:true, text, badgeStyle:style, icon });
+    const barcell = (text, w, color) => ({ bar:true, text, barW:w, barColor:color });
+    const pcell = (text, color='#3f3f46', weight='500') => ({ plain:true, text, color, weight });
+    const dash = () => pcell('—', '#d4d4d8');
+    const scoreRows = [
+      { label:'Status', cells:[
+        bcell('Completed','background:#dcfce7;color:#15803d',check),
+        bcell('Active','background:#f5f3ff;color:#6d28d9',ic('<circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/>')),
+        bcell('Unlocked','background:#dcfce7;color:#15803d',check),
+        bcell('Unlocked','background:#dcfce7;color:#15803d',check) ] },
+      { label:'Deliverables', cells:[ barcell('3 of 3','100%','#22c55e'), barcell('1 of 5','20%','#7c3aed'), dash(), dash() ] },
+      { label:'Tools unlocked', cells:[ pcell('4 of 4','#18181b','600'), pcell('4 of 4','#18181b','600'), pcell('5 of 5','#18181b','600'), pcell('7 of 7','#18181b','600') ] },
+      { label:'Key output', cells:[ pcell('1 startup · 5 interviews · TAM sized','#52525b'), pcell('OKRs set','#52525b'), dash(), dash() ] },
+    ];
+    const kpis = [
+      { label:'Total tools unlocked', value:'20 of 20' },
+      { label:'Deliverables completed', value:'4 of 18' },
+      { label:'Days remaining', value:'19' },
+    ];
+
+    // ---- Section 4 ----
+    const interviews = [
+      { name:'Sarah T.', title:'VP Ops · SaaS', date:'Jul 2', insight:'Current tools don\u2019t handle async workflows' },
+      { name:'Marcus R.', title:'Founder · Agency', date:'Jul 3', insight:'Price sensitivity at $200/mo threshold' },
+      { name:'Diana K.', title:'Eng Lead · Fintech', date:'Jul 4', insight:'Integration with Slack is non-negotiable' },
+      { name:'James W.', title:'PM · Remote-first', date:'Jul 5', insight:'Discovery takes 3x longer than expected' },
+      { name:'Priya M.', title:'COO · SMB', date:'Jul 6', insight:'No single source of truth for customer data' },
+    ];
+
+    // ---- Section 6 ----
+    const lockedWeeks = [
+      { num:3, name:'Validate & Team', unlockLabel:'Unlocks when Week 2 is complete',
+        pills:['Scoring Engine','Advisors','Office Hours','Co-founder Match','MI Investor Signals'],
+        deliverables:'Venture-readiness score · Advisor cadence · Co-founder decision' },
+      { num:4, name:'Incorporate & Capital', unlockLabel:'Unlocks when Week 3 is complete',
+        pills:['Incorporate','Cap Table','83(b)','Co-founder Agreement','Capital','KYC'],
+        deliverables:'Delaware C-Corp · Vesting cap table · 83(b) filed · 3 investor intros' },
+    ];
+    lockedWeeks.forEach(lw => { lw.onOpen = () => openWeek(lw.num); });
+
+    // ---- Tool pages ----
+    const mkActive = (key, icon, name, desc) => ({ key, icon, name, desc, onOpen:()=>openTool(key),
+      active:true, locked:false, iconStyle:'background:#f5f3ff;color:#7c3aed', titleColor:'#27272a',
+      bg:'#fff', border:'#ececf1', cursor:'cursor:pointer', opacity:'', weekPill:'Week 2 · Cohort 3' });
+    const plusIc = ic('<path d="M12 5v14M5 12h14"/>', 2.2);
+    const mkLocked = (key, icon, name, desc, wk, rows, chain, warn) => ({ key, icon, name, desc, onOpen:()=>openTool(key),
+      active:true, locked:false, week:wk, hasModules:true, warn: warn||'',
+      previewRows: rows.map(r => ({ ...r, icon: r.done ? check : plusIc, iconStyle: r.done ? 'background:#dcfce7;color:#15803d' : 'background:#f4f4f5;color:#a1a1aa' })),
+      moduleTotal: rows.length, moduleDone: rows.filter(r=>r.done).length,
+      modulePct: Math.round(rows.filter(r=>r.done).length/rows.length*100),
+      phaseAccent: wk===3 ? '#0d9488' : '#7c3aed',
+      feedChain: chain,
+      weekName: wk===3 ? 'Validate & Team' : 'Incorporate & Capital',
+      feeds: wk===3 ? 'Week 3 deliverables and your venture-readiness score.' : 'Week 4 incorporation and fundraise deliverables.',
+      iconStyle:'background:#f5f3ff;color:#7c3aed', titleColor:'#27272a',
+      bg:'#fff', border:'#ececf1', cursor:'cursor:pointer', opacity:'', weekPill:'Unlocked · Wk '+wk });
+    const chn = (...labels) => labels.map((l,i) => ({ l, cur: i===0 }));
+    const toolMeta = {
+      startups: mkActive('startups', tIcon.startups, 'Startups', 'Your company record and founding team'),
+      discovery: mkActive('discovery', tIcon.discovery, 'Customer Discovery', 'Structured interview evidence — pain points, ICP fit, and deck-ready quotes.'),
+      market: mkActive('market', tIcon.market, 'Market Intel', 'TAM/SAM research · read-only in Week 2'),
+      revenue: mkActive('revenue', tIcon.revenue, 'Revenue', 'Capture real revenue and build investor-ready proof of traction.'),
+      advisor: mkActive('advisor', tIcon.advisor, 'Profiling', 'Founder profiling report — skills, values, archetypes, and assessment progress.'),
+      roadmap: mkActive('roadmap', tIcon.roadmap, 'Roadmap', 'OKRs, milestones, and MVP scope'),
+      brand: mkActive('brand', tIcon.brand, 'Brand & Landing Pages', 'Create landing pages for your audience'),
+      deck: mkActive('deck', tIcon.deck, 'Pitch Deck Builder', 'Auto-assemble your venture pitch deck'),
+      ops: mkActive('ops', tIcon.ops, 'Studio Ops', 'Weekly cadence and accountability'),
+      score: mkLocked('score', tIcon.score, 'Scoring Engine', 'Structured scoring of venture readiness across all key dimensions before investor outreach', 3,
+        [{t:'Diligence questionnaire',d:'Assessment across 8 dimensions: team, market, product, traction, IP, financials, legal, competition. Auto-saves progress.',feed:'→ Evidence score',done:true},
+         {t:'Evidence-confidence score',d:'Weighted 0–100 composite with per-dimension breakdowns and color-coded confidence bands',feed:'→ Weak points',done:true},
+         {t:'Weak-point analysis',d:'Ranked low-scoring dimensions with improvement actions, estimated effort, and score impact',feed:'→ Readiness',done:true},
+         {t:'Benchmark comparison',d:'Score overlaid against comparable spinouts at the same stage; percentile ranking',feed:'→ Investor signals',done:false},
+         {t:'Score history',d:'Score timeline across the 30-day program with weekly delta and fundraise projection',feed:'→ Capital',done:false},
+         {t:'Export investor report',d:'One-click PDF of score, dimension breakdown, and weak-point summary',feed:'→ Pitch Deck',done:false}],
+        chn('Scoring Engine','Investor Signals','Capital')),
+      advisors: mkLocked('advisors', tIcon.advisors2, 'Advisors', 'Sector-matched advisors with equity agreements and structured recurring support', 3,
+        [{t:'Matched advisors',d:'2 advisors matched to sector, stage, and weak points; bios, relevant exits, match rationale',feed:'→ Equity agreements',done:true},
+         {t:'Equity agreements',d:'FAST or custom terms with vesting (1–2% typical) and cliff. DocuSign-ready.',feed:'→ Cap Table',done:true},
+         {t:'Cadence',d:'Recurring 30-min check-ins with calendar sync, agenda templates, and post-call notes',feed:'→ Deliverables',done:true},
+         {t:'Intro email generator',d:'AI-drafted personalized outreach per advisor; editable tone, includes your one-liner and ask',feed:'→ Advisor response',done:false},
+         {t:'Value-add log',d:'Track intros made, feedback given, doors opened. Used in the Wk 6 equity review.',feed:'→ Advisor review',done:false},
+         {t:'Request additional match',d:'Criteria for a third match with reason field and sector re-specification',feed:'→ Matched advisors',done:false}],
+        chn('Advisors','Cap Table','Co-founder Agreement')),
+      hours: mkLocked('hours', tIcon.hours, 'Office Hours', 'Live sessions with partners — investors, lawyers, and operators — turned into tracked execution.', 3,        [{t:'Book a session',d:'Partner slots filtered by sector and week focus. 30 or 60 min; video link auto-generated.',feed:'→ Session notes',done:true},
+         {t:'Session history',d:'Past sessions with partner, type, and auto-generated summary. Searchable.',feed:'→ Deliverables',done:true},
+         {t:'Pre-session brief',d:'Auto one-pager sent to the partner: scoring data, thesis, and open questions',feed:'→ Partner prep',done:true},
+         {t:'Upcoming sessions',d:'Booked sessions with countdown, agenda preview, and rescheduling',feed:'→ Calendar',done:false},
+         {t:'Partner directory',d:'All partners with bios, expertise tags, and availability. Filter by topic.',feed:'→ Book a session',done:false},
+         {t:'Post-session action items',d:'Structured debrief: commitments, follow-ups, decisions. Notifies the team.',feed:'→ Deliverables',done:false}],
+        chn('Office Hours','Advisors','Capital')),
+      cofmatch: mkLocked('cofmatch', tIcon.cofound, 'Co-founder Match', 'Identify, evaluate, and decide on a co-founder — or document your solo path formally', 3,
+        [{t:'Candidate pool',d:'Vetted candidates matched to your skills gap; background, motivation, equity expectations',feed:'→ Track decision',done:true},
+         {t:'Track decision',d:'Co-founder lead identified or documented solo path. Required to advance to Wk 4.',feed:'→ Co-founder Agreement',done:true},
+         {t:'Skills gap matrix',d:'Current vs. required skills; highlights critical gaps to guide search criteria',feed:'→ Candidate pool',done:false},
+         {t:'Reference check',d:'Structured 5-question template. Tracks responses and flags concerns.',feed:'→ Track decision',done:false},
+         {t:'Trial project tracker',d:'2-week trial task with deliverable, deadline, and outcome assessment',feed:'→ Track decision',done:false},
+         {t:'Intro request',d:'One-click warm intro via the Spin-Out Lab network, with your pitch to the candidate',feed:'→ Candidate pool',done:false}],
+        chn('Co-founder Match','Co-founder Agreement','Cap Table')),
+      misignals: mkLocked('misignals', tIcon.market, 'MI — Investor Signals', 'Real-time intelligence on active investors matching your thesis, stage, and sector', 3,
+        [{t:'Investor signals',d:'Live mandate feed: investor, fund size, check size, sector focus, match strength',feed:'→ Outreach tracker',done:true},
+         {t:'Full market intel',d:'Read/write investor database. Filter, export shortlists, annotate with notes.',feed:'→ Capital',done:true},
+         {t:'Warm intro mapper',d:'Second-degree paths via advisors and partners; shortest path and intro quality score',feed:'→ Outreach tracker',done:false},
+         {t:'Outreach tracker',d:'CRM log of every touchpoint: Identified → Contacted → Meeting → Diligence',feed:'→ Capital',done:false},
+         {t:'Investor fit score',d:'Per-investor compatibility from scoring results, sector match, and check size',feed:'→ Capital',done:false},
+         {t:'Signal alerts',d:'Weekly digest of new mandates and fund announcements matching your thesis',feed:'→ Outreach tracker',done:false}],
+        chn('Investor Signals','Outreach Tracker','Capital')),
+      incorporate: mkLocked('incorporate', tIcon.incorporate, 'Incorporate', 'Form your legal entity with guided document generation and state filing support', 4,
+        [{t:'Entity type selector',d:'C-Corp vs. LLC vs. PBC decision tree. Recommended path auto-selected from Week 3 data.',feed:'→ Formation docs',done:true},
+         {t:'Formation documents',d:'Articles, Bylaws, and Board Resolutions pre-filled. Registered agent included. DocuSign-ready.',feed:'→ Cap Table',done:true},
+         {t:'State filing tracker',d:'Submitted → Processing → Approved → EIN issued, with estimated timeline',feed:'→ Section 83(b)',done:true},
+         {t:'Registered agent setup',d:'Assign an agent for service of process; recommended providers with fee comparison',feed:'→ Formation docs',done:false},
+         {t:'EIN application',d:'Pre-filled IRS SS-4 with online filing link and expected processing time',feed:'→ Cap Table',done:false},
+         {t:'University IP assignment',d:'Checklist and template for assigning university IP; tech transfer office requirements',feed:'→ Co-founder Agreement',done:false}],
+        chn('Incorporate','Cap Table','Section 83(b)')),
+      captable: mkLocked('captable', tIcon.cap, 'Cap Table', 'Live capitalization ledger, vesting, and dilution modeling — synced with Carta.', 4,
+        [{t:'Founder stock',d:'Share issuance per founder: 4-year vest, 1-year cliff. Auto-calculates diluted ownership.',feed:'→ Section 83(b)',done:true},
+         {t:'Cap table on Carta',d:'Synced ledger: founders, advisors, option pool, and future SAFEs',feed:'→ Dilution simulator',done:true},
+         {t:'SAFE / note tracker',d:'Outstanding SAFEs and notes with cap, discount, MFN. Models conversion at next round.',feed:'→ Dilution simulator',done:false},
+         {t:'Option pool builder',d:'10–15% post-money pool; models founder dilution before and after creation',feed:'→ Carta',done:false},
+         {t:'Dilution simulator',d:'Ownership across pre-seed SAFE, seed, and Series A. Adjustable raise, cap, pool.',feed:'→ Capital',done:false},
+         {t:'Vesting accelerator clause',d:'Single or double trigger acceleration; pre-drafted clause library',feed:'→ Co-founder Agreement',done:false}],
+        chn('Cap Table','Section 83(b)','Co-founder Agreement')),
+      cofagreement: mkLocked('cofagreement', tIcon.cofound, 'Co-founder Agreement', 'Draft, negotiate, and execute the founding team agreement covering equity, IP, roles, and departure', 4,
+        [{t:'Agreement builder',d:'Clause-by-clause: equity splits, vesting, IP assignment, authority, non-compete, buyback',feed:'→ DocuSign',done:true},
+         {t:'Role & responsibility matrix',d:'RACI for product, GTM, fundraising, ops, and legal. Conflict declarations included.',feed:'→ Agreement builder',done:true},
+         {t:'DocuSign execution',d:'E-signature for all founders with per-signer status. Executed copy stored in vault.',feed:'→ Cap Table',done:true},
+         {t:'Dispute resolution clause',d:'Arbitration or mediation library with AAA and JAMS template language',feed:'→ Agreement builder',done:false},
+         {t:'IP assignment rider',d:'Prior and future IP assigned to the entity; links to university disclosure requirements',feed:'→ Incorporate',done:false},
+         {t:'Solo founder declaration',d:'Documents the solo decision and confirms IP vests entirely with the single founder',feed:'→ Cap Table',done:false}],
+        chn('Co-founder Agreement','Cap Table','Compliance / KYC')),
+      capital: mkLocked('capital', tIcon.capital, 'Capital', 'Run your fundraise from first signal to first close — warm intros, data room, round management', 4,
+        [{t:'Fundraise overview',d:'Target raise, instrument, cap, discount, pro-rata, MFN. Auto-populated from Cap Table.',feed:'→ Investor pipeline',done:true},
+         {t:'Warm intro requests',d:'Introductions via advisors, partners, and second-degree connections from MI Signals',feed:'→ Outreach tracker',done:true},
+         {t:'Data room',d:'Deck, financials, cap table, scoring report, team bios, IP summary, customer evidence',feed:'→ Compliance / KYC',done:true},
+         {t:'Round tracker',d:'Identified → Intro → Meeting → Diligence → Term sheet → Closed. Committed vs. target bar.',feed:'→ Use of Funds',done:false},
+         {t:'SAFE generator',d:'YC-standard SAFE pre-filled with your round terms. DocuSign-ready.',feed:'→ Cap Table',done:false},
+         {t:'Pitch feedback log',d:'Per-meeting feedback; aggregates common objections to inform pitch iteration',feed:'→ Scoring Engine',done:false}],
+        chn('Capital','Use of Funds','Compliance / KYC')),
+      usefunds: mkLocked('usefunds', tIcon.capital, 'Use of Funds', 'Define capital allocation across engineering, GTM, and operations — with runway modeling', 4,
+        [{t:'Allocation split',d:'Sliders: Engineering 55% · GTM 30% · Operations 15%. Updates pitch slide in real time.',feed:'→ Runway model',done:true},
+         {t:'Runway model',d:'Burn calculator: headcount, salaries, infrastructure, GTM. Currently 18 months.',feed:'→ Milestones',done:true},
+         {t:'Milestone mapping',d:'Each bucket mapped to a deliverable; capital efficiency per milestone',feed:'→ Pitch Deck',done:true},
+         {t:'Feeds Pitch Deck',d:'Auto-syncs the Use of Funds slide. One-click sync with last-synced timestamp.',feed:'→ Capital',done:true},
+         {t:'Scenario builder',d:'Pre-seed vs. seed models at $500K / $1M / $2M with burn and runway per scenario',feed:'→ Runway model',done:false},
+         {t:'Burn alert triggers',d:'Alerts when projected runway drops below 6 months, 3 months, or custom',feed:'→ Milestones',done:false}],
+        chn('Use of Funds','Capital','Pitch Deck')),
+      _unused_kyc_start: (() => { const skip = ['KYC questionnaire',
+         {t:'AML / sanctions check',d:'Automated OFAC, EU, and UN screening. Pass/fail with audit log.',feed:'→ Round close',done:true},
+         {t:'Document vault',d:'KYC forms, accreditation, AML results, 83(b) confirmations, agreements. ZIP export.',feed:'→ Data room',done:false},
+        ]; return null; })(),
+    };
+    const currentTool = toolMeta[view] || toolMeta.startups;
+    currentTool.stripe = (view==='advisors' || view==='cofmatch' || view==='hours' || view==='revenue') ? '#0d9488' : '#7c3aed';
+    weeks.forEach(w => { w.onOpen = () => this.setState({ view:'workspace', selectedWeekTab: w.num }); });
+
+    // ---- Week overview ----
+    const weekTools = {
+      1: ['startups','discovery','market','advisor'],
+      2: ['roadmap','brand','deck','ops'],
+      3: ['score','advisors','hours','cofmatch','misignals','revenue'],
+      4: ['incorporate','captable','cofagreement','capital','usefunds','revenue'],
+    };
+    const weekPanels = {
+      1: [ {title:'What you do',items:['Define the problem and ICP','Run market sizing seed research','Talk to ≥5 customers and log every interview']},
+           {title:'What unlocks',items:['Startups','Customer Discovery','Market Intelligence (read-only)','Profiling']},
+           {title:'Deliverables',items:['Complete skills, values, and archetype assessment in Profiling','Log ≥5 customer interviews in Customer Discovery','Finalize ICP definition and validation criteria','Create startup record with one-liner and sector tags']} ],
+      2: [ {title:'What you do',items:['Scope the MVP','Set 90-day OKRs','Draft brand v1','Draft pitch deck v1']},
+           {title:'What unlocks',items:['Roadmap','Brand & Landing Pages','Pitch Deck Builder','Studio Ops cadence']},
+           {title:'Deliverables',items:['Draft Brand v1 (tagline, value prop, visual direction)','Create Pitch Deck v1 (problem/solution/market/ask)','Set and lock 90-day OKRs','Define MVP scope and 4-week build plan']} ],
+      3: [ {title:'What you do',items:['Run your first venture-readiness score','Match with advisors','Decide co-founder track','Pressure-test scoring weak points']},
+           {title:'What unlocks',items:['Diligence & Scoring Engine','Advisors','Office Hours','Co-founder Match','MI — Investor Signals']},
+           {title:'Deliverables',items:['Book at least one session in Office Hours with a Service partner or Operator','Bring revenue proof from early customers or pilots','Achieve Scoring Engine score with ≥70% confidence across 5+ dimensions','Establish recurring advisor cadence (≥bi-weekly)','Finalize co-founder decision: match selected or solo-founder declaration signed']} ],
+      4: [ {title:'What you do',items:['Incorporate the entity','Issue founder stock with vesting','File 83(b)','Sign co-founder agreement','Lock the fundraise ask']},
+           {title:'What unlocks',items:['Incorporate','Cap Table','Co-founder Agreement','Capital','Use of Funds']},
+           {title:'Deliverables',items:['Fill in Use of Funds with allocation splits and runway modeling','File incorporation docs and receive EIN','Issue founder stock and file 83(b) election','Sign co-founder agreement (or solo declaration)','Secure ≥3 warm investor intros from MI — Investor Signals','Lock cap table with dilution modeling for seed raise']} ],
+    };
+    const weekMeta = {
+      1:{name:'Idea & Customer',accent:'#16a34a',...badge.done},
+      2:{name:'Solution & Roadmap',accent:'#7c3aed',...badge.active},
+      3:{name:'Validate & Team',accent:'#0d9488',...badge.locked},
+      4:{name:'Incorporate & Capital',accent:'#7c3aed',...badge.locked},
+    };
+    const weekNum = view.startsWith('week-') ? parseInt(view.slice(5),10) : 0;
+    const wm = weekMeta[weekNum] || weekMeta[1];
+    const weekView = { num:weekNum, name:wm.name, accent:wm.accent,
+      badgeText:wm.badgeText, badgeIcon:wm.badgeIcon, badgeStyle:wm.badgeStyle,
+      panels: weekPanels[weekNum] || [],
+      tools: (weekTools[weekNum] || []).map(k => toolMeta[k]).filter(Boolean) };
+
+    const startupFields = [
+      { k:'One-liner', v:'Async workflow automation for distributed teams' },
+      { k:'Sector', v:'SaaS · Workflow automation' },
+      { k:'Stage', v:'Pre-formation' },
+      { k:'Founded', v:'July 2026 (in program)' },
+      { k:'Legal entity', v:'Not incorporated · Week 4' },
+      { k:'Data room', v:'6 documents' },
+    ];
+    const team = [ { initials:'GL', name:'Guillaume L.', role:'Founder / CEO', equity:'TBD' } ];
+
+    // ---- Startups command center ----
+    const startupIcon = (p,sw=1.7)=>ic(p,sw);
+    const chevR = startupIcon('<path d="m9 18 6-6-6-6"/>', 2.2);
+    const stProfile = {
+      name:'NovaCraft AI', stage:'Pre-formation',
+      tagline:'The intelligent async layer for distributed teams.',
+      tags:['SaaS','Workflow automation','AI-native','B2B'],
+      thesis:'Distributed teams lose hours to fragmented workflow data. NovaCraft unifies async work into a single intelligent layer that automates status, handoffs, and reporting — so teams move without meetings.',
+    };
+    const stFacts = [
+      { k:'Founded', v:'Jul 2026' }, { k:'Stage', v:'Pre-formation' }, { k:'HQ', v:'Remote-first' },
+      { k:'Team', v:'1 founder' }, { k:'Sector', v:'Workflow SaaS' }, { k:'Cohort', v:'Cohort 3' },
+    ];
+    const chipStyles = {
+      complete:'color:#166534;background:#dcfce7', progress:'color:#b45309;background:#fef3c7',
+      notstarted:'color:#71717a;background:#f4f4f5', locked:'color:#7c3aed;background:#f3effe',
+    };
+    const mkChip = (label, note, state, stateKey, toolKey) => ({
+      label, note, state, chipStyle:chipStyles[stateKey],
+      cursor: toolKey?'pointer':'default', onClick: toolKey?(()=>openTool(toolKey)):(()=>{}),
+      arrowIcon: chevR, arrowColor: toolKey?'#c4c4cc':'transparent',
+    });
+    const stStatusChips = [
+      mkChip('Legal entity','Incorporate in Week 4','Not started','locked','incorporate'),
+      mkChip('Cap table','Founder stock issued in Week 4','Locked · Wk 4','locked','captable'),
+      mkChip('Co-founder agreement','Draft & execute in Week 4','Locked · Wk 4','locked','cofagreement'),
+      mkChip('Scoring / readiness','9-dimension diligence','In progress','progress','score'),
+      mkChip('Data room','6 of 10 key documents','In progress','progress',null),
+    ];
+    const stFounders = [
+      { initials:'GL', name:'Guillaume L.', role:'Founder / CEO', equity:'TBD', avatarBg:'#6d28d9',
+        commitment:'Full-time', commitColor:'#166534', commitBg:'#dcfce7',
+        bio:'Ex-Stripe infra eng. Built async tooling for 200+ person distributed orgs.' },
+    ];
+    const stCoFounder = {
+      note:'Co-founder Match is active — 4 candidates ranked. Equity and vesting finalize once a co-founder is added or a solo path is documented.',
+      onMatch:()=>openTool('cofmatch'), onSolo:()=>openTool('cofagreement'),
+    };
+    const stDataRoom = {
+      count:6,
+      docs:[
+        { name:'Pitch deck v3', meta:'Presentation · updated Jul 18', icon:this.__docMini||startupIcon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'), iconColor:'#6d28d9', chip:'Ready', chipStyle:chipStyles.complete },
+        { name:'Market sizing model', meta:'Spreadsheet · updated Jul 15', icon:startupIcon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'), iconColor:'#0891b2', chip:'Ready', chipStyle:chipStyles.complete },
+        { name:'Customer discovery log', meta:'Doc · 5 interviews', icon:startupIcon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'), iconColor:'#0d9488', chip:'Ready', chipStyle:chipStyles.complete },
+        { name:'Certificate of incorporation', meta:'Generated in Week 4', icon:startupIcon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'), iconColor:'#c4c4cc', chip:'Missing', chipStyle:chipStyles.notstarted },
+      ],
+      onView:()=>{}, hasMissing:true,
+      missingNote:'Formation docs, cap table export, and signed agreements are missing — they generate in Week 4.',
+    };
+    const stActivity = [
+      { title:'Company profile created', time:'Jul 1, 2026 · Week 1', dotBg:'#7c3aed', dotBorder:'#e4defb', titleColor:'#27272a' },
+      { title:'Customer discovery completed · 5 interviews', time:'Jul 8, 2026 · Week 1', dotBg:'#7c3aed', dotBorder:'#e4defb', titleColor:'#27272a' },
+      { title:'Co-founder search started', time:'Jul 14, 2026 · Week 3', dotBg:'#7c3aed', dotBorder:'#e4defb', titleColor:'#27272a' },
+      { title:'Scoring Engine · readiness assessed', time:'Jul 15, 2026 · Week 3', dotBg:'#7c3aed', dotBorder:'#e4defb', titleColor:'#27272a' },
+      { title:'Incorporate by end of Week 4', time:'Due Jul 30, 2026 · upcoming', dotBg:'#fff', dotBorder:'#d4d4d8', titleColor:'#a1a1aa' },
+    ];
+    const stProg = {
+      week:4, phase:'Incorporate & Capital', pct:'62%',
+      onContinue:()=>openWeek(4),
+      weeks:[
+        { label:'Wk 1', title:'Validate — done', barColor:'#7c3aed', labelColor:'#7c3aed' },
+        { label:'Wk 2', title:'Build — done', barColor:'#7c3aed', labelColor:'#7c3aed' },
+        { label:'Wk 3', title:'Team — done', barColor:'#7c3aed', labelColor:'#7c3aed' },
+        { label:'Wk 4', title:'Incorporate — active', barColor:'#c4b5fd', labelColor:'#7c3aed' },
+      ],
+    };
+    const stNextAction = { title:'Incorporate your entity', cta:'Open Incorporate', onClick:()=>openTool('incorporate') };
+    const stPreview = {
+      isOpen:this.state.startupPreviewOpen,
+      open:()=>this.setState({startupPreviewOpen:true}),
+      close:()=>this.setState({startupPreviewOpen:false}),
+      stop:(e)=>e.stopPropagation(),
+    };
+
+    const icpFields = [
+      { k:'Segment', v:'Ops leads at distributed SaaS companies (50–500 employees)' },
+      { k:'Primary pain', v:'No single source of truth for workflow data' },
+      { k:'Willingness to pay', v:'$200/mo threshold; price-sensitive above' },
+      { k:'Must-have', v:'Native Slack integration' },
+    ];
+    const themes = ['Async workflows','Slack integration','$200/mo ceiling','Single source of truth','Onboarding speed'];
+
+    const fmtM = (m) => m>=1000 ? '$'+(m/1000).toFixed(m%1000===0?0:1)+'B' : '$'+Math.round(m)+'M';
+    const marketSizes = [
+      { k:'TAM', v:fmtM(this.state.tamM), note:'Workflow automation, global', source:'Gartner 2025' },
+      { k:'SAM', v:fmtM(this.state.samM), note:'Distributed SaaS teams', source:'CB Insights Q1 2026' },
+      { k:'SOM', v:fmtM(this.state.somM), note:'Reachable within 3 years', source:'Founder model' },
+    ];
+    const segments = [
+      { name:'Distributed SaaS', value:'$210M', pct:'62%' },
+      { name:'Agencies', value:'$82M', pct:'24%' },
+      { name:'Remote-first SMB', value:'$48M', pct:'14%' },
+    ];
+    const sources = this.state.sourcesList;
+    const typeTagStyle = (t) => ({ Report:'background:#f5f3ff;color:#6d28d9', Interview:'background:#dcfce7;color:#15803d', Article:'background:#eff6ff;color:#2563eb', Manual:'background:#f4f4f5;color:#71717a' }[t] || 'background:#f4f4f5;color:#71717a');
+    const sourceRows = sources.map((s,i) => ({ ...s, tagStyle:typeTagStyle(s.type), onRemove:()=>this.removeSource(i) }));
+
+    // ---- Market dynamics (Section 2) ----
+    const cagrPct = parseFloat(this.state.marketForm.cagr)||24;
+    const sparkPts = [0,1,2,3,4].map(i => this.state.tamM*Math.pow(1+cagrPct/100, i-2));
+    const maxSpark = Math.max(...sparkPts), minSpark = Math.min(...sparkPts);
+    const sparkW = 220, sparkH = 48, sparkPad = 6;
+    const sparkXY = sparkPts.map((v,i) => [ sparkPad + i*((sparkW-sparkPad*2)/4), sparkH-sparkPad - ((v-minSpark)/((maxSpark-minSpark)||1))*(sparkH-sparkPad*2) ]);
+    const sparkPath = sparkXY.map((p,i)=> (i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+    const maturityStyle = { Early:'background:#dcfce7;color:#15803d', Growing:'background:#f5f3ff;color:#6d28d9', Mature:'background:#f4f4f5;color:#71717a' }[this.state.marketForm.maturity] || 'background:#f4f4f5;color:#71717a';
+    const dynamics = {
+      cagr: cagrPct, peakWindow:'2025–2028', growthDriver:this.state.marketForm.growthDriver,
+      maturity:this.state.marketForm.maturity, maturityStyle, tailwind:'Remote-first workforce normalization post-2020',
+      sparkPath, sparkDotX:sparkXY[2][0].toFixed(1), sparkDotY:sparkXY[2][1].toFixed(1),
+    };
+
+    // ---- Competitive landscape (Section 3) ----
+    const catStyle = (c) => ({ Direct:'background:#fef2f2;color:#b91c1c', Indirect:'background:#fffaf0;color:#b45309', Adjacent:'background:#f4f4f5;color:#71717a' }[c] || 'background:#f4f4f5;color:#71717a');
+    const competitorRows = this.state.competitors.slice(0,6).map((c,idx) => ({ ...c, catStyle:catStyle(c.cat), remove:()=>this.removeCompetitor(idx) }));
+    const posMapW=220, posMapH=140;
+    const posSeed = (s)=>{ let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return h; };
+    const compDots = competitorRows.map(c => { const h=posSeed(c.name); return { x: 14+((h%80)+ (posMapW-28-80)*((h>>4)%100)/100), y: 14+((h>>2)%100)/100*(posMapH-28), name:c.name }; });
+    const youDot = { x: posMapW*0.72, y: posMapH*0.28 };
+
+    // ---- Investor signal preview (Section 4) ----
+    // ---- Investor signals (scored — plugged into Profiling founder data) ----
+    const founderSignal = {
+      archetype:'Builder / Visionary',
+      strengths:['Product','Strategy','Technical'],
+      gaps:['Fundraising','GTM'],
+      sector:'Workflow automation',
+      stage:'Pre-seed',
+      traction:'$1.8k MRR · 3 paying',
+    };
+    const founderChips = [
+      { label:founderSignal.archetype, kind:'arch' },
+      { label:founderSignal.sector, kind:'sector' },
+      { label:founderSignal.stage, kind:'stage' },
+      { label:founderSignal.traction, kind:'traction' },
+    ].map(c => ({ ...c, chipStyle: c.kind==='arch' ? 'background:#f3effe;color:#6d28d9;border:1px solid #e4defb'
+      : c.kind==='traction' ? 'background:#ecfdf5;color:#15803d;border:1px solid #bbf7d0'
+      : 'background:#f4f4f5;color:#52525b;border:1px solid #ececf1' }));
+
+    const invRaw = [
+      { fund:'Northline Ventures', partner:'R. Adeyemi', focus:'Workflow & dev tools', stage:'Pre-seed–Seed', check:'$500k–1.5M',
+        criteria:[
+          {label:'Technical / product-led founder', w:30, met:true, note:'Builder archetype + product strength'},
+          {label:'Early revenue signal', w:25, met:true, note:'$1.8k MRR from 3 paying customers'},
+          {label:'Distributed-SaaS sector focus', w:25, met:true, note:'Exact thesis match'},
+          {label:'Named GTM / distribution lead', w:20, met:false, note:'GTM is a profiling gap'},
+        ] },
+      { fund:'Atlas Seed', partner:'M. Cho', focus:'B2B SaaS', stage:'Pre-seed', check:'$250k–750k',
+        criteria:[
+          {label:'Visionary founder, large market', w:30, met:true, note:'Visionary secondary archetype; $2.4B TAM'},
+          {label:'Pre-seed stage fit', w:25, met:true, note:'Matches current stage'},
+          {label:'Weekly usage / retention data', w:25, met:false, note:'No retention evidence yet'},
+          {label:'Prior founder exit', w:20, met:false, note:'First-time founder'},
+        ] },
+      { fund:'Vector Partners', partner:'S. Delacroix', focus:'Applied AI · automation', stage:'Seed', check:'$1M–2.5M',
+        criteria:[
+          {label:'Technical depth / defensibility', w:35, met:true, note:'Strong technical + product profile'},
+          {label:'AI-native product wedge', w:25, met:true, note:'Async workflow automation'},
+          {label:'Seed-stage traction bar', w:25, met:false, note:'Below Vector’s revenue threshold'},
+          {label:'Fundraising-ready narrative', w:15, met:false, note:'Fundraising is a profiling gap'},
+        ] },
+      { fund:'Fieldstone', partner:'J. Okafor', focus:'Dev-tools adjacent', stage:'Pre-seed–Seed', check:'$400k–1M',
+        criteria:[
+          {label:'Builder-led founding team', w:30, met:true, note:'Builder primary archetype'},
+          {label:'Bottom-up adoption motion', w:25, met:false, note:'No self-serve motion yet'},
+          {label:'Sector adjacency', w:25, met:true, note:'Workflow tooling adjacency'},
+          {label:'Co-founder in place', w:20, met:true, note:'Two-founder team'},
+        ] },
+      { fund:'Cadence Partners', partner:'L. Berg', focus:'Vertical SaaS', stage:'Seed', check:'$1M–2M',
+        criteria:[
+          {label:'Vertical wedge / ICP clarity', w:30, met:false, note:'Horizontal positioning'},
+          {label:'Commercial / GTM leadership', w:30, met:false, note:'GTM is a profiling gap'},
+          {label:'Domain expertise', w:20, met:true, note:'Deep async-workflow domain'},
+          {label:'Seed revenue bar', w:20, met:false, note:'Early revenue, below bar'},
+        ] },
+    ];
+    const bandFor = (s) => s>=70 ? {label:'Strong match',fg:'#15803d',bg:'#dcfce7'}
+      : s>=45 ? {label:'Moderate match',fg:'#b45309',bg:'#fffaf0'}
+      : {label:'Weak match',fg:'#a1a1aa',bg:'#f4f4f5'};
+    const investorSignals = invRaw.map((iv,idx) => {
+      const total = iv.criteria.reduce((a,c)=>a+c.w,0);
+      const got = iv.criteria.filter(c=>c.met).reduce((a,c)=>a+c.w,0);
+      const score = Math.round(100*got/total);
+      const dots = Math.max(1, Math.min(5, Math.round(score/20)));
+      const band = bandFor(score);
+      return { ...iv, score, dots, dotsStr:'●'.repeat(dots)+'○'.repeat(5-dots), band,
+        matched: iv.criteria.filter(c=>c.met).map(c=>({...c})),
+        gaps: iv.criteria.filter(c=>!c.met).map(c=>({...c})),
+        open: this.state.miOpenRow===idx,
+        onToggle: () => this.setState(s=>({ miOpenRow: s.miOpenRow===idx ? -1 : idx })),
+        chevron: this.state.miOpenRow===idx ? '▾' : '▸',
+        scoreColor: band.fg };
+    }).sort((a,b)=>b.score-a.score);
+    const miAgg = [
+      { v: String(investorSignals.length), l:'Investors tracking your thesis' },
+      { v: String(investorSignals.filter(i=>i.score>=70).length), l:'Strong matches' },
+      { v: Math.round(investorSignals.reduce((a,i)=>a+i.score,0)/investorSignals.length)+'%', l:'Avg. match strength' },
+      { v: founderSignal.gaps.length+' gaps', l:'Weakening your signal' },
+    ];
+    // compact rows for the Week-2 Market Intel preview (locked DB, scores visible)
+    const signalRows = investorSignals.slice(0,5).map(r => ({ fund:r.fund, focus:r.focus, stage:r.stage, dots:r.dots, dotsStr:r.dotsStr, score:r.score+'%', band:r.band }));
+
+    // ---- Readiness checklist (Section 6) ----
+    const checklist = [
+      { label:'TAM defined', done:true }, { label:'SAM defined', done:true }, { label:'SOM defined', done:true },
+      { label:'Sources added (min 2)', done: sources.length>=2 },
+      { label:'Market growth rate added', done: !!this.state.marketForm.cagr },
+      { label:'Competitive landscape (min 3 competitors)', done: this.state.competitors.length>=3 },
+      { label:'Positioning map completed', done:false },
+      { label:'Founder assumptions reviewed', done:false },
+      { label:'Investor signals reviewed (Week 3)', done:false },
+    ].map(c => ({ ...c, notDone: !c.done }));
+    const readinessPct = Math.round(100*checklist.filter(c=>c.done).length/checklist.length);
+    const readinessColor = readinessPct>=70 ? {bg:'#dcfce7',fg:'#15803d'} : readinessPct>=40 ? {bg:'#fffaf0',fg:'#b45309'} : {bg:'#fef2f2',fg:'#b91c1c'};
+    const readinessRemaining = Math.max(0, Math.ceil((0.70-readinessPct/100)*checklist.length));
+
+    // ---- Drawer control styles ----
+    const selStyle = 'background:#7c3aed;color:#fff;border-color:#7c3aed';
+    const unselStyle = 'background:#fff;color:#52525b;border-color:#e4e4e7';
+    const mTopSel = this.state.marketForm.methodology!=='Bottom-up';
+    const methodTopStyle = mTopSel ? selStyle : unselStyle;
+    const methodBottomStyle = !mTopSel ? selStyle : unselStyle;
+    const maturityOpts = ['Early','Growing','Mature'].map(m => ({ label:m, style: this.state.marketForm.maturity===m ? selStyle : unselStyle, onClick:()=>this.setMF('maturity',m) }));
+    const segFilterChips = segments.map(s => ({ name:s.name, style: (this.state.marketForm.segFilter||[]).includes(s.name) ? selStyle : unselStyle, onClick:()=>this.toggleSegFilter(s.name) }));
+    const methodChevronRot = this.state.marketMethodOpen ? 'transform:rotate(180deg)' : '';
+
+    const advisorThread = [
+      { isAdvisor:true, text:'What makes a defensible moat in your specific market?', align:'', bubble:'background:#fafafa;border:1px solid #f1f1f5;color:#3f3f46' },
+      { isAdvisor:false, text:'Data network effects from shared cross-team workflow templates.', align:'justify-content:flex-end', bubble:'background:#7c3aed;color:#fff' },
+      { isAdvisor:true, text:'Quantify the switching cost in your pitch — tie it to the $200/mo threshold from discovery.', align:'', bubble:'background:#fafafa;border:1px solid #f1f1f5;color:#3f3f46' },
+    ];
+
+    const okrs = [
+      { n:1, obj:'Prove demand with a shippable MVP', krs:[{t:'MVP scope locked',p:'45%'},{t:'3 design partners committed',p:'33%'}] },
+      { n:2, obj:'Establish measurable 90-day targets', krs:[{t:'OKRs ratified with advisor',p:'100%'},{t:'Weekly metric review live',p:'60%'}] },
+      { n:3, obj:'Reach pitch readiness', krs:[{t:'Deck v1 drafted',p:'0%'},{t:'Brand v1 live',p:'0%'}] },
+    ];
+    const valueStyleMap = { High:'background:#dcfce7;color:#15803d', Medium:'background:#fef3c7;color:#b45309', Low:'background:#f4f4f5;color:#a1a1aa' };
+    const tierStyleMap = { Core:'background:#ede9fe;color:#6d28d9', v2:'background:#eff6ff;color:#2563eb', 'Out of scope':'background:#f4f4f5;color:#a1a1aa' };
+    const statusStyleMap = { Done:'background:#dcfce7;color:#15803d', 'In Progress':'background:#fef3c7;color:#b45309', Review:'background:#eff6ff;color:#2563eb', Backlog:'background:#f4f4f5;color:#71717a', Blocked:'background:#fee2e2;color:#b91c1c' };
+    const mkFeat = (title, scopeTier, deliveryStatus, addedValue, effort, priorityReason, cycleAssigned) => {
+      const active = /Cycle 2/.test(cycleAssigned);
+      return { title, scopeTier, deliveryStatus, valueLabel:addedValue+' value', valueRaw:addedValue, effort,
+        priorityReason, cycleAssigned,
+        valueStyle:valueStyleMap[addedValue], tierStyle:tierStyleMap[scopeTier], statusStyle:statusStyleMap[deliveryStatus],
+        cycleColor: active?'#15803d':'#a1a1aa',
+        rowBorder: addedValue==='High'?'#d7f0df':'#f0f0f3', rowBg: addedValue==='High'?'#fbfefb':'#fff' };
+    };
+    const cycleFor = (v) => v==='High' ? 'Active · Cycle 2' : v==='Medium' ? 'Next cycle candidate' : 'Deferred from MVP';
+    const tierFor = (v) => v==='High' ? 'Core' : v==='Medium' ? 'v2' : 'Out of scope';
+    const statusFor = (v) => v==='High' ? 'Backlog' : 'Backlog';
+    const mvpFeatures = [
+      mkFeat('Async task threading','Core','In Progress','High','M','Core wedge — the async workflow pain 4 of 5 interviews named. Non-negotiable for demand proof.','Active · Cycle 2'),
+      mkFeat('ICP onboarding flow','Core','In Progress','High','S','Directly drives activation for the recommended Distributed-SaaS segment. Low effort, high leverage.','Active · Cycle 2'),
+      mkFeat('Slack integration','Core','Review','High','M','Deciding factor for design-partner champions — “won’t use it if it’s not in Slack.”','Active · Cycle 2'),
+      mkFeat('Analytics dashboard','v2','Backlog','Medium','L','Valuable for retention story but not required to prove initial demand. High effort.','Next cycle candidate'),
+      mkFeat('Mobile app','Out of scope','Backlog','Low','L','No interview signal; desktop-first ICP. Defer until post-seed unless a design partner blocks on it.','Deferred from MVP'),
+      ...this.state.customFeatures.map(cf => mkFeat(cf.title, tierFor(cf.value), statusFor(cf.value), cf.value, cf.effort, cf.reason || 'Founder-added priority.', cycleFor(cf.value))),
+    ];
+    const mvpGroups = [
+      { label:'Must ship now', sub:'High value → active cycle', dot:'#22c55e', items:mvpFeatures.filter(f=>f.valueRaw==='High') },
+      { label:'Valuable next', sub:'Medium value → next cycle / backlog', dot:'#d97706', items:mvpFeatures.filter(f=>f.valueRaw==='Medium') },
+      { label:'Deprioritized', sub:'Low value → v2 / out of scope', dot:'#a1a1aa', items:mvpFeatures.filter(f=>f.valueRaw==='Low') },
+    ];
+    const highN = mvpFeatures.filter(f=>f.valueRaw==='High').length;
+    const activeN = mvpFeatures.filter(f=>/Cycle 2/.test(f.cycleAssigned)).length;
+    const removedN = mvpFeatures.filter(f=>f.scopeTier==='Out of scope').length;
+    const mvpSummary = [
+      { v:String(highN), l:'High-value features identified', bg:'#f0fdf4', border:'#d7f0df', fg:'#15803d' },
+      { v:String(activeN), l:'In the active build cycle', bg:'#f5f3ff', border:'#e4defb', fg:'#6d28d9' },
+      { v:String(removedN), l:'Intentionally cut from MVP', bg:'#fafafa', border:'#ececf1', fg:'#52525b' },
+      { v:'Strong', l:'Scope confidence · focused on demand proof', bg:'#f0fdf4', border:'#d7f0df', fg:'#15803d' },
+    ];
+    const cycleHandoff = mvpFeatures.filter(f=>/Cycle 2/.test(f.cycleAssigned)).map(f=>({
+      title:f.title, cycle:'Pulled into Cycle 2', state:'Active in MVP build loop' }));
+    const milestones = [
+      { label:'Incorporation research', date:'Jul 8', status:'Done', dot:'#22c55e', lineHide:'' },
+      { label:'MVP scope locked', date:'Jul 16', status:'In progress', dot:'#7c3aed', lineHide:'' },
+      { label:'Brand + deck v1', date:'Jul 18', status:'Upcoming', dot:'#d4d4d8', lineHide:'' },
+      { label:'Week 2 gate review', date:'Jul 20', status:'Upcoming', dot:'#d4d4d8', lineHide:'display:none' },
+    ];
+
+    const brandNames = [ {name:'NovaCraft',status:'Current'}, {name:'Cadence',status:'Candidate'}, {name:'Fluxwork',status:'Candidate'} ];
+    const brandPalette = [ {hex:'#7C3AED'}, {hex:'#1E1B3A'}, {hex:'#22C55E'}, {hex:'#F8F8FA'} ];
+
+    const deckSlides = ['Title','Problem','Solution','Product','Market','Business Model','Traction','Competition','Go-to-Market','Team','Financials','The Ask'].map((title,i)=>({ n:i+1, title }));
+
+    const cadenceLocked = this.state.opsCadenceLocked;
+    const reviewDone = this.state.opsReviewDone;
+    const cadenceTag = (t) => t==='Set' ? 'background:#dcfce7;color:#15803d' : 'background:#f4f4f5;color:#a1a1aa';
+    const cadence = [
+      { day:'Mon', name:'Async standup', time:'9:00', owner:'Both founders', agenda:'Written check-in: yesterday, today, blockers.', outcome:'', tag: cadenceLocked?'Set':'Set', tagStyle:cadenceTag('Set') },
+      { day:'Wed', name:'Build review', time:'15:00', owner:'With advisor', agenda:'Demo MVP progress against Cycle 2 scope.', outcome: cadenceLocked?'Locked':'', tag: cadenceLocked?'Set':'Proposed', tagStyle:cadenceTag(cadenceLocked?'Set':'Proposed') },
+      { day:'Fri', name:'Metrics review', time:'16:00', owner:'Both founders', agenda:'OKR + traction check against 90-day targets.', outcome: cadenceLocked?'Locked':'', tag: cadenceLocked?'Set':'Proposed', tagStyle:cadenceTag(cadenceLocked?'Set':'Proposed') },
+      { day:'Fri', name:'Founder reflection', time:'17:00', owner:'Solo · optional', agenda:'What worked, what to change next week.', outcome:'', tag:'Optional', tagStyle:cadenceTag('Optional') },
+    ];
+    const commitStatusStyle = { Planned:'background:#f4f4f5;color:#71717a', 'In Progress':'background:#fef3c7;color:#b45309', Review:'background:#eff6ff;color:#2563eb', Done:'background:#dcfce7;color:#15803d', Blocked:'background:#fee2e2;color:#b91c1c' };
+    const mkCommit = (status, title, module, owner, due, nextAction) => ({ ...box(status==='Done'), title, module, owner, due, status, nextAction,
+      blocked: status==='Blocked', statusStyle:commitStatusStyle[status],
+      color: status==='Done'?'#a1a1aa':'#27272a', strike: status==='Done'?'text-decoration:line-through':'' });
+    const commitments = [
+      mkCommit('In Progress','Lock MVP scope with advisor','MVP Scope','Guillaume','Wed','Bring value-ranked feature list to Build review.'),
+      mkCommit('In Progress','Draft first 3 pitch-deck slides','Pitch Deck','Maya','Thu','Problem, Solution, Market drafted from module data.'),
+      mkCommit('Planned','Decide working brand name','Brand','Guillaume','Fri','Shortlist of 3 ready in Brand Builder.'),
+      mkCommit('Blocked','Confirm co-founder equity split','Co-founder Match','Both','Fri','Waiting on advisor input — escalated below.'),
+      mkCommit('Done','Publish customer waitlist page','Brand','Maya','Mon','Live · 142 views, 23 signups.'),
+    ];
+    const commitTotal = commitments.length;
+    const commitDoneCount = commitments.filter(c=>c.status==='Done').length;
+    const sevStyle = { High:'background:#fee2e2;color:#b91c1c', Medium:'background:#fef3c7;color:#b45309', Low:'background:#f4f4f5;color:#71717a' };
+    const blockers = [
+      { title:'Co-founder equity split unresolved', severity:'High', type:'Decision', recommended:'Bring the vesting scenarios to Wednesday’s advisor Build review and decide.', escalate:true },
+      { title:'Slack integration scope uncertain', severity:'Medium', type:'Technical', recommended:'Timebox a spike in Cycle 2; if >3 days, defer to v2.', escalate:false },
+    ];
+    const noBlockers = blockers.length===0;
+    const reviewRows = [
+      { label:'What shipped', value:'Customer waitlist page live (142 views, 23 signups).' },
+      { label:'What slipped', value:'Brand name decision moved to Friday.' },
+      { label:'What changed', value:'Slack integration flagged as scope risk — spike planned.' },
+      { label:'Rolls into next week', value:'Lock brand v1, finish pitch slides 4–6, resolve equity split.' },
+    ];
+    const reviewStatus = reviewDone ? 'Completed' : 'Open';
+    const reviewStatusStyle = reviewDone ? 'background:#dcfce7;color:#15803d' : 'background:#fef3c7;color:#b45309';
+    // execution health
+    const blockerPenalty = blockers.some(b=>b.severity==='High') ? 1 : 0;
+    const doneRatio = commitDoneCount/commitTotal;
+    const opsProgress = Math.round(doneRatio*100)+'%';
+    const opsHealth = blockerPenalty ? 'At risk' : (doneRatio>=0.6 ? 'On track' : 'On track');
+    const opsHealthStyle = blockerPenalty ? 'background:#fef3c7;color:#b45309' : 'background:#dcfce7;color:#15803d';
+    const opsHealthBar = blockerPenalty ? '#d97706' : '#22c55e';
+    const opsProgressNote = commitDoneCount+' of '+commitTotal+' commitments done · 1 high blocker';
+    const cadenceLock = cadenceLocked ? 'Locked' : 'Not locked';
+    const cadenceLockStyle = cadenceLocked ? 'background:#dcfce7;color:#15803d' : 'background:#fef3c7;color:#b45309';
+    const mhIcon = (ok) => ok
+      ? { icon: ic('<path d="M20 6 9 17l-5-5"/>'), dotStyle:'background:#dcfce7;color:#16a34a' }
+      : { icon: ic('<circle cx="12" cy="12" r="9"/>',1.6), dotStyle:'background:#f4f4f5;color:#cbcbd2' };
+    const opsMustHit = [
+      { text:'Lock MVP scope with advisor', ...mhIcon(false) },
+      { text:'Draft pitch deck v1 (problem → ask)', ...mhIcon(false) },
+      { text:'Resolve co-founder equity split', ...mhIcon(false) },
+    ].map(m => ({ text:m.text, icon:m.icon, dotStyle:m.dotStyle }));
+
+    // ===== SELECTED WEEK TAB (drives 2A / 2B / stats) =====
+    const tab = this.state.selectedWeekTab || 2;
+    const stat = (label, icon) => ({ label, icon });
+    const clockI = ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>');
+    const toolsI = ic('<path d="M14.5 9.5 21 3m0 0h-4m4 0v4"/><path d="M10 6a4 4 0 1 0 4 4"/><circle cx="8" cy="16" r="4"/>');
+    const weekStats = {
+      1: [ stat('Days 1–5', clockI), stat('3 of 3 tasks done', check), stat('4 tools unlocked', toolsI) ],
+      2: [ stat('Day 11 of 14', clockI), stat('1 of 5 tasks done', check), stat('4 tools unlocked', toolsI) ],
+      3: [ stat('Days 13–19', clockI), stat('0 of 3 tasks done', check), stat('5 tools unlocked', toolsI) ],
+      4: [ stat('Days 20–25', clockI), stat('0 of 4 tasks done', check), stat('7 tools unlocked', toolsI) ],
+    };
+    const weekDeliverables = {
+      1: [ drow(true,'Create startup record','Done','Open Startups',null,'startups'),
+           drow(true,'Log 5 customer interviews','Done','Open Customer Discovery',null,'discovery'),
+           drow(true,'Size TAM / SAM with citations','Done','Open Market Intel',null,'market'),
+           drow(false,'Complete skills, values & archetype assessment','Not Started','Open Profiling',null,'advisor'),
+           drow(false,'Finalize ICP definition and validation criteria','Not Started','Open Customer Discovery',null,'discovery'),
+           drow(false,'Export or share initial Market Intel research','Not Started','Open Market Intel',null,'market') ],
+      2: [ ...deliverableRows,
+           drow(false,'Draft Brand v1 (tagline, value prop, visual direction)','Not Started','Open Brand & Landing Pages',null,'brand'),
+           drow(false,'Map first 3 customer discovery follow-ups','Not Started','Open Customer Discovery',null,'discovery') ],
+      3: [ drow(false,'Run venture-readiness score','Not Started','Open Scoring Engine',null,'score'),
+           drow(false,'Establish advisor cadence','Not Started','Open Advisors',null,'advisors'),
+           drow(false,'Decide co-founder track','Not Started','Open Co-founder Match',null,'cofmatch'),
+           drow(false,'Book a session in Office Hours','Not Started','Open Office Hours',null,'hours'),
+           drow(false,'Bring revenue proof','Not Started','Open Revenue',null,'revenue'),
+           drow(false,'Generate investor-ready revenue summary','Not Started','Open Revenue',null,'revenue'),
+           drow(false,'Score ≥70% confidence across 5+ dimensions','Optional · boosts readiness','Open Scoring Engine',null,'score') ],
+      4: [ drow(false,'Incorporate the entity','Not Started','Open Incorporate',null,'incorporate'),
+           drow(false,'File incorporation docs and receive EIN','Not Started','Open Incorporate',null,'incorporate'),
+           drow(false,'Issue founder stock with vesting','Not Started','Open Cap Table',null,'captable'),
+           drow(false,'File 83(b) election','Not Started','Open Cap Table',null,'captable'),
+           drow(false,'Sign co-founder agreement (or solo declaration)','Not Started','Open Co-founder Agreement',null,'cofagreement'),
+           drow(false,'Lock the fundraise ask','Not Started','Open Capital',null,'capital'),
+           drow(false,'Fill in Use of Funds','Not Started','Open Use of Funds',null,'usefunds'),
+           drow(false,'Secure ≥3 warm investor intros','Not Started','Open MI — Investor Signals',null,'misignals'),
+           drow(false,'Lock cap table with dilution modeling','Not Started','Open Cap Table',null,'captable'),
+           drow(false,'Build data room with ≥8 key artifacts','Not Started','Open Startups',null,'startups') ],
+    };
+    const weekHeader = {
+      1: { title:'Week 1 — Idea & Customer', subtitle:'Define the problem and ICP. Run market sizing. Talk to ≥5 customers and log every interview.', accent:'#16a34a', st:'done', cta1:'discovery',cta1L:'Open Customer Discovery', cta2:'market',cta2L:'Open Market Intel' },
+      2: { title:'Week 2 — Solution & Roadmap', subtitle:'Scope the MVP. Set 90-day OKRs. Draft brand v1 and pitch deck v1.', accent:'#7c3aed', st:'active', cta1:'roadmap',cta1L:'Open Roadmap', cta2:'deck',cta2L:'Open Pitch Deck Builder' },
+      3: { title:'Week 3 — Validate & Team', subtitle:'Run your first venture-readiness score. Match advisors. Decide co-founder track.', accent:'#0d9488', st:'preview', cta1:'score',cta1L:'Open Scoring Engine', cta2:'advisors',cta2L:'Open Advisors' },
+      4: { title:'Week 4 — Incorporate & Capital', subtitle:'Incorporate the entity. Issue founder stock. File 83(b). Lock the fundraise ask.', accent:'#d97706', st:'preview', cta1:'incorporate',cta1L:'Open Incorporate', cta2:'captable',cta2L:'Open Cap Table' },
+    };
+    const wh = weekHeader[tab];
+    const pillMap = {
+      done: { pillText:'Completed', pillStyle:'color:#15803d;background:#dcfce7', isActive:false, cardAnim:'' },
+      active: { pillText:'Active week', pillStyle:'color:#6d28d9;background:#f5f3ff;border:1px solid #ede9fe', isActive:true, cardAnim:'animation:wsGlow 3s infinite' },
+      preview: { pillText:'Preview', pillStyle:'color:#71717a;background:#f4f4f5', isActive:false, cardAnim:'' },
+    };
+    const activeWeek = { title:wh.title, subtitle:wh.subtitle, accent:wh.accent,
+      ...pillMap[wh.st], delivLabel:'Week '+tab+' deliverables',
+      cta1Label:wh.cta1L, cta1:()=>openTool(wh.cta1), cta2Label:wh.cta2L, cta2:()=>openTool(wh.cta2) };
+    const activeStatsTab = weekStats[tab];
+    const deliverableRowsTab = weekDeliverables[tab];
+
+    // ===== INTERVIEW DETAILS (clickable rows) =====
+    const openInterview = (iv) => this.setState({ selectedInterview: iv });
+    const interviewData = [
+      { initial:'S', name:'Sarah T.', title:'VP Ops · SaaS', date:'Jul 2', insight:'Current tools don’t handle async workflows',
+        painPoints:['Async workflow gaps','Context lost across tools'], quotesArr:['Current tools don’t handle async workflows — we lose the thread constantly.'], icp:['Strong fit','Early adopter'],
+        insightFull:'Strong async pain. Manages a distributed team of 40 and actively cobbling together three tools. High intent — asked to join the beta unprompted.', nextSteps:['Send follow-up email','Add to prototype beta list'] },
+      { initial:'M', name:'Marcus R.', title:'Founder · Agency', date:'Jul 3', insight:'Price sensitivity at $200/mo threshold',
+        painPoints:['Budget ceiling','Per-seat pricing fatigue'], quotesArr:['Anything over $200 a month and I’d need to justify it to the whole team.'], icp:['Weak fit','Skeptic'],
+        insightFull:'Interested but price-anchored. Agency margins are thin; would need clear ROI within a month. Good signal on packaging, not an early adopter.', nextSteps:['Schedule second interview'] },
+      { initial:'D', name:'Diana K.', title:'Eng Lead · Fintech', date:'Jul 4', insight:'Integration with Slack is non-negotiable',
+        painPoints:['Slack integration required','Tool sprawl'], quotesArr:['If it doesn’t live in Slack, my team won’t use it. Full stop.'], icp:['Strong fit','Champion'],
+        insightFull:'Native Slack integration is the deciding factor. Willing to champion internally if the integration is first-class. Strong fit for design-partner program.', nextSteps:['Send follow-up email','Schedule second interview'] },
+      { initial:'J', name:'James W.', title:'PM · Remote-first', date:'Jul 5', insight:'Discovery takes 3x longer than expected',
+        painPoints:['Slow discovery','No single source of truth'], quotesArr:['Discovery takes three times longer than it should — everything is scattered.'], icp:['Strong fit','Early adopter'],
+        insightFull:'Feels the pain acutely across a remote org. Sees clear value in consolidation. Would pilot immediately with a small team.', nextSteps:['Add to prototype beta list'] },
+      { initial:'P', name:'Priya M.', title:'COO · SMB', date:'Jul 6', insight:'No single source of truth for customer data',
+        painPoints:['Fragmented customer data','Manual handoffs'], quotesArr:['We have no single source of truth — data lives in five places.'], icp:['Strong fit','Champion'],
+        insightFull:'Operational pain around fragmented data. Champion-level enthusiasm; already maps to our ICP. Prioritize for beta and testimonial.', nextSteps:['Send follow-up email','Add to prototype beta list'] },
+    ];
+    const interviewRows = interviewData.map(iv => ({ ...iv, onOpen: () => openInterview(iv) }));
+
+    // ===== LOG INTERVIEW LIGHTBOX =====
+    const capture = this.state.capture;
+    const capDef = [
+      { key:'otter', name:'Otter.ai transcript', desc:'Paste your transcript — we extract pain points and quotes automatically.', icon: ic('<path d="M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>') },
+      { key:'ai', name:'ChatGPT / AI summary', desc:'Paste a ChatGPT or Claude summary — we parse insights and next steps.', icon: spark },
+      { key:'manual', name:'Manual notes', desc:'Type your notes directly into the structured fields.', icon: ic('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>') },
+    ];
+    const captureMethods = capDef.map(m => ({ ...m, onSelect: () => this.setState({ capture: m.key }),
+      style: capture===m.key ? 'border:1px solid #a78bfa;background:#faf9ff' : 'border:1px solid #ececf1;background:#fff',
+      iconStyle: capture===m.key ? 'background:#ede9fe;color:#7c3aed' : 'background:#f4f4f5;color:#a1a1aa' }));
+    const pastePlaceholder = capture==='otter' ? 'Paste Otter.ai transcript here…' : 'Paste your ChatGPT or Claude summary here…';
+
+    const pill = (label, sel, onClick) => ({ label, onClick,
+      style: `height:32px;padding:0 13px;border-radius:8px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;${sel?'background:#7c3aed;color:#fff;border:1px solid #7c3aed':'background:#fff;color:#52525b;border:1px solid #e4e4e7'}` });
+    const formatPills = ['In-person','Video call','Phone','Async'].map(f => pill(f, this.state.format===f, () => this.setState({ format: f })));
+    const durationPills = ['15 min','30 min','45 min','60 min+'].map(d => pill(d, this.state.duration===d, () => this.setState({ duration: d })));
+
+    const painPills = this.state.painPoints.map((p, i) => ({ label: p, onRemove: () => this.setState(s => ({ painPoints: s.painPoints.filter((_,j)=>j!==i) })) }));
+    const onPainKey = (e) => { if (e.key === 'Enter' && e.target.value.trim()) { const v = e.target.value.trim(); this.setState(s => ({ painPoints: [...s.painPoints, v], newPain: '' })); e.target.value=''; } };
+    const quoteFields = this.state.quotes.map((q, i) => ({ text: q, onChange: (e) => { const v=e.target.value; this.setState(s => ({ quotes: s.quotes.map((x,j)=>j===i?v:x) })); } }));
+    const stepRows = this.state.nextSteps.map((s, i) => ({ label: s.t, ...box(s.done),
+      color: s.done?'#a1a1aa':'#3f3f46', strike: s.done?'text-decoration:line-through':'',
+      onToggle: () => this.setState(st => ({ nextSteps: st.nextSteps.map((x,j)=>j===i?{...x,done:!x.done}:x) })) }));
+    const icpAll = ['Strong fit','Weak fit','Wrong audience','Early adopter','Skeptic','Champion'];
+    const icpPills = icpAll.map(t => { const sel = this.state.icp.includes(t); return { label:t,
+      onToggle: () => this.setState(s => ({ icp: sel ? s.icp.filter(x=>x!==t) : [...s.icp, t] })),
+      style: `height:32px;padding:0 13px;border-radius:99px;font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer;${sel?'background:#7c3aed;color:#fff;border:1px solid #7c3aed':'background:#fff;color:#52525b;border:1px solid #e4e4e7'}` }; });
+    const extractInsights = () => this.setState({ extracted: true,
+      painPoints: ['Async workflow gaps','Price sensitivity at $200/mo','Slack integration required','No single source of truth'],
+      quotes: ['Current tools don’t handle async workflows.','If it doesn’t live in Slack, my team won’t use it.'] });
+
+    const isGenericTool = !!(toolMeta[view] && toolMeta[view].hasModules) && view!=='misignals' && view!=='incorporate' && view!=='capital' && view!=='score' && view!=='cofmatch' && view!=='usefunds' && view!=='captable' && view!=='advisors' && view!=='cofagreement';
+    const quickActions = [
+      { label:'Share', icon: ic('<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5 8.6 10.5"/>') },
+      { label:'Export', icon: ic('<path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>') },
+      { label:'Copy link', icon: ic('<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/>') },
+      { label:'Preview as investor', icon: ic('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>') },
+    ];
+    const chainCur = (toolMeta[view] && toolMeta[view].phaseAccent) || '#7c3aed';
+    const feedChainRows = (toolMeta[view] && toolMeta[view].feedChain || []).map((c,i,arr) => ({
+      l: c.l,
+      style: c.cur ? ('background:'+chainCur+';color:#fff') : 'background:#f4f4f5;color:#71717a',
+      lineStyle: i===arr.length-1 ? 'display:none;' : 'display:block;',
+    }));
+
+    return {
+      activeWeek, activeStats: activeStatsTab, deliverableRows: deliverableRowsTab, interviewRows,
+      isGenericTool, quickActions, feedChainRows,
+      showModuleBar: !!(toolMeta[view] && toolMeta[view].hasModules) && view!=='misignals',
+      goProfiling: (e) => { if(e&&e.preventDefault) e.preventDefault(); openTool('advisor'); },
+      closeLog: () => this.setState({ logOpen: false }), stop: (e) => e.stopPropagation(),
+      captureMethods, showPaste: capture!=='manual', pastePlaceholder,
+      extract: extractInsights, extracted: this.state.extracted,
+      formatPills, durationPills, painPills, newPain: this.state.newPain,
+      onPainInput: (e) => this.setState({ newPain: e.target.value }), onPainKey,
+      quoteFields, addQuote: () => this.setState(s => ({ quotes: [...s.quotes, ''] })),
+      insightText: this.state.insight, onInsightChange: (e) => { const v=e.target.value; this.setState({ insight: v }); },
+      stepRows, addStep: () => this.setState(s => ({ nextSteps: [...s.nextSteps, {t:'New step',done:false}] })),
+      icpPills, saveInterview: () => this.setState({ logOpen: false }),
+      selectedInterview: this.state.selectedInterview, closeDetail: () => this.setState({ selectedInterview: null }),
+      navGroups, progressSegments, weeks, toolGroups,
+      mainMaxW: '100%',
+      scoreCols, scoreRows, kpis, lockedWeeks,
+      isWorkspace: view==='workspace',
+      isTool: !!toolMeta[view],
+      isLockedTool: !!(toolMeta[view] && toolMeta[view].locked),
+      isWeekView: view.startsWith('week-'),
+      weekView, goWorkspace,
+      openRoadmap: () => openTool('roadmap'),
+      currentTool,
+      isStartups: view==='startups', isDiscovery: view==='discovery', isMarket: view==='market',
+      isAdvisor: view==='advisor', isRoadmap: view==='roadmap', isBrand: view==='brand',
+      isMISignals: view==='misignals', investorSignals, miAgg, founderChips,
+      isDeck: view==='deck', isOps: view==='ops', isIncorporate: view==='incorporate', isCapital: view==='capital', isScoreEngine: view==='score', isCofMatch: view==='cofmatch', isUseFunds: view==='usefunds', isCapTable: view==='captable', isAdvisorsTool: view==='advisors', isCofAgreement: view==='cofagreement', isHours: view==='hours', isRevenue: view==='revenue',
+      isEmbeddedTool: view==='brand' || view==='deck' || view==='incorporate' || view==='capital' || view==='score' || view==='cofmatch' || view==='usefunds' || view==='captable' || view==='advisors' || view==='cofagreement' || view==='discovery' || view==='hours' || view==='startups' || view==='revenue' || view==='advisor' || view==='market' || view==='misignals' || view==='roadmap' || view==='ops',
+      notEmbeddedTool: !(view==='brand' || view==='deck' || view==='incorporate' || view==='capital' || view==='score' || view==='cofmatch' || view==='usefunds' || view==='captable' || view==='advisors' || view==='cofagreement' || view==='discovery' || view==='hours' || view==='startups' || view==='revenue' || view==='advisor' || view==='market' || view==='misignals' || view==='roadmap' || view==='ops'),
+      startupFields, team, icpFields, themes, marketSizes, segments, sources, sourceRows, dynamics,
+      prog:stProg, profile:stProfile, facts:stFacts, statusChips:stStatusChips,
+      founders:stFounders, coFounder:stCoFounder, dataRoom:stDataRoom, activity:stActivity,
+      nextAction:stNextAction, startupPreview:stPreview,
+      competitorRows, compDots, youDot, posMapW, posMapH, signalRows, checklist, readinessPct, readinessColor, readinessRemaining,
+      marketMethodOpen: this.state.marketMethodOpen, toggleMarketMethod: () => this.setState(s=>({marketMethodOpen:!s.marketMethodOpen})),
+      marketDrawerOpen: this.state.marketDrawerOpen, openMarketDrawer: () => this.setState({marketDrawerOpen:true}), closeMarketDrawer: () => this.setState({marketDrawerOpen:false}),
+      marketChecklistOpen: this.state.marketChecklistOpen, toggleMarketChecklist: () => this.setState(s=>({marketChecklistOpen:!s.marketChecklistOpen})),
+      recalcMarket: () => this.recalcMarket(),
+      marketForm: this.state.marketForm,
+      mfSet: (key) => (e) => this.setMF(key, e.target.value),
+      mfSetVal: (key, val) => () => this.setMF(key, val),
+      sourceAdding: this.state.sourceAdding, openAddSource: () => this.setState({sourceAdding:true}), cancelAddSource: () => this.setState({sourceAdding:false, newSourceTitle:''}),
+      newSourceTitle: this.state.newSourceTitle, setNewSourceTitle: (e) => this.setState({newSourceTitle:e.target.value}),
+      newSourceType: this.state.newSourceType, setNewSourceType: (e) => this.setState({newSourceType:e.target.value}),
+      confirmAddSource: () => this.addSource(),
+      addCompetitor: () => this.addCompetitor(),
+      compAdding: this.state.compAdding, compForm: this.state.compForm,
+      openAddComp: () => this.setState({compAdding:true}),
+      cancelAddComp: () => this.setState({compAdding:false, compForm:{name:'',cat:'Indirect',share:'',note:'',stage:'Seed'}}),
+      confirmAddComp: () => this.confirmAddComp(),
+      setCompName: (e) => this.setCompField('name', e.target.value),
+      setCompCat: (e) => this.setCompField('cat', e.target.value),
+      setCompShare: (e) => this.setCompField('share', e.target.value),
+      setCompNote: (e) => this.setCompField('note', e.target.value),
+      setCompStage: (e) => this.setCompField('stage', e.target.value),
+      methodTopStyle, methodBottomStyle, maturityOpts, segFilterChips, methodChevronRot,
+      setMethodTopdown: () => this.setMF('methodology','Top-down'), setMethodBottomup: () => this.setMF('methodology','Bottom-up'),
+      advisorThread, okrs, mvpGroups, mvpSummary, cycleHandoff, milestones, brandNames, brandPalette, deckSlides, cadence, commitments,
+      opsWeekLabel:'Week 2 · Day 11', opsObjective:'Scope the MVP, draft the pitch, and lock a co-founder decision.',
+      opsMustHit, opsHealth, opsHealthStyle, opsHealthBar, opsProgress, opsProgressNote,
+      cadenceLock, cadenceLockStyle, commitTotal, commitDoneCount, blockers, noBlockers, reviewRows, reviewStatus, reviewStatusStyle,
+      lockCadence:()=>this.setState({opsCadenceLocked:true}),
+      lockCadenceLabel: cadenceLocked ? 'Cadence locked' : 'Lock cadence',
+      lockCadenceStyle: cadenceLocked ? 'opacity:.5;pointer-events:none' : '',
+      completeReview:()=>this.setState({opsReviewDone:true}),
+      completeReviewLabel: reviewDone ? 'Week closed out ✓' : 'Complete weekly review',
+      completeReviewStyle: reviewDone ? 'opacity:.5;pointer-events:none' : '',
+      addFeatureOpen: this.state.addFeatureOpen, featForm: this.state.featForm,
+      openAddFeature: () => this.setState({ addFeatureOpen:true, featForm:{ title:'', value:'High', effort:'S', reason:'' } }),
+      closeAddFeature: () => this.setState({ addFeatureOpen:false }),
+      setFeatTitle: e => this.setState(s=>({ featForm:{...s.featForm, title:e.target.value} })),
+      setFeatReason: e => this.setState(s=>({ featForm:{...s.featForm, reason:e.target.value} })),
+      featValueOpts: ['High','Medium','Low'].map(v => ({ label:v, onClick:()=>this.setState(s=>({featForm:{...s.featForm,value:v}})),
+        style: this.state.featForm.value===v ? 'color:#fff;background:#7c3aed;border:1px solid #7c3aed' : 'color:#71717a;background:#fff;border:1px solid #e4e4e7' })),
+      featEffortOpts: ['XS','S','M','L'].map(v => ({ label:v, onClick:()=>this.setState(s=>({featForm:{...s.featForm,effort:v}})),
+        style: this.state.featForm.effort===v ? 'color:#fff;background:#7c3aed;border:1px solid #7c3aed' : 'color:#71717a;background:#fff;border:1px solid #e4e4e7' })),
+      saveFeatDisabled: this.state.featForm.title.trim() ? '' : 'opacity:.5;pointer-events:none',
+      saveAddFeature: () => { if(!this.state.featForm.title.trim()) return; this.setState(s=>({ customFeatures:[...s.customFeatures, {...s.featForm}], addFeatureOpen:false })); },
+      docMini: ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+      imageMini: ic('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>'),
+      lockMini: lock, lockIcon: lock, checkIcon: check, sparkIcon: spark,
+      chevronIcon: ic('<path d="m6 9 6 6 6-6"/>', 2.2),
+      flaskIcon: ic('<path d="M9 3h6"/><path d="M10 3v6l-5 9a1.5 1.5 0 0 0 1.3 2.2h11.4A1.5 1.5 0 0 0 19 18l-5-9V3"/><path d="M7 15h10"/>'),
+      bellIcon: ic('<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>'),
+      week1Open: this.state.week1Open,
+      week1ChevronRot: this.state.week1Open ? 'transform:rotate(180deg)' : '',
+      toggleWeek1: () => this.setState(s => ({ week1Open: !s.week1Open })),
+      advisorOpen: this.state.advisorOpen,
+      advisorClosed: !this.state.advisorOpen,
+      toggleAdvisor: () => this.setState(s => ({ advisorOpen: !s.advisorOpen })),
+    };
+  }
+}
+</script>
+</body>
+</html>

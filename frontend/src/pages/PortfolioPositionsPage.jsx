@@ -7,7 +7,7 @@ import { api } from '../lib/api';
 const fmtMoney = (v) => (v == null ? '—' : `$${Number(v).toLocaleString()}`);
 const fmtPct = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
 
-export default function PortfolioPositionsPage() {
+export default function PortfolioPositionsPage({ embedded = false }) {
   const { role } = useAuth();
   const isAdmin = role === 'admin';
   const location = useLocation();
@@ -75,8 +75,9 @@ export default function PortfolioPositionsPage() {
   );
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className={embedded ? '' : 'max-w-5xl mx-auto'}>
       <div className="flex items-center justify-between mb-6">
+        {!embedded && (
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <PieChart size={22} /> Cap Table &amp; Ownership
@@ -85,6 +86,7 @@ export default function PortfolioPositionsPage() {
             Ownership and dilution across rounds for each portfolio company.
           </p>
         </div>
+        )}
         <div className="flex items-center gap-2">
           <button onClick={load} className="p-2 text-gray-500 hover:text-gray-800" title="Refresh"><RefreshCw size={16} /></button>
           {isAdmin && (

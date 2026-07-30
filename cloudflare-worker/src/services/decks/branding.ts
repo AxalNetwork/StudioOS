@@ -119,7 +119,7 @@ export async function fetchLandingPageForProject(env: Env, projectId: number): P
     const row = await env.DB.prepare(
       `SELECT logo_url, logo_svg, logo_asset_id, theme_color, palette_bg, palette_ink,
               palette_secondary, palette_accent, font_pairing, name
-       FROM landing_pages WHERE project_id = ?`
+       FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1`
     ).bind(projectId).first<BrandKitRow>();
     return row || null;
   } catch {

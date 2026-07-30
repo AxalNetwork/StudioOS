@@ -156,16 +156,15 @@ def browse(
     user: User = Depends(get_current_user),
 ):
     _gate(user)
-    try:
-        cards = svc.browse(
-            session, user,
-            q=q, skill=skill, sector=sector, commitment=commitment,
-            remote_only=remote_only, limit=limit,
-        )
-    except PermissionError:
-        raise HTTPException(status_code=400,
-                            detail="Create your co-founder profile first (PUT /api/cofounder/me)")
-    return {"items": cards}
+    # Browse-first: no profile required to browse; cards are unscored for
+    # profile-less viewers and the flag lets the UI prompt profile creation.
+    cards = svc.browse(
+        session, user,
+        q=q, skill=skill, sector=sector, commitment=commitment,
+        remote_only=remote_only, limit=limit,
+    )
+    has_profile = svc.get_my_profile(session, user) is not None
+    return {"items": cards, "viewer_has_profile": has_profile}
 
 
 class InterestIn(BaseModel):

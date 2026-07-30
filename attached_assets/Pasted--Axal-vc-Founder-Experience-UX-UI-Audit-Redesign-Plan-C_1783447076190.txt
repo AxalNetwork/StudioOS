@@ -1,0 +1,238 @@
+# Axal.vc Founder Experience — UX/UI Audit & Redesign Plan
+
+## Context
+
+The founder panel has grown by accretion: ~130 page components, 150+ API route files, and several rounds of nav-level consolidation (tab shells wrapping legacy pages) without true redesign. The product owner asked for a senior product-design audit of the whole founder panel — Studio, Command Center, Team, Metrics, Brand & Landing, Customer Discovery, Advisory, Capital, Legal — with the goals of reducing overload, cutting clicks, clarifying hierarchy, and making the Startup Lifecycle the central organizing model **as a module inside Command Center only**. Hard constraints: keep the existing sidebar sections (Studio / Build / Validate / Raise / Launch), no new top-level pages, lifecycle lives in Command Center, prefer simplification over addition.
+
+**Deliverable of this task**: the audit document itself, committed to the repo as `FOUNDER_UX_AUDIT.md` (repo root, alongside GOTCHAS.md / PRODUCTION.md — *not* `docs/`, which is the built frontend bundle) on branch `claude/axal-founder-ux-audit-hvf5a1`, pushed, with a draft PR. This is a redesign *planning* task — no product code changes in this pass; the roadmap primes follow-up implementation tasks.
+
+---
+
+# THE AUDIT (content of FOUNDER_UX_AUDIT.md)
+
+## Executive summary
+
+StudioOS has strong bones — a real lead-capture pipeline, a genuine AI advisor, a 33-template legal engine, working booking/matching/jobs marketplaces — but the founder experience is assembled from studio-operator parts and nav-level merges, so founders see an admin console wearing a founder costume. Five systemic problems drive nearly all of the overload:
+
+1. **Two "homes", neither is a command center.** `/studio` (the landing Dashboard) says "your venture studio at a glance" but shows no venture state; the page *named* Command Center (`/build/command-center`) is a 4-tab wrapper around internal studio tooling (Founder Portal intake, Execution, Studio Ops, Spin-Outs) written in operator language ("scored against the studio rubric", "Decision Gate", "kill").
+2. **The lifecycle exists in the database but not in the UI.** `projects.stage/status/playbook_week`, onboarding's "Idea/Prototype/MVP/Revenue/Scaling", and traction signals all exist — but stage fields are admin-editable only, and no surface answers a founder's two questions: *where am I?* and *what should I do next?*
+3. **Duplicate concepts pairs.** Two advisor systems that don't share tables (bookable marketplace in Team vs CRM directory in Advisory); two customer-discovery pages (the in-nav one has no leads; the one with the lead CRM is off-nav); two lead stores written on every signup; three legal surfaces; a fake "AI Advisor" (hardcoded templates, `ai_generated:false` always) while the real conversational AI sits only on the Dashboard.
+4. **Lifecycles half-built.** Landing signups are already audience-typed (customer/investor/partner/advisor/mentor/cofounder) and auto-routed — but co-founder and partner leads dead-end; the Raise Pipeline can't even add an investor directly; the Legal Engine's status pills are hardcoded placeholders and its jurisdiction picker is decorative.
+5. **Consolidation ≠ simplification.** Tab shells (`?tab=`) reduced sidebar rows but preserved every page's internal sub-structure, producing 3-level nesting (Command Center → Studio Ops → Strategic Oversight; Team → Co-Founder → browse/connections/profile) and three different empty-state, filter-bar, and accent-color treatments inside a single "workspace".
+
+The fix is not more pages — it's one lifecycle spine in Command Center, one lead lifecycle from Brand → typed destinations, one advisor model, one discovery workspace, and a founder-language naming pass.
+
+---
+
+## Section-by-section audit
+
+### 1) Studio (`/studio` → Dashboard.jsx)
+
+**What's there**: Welcome header, semantic search, notification bell, "Refresh Scores", PersonalAdvisor (the real AI), ProfileFitSection, two conditional cards (operator tasks, subsidiaries) that most founders never see. Onboarding checklist panel was removed (2026-05-22). No venture state, no metrics, no next actions.
+
+**Critique**: For a first-time founder this page is pleasant but inert — it tells them nothing about their company and points nowhere. The one genuinely differentiating asset (PersonalAdvisor) is good placement; everything else is chrome. "Refresh Scores" is operator language and operates on data the founder can't see from here.
+
+**Recommendation** (keep Studio as the *starting point*, per constraints):
+- Studio = "you + your direction": PersonalAdvisor stays primary; add a single compact **venture card** (startup name, lifecycle stage chip, one next-best action) that deep-links into Command Center's lifecycle module. New founders with no venture see "Shape your first venture" → Command Center intake.
+- Remove/demote "Refresh Scores" for founders; keep semantic search.
+- Do not rebuild the removed checklist here — the checklist belongs to the lifecycle module in Command Center; Studio links to it.
+
+### 2) Command Center (`/build/command-center`)
+
+**What's there**: Tab shell over FounderPortal (3-step intake wizard + auto-score), ExecutionPage (three whole pages — Startups, Pipeline Board, Roadmap — stacked vertically in one scroll), StudioOpsPage (ops kanban + "Strategic Oversight" sub-tab with continue/iterate/spin-out/**kill** AI verdicts), SpinOutsPage (read-only grid).
+
+**Critique**: This is the studio's internal ops console shown to founders. Labels are supply-side ("Founder Portal", "Studio Ops", "Spin-Outs"); the Execution tab is an anti-pattern (three pages of scroll with no local nav); depth reaches 3 levels; and nothing on the page says where the venture stands or what to do next. It is a dashboard of *tools*, not a command center of *state*.
+
+**Recommendation** — restructure to 4 founder-language tabs, lifecycle first:
+- **Overview** (new, default tab): the **Startup Lifecycle module** (stage rail + next-best-action + stage checklist — see lifecycle spec below), a venture snapshot card (status, score if available, playbook week), and a 4-tile metrics strip (MRR, active users, runway, traction) sourced from the latest `metrics_snapshots` + signals, linking to `/build/metrics`.
+- **Startups** (rename of Execution's ProjectsPage; Pipeline Board becomes a view toggle here, not a stacked page).
+- **Roadmap** (RoadmapPage promoted out of the stack).
+- **Operations** (Studio Ops renamed; "Strategic Oversight" verdicts reframed for founders — "kill" is not a word a product shows a founder about their own company; suggest "Focus recommendation").
+- Founder Portal (intake) stops being a *tab* and becomes the **"New startup" action** from Overview/Startups — intake is an event, not a place you revisit.
+- Spin-Outs: fold into Startups as a status filter (it's already just a status-filtered grid).
+
+### The Startup Lifecycle module (lives ONLY in Command Center → Overview)
+
+Six founder-facing stages, mapped to what exists:
+
+| Stage | Founder goal | Primary pages | Top action | Surface first |
+|---|---|---|---|---|
+| **Idea** | Shape the concept, capture it | Studio (PersonalAdvisor), Command Center intake | Create/score the startup | Intake + concept summary |
+| **Validate** | Prove someone wants it | Customer Discovery, Brand & Landing, Signals | Publish a landing page; log 5 interviews | Waitlist count, interviews logged, validated hypotheses |
+| **Build** | Ship the MVP with the right people | Team (co-founder, advisors, jobs), Roadmap, Metrics | Set 90-day roadmap; fill key role | OKR progress, team gaps |
+| **Launch** | Get to market | Brand & Landing, Events, Co-Marketing, Articles | Launch page + first campaign | Pageviews/signups, launch checklist |
+| **Grow** | Find repeatable traction | Metrics, Customer Discovery (segments), Marketplace | Connect Stripe / log weekly metrics | MRR & active-user trend |
+| **Raise** | Fund the next stage | Pitch, Capital (pipeline/cap table/model), Legal Engine | Add 10 investors to pipeline | Pipeline by stage, round status, doc readiness |
+
+Mechanics (validated against the code):
+- New founder-editable **`projects.lifecycle_stage`** column (D1 migration `139_lifecycle_stage.sql`; verified no such column exists anywhere). Kept deliberately separate from the privileged `stage/status/playbook_week` trio (projects.ts:569), which remain the studio's internal pipeline — no permission changes to those. Default derived once from `company_profiles.stage` at first read (Idea/Prototype→idea, MVP→build, Revenue→grow, Scaling→raise).
+- Worker route first (per CLAUDE.md): `GET/PUT /api/progress/lifecycle/:projectId` in `progress.ts` — it already has `loadProject`/`ensureCanView`/`ensureCanEdit` per-project auth and already aggregates the needed signals. GET returns `{ stage, suggestions, checklist }` where checklist completion is **derived at read time** from real data (landing published → `landing_pages.published`; interviews ≥5 → `discovery_interviews` count; MRR>0 → latest `metrics_snapshots`; prospects active → `raise_prospects` count), not stored — always accurate, no new checklist table. Only non-derivable items (e.g. "talked to 3 potential co-founders") are manual check-offs stored in a small JSON column.
+- Advancement is **suggested, never automatic**: when derived signals satisfy the next stage, show a suggestion chip ("Looks like you're validating — move to Validate?"); founder confirms via PUT.
+- UI: horizontal 6-segment stage rail (compact, clickable) + one "Next best action" card + collapsed checklist (3–5 items/stage, each a deep link into existing pages). No wizard, no new sidebar entry. Add matching `api.js` methods (drift test `npm run test:drift` enforces route parity).
+
+### 3) Team (`/build/team`)
+
+**Critique**: The shell is fine; the contents diverge. Three embedded pages with three filter-bar implementations, two card-grid stacks, different accent colors (violet vs blue), and Co-Founder hiding its own second level of tabs (browse/connections/profile). Worst UX bug: tier-gating makes **free founders land on Jobs** (the last tab) because Advisor/Co-Founder are locked — the default experience of "Team" is its least strategic feature. Label mismatch: sidebar "Team", H1 "Team Building".
+- Advisor booking: sidebar→card→slot→request = 4 clicks (acceptable); Co-Founder first-use = 5+ (profile gate before *seeing anything*).
+
+**Recommendation**:
+- One workspace, 3 tabs (Advisors / Co-Founder / Hiring), shared FilterBar + PersonCard primitives, one accent.
+- Locked tabs show a **preview** (blurred/sample cards + upgrade CTA), and the default tab is always Advisors — a paywall you can see into converts better than a dumping redirect.
+- Co-Founder: kill inner tabs; single view = browse grid with a right side-panel for "My profile" and a "Connections" section above the grid when non-empty. Let founders browse anonymized cards *before* the profile gate; gate only the "I'm interested" action.
+- Add a "Leads" strip: co-founder-audience signups from landing pages surface here (see lead lifecycle) — closing today's dead end.
+- Rename H1 to "Team".
+
+### 4) Metrics (`/build/metrics`)
+
+**Critique**: The page itself is one of the cleanest in the app (tiles → charts → history → signals). The problem is placement/visibility, not design: nothing on Studio or Command Center reflects it, so metrics are out-of-sight-out-of-mind, and the traction score that drives the studio's scoring engine is buried.
+
+**Recommendation**: **Keep it standalone** (data entry + history need room), and surface a read-only 4-tile strip in Command Center → Overview ("View metrics →" link). Do not fold the full page into Command Center — that would re-create the Execution-stack anti-pattern. This is the "simplest and most useful placement": one source of truth, one summary view.
+
+### 5) Brand & Landing (`/build/brand`)
+
+**Critique**: The 4-step wizard is genuinely good (audience-first, 16 templates, AI assists). Three structural gaps: (a) **one landing page per project** (`project_id UNIQUE`) — founders can't run an investor page and a customer waitlist at once, and "save as reusable template" doesn't exist; (b) **slugs are `{name}-{random6}`** (`northwind-labs-x7k2p9`) — generated once, never editable, off-brand; (c) signups are captured well (audience-typed, dual-written to the Contacts hub with source + landing_page_id) but only 3 of 6 audiences have a downstream, the in-page viewer shows just the last 25, and there's no export.
+
+**Recommendation**:
+- **Projects → pages → templates**: drop the UNIQUE constraint; add a landing-page list per project ("Pages") with audience + status + signups per page; "Save as template" writes a founder-owned template (new `custom_templates` store) selectable in step 2 alongside the catalog.
+- **Branded URLs**: `axal.vc/p/{startup-slug}/{page-slug}` — startup slug claimed once per project (availability check, editable with redirect from old), page slug defaults from template/audience ("investors", "waitlist"). Legacy `/landing/:slug` URLs 301 forever.
+- **Complete the lead taxonomy**: cofounder→Team leads strip, partner→Marketplace/Network intro queue, mentor→advisor pipeline. `routed_to` already exists — extend `routeFor()` and render destinations.
+- Show **source** (which page/template) on every lead row everywhere; add CSV export to the Contacts hub.
+
+### 6) Customer Discovery (`/build/discovery`)
+
+**Critique**: The founder-visible page is an interview log only. The actual lead lifecycle (waitlist CRM: New→Invited→Followed up→Promoted, with invite/follow-up/promote actions) lives on an **off-nav page** (`/customer-discovery`) and partially in `/network?tab=contacts`. So the flagship "Validate" page can't receive the leads the flagship "Build" page (Brand) generates — founders manage discovery by URL knowledge.
+
+**Recommendation** — one workspace, three tabs:
+- **Leads** (contacts with `audience=customer` + waitlist view: status, source, segment, next action; actions: invite to interview, log interview, send follow-up, promote).
+- **Interviews** (existing Mom-Test log, unchanged — it's good).
+- **Insights** (pain themes + traction signals, currently bottom-of-page).
+- Retire `/customer-discovery` with a redirect. Single promote flow: lead → interview (both promote endpoints already exist; converge on the contacts one).
+
+### 7) Advisory Suite (`/advisory`)
+
+**Critique**: Labeled a suite, leads with a fake: the "AI Advisor" tab returns hardcoded template text (always `ai_generated:false`) while the real conversational advisor (`/api/advisor`, 2,400 lines) never appears here. The human features are split: *finding/booking* advisors lives in Team; *managing* advisors (CRM, promoted from landing leads) lives here as the fourth tab. AI dominates the layout 3-tabs-to-1 while the human experience is the actual value.
+
+**Recommendation** — human-first inversion:
+- Tab order: **My Advisors** (CRM directory + "From your waitlist" — first), **Find Advisors** (cross-link or embed the Team booking marketplace — one model: *find & book* there, *manage relationship* here, with a promote path Booking→My Advisors after a session), **Tools** (Financial Planner + Diligence Checker, honestly labeled as calculators), **Ask AI** (replace the template stub with the real PersonalAdvisor conversation, scoped to advisory topics).
+- Trust & conversation quality: advisor cards gain "last session", notes, and next follow-up (reuse `contact_tasks`); reviews already exist on the booking side — surface them in My Advisors.
+
+### 8) Capital (`/raise/capital`)
+
+**Critique**: Financial Model and Cap Table tabs are solid modeling tools. The Raise Pipeline is a stub wearing a CRM's name: flat card list, **no way to add an investor directly** (only via Contacts hub promote — a path founders won't find), no next actions on prospects (tasks live on the contact object), no round context (target/committed/close), no offers, no investor updates. `/capital` (capital calls etc.) is the *fund's* console, not the founder's — correct that it's hidden, but the founder side lacks its equivalents.
+
+**Recommendation** (smallest coherent v1):
+- **Round header card** above the pipeline: round name, target, committed (sum of `committed`-stage prospects or explicit amounts), stage, target close.
+- Add-investor form + CSV import on the pipeline; kanban-by-stage as default view (6 existing stages are right).
+- Per-prospect drawer: link prospect↔contact so follow-ups/replies/tasks (already built on contacts) appear in-place; add "amount" and "next step + date" fields.
+- **Investor updates**: lightweight composer (subject/body, log of sends) — v1 can be a send-log without email infra.
+- Capital calls stay fund-side; founders don't issue capital calls at this stage — explicitly out of scope.
+
+### 9) Legal Engine (`/raise/legal-engine`)
+
+**Critique**: Three legal surfaces confuse: this hub (4 cards, **placeholder status pills**, **decorative jurisdiction dropdown**), `/legal` (a VC-firm 4-layer library — GP/Fund/Portfolio/Compliance — whose framing is for fund managers yet founders can access), and `/legal-capital` (spin-out tooling). The template library is real (~33 docs, merge-field generation, 5 genuine jurisdictions with metadata) but organized by *the studio's* org chart, not the founder's needs; and it's missing founder-essential docs: NDA, ESOP, IP assignment, offer letters, employment contracts, HR policies, privacy policy, trademark.
+
+**Recommendation**:
+- `/raise/legal-engine` becomes THE founder legal home: a **jurisdiction-aware document checklist** grouped by company lifecycle, not by layer:
+  1. Formation (incorporation docs, bylaws/constitution per jurisdiction, EIN/filing kits)
+  2. Founders & Equity (founder/co-founder agreement, restricted stock, 83(b), cap table ref, ESOP*)
+  3. Team & Employment (offer letter*, employment contract*, HR policies*)
+  4. IP & Confidentiality (NDA*, IP assignment*, trademark kit*)
+  5. Fundraising (SAFE, term sheet, shareholders'/investors' rights, sub docs; pitch deck & financial model as *links* to their own tools, not duplicated docs)
+  6. Policies & Compliance (ToS, privacy policy*, compliance calendar)
+  (* = new template seeds, one migration.)
+- Wire the jurisdiction select to `GET /api/legal/jurisdictions`, persist per company, and let it drive which checklist variants/templates show (structures + naming per country — the 5-jurisdiction catalog already carries this metadata).
+- Status pills become real: derived from `documents`, incorporation orders, compliance events (all queryable today). Each checklist row: status → Generate/Upload/View → e-sign hook where available.
+- Scope `/legal` (VC library) away from the founder role; keep for admin/fund users.
+
+---
+
+## Merge / remove / relocate list
+
+| Action | What | Where it goes |
+|---|---|---|
+| Merge | `/customer-discovery` (off-nav) | into `/build/discovery` Leads tab (redirect) |
+| Merge | Spin-Outs tab | Startups status filter in Command Center |
+| Merge | Pipeline Board | view toggle inside Startups |
+| Merge | Advisor CRM ("My Advisors") + booking promote path | Advisory Suite first tab; Team keeps find/book |
+| Relocate | Founder Portal intake wizard | "New startup" action (modal/flow), not a tab |
+| Relocate | Metrics summary tiles | Command Center → Overview (page stays) |
+| Relocate | Waitlist signups viewer (Brand step 4) | link to Discovery Leads / Contacts (keep a mini-count in Brand) |
+| Remove (founder scope) | `/legal` VC 4-layer library | admin/fund roles only |
+| Remove | Fake "AI Advisor" template endpoint UI | replaced by real PersonalAdvisor |
+| Remove | "Refresh Scores" on Studio (founder) | Command Center venture snapshot |
+| Rename | "Founder Portal", "Studio Ops", "Execution", "Team Building", "kill" verdicts | founder-language pass (see naming table in doc) |
+
+## Recommended founder IA (sidebar unchanged)
+
+```
+Studio        → you + AI advisor + one venture card (state + next action)
+Build
+  Command Center → Overview (LIFECYCLE + snapshot + metrics strip) | Startups | Roadmap | Operations
+  Signals        → unchanged
+  Team           → Advisors | Co-Founder | Hiring  (+ leads strip)
+  Metrics        → unchanged (source of truth)
+  Brand & Landing→ Pages (multi) | Templates (catalog + saved) | Leads summary
+Validate
+  Customer Discovery → Leads | Interviews | Insights
+  Marketplace        → unchanged
+  Advisory           → My Advisors | Find Advisors | Tools | Ask AI
+  Network            → unchanged (Contacts hub remains the cross-audience inbox)
+Raise
+  Pitch        → unchanged
+  Capital      → Round + Pipeline (kanban) | Cap Table | Financial Model
+  Legal Engine → jurisdiction-aware lifecycle checklist (6 groups)
+Launch / More / Account → unchanged
+```
+
+## The unified lead lifecycle (templates → people → destinations)
+
+```
+Landing page (project + template + audience)  — branded URL /p/{startup}/{page}
+  └─ signup (email + audience + source + landing_page_id)
+       └─ contacts hub (status: new→invited→contacted→replied→qualified→active→passed)
+            ├─ customer  → Discovery Leads → invite → interview → survey/pitch flow
+            ├─ investor  → Raise Pipeline prospect → stages → committed
+            ├─ advisor   → Advisory "My Advisors" (→ book via Team)
+            ├─ mentor    → Advisory pipeline (same as advisor, tagged)
+            ├─ cofounder → Team leads strip → co-founder connection flow (NEW)
+            └─ partner   → Marketplace/Network intro queue (NEW)
+Source attribution (template + page) rendered on every lead row, every destination.
+```
+
+## Prioritized roadmap
+
+Effort: S = day-scale, M = multi-day, L = week+. Risk notes flag shared surfaces (many pages serve admin/investor/partner too — changes must be founder-scoped or role-aware).
+
+### Critical (the product thesis)
+1. **Lifecycle module + Command Center Overview restructure** — migration 139 + progress.ts route + Overview tab; rename tabs, unstack Execution, founder-language pass. (L; CommandCenterPage/ExecutionPage/StudioOpsPage are founder-only via redirects, low role risk; keep legacy `?tab=` redirects working)
+2. **Discovery unification** — Leads tab in `/build/discovery`, retire `/customer-discovery` behind a redirect; converge on the contacts promote endpoint. (M; Spin-Out Lab links to the old page — update those links)
+3. **Complete lead routing** — extend `routeFor()` (contacts.ts) for cofounder/partner/mentor + destination strips in Team/Marketplace/Advisory; render `source`/`landing_page_id` on every lead row. (M; pure additive)
+4. **Team defaults + flattening** — locked-preview default tab, kill Co-Founder inner tabs, browse-before-profile-gate. (M; AdvisorsPage/CofounderPage are shared with other roles standalone — keep `embedded` prop behavior separate)
+
+### Important (finish the lifecycles)
+5. **Branded URL system + multi-page + saved templates** — drop `landing_pages.project_id` UNIQUE (new migration), `/p/{startup}/{page}` route in worker index.ts beside `/landing/:slug` (301 legacy forever), startup-slug claim + availability check, custom templates table + picker slot. (L; biggest schema change; do slug system before lead-routing polish so attribution URLs are stable)
+6. **Raise Pipeline v1** — add-investor form, round header card (new `rounds` minimal table or round fields on projects), kanban view, prospect↔contact drawer reusing `contact_tasks`/`contact_replies`. (M/L)
+7. **Legal Engine** — wire jurisdiction select to existing `GET /api/legal/jurisdictions` + persist; real StatusPills from `documents`/orders/compliance events; regroup checklist into 6 founder-lifecycle groups; seed missing templates (NDA, ESOP, IP assignment, offer letter, employment, HR, privacy) in one migration; scope `/legal` to admin. (L)
+8. **Advisory human-first inversion** — reorder tabs, swap fake `POST /advisory/ask` UI for the real PersonalAdvisor component (already imported on Dashboard), "Tools" grouping. (M; keep `/advisory/ask` endpoint for drift/back-compat until UI fully cut over)
+
+### Nice to have
+9. Metrics strip on Command Center Overview + venture card on Studio. (S once #1 lands)
+10. Shared Tabs/FilterBar/PersonCard primitives; single accent. (M, incremental)
+11. CSV export on Contacts hub; Stripe-metrics nudge in Grow stage. (S)
+12. PageExplainer copy dedupe + naming sweep ("Team" vs "Team Building", "Refresh Scores", "kill" verdict copy). (S)
+
+---
+
+## Execution steps (after plan approval)
+
+1. Write `FOUNDER_UX_AUDIT.md` at repo root with the full audit above (expanded prose, tables, file references).
+2. `git checkout -b claude/axal-founder-ux-audit-hvf5a1` (create from current default branch HEAD).
+3. Commit ("Add founder UX audit and redesign roadmap"), push with `-u origin`, open **draft PR**.
+4. No product code changes in this pass.
+
+## Verification
+
+- Markdown renders correctly (preview locally; check tables).
+- All file references in the doc point at real paths (spot-check with `ls`/grep).
+- Drift test untouched (no code changes) — `npm run test:drift` not required but harmless.
+- PR created as draft against default branch; body summarizes the roadmap.

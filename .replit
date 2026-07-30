@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "python-3.11", "web", "bash"]
+modules = ["nodejs-20", "web", "python-3.11", "bash"]
 [agent]
 expertMode = true
 integrations = ["github:1.0.0"]
@@ -37,7 +37,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "UV_PROJECT_ENVIRONMENT=.venv uv run uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload"
+args = "UV_PROJECT_ENVIRONMENT=.venv uv run uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload"
 waitForPort = 8000
 
 [[workflows.workflow]]
@@ -75,6 +75,9 @@ externalPort = 3001
 localPort = 8000
 externalPort = 8000
 
+# Port 8000 (FastAPI dev backend) is NOT mapped externally.
+# Frontend Vite proxy forwards /api/* to localhost:8000 internally only.
+
 [deployment]
 deploymentTarget = "autoscale"
 build = ["bash", "build-deploy.sh"]
@@ -86,6 +89,9 @@ run = ["bash", "run-deploy.sh"]
 GOOGLE_REDIRECT_URI = "https://developers.google.com/oauthplayground"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME = "StudioOS"
+DEV_EMAIL_OVERRIDE = "dev-orders@axal.vc"
+
+[userenv.development]
 
 [postMerge]
 path = "scripts/post-merge.sh"

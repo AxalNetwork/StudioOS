@@ -108,14 +108,18 @@ def ensure_growth_track_columns() -> None:
     with Session(engine) as session:
         for tbl in ("projects", "deals"):
             try:
-                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                     f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS "
                     f"track_type VARCHAR DEFAULT 'spin_out' NOT NULL"
                 ))
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_growth_track_columns: %s ALTER failed: %s", tbl, exc)
             try:
-                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                     f"CREATE INDEX IF NOT EXISTS ix_{tbl}_track_type "
                     f"ON {tbl}(track_type)"
                 ))
@@ -136,7 +140,9 @@ def ensure_project_revenue_proof_columns() -> None:
             ("paid_pilot_status", "VARCHAR"),
         ):
             try:
-                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                     f"ALTER TABLE projects ADD COLUMN IF NOT EXISTS {col} {ddl}"
                 ))
             except Exception as exc:  # noqa: BLE001
@@ -159,7 +165,9 @@ def ensure_project_product_demo_columns() -> None:
             "website",
         ):
             try:
-                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                     f"ALTER TABLE projects ADD COLUMN IF NOT EXISTS {col} VARCHAR"
                 ))
             except Exception as exc:  # noqa: BLE001
@@ -176,7 +184,9 @@ def ensure_lifecycle_columns() -> None:
     with Session(engine) as session:
         for col in ("lifecycle_stage", "lifecycle_manual_checks"):
             try:
-                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                     f"ALTER TABLE projects ADD COLUMN IF NOT EXISTS {col} VARCHAR"
                 ))
             except Exception as exc:  # noqa: BLE001
@@ -198,6 +208,36 @@ def ensure_user_access_level_column() -> None:
         except Exception as exc:  # column already exists / other DBs
             session.rollback()
             logger.debug("ensure_user_access_level_column: ALTER skipped: %s", exc)
+
+
+def ensure_ticket_github_columns() -> None:
+    """Add `tickets.github_issue_number` + `tickets.github_issue_url` so the
+    dev FastAPI backend can mirror a ticket to a GitHub issue in lockstep
+    with the production Worker (which already has these columns). Idempotent
+    (`ADD COLUMN IF NOT EXISTS`)."""
+    cols = (
+        ("github_issue_number", "INTEGER"),
+        ("github_issue_url", "VARCHAR"),
+    )
+    with Session(engine) as session:
+        for col, ddl in cols:
+            try:
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                    f"ALTER TABLE tickets ADD COLUMN IF NOT EXISTS {col} {ddl}"
+                ))
+                session.commit()
+            except Exception as exc:
+                session.rollback()
+                logger.debug("ensure_ticket_github_columns: ALTER %s skipped: %s", col, exc)
+        try:
+            session.exec(text(
+                "CREATE INDEX IF NOT EXISTS ix_tickets_github_issue_number "
+                "ON tickets (github_issue_number)"
+            ))
+            session.commit()
+        except Exception as exc:
+            session.rollback()
+            logger.debug("ensure_ticket_github_columns: index skipped: %s", exc)
 
 
 def ensure_score_anti_cheat_columns() -> None:
@@ -229,14 +269,18 @@ def ensure_score_anti_cheat_columns() -> None:
     with Session(engine) as session:
         for col, ddl in cols:
             try:
-                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                     f"ALTER TABLE score_snapshots ADD COLUMN IF NOT EXISTS {col} {ddl}"
                 ))
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_score_anti_cheat_columns: %s ALTER failed: %s", col, exc)
         for name, expr in indexes:
             try:
-                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                     f"CREATE INDEX IF NOT EXISTS {name} ON score_snapshots({expr})"
                 ))
             except Exception as exc:  # noqa: BLE001
@@ -259,7 +303,9 @@ def ensure_document_file_columns() -> None:
             ("signed_ip", "VARCHAR"),
         ):
             try:
-                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                     f"ALTER TABLE documents ADD COLUMN IF NOT EXISTS {col} {ddl}"
                 ))
             except Exception as exc:  # noqa: BLE001
@@ -471,7 +517,9 @@ def ensure_investor_role_split() -> None:
         # reruns even if a previous boot died between the role flip and the
         # row insert (architect feedback: don't gate on the just-promoted set).
         try:
-            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates code-defined dialect SQL exprs / int-coerced ids; data values are bound, dev-only FastAPI not exposed to user input
+            # Justification: f-string interpolates code-defined dialect SQL exprs / int-coerced
+            # ids; data values are bound, dev-only FastAPI not exposed to user input
+            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                 f"""
                 INSERT INTO investors (uid, user_id, investor_type, accreditation_status, created_at, updated_at)
                 SELECT {uuid_expr}, u.id, 'lp', 'verified', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -481,7 +529,9 @@ def ensure_investor_role_split() -> None:
                 """
             ))
             session.commit()
-            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates code-defined dialect SQL exprs / int-coerced ids; data values are bound, dev-only FastAPI not exposed to user input
+            # Justification: f-string interpolates code-defined dialect SQL exprs / int-coerced
+            # ids; data values are bound, dev-only FastAPI not exposed to user input
+            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                 f"""
                 UPDATE users SET investor_id = (
                     SELECT i.id FROM investors i WHERE i.user_id = users.id LIMIT 1
@@ -500,7 +550,10 @@ def ensure_investor_role_split() -> None:
         # comparison stays dialect-agnostic (sqlite stores raw TEXT).
         try:
             if is_pg:
-                promoted = session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates code-defined dialect SQL exprs / int-coerced ids; data values are bound, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates code-defined dialect SQL exprs /
+                # int-coerced ids; data values are bound, dev-only FastAPI not exposed to user
+                # input
+                promoted = session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                     f"""
                     WITH lp_users AS (
                         SELECT DISTINCT u.id AS user_id
@@ -527,7 +580,10 @@ def ensure_investor_role_split() -> None:
                 )).all()
                 ids = [r[0] if isinstance(r, tuple) else r.user_id for r in rows]
                 if ids:
-                    session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates code-defined dialect SQL exprs / int-coerced ids; data values are bound, dev-only FastAPI not exposed to user input
+                    # Justification: f-string interpolates code-defined dialect SQL exprs /
+                    # int-coerced ids; data values are bound, dev-only FastAPI not exposed to
+                    # user input
+                    session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                         f"UPDATE users SET role = 'INVESTOR' WHERE id IN ({','.join(str(int(i)) for i in ids)})"
                     ))
                 promoted = [(i,) for i in ids]
@@ -543,7 +599,10 @@ def ensure_investor_role_split() -> None:
                 for row in promoted:
                     uid = row[0] if isinstance(row, tuple) else row.id
                     try:
-                        session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates code-defined dialect SQL exprs / int-coerced ids; data values are bound, dev-only FastAPI not exposed to user input
+                        # Justification: f-string interpolates code-defined dialect SQL exprs /
+                        # int-coerced ids; data values are bound, dev-only FastAPI not exposed
+                        # to user input
+                        session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                             f"""
                             INSERT INTO investors (uid, user_id, investor_type, accreditation_status, created_at, updated_at)
                             SELECT {uuid_expr}, :uid, 'lp', 'verified', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -609,12 +668,16 @@ def ensure_marketplace_columns() -> None:
     with Session(engine) as session:
         for col, ddl in cols:
             try:
-                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_marketplace_columns: %s ALTER failed: %s", col, exc)
         for name, expr in indexes:
             try:
-                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON partners({expr})"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON partners({expr})"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_marketplace_columns: %s INDEX failed: %s", name, exc)
         session.commit()
@@ -651,7 +714,9 @@ def ensure_partner_directory_columns() -> None:
     with Session(engine) as session:
         for col, ddl in cols:
             try:
-                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_partner_directory_columns: partners.%s ALTER failed: %s", col, exc)
         session.commit()
@@ -693,7 +758,9 @@ def ensure_partner_directory_columns() -> None:
 
         for name, expr in indexes:
             try:
-                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON partners({expr})"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static literals from local lists,
+                # dev-only FastAPI not exposed to user input
+                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON partners({expr})"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_partner_directory_columns: %s INDEX failed: %s", name, exc)
         session.commit()
@@ -722,14 +789,18 @@ def ensure_trust_layer_columns() -> None:
     with Session(engine) as session:
         for col, ddl in partner_cols:
             try:
-                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static literals from local lists,
+                # dev-only FastAPI not exposed to user input
+                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                 session.commit()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_trust_layer_columns: partners.%s: %s", col, exc)
                 session.rollback()
         for col, ddl in investor_cols:
             try:
-                session.exec(text(f"ALTER TABLE investors ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static literals from local lists,
+                # dev-only FastAPI not exposed to user input
+                session.exec(text(f"ALTER TABLE investors ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                 session.commit()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_trust_layer_columns: investors.%s: %s", col, exc)
@@ -938,7 +1009,9 @@ def ensure_cap_table_scenarios_table() -> None:
     """
     with Session(engine) as session:
         try:
-            session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+            # Justification: f-string interpolates static schema identifiers from local lists,
+            # dev-only FastAPI not exposed to user input
+            session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
             session.exec(text(
                 "CREATE INDEX IF NOT EXISTS ix_cap_table_scenarios_owner "
                 "ON cap_table_scenarios(owner_user_id)"
@@ -971,6 +1044,10 @@ def ensure_advisor_profiles_tables() -> None:
         source VARCHAR,
         status VARCHAR NOT NULL DEFAULT 'active',
         source_contact_id INTEGER,
+        last_session_at TEXT,
+        notes TEXT,
+        follow_up_at TEXT,
+        follow_up_note TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
     )
@@ -986,8 +1063,10 @@ def ensure_advisor_profiles_tables() -> None:
     """
     with Session(engine) as session:
         try:
-            session.exec(text(profiles_ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- static schema DDL, no user input, dev-only FastAPI
-            session.exec(text(startups_ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- static schema DDL, no user input, dev-only FastAPI
+            # Justification: static schema DDL, no user input, dev-only FastAPI
+            session.exec(text(profiles_ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+            # Justification: static schema DDL, no user input, dev-only FastAPI
+            session.exec(text(startups_ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
             session.exec(text(
                 "CREATE INDEX IF NOT EXISTS ix_advisor_profiles_founder "
                 "ON advisor_profiles(founder_id, status)"
@@ -996,6 +1075,14 @@ def ensure_advisor_profiles_tables() -> None:
                 "CREATE INDEX IF NOT EXISTS ix_advisor_startups_profile "
                 "ON advisor_startups(advisor_profile_id)"
             ))
+            # Relationship fields (dev mirror of Worker migration 143) — the
+            # table may pre-date these columns, so ALTER idempotently.
+            for col in ("last_session_at", "notes", "follow_up_at", "follow_up_note"):
+                # Justification: static schema DDL over a fixed tuple, no user
+                # input, dev-only FastAPI.
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                    f"ALTER TABLE advisor_profiles ADD COLUMN IF NOT EXISTS {col} TEXT"
+                ))
             session.commit()
         except Exception as exc:  # noqa: BLE001
             logger.warning("ensure_advisor_profiles_tables failed: %s", exc)
@@ -1036,14 +1123,18 @@ def ensure_founder_risk_profiles_table() -> None:
     )
     with Session(engine) as session:
         try:
-            session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+            # Justification: f-string interpolates static schema identifiers from local lists,
+            # dev-only FastAPI not exposed to user input
+            session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
             session.commit()
         except Exception as exc:  # noqa: BLE001
             logger.warning("ensure_founder_risk_profiles_table: CREATE failed: %s", exc)
             session.rollback()
         for name, expr in indexes:
             try:
-                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static literals from local lists,
+                # dev-only FastAPI not exposed to user input
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                     f"CREATE INDEX IF NOT EXISTS {name} ON founder_risk_profiles({expr})"
                 ))
             except Exception as exc:  # noqa: BLE001
@@ -1095,14 +1186,18 @@ def ensure_references_table() -> None:
     )
     with Session(engine) as session:
         try:
-            session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+            # Justification: f-string interpolates static schema identifiers from local lists,
+            # dev-only FastAPI not exposed to user input
+            session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
             session.commit()
         except Exception as exc:  # noqa: BLE001
             logger.warning("ensure_references_table: CREATE failed: %s", exc)
             session.rollback()
         for name, expr in indexes:
             try:
-                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static literals from local lists,
+                # dev-only FastAPI not exposed to user input
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                     f'CREATE INDEX IF NOT EXISTS {name} ON "references"({expr})'
                 ))
             except Exception as exc:  # noqa: BLE001
@@ -1170,14 +1265,18 @@ def ensure_service_catalogue_columns() -> None:
         # 2) Partner Stripe columns
         for col, ddl in partner_cols:
             try:
-                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static literals from local lists,
+                # dev-only FastAPI not exposed to user input
+                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_service_catalogue_columns: partners.%s ALTER failed: %s", col, exc)
 
         # 3) Engagement lifecycle / Stripe columns
         for col, ddl in engagement_cols:
             try:
-                session.exec(text(f"ALTER TABLE engagements ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static literals from local lists,
+                # dev-only FastAPI not exposed to user input
+                session.exec(text(f"ALTER TABLE engagements ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_service_catalogue_columns: engagements.%s ALTER failed: %s", col, exc)
 
@@ -1186,7 +1285,9 @@ def ensure_service_catalogue_columns() -> None:
         #    no-op once the column is already nullable.
         for col in ("quote_id", "need_id"):
             try:
-                session.exec(text(f"ALTER TABLE engagements ALTER COLUMN {col} DROP NOT NULL"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static literals from local lists,
+                # dev-only FastAPI not exposed to user input
+                session.exec(text(f"ALTER TABLE engagements ALTER COLUMN {col} DROP NOT NULL"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
             except Exception:  # noqa: BLE001
                 pass
 
@@ -1216,7 +1317,9 @@ def ensure_service_catalogue_columns() -> None:
         # 7) Indexes
         for name, tbl, expr in indexes:
             try:
-                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON {tbl}({expr})"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static literals from local lists,
+                # dev-only FastAPI not exposed to user input
+                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON {tbl}({expr})"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_service_catalogue_columns: %s INDEX failed: %s", name, exc)
 
@@ -1261,7 +1364,9 @@ def ensure_market_intel_tables() -> None:
             ("mi_contribution_optout", "INTEGER NOT NULL DEFAULT 0"),
         ):
             try:
-                session.exec(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static literals from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static literals from local lists,
+                # dev-only FastAPI not exposed to user input
+                session.exec(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                 session.commit()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_market_intel_tables: users.%s failed: %s", col, exc)
@@ -1323,10 +1428,96 @@ def ensure_matching_tables() -> None:
     with Session(engine) as session:
         for ddl in statements:
             try:
-                session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                 session.commit()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_matching_tables: statement failed: %s", exc)
+                session.rollback()
+
+
+def ensure_intro_network_tables() -> None:
+    """Dev parity for the credits-based Network → Introductions propositions.
+
+    Production (``cloudflare-worker/src/routes/introductions.ts`` +
+    ``services/introductions.ts``) stores curated warm-intro propositions in
+    ``intro_propositions`` and a credit ledger in ``intro_credit_ledger`` (D1 /
+    SQLite). The dev FastAPI backend has neither, so ``/api/introductions/*``
+    404s and the Introductions panel renders a red "Not found" error.
+
+    This mirrors the worker's two tables in Postgres so the ported endpoints in
+    ``routes/introductions.py`` can generate propositions and round-trip
+    accept/decline + credit spends in the local preview. Idempotent; Postgres
+    DDL. Distinct from ``ensure_network_introductions_tables`` (Task #12), which
+    backs the separate privacy-preserving ``/network-introductions`` flow.
+    """
+    statements = (
+        """
+        CREATE TABLE IF NOT EXISTS intro_propositions (
+            id SERIAL PRIMARY KEY,
+            uid TEXT UNIQUE NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            target_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status VARCHAR NOT NULL DEFAULT 'pending',
+            score REAL NOT NULL DEFAULT 0,
+            breakdown_json TEXT,
+            source VARCHAR NOT NULL DEFAULT 'matching',
+            expires_at TIMESTAMP,
+            responded_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_intro_props_pair "
+        "ON intro_propositions(user_id, target_user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_intro_props_user_status "
+        "ON intro_propositions(user_id, status, created_at)",
+        """
+        CREATE TABLE IF NOT EXISTS intro_credit_ledger (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            delta INTEGER NOT NULL,
+            bucket VARCHAR NOT NULL,
+            kind VARCHAR NOT NULL,
+            source_ref VARCHAR NOT NULL,
+            note TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_intro_ledger_idem "
+        "ON intro_credit_ledger(user_id, kind, source_ref)",
+        "CREATE INDEX IF NOT EXISTS idx_intro_ledger_user "
+        "ON intro_credit_ledger(user_id, created_at)",
+        # Investor → founder warm-intro requests (worker Task #6 W-1 parity).
+        # Backs POST /introductions/request + GET /introductions{,/quota}.
+        """
+        CREATE TABLE IF NOT EXISTS investor_introductions (
+            id SERIAL PRIMARY KEY,
+            uid TEXT UNIQUE NOT NULL,
+            investor_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            founder_user_id INTEGER,
+            founder_id INTEGER,
+            project_id INTEGER,
+            message TEXT,
+            status VARCHAR NOT NULL DEFAULT 'pending',
+            quarter VARCHAR NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_investor_intros_user "
+        "ON investor_introductions(investor_user_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_investor_intros_quarter "
+        "ON investor_introductions(investor_user_id, quarter)",
+    )
+    with Session(engine) as session:
+        for ddl in statements:
+            try:
+                # Justification: static schema identifiers only, no user input;
+                # dev-only FastAPI backend.
+                session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_intro_network_tables: statement failed: %s", exc)
                 session.rollback()
 
 
@@ -2188,7 +2379,9 @@ def ensure_brand_landing_columns() -> None:
         ]
         for table, col, ddl in cols:
             try:
-                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                     f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {ddl}"
                 ))
             except Exception as exc:  # noqa: BLE001
@@ -2199,7 +2392,425 @@ def ensure_brand_landing_columns() -> None:
         ]
         for name, expr in indexes:
             try:
-                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON {expr}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text -- f-string interpolates static schema identifiers from local lists, dev-only FastAPI not exposed to user input
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON {expr}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_brand_landing_columns: index %s: %s", name, exc)
         session.commit()
+
+
+def ensure_network_introductions_tables() -> None:
+    """Task #12 — Secure introductions & matching flow.
+
+    Idempotently:
+      * creates `network_introductions` (the intro/match records) + indexes
+      * creates `network_intro_messages` (connected-thread messaging) + index
+      * adds display/contact columns to `investors` so admins can create
+        profiles for people not yet on the platform (off-platform recipients)
+
+    Safe on every boot.
+    """
+    intro_ddl = """
+    CREATE TABLE IF NOT EXISTS network_introductions (
+        id SERIAL PRIMARY KEY,
+        uid VARCHAR UNIQUE NOT NULL,
+        initiator_user_id INTEGER NOT NULL REFERENCES users(id),
+        recipient_user_id INTEGER REFERENCES users(id),
+        recipient_investor_id INTEGER REFERENCES investors(id),
+        off_platform BOOLEAN DEFAULT FALSE NOT NULL,
+        recipient_name VARCHAR NOT NULL,
+        recipient_company VARCHAR,
+        recipient_headline VARCHAR,
+        recipient_photo_url VARCHAR,
+        recipient_email VARCHAR,
+        draft_message TEXT,
+        status VARCHAR DEFAULT 'pending' NOT NULL,
+        initiator_accepted BOOLEAN DEFAULT TRUE NOT NULL,
+        recipient_accepted BOOLEAN DEFAULT FALSE NOT NULL,
+        invite_token_hash VARCHAR,
+        invite_token_expires TIMESTAMP,
+        invite_used_at TIMESTAMP,
+        email_sent BOOLEAN DEFAULT FALSE NOT NULL,
+        email_sent_at TIMESTAMP,
+        viewed_at TIMESTAMP,
+        accepted_at TIMESTAMP,
+        declined_at TIMESTAMP,
+        connected_at TIMESTAMP,
+        expired_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )
+    """
+    msg_ddl = """
+    CREATE TABLE IF NOT EXISTS network_intro_messages (
+        id SERIAL PRIMARY KEY,
+        uid VARCHAR UNIQUE NOT NULL,
+        introduction_id INTEGER NOT NULL REFERENCES network_introductions(id),
+        sender_user_id INTEGER NOT NULL REFERENCES users(id),
+        body TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )
+    """
+    investor_cols = (
+        ("display_name", "VARCHAR"),
+        ("company", "VARCHAR"),
+        ("headline", "VARCHAR"),
+        ("photo_url", "VARCHAR"),
+        ("contact_email", "VARCHAR"),
+    )
+    indexes = (
+        ("ix_network_introductions_uid", "network_introductions", "uid"),
+        ("ix_network_introductions_initiator", "network_introductions", "initiator_user_id"),
+        ("ix_network_introductions_recipient", "network_introductions", "recipient_user_id"),
+        ("ix_network_introductions_investor", "network_introductions", "recipient_investor_id"),
+        ("ix_network_introductions_status", "network_introductions", "status"),
+        ("ix_network_introductions_token", "network_introductions", "invite_token_hash"),
+        ("ix_network_intro_messages_intro", "network_intro_messages", "introduction_id"),
+    )
+    with Session(engine) as session:
+        for ddl in (intro_ddl, msg_ddl):
+            try:
+                # Justification: static DDL literal, no user input interpolated.
+                session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_network_introductions_tables: CREATE failed: %s", exc)
+                session.rollback()
+        for col, ddl in investor_cols:
+            try:
+                # Justification: f-string interpolates static schema identifiers
+                # from a local list, dev-only FastAPI not exposed to user input.
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                    f"ALTER TABLE investors ADD COLUMN IF NOT EXISTS {col} {ddl}"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_network_introductions_tables: investors.%s: %s", col, exc)
+        for name, table, expr in indexes:
+            try:
+                # Justification: f-string interpolates static literals from a
+                # local list, dev-only FastAPI not exposed to user input.
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                    f"CREATE INDEX IF NOT EXISTS {name} ON {table}({expr})"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_network_introductions_tables: index %s: %s", name, exc)
+        session.commit()
+
+
+def ensure_organizations_table() -> None:
+    """Task #16 — create the `organizations` directory table + indexes.
+
+    Idempotent (CREATE TABLE / INDEX IF NOT EXISTS). `init_db()` also creates
+    the table from SQLModel metadata on a fresh DB; this keeps existing dev/
+    preview DBs in sync and guarantees the supporting indexes exist for the
+    searchable/paginated list endpoint.
+    """
+    table_ddl = """
+        CREATE TABLE IF NOT EXISTS organizations (
+            id BIGSERIAL PRIMARY KEY,
+            uid TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            normalized_key TEXT UNIQUE NOT NULL,
+            website TEXT,
+            linkedin TEXT,
+            org_type TEXT,
+            hq_country TEXT,
+            parent_company TEXT,
+            sector_focus_text TEXT,
+            sector_tags_json TEXT NOT NULL DEFAULT '[]',
+            fund_size TEXT,
+            fund_number TEXT,
+            latest_fund_date TEXT,
+            notable_lps TEXT,
+            stage_focus_json TEXT NOT NULL DEFAULT '[]',
+            min_ticket TEXT,
+            max_ticket TEXT,
+            region_focus_json TEXT NOT NULL DEFAULT '[]',
+            deep_tech_only BOOLEAN,
+            dt_deal_count TEXT,
+            additional_focus TEXT,
+            yearly_raised_json TEXT NOT NULL DEFAULT '{}',
+            source TEXT NOT NULL DEFAULT 'euro_vc',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """
+    indexes = (
+        ("ix_organizations_name", "name"),
+        ("ix_organizations_normalized_key", "normalized_key"),
+        ("ix_organizations_org_type", "org_type"),
+        ("ix_organizations_hq_country", "hq_country"),
+        ("ix_organizations_source", "source"),
+    )
+    with Session(engine) as session:
+        try:
+            # Justification: static DDL literal, no user input interpolated.
+            session.exec(text(table_ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            session.rollback()
+            logger.warning("ensure_organizations_table: CREATE failed: %s", exc)
+        for name, expr in indexes:
+            try:
+                # Justification: f-string interpolates static literals from a
+                # local list, dev-only FastAPI not exposed to user input.
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                    f"CREATE INDEX IF NOT EXISTS {name} ON organizations({expr})"
+                ))
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                session.rollback()
+                logger.warning("ensure_organizations_table: index %s: %s", name, exc)
+
+
+def ensure_deal_flow_tables() -> None:
+    """Deal Flow (Task #4): add deal-term columns to `deals` and create the
+    `commitments` + `deal_invitations` tables. Mirrors the production D1
+    migration so `/api/deals/*` (funnel, detail, commitments, invitations)
+    round-trips in the dev preview. Idempotent Postgres DDL.
+    """
+    deal_columns = (
+        "target_raise DOUBLE PRECISION",
+        "capital_committed DOUBLE PRECISION DEFAULT 0",
+        "minimum_check DOUBLE PRECISION",
+        "valuation_cap DOUBLE PRECISION",
+        "carry_pct DOUBLE PRECISION",
+        "management_fee_pct DOUBLE PRECISION",
+        "instrument VARCHAR",
+        "spv_jurisdiction VARCHAR",
+        "closing_deadline VARCHAR",
+        "website VARCHAR",
+        "description TEXT",
+        "lead_partner_id INTEGER",
+        "stage_changed_at TIMESTAMP",
+    )
+    tables = (
+        """
+        CREATE TABLE IF NOT EXISTS commitments (
+            id SERIAL PRIMARY KEY,
+            uid TEXT UNIQUE NOT NULL,
+            deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+            investor_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            amount DOUBLE PRECISION NOT NULL,
+            status VARCHAR NOT NULL DEFAULT 'pending',
+            notes TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_commitments_deal ON commitments(deal_id)",
+        "CREATE INDEX IF NOT EXISTS idx_commitments_investor ON commitments(investor_user_id)",
+        """
+        CREATE TABLE IF NOT EXISTS deal_invitations (
+            id SERIAL PRIMARY KEY,
+            uid TEXT UNIQUE NOT NULL,
+            deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+            investor_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            invited_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            message TEXT,
+            email_opt_in BOOLEAN NOT NULL DEFAULT FALSE,
+            status VARCHAR NOT NULL DEFAULT 'invited',
+            responded_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_deal_invites_pair ON deal_invitations(deal_id, investor_user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_deal_invites_investor ON deal_invitations(investor_user_id, status)",
+    )
+    with Session(engine) as session:
+        for col in deal_columns:
+            try:
+                # Justification: static DDL literals from a local tuple, no
+                # user input; dev-only FastAPI backend.
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                    f"ALTER TABLE deals ADD COLUMN IF NOT EXISTS {col}"
+                ))
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                session.rollback()
+                logger.warning("ensure_deal_flow_tables: column %s: %s", col, exc)
+        # Backfill stage_changed_at for pre-existing rows so days-in-stage is
+        # sensible on first boot.
+        try:
+            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                "UPDATE deals SET stage_changed_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP) WHERE stage_changed_at IS NULL"
+            ))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            session.rollback()
+            logger.warning("ensure_deal_flow_tables: backfill stage_changed_at: %s", exc)
+        for ddl in tables:
+            try:
+                # Justification: static DDL literals, no user input; dev-only.
+                session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                session.rollback()
+                logger.warning("ensure_deal_flow_tables: statement failed: %s", exc)
+
+
+def ensure_spinout_lab_tables() -> None:
+    """Spin-Out Lab dev-parity schema — mirrors the production Worker's
+    columns and milestones table (cloudflare-worker/src/routes/spinout_lab.ts)
+    so the /api/spinout-lab routes work against the dev Postgres too.
+    Idempotent (ADD COLUMN IF NOT EXISTS / CREATE TABLE IF NOT EXISTS).
+    """
+    stmts = (
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS spinout_lab_active INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS spinout_lab_week INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS spinout_lab_started_at TIMESTAMP",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_incorporated INTEGER DEFAULT 0",
+        # Task #7 — cohort admission (mirrors Worker migration 154).
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS spinout_lab_admitted INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS spinout_lab_cohort TEXT",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_product TEXT",
+        """
+        CREATE TABLE IF NOT EXISTS spinout_lab_milestones (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            week INTEGER NOT NULL,
+            milestone_key TEXT NOT NULL,
+            completed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, milestone_key)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_spinout_lab_milestones_user ON spinout_lab_milestones(user_id)",
+        # Cohort applications (mirrors Worker migration 155). One row per
+        # submission; founders may re-apply after a refusal.
+        """
+        CREATE TABLE IF NOT EXISTS spinout_applications (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            company_name TEXT NOT NULL,
+            idea TEXT NOT NULL,
+            incorporated TEXT NOT NULL DEFAULT 'no',
+            stage TEXT,
+            jurisdiction TEXT,
+            cohort TEXT NOT NULL DEFAULT 'Cohort 4',
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            decided_at TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_spinout_applications_user ON spinout_applications(user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_spinout_applications_status ON spinout_applications(status)",
+    )
+    with Session(engine) as session:
+        for ddl in stmts:
+            try:
+                # Justification: static DDL literals from a local tuple, no
+                # user input; dev-only FastAPI backend.
+                session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                session.rollback()
+                logger.warning("ensure_spinout_lab_tables: statement failed: %s", exc)
+
+
+def ensure_orders_tables() -> None:
+    """Task #8 — commerce cart/checkout tables + users.stripe_customer_id.
+
+    Idempotent (CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS).
+    Backs the redesigned Products page cart + one-time checkout flow.
+    Tables: orders, user_products, promo_redemptions, feature_unlocks,
+    intro_credit_ledger. See .local/tasks/products-cart-contract.md.
+    """
+    tables = (
+        """
+        CREATE TABLE IF NOT EXISTS orders (
+            id TEXT PRIMARY KEY,
+            order_ref TEXT UNIQUE NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status VARCHAR NOT NULL DEFAULT 'pending',
+            currency VARCHAR NOT NULL DEFAULT 'usd',
+            subtotal_cents INTEGER NOT NULL DEFAULT 0,
+            discount_cents INTEGER NOT NULL DEFAULT 0,
+            vat_cents INTEGER NOT NULL DEFAULT 0,
+            total_cents INTEGER NOT NULL DEFAULT 0,
+            promo_code TEXT,
+            billing_country TEXT,
+            payment_intent_id TEXT,
+            items_json TEXT NOT NULL DEFAULT '[]',
+            invoice_number TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            paid_at TIMESTAMP
+        )
+        """,
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_payment_intent ON orders(payment_intent_id) WHERE payment_intent_id IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS ix_orders_user ON orders(user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_orders_status ON orders(status)",
+        """
+        CREATE TABLE IF NOT EXISTS user_products (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            order_ref TEXT REFERENCES orders(order_ref),
+            product_id TEXT,
+            price_id TEXT,
+            kind TEXT,
+            label TEXT,
+            quantity INTEGER NOT NULL DEFAULT 1,
+            activated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_user_products_user ON user_products(user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_user_products_order ON user_products(order_ref)",
+        # Idempotent fulfilment: one entitlement row per (order, price). Guards
+        # against double-grant if /orders/confirm and the webhook race.
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_products_order_price ON user_products(order_ref, price_id)",
+        """
+        CREATE TABLE IF NOT EXISTS promo_redemptions (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            code TEXT NOT NULL,
+            order_ref TEXT,
+            price_id TEXT,
+            discount_cents INTEGER NOT NULL DEFAULT 0,
+            redeemed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_promo_redemptions_user ON promo_redemptions(user_id)",
+        # Idempotent fulfilment: one redemption row per order.
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_promo_redemptions_order ON promo_redemptions(order_ref) WHERE order_ref IS NOT NULL",
+        """
+        CREATE TABLE IF NOT EXISTS feature_unlocks (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            feature_key TEXT NOT NULL,
+            price_id TEXT,
+            payment_intent_id TEXT,
+            activated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_feature_unlocks_user ON feature_unlocks(user_id)",
+        """
+        CREATE TABLE IF NOT EXISTS intro_credit_ledger (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            delta INTEGER NOT NULL DEFAULT 0,
+            reason TEXT,
+            payment_intent_id TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_intro_credit_ledger_user ON intro_credit_ledger(user_id)",
+    )
+    with Session(engine) as session:
+        try:
+            session.exec(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR"
+            ))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            session.rollback()
+            logger.warning("ensure_orders_tables: users.stripe_customer_id add failed: %s", exc)
+        for ddl in tables:
+            try:
+                # Justification: static DDL literals from a local tuple, no
+                # user input; dev-only FastAPI backend.
+                session.exec(text(ddl))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                session.commit()
+            except Exception as exc:  # noqa: BLE001
+                session.rollback()
+                logger.warning("ensure_orders_tables: statement failed: %s", exc)

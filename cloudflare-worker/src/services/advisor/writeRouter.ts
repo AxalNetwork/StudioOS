@@ -108,6 +108,57 @@ async function ensureInvestorProfile(env: Env, user: User): Promise<boolean> {
 }
 
 /**
+ * Lazy-create / update the explorer_needs row keyed by user_id. Table is
+ * bootstrapped by ensureExploringSchema (services/exploringSchema.ts) —
+ * call that first so a cold DB self-heals instead of failing this INSERT.
+ * `track` (founder/investor/advisor/partner) is written on every call so
+ * it always reflects the bank the caller is currently answering.
+ */
+async function ensureExplorerNeeds(env: Env, userId: number, track: string): Promise<boolean> {
+  try {
+    const { ensureExploringSchema } = await import('../exploringSchema.ts');
+    await ensureExploringSchema(env);
+    await env.DB.prepare(
+      `INSERT INTO explorer_needs (user_id, track) VALUES (?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET track = excluded.track, updated_at = datetime('now')`,
+    ).bind(userId, track).run();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Merge a single track-specific 4th-section answer (funding, capital,
+ * compensation, or commercials — see banks/explorer.ts) into
+ * explorer_needs.track_extra_json, keyed by the full question_id. Mirrors
+ * mergeUserExtras/mergeProjectExtras's read-merge-write sidecar pattern.
+ */
+async function mergeExplorerTrackExtra(env: Env, userId: number, key: string, value: string): Promise<boolean> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT track_extra_json FROM explorer_needs WHERE user_id = ?`,
+    ).bind(userId).first<{ track_extra_json: string | null }>().catch(() => null);
+    let extras: Record<string, string> = {};
+    if (row?.track_extra_json) {
+      try {
+        const parsed = JSON.parse(row.track_extra_json);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          extras = parsed as Record<string, string>;
+        }
+      } catch { /* malformed — overwrite */ }
+    }
+    extras[key] = value;
+    await env.DB.prepare(
+      `UPDATE explorer_needs SET track_extra_json = ?, updated_at = datetime('now') WHERE user_id = ?`,
+    ).bind(JSON.stringify(extras), userId).run();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Resolve (or lazy-create) the advisor row owned by `user`. Uses the
  * same lookup order as routes/advisors.ts:myAdvisor — users.advisor_id
  * first, then fall back to advisors.user_id. Column names match the
@@ -554,6 +605,43 @@ async function routeFitAnswer(
   return { status: 'saved', saved_to };
 }
 
+// ---------------------------------------------------------------------------
+// Explorer bank — Problem/Challenge Discovery (see banks/explorer.ts).
+// Every id is `explorer.<track>.<section>.<leaf>`; CONTEXT/CHALLENGES/
+// TIMELINE leaves are identically named across all 4 tracks, so one shared
+// map handles them regardless of which track the user is on. Only each
+// track's 4th section (funding/capital/compensation/commercials) varies —
+// those leaves fall through to the JSON sidecar (mergeExplorerTrackExtra).
+// ---------------------------------------------------------------------------
+const EXPLORER_ID_RE = /^explorer\.(founder|investor|advisor|partner)\.(.+)$/;
+
+const EXPLORER_SHARED_LEAF_MAP: Record<string, { col: string; serialise?: (v: string) => string | number | null }> = {
+  'context.status': { col: 'current_status' },
+  'context.team': { col: 'team_structure', serialise: (v) => {
+    const lower = v.toLowerCase();
+    if (lower.startsWith('solo') || lower.startsWith('independent') || lower.startsWith('investing solo') || lower.startsWith('advising solo')) return 'solo';
+    if (lower.startsWith('with') || lower.startsWith('part of')) return 'with_team';
+    return v;
+  } },
+  'context.sector': { col: 'sector' },
+  'context.geography': { col: 'geography' },
+  'challenges.top1_depth': { col: 'challenge_1_depth' },
+  'timeline.urgency': { col: 'timeline_urgency' },
+  'timeline.deadline': { col: 'hard_deadline' },
+  'timeline.runway': { col: 'runway_months', serialise: (v) => {
+    const n = Number(v.replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) ? n : null;
+  } },
+};
+
+// Last question id per track — answering it marks needs_assessment_completed.
+const EXPLORER_LAST_QUESTION_ID: Record<string, string> = {
+  founder: 'explorer.founder.funding.lead_investor',
+  investor: 'explorer.investor.capital.source',
+  advisor: 'explorer.advisor.compensation.min_engagement',
+  partner: 'explorer.partner.commercials.min_deal_size',
+};
+
 /**
  * Route a single answer to its persistence target.
  *
@@ -647,6 +735,25 @@ export async function routeAnswer(
   if (questionId === 'role_detect.primary') {
     const role = mapRoleAnswer(value);
     if (!role) return { status: 'failed', error: 'unable to map answer to a role' };
+    // Task #9 — exploring users never get users.role written by the
+    // detector: the answer lands in user_role_review.suggested_role and an
+    // admin applies the final role from /api/admin/exploring. The caller
+    // may pass an OVERLAID user (role = suggested persona for bank
+    // selection), so check `actual_role` (stamped by the overlay) first.
+    const actualRole = String((user as User & { actual_role?: string }).actual_role || user.role || '').toLowerCase();
+    if (actualRole === 'exploring') {
+      try {
+        const { upsertSuggestedRole } = await import('../exploringSchema.ts');
+        await upsertSuggestedRole(env, user.id, role);
+      } catch (e) {
+        return { status: 'failed', error: (e as Error).message };
+      }
+      return {
+        status: 'saved',
+        saved_to: { table: 'user_role_review', column: 'suggested_role', id: user.id },
+        hint: `Noted — you sound like a ${role}. An Axal admin will confirm your final role.`,
+      };
+    }
     try {
       await env.DB.prepare(`UPDATE users SET role = ? WHERE id = ?`).bind(role, user.id).run();
     } catch (e) {
@@ -804,13 +911,16 @@ export async function routeAnswer(
         // ensureSchema) so this works on dev/SQLite without a prior
         // brand-page open.
         await env.DB.exec(
-          "CREATE TABLE IF NOT EXISTS landing_pages (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL UNIQUE, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, tagline TEXT, headline TEXT, subheadline TEXT, cta_text TEXT DEFAULT 'Join the waitlist', logo_url TEXT, logo_svg TEXT, theme_color TEXT DEFAULT '#7c3aed', published INTEGER DEFAULT 0, views_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))",
+          // Lockstep with brand.ts ensureSchema / migration 144: multi-page
+          // sites — project_id is NOT unique; page_slug is unique per project.
+          "CREATE TABLE IF NOT EXISTS landing_pages (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, slug TEXT NOT NULL UNIQUE, page_slug TEXT NOT NULL DEFAULT 'home', name TEXT NOT NULL, tagline TEXT, headline TEXT, subheadline TEXT, cta_text TEXT DEFAULT 'Join the waitlist', logo_url TEXT, logo_svg TEXT, theme_color TEXT DEFAULT '#7c3aed', published INTEGER DEFAULT 0, views_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))",
         );
         const proj = await env.DB.prepare(`SELECT name FROM projects WHERE id = ?`).bind(ctx.project_id).first<{ name: string }>();
         const baseName = (proj?.name || 'page').replace(/[^a-z0-9-]+/gi, '-').toLowerCase().slice(0, 40) || 'page';
         const tail = Math.random().toString(36).slice(2, 8);
         const slug = `${baseName}-${tail}`;
-        const existing = await env.DB.prepare(`SELECT id FROM landing_pages WHERE project_id = ?`).bind(ctx.project_id).first<{ id: number }>();
+        // Multi-page sites: advisor writes target the primary (oldest) page.
+        const existing = await env.DB.prepare(`SELECT id FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1`).bind(ctx.project_id).first<{ id: number }>();
         if (existing?.id) {
           await env.DB.prepare(
             `UPDATE landing_pages SET ${col} = ?, updated_at = datetime('now') WHERE id = ?`,
@@ -1186,6 +1296,99 @@ export async function routeAnswer(
     }
   }
 
+  // ---- Explorer bank ---------------------------------------------------
+  // Problem/Challenge Discovery. Four tracks (founder/investor/advisor/
+  // partner — see banks/explorer.ts), selected by the `role_detect.primary`
+  // answer. Every id is `explorer.<track>.<section>.<leaf>`; the section+
+  // leaf shape is shared across all 4 tracks (CONTEXT/CHALLENGES/TIMELINE),
+  // so one leaf→column map below covers all of them. The track's 4th
+  // section (funding/capital/compensation/commercials) varies by track and
+  // has no dedicated columns — those answers land in track_extra_json.
+  //
+  // Answers persist in explorer_needs, keyed ONLY by user_id (never
+  // founder_id/advisor_id/partner_profiles.id/etc.), so the data survives
+  // an admin re-tagging the user from 'exploring' to founder/investor/
+  // advisor/partner (routes/admin_exploring.ts). Nothing in this router or
+  // its callers ever resolves this table by a client-supplied user id —
+  // `user` here is always the requireAuth-verified caller — so an
+  // explorer's answers are visible only to that user and to admin-gated
+  // routes (requireAdmin), never to other users.
+  if (q.persona === 'explorer') {
+    // Exploring users reach here with `role` overlaid onto their suggested
+    // persona (routes/advisor.ts applyExploringOverlay) and the real role
+    // preserved on `actual_role`; admins may answer for support/testing.
+    // Read the exploring signal from actual_role (falling back to role for a
+    // non-overlaid caller) — never the overlaid `role`, which is never
+    // literally 'exploring'.
+    const explorerRole = String(
+      (user as User & { actual_role?: string }).actual_role || user.role || '',
+    ).toLowerCase();
+    if (explorerRole !== 'exploring' && explorerRole !== 'admin') {
+      return { status: 'failed', error: 'explorer questions require exploring role' };
+    }
+    const trackMatch = EXPLORER_ID_RE.exec(questionId);
+    if (!trackMatch) return { status: 'noop' };
+    const [, track, leaf] = trackMatch;
+    if (!(await ensureExplorerNeeds(env, user.id, track))) {
+      return { status: 'failed', error: 'could not initialise explorer_needs row' };
+    }
+
+    // Multi-select challenges split across 3 discrete priority columns
+    // (rather than a JSON array) so the Phase-2 recommendation engine can
+    // filter/index on the top challenge directly.
+    if (leaf === 'challenges.top3') {
+      const picks = parseList(value).slice(0, 3);
+      try {
+        await env.DB.prepare(
+          `UPDATE explorer_needs
+             SET challenge_1 = ?, challenge_2 = ?, challenge_3 = ?, updated_at = datetime('now')
+           WHERE user_id = ?`,
+        ).bind(picks[0] || null, picks[1] || null, picks[2] || null, user.id).run();
+        return {
+          status: 'saved',
+          saved_to: { table: 'explorer_needs', column: 'challenge_1', id: user.id, page_url: '/explorer/profile' },
+        };
+      } catch (e) {
+        return { status: 'failed', error: (e as Error).message };
+      }
+    }
+
+    const sharedLeaf = EXPLORER_SHARED_LEAF_MAP[leaf];
+    if (sharedLeaf) {
+      const dbValue = sharedLeaf.serialise ? sharedLeaf.serialise(value) : value;
+      try {
+        await env.DB.prepare(
+          `UPDATE explorer_needs SET ${sharedLeaf.col} = ?, updated_at = datetime('now') WHERE user_id = ?`,
+        ).bind(dbValue, user.id).run();
+        return {
+          status: 'saved',
+          saved_to: { table: 'explorer_needs', column: sharedLeaf.col, id: user.id, page_url: '/explorer/profile' },
+        };
+      } catch (e) {
+        return { status: 'failed', error: (e as Error).message };
+      }
+    }
+
+    // Track-specific 4th-section leaf (funding, capital, compensation, or
+    // commercials) — no dedicated column, lands in the JSON sidecar.
+    const ok = await mergeExplorerTrackExtra(env, user.id, questionId, value);
+    if (!ok) return { status: 'failed', error: 'could not persist explorer track answer' };
+    // The last question of each track's bank (see EXPLORER_LAST_QUESTION_ID)
+    // marks the needs-assessment complete, so the admin queue + Phase-2
+    // recommendation engine know this explorer has full signal without
+    // re-deriving it from individual answer counts.
+    if (EXPLORER_LAST_QUESTION_ID[track] === questionId) {
+      try {
+        const { markNeedsAssessmentCompleted } = await import('../exploringSchema.ts');
+        await markNeedsAssessmentCompleted(env, user.id);
+      } catch { /* best-effort */ }
+    }
+    return {
+      status: 'saved',
+      saved_to: { table: 'explorer_needs', column: 'track_extra_json', id: user.id, page_url: '/explorer/profile' },
+    };
+  }
+
   // ---- Admin bank -----------------------------------------------------
   if (q.persona === 'admin') {
     if (questionId === 'admin.preferences.digest_freq') {
@@ -1294,7 +1497,7 @@ export async function hydrateAlreadyAnswered(env: Env, user: User): Promise<Set<
         // it was changed.
         try {
           const lp = await env.DB.prepare(
-            `SELECT tagline, theme_color FROM landing_pages WHERE project_id = ?`,
+            `SELECT tagline, theme_color FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1`,
           ).bind(proj.id).first<{ tagline: string | null; theme_color: string | null }>().catch(() => null);
           if (lp?.tagline) answered.add('founder.brand.tagline');
           // theme_color is non-null on every landing_pages row (the

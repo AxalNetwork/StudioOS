@@ -89,6 +89,9 @@ import {
   generateCsrfToken,
 } from '../auth';
 import { hashEmail } from '../util/hashEmail';
+// Task #9 follow-up — fresh Google signups land in 'exploring' too, same
+// as /register and magic-link. See exploringSchema.ts.
+import { ensureExploringSchema } from '../services/exploringSchema';
 
 const authGoogle = new Hono<{ Bindings: Env }>();
 
@@ -552,16 +555,17 @@ authGoogle.get('/callback', async (c) => {
       } else {
         // Rule 4 — fresh signup. Google already verified the email.
         const name = (idt.name || googleEmail.split('@')[0] || 'New user').slice(0, 200);
-        // Fresh Google signups land with role='partner' — the lowest-trust
-        // CHECK-compliant default (users.role has a CHECK constraint that
-        // only permits admin/founder/partner/investor, see sql/schema.sql).
-        // The post-callback redirect still routes newSignup users to
-        // /onboarding/chat so the Workers AI Llama chatbot can capture a
-        // persona into partner_profiles for admin review. Admin assigns
-        // the final role manually from the profiling review queue.
+        // Task #9 follow-up — fresh Google signups land directly in
+        // 'exploring' (users.role CHECK relaxed by ensureExploringSchema),
+        // matching /register and magic-link. The post-callback redirect
+        // still routes newSignup users to /onboarding/chat so the Workers
+        // AI Llama chatbot can capture a persona into partner_profiles for
+        // admin review; admin assigns the final role manually from the
+        // exploring-users review queue (routes/admin_exploring.ts).
+        await ensureExploringSchema(c.env);
         const inserted = await sql`
           INSERT INTO users (email, name, role, email_verified)
-          VALUES (${googleEmail}, ${name}, 'partner', true)
+          VALUES (${googleEmail}, ${name}, 'exploring', true)
           RETURNING *` as any[];
         user = inserted[0];
         // INSERT OR IGNORE defends against the rare case where a second
@@ -637,7 +641,15 @@ authGoogle.get('/callback', async (c) => {
     // Llama 3.1 8B via /api/profiling/chat) which classifies persona and
     // saves a partner_profiles row for admin review. Existing users honour
     // the sanitized redirect target the caller passed to /start.
-    const landing = newSignup ? '/onboarding/chat' : sanitizeRedirect(state.redirect);
+    //
+    // Task #1 — invite/deep-link continuity: when the caller passed an
+    // EXPLICIT redirect (e.g. /register?next=… → an invitation acceptance
+    // page), honour it for new signups too instead of hard-routing them to
+    // the chat. Only the default '/dashboard' falls through to the chatbot
+    // landing; the client-side gate still nudges un-profiled users there
+    // on their next navigation.
+    const requested = sanitizeRedirect(state.redirect);
+    const landing = newSignup && requested === '/dashboard' ? '/onboarding/chat' : requested;
     const url = `${appUrl(c.env)}${landing}${landing.includes('?') ? '&' : '?'}google=ok${newSignup ? '&google_signup=1' : ''}`;
     return c.redirect(url, 302);
   } catch (e: any) {

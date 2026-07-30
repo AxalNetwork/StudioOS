@@ -1,0 +1,150 @@
+
+Select alert #3998
+Partial server-side request forgery
+Critical
+#3998 opened 5 days ago • Detected by CodeQL in backend/.../services/stripe_commerce.py :135
+main
+
+Select alert #3997
+Partial server-side request forgery
+Critical
+#3997 opened 5 days ago • Detected by CodeQL in backend/.../services/stripe_commerce.py :131
+main
+
+Select alert #3996
+Use of a broken or weak cryptographic hashing algorithm on sensitive data
+High
+#3996 opened 5 days ago • Detected by CodeQL in backend/.../routes/commerce.py :491
+main
+
+Select alert #3987
+Overly permissive regular expression range
+Medium
+#3987 opened last week • Detected by CodeQL in backend/.../services/organizations_import.py :57
+main
+
+Select alert #4010
+Missing origin verification in `postMessage` handler
+Medium
+#4010 opened 1 minute ago • Detected by CodeQL in spin-out-lab-pipeline/project/support.js :1337
+main
+
+Select alert #4001
+Log Injection
+Medium
+#4001 opened 5 days ago • Detected by CodeQL in backend/.../services/stripe_commerce.py :149
+main
+
+Select alert #4000
+Log Injection
+Medium
+#4000 opened 5 days ago • Detected by CodeQL in backend/.../services/stripe_commerce.py :139
+main
+
+Select alert #3999
+Log Injection
+Medium
+#3999 opened 5 days ago • Detected by CodeQL in backend/.../routes/commerce.py :654
+main
+
+Select alert #3993
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3993 opened last week • Detected by Semgrep OSS in backend/.../models/migrations.py :2625
+main
+
+Select alert #3986
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3986 opened last week • Detected by Semgrep OSS in backend/.../models/migrations.py :2558
+main
+
+Select alert #3985
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3985 opened last week • Detected by Semgrep OSS in backend/.../models/migrations.py :2493
+main
+
+Select alert #3984
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3984 opened last week • Detected by Semgrep OSS in backend/.../models/migrations.py :2484
+main
+
+Select alert #3971
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3971 opened last week • Detected by Semgrep OSS in backend/.../models/migrations.py :2384
+main
+
+Select alert #3970
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3970 opened last week • Detected by Semgrep OSS in backend/.../models/migrations.py :605
+main
+
+Select alert #3969
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3969 opened last week • Detected by Semgrep OSS in backend/.../models/migrations.py :586
+main
+
+Select alert #3968
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3968 opened last week • Detected by Semgrep OSS in backend/.../models/migrations.py :534
+main
+
+Select alert #3967
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3967 opened last week • Detected by Semgrep OSS in backend/.../models/migrations.py :308
+main
+
+Select alert #4522
+Semgrep Finding: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
+Warning
+#4522 opened now • Detected by Semgrep OSS in spin-out-lab-pipeline/project/support.js :1788
+main
+
+Select alert #4518
+Semgrep Finding: javascript.browser.security.insufficient-postmessage-origin-validation.insufficient-postmessage-origin-validation
+Warning
+#4518 opened now • Detected by Semgrep OSS in spin-out-lab-pipeline/project/support.js :1337
+main
+
+Select alert #4517
+Semgrep Finding: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
+Warning
+#4517 opened now • Detected by Semgrep OSS in spin-out-lab-pipeline/project/support.js :1317
+main
+
+Select alert #4516
+Semgrep Finding: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop
+Warning
+#4516 opened now • Detected by Semgrep OSS in spin-out-lab-pipeline/project/support.js :1095
+main
+
+Select alert #4006
+Semgrep Finding: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+Warning
+#4006 opened 5 days ago • Detected by Semgrep OSS in backend/scripts/seed_stripe_test_catalog... :36
+main
+
+Select alert #4005
+Semgrep Finding: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
+Warning
+#4005 opened 5 days ago • Detected by Semgrep OSS in backend/.../routes/commerce.py :490
+main
+
+Select alert #4514
+Expression has no effect
+Warning
+#4514 opened 1 minute ago • Detected by CodeQL in spin-out-lab-pipeline/.../uploads/Pitch Deck Builder.dc.ht... :272
+main
+
+Select alert #4513
+Expression has no effect
+Warning
+#4513 opened 1 minute ago • Detected by CodeQL in spin-out-lab-pipeline/.../uploads/Pitch Deck Builder.dc.ht... :263
+main

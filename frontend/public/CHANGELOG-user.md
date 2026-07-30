@@ -5,6 +5,133 @@ everyone using the platform. Newest changes are at the top.
 
 ---
 
+## New: a guided "Discovery" chat and a Products page for Exploring members
+
+If you're in the Exploring stage, the Personal Advisor now walks you through a short set of questions about the problem or opportunity you're working on — tailored to whether you're exploring as a founder, investor, advisor, or partner. Your answers are saved to your account and stay with you even if your role changes later.
+
+There's also a new **Products** page where you can see what's on offer and redeem a one-time code that unlocks premium features for 30 days at no cost. Anything paid uses the same secure checkout as the rest of the platform.
+
+---
+
+## Fixed: the Personal Advisor no longer errors during Exploring onboarding
+
+Members in the Exploring stage who answered the Personal Advisor's opening questions (like "Which best describes how you'll use StudioOS?") were hitting an error instead of moving on. That's fixed — your answer is saved, noted for the Axal team's role review, and the conversation continues normally.
+
+---
+
+## Fixed: changing a member's role to Exploring, Advisor, or Investor no longer fails
+
+Admins hitting an error when moving a member into Exploring (or Advisor/Investor) from the Admin Console's Users table will find it works now. A behind-the-scenes database update that these role changes depend on had been quietly failing in production; it has been repaired and applied, with no member data affected.
+
+---
+
+## Your account starts in "Exploring" the moment you sign up
+
+You now begin in the Exploring space as soon as you create your account — no need to finish the welcome chat first. The path you picked when signing up (founder, investor, or partner) is noted for our team right away, so your review can start sooner. Admins can also move any member back into Exploring for a fresh review; moving someone out of Exploring still happens through the Exploring Users review after a signed membership agreement.
+
+---
+
+## Advisors can be assigned from the Admin Console
+
+The role menu in the Admin Console's Users table now includes **Advisor**, alongside Founder, Partner, Investor, and Exploring — so admins can make someone an advisor directly, without a workaround. The Users page also gained an **Advisors** tile, so you can see how many advisors there are and filter to just them. Members still in the "Exploring" stage are unchanged: their final role is still assigned from the Exploring Users page after a signed agreement.
+
+---
+
+## Admins can now preview the "Exploring" experience
+
+The **View as** menu in the admin bar now includes **Exploring**. Pick it to see the platform exactly as a newly onboarded member does while they wait for their role — the same starting dashboard, the same slim menu, and the same limits on where they can go. Switch back to **View as: Admin** any time. Reviewing and approving individual exploring members still happens in the Exploring Users page.
+
+---
+
+## A friendlier start: explore first, commit later
+
+Finishing the welcome chat no longer locks you into an account type right away. Instead, you start in a new "Exploring" space while our team reviews your profile.
+
+- **Your own starting dashboard.** After the welcome chat you land on a simple home with your Personal Advisor and your profile summary — keep answering questions to sharpen your fit while you wait.
+- **A real person confirms your role.** The Axal team reviews what you shared — including a short summary of your welcome conversation — sends you a membership agreement to sign, and only then unlocks the workspace that matches you — founder, investor, partner, or advisor.
+- **Nothing is lost.** Everything you tell the Personal Advisor while exploring carries over to your full account.
+
+---
+
+## We measure our own signup experience now — privately
+
+To find and fix the places where joining StudioOS is confusing or broken, the platform now keeps count of the steps people take while signing up (like "opened the sign-up page" or "verified their email").
+
+- **Only with your permission.** Nothing is counted unless you accept analytics cookies in the cookie banner. Decline, and nothing is ever recorded.
+- **No outside companies.** The counts go straight to our own servers — there is no Google Analytics or any other third-party tracker involved.
+- **No personal details.** We don't store your name, email, or address in these counts — just anonymous steps, which are deleted automatically after six months.
+
+---
+
+## Invitations now take you straight where you were headed
+
+Joining from an invitation is finally seamless:
+
+- **You land on your invitation, not a detour.** If you create an account from an invitation link, you now arrive at that invitation right after signing up — whether you signed up with an emailed link, an authenticator, or Google. Previously the welcome chat could swallow the invitation entirely.
+- **The welcome chat is now optional.** A new "Skip for now" button takes you straight to your dashboard — you can tell us about yourself later.
+- **Less retyping.** Coming from an invitation email, your email address is already filled in on the sign-up form, and partner invitations pre-fill your name in the welcome conversation so you just confirm it.
+- **The right account from the start.** Signing up as an investor or founder from the website now sets up the matching account type right away, instead of a generic one.
+
+---
+
+## Verifying your email now signs you in
+
+Getting started is one step shorter, and extra security is there when you want it:
+
+- **Click the link, you're in.** Verifying your email now signs you in directly — no separate sign-in step and no required authenticator setup before you can enter your account.
+- **Add an authenticator when you're ready.** Right after verifying — or any time from Settings → Security — you can add an authenticator app in about a minute: scan a QR code (or type in a key), enter the 6-digit code it shows, and save your recovery codes.
+- **Setup can't half-fail anymore.** Your authenticator is only switched on after you've entered a working code from it, so an interrupted setup can never lock you out.
+- **Fixed:** requesting a new verification email no longer disturbs accounts that were already verified.
+
+---
+
+## Sign in with just your email
+
+No more authenticator hurdles to get started:
+
+- **Email me a sign-in link.** On the sign-in page, you can now request a secure one-time link instead of typing an authenticator code. Tap the link in the email and you're in — it works for 15 minutes.
+- **Joining is one step.** Creating an account now sends you a sign-in link right away — one tap both confirms your email and signs you in. Prefer an authenticator app from day one? That option is still there.
+- **Partners land in their portal.** After signing a partnership agreement, the "you're all set" screen now emails you a sign-in link directly — no more getting stuck at a code prompt you never set up.
+- **Clearer help along the way.** If the human-verification widget can't load (often an ad blocker), the page now says so and offers the email link instead of a greyed-out button. Check-your-email screens add an "Open Gmail / Open Outlook" shortcut and a reminder to check spam for mail from support@axal.vc.
+
+---
+
+## Run your raise from one board
+
+The Raise Pipeline is now a full fundraising workspace:
+
+- **Your round at a glance.** Set your target, close date and round name once — the header shows how much is committed, your progress toward target, and how many investors are in play.
+- **Add investors your way.** Add them one at a time with a quick form, or upload a CSV (name, email, firm, amount, notes) and import your whole list at once. Anyone with an email is also added to your Contacts hub automatically.
+- **Drag investors between stages.** The pipeline is now a board — drag a card from "To contact" through "Committed" (or "Passed") as conversations progress.
+- **Everything about an investor in one place.** Click any card to open a side panel with their stage, firm, check size and notes, plus their linked contact record with a shortcut into your Contacts hub.
+- **Keep investors in the loop.** Post investor updates right from the pipeline. Each update is saved to your raise and noted on every active investor's contact timeline. Updates are recorded in StudioOS — they are not sent as emails.
+
+---
+
+## People first: Team and Advisory redesigned around humans
+
+The pages about your team and advisors now lead with people, not tools:
+
+- **"Your People".** The Team page opens on advisors for everyone, and its new title says what it's really about — the humans building this with you. Sections your plan doesn't include yet show a blurred preview of what's inside instead of a plain lock.
+- **Advisory starts with your advisors.** The advisor directory is now the first thing you see; the AI tools moved behind it. The AI Advisor tab now hosts the same interactive advisor you know from your home screen, with the older question-and-answer form kept as a clearly labeled backup.
+- **Remember every advisor relationship.** Each advisor card can now show when you last met, when to follow up (overdue follow-ups are highlighted), what the follow-up is about, and your private notes — all editable from the advisor's edit panel.
+- **Browse co-founders before committing.** You no longer need a profile just to look around — browse candidates as a guest, and you'll be guided to create your profile when you want to express interest. Match scores appear once you have a profile to match against.
+
+---
+
+## Your investor workspace, consolidated
+
+We tidied the investor sidebar so related tools live together instead of as a long list of separate links:
+
+- **Four focused workspaces.** Portfolio (Health, Company Updates and Cap Table), Fund Modeling (Reserve Allocation and Exit Waterfall), Fund Ops (Funds, LP Reporting and Capital Calls) and your own My LP Portal now open as tabbed areas instead of scattered pages.
+- **LP Reporting shows real numbers.** TVPI and DPI are now calculated live from each fund's called, distributed and NAV figures — no more hand-typed values.
+- **A lighter Account menu.** Advisors, Partners, Jobs and Articles were removed from the investor Account group to keep it focused on what LPs actually use.
+- **Exits are clearly a simulation.** The buyer-matching "execute exit" flow now says plainly that it's a simulation — no real money moves.
+- **See your usage next to every upgrade prompt.** When you hit a plan limit, a small card now shows your live billing and introductions usage right beside the upgrade options.
+- **Previews instead of locks.** Tabs you can't open yet show a blurred preview of what's inside rather than a plain lock.
+
+---
+
 ## Due diligence, decisions and positions now flow together
 
 Due diligence is no longer an admin-only tool, and the steps from scoring a startup to committing capital now hand off to each other instead of making you start over each time:

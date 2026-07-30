@@ -52,7 +52,17 @@ async def create_ticket(
         description=data.description,
         priority=data.priority,
         submitted_by=user.name or user.email,
+        session=session,
     )
+
+    if github_result:
+        # Persist the issue mirror so the webhook + pull-sync can match this
+        # ticket back to its GitHub issue by number.
+        ticket.github_issue_number = github_result.get("number")
+        ticket.github_issue_url = github_result.get("url")
+        session.add(ticket)
+        session.commit()
+        session.refresh(ticket)
 
     response = ticket.model_dump() if hasattr(ticket, 'model_dump') else dict(ticket)
     if github_result:

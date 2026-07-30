@@ -1,4 +1,9 @@
+@import url("https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;600;700&display=swap");
 @import "tailwindcss";
+
+@keyframes wsPulse{0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,.45)}50%{box-shadow:0 0 0 5px rgba(124,58,237,0)}}
+@keyframes wsGlow{0%,100%{box-shadow:0 0 0 1px rgba(124,58,237,.35),0 1px 2px rgba(24,24,27,.04)}50%{box-shadow:0 0 0 3px rgba(124,58,237,.18),0 1px 2px rgba(24,24,27,.04)}}
+@keyframes wsFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
 /* Tailwind 4 — opt the .dark class on <html> in as the activator for the
    `dark:` variant. SettingsContext flips this class based on the user's
@@ -150,6 +155,21 @@ select::-ms-expand { display: none; }
 ::-webkit-scrollbar-thumb {
   background: var(--app-scroll-thumb);
   border-radius: 3px;
+}
+
+/* Hide scrollbars on horizontally-scrollable tab strips while keeping them
+   swipe/trackpad scrollable. This hides bars on BOTH axes, which also
+   suppresses the phantom vertical scrollbar an `overflow-x: auto` box gets
+   (per CSS spec its `overflow-y` computes to `auto`, and tab rows overflow
+   ~1px because active tabs use `border-b-2 -mb-px`). We intentionally do NOT
+   add `overflow-y: hidden` — that would clip the protruding 1px of the
+   active-tab underline. */
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE / old Edge */
+  scrollbar-width: none;    /* Firefox */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;            /* Chrome / Safari / Edge */
 }
 
 /* ---------------------------------------------------------------------------

@@ -10,6 +10,355 @@
 > written for the people using the platform, not the engineers
 > building it.
 >
+
+## Explorer Discovery bank + Products page — Problem/Challenge Discovery for Exploring users
+
+Exploring users now get a dedicated "Problem/Challenge Discovery" question bank in the Personal Advisor, plus a Products page that surfaces a one-time explorer promo code redeemable into a 30-day feature unlock (integrates PR #142).
+
+- **Bank** (`cloudflare-worker/src/services/advisor/banks/explorer.ts`) — four tracks (founder/investor/advisor/partner) selected by the `role_detect.primary` answer; every id is `explorer.<track>.<section>.<leaf>` over a shared CONTEXT/CHALLENGES/TIMELINE shape plus a track-specific 4th section. Wired into `routes/advisor.ts` (`isExploringUser` via `actual_role`, `explorerBankForTrack`, `promo_notice`, completion payload) and `selectBank`/`workingBankFor`.
+- **Persistence** — `148_explorer_needs.sql` (`explorer_needs`, keyed only by `user_id` so answers survive an admin re-tag from Exploring to a real role) and `149_explorer_promo_codes.sql` (`explorer_promo_codes`). `writeRouter.ts` routes `persona:'explorer'` answers into `explorer_needs` (shared leaf→column map; track-specific answers land in `track_extra_json`).
+- **Promo/Products** — `services/explorerPromo.ts` mints synthetic one-time codes that redeem straight into a 30-day `feature_unlocks` row ($0, no Stripe call). `routes/products.ts` (`GET /api/products/promo`, `POST /api/products/redeem`) mounted at `/api/products`; `frontend/src/pages/ProductsPage.jsx` + `components/AxalCheckout.jsx` reuse the existing Stripe catalog/checkout for paid items.
+- **Reconcile on merge**: adding `'explorer'` to the `Persona` union required an `explorer` key in `stateMachine.ts` `DYNAMIC_PROMPTS` and switching the `writeRouter.ts` explorer-role guard off the overlaid `role` onto `actual_role` (exploring users arrive with `role` overlaid onto their suggested persona; admins may answer for support). Migrations renumbered 150/151 → 148/149 to stay contiguous (local max was 147).
+- **Verified**: worker `tsc` clean; all drift guards pass (incl. advisor-bank drift with `questionIds.gen.ts` in sync); advisor/exploring/migration/authz/profiling/fit suites green; frontend build clean.
+
+## Explorer onboarding deadlock fixed — writeAnswer gate now accepts the 'unknown' persona
+
+Exploring users answering the Personal Advisor's role-detector question ("Which best describes how you'll use StudioOS?" → "I am building a startup") got `Error: writeAnswer not available for unknown`. Exploring users without a reviewed/suggested role map to persona `unknown` (`personaFor()` in `cloudflare-worker/src/routes/advisor.ts`), which pins them to the 3-question ROLE_DETECTOR bank — but the L2 tool gate's `TOOL_PERSONA_ALLOWLIST` (`services/advisor/guardrails.ts`) did not include `unknown` for `writeAnswer`, so the very detector answer that escapes the unknown state was rejected with `persona_mismatch` (403) before `routeAnswer` could write `user_role_review.suggested_role`. Onboarding deadlocked.
+
+- Fix: `'unknown'` added to the `writeAnswer` allowlist only. No other tool accepts it; scoped writes stay guarded — `selectBank()` pins unknown users to the detector bank, the `/answer` visible-bank eligibility gate 409s everything else, and every persona bank in `writeRouter.ts` re-checks the caller's role before writing.
+- Tests (`cloudflare-worker/test/advisor.scenarios.test.ts`): regression pinning `writeAnswer` OK for persona `unknown` + privileged tools (scoreDeal/draftMemo/findInvestor/listMyTasks) still `persona_mismatch` for it. 20/20 pass; worker tsc clean.
+
+## Prod role-change 500 fixed — users role-CHECK rebuild no longer aborted by views or FK enforcement
+
+Setting any user's role to Exploring/Advisor/Investor from the Admin Console 500'd on prod: the D1 `users` table still carried the legacy `CHECK (role IN ('admin','founder','partner'))` because every lazy role-CHECK rebuild in `cloudflare-worker/src/util/usersRoleRebuild.ts` had been silently rolling back on boot since the roles shipped (the `[boot] … rebuild failed/skipped` warns on every request). Two stacked causes, both fixed by re-sequencing the rebuild batch:
+
+- **Views**: the old `CREATE users_new → copy → DROP users → RENAME` sequence dies on any DB with a view over `users` (prod has `partner_summary`) — `ALTER TABLE … RENAME` re-validates all schema objects and aborts with `error in view partner_summary: no such table: main.users`. The rebuild no longer RENAMEs at all: the final table is `CREATE`d directly under its real name, so views are never touched.
+- **Deferred FKs**: D1 enforces foreign keys; `DROP TABLE users` implicitly deletes every row and each child row (founders, limited_partners, …) becomes a deferred violation that only INSERTs into a table literally named `users` can resolve — rows copied into `users_new` *before* the drop never did, so the batch failed at commit with `FOREIGN KEY constraint failed` (D1: "DB was reset and rolled back"). New order: snapshot to `users_rebuild_tmp` → `DROP users` → `CREATE users` (relaxed CHECK) → copy back into `users` (violations return to zero) → drop temp → replay indexes.
+- The three per-role functions collapsed into one shared `rebuildUsersRoleCheckFor(env, role)` core (exports unchanged); the AUTOINCREMENT high-water mark (`sqlite_sequence`) is preserved so a future signup can't reuse a deleted user's id.
+- **Tests (`cloudflare-worker/test/users_role_rebuild.test.ts`)** — two new regression tests: a view-over-users seed (`partner_summary` + a view-on-view) asserting the rebuild commits and views survive byte-identical, and a `enableForeignKeyConstraints: true` D1-parity run proving the copy-back resolves the deferred violations (the old sequence fails both). 7/7 pass.
+- **Verified on prod after deploy**: `users` CHECK now `('admin','founder','partner','exploring','advisor','investor')`, 43 users intact, `partner_summary` present, 17 indexes replayed, no temp table, `sqlite_sequence` = MAX(id), zero boot warns in `wrangler tail`.
+
+## Code Scanning alerts resolved — crypto ids, path guard, suppression placement, committed dev secret removed (Task #7)
+
+All ~50 open GitHub Code Scanning alerts (CodeQL + Semgrep) addressed at the source so they auto-close on the next scan of `main`.
+
+- **`frontend/src/lib/funnel.js`** — analytics id fallback no longer uses `Math.random()` (CodeQL `js/insecure-randomness`): `crypto.randomUUID()` → `crypto.getRandomValues()` → a time+counter last resort that deliberately avoids `Math.random`.
+- **`frontend/src/pages/BrandBuilderPage.jsx`** — removed the dead Task #2 multi-page-site block (17 unused `useState` pairs + never-called `seedFromLanding`/`refreshPages`/`refreshCustomTemplates`, ~90 lines) behind the ~32 unused-variable notes; the live load effect already inlines the same seeding logic.
+- **`backend/app/services/file_storage.py`** — `_path()` adds a statically-recognisable traversal barrier (segment allowlist rejecting empty/`.`/`..`, absolute keys, backslashes + `normpath`/`startswith` root check) in front of the existing `resolve()`+`relative_to` guard (CodeQL `py/path-injection`).
+- **`backend/app/api/routes/brand.py`** — `_derive_slug_base` trims with `str.strip('-')`/`rstrip('-')` instead of the flagged `^-+|-+$` / `-+$` regexes (polynomial-redos).
+- **`backend/app/api/routes/public_profiles.py`** — the four empty `except: pass` blocks now narrow to `(ValueError, TypeError)` where it's JSON parsing and log at debug with context in all four.
+- **`backend/app/models/migrations.py` + `backend/app/api/routes/progress.py`** — all 39 `# nosemgrep: …avoid-sqlalchemy-text` comments carried trailing `-- justification` prose; Semgrep parses the rule-id list up to commas, so the prose (which contains commas) broke every suppression. Justifications moved to preceding `# Justification:` comment lines, leaving bare `# nosemgrep: <rule-id>` on the match line; the one comment sitting on a closing `))` (not the match's first line) moved onto the `session.exec(text(` line. Verified locally: `semgrep scan --config r/…avoid-sqlalchemy-text` → 0 findings.
+- **`.replit`** — the committed literal dev `JWT_SECRET` under `[userenv.development]` (Semgrep generic secret alert) is deleted; dev now uses the pre-existing `JWT_SECRET` Replit Secret, whose value differs from the leaked literal (verified), so no rotation of the live secret was needed. The leaked literal only ever signed dev tokens.
+- **Scan health** — both CodeQL legs (python, javascript-typescript) and Semgrep are green on the latest `main` runs (verified via the public Actions API); the earlier red run was a one-off python-leg analysis failure. Note: GitHub's *default setup* CodeQL (`dynamic/github-code-scanning/codeql`) runs alongside the advanced `.github/workflows/codeql.yml` — consider disabling default setup in repo Settings → Code security to avoid duplicate scans.
+
+## New signups land in Exploring at signup; admins can move users into it (Task #9 follow-up, PR #141)
+
+Fresh accounts now hold in `role='exploring'` from the moment they exist — not only after the onboarding chat — and the generic admin role dropdown gains 'exploring' as a destination.
+
+- **Signup surfaces (`cloudflare-worker/src/routes/auth.ts` `/register` fresh-INSERT + incomplete-retry UPDATE, `/magic/verify` find-or-create; `routes/auth_google.ts` fresh Google signup)** — new users INSERT with `role='exploring'` instead of the marketing-lane role (founder/partner/investor). On `/register` (the only surface where a lane is chosen) the lane is preserved via `upsertSuggestedRole()` into `user_role_review.suggested_role`, so the Exploring Users queue shows the suggestion immediately, before the chatbot runs; the lane also still seeds lane-appropriate trust obligations and the investor 14-day trial. Known exception: the deck-share self-serve signup (`routes/deck_share_actions.ts` POST `/share/:token/signup`) still creates accounts with the requested role directly, outside the exploring queue.
+- **Generic role endpoint (`routes/admin.ts` PATCH `/admin/users/:id/role`)** — `'exploring'` is now an accepted destination, so an admin can send any user (e.g. a partner) back into the holding state for re-review; moving INTO exploring also resets the stale `user_role_review` assignment fields. Moving OUT of exploring still requires the binding-agreement-gated `/api/admin/exploring/users/:id/assign-role` flow — the generic endpoint rejects that direction with a 409 (`code: 'use_exploring_assign_role'`).
+- **Frontend (`pages/AdminPage.jsx` RoleDropdown)** — "Exploring" added to the Users-table role dropdown; for users already in exploring, the founder/partner/investor options are disabled client-side with a tooltip pointing at the Exploring Users queue, mirroring the 409.
+- Dev-parity note: prod/Worker-only, like the rest of the exploring feature — the dev FastAPI `UserRole` enum has no `exploring`, so its `/admin/users/{id}/role` rejects it with a 400 in dev.
+
+## Advisor in Admin Console role management (Task #5)
+
+Admins can now set an existing user's role to Advisor from the Admin Console → Users table (previously only the Exploring queue could assign it, and the Worker rejected `advisor` on this endpoint).
+
+- **`frontend/src/pages/AdminPage.jsx`** — `RoleDropdown` OPTIONS gains `advisor` (existing disable-when-exploring behavior applies to it automatically); `handleRoleChange` confirm-dialog label map gains `Advisor`; Users-tab count/filter tiles gain an `advisor` bucket.
+- **`cloudflare-worker/src/routes/admin.ts`** — `PATCH /admin/users/:userId/role` accepts `'advisor'` in the role whitelist. The admin promotion/demotion blocks and the exploring-transition guard (409 → use the Exploring queue) are unchanged.
+- **Dev FastAPI** — no change needed: `backend/app/api/routes/admin.py` validates via the `UserRole` enum, which already includes `ADVISOR`.
+
+## View as: Exploring for admins (Task #14)
+
+The admin View-as menu now includes the Exploring holding state so admins can preview that experience end-to-end without impersonating a specific user.
+
+- **`App.jsx` (PortalSwitcher)** — dropped the v1 `filter(role !== 'exploring')` from the View-as dropdown; all six ROLE_LABELS entries now render. No other wiring needed: `ROLE_DEFAULT_PATH.exploring = '/exploring'` routes the switch, `RoleGuard` already computes `effectiveRole` from `viewMode` for admins (disallowed routes bounce to `/exploring`, exactly what a real exploring user gets), and `sidebarConfig.js` has the explicit lean `exploring` group. The `/exploring` route guard already admitted `['admin','exploring']`.
+- **`ExploringDashboard.jsx`** — the "Exploring" badge gains `dark:` variants (was light-only). Its widgets (PersonalAdvisor, ProfileFitSection) are self-contained and already render for admin viewers (same mounts as Dashboard.jsx), so no hardening was needed.
+- Per-user review is unchanged — admins still inspect/assign real exploring users at `/admin/exploring`.
+
+## "Exploring" holding role + admin role-assignment queue (Task #9)
+
+The onboarding chatbot no longer auto-promotes users to their inferred role. Chat completion now lands the user in a new `role='exploring'` holding state; the inferred persona is stored as a **suggestion** and an admin turns it into a real role only after a signed binding agreement.
+
+- **Schema (`sql/migrations/147_user_role_review.sql` + `services/exploringSchema.ts`, new)** — `user_role_review` side table (users is at the D1 ALTER limit): `suggested_role`, `role_confirmed`, `onboarded_at`, binding-envelope refs (`binding_envelope_id/document_type/sent_at`), assignment audit (`assigned_role/by_user_id/at`). `ensureExploringSchema()` (isolate-once bootstrap in `index.ts`) also rebuilds the `users.role` CHECK via `rebuildUsersRoleCheckForExploring` (`services/usersRoleRebuild.ts`) so `'exploring'` is CHECK-legal.
+- **`/api/profiling/save` (`routes/profiling.ts`)** — persona→role inference is unchanged, but the result is now written to `user_role_review.suggested_role` instead of `users.role`. Gate (`flow='chat' AND completed_at IS NULL`) is read BEFORE the flip; non-admin gated users get `role='exploring'` (try/catch degrade: on CHECK failure the old role survives and the suggestion is still stored). Spin-Out Lab auto-start moved out of /save into admin assignment. Response now carries `{role, suggested_role}` so the client can route.
+- **Advisor overlay (`routes/advisor.ts`)** — `advisorUser()`/`applyExploringOverlay()` wrap `requireAuth` on all advisor endpoints: an exploring user with a stored suggestion gets that role overlaid for BANK SELECTION only (`actual_role='exploring'` preserved), so Skills/Values/Archetype/Fit profiling keeps working in the holding state. `writeRouter.ts` routes `role_detect.primary` answers from exploring users into `user_role_review.suggested_role`, never `users.role`.
+- **Admin queue (`routes/admin_exploring.ts`, new; mounted at `/api/admin/exploring` before the catch-all)** — `GET /users` (grouped answered-count join, no N+1; each row carries `onboarding_summary` derived via exported `deriveOnboardingSummary()` — `extracted_data.summary` first, truncated user-side `chat_history` fallback, raw blobs stripped from the payload; tested in `test/admin_exploring.summary.test.ts`, wired into `test:drift`), `POST /users/:id/binding` (create + send the binding-agreement envelope via `createAndSendEnvelope`, native or DocuSign), `POST /users/:id/assign-role` (whitelist founder/investor/partner/advisor — never admin; hard-gated on the envelope belonging to THIS user AND `status='completed'`; resets `onboarding_progress` to the role wizard for founder/investor; starts Spin-Out Lab for founder + 'Spin-Out (New)'; audit-logged).
+- **Frontend** — new `/exploring` dashboard (`pages/ExploringDashboard.jsx`: status strip + PersonalAdvisor + ProfileFitSection) with its own lean sidebar group (`sidebarConfig.js` — explicit group required, unknown roles fall back to the founder nav); new `/admin/exploring` review page (`pages/admin/AdminExploring.jsx` + sidebar entry + `adminExploring` in `lib/api.js`); `OnboardingChatPage` finish/skip route by the server's post-save role; `exploring` added to ROLE_LABELS/COLORS/DEFAULT_PATH and the shared-surface guards (settings/profile/docs/trust/activity/tickets/chat) in `App.jsx`. 'exploring' is filtered out of the admin View-as menu (v1).
+
+## Signup funnel instrumentation (Task #2)
+
+First-party, consent-aware funnel analytics — no third-party trackers. Reference doc: `ANALYTICS_FUNNEL.md` (event dictionary, privacy contract, retention, baseline + alert queries).
+
+- **Event sink (`cloudflare-worker/src/routes/track.ts`, new)** — unauthenticated `POST /api/track` accepts batches (≤20 events, 16 KB body cap) from the client tracker, enforces a 21-name event allowlist, re-validates + clips every field (query/fragment stripped from `path`/`referrer` so magic-link/verification tokens can't ride along), derives a coarse browser family server-side (no full UA stored, no IP stored), inserts via `DB.batch`, and ALWAYS answers 204 — telemetry must never block a user flow. Called with `credentials:'omit'` (no cookie → no CSRF surface); deliberately NOT `sendBeacon` (it sends cookies). New per-IP rate bucket `track` (60/min) in `rateLimit.ts`.
+- **Schema (`sql/migrations/146_funnel_events.sql` + `services/funnelEventsSchema.ts`, new)** — append-only `funnel_events` table (pseudonymous `anon_id`/`session_id`, discrete segmentation columns utm_*/ref_code/lane/invite_type/device/browser, `props` JSON ≤500 B), indexes on `(event, created_at)` and `(anon_id, created_at)`; lazy `ensureFunnelEventsSchema()` bootstrap so `/api/track` self-heals on DBs the migration hasn't reached. Nightly cron (04:20 UTC, `index.ts`) purges rows older than 180 days.
+- **Consent-gated tracker (`frontend/src/lib/funnel.js`, new)** — buffers events in memory until the visitor grants the "analytics" cookie-consent category (buffer capped at 20; dropped on decline/pagehide); `anon_id` minted only post-consent. First-touch attribution captured once per tab from an allowlist of query params (`utm_*`, `ref`, `lane`, `invite`/`invitee`, `product`). Flushes at 10 events / 5 s / pagehide via keepalive fetch, prod-only (dev = `console.debug`). `trackOnce()` de-dupes per browser via localStorage.
+- **Instrumented pages** — LandingPage (`landing_view`), RegisterPage (`register_view/form_start/field_error/turnstile_failed/submit/success/resend_click`; `register_success` carries `email_sent:false` when the verification email silently failed — the audit's drop-off signal, alert threshold in `ANALYTICS_FUNNEL.md`), VerifyEmailPage (`verify_email_view/result`), TotpEnrollment (`totp_setup_start/complete/abandon` — ref-guarded so StrictMode can't double-fire; abandon = explicit cancel or pagehide, never unmount), LoginPage (`login_view/submit/error/success` per method incl. `totp_missing`), OnboardingChatPage (`onboarding_chat_view/complete/skip`), Dashboard (`dashboard_first_view` via `trackOnce`).
+- **Baseline** — documented `activity_logs` query (`user_registered` → `email_verified` → `user_login*`) in `ANALYTICS_FUNNEL.md` for the pre-instrumentation server-side funnel and consent-rate sanity checks.
+
+## Invitation & lane continuity through signup (Task #1)
+
+A `?next=` deep link (e.g. a startup-team invitation) now survives the entire signup round-trip on every auth path, audience lanes map to real account roles, and the onboarding chatbot stops trapping invited users.
+
+- **`?next=` continuity (`frontend/src/lib/pendingNext.js`, new)** — RegisterPage validates and persists the return path (localStorage `gvpn:next`, 24 h TTL, same-origin `/`-paths only, mirrors the worker's `sanitizeRedirect`). `RequireAuth` (App.jsx) consumes it once per page load after auth resolves and `<Navigate>`s there BEFORE the Task #66 chat gate engages; the gate stays suppressed while the user remains on the target (they get nudged to the chat on their next navigation instead). Consume-once uses module state so StrictMode double-renders and the "redirected" flag (set post-commit in a `useEffect`) can't half-consume it.
+- **Magic-link path (`LoginPage.jsx`)** — `/login?next=` is now also stored via `storePendingNext`; the TOTP and Google paths already honoured `safeNextPath()` client-side, but the magic link round-trips through the inbox and `/magic/verify` (which lands on the default page), so the stored copy is the only way it survives.
+- **Google path (`RegisterPage.jsx` + `cloudflare-worker/src/routes/auth_google.ts`)** — RegisterPage passes `redirect: nextPath` into `/auth/google/start`; the callback now honours an EXPLICIT sanitized redirect for `newSignup` too — only the default `'/dashboard'` still falls through to `/onboarding/chat`.
+- **Lane → role (`RegisterPage.jsx`)** — both register payloads (magic `defer_email` and classic) now send `role` derived from the `?lane=` param (`lp` folds into `investor`); the worker already validated `role ∈ founder/partner/investor` and defaulted to `partner`, so LP/investor/founder signups stop landing in the partner default.
+- **Skippable onboarding chat (`OnboardingChatPage.jsx`)** — new "Skip for now" button saves the partial transcript via `/api/profiling/save` (zero user turns accepted; flips `onboarding_progress.completed_at`, releasing the gate) and hard-reloads to `/dashboard` (same rationale as `finish()`). Footer copy softened ("An admin will review…" → tailoring copy).
+- **Invitee prefills** — `/register?invitee=` now prefills the email field (referral invitation emails already append `&invitee=<email>` to their `/register?ref=` links; `?email=` still works). `PartnerOnboardPage` prefills the first chatbot question (`full_name`) from `invitation.recipient_name` as a confirm-or-correct step instead of making the invitee retype what the admin already entered.
+
+## Optional TOTP + enrolment correctness (Task #11)
+
+TOTP stops being a signup gate and becomes an optional, recommended upgrade — and enrolment now proves the authenticator works before anything persists server-side.
+
+- **Verify-email signs you in (`cloudflare-worker/src/routes/auth.ts` `/confirm-verify-email`)** — now mints a real `email_only` session mirroring `POST /login`'s response shape (token, csrf_token, user, expires_in) with cookies, `verify-email-ip` rate limit (10/900s), `is_active` check, `user_sessions` row (`factor='email'`, `assurance_level='email_only'`, `step_up_due_at` = +MAGIC_STEP_UP_DAYS) and stale cross-identity session revocation. `setup_token` still returned for back-compat with the old mandatory flow.
+- **`/resend-verification` no longer un-verifies** — early-returns for already-verified accounts instead of resetting `email_verified` and clearing the TOTP secret (the enrolment-destruction bug).
+- **Two-phase optional enrolment (`settings.ts` `POST /api/settings/totp/enrol/start` + `/confirm`)** — `start` proposes a secret (nothing persisted); `confirm` validates the round-tripped secret plus a live 6-digit code, persists secret + 10 recovery codes, sets `factor='totp'`, and upgrades the **current** session in place (assurance `full`, `last_step_up_at=now`, `step_up_due_at` cleared) *without* bumping `jwt_min_iat` — other devices stay signed in. 403 `already_configured` when TOTP exists (re-pair/repair remain the paths for that); `auth_totp_added` security email best-effort; `totp_enrolled` audit log. Routes allow-listed for email_only sessions in `src/auth.ts`. Also fixed the settings re-enrol path generating recovery codes via `generateToken().slice()` instead of `generateRecoveryCode()`.
+- **Shared wizard (`frontend/src/components/TotpEnrollment.jsx`)** — QR (client-rendered from the provisioning URI) + manual secret + `otpauth://` deep link + per-app manual instructions + live-code confirm + one-time recovery codes with copy/download and a mandatory "I've saved these" ack. Used by `VerifyEmailPage` and Settings → Security.
+- **`VerifyEmailPage.jsx`** — stores the minted session like LoginPage, shows "You're verified" with a Continue CTA plus the optional enrolment card; falls back to a Sign-in CTA when an older worker response has no token.
+- **Settings → Security (`SettingsPage.jsx` AuthSection)** — new "Set up authenticator" card when `totp_configured` is false (magic-link/Google signups), embedding the shared wizard and reloading settings on completion.
+- **`RegisterPage.jsx` cleanup** — dead step 2 (inline chatbot, retired in Task #66) and step 4 (mandatory TOTP enrolment) removed along with their orphaned state/effects/functions and icon/QRCode imports; progress bar is 2 segments now.
+
+## Magic-link sign-in + entry-screen fixes (Task #10)
+
+The backend magic-link auth (BLOCK-AUTH-01: `POST /api/auth/magic/start` + `/magic/verify`, 15-min single-use links) finally gets UI — `api.magicStart` previously had zero callers. Audit P0 tier (fixes 1, 2, 6) plus copy/form polish (10, 12, 13, 15) from `SIGNUP_FRICTION_AUDIT_2026-07-08.md`. Frontend-only except one email-copy string; no new backend flows.
+
+- **Login (`LoginPage.jsx`)** — "Email me a sign-in link" button with sent-state (Open Gmail/Outlook deep links, spam hint, 60s resend cooldown). The `'Account not set up for TOTP authentication'` error (deal-activated partners, magic signups) is now mapped to friendly copy and highlights the magic button instead of dead-ending.
+- **Register (`RegisterPage.jsx`)** — magic link is the primary email path: `register({ defer_email: true })` (409 "already registered" tolerated — link signs existing users in) then `magicStart`; classic verification→TOTP flow kept as a secondary text link. Step 3 copy branches on `emailMode`; resend re-sends whichever email the user is waiting for. Real `<form>` (Enter submits), `autocomplete`/`inputmode`, `text-base sm:text-sm` inputs (no iOS focus zoom), Terms/Privacy trust line, "Continue with Google — fastest".
+- **Turnstile fail-visible fallback (both pages)** — when the widget script never loads (~10s poll exhausted), an amber notice explains why the token-gated CTA is unavailable and points at the magic link (which the server rate-limits per-IP/per-email independently). On register, the fallback skips `register()` (token is server-enforced) and sends the bare magic link — `magic/verify` find-or-creates; referral attribution is lost only in that edge case.
+- **Partner dead end (`PartnerOnboardPage.jsx`, `partnerDeals.ts`)** — the post-signing "Sign in to Partner Portal" CTA (which led to the TOTP wall) now requests a magic link for `invitation.recipient_email` inline; the deal-activation email tells signers to use "Email me a sign-in link".
+- **Copy (`LandingPage.jsx` et al.)** — "How it works" step 2 reframed per audit ("Browse and match with just your email — verification comes later…"); "We use TOTP…" jargon removed from register subheads/lane copy; check-email screens gain the spam hint + inbox deep links.
+
+## Prod deploy — D1 migration-ledger adoption + migrations 139–145 applied
+
+Ops entry for the first ledger-driven prod deploy (2026-07-08).
+
+- One-time `npm run d1:baseline` run against prod (ledger now authoritative, 147 rows). It **marked 139–145 without executing them** although their effects were absent (they postdate the last hand-apply) — caught by PRAGMA verification, fixed by un-marking the 7 ledger rows and re-running `node scripts/migrate-d1.mjs --remote` to real-apply. All seven verified present afterwards (`lifecycle_stage`, investor-profile unify cols, watchlist/journal contract, `dd_case_id`/`ic_decision_id`, advisor relationship fields, `brand_sites`/`page_slug`, raise tables).
+- `cloudflare-worker/sql/migrations/141_watchlist_journal_contract.sql` — stripped SQL `BEGIN;`/`COMMIT;`: D1 rejects transaction statements, so the file could never apply remotely (the wrangler `--file` batch is atomic anyway). See GOTCHAS → Migrations & schema.
+- Worker deployed to production; `scripts/check-spa-live.mjs` all green (apex + app.axal.vc routes, hashed assets, `/api/health`).
+
+## Raise Pipeline v1 (Task #1)
+
+The raise pipeline grows from a flat prospect list into a real fundraising workspace: a server-persisted active round with target/raised/close-date header, add-investor form + CSV import, a drag-between-stages kanban, a prospect drawer linked to the underlying Contacts-hub record, and investor updates posted from the pipeline. Worker-only domain (dev FastAPI has no contacts routes).
+
+**Schema**
+- `cloudflare-worker/sql/migrations/145_raise_rounds.sql` — `raise_rounds` (one active round per project via partial unique index `uq_raise_rounds_active`, same pattern as `uq_stages_one_active`), `raise_investor_updates`, and `ALTER raise_prospects ADD COLUMN amount REAL` (check size). Mirrored in `contacts.ts` `ensureSchema` (tables via `IF NOT EXISTS`; the ALTER via the PRAGMA-guarded try/catch reference pattern).
+
+**Backend — prod Worker (D1), all in `cloudflare-worker/src/routes/contacts.ts`, founder-scoped (`requireRole` + `ownedProjectScope`), registered before `/:uid`**
+- `GET/PUT /api/contacts/raise-round` — active-round read/upsert. `raised` is always computed as `SUM(amount)` over `stage='committed'` prospects (never a stored counter). Upsert is SELECT→UPDATE-else-INSERT; a losing INSERT race re-reads the winner. `close_date` must be `YYYY-MM-DD` or it stores null. Single-project founders may omit `project_id`; otherwise 400.
+- `POST /api/contacts/raise-prospects` — add investor from the pipeline (name or valid email required). With an email it also creates-or-links the Contacts-hub row (`audience='investor'`, `source='raise'`, `promoted_to='raise'`, `promoted_ref_id`) — the reverse of `/:uid/promote`, reusing an existing unpromoted contact instead of duplicating and never clobbering a claimed `promoted_ref_id`. Duplicate (project, email) in the pipeline → 409.
+- `POST /api/contacts/raise-prospects/import` — bulk rows (client parses the CSV), capped at 50 rows/request (each row costs several D1 calls; the SPA chunks bigger files, UI cap 200). Returns `{created, skipped:[{row, reason}], total}` — per-row failures reported, never silently dropped.
+- `GET /api/contacts/raise-prospects/:id` — drawer detail joining the linked contact (uid/status/source/last-activity) via `contact_id`.
+- `PUT /api/contacts/raise-prospects/:id` — now also accepts `amount` (email stays immutable so the contact link can't desync).
+- `GET/POST /api/contacts/raise-updates` — investor updates. `recipients_count` = non-passed prospects; each linked contact gets a best-effort outbound `contact_replies` timeline row ("Investor update — <subject>"), batched in one `DB.batch`. Updates are **recorded, not emailed** (no bulk sender exists; UI copy says so explicitly).
+
+**Frontend**
+- `frontend/src/pages/RaisePipelinePage.jsx` — rebuilt: round header card (raised/target/close date/committed count + progress bar, edit modal), project selector for multi-project founders, Add-investor modal, CSV-import modal (small quote-aware client-side parser, header-mapped columns name/email/firm/amount/notes, 50-row API chunking), HTML5 drag-and-drop kanban (stage select kept in the drawer for accessibility), right-side prospect drawer (stage/firm/amount/notes + contact card linking to `/network?tab=contacts`), and an Investor updates panel. Keeps the `embedded` prop used by `CapitalWorkspacePage`.
+- `frontend/src/lib/api.js` — `raiseRound`, `raiseRoundSave`, `raiseProspectCreate`, `raiseProspectsImport`, `raiseProspectGet`, `raiseUpdates`, `raiseUpdateCreate`.
+
+**Tests**
+- `cloudflare-worker/test/raise_pipeline.test.ts` (added to `test:drift`) — drives the real contacts router over a node:sqlite D1 adapter: round upsert-not-duplicate, raised aggregation, contact create-or-link + reuse + 409, import created/skipped accounting + 50-row cap, drawer contact join, update recipients excluding `passed` + timeline rows, cross-founder 403s, close-date validation.
+
+## Team & Advisory human-first redesign (Task #1)
+
+The people surfaces led with AI tools and paywalls instead of humans. This flips both: directories and real relationships first, AI second, gates shown as previews rather than walls.
+
+**Frontend**
+- `frontend/src/pages/TeamBuildingPage.jsx` — H1 → "Your People" with people-first subtitle; every tier now lands on the Advisor tab (locked tabs no longer skipped); `LockedTab` is a blurred **static skeleton** preview (fake `PreviewCard`s — never real gated data) with the upgrade CTA overlaid, same `openPaywall` flow.
+- `frontend/src/pages/AdvisoryPage.jsx` — tab order + default flipped to directory-first ("Advisors" leads, `tab` state defaults `'directory'`); new `AiAdvisorTab` mounts the **real** `PersonalAdvisor` (same component as the Dashboard) as the primary AI surface, with the old template `AdvisorTab` demoted to a labeled fallback (auto-swapped in when `/api/advisor` 404s — dev FastAPI / older workers — else behind a `<details>` disclosure); `AdvisorCard` gains a relationship strip (last session, follow-up with overdue amber highlight, follow-up note, running notes) and `AdvisorEditDrawer` gains the matching fields (date inputs, 500/4000 char caps), all with `dark:` variants.
+- `frontend/src/components/advisor/PersonalAdvisor.jsx` — new optional props: `disablePersistedFullscreen` (non-Dashboard mounts ignore + don't clobber the persisted `viewMode:'fullscreen'`; conversation pointer still shared) and `onAvailabilityChange(bool)` (fired from bootstrap via a ref so hosts can swap in a fallback when the endpoint is missing).
+- `frontend/src/pages/CofounderPage.jsx` — browse-first: the profile-gate panel is gone; guests see the browse grid with a slim "browsing as a guest" banner, clicking Interest without a profile routes into profile creation, and the match-score chip hides when `match_score` is null.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/sql/migrations/143_advisor_relationship_fields.sql` — `advisor_profiles` + `last_session_at`, `notes`, `follow_up_at`, `follow_up_note` (all TEXT/nullable).
+- `cloudflare-worker/src/services/advisorProfilesSchema.ts` — Row type, CREATE TABLE and per-statement try/catch ALTER loop cover the four new columns.
+- `cloudflare-worker/src/routes/advisory.ts` — `PUT /advisors/:id` accepts the four fields; ISO dates validated (400 on garbage), `notes` capped 4000 / `follow_up_note` 500; `undefined` keeps the stored value.
+- `cloudflare-worker/src/routes/cofounder.ts` — `GET /cofounder/browse` no longer 400s without a profile: `score` is `number|null` (no self-scoring against a missing profile), sorted with null-last, response adds `viewer_has_profile`. `POST /interest` keeps the profile requirement.
+
+**Backend — dev FastAPI parity**
+- `backend/app/services/cofounder.py` + `backend/app/routes/cofounder.py` — browse no longer raises without a profile; `score: None`, `viewer_has_profile` returned.
+- `backend/app/api/routes/advisory.py` + `backend/app/models/migrations.py` (`ensure_advisor_profiles_tables`) — the four relationship fields mirrored in dev with the same PUT semantics (absent keeps, empty clears, bad date → 400, 4000/500 caps); columns added via idempotent `ADD COLUMN IF NOT EXISTS`. NB: SQLAlchemy `text().bindparams()` rejects a bind param named `fn` (collides with its `@_generative` decorator internals) — prefixed the new params `p_*`.
+
+## Investor Support consolidation & Account trim (Task #4)
+
+The investor "Support" sidebar had eight peer links that were really four jobs, and the "Account" group carried founder-oriented rows (Advisors, Partners, Jobs, Articles) an LP never needs. This folds the fund/portfolio surfaces into four tabbed workspaces backed by the existing canonical stores, trims the Account group, labels the mock liquidity settlement as a simulation, and standardizes the locked/paywall UX so every 402 shows the investor's live quota.
+
+**Frontend — workspaces (new)**
+- `frontend/src/pages/PortfolioWorkspace.jsx` — Health · Updates · Positions (Cap Table) tabs; embeds the existing pages. The Cap Table tab is role-filtered (admin/investor).
+- `frontend/src/pages/FundModelingWorkspace.jsx` — Reserve Allocation · Exit Waterfall tabs; embeds `ReservesPage`/`WaterfallPage`.
+- `frontend/src/pages/FundOpsWorkspace.jsx` — Funds admin · LP Reporting · Capital Calls tabs. Funds admin renders the real `AdminFundsView` for admins and a role-locked blurred preview for non-admin investors; the Capital Calls panel is **role-scoped** — admins read the studio-wide ledger (`api.capitalCalls()`), investors read only their own commitments via `api.fundsLpPortal()` (the same per-LP source My LP Portal uses, never the un-scoped global `/legalcap/capital/calls`). Amounts are normalized across the `amount_cents` (worker) and `amount` (dev/LP-portal) shapes.
+- `frontend/src/pages/LPPortalPage.jsx` — "My LP Portal" as its own workspace (renders `LPPortalView`).
+- `frontend/src/components/WorkspaceTabs.jsx` — shared path-based tab bar + `WorkspaceHeader`, mirroring the `CapitalWorkspacePage` precedent.
+- `frontend/src/components/LockedPreview.jsx` — blurred-preview overlay replacing lock icons; role-lock (message only) or tier-lock (upgrade CTA + quota card).
+- `frontend/src/components/QuotaCard.jsx` — compact investor billing + introductions quota card, rendered beside paywalls and locked previews.
+
+**Frontend — edits**
+- `frontend/src/pages/LPReportingPage.jsx` — TVPI/DPI are now live-computed on display (DPI = distributed/called; TVPI = (NAV+distributed)/called; null when called ≤ 0) instead of hand-authored; removed the dpi/tvpi form inputs; added an `embedded` prop.
+- `frontend/src/pages/{ReservesPage,WaterfallPage,PortfolioHealthPage,PortfolioUpdatesPage,PortfolioPositionsPage}.jsx` — added an `embedded` prop that drops the outer padding + own title block when the page is embedded in a workspace.
+- `frontend/src/pages/FundsPage.jsx` — `AdminFundsView`/`LPPortalView` promoted to named exports; the standalone default `FundsPage` (a divergent tabbed copy) removed.
+- `frontend/src/App.jsx` — `/portfolio/health|updates|positions` → `PortfolioWorkspace`; `/portfolio/reserves|waterfall` → `FundModelingWorkspace`; `/funds` + new `/funds/capital-calls` + `/lp-reports` → `FundOpsWorkspace`; new `/lp-portal` → `LPPortalPage` (existing route guards preserved).
+- `frontend/src/sidebarConfig.js` — investor Support group: replaced "Funds" with "My LP Portal" and added "Capital Calls"; Account group: dropped Advisors, Partners, Jobs and Articles.
+- `frontend/src/components/PaywallModal.jsx` — the investor-mode paywall renders `QuotaCard` above the plan grid so every 402 shows live usage.
+- `frontend/src/pages/LiquidityPage.jsx` — buyer-match exits are labelled a **Simulation** (badge + subtitle + confirm copy): no real funds move.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/liquidity.ts` — the `execute-exit` response now carries `simulated: true` and `settlement: 'simulation'` so the mock settlement is honest on the wire.
+
+## Diligence → Commit → Ledger hand-offs (investor-audit #5 + #8, Task #83)
+
+Due Diligence was admin-only, and the investor funnel had no real hand-offs between scoring, the IC, the diligence case, the decision journal, and the position ledger — each was a separate re-search. This de-admins DD for investors/advisors, feeds open reviewer items into the lifecycle's next-actions, and wires the funnel so each stage carries the previous one's context. Also regroups Market Intelligence's ~21 sub-tabs under 5 lenses.
+
+**Migration**
+- `cloudflare-worker/sql/migrations/142_ic_dd_journal_links.sql` — `ic_decisions.dd_case_id` (+ index) links an IC decision to the DD case it was formed from; `decision_journal_entries.ic_decision_id` (+ partial unique index on `(owner_user_id, ic_decision_id) WHERE ic_decision_id IS NOT NULL`) lets an IC vote find-or-update exactly one auto-drafted journal entry per voter.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/dd.ts` — `POST /dd/cases` now lets an investor open a case when `subject_type='project'` AND they're in a deal room for that project (`investor_dealroom_members` JOIN `deals` ON `project_id`); admin/partner behaviour unchanged.
+- `cloudflare-worker/src/routes/dashboard.ts` — `GET /api/dashboard/investor-lifecycle` gains `next_actions[]` (open DD reviewer sections assigned to the caller → `/due-diligence/:uid`); the diligence stage now deep-links `/due-diligence` (was `/admin/due-diligence`). Route still read-only.
+- `cloudflare-worker/src/routes/ic.ts` — IC decisions carry `dd_case_id` (POST/PUT + DTO resolves `{uid, subject_label, status}`); casting a vote auto-drafts a private `decision_journal_entries` row (yes→invest / no→pass / abstain→defer; find-or-update by `owner_user_id + ic_decision_id`; rationale ≥3 chars becomes the thesis, else synthesized; conviction `3`; wrapped in try/catch so a journal failure never fails the vote). Skips when the decision has no `project_id`.
+
+**Frontend**
+- `frontend/src/App.jsx` / `sidebarConfig.js` / `wrangler.toml` — new investor/advisor-facing `/due-diligence` (+ `/due-diligence/:uid`) routes reuse the existing `AdminDueDiligence(Case)Page` (internal `base` derived from `useLocation`); guarded to `admin,partner,investor,advisor` and apex-routed in BOTH `wrangler.toml` route blocks. Reviewer-invite emails still point at `/admin/due-diligence/:uid` (apex via `/admin/*`).
+- `frontend/src/pages/DealsPage.jsx` — deal-room members get an **Open DD case** action (find-or-create on the deal's `project_id` via `dd.listCases`/`dd.openCase` → `/due-diligence/:uid`).
+- `frontend/src/pages/Dashboard.jsx` — the investor lifecycle prepends `next_actions[]` ahead of the funnel-stage rollup so the module's "next best action" points at concrete diligence work.
+- `frontend/src/pages/ICDecisionPage.jsx` — links back to its DD case; an **invest** decision shows a **Record position** CTA (admin) that prefills the position ledger via router `state.prefill`; a hint notes each vote drafts a private journal entry.
+- `frontend/src/pages/PortfolioPositionsPage.jsx` — reads router `state.prefill` to auto-open + pre-fill the round form (startup id + round) when arriving from an IC decision.
+- `frontend/src/pages/ScoringPage.jsx` — **Generate deal memo** is now the primary CTA and, on success, creates an IC decision seeded from the just-stored scoring memo (`from_scoring: true`) and navigates to `/ic/:uid` (falls back to the old confirmation if the IC step fails; memo is already persisted).
+- `frontend/src/pages/MarketIntelPage.jsx` — the ~21 sub-tabs are regrouped under 5 top-level lenses (Sector Compass / Investor Signals / Capital Markets / Founder Pulse / Ecosystem). A pill picker scopes the sub-tab dropdown to the active lens; every tab body still renders off `tab`, so it's a pure navigation layer.
+
+## Actionable matches & investor-scoped deal flow (investor-audit #2)
+
+The scored-match cards on the AI Matching Engine were read-only, and Deal Flow showed the whole firm-wide funnel with an operator-only "advance stage" button that made no sense for an investor. This gives every match card real verbs, scopes the deal pipeline to an investor's own relationships, and dedupes three near-identical scored-card implementations behind one shared component.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/matches.ts` — `GET /api/matches/deal-flow` now resolves a `deal_id` per project (correlated subquery, `ORDER BY id DESC LIMIT 1`) and `GET /api/matches/co-invest` selects `d.id as deal_id`, so a scored card can deep-link/join the actual deal room instead of only the project.
+- `cloudflare-worker/src/routes/deals.ts` — `GET /api/deals` accepts `?scope=mine` for investors and annotates each deal with `is_member` (is this investor in the dealroom?). `scope=mine` filters to deals the investor has a real relationship with: dealroom member (`investor_dealroom_members`), introduced (`investor_introductions.project_id`), or a converted watchlist item (`watchlist_items.converted_deal_id`, wrapped in try/catch for fresh DBs). Scope/annotation apply to the investor role only; operators and founders are unaffected. Calls `ensureInvestorPaywallSchema` before touching the paywall tables.
+
+**Frontend**
+- `frontend/src/components/ScoredDealCard.jsx` (new) — one shared `ScoredDealCard` + exported `ScorePill` (80/60 match thresholds). Each card carries three self-managed actions: **Watchlist** (`watchlistCreate`), **Request intro** (`introductionsRequest`, gated to `canRequestIntro`/investor role), and **Open deal room** (`dealroomJoin` then navigate, shown only when a `deal_id` is present). Intro and dealroom join both 402 *without* a `required` field, so the global PaywallModal never auto-opens — the card surfaces the quota message inline with an `openPaywall()` Upgrade CTA.
+- `frontend/src/pages/MatchesPage.jsx` — Deal Flow and Co-Investment now render `ScoredDealCard` (co-invest keyed by `deal_id`, with a `#rank`); the local `DealCard`/`ScorePill` and unused `Brain` import were removed. `InvestorMatch`/`ReferralScores` reuse the shared `ScorePill`. PipelinePage's own ScorePill (70/40 traction thresholds on a kanban tile) is deliberately left separate.
+- `frontend/src/pages/DealsPage.jsx` — investors get a **My deals / All deals** scope toggle (default `mine`, derived from the resolved role and refetched when role hydrates or scope changes) and per-relationship row actions replacing the advance button: **Join room** / **View room** (driven by `is_member`; 402 handled inline) and **Pass** (records a `decision_journal` `pass` with a ≥10-char reason, client-validated; hidden when the deal has no `project_id`).
+- `frontend/src/lib/api.js` — `listDeals(status, scope)` now takes a scope param; added `dealroomJoin`/`dealroomLeave` and `introductionsRequest`.
+
+## Investor deal desk on /studio (investor-audit #1)
+
+Investors landing on `/studio` were shown the founder home (Profile & Fit + studio-ops widgets) plus a trial banner — none of it relevant to an LP/angel. The Dashboard API already computed an investor payload (`proprietary_deal_flow`, `ai_scored_opportunities`, `quick_stats`, `syndication_tools`) that the frontend discarded. This turns `/studio` into a real investor deal desk.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/dashboard.ts` — new read-only `GET /api/dashboard/investor-lifecycle`. Aggregates the caller's own deal funnel into `{ stages[], current_stage, counts, generated_at }`. Five ordered stages (watching → warm intro → deal room → diligence → committed) each carry a `count`, a `reached` flag, and a deep-link `href`; `current_stage` is the deepest stage with activity. Every count is scoped to `user.id` and wrapped in `safeQuery` (each falls back to `0`), so a missing table degrades to an empty funnel instead of a 500. Sources: `watchlist_items` (owner, `status='watching'`), `investor_introductions` (investor), `investor_dealroom_members` (investor), `dd_cases` owned-or-reviewed, `decision_journal_entries` (`decision='invest'`), plus ride-along counts for IC engagement (`ic_decisions`/`ic_votes`), recorded `portfolio_positions`, and open `secondary_listings`. No `index.ts` change — the dashboard app is already mounted at `/api/dashboard`. Route never writes.
+
+**Frontend**
+- `frontend/src/lib/api.js` — `investorLifecycle()` → `GET /dashboard/investor-lifecycle`.
+- `frontend/src/pages/Dashboard.jsx` — when `role_view === 'investor'`, renders a new `InvestorHome` instead of `ProfileFitSection` + the operator grid: `InvestorQuotaBars`, a read-only deal-lifecycle funnel (reuses `command-center/LifecycleModule` with `canEdit={false}`; the funnel payload is mapped into the module's `stages`/`checklist` shape so "next best action" auto-derives from the first un-reached stage), a quick-stats row (deals in flow, avg AI match, watching, active deal rooms), and an `AI-scored opportunities` strip built from `ai_scored_opportunities` (cards link out only — Open → `/projects/:id`, plus `/watchlist` and `/deals`; deep card actions are deferred to the Actionable-Matches task). `RoleBadge` gains an `investor` (indigo) style. `PersonalAdvisor`, `SemanticSearch`, and the trial banner are unchanged for investors. Non-investor roles keep the existing home verbatim.
+
+## Watchlist & decision journal — full contract + follow-up reminders
+
+Reconciles the Worker's watchlist and decision-journal routes with the SPA + dev-FastAPI contract (investor-audit #14). Both surfaces previously exposed a thin subset of fields; the SPA sent — and expected back — richer objects (external prospects, tags, key risks, expected multiple/timeline, structured outcomes) that the Worker silently dropped. Adds a `next_check_at` follow-up reminder that actually fires.
+
+**Schema (migration 141 — already merged)**
+- Fresh-DB DDL in `cloudflare-worker/sql/t13_t14_t15.sql` brought in line with migration 141 so a from-scratch build matches a migrated one: `watchlist_items` gains `external_name`/`external_url`/`sector`/`stage`/`source`/`tags_json` (NOT NULL DEFAULT `'[]'`)/`reminded_at`, `project_id` is now nullable (external prospects), status vocabulary is `watching|converted|passed_on|archived`, plus partial unique `uq_watchlist_owner_external` (one external prospect per owner). `decision_journal_entries` gains `watchlist_item_id`, `key_risks`, `expected_multiple` (REAL), `expected_timeline_months` (INT), `tags_json`, `outcome_status` (NOT NULL DEFAULT `'pending'`), `outcome_actual_multiple` (REAL), `decided_at`, plus the watchlist/outcome-status indexes.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/watchlist.ts` — rewritten to the full contract. List returns `{items, counts:{watching,converted,passed_on,archived}}`; create is idempotent and 201; PUT applies each field explicitly (no cast-assignment), stamps `passed_at` on transition into `passed_on`; convert/delete preserved. Anti-portfolio returns `{owner,total_passes,counts:{vindicated,regret,open},regret_rate,biggest_regret,rows}`. Existing route signatures unchanged (drift-safe); `/items`, `/items/:id`, `/digest`, `/watchlist/anti-portfolio` aliases kept.
+- `cloudflare-worker/src/routes/journal.ts` — rewritten to the full contract. Decision `invest|pass|defer`, conviction integer 1..5, thesis min-10, plus `key_risks`/`expected_outcome`/`expected_multiple`/`expected_timeline_months`/`tags`. `resolveTargets` links a `project_uid` and/or ownership-checked `watchlist_uid`/`deal_uid`. List returns `{items,counts_by_decision,counts_by_outcome}`; `POST /:uid/outcome` records `outcome_status` (rejects `pending`) + `outcome_actual_multiple`. `/entries` aliases translate numeric id → uid for PATCH/DELETE.
+- `cloudflare-worker/src/services/watchlistGrading.ts` (new, zero runtime imports) — pure `gradePass(signal)` (vindicated/regret/open) and `reminderDue(nextCheckAt, remindedAt, now)`; `parseTs` accepts ISO / space-separated / `Z` / date-only.
+- `cloudflare-worker/src/services/watchlistReminders.ts` (new) — `sweepWatchlistReminders(env, now)` selects due `watching` items (LIMIT 1000), fires one `watchlist_followup` notification (category `deals`, deep-links `/watchlist`) per due checkpoint, then stamps `reminded_at`. Bumping `next_check_at` re-arms it.
+- `cloudflare-worker/src/index.ts` — cron wires the sweep every 15 minutes (between the event-reminder sweep and the analytics snapshot), best-effort try/catch.
+- `cloudflare-worker/src/routes/_t13t14t15_helpers.ts` — added `trimOrNull(v,max)` and `normaliseTags(value)` (CSV or array, cap 20).
+
+**Tests**
+- `cloudflare-worker/test/watchlistJournal.contract.test.ts` (new) — unit coverage for `gradePass`, `reminderDue` (re-arm, date-only, space-ts, garbage), `normaliseTags`, `trimOrNull`; appended to the `test:drift` strip-types gate in root `package.json`.
+
+## Unify investor preferences & thesis
+
+Makes `investor_profiles` the single canonical store for what an investor is looking for and retires the legacy `user_preferences` write path. Onboarding fields that were collected but silently dropped are now persisted, and investors can edit their thesis from Settings for the first time. The old Matches "Preferences" modal is gone. The scorer still *reads* `user_preferences` for now (that read migration is a separate sourcing task), so brand-new investors have empty deal-flow scoring until then — an accepted, documented gap.
+
+**Schema (D1 + dev SQLite)**
+- `cloudflare-worker/sql/migrations/140_investor_profile_unify.sql` — adds `firm_name`, `accreditation_status`, `country`, `lp_intent`, `lp_target_usd`, `notes` to `investor_profiles`; keeps a guarded `CREATE TABLE IF NOT EXISTS user_preferences` (still read by the scorer); one-time backfill copies legacy `bio`→`thesis_text` and check-size cents→`ticket_min_usd`/`ticket_max_usd` (USD) via COALESCE only where the profile fields are empty. No focus/stage mapping (the two vocabularies differ).
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/investor_signals.ts` — profile store extended for the six new columns (bootstrap cols, `ProfileRow`, `emptyProfile`, `shapeProfile`, `ProfileUpsertBody`). The PUT is full-replace, so it now loads the existing row and applies **preserve-if-absent** per field (`body.x === undefined ? existing : sanitized`) — a partial save from any Settings card can no longer wipe onboarding-only data.
+- `cloudflare-worker/src/routes/matches.ts` — removed `GET`/`PUT /preferences` (the write path) and the now-unused `safeJson` helper. The `user_preferences` table DDL in `ensureSchema` and the four scorer reads are intentionally kept.
+- `cloudflare-worker/src/services/onboardingChecklist.ts` — the `*.notifs` checklist items ("Configure notifications") counted `user_preferences` rows as a proxy; retiring that write path would have made them uncompletable, so they now check `users.notification_prefs`, falling back to the legacy `user_preferences` row for pre-existing accounts.
+
+**Backend — dev FastAPI (never deployed)**
+- `backend/app/api/routes/investor_signals.py` — mirrors the preserve-if-absent PUT and the empty-profile shape.
+- `backend/app/api/routes/matches.py` — removed `get_preferences`/`put_preferences`; kept `_load_prefs` (still used by the scorer).
+
+**Frontend**
+- `frontend/src/pages/OnboardingInvestorPage.jsx` — `handleFinish` now sends the six previously-dropped fields (firm name, accreditation status, country, LP intent, LP target, notes).
+- `frontend/src/pages/SettingsPage.jsx` — new **"My thesis"** card in Privacy lets investors edit sectors, stages, geographies and free-text thesis (anti-thesis is shown read-only; it stays editable in the existing "Investor Thesis & Matching" card). Saves through the full-replace profile PUT, resending the fields it doesn't edit so nothing is lost.
+- `frontend/src/pages/MatchesPage.jsx` — removed the legacy "Preferences" modal; the button and empty-state banner now link to `/settings/privacy`, and the banner is driven by the canonical profile's `sectors`.
+- `frontend/src/lib/api.js` — removed `matchPreferences`/`matchPreferencesSave`.
+
+**Validation**
+- `npm run test:drift` (full suite incl. `tsc --noEmit` in `cloudflare-worker/`) passes.
+
+---
+
+## Investor UX Audit ④ — Investor permissions & scoring safety
+
+Closes two role-bleed holes from the Investor UX audit: investors held studio-operator write powers they should not have, and exploring the scoring engine as any non-founder silently wrote an OFFICIAL (LP-facing, 7-day cooldown-locking) score. Investors are now observers/voters on the pipeline, and scoring is practice-by-default for every role with an explicit official-submit confirm. Admin/partner behavior on the pipeline and scoring is otherwise unchanged. No schema changes.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/src/routes/pipeline.ts` — `ADVANCE_ROLES` narrowed from `{admin, partner, investor}` to `{admin, partner}`. This is the shared studio-operator write gate, so investors now get 403 on create-project, advance-stage, MVP-task create/patch, metrics snapshot, and decision-gate review/decide. Error strings already read "admins or partners". Community voting (`/pipeline/votes/:id`) is a separate gate (any session) and is unchanged.
+- `cloudflare-worker/src/routes/scoring.ts` — sandbox (practice) is now honored for **all** roles, not just founders. Previously `willBeOfficial`/`effectiveSandbox` hard-coded `user.role === 'founder'`, so a partner/investor run always wrote official. Now `willBeOfficial = !!project_id && !isSandbox` and `effectiveSandbox = isSandbox`, kept in lockstep. Sandbox is strictly the safer path (never LP-visible, never locks the window), so this widens choice without a privilege change. The 7-day official cooldown, UNIQUE-index week race → 409, anomaly-hold, and admin `?force=1` escape hatch are all intact.
+
+**Backend — dev FastAPI (SQLite/Postgres mirror, never deployed)**
+- `backend/app/api/routes/scoring.py` — mirrors the Worker: `is_sandbox = bool(req.is_sandbox)` (was `... and _is_founder(user)`) so local testing matches prod practice-by-default behavior.
+
+**Frontend**
+- `frontend/src/pages/PipelinePage.jsx` — `canEdit` narrowed to `admin|partner` (was `admin|partner|investor`). This single gate hides all board write controls for investors: drag-and-drop, "New Pipeline Startup", the drawer's Advance/Trigger-review/Decide (Spin-Out/Iterate/Kill) buttons, and the Tasks/Metrics editors. Investors still see the board and the per-deal vote widget.
+- `frontend/src/pages/ScoringPage.jsx` — the run button now reflects the mode ("Run Practice Score" vs "Submit Official Score") and, in official mode, opens a new `OfficialConfirmModal` explaining the consequences (signed, LP-visible after sign-off, 7-day lock) before writing. Practice runs still fire immediately. Practice remains the default mode on load for every role.
+
+**Validation**
+- `npm run test:drift` (typecheck + API drift). Frontend modules transform cleanly via Vite (HMR, no errors).
+
+---
+
+## Founder UX Audit #1 (part b) — Command Center tab restructure
+
+Completes Critical item #1 from `FOUNDER_UX_AUDIT.md`: restructures the Command Center around the venture lifecycle with four founder-language tabs and folds away the tabs that exposed studio-internal structure. Frontend-only — no backend, schema or verdict-logic changes.
+
+**Frontend**
+- `frontend/src/pages/CommandCenterPage.jsx` — rewritten. Tabs are now **Overview | Startups | Roadmap | Operations** (lifecycle order; Overview still default). Roadmap is promoted out of the old stacked Execution tab; Studio Ops is renamed **Operations**. The active tab lives in `?tab=` (deep-linkable). Legacy `?tab=` values are aliased so every old link (and the `/execution`, `/studio-ops`, `/spinouts`, `/founder` redirects in `App.jsx`) keeps working: `execution→startups`, `studio-ops→operations`, `spin-outs→startups` (with the Spin-outs filter pre-applied). **Founder Portal is no longer a tab** — intake is launched as the **"New startup"** action and rendered on its own hidden surface (`?tab=founder-portal`|`new`) with a "Back to Command Center" link.
+- `frontend/src/components/command-center/StartupsTab.jsx` — new. A List/Board view toggle over the existing `ProjectsPage` (list) and `PipelinePage` (board), plus an "All startups / Spin-outs" status filter that folds in the former Spin-Outs tab (statuses `spinout|spinout_ready|incorporated|active`). A single **"New startup"** button routes to the guided intake wizard.
+- `frontend/src/pages/ProjectsPage.jsx` — added optional, backward-compatible props: `statusFilter` (client-side status-array filter), `hideCreate` (hide the built-in New Startup button), `onNewStartup` (override the create action for the button + empty-state CTA). Standalone behaviour (admin `/projects`) unchanged.
+- `frontend/src/pages/StudioOpsPage.jsx` — added optional `founderCopy` prop (default off; admin `/studio-ops` unchanged). When on: the "Strategic Oversight" sub-tab → "Focus recommendation", the review card heading → "Focus recommendation", the verdict label → "Suggested focus", the rule verdict is mapped to founder language (CONTINUE→Keep building, ITERATE→Refine & iterate, SPIN-OUT→Ready to spin out, KILL→Reassess & refocus), and the word "kill" is softened out of the AI summary. **Backend verdicts (`studioops.ts`) are unchanged.**
+
+**Bug fixed en route**
+- `frontend/src/pages/RoadmapPage.jsx` — its two `setSearchParams(..., { replace: true })` calls replaced the *entire* query string, clobbering the host `?tab=roadmap` when embedded in the Command Center (the Roadmap tab silently fell back to Overview). Both now merge into the existing params via the functional updater, preserving `tab`. Standalone behaviour unchanged.
+
+**Validation**
+- Frontend-only; all changed modules transform cleanly via Vite. End-to-end (Playwright) as the demo founder: four-tab structure with Overview default; Startups List/Board toggle + Spin-outs filter + New startup intake; Roadmap tab renders and *stays* active (regression check for the clobber bug); Operations "Focus recommendation" relabel with no "kill" text; all four legacy aliases (`execution`, `studio-ops`, `spin-outs`, `founder-portal`) resolve to the correct surface/state.
+
+---
+
+## Founder UX Audit #1 (part a) — Startup Lifecycle module + Command Center Overview tab
+
+Implements the lifecycle spine from `FOUNDER_UX_AUDIT.md` Critical item #1: a founder-editable lifecycle stage + derived checklist, surfaced on a new **Overview** tab that is now the default landing surface of the Command Center. This is part (a) — the lifecycle module, venture snapshot and metrics strip. Part (b) (the broader tab restructure: unstack Execution, merge Spin-Outs into a Startups filter, drop Founder Portal as a tab, founder-language pass) is deferred pending user confirmation.
+
+**Backend — prod Worker (D1)**
+- `cloudflare-worker/sql/migrations/139_lifecycle_stage.sql` — adds `projects.lifecycle_stage` + `projects.lifecycle_manual_checks` (TEXT/JSON). Idempotent guard `ensureLifecycleColumns` mirrors the column adds at runtime for older DBs.
+- `cloudflare-worker/src/routes/progress.ts` — new `GET /api/progress/lifecycle/:projectId` and `PUT /api/progress/lifecycle/:projectId`. Stages: `idea → validate → build → launch → grow → raise`. GET infers the stage from observable signals when none is stored (`stored:false`), returns per-stage checklist (auto items derived from signals; manual items are founder check-offs) and advance suggestions. PUT validates the stage against the allowed set (400 otherwise), clamps `manual_checks` to booleans, and **merges** manual checks (PATCH-like) so toggling one stage's check never wipes another's. `lifecycle_stage` is written only via this PUT (kept out of `projects.ts` privilegedFields).
+
+**Backend — dev FastAPI (SQLite/Postgres mirror, never deployed)**
+- `backend/app/models/migrations.py` — `ensure_lifecycle_columns` (wired into `main.py` lifespan) mirrors the two columns.
+- `backend/app/api/routes/progress.py` — mirrors GET/PUT `/progress/lifecycle/{id}` with the same inference, validation and merge semantics.
+
+**Frontend**
+- `frontend/src/components/command-center/LifecycleModule.jsx` — 6-stage rail (clickable to set stage when editable), auto-detected hint when the stage is inferred, advance-stage suggestion banners, a "next best action" derived from the first incomplete checklist item, and the current stage's checklist (manual items toggle via the merge PUT; auto items are read-only and deep-link to the surface that moves them).
+- `frontend/src/components/command-center/OverviewTab.jsx` — resolves the founder's project (`?project_id=` or first in scope), fetches lifecycle/project/scores/metrics/signals via `Promise.allSettled` (one failing endpoint never blanks the page), and renders a venture snapshot card (name/status/playbook week/score-tier), the `LifecycleModule`, and a read-only traction strip linking to `/build/metrics`. Empty state (no venture) routes to the Founder Portal intake.
+- `frontend/src/pages/CommandCenterPage.jsx` — adds **Overview** as the first + default tab; the four legacy tabs (`founder-portal`, `execution`, `studio-ops`, `spin-outs`) and their `?tab=` deep links are unchanged.
+- `frontend/src/lib/api.js` — `getLifecycle(projectId)` / `updateLifecycle(projectId, data)`.
+
+**Deviation from the audit spec**
+- The audit's metrics strip lists a **runway** tile, but `metrics_snapshots` has no runway column and none is derivable without cash/burn inputs. Rather than fabricate a value, the strip shows **Monthly churn** (falling back to **New users** when churn is unset) alongside MRR, active users and traction score. Flagged for the user.
+
+**Drift / types**
+- `cloudflare-worker/` `tsc --noEmit` passes; `npm run test:drift` green. Backend GET/PUT verified with authenticated smoke tests (stage inference, persistence, 400 on invalid stage, boolean clamping, cross-stage merge preservation).
+
+---
+
 ## Task #5 — Public author profiles
 
 Live author profile pages driven by the user's Settings > Profile as the single source of truth.

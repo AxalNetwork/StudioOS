@@ -87,6 +87,7 @@ async def lifespan(app: FastAPI):
             ensure_lifecycle_columns,
             ensure_document_file_columns,
             ensure_user_access_level_column,
+            ensure_ticket_github_columns,
             ensure_score_anti_cheat_columns,
             ensure_investor_role_split,
             ensure_marketplace_columns,
@@ -113,6 +114,12 @@ async def lifespan(app: FastAPI):
             ensure_compliance_reminder_runs_table,
             ensure_wellbeing_tables,
             ensure_user_handle_column,
+            ensure_network_introductions_tables,
+            ensure_intro_network_tables,
+            ensure_organizations_table,
+            ensure_deal_flow_tables,
+            ensure_orders_tables,
+            ensure_spinout_lab_tables,
         )
         ensure_brand_landing_columns()
         logger.info("StudioOS migrations: brand landing columns ensured")
@@ -128,6 +135,9 @@ async def lifespan(app: FastAPI):
         logger.info("StudioOS migrations: document file columns ensured")
         ensure_user_access_level_column()
         logger.info("StudioOS migrations: user.access_level column ensured")
+        # Task — GitHub ticket sync: mirror issue number/url onto tickets.
+        ensure_ticket_github_columns()
+        logger.info("StudioOS migrations: ticket github columns ensured")
         # Epic 5 — anti-cheat columns on score_snapshots (HMAC, sandbox flag,
         # admin review state, 7-day cooldown).
         ensure_score_anti_cheat_columns()
@@ -204,6 +214,25 @@ async def lifespan(app: FastAPI):
         # Task #40 — founder wellbeing pulse + resource directory.
         ensure_wellbeing_tables()
         logger.info("StudioOS migrations: wellbeing tables ensured")
+        # Task #12 — secure introductions & matching flow tables.
+        ensure_network_introductions_tables()
+        logger.info("StudioOS migrations: network introductions tables ensured")
+        # Credits-based Introductions propositions dev parity (worker-only in prod).
+        ensure_intro_network_tables()
+        logger.info("StudioOS migrations: intro network (propositions/credits) tables ensured")
+        # Task #16 — Organizations directory (real VC funds / deep-tech investors).
+        ensure_organizations_table()
+        ensure_deal_flow_tables()
+        logger.info("StudioOS migrations: deal-flow tables ensured")
+        # Task #8 — commerce cart/checkout tables + users.stripe_customer_id.
+        ensure_orders_tables()
+        logger.info("StudioOS migrations: orders/commerce tables ensured")
+        ensure_spinout_lab_tables()
+        logger.info("StudioOS migrations: spinout lab tables ensured")
+        logger.info("StudioOS migrations: organizations table ensured")
+        from backend.app.services.organizations_import import bootstrap_organizations
+        bootstrap_organizations()
+        logger.info("StudioOS seed: organizations directory bootstrapped")
         # Task #55 — public profile handle column + backfill.
         ensure_user_handle_column()
         logger.info("StudioOS migrations: user.handle column ensured")
@@ -425,7 +454,9 @@ app.include_router(activity.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 
 from backend.app.api.routes import csp_report as _csp_report  # noqa: E402
+from backend.app.api.routes import spinout_lab as _spinout_lab  # noqa: E402
 app.include_router(_csp_report.router, prefix="/api")
+app.include_router(_spinout_lab.router, prefix="/api")
 # --- Backoffice routers (Security Item #6: Cloudflare Zero Trust perimeter)
 # Every router below is admin/internal and gets an extra perimeter check via
 # `require_cf_access`. When CF_ACCESS_TEAM_DOMAIN / CF_ACCESS_AUD are unset
@@ -446,6 +477,10 @@ from backend.app.api.routes import infra as _infra
 app.include_router(_infra.router, prefix="/api", dependencies=_BACKOFFICE_DEPS)
 from backend.app.api.routes import admin_contracts as _admin_contracts
 app.include_router(_admin_contracts.router, prefix="/api", dependencies=_BACKOFFICE_DEPS)
+from backend.app.api.routes import admin_github as _admin_github
+app.include_router(_admin_github.router, prefix="/api", dependencies=_BACKOFFICE_DEPS)
+# Public, signature-verified GitHub webhook (no auth perimeter).
+app.include_router(_admin_github.webhook_router, prefix="/api")
 from backend.app.api.routes import company as _company
 app.include_router(_company.router, prefix="/api")
 from backend.app.api.routes import files as _files
@@ -486,6 +521,9 @@ from backend.app.api.routes import search as _search  # noqa: E402
 app.include_router(_search.router, prefix="/api")
 from backend.app.api.routes import onboarding as _onboarding  # noqa: E402
 app.include_router(_onboarding.router, prefix="/api")
+# Task #16 — Organizations directory (Network > Organizations) read API.
+from backend.app.api.routes import organizations as _organizations  # noqa: E402
+app.include_router(_organizations.router, prefix="/api")
 from backend.app.api.routes import profiling as _profiling  # noqa: E402
 app.include_router(_profiling.router, prefix="/api")
 from backend.app.api.routes import kyc as _kyc  # noqa: E402
@@ -496,8 +534,17 @@ app.include_router(_brand.router, prefix="/api")
 # Task #38 — dev-only parity shims (Skills profile + Payouts/network).
 from backend.app.api.routes import skills as _skills  # noqa: E402
 app.include_router(_skills.router, prefix="/api")
+# Task #12 — secure introductions & matching flow (distinct namespace from the
+# credits-based /api/introductions worker system).
+from backend.app.api.routes import network_introductions as _network_intros  # noqa: E402
+app.include_router(_network_intros.router, prefix="/api")
+from backend.app.api.routes import introductions as _introductions  # noqa: E402
+app.include_router(_introductions.router, prefix="/api")
 from backend.app.api.routes import network as _network  # noqa: E402
 app.include_router(_network.router, prefix="/api")
+# Task #8 — redesigned Products page: catalog, payments, cart orders, webhook.
+from backend.app.api.routes import commerce as _commerce  # noqa: E402
+app.include_router(_commerce.router, prefix="/api")
 
 # --- Public landing page HTML (Task #4 parity) ----------------------------
 # The dev backend serves HTML directly for /landing/:slug and
@@ -527,6 +574,46 @@ def _landing_preview(token: str, request: Request, session: Session = Depends(ge
         raise HTTPException(status_code=404, detail="not found")
     nonce = getattr(request.state, "csp_nonce", "")
     return _render_landing_html(row, noindex=True, csp_nonce=nonce)
+
+# Task #2 — branded multi-page site URLs (/p/{startup}/{page}); /p/{startup}
+# renders the site's home page. Mirrors the Worker's renderSitePage.
+def _render_site_page(site_slug: str, page_slug, request: Request, session: Session):
+    from backend.app.api.routes.brand import _ensure_schema, _render_landing_html
+    _ensure_schema(session)
+    site = session.exec(text(
+        "SELECT project_id FROM brand_sites WHERE slug = :slug"
+    ), params={"slug": site_slug}).mappings().first()
+    if not site:
+        raise HTTPException(status_code=404, detail="not found")
+    if page_slug:
+        row = session.exec(text(
+            "SELECT * FROM landing_pages WHERE project_id = :pid AND page_slug = :ps AND published = TRUE"
+        ), params={"pid": site["project_id"], "ps": page_slug}).mappings().first()
+    else:
+        # Site root: prefer the "home" page, else the oldest published page.
+        row = session.exec(text(
+            "SELECT * FROM landing_pages WHERE project_id = :pid AND published = TRUE "
+            "ORDER BY CASE WHEN page_slug = 'home' THEN 0 ELSE 1 END, id LIMIT 1"
+        ), params={"pid": site["project_id"]}).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="not found")
+    try:
+        session.exec(text(
+            "UPDATE landing_pages SET views_count = COALESCE(views_count,0)+1 WHERE id = :id"
+        ), params={"id": row["id"]})
+        session.commit()
+    except Exception:
+        session.rollback()
+    nonce = getattr(request.state, "csp_nonce", "")
+    return _render_landing_html(row, noindex=False, csp_nonce=nonce)
+
+@app.get("/p/{site_slug}/{page_slug}", response_class=HTMLResponse)
+def _site_page_html(site_slug: str, page_slug: str, request: Request, session: Session = Depends(get_session)):
+    return _render_site_page(site_slug, page_slug, request, session)
+
+@app.get("/p/{site_slug}", response_class=HTMLResponse)
+def _site_home_html(site_slug: str, request: Request, session: Session = Depends(get_session)):
+    return _render_site_page(site_slug, None, request, session)
 
 from backend.app.api.routes import decks as _decks  # noqa: E402
 app.include_router(_decks.router, prefix="/api")

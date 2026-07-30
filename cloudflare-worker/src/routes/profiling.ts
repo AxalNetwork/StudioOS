@@ -6,6 +6,8 @@ import { notifyOnboardingChat } from '../services/realtime';
 import { createAndSendEnvelope } from './esign';
 import { hashEmail } from '../util/hashEmail';
 import { run as aiRouterRun } from '../services/aiRouter';
+// Task #9 — 'exploring' holding state (side table + role-CHECK relax).
+import { ensureExploringSchema, upsertSuggestedRole } from '../services/exploringSchema';
 
 const profiling = new Hono<{ Bindings: Env }>();
 
@@ -324,50 +326,64 @@ ${transcript}`;
   const personaLabel = founderTrack ? `${persona} / ${founderTrack}` : (persona || 'unknown');
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_captured', ${`Profile captured — ${personaLabel} — pending admin verification`}, ${await hashEmail(email)}, ${user.id})`;
 
-  // Task #51-followup — auto-assign role from chatbot classification so
-  // the user can access basic features immediately (paywall gates the
-  // premium surface). Admin handles agreement + final role tweaks
-  // (e.g. promoting a partner to advisor-specific permissions) from
-  // /api/profiling/admin/list.
+  // Task #9 — intermediary "exploring" holding state. The chatbot's persona
+  // classification is a SUGGESTION only: it is stored in user_role_review
+  // (users is at D1's ALTER column limit, so review state lives in a side
+  // table) and the user's role flips to 'exploring' until an admin sends a
+  // binding agreement and explicitly assigns the final role from
+  // /api/admin/exploring. This replaces the old Task #51 auto-promotion
+  // (partner→founder/investor) — no user bypasses admin review anymore.
   //
-  // users.role has a CHECK constraint (admin/founder/partner/investor
-  // only — see sql/schema.sql) so personas outside that set fold into
-  // 'partner' here; the precise persona stays in partner_profiles for
-  // admin review.
+  // Scope guard: only users still behind the onboarding chat gate
+  // (onboarding_progress flow='chat' AND completed_at IS NULL — i.e. fresh
+  // signups; checked BEFORE the gate release below flips completed_at) and
+  // never admins. Existing already-roled users who revisit the chatbot are
+  // untouched.
   let inferredRole: string | null = null;
   if (persona === 'Founder') inferredRole = 'founder';
   else if (typeof persona === 'string' && persona.startsWith('Investor')) inferredRole = 'investor';
-  else if (persona) inferredRole = 'partner'; // Advisor / Operator / Counsel / Technical / Liquidity
-  if (inferredRole) {
-    const currentRole = String(user.role || '').toLowerCase();
-    // Never demote: admin/founder/investor stay put. Only promote from
-    // the fresh-signup default ('partner') into founder/investor when
-    // the chatbot has a higher-trust classification. partner→partner is
-    // a no-op.
-    const canPromote =
-      currentRole === 'partner' &&
-      (inferredRole === 'founder' || inferredRole === 'investor');
-    if (canPromote) {
+  else if (persona === 'Advisor') inferredRole = 'advisor';
+  else if (persona) inferredRole = 'partner'; // Operator / Counsel / Technical / Liquidity
+  const currentRole = String(user.role || '').toLowerCase();
+  let assignedRole: string | null = null;
+  if (currentRole !== 'admin' && currentRole !== 'exploring') {
+    let gateActive = false;
+    try {
+      const gateRow = await c.env.DB.prepare(
+        `SELECT flow, completed_at FROM onboarding_progress WHERE user_id = ?`
+      ).bind(user.id).first<{ flow: string | null; completed_at: string | null }>();
+      gateActive = !!gateRow && gateRow.flow === 'chat' && !gateRow.completed_at;
+    } catch (e) { console.error('[PROFILING] gate lookup failed', e); }
+    if (gateActive) {
       try {
-        await sql`UPDATE users SET role = ${inferredRole} WHERE id = ${user.id}`;
-      } catch (e) { console.error('[PROFILING] role promotion failed', e); }
+        await ensureExploringSchema(c.env);
+        await sql`UPDATE users SET role = 'exploring' WHERE id = ${user.id}`;
+        assignedRole = 'exploring';
+      } catch (e) {
+        // If the role-CHECK rebuild has not landed (ensureExploringSchema
+        // swallows its own failures), the UPDATE throws on the old CHECK.
+        // Degrade loudly but safely: the user keeps their current role
+        // (the pre-Task-#9 behavior minus auto-promotion) and the
+        // suggestion below is still recorded for admin review.
+        console.error('[PROFILING] exploring role flip failed — user keeps current role', e);
+      }
+      try {
+        await upsertSuggestedRole(c.env, user.id, inferredRole, { markOnboarded: true });
+      } catch (e) { console.error('[PROFILING] suggested role upsert failed', e); }
     }
+  } else if (currentRole === 'exploring') {
+    // Re-saving the chatbot while already exploring just refreshes the
+    // suggestion — never flips the role.
+    assignedRole = 'exploring';
+    try {
+      await upsertSuggestedRole(c.env, user.id, inferredRole, { markOnboarded: true });
+    } catch (e) { console.error('[PROFILING] suggested role upsert failed', e); }
   }
 
-  // Task #51-followup — founder track drives feature unlocking.
-  //  • "Spin-Out (New)"        → activate the 30-Day Spin-Out Lab so the
-  //                              founder must hit weekly milestones to
-  //                              unlock features (sidebar collapses to the
-  //                              lab; `users.spinout_lab_active=1`).
-  //  • "Strategic Scale (Existing)" → leave the lab off; existing founders
-  //                              get the full founder portal immediately.
-  // Admin can still flip a founder into the lab manually later.
-  if (inferredRole === 'founder' && founderTrack === 'Spin-Out (New)') {
-    try {
-      const { startLab } = await import('./spinout_lab');
-      await startLab(sql as any, user.id);
-    } catch (e) { console.error('[PROFILING] spinout lab start failed', e); }
-  }
+  // Task #9 — the Spin-Out Lab auto-start moved to the admin role
+  // assignment (routes/admin_exploring.ts): a 'Spin-Out (New)' founder
+  // track recorded in partner_profiles starts the lab when the admin
+  // confirms the founder role, not at chat-save time.
 
   // Task #66 — release the onboarding-chatbot gate. The frontend
   // RequireAuth guard in App.jsx pins every non-/onboarding/chat path
@@ -389,7 +405,18 @@ ${transcript}`;
 
   await sql.end();
 
-  return c.json({ saved: true, persona, founder_track: founderTrack, role: inferredRole, summary: extracted?.summary || null });
+  // Task #9 — `role` is the user's ACTUAL post-save role ('exploring' when
+  // the holding state applied, otherwise their unchanged role); the inferred
+  // persona travels separately as `suggested_role` so the frontend can route
+  // exploring users to /exploring without implying a final assignment.
+  return c.json({
+    saved: true,
+    persona,
+    founder_track: founderTrack,
+    role: assignedRole || currentRole || null,
+    suggested_role: inferredRole,
+    summary: extracted?.summary || null,
+  });
 });
 
 // ---------- Admin endpoints ----------

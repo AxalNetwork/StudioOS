@@ -30,6 +30,98 @@ export function isProductKind(v: unknown): v is ProductKind {
 }
 
 // ---------------------------------------------------------------------------
+// Audience categories — who a product is "for". Independent of `kind`
+// (a product can be both incorporation + legal services, e.g.).
+// ---------------------------------------------------------------------------
+export type AudienceCategory =
+  | 'founders'
+  | 'investors_lps'
+  | 'service_partners'
+  | 'advisors'
+  | 'legal_services';
+
+export const AUDIENCE_CATEGORIES: ReadonlyArray<{ value: AudienceCategory; label: string }> = [
+  { value: 'founders', label: 'For Founders' },
+  { value: 'investors_lps', label: 'For Investors / LPs' },
+  { value: 'service_partners', label: 'For Service Partners' },
+  { value: 'advisors', label: 'For Advisors' },
+  { value: 'legal_services', label: 'Legal Services' },
+];
+
+const AUDIENCE_SET: ReadonlySet<string> = new Set(AUDIENCE_CATEGORIES.map((a) => a.value));
+
+export function isAudienceCategory(v: unknown): v is AudienceCategory {
+  return typeof v === 'string' && AUDIENCE_SET.has(v);
+}
+
+/**
+ * Resolve a product's audience categories. Priority:
+ *   1. Explicit `metadata.audience` — comma-separated category slugs, set by
+ *      an admin. Unknown slugs are dropped rather than rejected, so a typo
+ *      degrades to "uncategorised" instead of breaking the read.
+ *   2. Heuristic fallback from `kind` + tier/plan metadata + a keyword scan
+ *      of the product name, so existing catalog entries (created before this
+ *      taxonomy existed) still land somewhere sensible without a manual edit.
+ * A product may belong to more than one category (e.g. incorporation is
+ * both founders + legal_services).
+ */
+export function deriveCategories(
+  name: string,
+  kind: ProductKind,
+  metadata: Record<string, string>,
+): AudienceCategory[] {
+  if (metadata.audience) {
+    const explicit = metadata.audience
+      .split(',')
+      .map((s) => s.trim())
+      .filter(isAudienceCategory);
+    if (explicit.length > 0) return [...new Set(explicit)];
+  }
+
+  const cats = new Set<AudienceCategory>();
+  const n = name.toLowerCase();
+
+  if (kind === 'incorporation') {
+    cats.add('founders');
+    cats.add('legal_services');
+  }
+  if (kind === 'subscription') {
+    if (metadata.tier === 'growth' || metadata.tier === 'studio') cats.add('founders');
+    if (metadata.investor_tier === 'professional' || metadata.investor_tier === 'institutional') {
+      cats.add('investors_lps');
+    }
+    if (metadata.plan === 'mi_pro') cats.add('investors_lps');
+  }
+
+  // Keyword fallback — covers alacarte/session products and anything the
+  // structured metadata above didn't already classify. Tokenize on
+  // non-alphanumerics so plurals/punctuation ("LP's", "Founders,") and
+  // standalone abbreviations ("LP") match without false-positiving on
+  // substrings inside unrelated words.
+  const tokens = new Set(n.split(/[^a-z0-9]+/).filter(Boolean));
+  if (tokens.has('founder') || tokens.has('founders')) cats.add('founders');
+  if (
+    tokens.has('investor') ||
+    tokens.has('investors') ||
+    tokens.has('lp') ||
+    tokens.has('lps')
+  ) {
+    cats.add('investors_lps');
+  }
+  if (tokens.has('advisor') || tokens.has('advisors')) cats.add('advisors');
+  if (tokens.has('partner') || tokens.has('partners')) cats.add('service_partners');
+  if (
+    n.includes('registered agent') ||
+    tokens.has('legal') ||
+    tokens.has('incorporation')
+  ) {
+    cats.add('legal_services');
+  }
+
+  return [...cats];
+}
+
+// ---------------------------------------------------------------------------
 // Normalised shapes (what we mirror + return to the API).
 // ---------------------------------------------------------------------------
 export interface CatalogPrice {
@@ -49,6 +141,7 @@ export interface CatalogProduct {
   kind: ProductKind;
   active: boolean;
   metadata: Record<string, string>;
+  categories: AudienceCategory[];
   prices: CatalogPrice[];
   synced_at: string;
 }
@@ -164,12 +257,14 @@ export async function fetchStripeCatalog(env: Env): Promise<CatalogProduct[]> {
   return products.map((prod) => {
     const metadata = prod.metadata ?? {};
     const productPrices = pricesByProduct.get(prod.id) ?? [];
+    const kind = deriveKind(metadata, productPrices);
     return {
       id: prod.id,
       name: prod.name,
-      kind: deriveKind(metadata, productPrices),
+      kind,
       active: prod.active,
       metadata,
+      categories: deriveCategories(prod.name, kind, metadata),
       prices: productPrices,
       synced_at: now,
     };
@@ -226,12 +321,14 @@ function rowToProduct(row: CatalogRow): CatalogProduct {
   } catch {
     /* corrupt row → empty prices */
   }
+  const kind = isProductKind(row.kind) ? row.kind : 'alacarte';
   return {
     id: row.id,
     name: row.name,
-    kind: isProductKind(row.kind) ? row.kind : 'alacarte',
+    kind,
     active: row.active === 1,
     metadata,
+    categories: deriveCategories(row.name, kind, metadata),
     prices,
     synced_at: row.synced_at,
   };
@@ -289,7 +386,11 @@ export async function syncCatalog(env: Env): Promise<{ synced: number }> {
  * Read the mirrored catalog from D1, optionally filtered by kind. Self-heals:
  * if the mirror is empty and Stripe is configured, runs a sync first.
  */
-export async function getCatalog(env: Env, kind?: ProductKind): Promise<CatalogProduct[]> {
+export async function getCatalog(
+  env: Env,
+  kind?: ProductKind,
+  audience?: AudienceCategory,
+): Promise<CatalogProduct[]> {
   await ensureCatalogSchema(env);
 
   const countRow = await env.DB.prepare('SELECT COUNT(*) AS n FROM stripe_products')
@@ -308,7 +409,10 @@ export async function getCatalog(env: Env, kind?: ProductKind): Promise<CatalogP
       ).bind(kind)
     : env.DB.prepare('SELECT * FROM stripe_products ORDER BY name COLLATE NOCASE ASC');
   const res = await stmt.all<CatalogRow>();
-  return (res.results ?? []).map(rowToProduct);
+  const products = (res.results ?? []).map(rowToProduct);
+  // Category derivation depends on name/kind/metadata, not a stored column,
+  // so the audience filter is applied in-memory after the row → product map.
+  return audience ? products.filter((p) => p.categories.includes(audience)) : products;
 }
 
 /**
@@ -517,6 +621,7 @@ export async function createProduct(env: Env, body: CreateProductBody): Promise<
       kind: body.kind,
       active: prod.active,
       metadata: prod.metadata ?? body.metadata,
+      categories: deriveCategories(prod.name, body.kind, prod.metadata ?? body.metadata),
       prices: [],
       synced_at: new Date().toISOString(),
     }

@@ -69,6 +69,55 @@ export const VALUE_SPECS: Record<AxalValueKey, AxalValueSpec> = {
 };
 
 // ---------------------------------------------------------------------------
+// Task #19 — Axal Fit & Values v2. Additive 6th value vocabulary. The v1
+// AXAL_VALUES (5) and VALUE_SPECS above are frozen (v1 rubric scoring + its unit
+// test depend on exactly 5); v2 layers `ambition` on top. The write-router
+// persists it generically to axal_values (no schema change — value_key is free
+// text), and services/fitV2Decision.ts is the only reader.
+// ---------------------------------------------------------------------------
+export const FIT_V2_VALUES = [...AXAL_VALUES, 'ambition'] as const;
+export type FitV2ValueKey = (typeof FIT_V2_VALUES)[number];
+
+export const AMBITION_SPEC: AxalValueSpec & { key: 'ambition' } = {
+  key: 'ambition' as AxalValueKey, // structurally an AxalValueSpec; v2-only key
+  label: 'Ambition',
+  description: 'Driven to build something lasting and consequential, not merely comfortable.',
+} as AxalValueSpec & { key: 'ambition' };
+
+export const FIT_V2_VALUE_SPECS: Record<string, AxalValueSpec> = {
+  ...VALUE_SPECS,
+  ambition: AMBITION_SPEC,
+};
+
+export interface FitV2ValueRow {
+  value_key: FitV2ValueKey;
+  label: string;
+  score: number;       // 0..1
+  confidence: number;  // 0..1
+}
+
+/** Read the user's 6 v2 Axal behavioral values (5 v1 + ambition). */
+export async function loadAxalValuesV2(env: Env, userId: number): Promise<FitV2ValueRow[]> {
+  const byKey = new Map<string, { score: number; confidence: number }>();
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT value_key, score, confidence FROM axal_values WHERE user_id = ?`,
+    )
+      .bind(userId)
+      .all<{ value_key: string; score: number; confidence: number }>();
+    for (const r of rows.results || []) byKey.set(r.value_key, { score: r.score, confidence: r.confidence });
+  } catch (e) {
+    console.error('[axalFit] loadAxalValuesV2:', (e as Error).message);
+  }
+  return FIT_V2_VALUES.map((key) => ({
+    value_key: key,
+    label: FIT_V2_VALUE_SPECS[key]?.label ?? key,
+    score: byKey.get(key)?.score ?? 0,
+    confidence: byKey.get(key)?.confidence ?? 0,
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // Red flags (7). Probed via `measures.red_flag = { key, at_or_below }` on
 // specific fit questions: when an answer's 0..5 score is at or below the
 // threshold, the flag fires.
@@ -338,13 +387,21 @@ async function loadAnsweredScores(
   return out;
 }
 
-/** Mean confidence across the user's 5 Axal values (0 when none recorded). */
+/**
+ * Mean confidence across the user's 5 v1 Axal values (0 when none recorded).
+ *
+ * Task #19 — must AVG over exactly the 5 v1 keys (AXAL_VALUES). The v2 6th value
+ * `ambition` also lives in axal_values, so an unfiltered AVG would let v2 data
+ * shift v1 signal_quality — breaking the additive contract. The IN (...) filter
+ * keeps v1 output invariant to v2.
+ */
 async function loadAxalMeanConfidence(env: Env, userId: number): Promise<number> {
   try {
+    const placeholders = AXAL_VALUES.map(() => '?').join(', ');
     const row = await env.DB.prepare(
-      `SELECT AVG(confidence) AS c FROM axal_values WHERE user_id = ?`,
+      `SELECT AVG(confidence) AS c FROM axal_values WHERE user_id = ? AND value_key IN (${placeholders})`,
     )
-      .bind(userId)
+      .bind(userId, ...AXAL_VALUES)
       .first<{ c: number | null }>();
     return clamp01(Number(row?.c ?? 0));
   } catch (e) {

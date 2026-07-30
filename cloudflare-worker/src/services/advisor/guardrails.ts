@@ -168,7 +168,16 @@ export interface GateResult {
 // Allowlist by persona — extending here is the only way a new tool reaches
 // the LLM. Tool names mirror the AC-3 chat client's tool registry.
 const TOOL_PERSONA_ALLOWLIST: Record<string, string[]> = {
-  writeAnswer:  ['founder', 'investor', 'advisor', 'partner', 'admin'],
+  // 'unknown' is the pre-role-detector persona (exploring users awaiting
+  // admin role review, or any user without a mapped role). They are pinned
+  // to the 3-question ROLE_DETECTOR bank by selectBank(), and the /answer
+  // eligibility gate 409s anything outside their visible bank, so allowing
+  // writeAnswer here only unlocks the detector writes (users.organization/
+  // headline + user_role_review.suggested_role) — without it the answer
+  // that ESCAPES the unknown state is itself rejected (persona_mismatch)
+  // and onboarding deadlocks. Every persona bank in writeRouter re-checks
+  // the caller's role before writing, so this grants no bank access.
+  writeAnswer:  ['unknown', 'founder', 'investor', 'advisor', 'partner', 'admin'],
   openPage:     ['founder', 'investor', 'advisor', 'partner', 'admin'],
   explainTopic: ['founder', 'investor', 'advisor', 'partner', 'admin'],
   scoreDeal:    ['investor', 'admin'],

@@ -282,6 +282,119 @@ def send_referral_invite(
     )
 
 
+def send_network_intro_invite(
+    to_email: str,
+    recipient_name: Optional[str],
+    requester: dict,
+    message: Optional[str],
+    review_url: str,
+    sender_label: str = "Axal Network",
+) -> tuple:
+    """Task #12 — branded off-platform introduction invite.
+
+    Sends the recipient a summary of the requester (name/role/company/
+    headline/photo), the short intro note, a register-at-axal.vc CTA, and a
+    secure single-use tokenized review link to accept/decline BEFORE seeing the
+    full profile. Never reveals the requester's email.
+
+    Returns (sent: bool, review_url: str). When Gmail is unconfigured we log
+    the link (dev/testing fallback) and return (False, review_url).
+    """
+    req_name = _escape_html(requester.get("name") or "A member")
+    req_role = _escape_html((requester.get("role") or "").title())
+    req_company = _escape_html(requester.get("company") or "")
+    req_headline = _escape_html(requester.get("headline") or "")
+    photo = requester.get("photo_url") or ""
+    msg_html = _escape_html(message) if message else ""
+
+    domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
+    register_url = (f"https://{domain}/register" if domain
+                    else os.environ.get("APP_URL", "https://axal.vc") + "/register")
+
+    subline = " · ".join([p for p in (req_role, req_company) if p])
+    avatar_block = (
+        f'<img src="{photo}" width="56" height="56" alt="" '
+        f'style="border-radius:28px;object-fit:cover;display:block;">'
+        if photo else
+        '<div style="width:56px;height:56px;border-radius:28px;background:#ede9fe;'
+        'color:#7c3aed;font-weight:700;font-size:20px;line-height:56px;'
+        'text-align:center;">' + (req_name[:1] if req_name else "A") + '</div>'
+    )
+    msg_block = (
+        f'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;'
+        f'padding:16px;font-size:14px;color:#374151;line-height:1.6;margin:16px 0;">'
+        f'&ldquo;{msg_html}&rdquo;</div>'
+        if msg_html else ""
+    )
+    html_body = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
+<tr><td align="center">
+<table width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;">
+<tr><td style="padding:32px 32px 0;">
+  <div style="font-size:20px;font-weight:700;color:#7c3aed;margin-bottom:20px;">&#9889; AXAL Ventures</div>
+  <h1 style="font-size:20px;font-weight:700;color:#111827;margin:0 0 4px;">You have an introduction request</h1>
+  <p style="font-size:14px;color:#6b7280;margin:0 0 20px;line-height:1.6;">
+    Hi{(' ' + _escape_html(recipient_name)) if recipient_name else ''}, someone on Axal would like to connect with you.
+  </p>
+  <table cellpadding="0" cellspacing="0" style="margin-bottom:8px;"><tr>
+    <td style="padding-right:12px;vertical-align:top;">{avatar_block}</td>
+    <td style="vertical-align:middle;">
+      <div style="font-size:15px;font-weight:700;color:#111827;">{req_name}</div>
+      <div style="font-size:13px;color:#6b7280;">{subline}</div>
+      {f'<div style="font-size:13px;color:#374151;margin-top:2px;">{req_headline}</div>' if req_headline else ''}
+    </td>
+  </tr></table>
+  {msg_block}
+  <p style="font-size:13px;color:#6b7280;line-height:1.6;margin:0 0 8px;">
+    Your contact details stay private. Review the request and decide whether to
+    connect &mdash; the other side only sees your details once you both accept.
+  </p>
+</td></tr>
+<tr><td style="padding:8px 32px 8px;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:8px 0;">
+    <a href="{review_url}" style="display:inline-block;background:#7c3aed;color:#ffffff;font-size:14px;
+    font-weight:600;text-decoration:none;padding:12px 32px;border-radius:8px;">Review the request</a>
+  </td></tr></table>
+</td></tr>
+<tr><td style="padding:0 32px 28px;">
+  <p style="font-size:12px;color:#9ca3af;line-height:1.6;margin:12px 0 0;text-align:center;">
+    New to Axal? <a href="{register_url}" style="color:#7c3aed;">Create your account</a> to claim your profile and message directly.
+  </p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body></html>"""
+    plain = (
+        f"Hi{(' ' + (recipient_name or '')).rstrip()},\n\n"
+        f"{requester.get('name') or 'A member'} on Axal Ventures would like an introduction.\n"
+        f"{subline}\n\n"
+        + (f"\"{message}\"\n\n" if message else "")
+        + "Your contact details stay private until you both accept.\n\n"
+        f"Review the request: {review_url}\n"
+        f"New to Axal? Create your account: {register_url}\n"
+    )
+    if _is_gmail_configured():
+        ok = _send_html_email(
+            to_email=to_email,
+            subject=f"{requester.get('name') or 'Someone'} would like an introduction — Axal",
+            html_body=html_body,
+            plain_text=plain,
+            sender_label=sender_label,
+        )
+        return (ok, review_url)
+    # Dev/testing fallback — no email provider configured.
+    print(f"\n{'='*60}")
+    print("NETWORK INTRODUCTION INVITE (no email provider configured)")
+    print(f"To: {to_email}")
+    print(f"Requester: {requester.get('name')}")
+    print(f"Review link: {review_url}")
+    print(f"{'='*60}\n")
+    return (False, review_url)
+
+
 def _escape_html(s: str) -> str:
     return (s.replace("&", "&amp;")
              .replace("<", "&lt;")

@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}
+    .cd-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+    .cd-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa}
+    .cd-card{background:#fff;border:1px solid #ececf1;border-radius:16px;box-shadow:0 1px 2px rgba(24,24,27,.03)}
+    .cd-row:hover{background:#faf9fc}
+    .cd-root.cd-embedded .cd-topbar{display:none!important}
+    @keyframes cdFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    @media (max-width:1080px){.cd-2col{grid-template-columns:1fr!important}.cd-funnel{overflow-x:auto}}
+    @media (max-width:720px){.cd-stats{grid-template-columns:1fr 1fr!important}.cd-drawer{width:100%!important}}
+  </style>
+</helmet>
+
+<div class="cd-root {{ embeddedClass }}" style="max-width:100%;margin:0 auto;padding:0 24px 120px">
+  <div class="cd-topbar" style="height:3px;background:#7c3aed;border-radius:0 0 3px 3px;margin-bottom:16px"></div>
+  <div class="cd-topbar" style="display:flex;align-items:center;justify-content:space-between;padding:6px 0 18px;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:12px">
+      <a href="#" onClick="{{ back }}" style="display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px 0 9px;border-radius:9px;border:1px solid #e4e4e7;background:#fff;color:#52525b;font-size:13px;font-weight:600">← Back to Workspace</a>
+      <div><div style="display:flex;align-items:center;gap:9px"><h1 style="margin:0;font-size:19px;font-weight:800;letter-spacing:-.02em">Customer Discovery</h1><span style="font-size:10.5px;font-weight:700;color:#166534;background:#dcfce7;border-radius:99px;padding:3px 9px">Active</span></div><div style="font-size:13px;color:#71717a;margin-top:2px">Structured interview evidence — pain points, ICP fit, and deck-ready quotes.</div></div>
+    </div>
+    <button onClick="{{ openLog }}" style="height:38px;padding:0 16px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 1px 2px rgba(124,58,237,.4)">+ Log interview</button>
+  </div>
+
+  <!-- STAT STRIP -->
+  <div class="cd-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
+    <sc-for list="{{ statStrip }}" as="s" hint-placeholder-count="4">
+      <div class="cd-card" style="padding:18px 20px">
+        <div class="cd-mono" style="font-size:28px;font-weight:700;color:{{ s.color }};line-height:1">{{ s.value }}</div>
+        <div style="font-size:12px;color:#71717a;margin-top:6px">{{ s.label }}</div>
+        <sc-if value="{{ s.hasBar }}"><div style="height:5px;background:#f0f0f3;border-radius:99px;margin-top:10px;overflow:hidden"><div style="height:100%;width:{{ s.barPct }};background:{{ s.color }};border-radius:99px"></div></div></sc-if>
+      </div>
+    </sc-for>
+  </div>
+
+  <div class="cd-2col" style="display:grid;grid-template-columns:1.55fr 1fr;gap:20px;align-items:start">
+    <!-- LEFT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:20px">
+
+      <!-- VALIDATION FUNNEL -->
+      <div class="cd-card" style="padding:22px">
+        <div class="cd-lbl" style="margin-bottom:18px">Discovery funnel · interviews → solution-fit</div>
+        <div class="cd-funnel" style="display:flex;align-items:flex-end;gap:6px">
+          <sc-for list="{{ funnel }}" as="f" hint-placeholder-count="4">
+            <div style="flex:1;min-width:70px;display:flex;flex-direction:column;align-items:center">
+              <div class="cd-mono" style="font-size:20px;font-weight:700;color:#27272a;margin-bottom:6px">{{ f.count }}</div>
+              <div style="width:100%;height:{{ f.h }};background:{{ f.color }};border-radius:8px"></div>
+              <div style="font-size:11.5px;font-weight:600;color:#52525b;margin-top:9px;text-align:center">{{ f.label }}</div>
+              <div style="font-size:10.5px;color:#a1a1aa;margin-top:1px">{{ f.rate }}</div>
+            </div>
+            <sc-if value="{{ f.hasArrow }}"><div style="color:#d4d4d8;font-size:16px;padding-bottom:34px">→</div></sc-if>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- PAIN POINT VALIDATION -->
+      <div class="cd-card" style="padding:22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div class="cd-lbl">Pain point validation</div><div style="display:flex;gap:12px;font-size:10px;font-weight:600"><span style="color:#dc2626">● Need</span><span style="color:#b45309">● Good</span><span style="color:#a1a1aa">● Nice</span></div></div>
+        <div style="font-size:11.5px;color:#a1a1aa;margin-bottom:16px">Ranked by mentions · need-to-have concentration anchors the deck's Problem slide</div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <sc-for list="{{ painRows }}" as="p" hint-placeholder-count="4">
+            <div>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">
+                <span style="width:20px;height:20px;flex:none;border-radius:6px;background:{{ p.rankBg }};color:{{ p.rankColor }};font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ p.rank }}</span>
+                <span style="font-size:13.5px;font-weight:600;color:#27272a;flex:1">{{ p.label }}</span>
+                <sc-if value="{{ p.anchor }}"><span style="font-size:9.5px;font-weight:700;color:#166534;background:#dcfce7;border-radius:99px;padding:2px 8px">Deck anchor</span></sc-if>
+                <span class="cd-mono" style="font-size:12px;font-weight:600;color:#52525b">{{ p.mentions }} of {{ p.total }}</span>
+              </div>
+              <div style="display:flex;height:8px;border-radius:99px;overflow:hidden;background:#f4f4f5">
+                <div style="width:{{ p.needW }};background:#dc2626" title="Need-to-have"></div>
+                <div style="width:{{ p.goodW }};background:#f59e0b" title="Good-to-have"></div>
+                <div style="width:{{ p.niceW }};background:#d4d4d8" title="Nice-to-have"></div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+                <span style="font-size:11px;color:#a1a1aa">{{ p.breakdown }}</span>
+                <button onClick="{{ p.sendToDeck }}" style="font-size:10.5px;font-weight:600;color:{{ p.deckColor }};background:{{ p.deckBg }};border:1px solid {{ p.deckBorder }};border-radius:7px;padding:3px 9px;cursor:pointer">{{ p.deckLabel }}</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- INBOUND LEADS -->
+      <div class="cd-card" style="padding:22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px">
+          <div class="cd-lbl">Inbound leads · <span style="color:#6d28d9">Brand &amp; Pages</span></div>
+          <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+            <sc-for list="{{ audienceFilters }}" as="a" hint-placeholder-count="4"><button onClick="{{ a.onClick }}" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;cursor:pointer;{{ a.style }}">{{ a.label }}</button></sc-for>
+            <button onClick="{{ openAddLead }}" style="font-size:11px;font-weight:700;color:#fff;background:#7c3aed;border:none;border-radius:99px;padding:5px 12px;cursor:pointer;margin-left:4px">+ Add lead</button>
+          </div>
+        </div>
+        <div style="font-size:11.5px;color:#a1a1aa;margin-bottom:14px">{{ inboundNote }}</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ inboundRows }}" as="l" hint-placeholder-count="3">
+            <div style="border:1px solid #f0f0f3;border-radius:12px;padding:13px 15px">
+              <div style="display:flex;align-items:flex-start;gap:12px">
+                <span style="width:34px;height:34px;flex:none;border-radius:9px;background:{{ l.avatarBg }};color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ l.initials }}</span>
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:700;color:#27272a">{{ l.name }}</span><span style="font-size:10px;font-weight:700;border-radius:99px;padding:2px 8px;{{ l.audienceStyle }}">{{ l.audienceLabel }}</span><span style="font-size:10px;font-weight:600;border-radius:99px;padding:2px 8px;{{ l.icpStyle }}">{{ l.icpPre }}</span></div>
+                  <div style="font-size:11.5px;color:#71717a;margin-top:2px">{{ l.role }} · {{ l.company }}</div>
+                  <div style="display:flex;align-items:center;gap:7px;margin-top:7px;flex-wrap:wrap">
+                    <span style="font-size:10px;font-weight:600;color:#6d28d9;background:#f5f3ff;border:1px solid #ede9fe;border-radius:6px;padding:2px 7px">{{ l.sourcePage }}</span>
+                    <span style="font-size:10.5px;color:#a1a1aa">{{ l.intent }} · {{ l.submitted }}</span>
+                  </div>
+                  <sc-if value="{{ l.note }}"><div style="font-size:11.5px;color:#52525b;font-style:italic;margin-top:7px;line-height:1.4">"{{ l.note }}"</div></sc-if>
+                </div>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:11px">
+                <button onClick="{{ l.onConvert }}" style="font-size:11px;font-weight:600;color:#fff;background:#7c3aed;border:none;border-radius:7px;padding:6px 11px;cursor:pointer">Convert to interview</button>
+                <sc-for list="{{ l.actions }}" as="ac" hint-placeholder-count="3"><button onClick="{{ ac.onClick }}" style="font-size:11px;font-weight:600;color:#52525b;background:#fff;border:1px solid #e4e4e7;border-radius:7px;padding:6px 11px;cursor:pointer">{{ ac.label }}</button></sc-for>
+              </div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ inboundEmpty }}"><div style="font-size:12px;color:#a1a1aa;text-align:center;padding:14px 0">No {{ audienceWord }} leads in the queue.</div></sc-if>
+        </div>
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid #f4f4f5;display:flex;flex-direction:column;gap:6px">
+          <sc-for list="{{ leadInsights }}" as="i" hint-placeholder-count="2"><div style="font-size:11.5px;color:#52525b;display:flex;gap:8px"><span style="color:#7c3aed">›</span>{{ i }}</div></sc-for>
+        </div>
+      </div>
+
+      <!-- INTERVIEW LOG TABLE -->
+      <div class="cd-card" style="padding:0;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px;flex-wrap:wrap;gap:10px">
+          <div class="cd-lbl">Interview log · <span style="color:#15803d">{{ loggedCount }} of ≥5 done</span></div>
+          <div style="display:flex;gap:5px">
+            <sc-for list="{{ sourceFilters }}" as="s" hint-placeholder-count="3"><button onClick="{{ s.onClick }}" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;cursor:pointer;{{ s.style }}">{{ s.label }}</button></sc-for>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;min-width:640px">
+            <thead><tr style="background:#faf9fc;border-top:1px solid #f0f0f3;border-bottom:1px solid #f0f0f3">
+              <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#71717a;padding:10px 16px;text-align:left">Contact</th>
+              <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#71717a;padding:10px 12px;text-align:left">ICP fit</th>
+              <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#71717a;padding:10px 12px;text-align:left">Top pain</th>
+              <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#71717a;padding:10px 12px;text-align:left">Source</th>
+              <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#71717a;padding:10px 12px;text-align:center">Quote</th>
+            </tr></thead>
+            <tbody>
+              <sc-for list="{{ interviewRows }}" as="r" hint-placeholder-count="5">
+                <tr class="cd-row" onClick="{{ r.onOpen }}" style="border-bottom:1px solid #f4f4f5;cursor:pointer">
+                  <td style="padding:12px 16px"><div style="display:flex;align-items:center;gap:10px"><span style="width:28px;height:28px;flex:none;border-radius:50%;background:{{ r.avatarBg }};color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ r.initial }}</span><div><div style="font-size:13px;font-weight:600;color:#27272a">{{ r.name }}</div><div style="font-size:11px;color:#a1a1aa">{{ r.title }} · {{ r.date }}</div></div></div></td>
+                  <td style="padding:12px 12px"><span style="font-size:10.5px;font-weight:700;border-radius:99px;padding:3px 9px;{{ r.fitStyle }}">{{ r.fit }}</span></td>
+                  <td style="padding:12px 12px"><span style="font-size:11px;font-weight:600;color:#6d28d9;background:#fff;border:1px solid #c4b5fd;border-radius:99px;padding:3px 10px">{{ r.topPain }}</span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;margin-left:7px;background:{{ r.sevColor }}" title="{{ r.sevLabel }}"></span></td>
+                  <td style="padding:12px 12px"><span style="font-size:10.5px;font-weight:600;border-radius:6px;padding:2px 8px;{{ r.sourceStyle }}">{{ r.source }}</span></td>
+                  <td style="padding:12px 12px;text-align:center"><sc-if value="{{ r.hasQuote }}"><span title="Deck-eligible quote" style="color:#7c3aed;font-size:14px">❝</span></sc-if></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <!-- ICP FIT SUMMARY -->
+      <div class="cd-card" style="padding:20px">
+        <div class="cd-lbl" style="margin-bottom:14px">ICP fit summary</div>
+        <div style="display:flex;height:10px;border-radius:99px;overflow:hidden;background:#f4f4f5;margin-bottom:10px">
+          <div style="width:{{ icp.strongW }};background:#16a34a" title="Strong fit"></div>
+          <div style="width:{{ icp.partialW }};background:#f59e0b" title="Partial fit"></div>
+          <div style="width:{{ icp.notW }};background:#d4d4d8" title="Not ICP"></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;color:#52525b"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#16a34a;margin-right:7px"></span>Strong fit</span><span class="cd-mono" style="font-size:12px;font-weight:600">{{ icp.strong }}</span></div>
+          <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;color:#52525b"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#f59e0b;margin-right:7px"></span>Partial fit</span><span class="cd-mono" style="font-size:12px;font-weight:600">{{ icp.partial }}</span></div>
+          <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;color:#52525b"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#d4d4d8;margin-right:7px"></span>Not ICP</span><span class="cd-mono" style="font-size:12px;font-weight:600">{{ icp.notFit }}</span></div>
+        </div>
+        <div style="margin-top:14px;padding:11px 13px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;display:flex;align-items:center;gap:9px"><span style="font-size:11px;font-weight:700;color:#166534">Confidence: {{ icp.confidence }}</span><span style="font-size:11px;color:#15803d">· {{ icp.confidenceNote }}</span></div>
+        <sc-if value="{{ icp.hasRefine }}"><div style="margin-top:9px;padding:11px 13px;background:#fffaf0;border:1px solid #f9edd6;border-radius:10px;font-size:11.5px;color:#92400e;line-height:1.4">{{ icp.refine }}</div></sc-if>
+      </div>
+
+      <!-- WORKING DEFINITION -->
+      <div class="cd-card" style="padding:20px">
+        <div class="cd-lbl" style="margin-bottom:12px">ICP · working definition</div>
+        <sc-for list="{{ icpFields }}" as="f" hint-placeholder-count="4">
+          <div style="padding:9px 0;border-top:1px solid #f4f4f5"><div style="font-size:11px;color:#a1a1aa;margin-bottom:2px">{{ f.k }}</div><div style="font-size:12.5px;font-weight:600;color:#27272a">{{ f.v }}</div></div>
+        </sc-for>
+      </div>
+
+      <!-- RECURRING THEMES -->
+      <div class="cd-card" style="padding:20px">
+        <div class="cd-lbl" style="margin-bottom:11px">Recurring themes</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <sc-for list="{{ themeTags }}" as="t" hint-placeholder-count="5"><span style="font-size:12px;font-weight:600;color:#52525b;background:#f4f4f5;border-radius:99px;padding:5px 11px">{{ t.label }} <span class="cd-mono" style="color:#a1a1aa;font-weight:700">{{ t.count }}</span></span></sc-for>
+        </div>
+      </div>
+
+      <!-- DATA ROOM -->
+      <div class="cd-card" style="padding:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div class="cd-lbl">Data room · {{ dataRoom.count }} items</div><button style="height:26px;padding:0 10px;border-radius:7px;border:1px solid #e4e4e7;background:#fff;color:#6d28d9;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">View all</button></div>
+        <div style="display:flex;flex-direction:column">
+          <sc-for list="{{ dataRoom.items }}" as="d" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #f4f4f5"><span style="width:8px;height:8px;border-radius:2px;background:{{ d.dot }}"></span><div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600;color:#27272a">{{ d.name }}</div><div style="font-size:10.5px;color:#a1a1aa">{{ d.meta }}</div></div><span style="font-size:9.5px;font-weight:700;border-radius:99px;padding:2px 8px;{{ d.chipStyle }}">{{ d.chip }}</span></div>
+          </sc-for>
+        </div>
+        <div style="margin-top:12px;padding:10px 12px;background:#fffaf0;border:1px solid #f9edd6;border-radius:10px;font-size:11px;color:#92400e;line-height:1.4">{{ dataRoom.gap }}</div>
+      </div>
+
+      <!-- DECK READINESS -->
+      <div class="cd-card" style="padding:20px">
+        <div class="cd-lbl" style="margin-bottom:14px">Deck readiness</div>
+        <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:14px">
+          <sc-for list="{{ readiness }}" as="c" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:17px;height:17px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;{{ c.iconStyle }}">{{ c.icon }}</span><span style="font-size:12.5px;color:{{ c.color }}">{{ c.label }}</span></div>
+          </sc-for>
+        </div>
+        <button onClick="{{ exportSummary }}" style="width:100%;height:38px;border-radius:9px;border:none;background:{{ exportReady ? '#7c3aed' : '#e4e4e7' }};color:{{ exportReady ? '#fff' : '#a1a1aa' }};font-family:inherit;font-size:12.5px;font-weight:700;cursor:{{ exportReady ? 'pointer' : 'not-allowed' }}">Export discovery summary</button>
+        <sc-if value="{{ exportedToast }}"><div style="margin-top:9px;font-size:11px;color:#15803d;text-align:center">✓ Summary sent to Problem slide</div></sc-if>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADD LEAD MODAL (manual) -->
+<sc-if value="{{ addLeadOpen }}">
+  <div onClick="{{ closeAddLead }}" style="position:fixed;inset:0;z-index:80;background:rgba(24,24,27,.5);backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding:60px 20px;overflow-y:auto">
+    <div onClick="{{ stop }}" style="width:100%;max-width:440px;background:#fff;border-radius:18px;box-shadow:0 30px 80px -20px rgba(24,24,27,.5);overflow:hidden">
+      <div style="padding:18px 22px;border-bottom:1px solid #f0f0f3;display:flex;align-items:center;justify-content:space-between">
+        <div><div style="font-size:15px;font-weight:800;color:#1A202C">Add lead manually</div><div style="font-size:11.5px;color:#a1a1aa;margin-top:2px">Log a customer or contact you found outside Brand &amp; Pages</div></div>
+        <button onClick="{{ closeAddLead }}" style="width:28px;height:28px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#71717a;cursor:pointer;font-size:14px">×</button>
+      </div>
+      <div style="padding:18px 22px;display:flex;flex-direction:column;gap:12px">
+        <label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.04em">Name</span><input value="{{ leadForm.name }}" onInput="{{ setLeadName }}" placeholder="Jordan Ellis" style="height:36px;border:1px solid #e4e4e7;border-radius:9px;padding:0 11px;font-size:13px"></label>
+        <label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.04em">Role / title</span><input value="{{ leadForm.role }}" onInput="{{ setLeadRole }}" placeholder="Ops Lead" style="height:36px;border:1px solid #e4e4e7;border-radius:9px;padding:0 11px;font-size:13px"></label>
+        <label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.04em">Company</span><input value="{{ leadForm.company }}" onInput="{{ setLeadCompany }}" placeholder="Acme Ops" style="height:36px;border:1px solid #e4e4e7;border-radius:9px;padding:0 11px;font-size:13px"></label>
+        <label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.04em">Email</span><input value="{{ leadForm.email }}" onInput="{{ setLeadEmail }}" placeholder="jordan@acme.co" style="height:36px;border:1px solid #e4e4e7;border-radius:9px;padding:0 11px;font-size:13px"></label>
+        <div>
+          <span style="font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.04em">Audience</span>
+          <div style="display:flex;gap:6px;margin-top:5px"><sc-for list="{{ leadAudienceOpts }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.onClick }}" style="font-size:11.5px;font-weight:600;padding:6px 11px;border-radius:8px;cursor:pointer;{{ o.style }}">{{ o.label }}</button></sc-for></div>
+        </div>
+        <label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.04em">Note (optional)</span><textarea value="{{ leadForm.note }}" onInput="{{ setLeadNote }}" placeholder="How you met them, what they're interested in…" rows="2" style="border:1px solid #e4e4e7;border-radius:9px;padding:8px 11px;font-size:13px;resize:vertical"></textarea></label>
+      </div>
+      <div style="padding:14px 22px;border-top:1px solid #f0f0f3;display:flex;justify-content:flex-end;gap:8px">
+        <button onClick="{{ closeAddLead }}" style="font-size:12.5px;font-weight:600;color:#52525b;background:#fff;border:1px solid #e4e4e7;border-radius:9px;padding:8px 14px;cursor:pointer">Cancel</button>
+        <button onClick="{{ saveAddLead }}" style="font-size:12.5px;font-weight:700;color:#fff;background:#7c3aed;border:none;border-radius:9px;padding:8px 16px;cursor:pointer;{{ saveLeadDisabled }}">Add lead</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<!-- LOG INTERVIEW MODAL (stepper) -->
+<sc-if value="{{ logOpen }}">
+  <div onClick="{{ closeLog }}" style="position:fixed;inset:0;z-index:80;background:rgba(24,24,27,.5);backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto;animation:cdFade .18s ease">
+    <div onClick="{{ stop }}" style="width:100%;max-width:660px;background:#fff;border-radius:20px;box-shadow:0 30px 80px -20px rgba(24,24,27,.5);overflow:hidden">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 24px 0">
+        <div><h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em">Log Interview</h2><div class="cd-mono" style="font-size:12px;color:#71717a;margin-top:3px">{{ logSubtitle }}</div></div>
+        <button onClick="{{ closeLog }}" style="width:30px;height:30px;border-radius:8px;border:none;background:#f4f4f5;color:#71717a;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center">×</button>
+      </div>
+      <!-- stepper -->
+      <div style="display:flex;gap:8px;padding:16px 24px">
+        <sc-for list="{{ steps }}" as="st" hint-placeholder-count="3"><div onClick="{{ st.onClick }}" style="flex:1;cursor:pointer"><div style="height:4px;border-radius:99px;background:{{ st.barColor }}"></div><div style="font-size:11px;font-weight:600;color:{{ st.textColor }};margin-top:6px">{{ st.num }}. {{ st.label }}</div></div></sc-for>
+      </div>
+      <div style="padding:6px 24px 4px;min-height:280px">
+        <!-- STEP 1: CONTACT -->
+        <sc-if value="{{ isStep1 }}">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px" class="cd-2col">
+            <label><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:5px">Name</div><input type="text" value="{{ form.name }}" onChange="{{ setName }}" placeholder="Full name" style="width:100%;height:38px;padding:0 12px;border:1px solid #e4e4e7;border-radius:9px;font-size:13px;outline:none;font-family:inherit"></label>
+            <label><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:5px">Role / title</div><input type="text" value="{{ form.role }}" onChange="{{ setRole }}" placeholder="e.g. VP Ops" style="width:100%;height:38px;padding:0 12px;border:1px solid #e4e4e7;border-radius:9px;font-size:13px;outline:none;font-family:inherit"></label>
+            <label><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:5px">Company / segment</div><input type="text" value="{{ form.company }}" onChange="{{ setCompany }}" placeholder="e.g. Distributed SaaS" style="width:100%;height:38px;padding:0 12px;border:1px solid #e4e4e7;border-radius:9px;font-size:13px;outline:none;font-family:inherit"></label>
+            <label><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:5px">Interview date</div><input type="text" value="{{ form.date }}" onChange="{{ setDate }}" placeholder="Jul 21" style="width:100%;height:38px;padding:0 12px;border:1px solid #e4e4e7;border-radius:9px;font-size:13px;outline:none;font-family:inherit"></label>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:20px;margin-top:16px">
+            <div><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:6px">Format</div><div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ formatPills }}" as="p" hint-placeholder-count="3"><button onClick="{{ p.onClick }}" style="{{ p.style }}">{{ p.label }}</button></sc-for></div></div>
+            <div><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:6px">Source</div><div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ sourcePills }}" as="p" hint-placeholder-count="4"><button onClick="{{ p.onClick }}" style="{{ p.style }}">{{ p.label }}</button></sc-for></div></div>
+          </div>
+        </sc-if>
+        <!-- STEP 2: ICP & PAIN -->
+        <sc-if value="{{ isStep2 }}">
+          <div style="margin-bottom:18px"><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:8px">ICP fit rating</div><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ fitPills }}" as="p" hint-placeholder-count="3"><button onClick="{{ p.onClick }}" style="{{ p.style }}">{{ p.label }}</button></sc-for></div></div>
+          <div style="margin-bottom:18px">
+            <div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:8px">Pain points &amp; severity</div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:9px">
+              <sc-for list="{{ painEntries }}" as="pe" hint-placeholder-count="2">
+                <div style="display:flex;align-items:center;gap:8px"><span style="flex:1;font-size:12.5px;font-weight:600;color:#6d28d9;background:#fff;border:1px solid #c4b5fd;border-radius:8px;padding:7px 11px">{{ pe.label }}</span><div style="display:flex;gap:3px"><sc-for list="{{ pe.sevPills }}" as="sv" hint-placeholder-count="3"><button onClick="{{ sv.onClick }}" style="{{ sv.style }}">{{ sv.label }}</button></sc-for></div><button onClick="{{ pe.onRemove }}" style="width:24px;height:24px;border-radius:6px;border:none;background:#f4f4f5;color:#71717a;cursor:pointer">×</button></div>
+              </sc-for>
+            </div>
+            <input type="text" value="{{ newPain }}" onChange="{{ setNewPain }}" onKeyDown="{{ onPainKey }}" placeholder="Type a pain point and press Enter" style="width:100%;height:36px;padding:0 12px;border:1px dashed #d4d4d8;border-radius:9px;font-size:13px;outline:none;background:#fafafa;font-family:inherit">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px" class="cd-2col">
+            <label><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:5px">Willingness to pay</div><input type="text" value="{{ form.wtp }}" onChange="{{ setWtp }}" placeholder="e.g. $200/mo ceiling" style="width:100%;height:38px;padding:0 12px;border:1px solid #e4e4e7;border-radius:9px;font-size:13px;outline:none;font-family:inherit"></label>
+            <label><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:5px">Must-have / blocker</div><input type="text" value="{{ form.musthave }}" onChange="{{ setMusthave }}" placeholder="e.g. Native Slack" style="width:100%;height:38px;padding:0 12px;border:1px solid #e4e4e7;border-radius:9px;font-size:13px;outline:none;font-family:inherit"></label>
+          </div>
+        </sc-if>
+        <!-- STEP 3: QUOTES & INSIGHTS -->
+        <sc-if value="{{ isStep3 }}">
+          <div style="margin-bottom:18px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;font-weight:600;color:#3f3f46">Notable quote</span><label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#6d28d9;cursor:pointer"><input type="checkbox" checked="{{ form.deckEligible }}" onChange="{{ toggleDeckEligible }}" style="accent-color:#7c3aed">Deck-eligible</label></div>
+            <textarea rows="2" value="{{ form.quote }}" onChange="{{ setQuote }}" placeholder="Paste or type a direct quote…" style="width:100%;padding:10px 12px;border:1px solid #e4e4e7;border-radius:9px;font-size:13px;outline:none;resize:vertical;font-family:inherit;font-style:italic"></textarea>
+          </div>
+          <div style="margin-bottom:18px"><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:6px">Insights</div><textarea rows="3" value="{{ form.insight }}" onChange="{{ setInsight }}" placeholder="Open-ended summary (3–5 sentences)" style="width:100%;padding:10px 12px;border:1px solid #e4e4e7;border-radius:9px;font-size:13px;outline:none;resize:vertical;font-family:inherit"></textarea></div>
+          <div><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:6px">Follow-up action</div><div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ followPills }}" as="p" hint-placeholder-count="4"><button onClick="{{ p.onClick }}" style="{{ p.style }}">{{ p.label }}</button></sc-for></div></div>
+        </sc-if>
+      </div>
+      <div style="padding:16px 24px;border-top:1px solid #f1f1f5;background:#fafafa;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <button onClick="{{ prevStep }}" style="height:38px;padding:0 15px;border-radius:9px;border:1px solid #e4e4e7;background:#fff;color:#52525b;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">{{ backLabel }}</button>
+        <button onClick="{{ nextStep }}" style="height:38px;padding:0 18px;border-radius:9px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 1px 2px rgba(124,58,237,.4)">{{ nextLabel }}</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<!-- INTERVIEW DETAIL DRAWER -->
+<sc-if value="{{ selectedInterview }}">
+  <div onClick="{{ closeDetail }}" style="position:fixed;inset:0;z-index:80;background:rgba(24,24,27,.5);backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding:48px 20px;overflow-y:auto;animation:cdFade .18s ease">
+    <div onClick="{{ stop }}" style="width:100%;max-width:600px;background:#fff;border-radius:20px;box-shadow:0 30px 80px -20px rgba(24,24,27,.5);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:13px;padding:20px 24px;border-bottom:1px solid #f1f1f5">
+        <div style="width:42px;height:42px;flex:none;border-radius:50%;background:{{ selectedInterview.avatarBg }};color:#fff;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center">{{ selectedInterview.initial }}</div>
+        <div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:800;color:#18181b;letter-spacing:-.01em">{{ selectedInterview.name }}</div><div class="cd-mono" style="font-size:12px;color:#71717a">{{ selectedInterview.title }} · Interviewed {{ selectedInterview.date }}, 2026</div></div>
+        <button onClick="{{ closeDetail }}" style="width:30px;height:30px;border-radius:8px;border:none;background:#f4f4f5;color:#71717a;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center">×</button>
+      </div>
+      <div style="padding:22px 24px;display:flex;flex-direction:column;gap:20px">
+        <sc-if value="{{ selectedInterview.hasSource }}"><div style="display:flex;align-items:center;gap:8px;padding:10px 13px;background:#f5f3ff;border:1px solid #ede9fe;border-radius:10px"><span style="font-size:11px;font-weight:700;color:#6d28d9">Source: {{ selectedInterview.source }}</span><span style="font-size:11px;color:#7c3aed">· {{ selectedInterview.sourcePage }}</span></div></sc-if>
+        <div><div class="cd-lbl" style="margin-bottom:9px">ICP signal</div><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ selectedInterview.icp }}" as="t" hint-placeholder-count="2"><span style="font-size:11px;font-weight:700;color:#6d28d9;background:#f5f3ff;border:1px solid #ede9fe;border-radius:99px;padding:4px 10px">{{ t }}</span></sc-for></div></div>
+        <div><div class="cd-lbl" style="margin-bottom:9px">Pain points</div><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ selectedInterview.painPoints }}" as="p" hint-placeholder-count="3"><span style="font-size:12px;font-weight:600;color:#6d28d9;background:#fff;border:1px solid #c4b5fd;border-radius:99px;padding:5px 11px">{{ p }}</span></sc-for></div></div>
+        <div><div class="cd-lbl" style="margin-bottom:9px">Notable quotes</div><div style="display:flex;flex-direction:column;gap:8px"><sc-for list="{{ selectedInterview.quotesArr }}" as="q" hint-placeholder-count="2"><div style="font-size:13px;font-style:italic;color:#3f3f46;line-height:1.5;background:#fafafa;border-left:2px solid #c4b5fd;border-radius:0 9px 9px 0;padding:10px 13px">"{{ q }}"</div></sc-for></div></div>
+        <div><div class="cd-lbl" style="margin-bottom:9px">Insights</div><p style="margin:0;font-size:13px;color:#3f3f46;line-height:1.55">{{ selectedInterview.insightFull }}</p></div>
+        <div><div class="cd-lbl" style="margin-bottom:9px">Next steps</div><div style="display:flex;flex-direction:column;gap:7px"><sc-for list="{{ selectedInterview.nextSteps }}" as="s" hint-placeholder-count="2"><div style="display:flex;align-items:center;gap:9px"><span style="width:16px;height:16px;flex:none;border-radius:5px;background:#fff;border:1.5px solid #d4d4d8"></span><span style="font-size:12.5px;color:#3f3f46">{{ s }}</span></div></sc-for></div></div>
+      </div>
+      <div style="display:flex;gap:10px;padding:16px 24px;border-top:1px solid #f1f1f5;background:#fafafa">
+        <button style="flex:1;height:38px;border-radius:9px;border:1px solid #e4e4e7;background:#fff;color:#6d28d9;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Invite to meet</button>
+        <button onClick="{{ closeDetail }}" style="height:38px;padding:0 16px;border-radius:9px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer">Close</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:null,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = {
+    logOpen:false, logStep:1, selectedInterview:null,
+    addLeadOpen:false, leadForm:{ name:'', role:'', company:'', email:'', audience:'customer', note:'' },
+    audienceFilter:'customer', sourceFilter:'all',
+    deckPains:{}, exportedToast:false,
+    newPain:'',
+    form:{ name:'', role:'', company:'', date:'Jul 21', format:'Call', source:'Warm intro',
+      fit:'Strong fit', pains:[], wtp:'', musthave:'', quote:'', deckEligible:true, insight:'', follow:'Invite to beta' },
+    interviews:[
+      { initial:'S', name:'Sarah T.', title:'VP Ops · SaaS', date:'Jul 2', avatarBg:'#7c3aed', fit:'Strong fit', source:'Manual',
+        topPain:'Async workflow gaps', severity:'need',
+        painPoints:['Async workflow gaps','Context lost across tools'], quotesArr:['Current tools don\u2019t handle async workflows \u2014 we lose the thread constantly.'], deckQuote:true, icp:['Strong fit','Early adopter'],
+        insightFull:'Strong async pain. Manages a distributed team of 40 and actively cobbling together three tools. High intent \u2014 asked to join the beta unprompted.', nextSteps:['Send follow-up email','Add to prototype beta list'] },
+      { initial:'M', name:'Marcus R.', title:'Founder · Agency', date:'Jul 3', avatarBg:'#0891b2', fit:'Partial fit', source:'Manual',
+        topPain:'Budget ceiling', severity:'good',
+        painPoints:['Budget ceiling','Per-seat pricing fatigue'], quotesArr:['Anything over $200 a month and I\u2019d need to justify it to the whole team.'], deckQuote:false, icp:['Partial fit','Skeptic'],
+        insightFull:'Interested but price-anchored. Agency margins are thin; would need clear ROI within a month. Good signal on packaging, not an early adopter.', nextSteps:['Schedule second interview'] },
+      { initial:'D', name:'Diana K.', title:'Eng Lead · Fintech', date:'Jul 4', avatarBg:'#4f46e5', fit:'Strong fit', source:'Brand & Pages', sourcePage:'Product Waitlist',
+        topPain:'Slack integration required', severity:'need',
+        painPoints:['Slack integration required','Tool sprawl'], quotesArr:['If it doesn\u2019t live in Slack, my team won\u2019t use it. Full stop.'], deckQuote:true, icp:['Strong fit','Champion'],
+        insightFull:'Native Slack integration is the deciding factor. Willing to champion internally if the integration is first-class. Strong fit for design-partner program.', nextSteps:['Send follow-up email','Schedule second interview'] },
+      { initial:'J', name:'James W.', title:'PM · Remote-first', date:'Jul 5', avatarBg:'#0d9488', fit:'Strong fit', source:'Brand & Pages', sourcePage:'Demo Request',
+        topPain:'Slow discovery', severity:'need',
+        painPoints:['Slow discovery','No single source of truth'], quotesArr:['Discovery takes three times longer than it should \u2014 everything is scattered.'], deckQuote:true, icp:['Strong fit','Early adopter'],
+        insightFull:'Feels the pain acutely across a remote org. Sees clear value in consolidation. Would pilot immediately with a small team.', nextSteps:['Add to prototype beta list'] },
+      { initial:'P', name:'Priya M.', title:'COO · SMB', date:'Jul 6', avatarBg:'#db2777', fit:'Strong fit', source:'Referral',
+        topPain:'Fragmented customer data', severity:'need',
+        painPoints:['Fragmented customer data','Manual handoffs'], quotesArr:['We have no single source of truth \u2014 data lives in five places.'], deckQuote:false, icp:['Strong fit','Champion'],
+        insightFull:'Operational pain around fragmented data. Champion-level enthusiasm; already maps to our ICP. Prioritize for beta and testimonial.', nextSteps:['Send follow-up email','Add to prototype beta list'] },
+    ],
+    inbound:[
+      { id:'l1', name:'Elena Vasquez', initials:'EV', avatarBg:'#7c3aed', role:'Head of Ops', company:'Nomadic (120 ppl)', audience:'customer', icpPre:'Likely ICP', sourcePage:'Product Waitlist', intent:'Waitlist', submitted:'2h ago', note:'We\u2019re drowning in Slack threads and Notion docs — need one place.' },
+      { id:'l2', name:'Tom Bradley', initials:'TB', avatarBg:'#0891b2', role:'RevOps Lead', company:'Flowbase', audience:'customer', icpPre:'Possible ICP', sourcePage:'Demo Request', intent:'Demo request', submitted:'5h ago', note:'Curious how this compares to our current stack.' },
+      { id:'l3', name:'Aisha Kwon', initials:'AK', avatarBg:'#db2777', role:'Founder', company:'Stealth', audience:'customer', icpPre:'Unclear', sourcePage:'Beta Interest', intent:'Beta interest', submitted:'1d ago', note:'' },
+      { id:'l4', name:'Raj Patel', initials:'RP', avatarBg:'#4f46e5', role:'Ex-VP Eng', company:'Angel', audience:'advisor', icpPre:'\u2014', sourcePage:'Advisor Page', intent:'Advisor interest', submitted:'6h ago', note:'Happy to advise on infra scaling.' },
+      { id:'l5', name:'Nadia Okonkwo', initials:'NO', avatarBg:'#16a34a', role:'Product / GTM', company:'\u2014', audience:'cofounder', icpPre:'\u2014', sourcePage:'Co-founder Page', intent:'Co-founder interest', submitted:'2d ago', note:'Interested in the GTM co-founder role.' },
+    ],
+  };
+
+  s(v){ this.setState(v); }
+  setForm(k,v){ this.setState(st => ({ form:{...st.form,[k]:v} })); }
+
+  renderVals(){
+    const st=this.state; const F=st.form;
+    const pill=(active)=> active
+      ? 'font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:99px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;cursor:pointer;font-family:inherit'
+      : 'font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:99px;border:1px solid #e4e4e7;background:#fff;color:#52525b;cursor:pointer;font-family:inherit';
+
+    // ---- interviews & aggregates ----
+    const ivs=st.interviews;
+    const logged=ivs.length;
+    const distinctPains=[...new Set(ivs.flatMap(i=>i.painPoints))].length;
+
+    // pain aggregation with severity buckets
+    const painAgg={};
+    ivs.forEach(iv=>{ iv.painPoints.forEach((p,idx)=>{ const sev = idx===0 ? iv.severity : 'good';
+      if(!painAgg[p]) painAgg[p]={label:p,need:0,good:0,nice:0,total:0};
+      painAgg[p][sev]=(painAgg[p][sev]||0)+1; painAgg[p].total++; }); });
+    let painList=Object.values(painAgg).sort((a,b)=>b.total-a.total);
+    const N=18; // reported reach denominator (mirrors deck "X of 18")
+    const scaleUp={ 'Async workflow gaps':14,'Slow discovery':14,'Slack integration required':11,'No single source of truth':11,'Fragmented customer data':9 };
+    const painRows=painList.slice(0,4).map((p,i)=>{
+      const mentions=scaleUp[p.label]||p.total;
+      const tot=p.need+p.good+p.nice||1;
+      const anchor=p.need>=p.good+p.nice && mentions>=9;
+      const on=!!st.deckPains[p.label];
+      return { label:p.label, rank:i+1, mentions, total:N,
+        rankBg:i===0?'#7c3aed':'#f5f3ff', rankColor:i===0?'#fff':'#6d28d9',
+        needW:(p.need/tot*100)+'%', goodW:(p.good/tot*100)+'%', niceW:(p.nice/tot*100)+'%',
+        breakdown:`${p.need} need · ${p.good} good · ${p.nice} nice`,
+        anchor, sendToDeck:()=>this.setState(s=>({deckPains:{...s.deckPains,[p.label]:!s.deckPains[p.label]}})),
+        deckLabel: on?'✓ On Problem slide':'Send to Problem slide',
+        deckColor: on?'#166534':'#6d28d9', deckBg: on?'#dcfce7':'#f5f3ff', deckBorder: on?'#bbf7d0':'#ede9fe' };
+    });
+
+    // ICP fit summary
+    const strong=ivs.filter(i=>i.fit==='Strong fit').length;
+    const partial=ivs.filter(i=>i.fit==='Partial fit').length;
+    const notFit=ivs.filter(i=>i.fit==='Not ICP').length;
+    const pct=(n)=>logged?Math.round(n/logged*100):0;
+    const conf = logged>=5 ? 'High' : logged>=3 ? 'Medium' : 'Low';
+    const icp={ strong:pct(strong)+'%', partial:pct(partial)+'%', notFit:pct(notFit)+'%',
+      strongW:pct(strong)+'%', partialW:pct(partial)+'%', notW:pct(notFit)+'%',
+      confidence:conf, confidenceNote:`${logged} interviews logged`,
+      hasRefine: strong/logged>0.7,
+      refine:'80% strong-fit skews to distributed SaaS ops. Consider narrowing the ICP segment from "50–500 employees" toward the 50–200 band where pain is most acute.' };
+
+    // funnel
+    const funnelData=[['Reached',30,'100%','#6d28d9'],['Qualified',22,'73%','#8b5cf6'],['Pain confirmed',17,'57%','#a78bfa'],['Solution-fit',11,'37%','#c4b5fd']];
+    const maxF=30;
+    const funnel=funnelData.map((f,i)=>({ label:f[0], count:f[1], rate:f[2], color:f[3], h:(40+f[1]/maxF*110)+'px', hasArrow:i<funnelData.length-1 }));
+
+    // stat strip
+    const statStrip=[
+      { value:''+logged, label:'Interviews logged', color:'#6d28d9', hasBar:false },
+      { value:''+distinctPains, label:'Distinct pains', color:'#6d28d9', hasBar:false },
+      { value:'4 of 5', label:'Hypotheses validated', color:'#6d28d9', hasBar:false },
+      { value:`${Math.min(logged,5)} of 5`, label:'Minimum interviews', color: logged>=5?'#16a34a':'#f59e0b', hasBar:true, barPct:Math.min(100,logged/5*100)+'%' },
+    ];
+
+    // ---- inbound leads ----
+    const audStyle={ customer:'color:#6d28d9;background:#f5f3ff', advisor:'color:#2563eb;background:#eff6ff', cofounder:'color:#0d9488;background:#ecfdf5' };
+    const audLabel={ customer:'Customer', advisor:'Advisor', cofounder:'Co-founder' };
+    const icpPreStyle=(s)=>({ 'Likely ICP':'color:#166534;background:#dcfce7','Possible ICP':'color:#b45309;background:#fef3c7','Unclear':'color:#71717a;background:#f4f4f5','Likely non-ICP':'color:#991b1b;background:#fef2f2' }[s]||'color:#71717a;background:#f4f4f5');
+    const af=st.audienceFilter;
+    const filteredInbound = af==='all' ? st.inbound : st.inbound.filter(l=>l.audience===af);
+    const routeLabel={ customer:'', advisor:'Route to Advisors', cofounder:'Route to Co-founder' };
+    const inboundRows=filteredInbound.map(l=>({
+      ...l, audienceStyle:audStyle[l.audience], audienceLabel:audLabel[l.audience],
+      icpStyle: l.audience==='customer'?icpPreStyle(l.icpPre):'display:none', 
+      onConvert:()=>this.convertLead(l),
+      actions:[ {label:'Qualify',onClick:()=>{}}, {label:'Follow-up',onClick:()=>{}}, (l.audience!=='customer'?{label:routeLabel[l.audience],onClick:()=>{}}:{label:'Add to beta',onClick:()=>{}}), {label:'Archive',onClick:()=>this.archiveLead(l.id)} ].filter(Boolean),
+    }));
+    const audienceFilters=[['customer','Customers'],['advisor','Advisors'],['cofounder','Co-founders'],['all','All inbound']].map(([k,lab])=>({
+      label:lab, onClick:()=>this.s({audienceFilter:k}),
+      style: af===k?'color:#fff;background:#7c3aed;border:1px solid #7c3aed':'color:#71717a;background:#fff;border:1px solid #e4e4e7' }));
+    const routeNote={ customer:'Routing to → Customer Discovery. Customer-intent leads are prioritized for interviews.', advisor:'These route to → Advisors. Shown here for visibility only.', cofounder:'These route to → Co-founder Match. Shown here for visibility only.', all:'All audiences. Customer leads stay here; advisor and co-founder leads route to their own tools.' };
+    const leadInsights=[ '6 qualified discovery leads came from the Product Waitlist page.', 'Brand & Pages leads show higher ICP fit than cold outreach.', 'Most qualified inbound leads selected the async-workflow pain.' ];
+
+    // ---- interview log table ----
+    const fitStyle=(f)=>({ 'Strong fit':'color:#166534;background:#dcfce7','Partial fit':'color:#b45309;background:#fef3c7','Not ICP':'color:#71717a;background:#f4f4f5' }[f]);
+    const sevColor={ need:'#dc2626', good:'#f59e0b', nice:'#d4d4d8' };
+    const sevLabel={ need:'Need-to-have', good:'Good-to-have', nice:'Nice-to-have' };
+    const srcStyle=(s)=> s==='Brand & Pages' ? 'color:#6d28d9;background:#f5f3ff' : s==='Referral' ? 'color:#2563eb;background:#eff6ff' : 'color:#71717a;background:#f4f4f5';
+    const sf=st.sourceFilter;
+    let rows=ivs.slice();
+    if(sf==='brand') rows=rows.filter(i=>i.source==='Brand & Pages');
+    else if(sf==='manual') rows=rows.filter(i=>i.source==='Manual');
+    const interviewRows=rows.map(iv=>({ ...iv, fitStyle:fitStyle(iv.fit), sevColor:sevColor[iv.severity], sevLabel:sevLabel[iv.severity], sourceStyle:srcStyle(iv.source), hasQuote:iv.deckQuote, onOpen:()=>this.s({selectedInterview:{ ...iv, hasSource: iv.source==='Brand & Pages', sourcePage: iv.sourcePage||'' }}) }));
+    const sourceFilters=[['all','All'],['manual','Manual'],['brand','Brand & Pages']].map(([k,lab])=>({
+      label:lab, onClick:()=>this.s({sourceFilter:k}),
+      style: sf===k?'color:#fff;background:#7c3aed;border:1px solid #7c3aed':'color:#71717a;background:#fff;border:1px solid #e4e4e7' }));
+
+    // themes with counts
+    const themeCounts={};
+    ivs.forEach(i=>i.painPoints.forEach(p=>{ themeCounts[p]=(themeCounts[p]||0)+1; }));
+    const themeTags=[['Async workflows',6],['Slack integration',4],['$200/mo ceiling',3],['Single source of truth',5],['Onboarding speed',2]].map(([label,count])=>({label,count}));
+
+    const icpFields=[
+      { k:'Segment', v:'Ops leads at distributed SaaS companies (50–500 employees)' },
+      { k:'Primary pain', v:'No single source of truth for workflow data' },
+      { k:'Willingness to pay', v:'$200/mo threshold; price-sensitive above' },
+      { k:'Must-have', v:'Native Slack integration' },
+    ];
+
+    // data room
+    const dataRoom={ count:8, items:[
+      { name:'Interview recordings (5)', meta:'Otter.ai transcripts', dot:'#16a34a', chip:'Complete', chipStyle:'color:#166534;background:#dcfce7' },
+      { name:'Discovery summary', meta:'Auto-generated · Jul 20', dot:'#7c3aed', chip:'Ready', chipStyle:'color:#166534;background:#dcfce7' },
+      { name:'Inbound lead evidence', meta:'Brand & Pages submissions', dot:'#6d28d9', chip:'6 items', chipStyle:'color:#6d28d9;background:#f5f3ff' },
+      { name:'ICP working definition', meta:'Confirmed', dot:'#16a34a', chip:'Ready', chipStyle:'color:#166534;background:#dcfce7' },
+    ], gap:'3 of 5 interviews have no attached notes. Attach transcripts to strengthen the data room.' };
+
+    // deck readiness
+    const deckPainCount=Object.values(st.deckPains).filter(Boolean).length;
+    const deckQuoteCount=ivs.filter(i=>i.deckQuote).length;
+    const checks=[
+      { label:'Minimum 5 interviews met', ok:logged>=5 },
+      { label:'Top 3 pain points identified', ok:painList.length>=3 },
+      { label:'Deck-eligible quote per top pain', ok:deckQuoteCount>=3 },
+      { label:'ICP definition confirmed', ok:true },
+    ];
+    const readiness=checks.map(c=>({ label:c.label, color:c.ok?'#27272a':'#a1a1aa', icon:c.ok?'✓':'', iconStyle:c.ok?'background:#16a34a;color:#fff':'background:#fff;border:1.5px solid #d4d4d8;color:transparent' }));
+    const exportReady=checks.every(c=>c.ok);
+
+    // ---- log modal ----
+    const step=st.logStep;
+    const stepDefs=[[1,'Contact'],[2,'ICP & Pain'],[3,'Quotes & Insights']];
+    const steps=stepDefs.map(([n,lab])=>({ num:n, label:lab, onClick:()=>this.s({logStep:n}),
+      barColor: n<=step?'#7c3aed':'#e4e4e7', textColor: n===step?'#6d28d9':'#a1a1aa' }));
+    const formatPills=['Call','In-person','Async'].map(l=>({label:l,onClick:()=>this.setForm('format',l),style:pill(F.format===l)}));
+    const sourcePills=['Warm intro','Cold outreach','Community','Existing user','Brand & Pages'].map(l=>({label:l,onClick:()=>this.setForm('source',l),style:pill(F.source===l)}));
+    const fitPills=['Strong fit','Partial fit','Not ICP'].map(l=>({label:l,onClick:()=>this.setForm('fit',l),style:pill(F.fit===l)}));
+    const followPills=['Invite to beta','Invite to pilot','Request intro','No further action'].map(l=>({label:l,onClick:()=>this.setForm('follow',l),style:pill(F.follow===l)}));
+    const sevOpt=[['need','Need'],['good','Good'],['nice','Nice']];
+    const painEntries=F.pains.map((pe,idx)=>({ label:pe.label,
+      sevPills:sevOpt.map(([k,lab])=>({label:lab,onClick:()=>this.setPainSev(idx,k),
+        style: pe.sev===k?`font-size:10px;font-weight:700;padding:4px 7px;border-radius:6px;border:none;cursor:pointer;color:#fff;background:${sevColor[k]}`:'font-size:10px;font-weight:600;padding:4px 7px;border-radius:6px;border:1px solid #e4e4e7;background:#fff;color:#71717a;cursor:pointer'})),
+      onRemove:()=>this.removePain(idx) }));
+
+    return {
+      embeddedClass: this.props.embedded ? 'cd-embedded' : '',
+      statStrip, funnel, painRows, icp, icpFields, themeTags,
+      audienceFilters, inboundRows, inboundNote:routeNote[af], inboundEmpty:inboundRows.length===0, audienceWord:audLabel[af]||'inbound', leadInsights,
+      loggedCount:logged, sourceFilters, interviewRows,
+      dataRoom, readiness, exportReady, exportedToast:st.exportedToast,
+      exportSummary:()=>{ if(exportReady){ this.s({exportedToast:true}); setTimeout(()=>this.s({exportedToast:false}),2500);} },
+      // modal
+      logOpen:st.logOpen, openLog:()=>this.s({logOpen:true,logStep:1}), closeLog:()=>this.s({logOpen:false}),
+      openAddLead:()=>this.s({addLeadOpen:true, leadForm:{ name:'', role:'', company:'', email:'', audience:'customer', note:'' }}),
+      closeAddLead:()=>this.s({addLeadOpen:false}),
+      addLeadOpen:st.addLeadOpen, leadForm:st.leadForm,
+      setLeadName:e=>this.s({leadForm:{...st.leadForm,name:e.target.value}}),
+      setLeadRole:e=>this.s({leadForm:{...st.leadForm,role:e.target.value}}),
+      setLeadCompany:e=>this.s({leadForm:{...st.leadForm,company:e.target.value}}),
+      setLeadEmail:e=>this.s({leadForm:{...st.leadForm,email:e.target.value}}),
+      setLeadNote:e=>this.s({leadForm:{...st.leadForm,note:e.target.value}}),
+      leadAudienceOpts:['customer','advisor','cofounder'].map(k=>({ label:audLabel[k], onClick:()=>this.s({leadForm:{...st.leadForm,audience:k}}),
+        style: st.leadForm.audience===k ? 'color:#fff;background:#7c3aed;border:1px solid #7c3aed' : 'color:#71717a;background:#fff;border:1px solid #e4e4e7' })),
+      saveLeadDisabled: st.leadForm.name.trim() ? '' : 'opacity:.5;pointer-events:none',
+      saveAddLead:()=>{ if(!st.leadForm.name.trim()) return; this.saveManualLead(); },
+      logSubtitle: (F.name||'New contact')+' · '+(F.company||'—')+' · '+F.date,
+      steps, isStep1:step===1, isStep2:step===2, isStep3:step===3,
+      form:F, newPain:st.newPain,
+      setName:(e)=>this.setForm('name',e.target.value), setRole:(e)=>this.setForm('role',e.target.value),
+      setCompany:(e)=>this.setForm('company',e.target.value), setDate:(e)=>this.setForm('date',e.target.value),
+      setWtp:(e)=>this.setForm('wtp',e.target.value), setMusthave:(e)=>this.setForm('musthave',e.target.value),
+      setQuote:(e)=>this.setForm('quote',e.target.value), setInsight:(e)=>this.setForm('insight',e.target.value),
+      toggleDeckEligible:()=>this.setForm('deckEligible',!F.deckEligible),
+      setNewPain:(e)=>this.s({newPain:e.target.value}), onPainKey:(e)=>{ if(e.key==='Enter'){ e.preventDefault(); this.addPain(); } },
+      formatPills, sourcePills, fitPills, followPills, painEntries,
+      backLabel: step===1?'Cancel':'Back', nextLabel: step===3?'Save interview':'Next →',
+      prevStep:()=>{ if(step===1) this.s({logOpen:false}); else this.s({logStep:step-1}); },
+      nextStep:()=>{ if(step<3) this.s({logStep:step+1}); else this.saveInterview(); },
+      // detail
+      selectedInterview:st.selectedInterview, closeDetail:()=>this.s({selectedInterview:null}),
+      stop:(e)=>e.stopPropagation(),
+      back:(e)=>{e.preventDefault();try{window.parent&&window.parent.postMessage({type:'cd-back'},'*');}catch(x){}},
+    };
+  }
+
+  addPain(){ const p=this.state.newPain.trim(); if(!p) return; this.setState(s=>({ form:{...s.form,pains:[...s.form.pains,{label:p,sev:'need'}]}, newPain:'' })); }
+  setPainSev(idx,sev){ this.setState(s=>{ const pains=s.form.pains.slice(); pains[idx]={...pains[idx],sev}; return {form:{...s.form,pains}}; }); }
+  removePain(idx){ this.setState(s=>({ form:{...s.form,pains:s.form.pains.filter((_,i)=>i!==idx)} })); }
+
+  saveInterview(){
+    const F=this.state.form;
+    const initials=(F.name||'New').trim().charAt(0).toUpperCase();
+    const pains=F.pains.length?F.pains:[{label:'Unspecified pain',sev:'good'}];
+    const iv={ initial:initials, name:F.name||'New contact', title:(F.role||'—')+' · '+(F.company||'—'), date:F.date,
+      avatarBg:'#7c3aed', fit:F.fit, source:F.source, sourcePage:F.sourcePage||'',
+      topPain:pains[0].label, severity:pains[0].sev,
+      painPoints:pains.map(p=>p.label), quotesArr:F.quote?[F.quote]:[], deckQuote:!!(F.quote&&F.deckEligible),
+      icp:[F.fit], insightFull:F.insight||'—', nextSteps:[F.follow] };
+    this.setState(s=>({ interviews:[...s.interviews,iv], logOpen:false, logStep:1,
+      form:{ name:'', role:'', company:'', date:'Jul 21', format:'Call', source:'Warm intro', fit:'Strong fit', pains:[], wtp:'', musthave:'', quote:'', deckEligible:true, insight:'', follow:'Invite to beta' } }));
+  }
+
+  convertLead(l){
+    this.setState(s=>({ logOpen:true, logStep:1,
+      form:{ ...s.form, name:l.name, role:l.role, company:l.company, date:'Jul 21', source:'Brand & Pages', sourcePage:l.sourcePage, insight:l.note||'', pains:[] },
+      inbound:s.inbound.filter(x=>x.id!==l.id) }));
+  }
+  archiveLead(id){ this.setState(s=>({ inbound:s.inbound.filter(x=>x.id!==id) })); }
+  saveManualLead(){
+    const f=this.state.leadForm;
+    const initials=f.name.trim().split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const lead={ id:'m'+Date.now(), name:f.name.trim(), role:f.role||'—', company:f.company||'—', email:f.email||'', audience:f.audience,
+      initials, avatarBg:'#7c3aed', sourcePage:'Manual entry', note:f.note||'', icpPre:'Unscored', submitted:'Today' };
+    this.setState(s=>({ inbound:[lead, ...s.inbound], addLeadOpen:false }));
+  }
+}
+</script>
+</body>
+</html>

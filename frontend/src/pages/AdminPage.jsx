@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { reportError } from '../lib/log';
 import { api } from '../lib/api';
-import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2, ShieldAlert, KeyRound, Trash2, AlertTriangle, Heart, Eye, EyeOff, BadgeCheck, Ticket, Plus, CreditCard, Package, Zap } from 'lucide-react';
+import { Shield, Users, UserCheck, UserX, LogIn, ChevronDown, Briefcase, MessageSquare, X, Check, ShieldCheck, XCircle, CheckCircle2, FileText, Send, Download, Ban, Search, RefreshCw, Sparkles, Loader2, ShieldAlert, KeyRound, Trash2, AlertTriangle, Heart, Eye, EyeOff, BadgeCheck, Ticket, Plus, CreditCard, Package, Zap, GitBranch as Github, Copy, FlaskConical } from 'lucide-react';
 import { PERSONAS as PERSONA_TAXONOMY } from '../lib/personas';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
@@ -41,6 +41,8 @@ const ROLE_BADGES = {
   partner: 'bg-emerald-100 text-emerald-700',
   investor: 'bg-amber-100 text-amber-700',
   advisor: 'bg-sky-100 text-sky-700',
+  // Task #9 follow-up — new signups hold here pending admin review.
+  exploring: 'bg-sky-100 text-sky-700',
 };
 
 function RoleDropdown({ user, onRoleChange }) {
@@ -58,8 +60,16 @@ function RoleDropdown({ user, onRoleChange }) {
     { value: 'founder', label: 'Founder' },
     { value: 'partner', label: 'Partner' },
     { value: 'investor', label: 'Investor' },
+    { value: 'advisor', label: 'Advisor' },
+    // Task #9 follow-up — lets an admin send any user (e.g. a partner) back
+    // into the exploring holding state for re-review. The reverse direction
+    // (exploring → founder/partner/investor) is intentionally NOT offered
+    // here — that transition requires a signed binding agreement and must
+    // go through the Exploring Users queue (/admin/exploring).
+    { value: 'exploring', label: 'Exploring' },
   ];
   const currentLabel = OPTIONS.find(o => o.value === user.role)?.label ?? user.role;
+  const isExploring = user.role === 'exploring';
 
   return (
     <div ref={ref} className="relative inline-block">
@@ -81,24 +91,39 @@ function RoleDropdown({ user, onRoleChange }) {
           aria-label="Select role"
           className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-50 min-w-[120px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg py-1 overflow-hidden"
         >
-          {OPTIONS.map(opt => (
-            <li
-              key={opt.value}
-              role="option"
-              aria-selected={user.role === opt.value}
-              onClick={(e) => { e.stopPropagation(); setOpen(false); onRoleChange(user, opt.value); }}
-              className={`flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer select-none transition-colors ${
-                user.role === opt.value
-                  ? `${ROLE_BADGES[opt.value] || 'bg-gray-100 text-gray-700'} font-semibold`
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium'
-              }`}
-            >
-              <span className="w-[11px] shrink-0">
-                {user.role === opt.value && <Check size={11} />}
-              </span>
-              {opt.label}
-            </li>
-          ))}
+          {OPTIONS.map(opt => {
+            // Moving OUT of exploring requires a signed binding agreement
+            // and must go through the Exploring Users queue — disable those
+            // options here rather than let the user hit a 409 on click.
+            const disabled = isExploring && opt.value !== 'exploring';
+            return (
+              <li
+                key={opt.value}
+                role="option"
+                aria-selected={user.role === opt.value}
+                aria-disabled={disabled}
+                title={disabled ? 'Assign the final role from the Exploring Users queue (requires a signed binding agreement)' : undefined}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (disabled) return;
+                  setOpen(false);
+                  onRoleChange(user, opt.value);
+                }}
+                className={`flex items-center gap-2 px-3 py-1.5 text-xs select-none transition-colors ${
+                  disabled
+                    ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                    : user.role === opt.value
+                      ? `${ROLE_BADGES[opt.value] || 'bg-gray-100 text-gray-700'} font-semibold cursor-pointer`
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium cursor-pointer'
+                }`}
+              >
+                <span className="w-[11px] shrink-0">
+                  {user.role === opt.value && <Check size={11} />}
+                </span>
+                {opt.label}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -168,10 +193,12 @@ const ADMIN_SECTIONS = [
   { value: 'users', label: 'Users', Icon: Users },
   { value: 'profiles', label: 'Partner Profiles', Icon: Briefcase },
   { value: 'kyc', label: 'KYC Queue', Icon: ShieldCheck },
+  { value: 'lab-applications', label: 'Lab Applications', Icon: FlaskConical },
   { value: 'legal', label: 'Legal', Icon: FileText },
   { value: 'personas', label: 'Personas', Icon: Sparkles },
   { value: 'directory', label: 'Directory', Icon: Sparkles },
   { value: 'integration-keys', label: 'Integration Keys', Icon: KeyRound },
+  { value: 'github', label: 'GitHub Sync', Icon: Github },
   { value: 'promos', label: 'Promo Codes', Icon: Ticket },
   { value: 'payments', label: 'Payments', Icon: Package },
   { value: 'billing', label: 'Billing', Icon: CreditCard },
@@ -179,6 +206,117 @@ const ADMIN_SECTIONS = [
   { value: 'network-profiles', label: 'Advisors & Partners', Icon: Users },
 ];
 const ADMIN_SECTION_VALUES = new Set(ADMIN_SECTIONS.map(s => s.value));
+
+// Spin-Out Lab cohort application review queue. Accept → the founder gets
+// admitted flags + the "You're in" email (production Worker; dev sets flags
+// only); refuse → an encouragement-to-re-apply email for the next cohort.
+function LabApplicationsPanel() {
+  const [apps, setApps] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [deciding, setDeciding] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.adminSpinoutApplications();
+      setApps(res?.applications || []);
+    } catch (e) {
+      reportError('AdminPage:labApplications', e);
+      setApps([]);
+    } finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const decide = async (app, decision) => {
+    const verb = decision === 'accepted' ? 'Accept' : 'Refuse';
+    const ok = window.confirm(
+      `${verb} ${app.name || app.email}'s application for "${app.company_name}" (${app.cohort})?\n\n` +
+      (decision === 'accepted'
+        ? `They'll be admitted to the Lab and receive the "You're in" email with a link to their Spin-Out Lab workspace.`
+        : `They'll receive an email encouraging them to re-apply for the next cohort.`)
+    );
+    if (!ok) return;
+    setDeciding(app.id);
+    try {
+      const res = await api.adminSpinoutDecide(app.id, decision);
+      alert(`Application ${decision}.${res?.emailed ? ' Email sent.' : ' Email not sent (dev or send failure).'}`);
+      load();
+    } catch (e) { alert(e.message || 'Failed to decide'); }
+    finally { setDeciding(null); }
+  };
+
+  const pending = apps.filter(a => a.status === 'pending');
+  const decided = apps.filter(a => a.status !== 'pending');
+
+  if (loading) return <div className="text-gray-500 text-center py-16">Loading applications…</div>;
+
+  const Card = ({ app }) => (
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4" data-testid={`lab-application-${app.id}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-gray-900 dark:text-gray-100">{app.company_name}</span>
+            <span className="text-[11px] font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/50 border border-violet-100 dark:border-violet-800/50 rounded-full px-2 py-0.5">{app.cohort}</span>
+            {app.status !== 'pending' && (
+              <span className={`text-[11px] font-bold rounded-full px-2 py-0.5 border ${app.status === 'accepted' ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/40 border-emerald-200 dark:border-emerald-800/50' : 'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/40 border-red-200 dark:border-red-800/50'}`}>{app.status}</span>
+            )}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{app.name} · {app.email}</div>
+          <div className="text-xs text-gray-400 mt-0.5">
+            {app.incorporated === 'yes' ? 'Already incorporated' : 'Not yet incorporated'}
+            {app.stage ? ` · ${app.stage}` : ''}{app.jurisdiction ? ` · ${app.jurisdiction}` : ''}
+            {app.created_at ? ` · ${new Date(app.created_at).toLocaleDateString()}` : ''}
+          </div>
+          <p className="text-sm text-gray-700 dark:text-gray-300 mt-2 whitespace-pre-wrap">{app.idea}</p>
+        </div>
+        {app.status === 'pending' && (
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={() => decide(app, 'accepted')}
+              disabled={deciding === app.id}
+              data-testid={`lab-application-accept-${app.id}`}
+              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5"
+            >
+              <Check size={13} /> Accept
+            </button>
+            <button
+              onClick={() => decide(app, 'refused')}
+              disabled={deciding === app.id}
+              data-testid={`lab-application-refuse-${app.id}`}
+              className="px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5"
+            >
+              <X size={13} /> Refuse
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div data-testid="admin-lab-applications-panel">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Spin-Out Lab applications</h2>
+        <button onClick={load} className="text-xs font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1.5"><RefreshCw size={13} /> Refresh</button>
+      </div>
+      {pending.length === 0 && decided.length === 0 && (
+        <div className="text-gray-500 text-center py-16 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">No applications yet.</div>
+      )}
+      {pending.length > 0 && (
+        <div className="space-y-3 mb-8">
+          <div className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">{pending.length} pending review</div>
+          {pending.map(a => <Card key={a.id} app={a} />)}
+        </div>
+      )}
+      {decided.length > 0 && (
+        <div className="space-y-3">
+          <div className="text-xs font-bold uppercase tracking-wider text-gray-400">Decided</div>
+          {decided.map(a => <Card key={a.id} app={a} />)}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Dropdown replacing the old horizontal tab row. Closes on selection, outside
 // click, and Escape; full light/dark support. Preserves the `admin-page` and
@@ -383,9 +521,27 @@ export default function AdminPage({ onImpersonate }) {
     try { await api.adminSetAccessLevel(user.id, null); loadAll(); }
     catch (e) { alert(e.message || 'Failed to revoke limited access'); }
   };
+  // Task #7 — admit a founder to the next Spin-Out Lab cohort. Sends the
+  // "You're in" email (production Worker; dev backend sets flags only).
+  const handleSpinoutAdmit = async (user) => {
+    const cohort = window.prompt(
+      `Admit ${user.name || user.email} to the Spin-Out Lab?\n\n` +
+      `They'll receive a congratulations email linking to axal.vc/spinout-lab ` +
+      `and see the "You're in" screen on their next visit.\n\nCohort label:`,
+      'Cohort 3'
+    );
+    if (cohort === null) return;
+    try {
+      const res = await api.adminSpinoutAdmit(user.id, cohort.trim() || undefined);
+      alert(res?.already_admitted
+        ? `Already admitted — cohort refreshed to ${res.cohort} (no email re-sent).`
+        : `Admitted to ${res?.cohort || 'the Lab'}${res?.emailed ? ' — email sent.' : ' — email not sent (dev or send failure).'}`);
+      loadAll();
+    } catch (e) { alert(e.message || 'Failed to admit'); }
+  };
   const handleRoleChange = async (user, newRole) => {
     if (newRole === user.role) return;
-    const labels = { admin: 'Admin', founder: 'Founder', partner: 'Partner', investor: 'Investor' };
+    const labels = { admin: 'Admin', founder: 'Founder', partner: 'Partner', investor: 'Investor', advisor: 'Advisor', exploring: 'Exploring' };
     const ok = window.confirm(
       `Change ${user.name || user.email}'s role from ${labels[user.role] || user.role} ` +
       `to ${labels[newRole] || newRole}?\n\nThis takes effect immediately and is logged in their activity history.`
@@ -401,6 +557,10 @@ export default function AdminPage({ onImpersonate }) {
     founder: users.filter(u => u.role === 'founder').length,
     partner: users.filter(u => u.role === 'partner').length,
     investor: users.filter(u => u.role === 'investor').length,
+    advisor: users.filter(u => u.role === 'advisor').length,
+    // Task #9 follow-up — new signups land here pending admin review, so
+    // this is often the largest bucket now; surface it as its own filter.
+    exploring: users.filter(u => u.role === 'exploring').length,
   };
   const pendingProfiles = profiles.filter(p => p.admin_status === 'pending').length;
 
@@ -427,10 +587,12 @@ export default function AdminPage({ onImpersonate }) {
         <div data-testid="admin-network-profiles-panel"><AdminNetworkProfiles /></div>
       )}
 
+      {tab === 'lab-applications' && <LabApplicationsPanel />}
       {tab === 'legal' && <div data-testid="admin-legal-panel"><LegalPanel /></div>}
       {tab === 'personas' && <PersonasPanel />}
       {tab === 'directory' && <div data-testid="admin-directory-panel"><DirectoryPanel /></div>}
       {tab === 'integration-keys' && <div data-testid="admin-integration-keys-panel"><IntegrationKeysPanel /></div>}
+      {tab === 'github' && <div data-testid="admin-github-panel"><GithubSyncPanel /></div>}
       {tab === 'promos' && <div data-testid="admin-promos-panel"><PromoCodesPanel /></div>}
       {tab === 'payments' && <div data-testid="admin-payments-panel"><PaymentsPanel /></div>}
       {tab === 'billing' && <div data-testid="admin-billing-panel"><BillingPanel /></div>}
@@ -445,7 +607,7 @@ export default function AdminPage({ onImpersonate }) {
                   filter === role ? 'bg-violet-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-700 hover:border-violet-300'
                 }`}>
                 <div className="text-lg font-bold">{count}</div>
-                <div className="capitalize">{role === 'all' ? 'All Users' : `${role}s`}</div>
+                <div className="capitalize">{role === 'all' ? 'All Users' : role === 'exploring' ? 'Exploring' : `${role}s`}</div>
               </button>
             ))}
           </div>
@@ -552,6 +714,14 @@ export default function AdminPage({ onImpersonate }) {
                                 className="px-2.5 py-1.5 text-xs bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg font-medium transition-colors flex items-center gap-1"
                                 title="Remove limited access. User will be redirected to KYC.">
                                 Revoke Limited
+                              </button>
+                            )}
+                            {/* Task #7 — Spin-Out Lab admission. Admins excluded. */}
+                            {u.role !== 'admin' && (
+                              <button onClick={() => handleSpinoutAdmit(u)}
+                                className="px-2.5 py-1.5 text-xs bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg font-medium transition-colors flex items-center gap-1"
+                                title="Admit to the next Spin-Out Lab cohort — sends the congratulations email">
+                                Admit to Lab
                               </button>
                             )}
                             <button onClick={() => handleImpersonate(u.id)}
@@ -3242,6 +3412,56 @@ function DirectoryPanel() {
 // Task #16 — Metadata field component for the Payments panel create-product
 // form. Defined outside PaymentsPanel to avoid React re-mounting on every
 // parent render. Receives `kind`, `metadata`, `onChange`, and `inputCls`.
+// Audience categories a product can be filtered by on the storefront
+// (Products page). Independent of `kind` — stored as a comma-separated
+// `metadata.audience` list so a product can belong to more than one (e.g.
+// an incorporation product is both "For Founders" and "Legal Services").
+// Mirrors AUDIENCE_CATEGORIES in cloudflare-worker/src/services/catalog.ts.
+const AUDIENCE_OPTIONS = [
+  { value: 'founders', label: 'For Founders' },
+  { value: 'investors_lps', label: 'For Investors / LPs' },
+  { value: 'service_partners', label: 'For Service Partners' },
+  { value: 'advisors', label: 'For Advisors' },
+  { value: 'legal_services', label: 'Legal Services' },
+];
+
+function AudienceFields({ metadata, onChange }) {
+  const selected = (metadata.audience || '').split(',').map(s => s.trim()).filter(Boolean);
+  const toggle = (value) => {
+    const next = selected.includes(value) ? selected.filter(v => v !== value) : [...selected, value];
+    const meta = { ...metadata };
+    if (next.length > 0) meta.audience = next.join(',');
+    else delete meta.audience;
+    onChange(meta);
+  };
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+        Audience filters (Products page)
+      </label>
+      <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-1.5">
+        Leave unchecked to auto-classify from the product's kind/tier/name instead.
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {AUDIENCE_OPTIONS.map(opt => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => toggle(opt.value)}
+            className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+              selected.includes(opt.value)
+                ? 'bg-violet-600 border-violet-600 text-white'
+                : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-violet-400'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MetadataFields({ kind, metadata, onChange, inputCls }) {
   const setMeta = (k, v) => onChange({ ...metadata, [k]: v });
   if (kind === 'subscription') {
@@ -3260,11 +3480,15 @@ function MetadataFields({ kind, metadata, onChange, inputCls }) {
           value={currentSel}
           onChange={e => {
             const v = e.target.value;
-            const clean = {};
-            if (v === 'mi_pro') onChange({ ...clean, plan: 'mi_pro' });
-            else if (v === 'growth' || v === 'studio') onChange({ ...clean, tier: v });
-            else if (v === 'professional' || v === 'institutional') onChange({ ...clean, investor_tier: v });
-            else onChange(clean);
+            // Only clear the taxonomy keys this selector owns (plan / tier /
+            // investor_tier) — preserve everything else (e.g. `audience`,
+            // `commission_pct`) so switching subscription type doesn't
+            // silently wipe unrelated metadata set elsewhere in the form.
+            const { plan, tier, investor_tier, ...rest } = metadata;
+            if (v === 'mi_pro') onChange({ ...rest, plan: 'mi_pro' });
+            else if (v === 'growth' || v === 'studio') onChange({ ...rest, tier: v });
+            else if (v === 'professional' || v === 'institutional') onChange({ ...rest, investor_tier: v });
+            else onChange(rest);
           }}
         >
           <option value="">— select —</option>
@@ -3644,6 +3868,10 @@ function PaymentsPanel() {
               onChange={meta => setProdForm(f => ({ ...f, metadata: meta }))}
               inputCls={inputCls}
             />
+            <AudienceFields
+              metadata={prodForm.metadata}
+              onChange={meta => setProdForm(f => ({ ...f, metadata: meta }))}
+            />
             <div className="flex gap-2">
               <button type="submit" disabled={creating}
                 className="px-3 py-1.5 text-sm font-medium bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50">
@@ -3825,6 +4053,10 @@ function PaymentsPanel() {
                           metadata={editProdForm.metadata}
                           onChange={meta => setEditProdForm(f => ({ ...f, metadata: meta }))}
                           inputCls={inputCls}
+                        />
+                        <AudienceFields
+                          metadata={editProdForm.metadata}
+                          onChange={meta => setEditProdForm(f => ({ ...f, metadata: meta }))}
                         />
                         <div className="flex gap-2">
                           <button type="submit" disabled={savingEdit}
@@ -4742,6 +4974,200 @@ function WellbeingExpertsPanel() {
           toast.kind === 'ok' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
         }`}>{toast.msg}</div>
       )}
+    </div>
+  );
+}
+
+function GithubSyncPanel() {
+  const [cfg, setCfg] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+  const [token, setToken] = useState('');
+  const [owner, setOwner] = useState('');
+  const [repo, setRepo] = useState('');
+  const [revealedSecret, setRevealedSecret] = useState(null);
+  const { toast, showToast } = useToast(3500);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const c = await api.adminGetGithubConfig();
+      setCfg(c);
+      setOwner(c.repo_owner || '');
+      setRepo(c.repo_name || '');
+      setToken('');
+    } catch (e) {
+      reportError('AdminPage:githubConfigLoad', e);
+      showToast({ kind: 'err', msg: e.message || 'Failed to load' });
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, []);
+
+  const onSave = async () => {
+    setSaving(true);
+    try {
+      const body = { repo_owner: owner.trim(), repo_name: repo.trim() };
+      if (token.trim()) body.token = token.trim();
+      const r = await api.adminSaveGithubConfig(body);
+      if (r.webhook_secret) setRevealedSecret(r.webhook_secret);
+      showToast({ kind: 'ok', msg: 'GitHub settings saved.' });
+      setTestResult(null);
+      await refresh();
+    } catch (e) {
+      showToast({ kind: 'err', msg: e.message || 'Failed to save' });
+    } finally { setSaving(false); }
+  };
+
+  const onTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const r = await api.adminTestGithub();
+      setTestResult(r);
+      showToast({ kind: r.ok ? 'ok' : 'err', msg: r.detail || (r.ok ? 'Connected.' : 'Connection failed.') });
+    } catch (e) {
+      showToast({ kind: 'err', msg: e.message || 'Test failed' });
+    } finally { setTesting(false); }
+  };
+
+  const onRotateSecret = async () => {
+    if (!confirm('Generate a new webhook secret? You will need to update it in the GitHub webhook settings, or issue-close events will stop syncing.')) return;
+    try {
+      const r = await api.adminSaveGithubConfig({ generate_webhook_secret: true });
+      if (r.webhook_secret) setRevealedSecret(r.webhook_secret);
+      showToast({ kind: 'ok', msg: 'New webhook secret generated.' });
+      await refresh();
+    } catch (e) {
+      showToast({ kind: 'err', msg: e.message || 'Failed to rotate' });
+    }
+  };
+
+  const copy = (text, label) => {
+    try {
+      navigator.clipboard.writeText(text);
+      showToast({ kind: 'ok', msg: `${label} copied.` });
+    } catch { showToast({ kind: 'err', msg: 'Copy failed — select and copy manually.' }); }
+  };
+
+  const inputClass = 'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-3 py-2 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500';
+
+  if (loading) return (
+    <div className="flex items-center gap-2 text-gray-500 text-sm py-8 justify-center">
+      <Loader2 size={16} className="animate-spin" /> Loading GitHub settings…
+    </div>
+  );
+
+  const statusBadge = cfg?.configured
+    ? { text: 'Connected config', cls: 'bg-emerald-100 text-emerald-700' }
+    : cfg?.has_token
+      ? { text: 'Partially configured', cls: 'bg-amber-100 text-amber-700' }
+      : { text: 'Not configured', cls: 'bg-gray-100 text-gray-700' };
+
+  return (
+    <div data-density-target className="max-w-3xl">
+      {toast && (
+        <div className={`mb-4 px-4 py-2.5 rounded-lg text-sm ${toast.kind === 'ok' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+          {toast.msg}
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 mb-5">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <Github size={18} className="text-gray-800 dark:text-gray-100" />
+            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Support ticket → GitHub sync</h3>
+          </div>
+          <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${statusBadge.cls}`}>{statusBadge.text}</span>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          When configured, filing a support ticket opens a GitHub issue in the target repo, and closing/updating that issue syncs the ticket status back automatically.
+        </p>
+
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+          GitHub token {cfg?.has_token && <span className="text-emerald-600">· configured{cfg?.token_preview ? ` (${cfg.token_preview})` : ''}</span>}
+        </label>
+        <input
+          type="password"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          autoComplete="off"
+          placeholder={cfg?.has_token ? 'Leave blank to keep the current token' : 'Fine-grained PAT with Issues read/write'}
+          className={`${inputClass} mb-1`}
+        />
+        <p className="text-[11px] text-gray-500 mb-3">Needs <strong>Issues: Read and write</strong> on the target repo. Stored encrypted; never shown again after saving.</p>
+
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Repo owner</label>
+            <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder={cfg?.default_repo_owner} className={inputClass} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Repo name</label>
+            <input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder={cfg?.default_repo_name} className={inputClass} />
+          </div>
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={onSave} disabled={saving}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 inline-flex items-center gap-1.5">
+            {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save
+          </button>
+          <button onClick={onTest} disabled={testing || !cfg?.has_token}
+            title={cfg?.has_token ? 'Verify the token can reach the repo' : 'Configure a token first'}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1.5">
+            {testing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Test connection
+          </button>
+        </div>
+
+        {testResult && (
+          <div className={`mt-3 text-xs px-3 py-2 rounded-lg border ${testResult.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+            {testResult.ok ? <CheckCircle2 size={13} className="inline mr-1 -mt-0.5" /> : <XCircle size={13} className="inline mr-1 -mt-0.5" />}
+            {testResult.detail}
+          </div>
+        )}
+      </div>
+
+      {/* Webhook — manual registration */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
+        <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-1">Webhook (status sync back)</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          Add this webhook in GitHub → the repo → Settings → Webhooks → Add webhook. Set content type to <code className="text-[11px]">application/json</code> and select <strong>“Let me select individual events” → Issues</strong>.
+        </p>
+
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Payload URL</label>
+        <div className="flex gap-2 mb-3">
+          <input readOnly value={cfg?.webhook_url || ''} className={`${inputClass} font-mono text-xs`} />
+          <button onClick={() => copy(cfg?.webhook_url || '', 'Payload URL')}
+            className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 inline-flex items-center gap-1.5">
+            <Copy size={12} /> Copy
+          </button>
+        </div>
+
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Secret {cfg?.has_webhook_secret && <span className="text-emerald-600">· configured</span>}
+        </label>
+        {revealedSecret ? (
+          <div className="flex gap-2 mb-2">
+            <input readOnly value={revealedSecret} className={`${inputClass} font-mono text-xs`} />
+            <button onClick={() => copy(revealedSecret, 'Secret')}
+              className="shrink-0 px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 inline-flex items-center gap-1.5">
+              <Copy size={12} /> Copy
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-2 mb-2 flex-wrap">
+            <button onClick={onRotateSecret}
+              className="px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 inline-flex items-center gap-1.5">
+              <RefreshCw size={12} /> {cfg?.has_webhook_secret ? 'Rotate secret' : 'Generate secret'}
+            </button>
+          </div>
+        )}
+        <p className="text-[11px] text-amber-700 dark:text-amber-300">
+          The secret is shown only once — when generated or rotated. Copy it into GitHub immediately; if you lose it, rotate to get a new one (and update GitHub to match).
+        </p>
+      </div>
     </div>
   );
 }

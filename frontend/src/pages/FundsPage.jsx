@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import PageExplainer from '../components/PageExplainer';
 import {
   Banknote, FileText, RefreshCw, Plus, X, AlertTriangle, CheckCircle2,
   PieChart as PieIcon, TrendingUp, Wallet, Send, ScrollText,
@@ -239,7 +238,7 @@ function LPADrawer({ fundId, onClose }) {
 }
 
 // ----- Admin/Operator view -----
-function AdminFundsView() {
+export function AdminFundsView() {
   const [funds, setFunds] = useState(null);
   const [active, setActive] = useState(null);          // selected fund
   const [activeDistribs, setActiveDistribs] = useState([]);
@@ -401,7 +400,7 @@ function AdminFundsView() {
 }
 
 // ----- LP Portal view -----
-function LPPortalView() {
+export function LPPortalView() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -558,39 +557,6 @@ function Card({ icon: Icon, label, value, sub, accent }) {
       </div>
       <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</div>
       {sub && <div className="text-[11px] text-gray-500 mt-1">{sub}</div>}
-    </div>
-  );
-}
-
-export default function FundsPage({ currentUser }) {
-  const isAdmin = currentUser?.role === 'admin';
-  const [tab, setTab] = useState(isAdmin ? 'admin' : 'lp');
-
-  return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 dark:text-gray-100">
-          <Banknote size={22} className="text-violet-600" /> VC Funds
-        </h1>
-        <PageExplainer pageKey="funds" />
-        <p className="text-sm text-gray-600 mt-1">Fund operations, LPA management, capital calls and returns distribution.</p>
-      </div>
-
-      {isAdmin && (
-        <div className="border-b border-gray-200 flex gap-1 overflow-x-auto [&>button]:whitespace-nowrap dark:border-gray-800">
-          {[
-            { id: 'admin', label: 'Fund Operations' },
-            { id: 'lp', label: 'LP Portal (preview)' },
-          ].map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-                tab === t.id ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-500 hover:text-gray-800'
-              }`}>{t.label}</button>
-          ))}
-        </div>
-      )}
-
-      {tab === 'admin' && isAdmin ? <AdminFundsView /> : <LPPortalView />}
     </div>
   );
 }
