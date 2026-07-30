@@ -400,14 +400,14 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
     key: 'spinout_application_received', category: 'spinout', severity: 'info',
     replyTo: 'support@axal.vc', alwaysSend: true,
     subject: 'Application received — Spin-Out Lab ({{cohort_label}})',
-    text: `Hi {{name}},\n\nWe've received your Spin-Out Lab application for {{company_name}} ({{cohort_label}}).\n\nWhat happens next:\n1. Application review — a program manager reviews within 5 business days.\n2. Founder interview — a 30-minute call to align on scope and readiness.\n3. Cohort onboarding — accepted founders start at the Validate gate on day one.\n\nNo equity taken by Meridian. Acceptance is selective.\n\nThe Axal team`,
+    text: `Hi {{name}},\n\nWe've received your Spin-Out Lab application for {{company_name}} ({{cohort_label}}).\n\nWhat happens next:\n1. Application review — a program manager reviews within 5 business days.\n2. Founder interview — a 30-minute call to align on scope and readiness.\n3. Cohort onboarding — accepted founders start at the Validate gate on day one.\n\nNo equity taken by Axal VC. Acceptance is selective.\n\nThe Axal team`,
     html: `<h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">Application received</h1>
 <p style="font-size:14px;color:#6b7280;margin:0 0 20px;line-height:1.6;">Hi {{name}}, we've received your <strong style="color:#111827;">Spin-Out Lab</strong> application for <strong style="color:#111827;">{{company_name}}</strong> ({{cohort_label}}).</p>
 <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:14px;padding:18px 20px;margin:0 0 24px;">
   <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#7c3aed;font-weight:600;margin:0 0 10px;">What happens next</div>
   <div style="font-size:14px;color:#111827;line-height:1.8;">1. <strong>Application review</strong> — a program manager reviews within 5 business days.<br/>2. <strong>Founder interview</strong> — a 30-minute call to align on scope and readiness.<br/>3. <strong>Cohort onboarding</strong> — accepted founders start at the Validate gate on day one.</div>
 </div>
-<p style="font-size:13px;color:#6b7280;margin:0;line-height:1.6;">No equity taken by Meridian. Acceptance is selective.</p>`,
+<p style="font-size:13px;color:#6b7280;margin:0;line-height:1.6;">No equity taken by Axal VC. Acceptance is selective.</p>`,
   }),
   // Cohort application refusal. vars: name, company_name, cohort_label, next_cohort_label, apply_url
   spinout_refused: t({

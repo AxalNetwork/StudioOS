@@ -27,12 +27,18 @@ function initialsOf(name, email) {
   return src.slice(0, 2).toUpperCase();
 }
 
-export default function SpinoutLabApplyPage() {
+// Task #106 — `previewMode` ('form' | 'submitted') powers the read-only
+// admin journey preview: no state fetch, no admitted redirect, and submit
+// simulates the confirmation locally instead of POSTing an application.
+// Founders always render with previewMode = null, so nothing changes for
+// the real apply flow.
+export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmitted = null }) {
+  const isPreview = previewMode != null;
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isPreview);
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [submitted, setSubmitted] = useState(previewMode === "submitted");
   const [error, setError] = useState("");
 
   const [company, setCompany] = useState("");
@@ -42,6 +48,7 @@ export default function SpinoutLabApplyPage() {
   const [jurisKey, setJurisKey] = useState("de");
 
   useEffect(() => {
+    if (isPreview) return undefined; // preview renders simulated state only
     let alive = true;
     (async () => {
       try {
@@ -53,7 +60,7 @@ export default function SpinoutLabApplyPage() {
       if (alive) setLoading(false);
     })();
     return () => { alive = false; };
-  }, [navigate]);
+  }, [navigate, isPreview]);
 
   const juris = JURIS.find((j) => j.key === jurisKey) || JURIS[0];
   const jurisLabel = incorporated === "yes" ? "Current jurisdiction" : "Preferred jurisdiction";
@@ -69,6 +76,12 @@ export default function SpinoutLabApplyPage() {
     setError("");
     if (!company.trim()) { setError("Company / working name is required."); return; }
     if (!idea.trim()) { setError("Please describe your idea or project."); return; }
+    if (isPreview) {
+      // Preview mode is read-only — nothing is submitted or emailed.
+      setSubmitted(true);
+      if (onPreviewSubmitted) onPreviewSubmitted();
+      return;
+    }
     setSubmitting(true);
     try {
       await spinoutLab.apply({

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Loader2, ArrowRight, FlaskConical, Globe, Circle, Lock, FileText, BadgeCheck } from "lucide-react";
+import { Check, Loader2, ArrowRight, FlaskConical, Globe, Circle, Lock, Unlock, FileText, BadgeCheck } from "lucide-react";
 import { spinoutLab } from "../lib/api";
 import { useAuth } from "../hooks/useAuthSync";
 import { reportError } from "../lib/log";
@@ -128,7 +128,7 @@ export const DELIVERABLES = [
   { icon: <DIconFile83 />, name: "83(b) Election", desc: "Section 83(b) election generated, tracked, and filed." },
   { icon: <DIconDeck />, name: "Pitch Deck", desc: "12-slide venture-standard deck, designed and reviewed." },
   { icon: <DIconModel />, name: "Financial Model", desc: "3-year P&L, revenue model, and unit economics." },
-  { icon: <DIconIntro />, name: "Warm Introductions", desc: "5–10 curated intros to the Meridian investor network." },
+  { icon: <DIconIntro />, name: "Warm Introductions", desc: "5–10 curated intros to the Axal VC investor network." },
   { icon: <DIconAdvisor />, name: "Advisor Network", desc: "2 matched advisors with equity agreements in place." },
   { icon: <DIconDataroom />, name: "Data Room", desc: "Organized deal room ready for investor due diligence." },
   { icon: <DIconBadge />, name: "Verified Badge", desc: "Spin-Out Lab Alumni badge for your profile." }
@@ -488,8 +488,9 @@ export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
 
 // Task #7 — "You're in" celebration for admitted-but-not-started founders.
 // Rendered on /spinout-lab (sidebar stays); the CTA calls the existing
-// start endpoint and hands over to the workspace Dashboard.
-function CongratulationsScreen({ cohort, onStart, starting, startError }) {
+// start endpoint and hands over to the workspace Dashboard. Exported for
+// the admin journey preview (Task #106), which feeds it simulated props.
+export function CongratulationsScreen({ cohort, onStart, starting, startError }) {
   return (
     <div className="min-h-[100dvh] bg-[#F8F8FA] dark:bg-gray-950 font-sans text-gray-900 dark:text-gray-100 flex items-center justify-center px-6 py-16">
       <div className="max-w-[620px] w-full text-center">
@@ -534,7 +535,12 @@ function CongratulationsScreen({ cohort, onStart, starting, startError }) {
   );
 }
 
-function Dashboard({ state }) {
+// Exported for the admin journey preview (Task #106). `previewAllUnlocked`
+// is preview-only: it swaps phase Lock icons for Unlock (every phase
+// browsable) and shows the "All weeks unlocked · N days remaining" badge
+// from the workspace design handoff. Founders never receive this prop, so
+// real locking rules are untouched.
+export function Dashboard({ state, previewAllUnlocked = false }) {
   const week = Math.max(1, Math.min(4, state.week || 1));
   const completedKeys = new Set((state.milestones || []).map((m) => m.key));
   const isIncorporated = completedKeys.has("incorporation_completed");
@@ -564,7 +570,18 @@ function Dashboard({ state }) {
             </div>
             <p className="mt-2.5 ml-[52px] text-[15px] text-gray-500 dark:text-gray-400">From idea to incorporated in 30 days. Started {startedAtStr}.</p>
           </div>
-          <div className="flex gap-2.5 items-center">
+          <div className="flex gap-2.5 items-center flex-wrap">
+            {previewAllUnlocked && (
+              <span data-testid="preview-all-weeks-badge" className="h-10 px-3.5 rounded-[10px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-[8px] bg-violet-50 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 flex items-center justify-center">
+                  <Unlock size={14} aria-hidden="true" />
+                </span>
+                <span className="leading-[1.15]">
+                  <span className="block text-[13px] font-bold text-gray-800 dark:text-gray-100">All weeks unlocked</span>
+                  <span className="block tabular-nums text-[12px] text-gray-500 dark:text-gray-400">{state.days_remaining ?? 0} days remaining</span>
+                </span>
+              </span>
+            )}
             <Link to="/spinout-lab/brief" data-testid="download-program-brief" className="h-10 px-4 rounded-[10px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 text-[13.5px] font-semibold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
               <FileText size={15} aria-hidden="true" /> Download Program Brief
             </Link>
@@ -635,7 +652,7 @@ function Dashboard({ state }) {
               const isActive = !isDone && week === p.backendWeek;
               const t = PHASE_THEMES[p.color];
               
-              const statusIcon = isDone ? <Check size={14} strokeWidth={3} className="text-white" aria-hidden="true" /> : isActive ? <Circle size={14} fill="currentColor" stroke="none" style={{ animation: "wsPulse 2s infinite" }} className={t.ink} aria-hidden="true" /> : <Lock size={14} className="text-gray-400" aria-hidden="true" />;
+              const statusIcon = isDone ? <Check size={14} strokeWidth={3} className="text-white" aria-hidden="true" /> : isActive ? <Circle size={14} fill="currentColor" stroke="none" style={{ animation: "wsPulse 2s infinite" }} className={t.ink} aria-hidden="true" /> : previewAllUnlocked ? <Unlock size={14} className="text-gray-400" aria-hidden="true" /> : <Lock size={14} className="text-gray-400" aria-hidden="true" />;
               
               return (
                 <div key={i} className="flex items-stretch flex-1 min-w-0">
