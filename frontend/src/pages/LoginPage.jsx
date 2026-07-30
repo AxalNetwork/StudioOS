@@ -501,8 +501,16 @@ export default function LoginPage() {
                 >
                   {demoLoading === 'demo-admin@axal.test' ? 'Signing in…' : 'Sign in as demo admin (dev only)'}
                 </button>
+                <button
+                  onClick={() => demoLogin({ email: 'demo-exploring@axal.test', landing: '/exploring' })}
+                  disabled={!!demoLoading}
+                  data-testid="demo-exploring-login"
+                  className="w-full bg-sky-100 hover:bg-sky-200 border border-sky-300 disabled:opacity-50 rounded-lg py-2 text-xs font-medium text-sky-900 flex items-center justify-center gap-2"
+                >
+                  {demoLoading === 'demo-exploring@axal.test' ? 'Signing in…' : 'Sign in as demo explorer (dev only)'}
+                </button>
                 <p className="text-[10px] text-gray-500 mt-1 text-center">
-                  Skips TOTP &amp; Turnstile. Admin lands on <code>/admin</code>. Disabled in production builds.
+                  Skips TOTP &amp; Turnstile. Admin lands on <code>/admin</code>, explorer on <code>/exploring</code>. Disabled in production builds.
                 </p>
               </div>
             )}

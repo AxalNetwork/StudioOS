@@ -86,7 +86,7 @@ export default function SpinoutLabBriefPage() {
             <span className="w-8 h-8 rounded-[9px] bg-white/10 border border-white/15 flex items-center justify-center">
               <FlaskConical size={15} className="text-violet-300" aria-hidden="true" />
             </span>
-            <span className="text-[13px] font-bold tracking-tight text-white/90">Meridian · Spin-Out Lab</span>
+            <span className="text-[13px] font-bold tracking-tight text-white/90">Axal VC · Spin-Out Lab</span>
           </div>
           <h1 className="m-0 text-[44px] sm:text-[52px] leading-none font-black tracking-[-.03em]">
             Program <span className="text-violet-300">Brief</span>

@@ -832,6 +832,24 @@ def ensure_trust_layer_columns() -> None:
             session.rollback()
 
 
+def ensure_exploring_role_enum() -> None:
+    """Task #9 parity — extend the Postgres ``userrole`` enum with
+    ``EXPLORING`` so real exploring-state accounts (post-onboarding-chat
+    holding state, matching the production Worker/D1 schema) can exist in
+    the dev backend. Idempotent; must run before the demo seeder, which
+    creates ``demo-exploring@axal.test`` with this role.
+
+    Postgres requires ``ALTER TYPE ... ADD VALUE`` to run outside a
+    transaction block, hence the AUTOCOMMIT connection (same pattern as
+    the INVESTOR / ADVISOR enum extensions above).
+    """
+    try:
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            conn.exec_driver_sql("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'EXPLORING'")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ensure_exploring_role_enum: ALTER TYPE userrole: %s", exc)
+
+
 def ensure_advisor_tables() -> None:
     """Task #35 — Advisor matching + office hours. Idempotent.
 
