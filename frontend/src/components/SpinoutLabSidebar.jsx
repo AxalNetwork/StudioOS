@@ -10,7 +10,7 @@ import { useSpinoutLabState } from '../hooks/useSpinoutLabState';
 // Per-feature catalogue. Keys MUST match the strings in
 // `unlocked_features` returned by /api/spinout-lab/state — same set the
 // authenticated dashboard (`SpinoutLabPage.jsx`) consumes.
-export const FEATURE_CATALOGUE = {
+const FEATURE_CATALOGUE = {
   'spinout-lab': {
     to: '/spinout-lab',
     icon: Rocket,
@@ -120,7 +120,7 @@ export const FEATURE_CATALOGUE = {
 // Per-week ordering. The sidebar shows every unlocked feature returned by
 // the server, but renders them in a stable, week-grouped order so Week-1
 // items always sit at the top.
-export const WEEK_ORDER = {
+const WEEK_ORDER = {
   1: ['spinout-lab', 'projects', 'customer-discovery', 'market-intelligence'],
   2: ['roadmap', 'brand-builder', 'pitch-deck'],
   3: ['cofounder-match', 'advisors', 'office-hours', 'scoring'],
