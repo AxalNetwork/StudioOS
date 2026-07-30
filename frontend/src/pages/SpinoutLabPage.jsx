@@ -431,7 +431,7 @@ export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
           Talk to a Program Manager
         </a>
       </div>
-      <p className="mt-6 text-[12px] text-[#c4b5fd]">Spin-Out Lab is open to all Meridian users. Acceptance is selective. No equity taken by Meridian.</p>
+      <p className="mt-6 text-[12px] text-[#c4b5fd]">Spin-Out Lab is open to all Axal VC users. Acceptance is selective. No equity taken by Axal VC.</p>
     </section>
   );
 }
