@@ -248,6 +248,28 @@ def list_graduates(session: Session = Depends(get_session)):
     return out
 
 
+@router.get("/stats")
+def lab_stats(session: Session = Depends(get_session)):
+    """Public (no auth) — real numbers for the hero stats panel (also on the
+    logged-out marketing page). Companies built = distinct founders who
+    completed the week-4 incorporation milestone. Dev projects have no
+    funding columns, so total_raised is null here; the production Worker
+    sums projects.total_funding. Answers zeros when tables predate the Lab
+    migrations.
+    """
+    try:
+        row = session.exec(
+            text(
+                "SELECT COUNT(DISTINCT user_id) FROM spinout_lab_milestones "
+                "WHERE milestone_key = 'incorporation_completed'"
+            )
+        ).first()
+        companies = int((row[0] if row else 0) or 0)
+    except Exception:  # tables predate the Lab migrations
+        return {"companies": 0, "total_raised": None}
+    return {"companies": companies, "total_raised": None}
+
+
 @router.get("/cohort")
 def list_cohort(session: Session = Depends(get_session)):
     """Public (no auth) — powers the "Active cohort." live tracker, which

@@ -1,0 +1,167 @@
+Yes — add a dedicated **workspace access** capability. The site positions Axal VC as one verified network with role-based lanes and a tool stack spanning Spin-Out Lab, Personal AI Advisor, Capital & LP Portal, and Partner Marketplace, so the admin should be able to open the actual founder/company workspace from the admin profile and also control workspace access rights.[1]
+
+## Updated section to add
+
+Paste this into your prompt under **Main views to build**:
+
+#### 8. Workspace access
+A dedicated admin flow to open and manage each company’s Axal VC workspace.
+
+Build:
+- A **“Open workspace”** button on every company/profile page.
+- Ability for admins to open the founder workspace in:
+  - same tab
+  - new tab
+  - side-by-side preview drawer
+- A workspace access panel showing:
+  - workspace status
+  - workspace URL / slug
+  - cohort
+  - founder account owner
+  - active members
+  - last activity
+  - unlocked modules
+- Admin actions:
+  - impersonate as viewer
+  - impersonate as operator
+  - copy secure workspace link
+  - resend workspace invite
+  - suspend access
+  - reactivate access
+  - reset onboarding state
+- Access controls:
+  - who can access the workspace
+  - founder / cofounder / operator / advisor / investor visibility
+  - module-level permissions by role
+- Workspace health:
+  - missing setup steps
+  - incomplete founder profile
+  - incomplete company profile
+  - blocked modules
+  - overdue deliverables
+- Workspace navigation map:
+  - Startups
+  - Customer Discovery
+  - Market Intel
+  - Profiling
+  - Roadmap
+  - Brand & Landing Pages
+  - Pitch Deck Builder
+  - Studio Ops
+  - Scoring
+  - Advisors
+  - Office Hours
+  - Co-founder Match
+  - MI / Investor Signals
+  - Revenue
+  - Incorporate
+  - Cap Table
+  - 83(b)
+  - Co-founder Agreement
+  - Capital
+
+## Add to company page
+
+Add this under **Company / profile detail page**:
+
+- Workspace section:
+  - workspace slug
+  - access status
+  - last login
+  - onboarding completion %
+  - modules unlocked
+  - “Open workspace” button
+  - “View as founder” button
+  - “Manage access” button[1]
+
+## Add to data model
+
+Add these tables:
+
+- workspaces
+- workspace_members
+- workspace_module_access
+- workspace_invites
+- workspace_sessions
+- workspace_audit_logs[1]
+
+Suggested fields:
+
+#### workspaces
+- id
+- company_id
+- slug
+- status
+- onboarding_status
+- created_at
+- updated_at
+- last_activity_at
+
+#### workspace_members
+- id
+- workspace_id
+- user_id
+- role
+- access_status
+- invited_at
+- joined_at
+- last_seen_at
+
+#### workspace_module_access
+- id
+- workspace_id
+- feature_id
+- visibility
+- status
+- enabled_by
+- enabled_at
+
+#### workspace_audit_logs
+- id
+- workspace_id
+- actor_user_id
+- action
+- target_type
+- target_id
+- metadata
+- created_at
+
+## Add to roles and permissions
+
+Add these permissions:
+
+- super_admin can impersonate any workspace user
+- cohort_admin can open and manage all cohort workspaces
+- operator can access assigned company workspaces
+- reviewer can view application data but not founder workspace unless granted
+- viewer can see admin summaries only, not impersonate[1]
+
+## Add to workflows
+
+Add this new workflow:
+
+6. **Workspace access flow**
+- admin opens company profile
+- clicks open workspace
+- chooses direct open or impersonated view
+- system checks role permissions
+- workspace opens to the relevant module
+- audit log records the access event
+- admin can manage invites, module access, and suspended users from the same panel[1]
+
+## Best wording to append
+
+Add this exact instruction near the end of your Replit prompt:
+
+> Include a full **workspace access layer** for admins. Every company in the Cohort Admin Dashboard should have an associated Axal VC workspace that admins can open directly. Add an “Open workspace” action from company profiles, cohort board cards, and application approval flows. Support role-based workspace access, impersonation/view-as mode, module-level permissions, invite management, and audit logging. The admin should be able to see what modules are unlocked in the workspace, who has access, the founder’s onboarding progress, and the last workspace activity.[1]
+
+## Stronger final prompt line
+
+Also add this sentence:
+
+> The dashboard is not only a review tool; it is the **control tower** for the live founder workspace experience across Spin-Out Lab, advisor tools, and venture-prep modules.[1]
+
+If you want, I can now give you the **fully merged final Replit prompt** with the workspace access section already inserted in the right place.
+
+Sources
+[1] Axal VC https://axal.vc/
