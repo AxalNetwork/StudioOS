@@ -676,7 +676,7 @@ function Dashboard({ state }) {
               deck readiness lives on the deck builder itself. */}
           <p className="mt-4 mb-0 text-[12.5px] text-gray-400 flex items-center gap-2">
             <BadgeCheck size={16} className="flex-none text-violet-500" aria-hidden="true" />
-            All Spin-Out Lab graduates receive a verified "Spin-Out Lab Alumni" badge on their Meridian founder profile.
+            All Spin-Out Lab graduates receive a verified "Spin-Out Lab Alumni" badge on their Axal VC founder profile.
           </p>
         </section>
 
