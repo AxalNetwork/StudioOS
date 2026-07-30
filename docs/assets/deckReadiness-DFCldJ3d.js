@@ -1,1 +1,0 @@
-function e({previewLoading:e,deckPreview:t}={}){return t?Array.isArray(t.gaps)&&t.gaps.length>0?`gaps`:t.draft?`draft`:`ready`:e?`loading`:`hidden`}export{e as t};

@@ -3150,6 +3150,11 @@ export const spinoutLab = {
       body: JSON.stringify({ milestone_key }),
     }),
   exit: () => request('/spinout-lab/exit', { method: 'POST' }),
+  // Public — real graduate companies for the "Graduate companies." section
+  // (renders on the logged-out marketing page too).
+  graduates: () => request('/spinout-lab/graduates'),
+  // Public — live "Active cohort." tracker members (same two surfaces).
+  cohort: () => request('/spinout-lab/cohort'),
   // Cohort application — signed-in founders only; contact info comes from
   // the account. Sends a confirmation email (production Worker).
   apply: (data) => request('/spinout-lab/apply', { method: 'POST', body: JSON.stringify(data) }),
