@@ -1439,8 +1439,12 @@ export const api = {
   // Spin-Out Lab cohort application review queue. Accept → admitted flags +
   // "You're in" email; refuse → encouragement-to-re-apply email (Worker).
   adminSpinoutApplications: () => request('/admin/spinout-applications'),
-  adminSpinoutDecide: (appId, decision) =>
-    request(`/admin/spinout-applications/${appId}/decide`, { method: 'POST', body: JSON.stringify({ decision }) }),
+  // Task #102 — optional `cohort` overrides the applied-to cohort on accept.
+  adminSpinoutDecide: (appId, decision, cohort) =>
+    request(`/admin/spinout-applications/${appId}/decide`, { method: 'POST', body: JSON.stringify(cohort ? { decision, cohort } : { decision }) }),
+  // Task #102 — admitted / active / graduated founders with milestone rows,
+  // derived tool unlocks, and the shared week catalog.
+  adminSpinoutParticipants: () => request('/admin/spinout-participants'),
 
   integrationsAvailable: () => request('/integrations/available'),
   // Crunchbase enrichment (Task #3, 2026-05-10) — growth tier, requires

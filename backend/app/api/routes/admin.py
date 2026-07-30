@@ -1,7 +1,7 @@
 import jwt
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlmodel import Session, select
 from backend.app.database import get_session
 from backend.app.models.entities import (
@@ -562,6 +562,12 @@ def admin_spinout_decide(
     decision = ((body or {}).get("decision") or "").strip().lower()
     if decision not in ("accepted", "refused"):
         raise HTTPException(status_code=400, detail="decision must be 'accepted' or 'refused'")
+    # Task #102 — optional cohort override on approval (defaults to the
+    # cohort the founder applied to, matching prior behavior).
+    # Worker parity: only a string cohort is honored; any other payload type
+    # is ignored and the applied-cohort/default fallback applies.
+    _raw_cohort = (body or {}).get("cohort")
+    cohort_override = _raw_cohort.strip()[:50] if isinstance(_raw_cohort, str) else ""
     row = session.exec(text(
         "SELECT id, user_id, cohort, status FROM spinout_applications WHERE id = :aid"
     ).bindparams(aid=app_id)).first()
@@ -582,17 +588,174 @@ def admin_spinout_decide(
     if getattr(result, "rowcount", 1) == 0:
         session.rollback()
         raise HTTPException(status_code=409, detail="Application was already decided")
+    cohort = cohort_override or row[2] or "Cohort 4"
     if decision == "accepted":
         target.spinout_lab_admitted = 1
-        target.spinout_lab_cohort = row[2] or "Cohort 4"
+        target.spinout_lab_cohort = cohort
         session.add(target)
     session.add(ActivityLog(
         action=f"spinout_application_{decision}",
-        details=f"Admin {admin.name} {decision} Spin-Out Lab application #{app_id} from {target.email} (dev: no email sent)",
+        details=f"Admin {admin.name} {decision} Spin-Out Lab application #{app_id} from {target.email}"
+        + (f" into {cohort}" if decision == "accepted" else "")
+        + " (dev: no email sent)",
         actor=admin.email,
     ))
     session.commit()
-    return {"ok": True, "status": decision, "emailed": False}
+    return {"ok": True, "status": decision, "cohort": cohort if decision == "accepted" else None, "emailed": False}
+
+
+# Task #102 — Spin-Out Lab participants for the admin dashboard
+# (/admin/spinout-lab): every admitted, active, or graduated founder with
+# their full program data — week/day, milestone rows, derived unlocked
+# tools, and the joined company/project. Worker parity:
+# cloudflare-worker/src/routes/admin.ts GET /spinout-participants.
+@router.get("/spinout-participants")
+def admin_spinout_participants(
+    session: Session = Depends(get_session),
+    admin: User = Depends(require_admin),
+):
+    from backend.app.api.routes.spinout_lab import (
+        MILESTONES, SPRINT_DAYS, _days_since, _unlocked_through,
+    )
+
+    catalog = [
+        {
+            "week": w["week"],
+            "required_all": w["required_all"],
+            "required_any": w["required_any"],
+            "unlocked_features": w["unlocked_features"],
+        }
+        for w in MILESTONES
+    ]
+
+    try:
+        rows = session.exec(text(
+            """SELECT u.id, u.uid, u.name, u.email,
+                      u.spinout_lab_admitted, u.spinout_lab_cohort,
+                      u.spinout_lab_active, u.spinout_lab_week,
+                      u.spinout_lab_started_at, u.is_incorporated,
+                      p.name, p.sector
+               FROM users u
+               LEFT JOIN projects p ON p.founder_id = u.founder_id
+               WHERE u.spinout_lab_admitted = 1
+                  OR u.spinout_lab_active = 1
+                  OR u.id IN (SELECT user_id FROM spinout_lab_milestones
+                              WHERE milestone_key = 'incorporation_completed')
+               ORDER BY u.spinout_lab_started_at ASC NULLS LAST, u.id ASC, p.id ASC
+               LIMIT 400"""
+        )).all()
+    except Exception:  # tables predate the Lab migrations
+        return {"participants": [], "catalog": catalog}
+
+    # Several projects per founder: keep the first row per user (same rule
+    # as the public cohort tracker).
+    deduped = []
+    seen = set()
+    for r in rows:
+        if r[0] in seen:
+            continue
+        seen.add(r[0])
+        deduped.append(r)
+
+    ms_map = {}
+    user_ids = [r[0] for r in deduped]
+    if user_ids:
+        try:
+            ms_rows = session.exec(
+                text(
+                    """SELECT user_id, milestone_key, week, completed_at
+                       FROM spinout_lab_milestones
+                       WHERE user_id IN :ids
+                       ORDER BY week ASC, completed_at ASC"""
+                ).bindparams(bindparam("ids", expanding=True)).bindparams(ids=user_ids)
+            ).all()
+        except Exception:
+            ms_rows = []
+        for m in ms_rows:
+            ms_map.setdefault(m[0], []).append({
+                "key": m[1],
+                "week": int(m[2]),
+                "completed_at": m[3].isoformat() if hasattr(m[3], "isoformat") else str(m[3]),
+            })
+
+    # Latest application per participant, fetched in ONE query (rows come
+    # back newest-first per user; keep the first seen) — a per-row
+    # _latest_application() call here would be an N+1 against up to 400
+    # participants. Same shape as spinout_lab._latest_application.
+    app_map = {}
+    if user_ids:
+        try:
+            app_rows = session.exec(
+                text(
+                    """SELECT user_id, id, company_name, incorporated, stage,
+                              jurisdiction, cohort, status, created_at, decided_at
+                       FROM spinout_applications
+                       WHERE user_id IN :ids
+                       ORDER BY user_id ASC, created_at DESC, id DESC"""
+                ).bindparams(bindparam("ids", expanding=True)).bindparams(ids=user_ids)
+            ).all()
+        except Exception:  # table not yet migrated
+            app_rows = []
+        for a in app_rows:
+            if a[0] in app_map:
+                continue
+            app_map[a[0]] = {
+                "id": a[1],
+                "company_name": a[2],
+                "incorporated": a[3],
+                "stage": a[4],
+                "jurisdiction": a[5],
+                "cohort": a[6],
+                "status": a[7],
+                "created_at": a[8].isoformat() if hasattr(a[8], "isoformat") else str(a[8]),
+                "decided_at": a[9].isoformat() if hasattr(a[9], "isoformat") else (str(a[9]) if a[9] else None),
+            }
+
+    participants = []
+    for r in deduped:
+        uid, started = r[0], r[8]
+        milestones = ms_map.get(uid, [])
+        completed_keys = {m["key"] for m in milestones}
+        active = int(r[6] or 0) == 1
+        graduated = "incorporation_completed" in completed_keys
+        status = "active" if active else ("graduated" if graduated else "admitted")
+        week = 4 if status == "graduated" else max(0, min(4, int(r[7] or 0)))
+        day = None
+        days_remaining = None
+        if status == "active" and started is not None:
+            day = min(SPRINT_DAYS, _days_since(started) + 1)
+            days_remaining = max(0, SPRINT_DAYS - _days_since(started))
+        elif status == "graduated" and started is not None:
+            done = next((m for m in milestones if m["key"] == "incorporation_completed"), None)
+            if done:
+                try:
+                    completed_dt = datetime.fromisoformat(done["completed_at"].replace(" ", "T"))
+                    started_dt = started if started.tzinfo else started
+                    delta = (completed_dt.replace(tzinfo=None) - started_dt.replace(tzinfo=None)).total_seconds()
+                    day = max(1, int(delta // 86_400) + 1)
+                except Exception:
+                    day = None
+        application = app_map.get(uid)
+        participants.append({
+            "user_id": uid,
+            "uid": r[1],
+            "name": r[2],
+            "email": r[3],
+            "admitted": int(r[4] or 0) == 1,
+            "cohort": r[5],
+            "status": status,
+            "week": week,
+            "day": day,
+            "days_remaining": days_remaining,
+            "started_at": started.isoformat() if hasattr(started, "isoformat") else (str(started) if started else None),
+            "is_incorporated": int(r[9] or 0) == 1,
+            "company_name": r[10] or (application or {}).get("company_name"),
+            "sector": r[11],
+            "milestones": milestones,
+            "unlocked_features": _unlocked_through(week) if status != "admitted" else [],
+            "application": application,
+        })
+    return {"participants": participants, "catalog": catalog}
 
 
 @router.post("/users/{user_id}/resend-verification")

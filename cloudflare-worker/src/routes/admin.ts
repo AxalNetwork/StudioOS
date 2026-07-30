@@ -16,6 +16,9 @@ import { assignFounderPublicId, assignPartnerPublicId, ensurePublicIdColumns } f
 // INTO the 'exploring' holding state (e.g. demoting a partner back for
 // re-review). ensureExploringSchema guarantees the CHECK admits the value.
 import { ensureExploringSchema } from '../services/exploringSchema';
+// Task #102 — admin Spin-Out Lab participants endpoint derives week/tool
+// unlocks from the shared milestone catalog (single source of truth).
+import { MILESTONES as SPINOUT_MILESTONES, unlockedFeaturesThrough } from '../services/spinoutLabCatalog';
 
 const admin = new Hono<{ Bindings: Env }>();
 
@@ -1046,11 +1049,14 @@ admin.post('/spinout-applications/:app_id/decide', async (c) => {
   const adminUser = await requireAdmin(c);
   const appId = parseInt(c.req.param('app_id'));
   if (!Number.isFinite(appId)) return c.json({ error: 'Invalid application id' }, 400);
-  const body = (await c.req.json().catch(() => ({}))) as { decision?: unknown };
+  const body = (await c.req.json().catch(() => ({}))) as { decision?: unknown; cohort?: unknown };
   const decision = (typeof body.decision === 'string' ? body.decision : '').trim().toLowerCase();
   if (decision !== 'accepted' && decision !== 'refused') {
     return c.json({ error: "decision must be 'accepted' or 'refused'" }, 400);
   }
+  // Task #102 — optional cohort override on approval (defaults to the
+  // cohort the founder applied to, matching prior behavior).
+  const cohortOverride = (typeof body.cohort === 'string' ? body.cohort : '').trim().slice(0, 50);
 
   const app: any = await c.env.DB.prepare(
     `SELECT a.id, a.user_id, a.company_name, a.cohort, a.status,
@@ -1070,7 +1076,7 @@ admin.post('/spinout-applications/:app_id/decide', async (c) => {
     return c.json({ error: 'Application was already decided' }, 409);
   }
 
-  const cohort = app.cohort || 'Cohort 4';
+  const cohort = cohortOverride || app.cohort || 'Cohort 4';
   const appUrl = (c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
   let emailed = false;
   if (decision === 'accepted') {
@@ -1120,7 +1126,155 @@ admin.post('/spinout-applications/:app_id/decide', async (c) => {
       adminHash, adminUser.id).run();
   } catch {}
 
-  return c.json({ ok: true, status: decision, emailed });
+  return c.json({ ok: true, status: decision, cohort: decision === 'accepted' ? cohort : null, emailed });
+});
+
+// Task #102 — Spin-Out Lab participants for the admin dashboard
+// (/admin/spinout-lab): every admitted, active, or graduated founder with
+// their full program data — week/day, milestone rows, derived unlocked
+// tools, and the joined company/project. Dev parity:
+// backend/app/api/routes/admin.py GET /admin/spinout-participants.
+admin.get('/spinout-participants', async (c) => {
+  await requireAdmin(c);
+
+  const catalog = SPINOUT_MILESTONES.map((w) => ({
+    week: w.week,
+    required_all: w.requiredAll,
+    required_any: w.requiredAny ?? [],
+    unlocked_features: w.unlockedFeatures,
+  }));
+
+  const SPRINT_DAYS = 28;
+  const parseTs = (s: string | null | undefined): number | null => {
+    if (!s) return null;
+    const ms = Date.parse(s.replace(' ', 'T') + (s.includes('Z') ? '' : 'Z'));
+    return Number.isFinite(ms) ? ms : null;
+  };
+  const daysSince = (startedAt: string | null | undefined): number => {
+    const startMs = parseTs(startedAt);
+    if (startMs == null) return 0;
+    return Math.max(0, Math.floor((Date.now() - startMs) / 86_400_000));
+  };
+
+  await ensureSpinoutAdmissionColumns(c.env);
+  let rows: any[] = [];
+  try {
+    const rs = await c.env.DB.prepare(
+      `SELECT u.id, u.uid, u.name, u.email,
+              u.spinout_lab_admitted, u.spinout_lab_cohort,
+              u.spinout_lab_active, u.spinout_lab_week,
+              u.spinout_lab_started_at, u.is_incorporated,
+              p.name AS project_name, p.sector AS project_sector
+       FROM users u
+       LEFT JOIN projects p ON p.founder_id = u.founder_id
+       WHERE u.spinout_lab_admitted = 1
+          OR u.spinout_lab_active = 1
+          OR u.id IN (SELECT user_id FROM spinout_lab_milestones
+                      WHERE milestone_key = 'incorporation_completed')
+       ORDER BY u.spinout_lab_started_at ASC, u.id ASC, p.id ASC
+       LIMIT 400`,
+    ).all();
+    rows = (rs.results ?? []) as any[];
+  } catch {
+    // tables predate the Lab migrations
+    return c.json({ participants: [], catalog });
+  }
+
+  // Several projects per founder: keep the first row per user (same rule
+  // as the public cohort tracker).
+  const deduped: any[] = [];
+  const seen = new Set<number>();
+  for (const r of rows) {
+    if (seen.has(r.id)) continue;
+    seen.add(r.id);
+    deduped.push(r);
+  }
+
+  const msMap = new Map<number, { key: string; week: number; completed_at: string }[]>();
+  if (deduped.length > 0) {
+    try {
+      const placeholders = deduped.map(() => '?').join(',');
+      const ms = await c.env.DB.prepare(
+        `SELECT user_id, milestone_key, week, completed_at
+         FROM spinout_lab_milestones
+         WHERE user_id IN (${placeholders})
+         ORDER BY week ASC, completed_at ASC`,
+      ).bind(...deduped.map((r) => r.id)).all();
+      for (const m of (ms.results ?? []) as any[]) {
+        const list = msMap.get(m.user_id) ?? [];
+        list.push({ key: m.milestone_key, week: Number(m.week), completed_at: m.completed_at });
+        msMap.set(m.user_id, list);
+      }
+    } catch { /* milestones table missing → empty lists */ }
+  }
+
+  // Latest application per participant, fetched in ONE query (rows come
+  // back newest-first per user; keep the first seen) — a per-row LIMIT 1
+  // lookup here would be an N+1 against up to 400 participants. Mirrors
+  // the dev backend's _latest_application shape.
+  const appMap = new Map<number, any>();
+  if (deduped.length > 0) {
+    try {
+      const placeholders = deduped.map(() => '?').join(',');
+      const apps = await c.env.DB.prepare(
+        `SELECT user_id, id, company_name, incorporated, stage, jurisdiction,
+                cohort, status, created_at, decided_at
+         FROM spinout_applications
+         WHERE user_id IN (${placeholders})
+         ORDER BY user_id ASC, created_at DESC, id DESC`,
+      ).bind(...deduped.map((r) => r.id)).all();
+      for (const a of (apps.results ?? []) as any[]) {
+        if (!appMap.has(a.user_id)) {
+          const { user_id: _uid, ...rest } = a;
+          appMap.set(a.user_id, rest);
+        }
+      }
+    } catch { /* table not yet migrated */ }
+  }
+
+  const participants = [];
+  for (const r of deduped) {
+    const milestones = msMap.get(r.id) ?? [];
+    const completedKeys = new Set(milestones.map((m) => m.key));
+    const active = Number(r.spinout_lab_active ?? 0) === 1;
+    const graduated = completedKeys.has('incorporation_completed');
+    const status = active ? 'active' : graduated ? 'graduated' : 'admitted';
+    const week = status === 'graduated' ? 4 : Math.max(0, Math.min(4, Number(r.spinout_lab_week ?? 0)));
+    let day: number | null = null;
+    let daysRemaining: number | null = null;
+    if (status === 'active' && r.spinout_lab_started_at) {
+      day = Math.min(SPRINT_DAYS, daysSince(r.spinout_lab_started_at) + 1);
+      daysRemaining = Math.max(0, SPRINT_DAYS - daysSince(r.spinout_lab_started_at));
+    } else if (status === 'graduated' && r.spinout_lab_started_at) {
+      const done = milestones.find((m) => m.key === 'incorporation_completed');
+      const startMs = parseTs(r.spinout_lab_started_at);
+      const doneMs = parseTs(done?.completed_at);
+      if (startMs != null && doneMs != null) {
+        day = Math.max(1, Math.floor((doneMs - startMs) / 86_400_000) + 1);
+      }
+    }
+    const application: any = appMap.get(r.id) ?? null;
+    participants.push({
+      user_id: r.id,
+      uid: r.uid ?? null,
+      name: r.name ?? null,
+      email: r.email,
+      admitted: Number(r.spinout_lab_admitted ?? 0) === 1,
+      cohort: r.spinout_lab_cohort ?? null,
+      status,
+      week,
+      day,
+      days_remaining: daysRemaining,
+      started_at: r.spinout_lab_started_at ?? null,
+      is_incorporated: Number(r.is_incorporated ?? 0) === 1,
+      company_name: r.project_name ?? application?.company_name ?? null,
+      sector: r.project_sector ?? null,
+      milestones,
+      unlocked_features: status !== 'admitted' ? unlockedFeaturesThrough(week) : [],
+      application: application ?? null,
+    });
+  }
+  return c.json({ participants, catalog });
 });
 
 admin.post('/users/:user_id/resend-verification', async (c) => {
