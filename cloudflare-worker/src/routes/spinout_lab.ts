@@ -520,6 +520,39 @@ type CohortMember = {
   started_at: string | null;
 };
 
+// GET /stats — PUBLIC (deliberately no requireAuth): real numbers for the
+// hero stats panel (also on the logged-out marketing page). Companies
+// built = distinct founders who completed the week-4 incorporation
+// milestone; total_raised sums each graduate's first (non-deleted)
+// project's total_funding. Never throws — answers zeros when tables
+// predate the Lab migrations.
+spinoutLab.get('/stats', async (c) => {
+  try {
+    const res = await c.env.DB.prepare(
+      `SELECT m.user_id, p.total_funding
+       FROM spinout_lab_milestones m
+       LEFT JOIN projects p ON p.founder_id = (SELECT founder_id FROM users WHERE id = m.user_id)
+         AND p.deleted_at IS NULL
+       WHERE m.milestone_key = 'incorporation_completed'
+       ORDER BY m.user_id ASC, p.id ASC`,
+    ).all<{ user_id: number; total_funding: number | null }>();
+    const rows = res.results ?? [];
+    const seen = new Set<number>();
+    let companies = 0;
+    let totalRaised = 0;
+    for (const r of rows) {
+      if (seen.has(r.user_id)) continue; // several projects: count the first
+      seen.add(r.user_id);
+      companies += 1;
+      const funding = Number(r.total_funding ?? 0);
+      if (Number.isFinite(funding) && funding > 0) totalRaised += funding;
+    }
+    return c.json({ companies, total_raised: totalRaised > 0 ? totalRaised : null });
+  } catch {
+    return c.json({ companies: 0, total_raised: null });
+  }
+});
+
 spinoutLab.get('/cohort', async (c) => {
   const parseTs = (s: string | null | undefined): number | null => {
     if (!s) return null;

@@ -3155,6 +3155,8 @@ export const spinoutLab = {
   graduates: () => request('/spinout-lab/graduates'),
   // Public — live "Active cohort." tracker members (same two surfaces).
   cohort: () => request('/spinout-lab/cohort'),
+  // Public — real hero stats (companies built, total raised by graduates).
+  stats: () => request('/spinout-lab/stats'),
   // Cohort application — signed-in founders only; contact info comes from
   // the account. Sends a confirmation email (production Worker).
   apply: (data) => request('/spinout-lab/apply', { method: 'POST', body: JSON.stringify(data) }),

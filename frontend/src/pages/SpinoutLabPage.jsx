@@ -301,6 +301,56 @@ export function GraduatesSection() {
   );
 }
 
+// Hero stats panel — LIVE data from GET /spinout-lab/stats (public; the
+// hero also renders on the logged-out marketing page). Companies built and
+// total raised are real; the "30 days" row is the program's promise, not a
+// measurement. The raised row always shows: "$0" when there is no funding
+// recorded yet (dev has no funding columns; production sums
+// projects.total_funding).
+export function HeroStatsPanel() {
+  // null = loading, 'error' = fetch failed, object = loaded
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    spinoutLab
+      .stats()
+      .then((r) => {
+        if (alive) setStats(r && typeof r === 'object' ? r : 'error');
+      })
+      .catch((e) => {
+        reportError('spinout-lab:stats', e);
+        if (alive) setStats('error');
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const loaded = stats && stats !== 'error' ? stats : null;
+  const companies = loaded ? Number(loaded.companies) || 0 : null;
+  const raised = loaded ? (fmtRaised(loaded.total_raised) ?? '$0') : null;
+
+  return (
+    <div className="flex flex-col gap-[1px] min-w-[230px] bg-white/10 border border-white/20 rounded-[16px] overflow-hidden">
+      <div className="p-4 px-5 flex flex-col gap-0.5">
+        <div className="tabular-nums text-[26px] font-extrabold tracking-tight">
+          {companies === null ? '—' : `${companies} ${companies === 1 ? 'company' : 'companies'}`}
+        </div>
+        <div className="text-[12.5px] text-[#a89fce]">Built to date</div>
+      </div>
+      <div className="p-4 px-5 flex flex-col gap-0.5 border-t border-white/10">
+        <div className="tabular-nums text-[26px] font-extrabold tracking-tight">{raised === null ? '—' : raised}</div>
+        <div className="text-[12.5px] text-[#a89fce]">Total capital raised by graduates</div>
+      </div>
+      <div className="p-4 px-5 flex flex-col gap-0.5 border-t border-white/10">
+        <div className="tabular-nums text-[26px] font-extrabold tracking-tight">30 days</div>
+        <div className="text-[12.5px] text-[#a89fce]">Average time to incorporation</div>
+      </div>
+    </div>
+  );
+}
+
 export function CohortTrackerSection() {
   // null = loading, 'error' = fetch failed, [] = no active cohort
   const [members, setMembers] = useState(null);
@@ -567,20 +617,7 @@ function Dashboard({ state }) {
                 <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 border border-white/20 text-[12.5px] font-semibold text-[#ede9fe]">Vesting cap table</span>
               </div>
             </div>
-            <div className="flex flex-col gap-[1px] min-w-[230px] bg-white/10 border border-white/20 rounded-[16px] overflow-hidden">
-              <div className="p-4 px-5 flex flex-col gap-0.5">
-                <div className="tabular-nums text-[26px] font-extrabold tracking-tight">12 companies</div>
-                <div className="text-[12.5px] text-[#a89fce]">Built to date</div>
-              </div>
-              <div className="p-4 px-5 flex flex-col gap-0.5 border-t border-white/10">
-                <div className="tabular-nums text-[26px] font-extrabold tracking-tight">$2.4M</div>
-                <div className="text-[12.5px] text-[#a89fce]">Total capital raised by graduates</div>
-              </div>
-              <div className="p-4 px-5 flex flex-col gap-0.5 border-t border-white/10">
-                <div className="tabular-nums text-[26px] font-extrabold tracking-tight">30 days</div>
-                <div className="text-[12.5px] text-[#a89fce]">Average time to incorporation</div>
-              </div>
-            </div>
+            <HeroStatsPanel />
           </div>
         </section>
 

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Lock } from 'lucide-react';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
-import { PIPELINE_PHASES, PHASE_THEMES, DELIVERABLES, CohortTrackerSection, GraduatesSection, ApplyCtaSection, LAB_APPLY_HREF as APPLY_HREF, LAB_CONTACT_HREF as CONTACT_HREF } from './SpinoutLabPage';
+import { PIPELINE_PHASES, PHASE_THEMES, DELIVERABLES, HeroStatsPanel, CohortTrackerSection, GraduatesSection, ApplyCtaSection, LAB_APPLY_HREF as APPLY_HREF, LAB_CONTACT_HREF as CONTACT_HREF } from './SpinoutLabPage';
 
 export default function SpinoutLabMarketingPage() {
   return (
@@ -46,20 +46,7 @@ export default function SpinoutLabMarketingPage() {
                 <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 border border-white/20 text-[12.5px] font-semibold text-[#ede9fe]">Vesting cap table</span>
               </div>
             </div>
-            <div className="flex flex-col gap-[1px] min-w-[230px] bg-white/10 border border-white/20 rounded-[16px] overflow-hidden">
-              <div className="p-4 px-5 flex flex-col gap-0.5">
-                <div className="tabular-nums text-[26px] font-extrabold tracking-tight">12 companies</div>
-                <div className="text-[12.5px] text-[#a89fce]">Built to date</div>
-              </div>
-              <div className="p-4 px-5 flex flex-col gap-0.5 border-t border-white/10">
-                <div className="tabular-nums text-[26px] font-extrabold tracking-tight">$2.4M</div>
-                <div className="text-[12.5px] text-[#a89fce]">Total capital raised by graduates</div>
-              </div>
-              <div className="p-4 px-5 flex flex-col gap-0.5 border-t border-white/10">
-                <div className="tabular-nums text-[26px] font-extrabold tracking-tight">30 days</div>
-                <div className="text-[12.5px] text-[#a89fce]">Average time to incorporation</div>
-              </div>
-            </div>
+            <HeroStatsPanel />
           </div>
         </section>
 
