@@ -44,7 +44,7 @@ const DELIVERABLES = [
   { Icon: FileCheck2, title: "83(b) Election", body: "Filed within the 30-day IRS window, archived in your data room." },
   { Icon: Presentation, title: "Pitch Deck", body: "12-slide venture-standard deck, designed and reviewed." },
   { Icon: LineChart, title: "Financial Model", body: "3-year P&L, revenue model, and unit economics." },
-  { Icon: Handshake, title: "Warm Introductions", body: "5–10 curated intros to the Meridian investor network." },
+  { Icon: Handshake, title: "Warm Introductions", body: "5–10 curated intros to the Axal VC investor network." },
   { Icon: Users, title: "Advisor Network", body: "2 matched advisors with equity agreements in place." },
   { Icon: FolderOpen, title: "Data Room", body: "Organized deal room ready for investor due diligence." },
 ];
@@ -162,7 +162,7 @@ export default function SpinoutLabBriefPage() {
             <div className="tabular-nums text-[12.5px] text-gray-500 dark:text-gray-400 print:text-gray-500 mt-0.5">Applications close August 1, 2026 · 8 spots</div>
           </div>
           <div className="text-[12.5px] text-gray-500 dark:text-gray-400 print:text-gray-500 max-w-[280px]">
-            Open to all Meridian users. Acceptance is selective. No equity taken by Meridian.
+            Open to all Axal VC users. Acceptance is selective. No equity taken by Axal VC.
           </div>
         </section>
       </div>

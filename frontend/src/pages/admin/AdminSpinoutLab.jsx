@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Check, X, RefreshCw, Search, FlaskConical, Users, Inbox, ExternalLink,
-  Lock, Unlock, ChevronRight, Calendar, Building2, CircleDashed,
+  Lock, Unlock, ChevronRight, Calendar, Building2, CircleDashed, Eye,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
@@ -599,9 +599,21 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
           <FlaskConical size={18} className="text-violet-500" />
           <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Spin-Out Lab</h2>
         </div>
-        <button onClick={load} className="text-xs font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1.5" data-testid="button-refresh-spinout-lab">
-          <RefreshCw size={13} /> Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Task #106 — read-only walkthrough of the new-founder journey
+              (marketing → apply → confirmation → welcome → workspace →
+              graduation) on simulated data; no impersonation, no writes. */}
+          <button
+            onClick={() => navigate('/admin/spinout-lab/preview')}
+            data-testid="button-preview-journey"
+            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1.5"
+          >
+            <Eye size={13} /> Preview founder journey
+          </button>
+          <button onClick={load} className="text-xs font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1.5" data-testid="button-refresh-spinout-lab">
+            <RefreshCw size={13} /> Refresh
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-1.5 mb-5" role="tablist">
