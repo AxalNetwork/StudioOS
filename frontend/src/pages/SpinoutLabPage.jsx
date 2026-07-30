@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Loader2, ArrowRight, FlaskConical, Globe, Circle, Lock, FileText, BadgeCheck } from "lucide-react";
+import { Check, Loader2, ArrowRight, FlaskConical, Circle, Lock, FileText, BadgeCheck, ChevronDown } from "lucide-react";
 import { api, spinoutLab } from "../lib/api";
 import { deckReadinessState } from "../lib/deckReadiness";
 import { useAuth } from "../hooks/useAuthSync";
 import { reportError } from "../lib/log";
 import SpinoutLabMarketingPage from "./SpinoutLabMarketingPage";
+import { FEATURE_CATALOGUE, WEEK_ORDER } from "../components/SpinoutLabSidebar";
 
 const WEEK_MILESTONES = {
   1: ["project_created", "customer_interview_logged_1", "customer_interview_logged_2", "customer_interview_logged_3"],
@@ -357,260 +358,618 @@ function CongratulationsScreen({ cohort, onStart, starting, startError }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Workspace home (design handoff: "Spin-Out Lab Workspace"). All progress
+// data comes from /api/spinout-lab/state; only the copy below is static.
+// Tool cards deep-link to the app's live pages via the sidebar's
+// FEATURE_CATALOGUE / WEEK_ORDER so both surfaces stay in lockstep.
+// ---------------------------------------------------------------------------
+
+// Progress is counted in "completion units" mirroring the backend gates
+// (backend/app/api/routes/spinout_lab.py MILESTONES): weeks 1/2/4 require all
+// their milestones, week 3 requires scoring + EITHER advisor or co-founder —
+// so week 3 is 2 units, not 3, and the program totals 10 units.
+const WEEK3_EITHER = ["advisor_meeting_booked", "cofounder_request_sent"];
+const WEEK_UNIT_TOTALS = { 1: 4, 2: 3, 3: 2, 4: 1 };
+const TOTAL_UNITS = Object.values(WEEK_UNIT_TOTALS).reduce((n, c) => n + c, 0);
+
+const WEEK_META = {
+  1: {
+    name: "Idea & Customer",
+    accent: "#16a34a",
+    summary: "Define the problem and ICP. Create your startup record. Talk to customers and log every interview.",
+    ctas: [
+      { label: "Open Startups", to: "/projects" },
+      { label: "Open Customer Discovery", to: "/build/discovery" },
+    ],
+    leaveWith: "Startup record · 3 logged interviews · Validated problem",
+  },
+  2: {
+    name: "Solution & Roadmap",
+    accent: "#7c3aed",
+    summary: "Scope the MVP. Set your quarter OKRs. Draft brand v1 and pitch deck v1.",
+    ctas: [
+      { label: "Open Roadmap", to: "/build/roadmap" },
+      { label: "Open Pitch Deck", to: "/build/deck" },
+    ],
+    leaveWith: "Quarter OKRs · Brand basics · Pitch deck v1",
+  },
+  3: {
+    name: "Validate & Team",
+    accent: "#0d9488",
+    summary: "Run the AI scoring engine. Book your first advisor meeting. Decide the co-founder track.",
+    ctas: [
+      { label: "Open AI Scoring", to: "/scoring" },
+      { label: "Open Advisors", to: "/advisors" },
+    ],
+    leaveWith: "Venture-readiness score · Advisor cadence · Co-founder decision",
+  },
+  4: {
+    name: "Incorporate & Capital",
+    accent: "#d97706",
+    summary: "Incorporate the entity. Set up the vesting cap table. File 83(b). Line up capital.",
+    ctas: [
+      { label: "Open Incorporate", to: "/incorporate" },
+      { label: "Open Cap Table", to: "/build/captable" },
+    ],
+    leaveWith: "Delaware C-Corp · Vesting cap table · 83(b) filed",
+  },
+};
+
+const MILESTONE_SHORT = {
+  project_created: "Startup",
+  customer_interview_logged_1: "Interview #1",
+  customer_interview_logged_2: "Interview #2",
+  customer_interview_logged_3: "Interview #3",
+  okrs_created: "OKRs",
+  brand_basics_filled: "Brand",
+  pitch_deck_drafted: "Deck v1",
+  scoring_run_completed: "Score",
+  advisor_meeting_booked: "Advisor",
+  cofounder_request_sent: "Co-founder",
+  incorporation_completed: "C-Corp",
+};
+
+const MILESTONE_TOOLS = {
+  project_created: { label: "Open Startups", to: "/projects" },
+  customer_interview_logged_1: { label: "Open Customer Discovery", to: "/build/discovery" },
+  customer_interview_logged_2: { label: "Open Customer Discovery", to: "/build/discovery" },
+  customer_interview_logged_3: { label: "Open Customer Discovery", to: "/build/discovery" },
+  okrs_created: { label: "Open Roadmap", to: "/build/roadmap" },
+  brand_basics_filled: { label: "Open Brand Builder", to: "/build/brand" },
+  pitch_deck_drafted: { label: "Open Pitch Deck", to: "/build/deck" },
+  scoring_run_completed: { label: "Open AI Scoring", to: "/scoring" },
+  advisor_meeting_booked: { label: "Open Advisors", to: "/advisors" },
+  cofounder_request_sent: { label: "Open Co-founder Match", to: "/cofounder" },
+  incorporation_completed: { label: "Open Incorporate", to: "/incorporate" },
+};
+
+const weekTools = (w) =>
+  (WEEK_ORDER[w] || [])
+    .filter((k) => k !== "spinout-lab" && FEATURE_CATALOGUE[k])
+    .map((k) => ({ key: k, ...FEATURE_CATALOGUE[k] }));
+
+function StatusBadge({ status }) {
+  if (status === "done") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10.5px] font-bold rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
+        <Check size={10} strokeWidth={3} aria-hidden="true" /> Completed
+      </span>
+    );
+  }
+  if (status === "active") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[10.5px] font-bold rounded-full px-2 py-0.5 bg-violet-50 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+        <span className="w-[5px] h-[5px] rounded-full bg-violet-600" style={{ animation: "wsPulse 2s infinite" }} aria-hidden="true" /> Active
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[10.5px] font-bold rounded-full px-2 py-0.5 bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500">
+      <Lock size={9} aria-hidden="true" /> Locked
+    </span>
+  );
+}
+
+function SectionLabel({ children }) {
+  return <div className="text-[11px] font-bold uppercase tracking-[.06em] text-gray-400 dark:text-gray-500 mb-3">{children}</div>;
+}
+
 function Dashboard({ state, onComplete, completing, completeError }) {
   const week = Math.max(1, Math.min(4, state.week || 1));
-  const completedKeys = new Set((state.milestones || []).map((m) => m.key));
-  const isIncorporated = completedKeys.has("incorporation_completed");
-  
+  const milestones = state.milestones || [];
+  const completedKeys = new Set(milestones.map((m) => m.key));
+  const completedAtByKey = new Map(milestones.map((m) => [m.key, m.completed_at]));
+  const isIncorporated = completedKeys.has("incorporation_completed") || !!state.is_incorporated;
+  const unlocked = new Set(state.unlocked_features || []);
+  const [openPast, setOpenPast] = useState(null);
+
+  const statusOf = (w) => (isIncorporated || week > w ? "done" : week === w ? "active" : "locked");
+  const doneUnitsIn = (w) => {
+    if (w === 3) {
+      return (
+        (completedKeys.has("scoring_run_completed") ? 1 : 0) +
+        (WEEK3_EITHER.some((k) => completedKeys.has(k)) ? 1 : 0)
+      );
+    }
+    return WEEK_MILESTONES[w].filter((k) => completedKeys.has(k)).length;
+  };
+
   const startedAt = state.started_at;
-  const startedAtStr = startedAt ? new Date(startedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "Recently";
-  // Reference design: Delaware + Wyoming selectable, the rest "Soon".
-  // Client-side selection only — incorporation itself is Delaware-first.
-  const [jurisdiction, setJurisdiction] = useState('de');
+  const startedAtStr = startedAt ? new Date(startedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : null;
+  const daysRemaining = Number.isFinite(state.days_remaining) ? state.days_remaining : null;
+  const programDay = startedAt
+    ? Math.min(30, Math.max(1, Math.floor((Date.now() - new Date(startedAt).getTime()) / 86400000) + 1))
+    : null;
+
+  const completedCount = [1, 2, 3, 4].reduce((n, w) => n + doneUnitsIn(w), 0);
+  const progressPct = isIncorporated ? 100 : Math.round((completedCount / TOTAL_UNITS) * 100);
+
+  const toolsUnlockedIn = (w) => weekTools(w).filter((t) => unlocked.has(t.key)).length;
+  const totalToolsUnlocked = [1, 2, 3, 4].reduce((n, w) => n + toolsUnlockedIn(w), 0);
+  const totalTools = [1, 2, 3, 4].reduce((n, w) => n + weekTools(w).length, 0);
+
+  const focusWeek = isIncorporated ? 4 : week;
+  const meta = WEEK_META[focusWeek];
+  const pastWeeks = [1, 2, 3, 4].filter((w) => statusOf(w) === "done");
+  const futureWeeks = [1, 2, 3, 4].filter((w) => statusOf(w) === "locked");
 
   return (
-    <div className="min-h-[100dvh] bg-[#F8F8FA] dark:bg-gray-950 font-sans text-gray-900 dark:text-gray-100 flex flex-col">
-      <main className="flex-1 w-full max-w-[1080px] mx-auto px-6 py-8 pb-20">
-        
-        {/* HEADER */}
-        <div className="flex flex-wrap gap-5 items-start justify-between mb-6">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-violet-600 dark:text-violet-400">
-                 <FlaskConical size={20} />
+    <div className="min-h-[100dvh] bg-[#F8F8FA] dark:bg-gray-950 font-sans text-gray-900 dark:text-gray-100">
+
+      {/* STICKY PAGE HEADER */}
+      <div className="sticky top-0 z-20 bg-[#F8F8FA]/90 dark:bg-gray-950/90 backdrop-blur-md border-b border-gray-200/80 dark:border-gray-800">
+        <div className="max-w-[1180px] mx-auto px-6 pt-4">
+          <div className="flex flex-wrap gap-4 items-center justify-between">
+            <div className="flex items-center gap-3.5 flex-wrap">
+              <div className="flex items-center gap-2.5">
+                <div className="w-[34px] h-[34px] rounded-[10px] bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center text-violet-600 dark:text-violet-400">
+                  <FlaskConical size={18} aria-hidden="true" />
+                </div>
+                <h1 className="m-0 text-xl font-extrabold tracking-[-.02em]">Spin-Out Lab</h1>
               </div>
-              <h1 className="m-0 text-3xl font-extrabold tracking-tight">Spin-Out Lab</h1>
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" style={{animation: 'wsPulse 2s infinite'}}></span>
-                {state.cohort || 'Cohort 3'} · Active
+              <span className="tabular-nums text-xs font-semibold text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-2.5 py-[5px]">
+                {state.cohort || "Cohort 3"}{startedAtStr ? ` · Started ${startedAtStr}` : ""}
               </span>
-            </div>
-            <p className="mt-2.5 ml-[52px] text-[15px] text-gray-500 dark:text-gray-400">From idea to incorporated in 30 days. Started {startedAtStr}.</p>
-          </div>
-          <div className="flex gap-2.5 items-center">
-            <Link to="/spinout-lab/brief" data-testid="download-program-brief" className="h-10 px-4 rounded-[10px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 text-[13.5px] font-semibold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-              <FileText size={15} aria-hidden="true" /> Download Program Brief
-            </Link>
-            <Link to="/spinout-lab/apply" data-testid="apply-next-cohort" className="h-10 px-4 rounded-[10px] bg-violet-600 text-white text-[13.5px] font-semibold flex items-center gap-2 shadow-sm shadow-violet-500/30 hover:bg-violet-700 transition-colors">
-              Apply to Next Cohort <span className="text-[15px]" aria-hidden="true">→</span>
-            </Link>
-          </div>
-        </div>
-
-        {/* JURISDICTION SELECTOR */}
-        <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-3 px-4 mb-8 shadow-sm">
-          <div className="flex items-center gap-2">
-            <Globe className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-            <span className="text-[13px] font-bold text-gray-900 dark:text-gray-100">Incorporation jurisdiction</span>
-          </div>
-          <div className="flex gap-1.5 flex-wrap">
-            {LAB_JURISDICTIONS.map((j) => (
-              j.soon ? (
-                <button key={j.key} disabled className="h-[34px] px-3 rounded-lg bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800 text-[13px] font-semibold opacity-60 flex items-center gap-1.5">
-                  {j.label} <span className="text-[9px] font-bold uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded px-1.5 py-0.5">Soon</span>
-                </button>
+              {isIncorporated ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 rounded-lg px-2.5 py-[5px]">
+                  <Check size={11} strokeWidth={3} aria-hidden="true" /> Program complete
+                </span>
               ) : (
-                <button
-                  key={j.key}
-                  type="button"
-                  onClick={() => setJurisdiction(j.key)}
-                  className={`h-[34px] px-3 rounded-lg text-[13px] font-semibold transition-colors border ${
-                    jurisdiction === j.key
-                      ? 'bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-500/30'
-                      : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800'
-                  }`}
+                <span className="tabular-nums inline-flex items-center gap-[7px] text-xs font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border border-violet-100 dark:border-violet-800/50 rounded-lg px-2.5 py-[5px]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-violet-600" style={{ animation: "wsPulse 2s infinite" }} aria-hidden="true" />
+                  Week {week} of 4{programDay ? ` · Day ${programDay}` : ""}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="w-[46px] h-[46px] rounded-full flex items-center justify-center flex-none"
+                  style={{ background: `conic-gradient(#7c3aed 0% ${progressPct}%, #e5e7eb ${progressPct}% 100%)` }}
+                  role="img"
+                  aria-label={`${progressPct}% of milestones complete`}
                 >
-                  {j.label}
-                </button>
-              )
-            ))}
-          </div>
-          <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto hidden md:inline">Entity & equity filing update across the program →</span>
-        </div>
-
-        {/* HERO SECTION */}
-        <section className="rounded-[20px] p-[38px] md:p-[40px] mb-10 overflow-hidden relative text-white" style={{ background: 'radial-gradient(1200px 400px at 12% -20%,rgba(139,92,246,.5),transparent 60%),linear-gradient(115deg,#1e1b3a 0%,#2a1d54 55%,#3b1d6e 100%)' }}>
-          <div className="flex flex-wrap gap-10 justify-between items-center relative z-10">
-            <div className="min-w-[300px] flex-1">
-              <div className="tabular-nums text-[76px] leading-[0.9] font-black tracking-[-0.04em] text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(90deg,#fff,#c4b5fd)', WebkitBackgroundClip: 'text' }}>30 days</div>
-              <p className="my-3.5 mb-5 text-[16px] text-[#cbc4e8] font-medium">Idea <span className="text-[#8b5cf6]">→</span> Delaware C-Corp <span className="text-[#8b5cf6]">→</span> Funded</p>
-              <div className="flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 border border-white/20 text-[12.5px] font-semibold text-[#ede9fe]">3 warm introductions</span>
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 border border-white/20 text-[12.5px] font-semibold text-[#ede9fe]">Pitch deck</span>
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 border border-white/20 text-[12.5px] font-semibold text-[#ede9fe]">Vesting cap table</span>
-              </div>
-            </div>
-            <div className="flex flex-col gap-[1px] min-w-[230px] bg-white/10 border border-white/20 rounded-[16px] overflow-hidden">
-              <div className="p-4 px-5 flex flex-col gap-0.5">
-                <div className="tabular-nums text-[26px] font-extrabold tracking-tight">12 companies</div>
-                <div className="text-[12.5px] text-[#a89fce]">Built to date</div>
-              </div>
-              <div className="p-4 px-5 flex flex-col gap-0.5 border-t border-white/10">
-                <div className="tabular-nums text-[26px] font-extrabold tracking-tight">$2.4M</div>
-                <div className="text-[12.5px] text-[#a89fce]">Total capital raised by graduates</div>
-              </div>
-              <div className="p-4 px-5 flex flex-col gap-0.5 border-t border-white/10">
-                <div className="tabular-nums text-[26px] font-extrabold tracking-tight">30 days</div>
-                <div className="text-[12.5px] text-[#a89fce]">Average time to incorporation</div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 30-DAY PIPELINE */}
-        <section className="mb-12">
-          <div className="flex items-baseline justify-between mb-1.5">
-            <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em]">The 30-day pipeline</h2>
-            <span className="text-[12.5px] text-gray-400">5 phases · sequential gates</span>
-          </div>
-          <p className="m-0 mb-5 text-[13.5px] text-gray-500">Each phase ends at a gate. Companies advance only on completion.</p>
-
-          <div className="flex flex-col lg:flex-row items-stretch gap-3 lg:gap-0">
-            {PIPELINE_PHASES.map((p, i) => {
-              const isDone = isIncorporated || week > p.backendWeek;
-              const isActive = !isDone && week === p.backendWeek;
-              const t = PHASE_THEMES[p.color];
-              
-              const statusIcon = isDone ? <Check size={14} strokeWidth={3} className="text-white" aria-hidden="true" /> : isActive ? <Circle size={14} fill="currentColor" stroke="none" style={{ animation: "wsPulse 2s infinite" }} className={t.ink} aria-hidden="true" /> : <Lock size={14} className="text-gray-400" aria-hidden="true" />;
-              
-              return (
-                <div key={i} className="flex items-stretch flex-1 min-w-0">
-                  <div className={`flex-1 min-w-0 rounded-[16px] p-[18px] flex flex-col transition-all border ${t.bg} ${t.border} ${isActive ? `ring-2 ring-offset-2 dark:ring-offset-gray-950 shadow-lg ${t.ring}` : ''}`}>
-                    <div className="flex items-center justify-between mb-2.5">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className={`w-[30px] h-[30px] flex-none rounded-[9px] font-extrabold text-[14px] flex items-center justify-center ${t.chip} ${t.ink}`}>{i + 1}</div>
-                        <div className="text-[15px] font-extrabold tracking-[-.01em]">{p.name}</div>
-                      </div>
-                      <span className={`w-[24px] h-[24px] flex-none flex items-center justify-center ${isDone ? 'rounded-full' : ''}`} style={isDone ? { background: t.fill } : {}}>
-                        {statusIcon}
-                      </span>
-                    </div>
-                    <span className={`tabular-nums self-start whitespace-nowrap px-[9px] py-[3px] rounded-[7px] text-[11px] font-bold mb-[13px] ${t.chip} ${t.ink}`}>
-                      {p.days}
-                    </span>
-                    <ul className="m-0 p-0 list-none flex flex-col gap-2 mb-4">
-                      {p.milestones.map((m) => {
-                         const done = completedKeys.has(m);
-                         return (
-                           <li key={m} className="flex gap-2 text-[12.5px] leading-[1.35] text-gray-700 dark:text-gray-300">
-                             <span className={`flex-none font-bold ${t.ink}`} aria-hidden="true">·</span>
-                             <span className="flex-1 flex flex-col gap-1.5">
-                               <span className={done ? "line-through opacity-60" : ""}>{MILESTONE_LABELS[m] || m}</span>
-                               {isActive && !done && (
-                                 <button type="button" onClick={() => onComplete(m)} disabled={completing === m} className={`self-start text-[11px] font-semibold px-2.5 py-1 rounded-md border bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-1.5 ${t.ink} ${t.border} disabled:opacity-60`}>
-                                    {completing === m ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : <Check size={12} aria-hidden="true" />} Complete
-                                 </button>
-                               )}
-                             </span>
-                           </li>
-                         );
-                      })}
-                    </ul>
-                    <div className={`mt-auto flex flex-col gap-1.5 border-t pt-3 ${t.border}`}>
-                       {p.tools.map((tool) => (
-                         <Link key={tool.label} to={tool.to} className={`flex items-center justify-between text-[11.5px] font-semibold px-2.5 py-2 rounded-lg transition-colors bg-white/60 dark:bg-gray-900/50 hover:bg-white dark:hover:bg-gray-800 border ${t.border} ${t.ink}`}>
-                            <span>{tool.label}</span>
-                            <ArrowRight size={12} aria-hidden="true" />
-                         </Link>
-                       ))}
-                    </div>
+                  <div className="tabular-nums w-[38px] h-[38px] rounded-full bg-[#F8F8FA] dark:bg-gray-950 flex items-center justify-center text-[10.5px] font-extrabold text-violet-700 dark:text-violet-300">
+                    {progressPct}%
                   </div>
-                  {i < PIPELINE_PHASES.length - 1 && (
-                    <div className="w-[26px] flex-none hidden lg:flex items-center justify-center text-violet-300 dark:text-violet-800">
-                      <ArrowRight size={18} aria-hidden="true" />
-                    </div>
-                  )}
+                </div>
+                <div className="leading-[1.15]">
+                  <div className="tabular-nums text-[13px] font-bold">{completedCount} of {TOTAL_UNITS} milestones</div>
+                  <div className="tabular-nums text-xs text-gray-500 dark:text-gray-400">
+                    {daysRemaining != null ? `${daysRemaining} days remaining` : "30-day program"}
+                  </div>
+                </div>
+              </div>
+              <div className="w-px h-[34px] bg-gray-200 dark:bg-gray-800 hidden sm:block" />
+              <div className="flex gap-2">
+                <Link to="/spinout-lab/brief" data-testid="download-program-brief" className="h-9 px-3.5 rounded-[10px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 text-[12.5px] font-semibold flex items-center gap-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                  <FileText size={14} aria-hidden="true" /> Program Brief
+                </Link>
+                <Link to="/spinout-lab/apply" data-testid="apply-next-cohort" className="h-9 px-3.5 rounded-[10px] bg-violet-600 text-white text-[12.5px] font-semibold flex items-center gap-1.5 shadow-sm shadow-violet-500/30 hover:bg-violet-700 transition-colors">
+                  Apply to Next Cohort <ArrowRight size={13} aria-hidden="true" />
+                </Link>
+              </div>
+            </div>
+          </div>
+          {/* Segmented week progress */}
+          <div className="flex gap-1.5 py-3.5">
+            {[1, 2, 3, 4].map((w) => {
+              const st = statusOf(w);
+              const weekPct = st === "done" ? 100 : st === "active" ? Math.max(6, Math.round((doneUnitsIn(w) / WEEK_UNIT_TOTALS[w]) * 100)) : 0;
+              return (
+                <div key={w} className="flex-1 flex flex-col gap-[5px]">
+                  <div className={`h-[7px] rounded-full relative overflow-hidden ${st === "locked" ? "bg-gray-200 dark:bg-gray-800" : "bg-violet-100 dark:bg-violet-900/40"}`}>
+                    <div
+                      className="absolute inset-y-0 left-0 bg-violet-600 rounded-full"
+                      style={{ width: `${weekPct}%`, ...(st === "active" ? { animation: "wsPulse 2s infinite" } : {}) }}
+                    />
+                  </div>
+                  <div className={`flex items-center gap-[5px] text-[11px] font-semibold ${st === "locked" ? "text-gray-400 dark:text-gray-500" : "text-violet-700 dark:text-violet-300"}`}>
+                    {st === "active" && <span className="w-[5px] h-[5px] rounded-full bg-violet-600" style={{ animation: "wsPulse 2s infinite" }} aria-hidden="true" />}
+                    Week {w}
+                  </div>
                 </div>
               );
             })}
           </div>
-          {completeError && (
-            <div className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3 px-4 dark:bg-red-950/30 dark:border-red-900 dark:text-red-400">
-              {completeError}
-            </div>
-          )}
-          
-          <DeckReadinessCard />
+        </div>
+      </div>
 
-          <p className="mt-4 mb-0 text-[12.5px] text-gray-400 flex items-center gap-2">
+      <main className="max-w-[1180px] mx-auto px-6 py-7 pb-24">
+
+        {/* SECTION 1 — WEEK TIMELINE */}
+        <section className="mb-9">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
+            {[1, 2, 3, 4].map((w) => {
+              const st = statusOf(w);
+              const m = WEEK_META[w];
+              return (
+                <div
+                  key={w}
+                  className={`bg-white dark:bg-gray-900 border rounded-2xl p-4 flex flex-col shadow-sm ${st === "active" ? "border-violet-300 dark:border-violet-700" : "border-gray-200 dark:border-gray-800"}`}
+                  style={st === "active" ? { animation: "wsGlow 3s infinite" } : undefined}
+                >
+                  <div className="flex items-center justify-between mb-2.5 gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-[26px] h-[26px] flex-none rounded-lg text-[12px] font-extrabold flex items-center justify-center" style={{ background: `${m.accent}1a`, color: m.accent }}>{w}</div>
+                      <div className="text-[14px] font-extrabold tracking-[-.01em] truncate">{m.name}</div>
+                    </div>
+                    <StatusBadge status={st} />
+                  </div>
+                  <p className="m-0 mb-3 text-[12px] leading-[1.45] text-gray-500 dark:text-gray-400">{m.summary}</p>
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {WEEK_MILESTONES[w].map((k) => {
+                      const done = completedKeys.has(k);
+                      return (
+                        <span key={k} className={`inline-flex items-center gap-1 text-[10.5px] font-semibold rounded-md px-1.5 py-0.5 ${done ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400" : "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500"}`}>
+                          {done ? <Check size={10} strokeWidth={3} aria-hidden="true" /> : <Circle size={8} aria-hidden="true" />}
+                          {MILESTONE_SHORT[k] || k}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-auto flex flex-wrap gap-1.5 pt-2.5 border-t border-gray-100 dark:border-gray-800">
+                    {weekTools(w).map((t) =>
+                      unlocked.has(t.key) ? (
+                        <Link key={t.key} to={t.to} className="text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 rounded-md px-2 py-[3px] hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors">
+                          {t.label}
+                        </Link>
+                      ) : (
+                        <span key={t.key} className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800 rounded-md px-2 py-[3px]">
+                          <Lock size={9} aria-hidden="true" />{t.label}
+                        </span>
+                      )
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* SECTION 2 — ACTIVE WEEK / COMPLETION PANEL */}
+        {isIncorporated ? (
+          <section className="mb-9">
+            <div className="bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-900 rounded-2xl p-6 shadow-sm flex flex-wrap items-center justify-between gap-5">
+              <div className="min-w-[260px] flex-1">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.05em] rounded-full px-2.5 py-1 mb-3 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
+                  <Check size={11} strokeWidth={3} aria-hidden="true" /> Program complete
+                </span>
+                <h2 className="m-0 text-[22px] font-extrabold tracking-[-.02em]">You're incorporated.</h2>
+                <p className="mt-[7px] mb-0 text-sm text-gray-500 dark:text-gray-400 max-w-[560px]">
+                  All four weeks are done — your entity is formed and every Lab tool stays unlocked for your company.
+                </p>
+              </div>
+              <div className="flex gap-2.5 flex-wrap">
+                <Link to="/incorporate" className="h-10 px-[18px] rounded-[10px] bg-violet-600 text-white text-[13.5px] font-semibold inline-flex items-center gap-[7px] shadow-sm shadow-violet-500/40 hover:bg-violet-700 transition-colors">
+                  Open Incorporate <ArrowRight size={14} aria-hidden="true" />
+                </Link>
+                <Link to="/capital" className="h-10 px-4 rounded-[10px] border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-[13.5px] font-semibold inline-flex items-center gap-[7px] hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                  Open Capital <ArrowRight size={14} aria-hidden="true" />
+                </Link>
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section className="mb-9">
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-5">
+                <div className="min-w-[260px] flex-1">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.05em] rounded-full px-2.5 py-1 mb-3" style={{ background: `${meta.accent}14`, color: meta.accent }}>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: meta.accent, animation: "wsPulse 2s infinite" }} aria-hidden="true" /> This week
+                  </span>
+                  <h2 className="m-0 text-[22px] font-extrabold tracking-[-.02em]">Week {week} — {meta.name}</h2>
+                  <p className="mt-[7px] mb-4 text-sm text-gray-500 dark:text-gray-400 max-w-[520px]">{meta.summary}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {programDay && (
+                      <span className="tabular-nums inline-flex items-center gap-1.5 text-xs font-semibold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800 rounded-lg px-2.5 py-1.5">
+                        Day {programDay} of 30
+                      </span>
+                    )}
+                    <span className="tabular-nums inline-flex items-center gap-1.5 text-xs font-semibold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800 rounded-lg px-2.5 py-1.5">
+                      <Check size={12} className="text-violet-600 dark:text-violet-400" aria-hidden="true" />
+                      {doneUnitsIn(week)} of {WEEK_UNIT_TOTALS[week]} milestones done
+                    </span>
+                    <span className="tabular-nums inline-flex items-center gap-1.5 text-xs font-semibold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800 rounded-lg px-2.5 py-1.5">
+                      {totalToolsUnlocked} tools unlocked
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-2.5 flex-wrap">
+                  <Link to={meta.ctas[0].to} className="h-10 px-[18px] rounded-[10px] bg-violet-600 text-white text-[13.5px] font-semibold inline-flex items-center gap-[7px] shadow-sm shadow-violet-500/40 hover:bg-violet-700 transition-colors">
+                    {meta.ctas[0].label} <ArrowRight size={14} aria-hidden="true" />
+                  </Link>
+                  <Link to={meta.ctas[1].to} className="h-10 px-4 rounded-[10px] border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-[13.5px] font-semibold inline-flex items-center gap-[7px] hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    {meta.ctas[1].label} <ArrowRight size={14} aria-hidden="true" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* SECTION 3 — DELIVERABLES + UNLOCKED TOOLS */}
+        <section className="grid grid-cols-1 lg:grid-cols-[1fr_1.6fr] gap-5 mb-9 items-start">
+          <div>
+            <SectionLabel>Week {focusWeek} deliverables</SectionLabel>
+            <div className="flex flex-col gap-2.5">
+              {WEEK_MILESTONES[focusWeek].map((k) => {
+                const done = completedKeys.has(k);
+                const tool = MILESTONE_TOOLS[k];
+                return (
+                  <div key={k} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4 shadow-sm flex gap-3 items-start">
+                    <span className={`w-5 h-5 flex-none mt-0.5 rounded-md flex items-center justify-center ${done ? "bg-emerald-500 text-white" : "bg-white dark:bg-gray-900 border-[1.5px] border-gray-300 dark:border-gray-700"}`} aria-hidden="true">
+                      {done && <Check size={12} strokeWidth={3} />}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[14px] font-semibold">{MILESTONE_LABELS[k] || k}</span>
+                        <span className={`text-[10.5px] font-semibold rounded-full px-2 py-0.5 ${done ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400" : "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500"}`}>
+                          {done ? "Done" : "Not started"}
+                        </span>
+                        {focusWeek === 3 && WEEK3_EITHER.includes(k) && (
+                          <span className="text-[10.5px] font-semibold rounded-full px-2 py-0.5 bg-violet-50 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300">
+                            Either counts
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
+                        {!done && !isIncorporated && (
+                          <button
+                            type="button"
+                            onClick={() => onComplete(k)}
+                            disabled={completing === k}
+                            className="h-7 px-2.5 rounded-lg border border-violet-200 dark:border-violet-800 bg-white dark:bg-gray-800 text-violet-700 dark:text-violet-300 text-[11.5px] font-semibold inline-flex items-center gap-1.5 hover:bg-violet-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-60"
+                          >
+                            {completing === k ? <Loader2 size={11} className="animate-spin" aria-hidden="true" /> : <Check size={11} aria-hidden="true" />} Complete
+                          </button>
+                        )}
+                        {tool && (
+                          <Link to={tool.to} className="h-7 px-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[11.5px] font-semibold text-gray-600 dark:text-gray-300 inline-flex items-center gap-1 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                            {tool.label} <ArrowRight size={11} aria-hidden="true" />
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {completeError && (
+              <div className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3 px-4 dark:bg-red-950/30 dark:border-red-900 dark:text-red-400">
+                {completeError}
+              </div>
+            )}
+            <DeckReadinessCard />
+          </div>
+
+          <div>
+            <SectionLabel>Your unlocked tools</SectionLabel>
+            {[1, 2, 3, 4].map((w) => {
+              const tools = weekTools(w).filter((t) => unlocked.has(t.key));
+              if (!tools.length) return null;
+              return (
+                <div key={w} className="mb-4">
+                  <div className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 mb-2">Week {w} — {WEEK_META[w].name}</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                    {tools.map((t) => {
+                      const Icon = t.icon;
+                      return (
+                        <Link key={t.key} to={t.to} className="group bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[13px] p-3 flex flex-col hover:border-violet-300 dark:hover:border-violet-700 hover:shadow-md transition-all">
+                          <div className="w-8 h-8 rounded-[9px] bg-violet-50 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 flex items-center justify-center mb-2">
+                            <Icon size={15} aria-hidden="true" />
+                          </div>
+                          <div className="text-[12.5px] font-bold mb-0.5">{t.label}</div>
+                          <div className="text-[11px] leading-[1.35] text-gray-400 dark:text-gray-500 mb-2.5 flex-1 line-clamp-2">{t.blurb}</div>
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="text-[9.5px] font-bold rounded-md px-1.5 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">Unlocked · Wk {w}</span>
+                            <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 inline-flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                              Open <ArrowRight size={11} aria-hidden="true" />
+                            </span>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* SECTION 4 — 30-DAY SCORECARD */}
+        <section className="mb-9">
+          <SectionLabel>30-day scorecard</SectionLabel>
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse min-w-[680px]">
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-gray-800/60">
+                    <th className="text-left px-4 py-3 border-b border-gray-200 dark:border-gray-800" aria-label="Metric" />
+                    {[1, 2, 3, 4].map((w) => (
+                      <th key={w} className="text-left text-[12px] font-bold px-4 py-3 border-b border-l border-gray-200 dark:border-gray-800">Week {w}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="text-[11px] font-bold uppercase tracking-[.06em] text-gray-400 dark:text-gray-500 px-4 py-3.5 border-b border-gray-100 dark:border-gray-800 whitespace-nowrap">Status</td>
+                    {[1, 2, 3, 4].map((w) => (
+                      <td key={w} className="px-4 py-3.5 border-b border-l border-gray-100 dark:border-gray-800 align-top">
+                        <StatusBadge status={statusOf(w)} />
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <td className="text-[11px] font-bold uppercase tracking-[.06em] text-gray-400 dark:text-gray-500 px-4 py-3.5 border-b border-gray-100 dark:border-gray-800 whitespace-nowrap">Deliverables</td>
+                    {[1, 2, 3, 4].map((w) => {
+                      const st = statusOf(w);
+                      if (st === "locked") return <td key={w} className="px-4 py-3.5 border-b border-l border-gray-100 dark:border-gray-800 text-gray-300 dark:text-gray-600">—</td>;
+                      const total = WEEK_UNIT_TOTALS[w];
+                      const done = doneUnitsIn(w);
+                      const pct = Math.round((done / total) * 100);
+                      return (
+                        <td key={w} className="px-4 py-3.5 border-b border-l border-gray-100 dark:border-gray-800 align-top">
+                          <div className="tabular-nums text-[12px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{done} of {total}</div>
+                          <div className="h-[5px] rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden max-w-[140px]">
+                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: st === "done" ? "#22c55e" : "#7c3aed" }} />
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr>
+                    <td className="text-[11px] font-bold uppercase tracking-[.06em] text-gray-400 dark:text-gray-500 px-4 py-3.5 border-b border-gray-100 dark:border-gray-800 whitespace-nowrap">Tools unlocked</td>
+                    {[1, 2, 3, 4].map((w) => {
+                      const n = toolsUnlockedIn(w);
+                      const total = weekTools(w).length;
+                      return (
+                        <td key={w} className={`tabular-nums px-4 py-3.5 border-b border-l border-gray-100 dark:border-gray-800 text-[12px] font-semibold ${n ? "text-gray-900 dark:text-gray-100" : "text-gray-300 dark:text-gray-600"}`}>
+                          {n ? `${n} of ${total}` : "—"}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr>
+                    <td className="text-[11px] font-bold uppercase tracking-[.06em] text-gray-400 dark:text-gray-500 px-4 py-3.5 whitespace-nowrap">Key output</td>
+                    {[1, 2, 3, 4].map((w) => {
+                      const st = statusOf(w);
+                      return (
+                        <td key={w} className={`px-4 py-3.5 border-l border-gray-100 dark:border-gray-800 text-[12px] ${st === "done" ? "text-gray-600 dark:text-gray-300" : st === "active" ? "text-violet-700 dark:text-violet-300 font-semibold" : "text-gray-300 dark:text-gray-600"}`}>
+                          {st === "done" ? WEEK_META[w].leaveWith : st === "active" ? "In progress" : "—"}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-t border-gray-100 dark:border-gray-800 divide-y sm:divide-y-0 sm:divide-x divide-gray-100 dark:divide-gray-800">
+              <div className="px-5 py-4">
+                <div className="tabular-nums text-[20px] font-extrabold tracking-tight">{totalToolsUnlocked} of {totalTools}</div>
+                <div className="text-[12px] text-gray-400 dark:text-gray-500">Tools unlocked</div>
+              </div>
+              <div className="px-5 py-4">
+                <div className="tabular-nums text-[20px] font-extrabold tracking-tight">{completedCount} of {TOTAL_UNITS}</div>
+                <div className="text-[12px] text-gray-400 dark:text-gray-500">Deliverables completed</div>
+              </div>
+              <div className="px-5 py-4">
+                <div className="tabular-nums text-[20px] font-extrabold tracking-tight">{isIncorporated ? "Done" : daysRemaining != null ? daysRemaining : "—"}</div>
+                <div className="text-[12px] text-gray-400 dark:text-gray-500">{isIncorporated ? "Program complete" : "Days remaining"}</div>
+              </div>
+            </div>
+          </div>
+          <p className="mt-3.5 mb-0 text-[12.5px] text-gray-400 dark:text-gray-500 flex items-center gap-2">
             <BadgeCheck size={16} className="flex-none text-violet-500" aria-hidden="true" />
-            All Spin-Out Lab graduates receive a verified "Spin-Out Lab Alumni" badge on their Meridian founder profile.
+            All Spin-Out Lab graduates receive a verified "Spin-Out Lab Alumni" badge on their founder profile.
           </p>
         </section>
 
-        {/* WHAT YOU LEAVE WITH */}
-        <section className="mb-12">
-          <h2 className="m-0 mb-5 text-[20px] font-extrabold tracking-[-.02em]">What you leave with.</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
-            {DELIVERABLES.map((d, i) => (
-              <div key={i} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-5 shadow-sm">
-                <div className="w-10 h-10 rounded-[11px] bg-violet-50 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 flex items-center justify-center mb-3.5">
-                  {d.icon}
-                </div>
-                <div className="text-[14.5px] font-bold mb-1.5">{d.name}</div>
-                <div className="text-[12.7px] leading-[1.45] text-gray-500 dark:text-gray-400">{d.desc}</div>
-              </div>
-            ))}
-          </div>
-        </section>
+        {/* SECTION 5 — COMPLETED WEEK SUMMARIES */}
+        {pastWeeks.length > 0 && (
+          <section className="mb-9">
+            <SectionLabel>Completed weeks</SectionLabel>
+            <div className="flex flex-col gap-2.5">
+              {pastWeeks.map((w) => {
+                const open = openPast === w;
+                return (
+                  <div key={w} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setOpenPast(open ? null : w)}
+                      aria-expanded={open}
+                      className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left"
+                    >
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="w-[26px] h-[26px] rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center" aria-hidden="true">
+                          <Check size={13} strokeWidth={3} />
+                        </span>
+                        <span className="text-[14px] font-bold">Week {w} — {WEEK_META[w].name}</span>
+                        <span className="tabular-nums text-[11.5px] font-semibold text-gray-400 dark:text-gray-500">{doneUnitsIn(w)} of {WEEK_UNIT_TOTALS[w]} milestones</span>
+                      </div>
+                      <ChevronDown size={16} className={`flex-none text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
+                    </button>
+                    {open && (
+                      <div className="px-5 pb-4 border-t border-gray-100 dark:border-gray-800">
+                        <ul className="m-0 mt-3 p-0 list-none flex flex-col gap-2">
+                          {WEEK_MILESTONES[w].map((k) => {
+                            const done = completedKeys.has(k);
+                            const at = completedAtByKey.get(k);
+                            return (
+                              <li key={k} className="flex items-center gap-2.5 text-[12.5px]">
+                                <span className={done ? "text-emerald-500" : "text-gray-300 dark:text-gray-600"} aria-hidden="true">
+                                  {done ? <Check size={13} strokeWidth={3} /> : <Circle size={10} />}
+                                </span>
+                                <span className={done ? "text-gray-700 dark:text-gray-300" : "text-gray-400 dark:text-gray-500"}>{MILESTONE_LABELS[k] || k}</span>
+                                {done && at && (
+                                  <span className="tabular-nums ml-auto text-[11px] text-gray-400 dark:text-gray-500">
+                                    {new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                  </span>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
-        {/* ACTIVE COHORT TRACKER */}
-        <section className="mb-12">
-          <div className="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-            <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em]">Active cohort.</h2>
-            <span className="inline-flex items-center gap-1.5 text-[12.5px] text-gray-500">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" style={{animation: 'wsPulse 2s infinite'}}></span>Live tracker
-            </span>
-          </div>
-          <p className="m-0 mb-4 text-[13.5px] text-gray-500 tabular-nums">Cohort 3 · Started July 1, 2026 · 6 companies</p>
-
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-4 shadow-sm">
-            <div className="overflow-x-auto no-scrollbar">
-              <div className="grid grid-cols-5 gap-3.5 min-w-[820px]">
-                {TRACKER_BOARD.map((col, i) => (
-                  <div key={i}>
-                    <div className={`flex items-center justify-between px-1 pb-2.5 border-b-2 mb-3 ${col.accent}`}>
-                      <span className="text-[12.5px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">{col.name}</span>
-                      <span className="tabular-nums text-[11.5px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-800 dark:text-gray-500 rounded-md px-2 py-0.5">{col.count}</span>
+        {/* SECTION 6 — LOCKED WEEK PREVIEWS */}
+        {futureWeeks.length > 0 && (
+          <section>
+            <SectionLabel>Coming up</SectionLabel>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {futureWeeks.map((w) => {
+                const m = WEEK_META[w];
+                return (
+                  <div key={w} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-[.04em]">Week {w}</div>
+                      <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-gray-400 dark:text-gray-500">
+                        <Lock size={10} aria-hidden="true" /> Unlocks when Week {w - 1} is complete
+                      </span>
                     </div>
-                    <div className="flex flex-col gap-2.5 min-h-[40px]">
-                      {col.cards.map((c, ci) => (
-                        <div key={ci} className="bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-xl p-3">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className={`w-8 h-8 rounded-lg flex-none font-extrabold text-[12px] flex items-center justify-center ${c.bg} ${c.ink}`}>
-                              {c.initials}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-[13px] font-bold whitespace-nowrap overflow-hidden text-ellipsis">{c.name}</div>
-                              <div className="text-[11px] text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{c.desc}</div>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className={`tabular-nums text-[11px] font-bold rounded-md px-2 py-1 ${col.tint}`}>
-                              {c.day}
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10.5px] text-gray-400">Lead</span>
-                              <div title={c.advisor} className="w-[22px] h-[22px] rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-bold text-[9.5px] flex items-center justify-center">
-                                {c.advInit}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
+                    <div className="text-base font-bold mb-3">{m.name}</div>
+                    <div className="flex flex-wrap gap-1.5 mb-3.5">
+                      {weekTools(w).map((t) => (
+                        <span key={t.key} className="text-[10.5px] font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800 rounded-md px-2 py-[3px]">{t.label}</span>
                       ))}
                     </div>
+                    <div className="text-[12px] text-gray-400 dark:text-gray-500 leading-[1.45]">
+                      <span className="font-semibold text-gray-500 dark:text-gray-400">You leave with:</span> {m.leaveWith}
+                    </div>
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
-          </div>
-        </section>
-
-        {/* GRADUATE COMPANIES */}
-        <GraduatesSection />
-
-        {/* APPLICATION CTA */}
-        <ApplyCtaSection applyHref="/spinout-lab/apply" />
+          </section>
+        )}
 
       </main>
     </div>
