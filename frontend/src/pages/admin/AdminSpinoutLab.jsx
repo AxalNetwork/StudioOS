@@ -29,7 +29,7 @@ const MILESTONE_LABELS = {
   incorporation_completed: 'Incorporation completed',
 };
 
-// Mirrors SpinoutLabSidebar's FEATURE_CATALOGUE labels.
+// Mirrors the workspace TOOL_INFO labels (pages/SpinoutLabWorkspace.jsx).
 const FEATURE_LABELS = {
   'spinout-lab': 'Spin-Out Lab',
   projects: 'Startups',

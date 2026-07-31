@@ -5,6 +5,7 @@ import { spinoutLab } from "../lib/api";
 import { useAuth } from "../hooks/useAuthSync";
 import { reportError } from "../lib/log";
 import SpinoutLabMarketingPage from "./SpinoutLabMarketingPage";
+import SpinoutLabWorkspace from "./SpinoutLabWorkspace";
 
 // Pipeline cards mirror the "Spin-Out Lab" design handoff
 // (attached_assets/Spin-Out_Lab.dc_*.html): five compact phases with the
@@ -731,14 +732,20 @@ export default function SpinoutLabPage() {
   const { user, refresh } = useAuth();
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState("");
 
   const load = useCallback(async () => {
+    setLoadError(false);
     try {
       const next = await spinoutLab.state();
       setState(next);
     } catch (e) {
+      // A failed /state fetch (backend restart, rate limit) must NOT
+      // silently render the wrong page for an active founder — surface an
+      // explicit retry instead.
+      setLoadError(true);
       reportError("spinout-lab:state", e);
     } finally {
       setLoading(false);
@@ -795,9 +802,33 @@ export default function SpinoutLabPage() {
     );
   }
 
-  // Handle active logic (incorporation finish, etc) internally if needed
-  // In the real app, user is redirected once incorporated, but we keep rendering Dashboard 
-  // since it handles both states visually.
+  // Active (or graduated) founders get the real workspace: week timeline,
+  // deliverables checklist, and the unlocked-tools grid, all at /spinout-lab.
+  if (state && (state.active || state.is_incorporated)) {
+    return <SpinoutLabWorkspace state={state} />;
+  }
 
+  // If we couldn't load state at all, don't guess — the program overview
+  // would look like "no access" to an active founder. Offer a retry.
+  if (!state && loadError) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 text-center px-6">
+        <p className="text-sm text-gray-600 dark:text-gray-300" data-testid="text-spinout-state-error">
+          We couldn't load your Spin-Out Lab status. This is usually temporary.
+        </p>
+        <button
+          type="button"
+          data-testid="button-retry-spinout-state"
+          onClick={() => { setLoading(true); load(); }}
+          className="h-10 px-4 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  // Everyone else (not applied / application pending) sees the program
+  // overview with the Apply CTA.
   return <Dashboard state={state || {}} />;
 }

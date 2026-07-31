@@ -27,7 +27,7 @@ const MILESTONE_ROUTE_PREFIXES = [
  * useSpinoutLabState
  * ------------------
  * Loads the Spin-Out Lab state (`/api/spinout-lab/state`) on mount and
- * exposes `{ state, loading, error, refresh }`. Used by `<SpinoutLabSidebar />`
+ * exposes `{ state, loading, error, refresh }`. Used by lab surfaces
  * so the unlocked-feature list re-renders the moment a milestone API
  * advances the founder's week — no hard refresh required.
  *
