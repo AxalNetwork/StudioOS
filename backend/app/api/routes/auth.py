@@ -623,6 +623,13 @@ def login(req: LoginRequest, request: Request, session: Session = Depends(get_se
             "email": user.email,
             "name": user.name,
             "role": user.role,
+            # Spin-Out Lab flags ride along so frontend route guards can
+            # grant lab-tool access from the FIRST render after login —
+            # without these, guards bounce lab members until the async
+            # /auth/me refresh lands (redirect race).
+            "spinout_lab_active": int(getattr(user, "spinout_lab_active", 0) or 0),
+            "spinout_lab_week": int(getattr(user, "spinout_lab_week", 0) or 0),
+            "is_incorporated": int(getattr(user, "is_incorporated", 0) or 0),
         },
         "expires_in": JWT_EXPIRY_HOURS * 3600,
     }
@@ -743,6 +750,13 @@ def dev_quick_login(
             "email": user.email,
             "name": user.name,
             "role": user.role,
+            # Spin-Out Lab flags ride along so frontend route guards can
+            # grant lab-tool access from the FIRST render after login —
+            # without these, guards bounce lab members until the async
+            # /auth/me refresh lands (redirect race).
+            "spinout_lab_active": int(getattr(user, "spinout_lab_active", 0) or 0),
+            "spinout_lab_week": int(getattr(user, "spinout_lab_week", 0) or 0),
+            "is_incorporated": int(getattr(user, "is_incorporated", 0) or 0),
         },
         "expires_in": JWT_EXPIRY_HOURS * 3600,
     }

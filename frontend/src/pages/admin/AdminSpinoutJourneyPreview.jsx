@@ -10,7 +10,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, X, Mail } from 'lucide-react';
 import SpinoutLabMarketingPage from '../SpinoutLabMarketingPage';
 import SpinoutLabApplyPage from '../SpinoutLabApplyPage';
-import { CongratulationsScreen, Dashboard } from '../SpinoutLabPage';
+import { CongratulationsScreen } from '../SpinoutLabPage';
+import SpinoutLabWorkspace from '../SpinoutLabWorkspace';
 
 const STAGES = [
   { key: 'marketing', label: 'Spin-Out Lab' },
@@ -154,10 +155,10 @@ export default function AdminSpinoutJourneyPreview() {
       );
       break;
     case 'workspace':
-      content = <Dashboard state={WORKSPACE_STATE} previewAllUnlocked />;
+      content = <SpinoutLabWorkspace state={WORKSPACE_STATE} previewAllUnlocked />;
       break;
     case 'graduation':
-      content = <Dashboard state={GRADUATION_STATE} />;
+      content = <SpinoutLabWorkspace state={GRADUATION_STATE} />;
       break;
     case 'marketing':
     default:

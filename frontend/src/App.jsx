@@ -18,7 +18,6 @@ import { SIDEBAR_GROUPS, defaultOpenGroups, filterItemsByTier, hasTier, hasInves
 import PaywallModal, { openPaywall } from './components/PaywallModal';
 import { Lock as LockIcon } from 'lucide-react';
 import { api } from './lib/api';
-const SpinoutLabSidebar = lazy(() => import('./components/SpinoutLabSidebar'));
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
 // renders synchronously on first paint. It marks itself a no-auth-redirect
 // surface on mount; a lazy chunk could load AFTER the background settings 401
@@ -681,10 +680,6 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   const isAdmin = (realUser || user)?.role === 'admin';
   const activeRole = isImpersonating ? user?.role : (isAdmin ? viewMode : user?.role);
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user);
-  // While the founder is in the Spin-Out Lab the sidebar collapses to the
-  // week-gated feature list. The standard nav returns the moment
-  // `spinout_lab_active` flips back to 0 (Week 4 auto-exit).
-  const inSpinoutLab = user?.spinout_lab_active === 1;
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
   // Tracks mouse/keyboard/scroll/touch on `window`. Disabled when no user is
@@ -756,13 +751,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 <X size={18} />
               </button>
             </div>
-            {inSpinoutLab ? (
-              <Suspense fallback={<div className="flex-1" />}>
-                <SpinoutLabSidebar onNavigate={closeOnMobileNav} />
-              </Suspense>
-            ) : (
-              <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} />
-            )}
+            <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} />
             <div className={`${effectiveCollapsed ? 'px-2' : 'px-5'} py-3 border-t border-gray-200 dark:border-gray-800`}>
               {user && (
                 effectiveCollapsed ? (
@@ -1305,6 +1294,15 @@ function AppInner() {
     </RequireAuth>
   );
 
+  // Spin-Out Lab participants unlock the lab's tool pages regardless of the
+  // role they held before admission (e.g. 'exploring' users accepted into a
+  // cohort). The workspace UI still week-gates the tool cards; this only
+  // stops RoleGuard from bouncing an active lab member off a lab tool route.
+  const labRoles = (roles) =>
+    user && user.spinout_lab_active === 1 && !roles.includes(user.role)
+      ? [...roles, user.role]
+      : roles;
+
   // Task #9 — authoring is open to any authenticated user (no role gate).
   const authOnly = (component) => <RequireAuth {...authProps}>{component}</RequireAuth>;
 
@@ -1368,22 +1366,22 @@ function AppInner() {
       <Route path="/onboarding/founder" element={guard(['admin', 'founder'], <OnboardingFounderPage />)} />
       <Route path="/onboarding/investor" element={guard(['admin', 'investor'], <OnboardingInvestorPage />)} />
       <Route path="/onboarding/partner" element={guard(['admin', 'partner'], <OnboardingPartnerPage />)} />
-      <Route path="/build/brand" element={guard(['admin', 'founder'], <BrandBuilderPage />)} />
+      <Route path="/build/brand" element={guard(labRoles(['admin', 'founder']), <BrandBuilderPage />)} />
       {/* Task #1 — RAISE Workspaces: founder-exclusive Pitch Deck / Reviewer
           routes now live inside the Pitch workspace; redirect to the right tab. */}
       <Route path="/build/deck" element={<Navigate to="/raise/pitch" replace />} />
       <Route path="/build/deck-reviewer" element={<Navigate to="/raise/pitch/review" replace />} />
       <Route path="/build/competitors" element={guard(['admin', 'founder', 'partner', 'investor'], <CompetitorAnalysisPage />)} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], <FinancialsPage />)} />
-      <Route path="/build/discovery" element={guard(['admin', 'founder', 'partner', 'investor'], <DiscoveryPage />)} />
+      <Route path="/build/discovery" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <DiscoveryPage />)} />
       {/* Legacy Customer Discovery folds into the unified Discovery workspace. */}
       <Route path="/customer-discovery" element={<Navigate to="/build/discovery" replace />} />
-      <Route path="/build/roadmap" element={guard(['admin', 'founder', 'partner', 'investor'], <RoadmapPage />)} />
+      <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <RoadmapPage />)} />
       <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], <MetricsPage />)} />
       {/* Signals — founder decision engine over public-market evidence. Shared
           by Founder + Advisor modes (mode changes ordering + copy only). */}
       <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SignalsPage user={user} />)} />
-      <Route path="/build/captable" element={guard(['admin', 'founder', 'partner', 'investor'], <CapTablePage />)} />
+      <Route path="/build/captable" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <CapTablePage />)} />
       <Route path="/marketplace" element={guard(['admin', 'founder', 'partner', 'investor'], <MarketplacePage user={user} />)} />
       {/* Task #2 — Founder Marketplace merges the Service Catalogue (/services) and
           Needs Board (/needs) into one tabbed page at /build/marketplace. The
@@ -1448,9 +1446,9 @@ function AppInner() {
       {/* Task #83 — de-admin Due Diligence: investor/advisor-facing alias of the same pages (no /admin framing). */}
       <Route path="/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
       <Route path="/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
-      <Route path="/scoring" element={guard(['admin', 'partner', 'investor'], <ScoringPage />)} />
-      <Route path="/projects" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectsPage />)} />
-      <Route path="/projects/:id" element={guard(['admin', 'founder', 'partner', 'investor'], <ProjectDetail />)} />
+      <Route path="/scoring" element={guard(labRoles(['admin', 'partner', 'investor']), <ScoringPage />)} />
+      <Route path="/projects" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <ProjectsPage />)} />
+      <Route path="/projects/:id" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <ProjectDetail />)} />
       {/* Task #12 — Founder Execution area: one deep-linkable shell wrapping the
           Projects / Board / Roadmap views. Standalone routes above stay intact
           for other personas. */}
@@ -1462,9 +1460,9 @@ function AppInner() {
           the pages it wraps. Standalone routes (/build/financials, /build/captable,
           /incorporate, /incorporate/*, /compliance, /legal-capital) stay intact
           for the investor/partner personas that share them. */}
-      <Route path="/raise/pitch" element={guard(['admin', 'founder'], <PitchWorkspacePage />)} />
-      <Route path="/raise/pitch/positioning" element={guard(['admin', 'founder'], <PitchWorkspacePage />)} />
-      <Route path="/raise/pitch/review" element={guard(['admin', 'founder'], <PitchWorkspacePage />)} />
+      <Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder']), <PitchWorkspacePage />)} />
+      <Route path="/raise/pitch/positioning" element={guard(labRoles(['admin', 'founder']), <PitchWorkspacePage />)} />
+      <Route path="/raise/pitch/review" element={guard(labRoles(['admin', 'founder']), <PitchWorkspacePage />)} />
       <Route path="/raise/capital" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
       <Route path="/raise/capital/model" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
       <Route path="/raise/capital/cap-table" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
@@ -1475,11 +1473,11 @@ function AppInner() {
       <Route path="/raise/legal-engine/compliance" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
       <Route path="/raise/legal-engine/equity" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
       <Route path="/legal" element={guard(['admin', 'founder'], <LegalPage />)} />
-      <Route path="/incorporate" element={guard(['admin', 'founder', 'partner', 'investor'], <IncorporatePage />)} />
-      <Route path="/incorporate/success" element={guard(['admin', 'founder', 'partner', 'investor'], <IncorporateSuccessPage />)} />
-      <Route path="/incorporate/cofounder-agreement" element={guard(['admin', 'founder', 'partner'], <CofounderAgreementPage />)} />
-      <Route path="/incorporate/83b" element={guard(['admin', 'founder', 'partner'], <Section83bPage />)} />
-      <Route path="/compliance" element={guard(['admin', 'founder', 'partner'], <CompliancePage />)} />
+      <Route path="/incorporate" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <IncorporatePage />)} />
+      <Route path="/incorporate/success" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <IncorporateSuccessPage />)} />
+      <Route path="/incorporate/cofounder-agreement" element={guard(labRoles(['admin', 'founder', 'partner']), <CofounderAgreementPage />)} />
+      <Route path="/incorporate/83b" element={guard(labRoles(['admin', 'founder', 'partner']), <Section83bPage />)} />
+      <Route path="/compliance" element={guard(labRoles(['admin', 'founder', 'partner']), <CompliancePage />)} />
       <Route path="/wellbeing" element={guard(['admin', 'founder'], <WellbeingPage />)} />
       <Route path="/wellbeing/expert-dashboard" element={guard(['admin', 'founder', 'partner', 'advisor'], <ExpertEditorPage />)} />
       <Route path="/wellbeing/expert/:uid" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ExpertProfilePage />)} />
@@ -1497,7 +1495,7 @@ function AppInner() {
       <Route path="/checkout/confirmation" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutConfirmationPage />)} />
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'], <DealsPage />)} />
       <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder'], <DealRoomPage />)} />
-      <Route path="/market-intel" element={guard(['admin', 'partner', 'investor'], <MarketIntelPage />)} />
+      <Route path="/market-intel" element={guard(labRoles(['admin', 'partner', 'investor']), <MarketIntelPage />)} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <AdvisoryPage />)} />
       {/* Team Building consolidation (Build › Team). Founders reach Advisor/
           Advisor, Co-Founder and Jobs through the unified /build/team
@@ -1508,7 +1506,7 @@ function AppInner() {
       <Route path="/build/command-center" element={guard(['admin', 'founder'], <CommandCenterPage />)} />
       {/* Task #74 — back-compat redirect from the pre-rename /mentors path. */}
       <Route path="/mentors" element={<Navigate to="/advisors" replace />} />
-      <Route path="/advisors" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], user?.role === 'founder' ? <Navigate to="/build/team?tab=advisor" replace /> : <AdvisorsPage />)} />
+      <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?tab=advisor" replace /> : <AdvisorsPage />)} />
       <Route path="/office-hours" element={guard(['admin', 'advisor'], <OfficeHoursPage />)} />
       <Route path="/partner/office-hours" element={guard(['admin', 'partner'], <PartnerOfficeHoursPage />)} />
       <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], <CoMarketingPage user={user} />)} />
@@ -1523,7 +1521,7 @@ function AppInner() {
       <Route path="/jobs/new" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobEditorPage />)} />
       <Route path="/jobs/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobEditorPage />)} />
       <Route path="/jobs/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobManagePage />)} />
-      <Route path="/cofounder" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/team?tab=cofounder" replace /> : <CofounderPage />)} />
+      <Route path="/cofounder" element={guard(labRoles(['admin', 'founder']), user?.role === 'founder' ? <Navigate to="/build/team?tab=cofounder" replace /> : <CofounderPage />)} />
       {/* Task #20 — Consolidated profile/advisor flow. The advisor conversation
           now builds the skill + values profile; the legacy /skills and /values
           routes redirect here (underlying data stores kept intact). */}

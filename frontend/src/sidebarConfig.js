@@ -34,6 +34,10 @@ export function hasTier(user, requiredTier) {
   if (!requiredTier || requiredTier === 'free') return true;
   if (!user) return false;
   if (BYPASS_ROLES.has(String(user.role))) return true;
+  // Active Spin-Out Lab members get the Growth-tier tooling their program
+  // requires (the Pitch Deck Builder is a REQUIRED week-2 lab deliverable) —
+  // capped at 'growth' so the lab does NOT unlock Studio-tier features.
+  if (Number(user.spinout_lab_active) === 1 && (TIER_RANK[requiredTier] ?? 0) <= TIER_RANK.growth) return true;
   const have = TIER_RANK[String(user.subscription_tier || 'free').toLowerCase()] ?? 0;
   return have >= (TIER_RANK[requiredTier] ?? 0);
 }

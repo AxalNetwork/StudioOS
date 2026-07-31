@@ -585,7 +585,15 @@ auth.post('/confirm-verify-email', safe('confirm-verify-email', 'Could not confi
     // Session fields mirror POST /login so the SPA stores them identically.
     token: jwtToken,
     csrf_token: csrfToken,
-    user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    // Spin-Out Lab flags ride along so frontend route guards can grant
+    // lab-tool access from the FIRST render after login (avoids the
+    // bounce-until-/auth/me-refreshes redirect race).
+    user: {
+      id: user.id, email: user.email, name: user.name, role: user.role,
+      spinout_lab_active: Number(user.spinout_lab_active ?? 0),
+      spinout_lab_week: Number(user.spinout_lab_week ?? 0),
+      is_incorporated: Number(user.is_incorporated ?? 0),
+    },
     expires_in: 24 * 3600,
   });
 }));
@@ -810,7 +818,15 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   return c.json({
     token: jwtToken,
     csrf_token: csrfToken,
-    user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    // Spin-Out Lab flags ride along so frontend route guards can grant
+    // lab-tool access from the FIRST render after login (avoids the
+    // bounce-until-/auth/me-refreshes redirect race).
+    user: {
+      id: user.id, email: user.email, name: user.name, role: user.role,
+      spinout_lab_active: Number(user.spinout_lab_active ?? 0),
+      spinout_lab_week: Number(user.spinout_lab_week ?? 0),
+      is_incorporated: Number(user.is_incorporated ?? 0),
+    },
     expires_in: 24 * 3600,
     used_recovery_code: usedRecoveryCode || undefined,
     password_reset_required: passwordResetRequired || undefined,
@@ -877,6 +893,12 @@ auth.get('/me', async (c) => {
     id: user.id, email: user.email, name: user.name, role: user.role,
     is_active: user.is_active, created_at: user.created_at,
     founder_id: founderId, partner_id: partnerId,
+    // Spin-Out Lab flags — parity with the login payload and the FastAPI
+    // dev backend's /me, so frontend route guards keep lab access stable
+    // across auth refreshes.
+    spinout_lab_active: Number((user as any).spinout_lab_active ?? 0),
+    spinout_lab_week: Number((user as any).spinout_lab_week ?? 0),
+    is_incorporated: Number((user as any).is_incorporated ?? 0),
     kyc_status: (user as any).kyc_status || 'not_started',
     // 'limited' lets the user past the KYC gate to browse the app, but
     // they still cannot sign legal agreements (server-enforced in esign).

@@ -5,3 +5,4 @@
 - [Spin-Out Lab conventions](spinout-lab-conventions.md) — /spinout-lab: marketing when logged out, full app shell when logged in; its Worker test slices exact source strings, so new /state fields go in the wire handler.
 - [docs/Worker lockstep](docs-worker-lockstep.md) — /assets/* on axal.vc is Worker-served; a docs/ push without a Worker redeploy 404s the new hashes (blank page).
 - [React Router redirect races](router-redirect-races.md) — guard redirects re-fire on urgent re-renders after auth/role flips; keep pending nav targets alive until the URL arrives.
+- [Owner work style](owner-work-style.md) — cancels queued follow-up tasks; wants direct in-session fixes, propose sparingly.
