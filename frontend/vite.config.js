@@ -72,6 +72,12 @@ export default defineConfig({
           });
         },
       },
+      // Backend-rendered public landing surfaces (Brand & Landing Pages).
+      // The dev FastAPI serves /landing/preview/:token, /landing/:slug and
+      // the branded multi-page sites at /p/:site/:page — without these the
+      // "View Live" preview URLs 404 on the Vite origin in dev.
+      '/landing': { target: 'http://localhost:8000', changeOrigin: true },
+      '/p/': { target: 'http://localhost:8000', changeOrigin: true },
     },
   },
 });

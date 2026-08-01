@@ -376,7 +376,7 @@ export default function SpinoutLabDiscoveryPage() {
               <div className={CARD} data-testid="discovery-leads">
                 <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
                   <div className={LBL}>Inbound leads · Brand &amp; Pages</div>
-                  <Link to="/build/brand" className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 whitespace-nowrap">Open landing pages →</Link>
+                  <Link to="/spinout-lab/brand" className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 whitespace-nowrap">Open landing pages →</Link>
                 </div>
                 <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mb-3.5">Customer-intent signups from your landing pages route here for interviews.</p>
                 {leadMsg && (

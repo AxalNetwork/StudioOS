@@ -100,6 +100,8 @@ const SpinoutLabUseOfFundsPage = lazy(() => import('./pages/SpinoutLabUseOfFunds
 const SpinoutLabCapitalPage = lazy(() => import('./pages/SpinoutLabCapitalPage'));
 const SpinoutLabCapTablePage = lazy(() => import('./pages/SpinoutLabCapTablePage'));
 const SpinoutLabPitchDeckPage = lazy(() => import('./pages/SpinoutLabPitchDeckPage'));
+const SpinoutLabBrandPage = lazy(() => import('./pages/SpinoutLabBrandPage'));
+const SpinoutLabOfficeHoursPage = lazy(() => import('./pages/SpinoutLabOfficeHoursPage'));
 const SpinoutLabCofounderAgreementPage = lazy(() => import('./pages/SpinoutLabCofounderAgreementPage'));
 const SpinoutLabApplyPage = lazy(() => import('./pages/SpinoutLabApplyPage'));
 const SpinoutLabBriefPage = lazy(() => import('./pages/SpinoutLabBriefPage'));
@@ -1344,7 +1346,14 @@ function AppInner() {
       <Route path="/spinout-lab/capital" element={guard(labRoles(['admin']), <SpinoutLabCapitalPage />)} />
       <Route path="/spinout-lab/captable" element={guard(labRoles(['admin']), <SpinoutLabCapTablePage />)} />
       <Route path="/spinout-lab/pitch-deck" element={guard(labRoles(['admin']), <SpinoutLabPitchDeckPage />)} />
+      {/* New Brand & Landing Pages tool (design: Brand & Landing Page.dc) —
+          replaces /build/brand as the founders' entry point, so it keeps the
+          same roles as the old route (any founder, plus active lab members). */}
+      <Route path="/spinout-lab/brand" element={guard(labRoles(['admin', 'founder']), <SpinoutLabBrandPage />)} />
       <Route path="/spinout-lab/cofounder-agreement" element={guard(labRoles(['admin']), <SpinoutLabCofounderAgreementPage />)} />
+      {/* Office Hours tool page (design: Office Hours.dc) — founder-side
+          partner session booking; /office-hours stays the advisor console. */}
+      <Route path="/spinout-lab/office-hours" element={guard(labRoles(['admin']), <SpinoutLabOfficeHoursPage />)} />
       {/* Cohort application form — signed-in founders only (contact info
           comes from the account); logged-out visitors are sent to register
           with the spinout-lab product intent. */}

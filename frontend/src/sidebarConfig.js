@@ -218,7 +218,7 @@ export const SIDEBAR_GROUPS = {
       // deep-links (or is redirected from) the legacy standalone routes.
       { to: '/build/team', icon: Users, label: 'Team', match: ['/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications'] },
       { to: '/build/metrics', icon: TrendingUp, label: 'Metrics' },
-      { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
+      { to: '/spinout-lab/brand', icon: Sparkles, label: 'Brand & Landing', match: ['/spinout-lab/brand', '/build/brand'] },
     ]},
     { key: 'validate', label: 'Validate', items: [
       { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
