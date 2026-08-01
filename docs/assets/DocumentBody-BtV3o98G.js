@@ -1,1 +1,0 @@
-import{n as e}from"./react-vendor-CAeKOGhI.js";var t=e();function n({text:e,className:n=``,emptyText:r=null}){let i=e==null?``:String(e);return i.trim()?(0,t.jsx)(`pre`,{className:`whitespace-pre-wrap ${n}`,children:i}):r==null?null:(0,t.jsx)(`div`,{className:`text-gray-400 text-sm`,children:r})}export{n as t};

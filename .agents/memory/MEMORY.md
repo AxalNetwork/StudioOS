@@ -6,3 +6,4 @@
 - [docs/Worker lockstep](docs-worker-lockstep.md) — /assets/* on axal.vc is Worker-served; a docs/ push without a Worker redeploy 404s the new hashes (blank page).
 - [React Router redirect races](router-redirect-races.md) — guard redirects re-fire on urgent re-renders after auth/role flips; keep pending nav targets alive until the URL arrives.
 - [Owner work style](owner-work-style.md) — cancels queued follow-up tasks; wants direct in-session fixes, propose sparingly.
+- [Dev/Worker API parity](dev-worker-api-parity.md) — apply-method & server deck export are Worker-only (405 in dev); pages need explicit client fallbacks.

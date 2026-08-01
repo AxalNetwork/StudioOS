@@ -133,8 +133,23 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
             "outcomeLabel": "TARGET OUTCOMES",
             "outcomes": [["Faster", "decisions"], ["Continuous", "monitoring"], ["Earlier", "signals"]],
         },
+        # Task #31 — Product demo (slot 6). Pulls the founder's REAL demo
+        # links/caption off the project; buildDeck() renders honest "Add a…"
+        # placeholders when unset. This section was missing from the dev
+        # mirror, which crashed buildDeck's eyebrow() (d.eyebrow undefined)
+        # for every dev PPTX export.
+        "productDemo": {
+            "eyebrow": "Product demo", "idx": "06",
+            "title": "See it work — live product walkthrough.",
+            "screenshot": "",
+            "caption": (getattr(project, "product_demo_caption", None) or "").strip(),
+            "walkthroughLabel": "WALKTHROUGH",
+            "body": "A guided pass through the core workflow: connect data, score risk, and act on live alerts.",
+            "liveUrl": (getattr(project, "product_demo_live_url", None) or "").strip(),
+            "videoUrl": (getattr(project, "product_demo_video_url", None) or "").strip(),
+        },
         "roadmap": {
-            "eyebrow": "Roadmap", "idx": "06",
+            "eyebrow": "Roadmap", "idx": "07",
             "title": "Now, next, later \u2014 on a 30-day operating clock.",
             "days": ["Day 0", "Day 30", "Day 60", "Day 90"],
             "currentDay": 1,
@@ -154,7 +169,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
             ],
         },
         "team": {
-            "eyebrow": "Team & Network", "idx": "07",
+            "eyebrow": "Team & Network", "idx": "08",
             "title": "A founder backed by an operating network.",
             "founder": {"initials": "—", "name": "Founder", "role": "Founder & CEO",
                         "bio": "[draft — add your founder profile in the Team module]"},
@@ -169,7 +184,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
             ],
         },
         "captable": {
-            "eyebrow": "Cap table & incorporation", "idx": "08",
+            "eyebrow": "Cap table & incorporation", "idx": "09",
             "title": "Entity-ready: clean cap table and founder setup.",
             "checklistLabel": "FOUNDER & ENTITY SETUP",
             "items": [
@@ -185,7 +200,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
             "segments": [["Founders", 80], ["Option pool", 15], ["Reserved", 5]],
         },
         "ask": {
-            "eyebrow": "The ask", "idx": "09",
+            "eyebrow": "The ask", "idx": "10",
             "title": "Raising a pre-seed round to reach revenue.",
             "kpis": [["$750K", "Target raise"], ["SAFE", "Instrument"], ["18 mo", "Runway"], ["Pre-seed", "Stage"]],
             "useLabel": "USE OF FUNDS",
@@ -198,7 +213,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
             "milestone": ["Gets us to:", "[draft — add your next funding milestone in the Capital module]"],
         },
         "deal": {
-            "eyebrow": "Deal readiness", "idx": "10",
+            "eyebrow": "Deal readiness", "idx": "11",
             "title": "Data room open. Ready to move.",
             "diligenceLabel": "DILIGENCE PACKAGE",
             "ready": [

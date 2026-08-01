@@ -61,7 +61,7 @@ export const TOOL_INFO = {
   // stays reachable at /build/roadmap via the page's "Kanban view" button.
   roadmap: { label: 'Roadmap', to: '/spinout-lab/roadmap', desc: 'OKRs, milestones, and MVP scope', icon: MapIcon },
   'brand-builder': { label: 'Brand & Landing Pages', to: '/build/brand', desc: 'Create landing pages for your audience', icon: Palette },
-  'pitch-deck': { label: 'Pitch Deck Builder', to: '/build/deck', desc: 'Auto-assemble your venture pitch deck', icon: Presentation },
+  'pitch-deck': { label: 'Pitch Deck Builder', to: '/spinout-lab/pitch-deck', desc: 'Auto-assemble your venture pitch deck', icon: Presentation },
   // Lab-facing readiness report + practice runs (design: workspace tool
   // pages); the partner/admin scoring console stays at /scoring.
   scoring: { label: 'Scoring Engine', to: '/spinout-lab/scoring', desc: 'Venture-readiness diligence', icon: Gauge },
