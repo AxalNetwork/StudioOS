@@ -12,8 +12,9 @@
  * is applied; the migration is the canonical record.
  */
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { Env, User } from '../types';
-import { requireRole } from '../auth';
+import { requireAuth, requireRole } from '../auth';
 import { isAdmin, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { sendContactInviteEmail } from '../services/email';
 import { ensureAdvisorProfilesSchema } from '../services/advisorProfilesSchema';
@@ -231,6 +232,22 @@ async function ownedProjectScope(env: Env, user: User): Promise<'all' | number[]
   return (rows.results || []).map((x) => Number(x.id));
 }
 
+/**
+ * Raise-pipeline auth. Founders own the raise workflow, but ACTIVE Spin-Out
+ * Lab members (role `exploring` + spinout_lab_active=1) run their Week-4
+ * raise through the lab Capital page too. Safe because every raise handler
+ * scopes by ownedProjectScope(), which keys off founder_id — an explorer only
+ * ever sees their own projects. Role alone is NOT enough: `exploring` is also
+ * the pre-admission holding role, and those accounts must not get the lab
+ * exception (mirrors advisors.ts).
+ */
+async function requireRaiseUser(c: Context<{ Bindings: Env }>): Promise<User> {
+  const user = await requireAuth(c);
+  if (user.role === 'admin' || user.role === 'founder') return user;
+  if (user.role === 'exploring' && Number((user as any).spinout_lab_active ?? 0) === 1) return user;
+  throw new Error('Forbidden');
+}
+
 async function loadOwned(env: Env, uid: string, user: User): Promise<ContactRow | 'notfound' | 'forbidden'> {
   const row = await env.DB.prepare('SELECT * FROM contacts WHERE uid = ?').bind(uid).first<ContactRow>();
   if (!row) return 'notfound';
@@ -439,7 +456,7 @@ r.post('/invite', async (c) => {
 // Registered BEFORE /:uid so the static segment wins the Hono route match.
 r.get('/raise-prospects', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const scope = await ownedProjectScope(c.env, user);
     let where = '1=1';
@@ -461,7 +478,7 @@ r.get('/raise-prospects', async (c) => {
 // PUT /api/contacts/raise-prospects/:id — update stage / notes / firm / name.
 r.put('/raise-prospects/:id', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const id = Number(c.req.param('id'));
     const row = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
@@ -487,7 +504,7 @@ r.put('/raise-prospects/:id', async (c) => {
 // the pipeline (form). Creates-or-links the underlying Contacts-hub row.
 r.post('/raise-prospects', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
     const projectId = Number(body.project_id);
@@ -506,7 +523,7 @@ r.post('/raise-prospects', async (c) => {
 // chunks bigger files). Per-row failures are reported, never silently dropped.
 r.post('/raise-prospects/import', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
     const projectId = Number(body.project_id);
@@ -532,7 +549,7 @@ r.post('/raise-prospects/import', async (c) => {
 // Contacts-hub record (via contact_id) so the SPA can render the contact card.
 r.get('/raise-prospects/:id', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const id = Number(c.req.param('id'));
     const row = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
@@ -554,7 +571,7 @@ r.get('/raise-prospects/:id', async (c) => {
 // counter that can drift).
 r.get('/raise-round', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const scope = await ownedProjectScope(c.env, user);
     const pid = resolveProjectId(scope, c.req.query('project_id'));
@@ -580,7 +597,7 @@ r.get('/raise-round', async (c) => {
 // status='active') backstops races — the losing INSERT re-reads the winner.
 r.put('/raise-round', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
     const scope = await ownedProjectScope(c.env, user);
@@ -631,7 +648,7 @@ r.put('/raise-round', async (c) => {
 // GET /api/contacts/raise-updates — investor updates posted from the pipeline.
 r.get('/raise-updates', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const scope = await ownedProjectScope(c.env, user);
     const pid = resolveProjectId(scope, c.req.query('project_id'));
@@ -651,7 +668,7 @@ r.get('/raise-updates', async (c) => {
 // says so explicitly rather than pretending delivery happened.
 r.post('/raise-updates', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
     const scope = await ownedProjectScope(c.env, user);

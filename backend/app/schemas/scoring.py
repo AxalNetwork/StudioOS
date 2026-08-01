@@ -111,9 +111,16 @@ class ProjectUpdate(BaseModel):
     why_now: Optional[str] = None
     tam: Optional[float] = None
     sam: Optional[float] = None
+    som: Optional[float] = None
     users_count: Optional[int] = None
     revenue: Optional[float] = None
     growth_signals: Optional[str] = None
+    # Structured revenue-proof fields (Worker parity — Task #2 there). The
+    # lab Revenue page edits these; validation mirrors the Worker coercion.
+    mrr: Optional[float] = None
+    paying_customers: Optional[int] = None
+    first_payment_date: Optional[str] = None
+    paid_pilot_status: Optional[str] = None
     cost_to_mvp: Optional[float] = None
     funding_needed: Optional[float] = None
     use_of_funds: Optional[str] = None

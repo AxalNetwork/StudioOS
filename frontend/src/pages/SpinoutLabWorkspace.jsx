@@ -18,9 +18,11 @@ import {
   Building2,
   CalendarCheck,
   Check,
+  Fingerprint,
   ChevronDown,
   ClipboardCheck,
   Compass,
+  DollarSign,
   FileSignature,
   FileText,
   FlaskConical,
@@ -43,25 +45,46 @@ const SPRINT_DAYS = 28;
 // spinout_lab.py MILESTONES / Worker spinoutLabCatalog.ts). Routes reuse the
 // same in-app destinations the old lab sidebar linked to.
 export const TOOL_INFO = {
-  projects: { label: 'Startups', to: '/projects', desc: 'Your company record and founding team', icon: Building2 },
-  'customer-discovery': { label: 'Customer Discovery', to: '/build/discovery', desc: 'Interview log and ICP tracker', icon: MessagesSquare },
-  'market-intelligence': { label: 'Market Intel', to: '/market-intel', desc: 'TAM / SAM research and sizing', icon: Compass },
-  roadmap: { label: 'Roadmap', to: '/build/roadmap', desc: 'OKRs, milestones, and MVP scope', icon: MapIcon },
+  // The lab-facing company record page (design: workspace tool pages); the
+  // raw /projects list stays reachable from it via "Edit record".
+  projects: { label: 'Startups', to: '/spinout-lab/startup', desc: 'Your company record and founding team', icon: Building2 },
+  // Lab-facing discovery dashboard (design: workspace tool pages); the raw
+  // interview-logging tool at /build/discovery stays reachable from it.
+  'customer-discovery': { label: 'Customer Discovery', to: '/spinout-lab/discovery', desc: 'Interview log and ICP tracker', icon: MessagesSquare },
+  // Lab-facing market page (design: workspace tool pages); the platform-wide
+  // investor/partner MI dashboard stays at /market-intel.
+  'market-intelligence': { label: 'Market Intel', to: '/spinout-lab/market', desc: 'TAM / SAM research and sizing', icon: Compass },
+  // Lab-facing founder profiling report (design: workspace tool pages);
+  // reads the Studio-built skills/values/archetype profile.
+  profiling: { label: 'Profiling', to: '/spinout-lab/profiling', desc: 'Skills, values, and archetype report', icon: Fingerprint },
+  // Lab-facing roadmap page (design: workspace tool pages); the raw kanban
+  // stays reachable at /build/roadmap via the page's "Kanban view" button.
+  roadmap: { label: 'Roadmap', to: '/spinout-lab/roadmap', desc: 'OKRs, milestones, and MVP scope', icon: MapIcon },
   'brand-builder': { label: 'Brand & Landing Pages', to: '/build/brand', desc: 'Create landing pages for your audience', icon: Palette },
   'pitch-deck': { label: 'Pitch Deck Builder', to: '/build/deck', desc: 'Auto-assemble your venture pitch deck', icon: Presentation },
-  scoring: { label: 'Scoring Engine', to: '/scoring', desc: 'Venture-readiness diligence', icon: Gauge },
-  advisors: { label: 'Advisors', to: '/advisors', desc: 'Matched advisor network', icon: Users },
+  // Lab-facing readiness report + practice runs (design: workspace tool
+  // pages); the partner/admin scoring console stays at /scoring.
+  scoring: { label: 'Scoring Engine', to: '/spinout-lab/scoring', desc: 'Venture-readiness diligence', icon: Gauge },
+  // Lab-facing matching + booking page; the full directory stays at /advisors.
+  advisors: { label: 'Advisors', to: '/spinout-lab/advisors', desc: 'Matched advisor network', icon: Users },
+  // Revenue capture + traction proof (metrics snapshots + project proof fields).
+  revenue: { label: 'Revenue', to: '/spinout-lab/revenue', desc: 'Capture revenue & traction proof', icon: DollarSign },
+  // Capital allocation + runway modeling; edits the SAME canonical
+  // use_of_funds/funding_needed fields THE ASK deck slide reads.
+  'use-of-funds': { label: 'Use of Funds', to: '/spinout-lab/use-of-funds', desc: 'Capital allocation & runway modeling', icon: PieChart },
   // Booking lives on the Advisors directory — /office-hours is the
   // advisor-side ops console, the wrong surface for a lab founder.
   'office-hours': { label: 'Office Hours', to: '/advisors', desc: 'Book partner sessions', icon: CalendarCheck },
   'cofounder-match': { label: 'Co-founder Match', to: '/cofounder', desc: 'Co-founder sourcing', icon: Users },
   incorporate: { label: 'Incorporate', to: '/incorporate', desc: 'Entity formation', icon: Landmark },
-  captable: { label: 'Cap Table', to: '/build/captable', desc: 'Founder stock & vesting', icon: PieChart },
+  captable: { label: 'Cap Table', to: '/spinout-lab/captable', desc: 'Ownership ledger & dilution modeling', icon: PieChart },
   'section-83b': { label: '83(b) Election', to: '/incorporate/83b', desc: 'File within 30 days of your stock grant', icon: FileText },
-  'cofounder-agreement': { label: 'Co-founder Agreement', to: '/incorporate/cofounder-agreement', desc: 'Signed founder terms', icon: FileSignature },
+  'cofounder-agreement': { label: 'Co-founder Agreement', to: '/spinout-lab/cofounder-agreement', desc: 'Founding team terms', icon: FileSignature },
   // No founder-facing capital surface exists yet (/capital is the investor
   // console) — card shows as coming soon until the lab version ships.
-  capital: { label: 'Capital', to: '/capital', desc: 'Fundraise & introductions', icon: Banknote, comingSoon: true },
+  // Lab-facing raise workspace (round + investor pipeline + data-room
+  // readiness). The founder-persona workspace at /raise/capital stays intact.
+  capital: { label: 'Capital', to: '/spinout-lab/capital', desc: 'Run your raise & data room', icon: Banknote },
   compliance: { label: 'Compliance', to: '/compliance', desc: 'Filing calendar & obligations', icon: ShieldCheck },
 };
 
@@ -81,7 +104,7 @@ export const WEEK_DEFS = [
       { label: '3 interviews', keys: ['customer_interview_logged_1', 'customer_interview_logged_2', 'customer_interview_logged_3'] },
       { label: 'TAM sized', keys: [] },
     ],
-    features: ['projects', 'customer-discovery', 'market-intelligence'],
+    features: ['projects', 'customer-discovery', 'market-intelligence', 'profiling'],
     leaveWith: 'Startup record · 3 customer interviews · TAM/SAM sized',
     deliverables: [
       { label: 'Create your startup record', keys: ['project_created'], tool: 'projects' },
@@ -125,7 +148,7 @@ export const WEEK_DEFS = [
       { label: 'Advisor cadence', keys: ['advisor_meeting_booked'] },
       { label: 'Co-founder', keys: ['cofounder_request_sent'] },
     ],
-    features: ['scoring', 'advisors', 'office-hours', 'cofounder-match'],
+    features: ['scoring', 'advisors', 'office-hours', 'cofounder-match', 'revenue'],
     leaveWith: 'Venture-readiness score · Advisor cadence · Co-founder decision',
     deliverables: [
       { label: 'Run your venture-readiness score', keys: ['scoring_run_completed'], tool: 'scoring' },
@@ -149,14 +172,16 @@ export const WEEK_DEFS = [
       { label: 'Cap table', keys: [] },
       { label: '83(b)', keys: [] },
     ],
-    features: ['incorporate', 'captable', 'section-83b', 'cofounder-agreement', 'capital', 'compliance'],
+    features: ['incorporate', 'captable', 'section-83b', 'cofounder-agreement', 'capital', 'compliance', 'use-of-funds'],
     leaveWith: 'Delaware C-Corp · Vesting cap table · 83(b) filed · Co-founder agreement',
     deliverables: [
       { label: 'Incorporate the entity', keys: ['incorporation_completed'], tool: 'incorporate' },
       { label: 'Initialize cap table & founder vesting', keys: [], tool: 'captable' },
       { label: 'File your 83(b) election', keys: [], tool: 'section-83b' },
       { label: 'Sign the co-founder agreement', keys: [], tool: 'cofounder-agreement' },
-      { label: 'Plan your use of funds', keys: [], tool: 'capital' },
+      // Retargeted from 'capital' (comingSoon, not navigable) to the real
+      // Use of Funds tool page — the deliverable was a dead-end before.
+      { label: 'Plan your use of funds', keys: [], tool: 'use-of-funds' },
     ],
   },
 ];
@@ -164,7 +189,7 @@ export const WEEK_DEFS = [
 // Deliverable progress with either/or awareness: rows sharing an `altGroup`
 // count as a single unit that is done when ANY member is done (mirrors the
 // backend's `required_any` week-3 gate — see MILESTONES in spinout_lab.py).
-function countDeliverables(week, isRowDone) {
+export function countDeliverables(week, isRowDone) {
   const groupDone = new Map();
   let total = 0;
   let done = 0;
@@ -186,7 +211,7 @@ function countDeliverables(week, isRowDone) {
   return { done, total };
 }
 
-function milestoneKeySet(milestones) {
+export function milestoneKeySet(milestones) {
   const out = new Set();
   (milestones || []).forEach((m) => {
     if (typeof m === 'string') out.add(m);

@@ -48,6 +48,7 @@ MILESTONES = [
             "projects",
             "customer-discovery",
             "market-intelligence",
+            "profiling",
         ],
     },
     {
@@ -60,7 +61,7 @@ MILESTONES = [
         "week": 3,
         "required_all": ["scoring_run_completed"],
         "required_any": ["advisor_meeting_booked", "cofounder_request_sent"],
-        "unlocked_features": ["cofounder-match", "advisors", "office-hours", "scoring"],
+        "unlocked_features": ["cofounder-match", "advisors", "office-hours", "scoring", "revenue"],
     },
     {
         "week": 4,
@@ -73,6 +74,7 @@ MILESTONES = [
             "cofounder-agreement",
             "capital",
             "compliance",
+            "use-of-funds",
         ],
     },
 ]

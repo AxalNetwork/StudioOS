@@ -547,7 +547,29 @@ projects.put('/:id', async (c) => {
       data[k] = s || null;
     }
   }
-  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
+  // Market-sizing invariants (mirrored in the dev FastAPI): TAM/SAM/SOM
+  // non-negative when supplied; funnel nests (SAM ≤ TAM, SOM ≤ SAM) judged
+  // against effective (incoming or stored) values. `som` exists since
+  // migration 069 (deck autofill) and is founder-editable like tam/sam.
+  for (const k of ['tam', 'sam', 'som']) {
+    if (data[k] !== undefined && data[k] !== null && (!Number.isFinite(Number(data[k])) || Number(data[k]) < 0)) {
+      await sql.end();
+      return c.json({ error: 'invalid_market_sizing', detail: `${k} must be a non-negative number` }, 400);
+    }
+  }
+  if (['tam', 'sam', 'som'].some((k) => data[k] !== undefined)) {
+    const eff = (k: string) => (data[k] !== undefined ? data[k] : (project as any)[k]);
+    const [tamV, samV, somV] = [eff('tam'), eff('sam'), eff('som')];
+    if (tamV != null && samV != null && Number(samV) > Number(tamV)) {
+      await sql.end();
+      return c.json({ error: 'invalid_market_sizing', detail: 'SAM cannot exceed TAM' }, 400);
+    }
+    if (samV != null && somV != null && Number(somV) > Number(samV)) {
+      await sql.end();
+      return c.json({ error: 'invalid_market_sizing', detail: 'SOM cannot exceed SAM' }, 400);
+    }
+  }
+  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
   // Normalise: coerce boolean → 0/1 for the NDA flag, trim URL, allow
   // explicit null to clear either field.
   if (data.data_room_nda_required !== undefined) {

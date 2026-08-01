@@ -86,6 +86,18 @@ function ensureCanEdit(project: Project, user: User): void {
     }
     return;
   }
+  // Active Spin-Out Lab members log interviews/OKRs as program deliverables
+  // regardless of account role (admitted users keep e.g. 'exploring').
+  // Deliberately an EXPLICIT ownership comparison, not
+  // canAccessFounderResource(): that predicate treats partners as privileged
+  // readers, which must never widen into cross-project writes.
+  if (
+    Number(user.spinout_lab_active ?? 0) === 1 &&
+    project.founder_id != null &&
+    user.founder_id === project.founder_id
+  ) {
+    return;
+  }
   throw new Error('Forbidden');
 }
 

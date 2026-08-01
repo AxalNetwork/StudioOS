@@ -29,6 +29,7 @@ export const MILESTONES: WeekDef[] = [
       'projects',
       'customer-discovery',
       'market-intelligence',
+      'profiling',
     ],
   },
   {
@@ -45,6 +46,7 @@ export const MILESTONES: WeekDef[] = [
       'advisors',
       'office-hours',
       'scoring',
+      'revenue',
     ],
   },
   {
@@ -57,6 +59,7 @@ export const MILESTONES: WeekDef[] = [
       'cofounder-agreement',
       'capital',
       'compliance',
+      'use-of-funds',
     ],
   },
 ];

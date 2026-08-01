@@ -771,6 +771,10 @@ def get_me(user: User = Depends(get_current_user)):
         "role": user.role,
         "is_active": user.is_active,
         "created_at": user.created_at.isoformat(),
+        # Parity with the Worker's /auth/me: the frontend uses founder_id for
+        # ownership-scoped UX (e.g. lab milestone marking on own project).
+        "founder_id": getattr(user, "founder_id", None),
+        "partner_id": getattr(user, "partner_id", None),
         "kyc_status": getattr(user, "kyc_status", None) or "not_started",
         # 'limited' = browse-only access without KYC (admin grant). Null = normal.
         "access_level": getattr(user, "access_level", None),

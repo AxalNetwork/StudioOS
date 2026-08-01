@@ -88,6 +88,18 @@ const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCa
 const ApiBridgePage = lazy(() => import('./pages/ApiBridgePage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const SpinoutLabPage = lazy(() => import('./pages/SpinoutLabPage'));
+const SpinoutLabStartupPage = lazy(() => import('./pages/SpinoutLabStartupPage'));
+const SpinoutLabDiscoveryPage = lazy(() => import('./pages/SpinoutLabDiscoveryPage'));
+const SpinoutLabMarketPage = lazy(() => import('./pages/SpinoutLabMarketPage'));
+const SpinoutLabRoadmapPage = lazy(() => import('./pages/SpinoutLabRoadmapPage'));
+const SpinoutLabProfilingPage = lazy(() => import('./pages/SpinoutLabProfilingPage'));
+const SpinoutLabScoringPage = lazy(() => import('./pages/SpinoutLabScoringPage'));
+const SpinoutLabAdvisorsPage = lazy(() => import('./pages/SpinoutLabAdvisorsPage'));
+const SpinoutLabRevenuePage = lazy(() => import('./pages/SpinoutLabRevenuePage'));
+const SpinoutLabUseOfFundsPage = lazy(() => import('./pages/SpinoutLabUseOfFundsPage'));
+const SpinoutLabCapitalPage = lazy(() => import('./pages/SpinoutLabCapitalPage'));
+const SpinoutLabCapTablePage = lazy(() => import('./pages/SpinoutLabCapTablePage'));
+const SpinoutLabCofounderAgreementPage = lazy(() => import('./pages/SpinoutLabCofounderAgreementPage'));
 const SpinoutLabApplyPage = lazy(() => import('./pages/SpinoutLabApplyPage'));
 const SpinoutLabBriefPage = lazy(() => import('./pages/SpinoutLabBriefPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
@@ -1316,6 +1328,21 @@ function AppInner() {
           app shell — sidebar and all — like every other authenticated page;
           logged-out visitors get the bare marketing surface. */}
       <Route path="/spinout-lab" element={user ? authOnly(<SpinoutLabPage />) : <SpinoutLabPage />} />
+      {/* Lab tool page — the founder's company record (design: workspace tool
+          pages). labRoles admits the active lab member's own role; admins can
+          open it for support. */}
+      <Route path="/spinout-lab/startup" element={guard(labRoles(['admin']), <SpinoutLabStartupPage />)} />
+      <Route path="/spinout-lab/discovery" element={guard(labRoles(['admin']), <SpinoutLabDiscoveryPage />)} />
+      <Route path="/spinout-lab/market" element={guard(labRoles(['admin']), <SpinoutLabMarketPage />)} />
+      <Route path="/spinout-lab/roadmap" element={guard(labRoles(['admin']), <SpinoutLabRoadmapPage />)} />
+      <Route path="/spinout-lab/profiling" element={guard(labRoles(['admin']), <SpinoutLabProfilingPage />)} />
+      <Route path="/spinout-lab/scoring" element={guard(labRoles(['admin']), <SpinoutLabScoringPage />)} />
+      <Route path="/spinout-lab/advisors" element={guard(labRoles(['admin']), <SpinoutLabAdvisorsPage />)} />
+      <Route path="/spinout-lab/revenue" element={guard(labRoles(['admin']), <SpinoutLabRevenuePage />)} />
+      <Route path="/spinout-lab/use-of-funds" element={guard(labRoles(['admin']), <SpinoutLabUseOfFundsPage />)} />
+      <Route path="/spinout-lab/capital" element={guard(labRoles(['admin']), <SpinoutLabCapitalPage />)} />
+      <Route path="/spinout-lab/captable" element={guard(labRoles(['admin']), <SpinoutLabCapTablePage />)} />
+      <Route path="/spinout-lab/cofounder-agreement" element={guard(labRoles(['admin']), <SpinoutLabCofounderAgreementPage />)} />
       {/* Cohort application form — signed-in founders only (contact info
           comes from the account); logged-out visitors are sent to register
           with the spinout-lab product intent. */}
@@ -1357,7 +1384,9 @@ function AppInner() {
           passes. Investor-only nav is curated above (NAV_BY_ROLE.investor)
           so we get a tighter capital-allocator surface; per-route guards
           stay permissive so deep links keep working during the split. */}
-      <Route path="/studio" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Dashboard />)} />
+      {/* Spin-Out Lab members (role `exploring`, lab-active) build their skills +
+          values profile in Studio too — the lab Profiling page reads from it. */}
+      <Route path="/studio" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <Dashboard />)} />
       {/* Task #9 — holding-state dashboard for chat-onboarded users awaiting admin role review. */}
       <Route path="/exploring" element={guard(['admin', 'exploring'], <ExploringDashboard />)} />
       <Route path="/dashboard" element={<DashboardRedirect />} />

@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import Session, select
 from sqlalchemy import text
@@ -634,6 +635,33 @@ def update_project(project_id: int, data: ProjectUpdate, session: Session = Depe
         if uof_error:
             raise HTTPException(status_code=400, detail={"error": uof_error, "code": "invalid_use_of_funds"})
         update_data["use_of_funds"] = uof_value
+    # Market-sizing invariants (mirrored in the Worker): TAM/SAM/SOM must be
+    # non-negative when supplied, and the funnel must nest — SAM ≤ TAM,
+    # SOM ≤ SAM — judged against the effective (incoming or stored) values.
+    for key in ("tam", "sam", "som"):
+        if key in update_data and update_data[key] is not None and float(update_data[key]) < 0:
+            raise HTTPException(status_code=400, detail={"error": "invalid_market_sizing", "detail": f"{key} must be non-negative"})
+    if any(k in update_data for k in ("tam", "sam", "som")):
+        eff = {k: (update_data[k] if k in update_data else getattr(project, k, None)) for k in ("tam", "sam", "som")}
+        if eff["tam"] is not None and eff["sam"] is not None and float(eff["sam"]) > float(eff["tam"]):
+            raise HTTPException(status_code=400, detail={"error": "invalid_market_sizing", "detail": "SAM cannot exceed TAM"})
+        if eff["sam"] is not None and eff["som"] is not None and float(eff["som"]) > float(eff["sam"]):
+            raise HTTPException(status_code=400, detail={"error": "invalid_market_sizing", "detail": "SOM cannot exceed SAM"})
+    # Structured revenue-proof fields — mirrors the Worker's Task #2
+    # coercion: non-negative numbers (null clears), paid_pilot_status is a
+    # closed enum (invalid values store NULL), date string is trimmed.
+    if "mrr" in update_data and update_data["mrr"] is not None:
+        v = float(update_data["mrr"])
+        update_data["mrr"] = v if math.isfinite(v) and v >= 0 else None
+    if "paying_customers" in update_data and update_data["paying_customers"] is not None:
+        pcf = float(update_data["paying_customers"])
+        update_data["paying_customers"] = int(math.floor(pcf)) if math.isfinite(pcf) and pcf >= 0 else None
+    if "first_payment_date" in update_data:
+        fpd = str(update_data["first_payment_date"] or "").strip()
+        update_data["first_payment_date"] = fpd or None
+    if "paid_pilot_status" in update_data:
+        pps = str(update_data["paid_pilot_status"] or "").strip().lower()
+        update_data["paid_pilot_status"] = pps if pps in {"paid", "pilot_paid", "pilot_signed", "pre_revenue"} else None
     # Task #66 — startup website: trim, allow null to clear, require an
     # http(s) scheme when present (mirrors the Worker validation).
     if "website" in update_data and update_data["website"] is not None:

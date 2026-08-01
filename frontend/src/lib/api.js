@@ -2344,6 +2344,10 @@ export const api = {
     const s = qs.toString();
     return request(`/advisors/${s ? `?${s}` : ''}`);
   },
+  // Worker-only matching engine (founder/explorer vectors vs advisor pool);
+  // the dev API has no /advisors/match — callers treat a 404 as "engine
+  // unavailable in this environment" and fall back to the directory ranking.
+  advisorsMatch: () => request('/advisors/match'),
   getAdvisor: (uid) => request(`/advisors/${uid}`),
   upsertMyAdvisor: (data) => request('/advisors/me', { method: 'POST', body: JSON.stringify(data) }),
   getMyAdvisor: () => request('/advisors/me'),

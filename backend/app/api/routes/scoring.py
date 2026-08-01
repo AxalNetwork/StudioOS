@@ -412,7 +412,18 @@ def get_project_scores(
         hidden_reason: str | None = None
 
         if snap.is_sandbox:
-            if not (is_admin or (is_founder and include_sandbox)):
+            # Ownership-based, but role-bounded: lab users (role `exploring`)
+            # can run sandbox scores on their own project, so the owning
+            # founder/explorer sees their own practice runs. The explicit role
+            # bound keeps LP/partner/investor accounts out even if a converted
+            # account still carries a founder_id. Mirrors
+            # cloudflare-worker/src/services/scoreIntegrity.ts.
+            owns = (
+                user.founder_id is not None
+                and user.founder_id == project.founder_id
+                and role_val in ("founder", "exploring")
+            )
+            if not (is_admin or (owns and include_sandbox)):
                 hidden_reason = "sandbox_visibility"
         else:
             if snap.admin_review_status not in ("auto_approved", "approved") and not is_admin:

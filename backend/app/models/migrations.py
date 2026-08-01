@@ -150,6 +150,20 @@ def ensure_project_revenue_proof_columns() -> None:
         session.commit()
 
 
+def ensure_project_market_sizing_columns() -> None:
+    """Prod parity — Worker migration 069 (deck autofill) added
+    `projects.som`; the dev schema never got it. Idempotent."""
+    with Session(engine) as session:
+        try:
+            # Justification: static identifier, dev-only FastAPI
+            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS som DOUBLE PRECISION"
+            ))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_project_market_sizing_columns: ALTER failed: %s", exc)
+        session.commit()
+
+
 def ensure_project_product_demo_columns() -> None:
     """Task #31 — add product-demo source columns to `projects` for the
     Spin-Out Demo Day "Product demo" slide. Idempotent (uses
@@ -924,6 +938,33 @@ def ensure_advisor_tables() -> None:
             ))
             session.commit()
         except Exception:  # noqa: BLE001
+            session.rollback()
+
+        # The rename above converts the COLUMN, but the legacy FK constraint
+        # still points at the old `mentors` table, so every slot INSERT on an
+        # upgraded dev DB fails with `office_hours_slots_mentor_id_fkey`.
+        # Idempotently re-point it at `advisors`: drop-if-exists + add with a
+        # stable name (the ADD is guarded so re-runs are no-ops).
+        try:
+            session.exec(text(
+                "ALTER TABLE office_hours_slots DROP CONSTRAINT IF EXISTS office_hours_slots_mentor_id_fkey"
+            ))
+            session.exec(text("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'office_hours_slots_advisor_id_fkey'
+                    ) THEN
+                        ALTER TABLE office_hours_slots
+                            ADD CONSTRAINT office_hours_slots_advisor_id_fkey
+                            FOREIGN KEY (advisor_id) REFERENCES advisors(id);
+                    END IF;
+                END $$;
+            """))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_advisor_tables: slots FK repoint: %s", exc)
             session.rollback()
 
         try:

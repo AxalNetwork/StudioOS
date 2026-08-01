@@ -245,6 +245,9 @@ class Project(SQLModel, table=True):
     why_now: Optional[str] = None
     tam: Optional[float] = None
     sam: Optional[float] = None
+    # Prod parity: Worker migration 069 (deck autofill) added projects.som —
+    # the obtainable-share figure the Demo Day deck's Market slide consumes.
+    som: Optional[float] = None
     users_count: Optional[int] = None
     revenue: Optional[float] = None
     # Task #2 — structured revenue proof surfaced on the Spin-Out Demo Day

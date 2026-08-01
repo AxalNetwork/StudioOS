@@ -70,6 +70,17 @@ def _ensure_can_edit(project: Project, user: User) -> None:
         return
     if user.role == UserRole.FOUNDER and can_access_founder_resource(user, project.founder_id):
         return
+    # Active Spin-Out Lab members log interviews/OKRs as program deliverables
+    # regardless of account role (admitted users keep e.g. 'exploring').
+    # Deliberately an EXPLICIT ownership comparison, not
+    # can_access_founder_resource(): that predicate treats partner/investor as
+    # privileged readers, which must never widen into cross-project writes.
+    if (
+        int(getattr(user, "spinout_lab_active", 0) or 0) == 1
+        and project.founder_id is not None
+        and user.founder_id == project.founder_id
+    ):
+        return
     raise HTTPException(status_code=403, detail="Read-only for non-founder roles")
 
 
@@ -488,6 +499,21 @@ def _ensure_waitlist_crm_schema(session: Session) -> None:
     if _WAITLIST_CRM_READY:
         return
     for s in [
+        # The base table is normally created lazily by brand.py; on a fresh DB
+        # where no brand endpoint ever ran, the CRM list would 500 without it.
+        """
+        CREATE TABLE IF NOT EXISTS waitlist_signups (
+            id BIGSERIAL PRIMARY KEY,
+            project_id INTEGER NOT NULL,
+            landing_page_id INTEGER,
+            email TEXT NOT NULL,
+            name TEXT,
+            source TEXT,
+            ip_hash TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "ALTER TABLE waitlist_signups ADD COLUMN IF NOT EXISTS audience TEXT",
         "ALTER TABLE waitlist_signups ADD COLUMN IF NOT EXISTS crm_status TEXT DEFAULT 'new'",
         "ALTER TABLE waitlist_signups ADD COLUMN IF NOT EXISTS invited_at TEXT",
         "ALTER TABLE waitlist_signups ADD COLUMN IF NOT EXISTS followed_up_at TEXT",
@@ -721,10 +747,24 @@ def promote_waitlist_customer(
     session.refresh(i)
 
     now_iso = datetime.utcnow().isoformat()
-    session.exec(text(
+    # Atomic claim (mirrors the Worker): only the request that flips the NULL
+    # promoted_interview_id wins; a concurrent loser deletes its interview and
+    # returns the winner's, so a double-click never creates duplicates.
+    claim = session.exec(text(
         "UPDATE waitlist_signups SET crm_status = 'promoted', promoted_at = :ts, "
-        "promoted_interview_id = :iid WHERE id = :sid AND project_id = :pid"
+        "promoted_interview_id = :iid WHERE id = :sid AND project_id = :pid "
+        "AND promoted_interview_id IS NULL"
     ), params={"ts": now_iso, "iid": i.id, "sid": signup_id, "pid": project_id})
+    if getattr(claim, "rowcount", 1) == 0:
+        session.delete(i)
+        session.commit()
+        lost = _load_customer_signup(session, project_id, signup_id)
+        winner = session.get(Interview, lost.get("promoted_interview_id")) if lost else None
+        return {
+            "signup": _serialize_signup(lost) if lost else None,
+            "interview": _serialize_interview(winner) if winner else None,
+            "already_promoted": True,
+        }
     session.add(ActivityLog(
         action="waitlist_promoted",
         details=f"Project {p.name}: promoted {signup['email']} to interview",

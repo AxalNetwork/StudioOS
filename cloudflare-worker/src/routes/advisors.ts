@@ -181,7 +181,14 @@ advisors.post('/me', async (c) => {
 advisors.get('/match', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!isFounder(user) && !isAdmin(user)) {
+    // ACTIVE Spin-Out Lab members (role `exploring` + spinout_lab_active) get
+    // advisor matching too — it is a Week-3 lab deliverable and the result is
+    // scoped to the caller's own vectors. Role alone is NOT enough: `exploring`
+    // is also the pre-admission holding role, and those accounts must not get
+    // the lab exception.
+    const isActiveLabExplorer =
+      user.role === 'exploring' && Number(user.spinout_lab_active ?? 0) === 1;
+    if (!isFounder(user) && !isAdmin(user) && !isActiveLabExplorer) {
       return c.json({ detail: 'Founder role required' }, 403);
     }
 
@@ -361,9 +368,20 @@ advisors.delete('/me/slots/:id', async (c) => {
 advisors.post('/slots/:id/book', async (c) => {
   try {
     const user = await requireAuth(c);
-    // Task #6 — advisor booking is Growth-tier for founders.
-    ensureTier(user, 'growth');
-    if (!isFounder(user) && !isAdmin(user)) return c.json({ detail: 'Founder role required' }, 403);
+    // Task #6 — advisor booking is Growth-tier for founders. Exception:
+    // ACTIVE Spin-Out Lab members (role `exploring` + spinout_lab_active)
+    // book advisor intros without a subscription — `advisor_meeting_booked`
+    // is a Week-3 lab deliverable (mirrors the scoring sandbox exception).
+    // Role alone is NOT enough: `exploring` is also the pre-admission holding
+    // role, and those accounts get neither the tier skip nor booking access.
+    const isActiveLabExplorer =
+      user.role === 'exploring' && Number(user.spinout_lab_active ?? 0) === 1;
+    if (!isActiveLabExplorer) {
+      ensureTier(user, 'growth');
+    }
+    if (!isFounder(user) && !isAdmin(user) && !isActiveLabExplorer) {
+      return c.json({ detail: 'Founder role required' }, 403);
+    }
     const slotId = Number(c.req.param('id'));
     const body = await c.req.json().catch(() => ({} as any));
     const slot = await c.env.DB.prepare('SELECT * FROM advisor_office_hour_slots WHERE id = ?').bind(slotId).first<SlotRow>();

@@ -379,7 +379,13 @@ export function snapshotIsVisible(
   if (ctx.role === 'admin') return true;
 
   if (isSandbox) {
-    return ctx.role === 'founder' && !!ctx.founderId && ctx.founderId === ctx.ownerFounderId;
+    // Ownership-based, but role-bounded: Spin-Out Lab users (role `exploring`)
+    // can run sandbox scores on their own project, so the owning
+    // founder/explorer sees their own practice runs. The explicit role bound
+    // keeps LP/partner/investor accounts out even if a converted account
+    // still carries a founder_id.
+    const ownerRole = ctx.role === 'founder' || ctx.role === 'exploring';
+    return ownerRole && !!ctx.founderId && ctx.founderId === ctx.ownerFounderId;
   }
 
   if (status === 'flagged' || status === 'rejected') return false;
