@@ -34,6 +34,7 @@ import {
   Palette,
   PieChart,
   Presentation,
+  Radar,
   Rocket,
   ShieldCheck,
   Users,
@@ -54,6 +55,13 @@ export const TOOL_INFO = {
   // Lab-facing market page (design: workspace tool pages); the platform-wide
   // investor/partner MI dashboard stays at /market-intel.
   'market-intelligence': { label: 'Market Intel', to: '/spinout-lab/market', desc: 'TAM / SAM research and sizing', icon: Compass },
+  // Week-3 investor-signals surface. The design shows "MI — Investor Signals"
+  // as its own Week-3 card; the app consolidated it into the Market Intel
+  // page's investor-fit section, so it links there. `uncounted` keeps it out of
+  // the scorecard's per-week tool totals (the design's own scorecard excludes
+  // it — Week 3 reads "5 of 5"), and `unlockWeek` gates it to Week 3 since it
+  // has no standalone backend feature flag.
+  misignals: { label: 'MI — Investor Signals', to: '/spinout-lab/market', desc: 'Scored investor-fit signals from your profiling', icon: Radar, uncounted: true, unlockWeek: 3 },
   // Lab-facing founder profiling report (design: workspace tool pages);
   // reads the Studio-built skills/values/archetype profile.
   profiling: { label: 'Profiling', to: '/spinout-lab/profiling', desc: 'Skills, values, and archetype report', icon: Fingerprint },
@@ -131,7 +139,7 @@ export const WEEK_DEFS = [
       { label: 'Brand basics', keys: ['brand_basics_filled'] },
       { label: 'Pitch deck v1', keys: ['pitch_deck_drafted'] },
     ],
-    features: ['roadmap', 'brand-builder', 'pitch-deck'],
+    features: ['roadmap', 'brand-builder', 'pitch-deck', 'studio-ops'],
     leaveWith: 'MVP scope · 90-day OKRs · Brand v1 · Pitch deck v1',
     deliverables: [
       { label: 'Scope the MVP', keys: ['mvp_scoped'], tool: 'roadmap' },
@@ -155,7 +163,7 @@ export const WEEK_DEFS = [
       { label: 'Advisor cadence', keys: ['advisor_meeting_booked'] },
       { label: 'Co-founder', keys: ['cofounder_request_sent'] },
     ],
-    features: ['scoring', 'advisors', 'office-hours', 'cofounder-match', 'revenue'],
+    features: ['scoring', 'advisors', 'office-hours', 'cofounder-match', 'misignals', 'revenue'],
     leaveWith: 'Venture-readiness score · Advisor cadence · Co-founder decision',
     deliverables: [
       { label: 'Run venture-readiness score', keys: ['scoring_run_completed'], tool: 'scoring' },
@@ -266,7 +274,10 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
   };
   const weekBrowsable = (num) => weekStatus(num) !== 'locked';
   const featureUnlocked = (key) =>
-    previewAllUnlocked || graduated || unlockedFeatures.has(key) || Boolean(TOOL_INFO[key]?.ungated);
+    previewAllUnlocked || graduated || unlockedFeatures.has(key) || Boolean(TOOL_INFO[key]?.ungated) ||
+    // Tools with no standalone backend flag (e.g. MI — Investor Signals) unlock
+    // by program week instead of an `unlocked_features` entry.
+    (TOOL_INFO[key]?.unlockWeek != null && currentWeek >= TOOL_INFO[key].unlockWeek);
   const chipDone = (weekNum, keys) =>
     keys.length > 0 ? keys.every((k) => done.has(k)) : weekStatus(weekNum) === 'done';
 
@@ -289,8 +300,11 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
   const weekStats = WEEK_DEFS.map((w) => {
     const status = weekStatus(w.num);
     const { done: dDone, total: dTotal } = countDeliverables(w, (d) => chipDone(w.num, d.keys));
-    const tTotal = w.features.length;
-    const tUnlocked = w.features.filter((k) => featureUnlocked(k)).length;
+    // `uncounted` tools show as cards but never count toward the scorecard's
+    // per-week tool totals — mirrors the design, whose scorecard excludes them.
+    const counted = w.features.filter((k) => !TOOL_INFO[k]?.uncounted);
+    const tTotal = counted.length;
+    const tUnlocked = counted.filter((k) => featureUnlocked(k)).length;
     const keyOutput = w.chips.filter((c) => chipDone(w.num, c.keys)).map((c) => c.label).join(' · ');
     return { def: w, status, dTotal, dDone, tTotal, tUnlocked, keyOutput };
   });
@@ -526,7 +540,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                   <ClipboardCheck size={13} className="text-violet-600 dark:text-violet-400" /> {deliverablesDone} of {selectedCounts.total} tasks done
                 </span>
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5">
-                  <Check size={13} className="text-violet-600 dark:text-violet-400" /> {selectedDef.features.filter((f) => featureUnlocked(f)).length} tools unlocked
+                  <Check size={13} className="text-violet-600 dark:text-violet-400" /> {selectedDef.features.filter((f) => featureUnlocked(f) && !TOOL_INFO[f]?.uncounted).length} tools unlocked
                 </span>
               </div>
             </div>

@@ -642,6 +642,24 @@ export default function SpinoutLabStartupPage() {
                   </div>
                 ))}
               </div>
+              {(project.problem_statement || project.solution) && (
+                <>
+                  <div className={`${LBL} mb-1.5`}>Founding thesis</div>
+                  <p className="text-[12.5px] text-gray-600 dark:text-gray-300 leading-relaxed mb-4">
+                    {[project.problem_statement, project.solution].filter(Boolean).join(' ')}
+                  </p>
+                </>
+              )}
+              <div className={`${LBL} mb-2`}>Team</div>
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-8 h-8 flex-none rounded-full bg-violet-600 text-white font-bold text-[11px] flex items-center justify-center">
+                  {initialsOf(founderName)}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[12.5px] font-semibold text-gray-800 dark:text-gray-100">{founderName}</div>
+                  <div className="text-[11px] text-gray-400 dark:text-gray-500">Founder / CEO · Full-time</div>
+                </div>
+              </div>
               <div className={`${LBL} mb-2`}>Data room</div>
               <div className="flex flex-wrap gap-1.5">
                 {docs.map((d) => (
@@ -650,6 +668,11 @@ export default function SpinoutLabStartupPage() {
                   </span>
                 ))}
               </div>
+              {!graduated && (
+                <div className="text-[11.5px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40 rounded-xl px-3.5 py-2.5 mt-4 leading-snug">
+                  Pre-formation company in the Axal VC Spin-Out Lab. Legal entity, cap table, and vesting finalize in Week 4.
+                </div>
+              )}
             </div>
           </div>
         </div>
