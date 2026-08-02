@@ -28,6 +28,7 @@ import {
   ChevronLeft, ChevronRight, X, Presentation,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { markMilestone } from '../lib/spinoutLabHooks';
 import { reportError } from '../lib/log';
 import { useAuth } from '../hooks/useAuthSync';
 import { useSpinoutDeckFields } from '../hooks/useSpinoutDeckFields';
@@ -146,6 +147,15 @@ export default function SpinoutLabPitchDeckPage() {
   const readyCount = statuses.filter((s) => s.state === 'ready').length;
   const readyPct = Math.round((readyCount / SLIDE_META.length) * 100);
   const exportDisabled = readyCount < EXPORT_MIN_READY;
+
+  // W2 deliverable — deck v1 counts as drafted when enough slides are ready
+  // to export (the page's own export threshold, backed by real Lab data).
+  useEffect(() => {
+    if (!fieldsLoading && projectId && readyCount >= EXPORT_MIN_READY) {
+      markMilestone(user, 'pitch_deck_drafted');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldsLoading, projectId, readyCount]);
 
   // Week chips aggregated from the per-slide statuses (cover excluded).
   const weekPills = useMemo(() => WEEKS.map((w) => {

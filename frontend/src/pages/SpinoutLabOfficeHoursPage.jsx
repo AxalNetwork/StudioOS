@@ -32,6 +32,7 @@ import {
   AlertTriangle, ExternalLink, Search, ChevronRight,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
+import { markMilestone } from '../lib/spinoutLabHooks';
 import { reportError } from '../lib/log';
 import { useToast } from '../components/useToast';
 import { pickLabProject } from './SpinoutLabStartupPage';
@@ -357,6 +358,8 @@ export default function SpinoutLabOfficeHoursPage() {
       });
       setDrawerFor(null);
       showToast('Session requested — the partner will confirm and your brief travels with the booking.');
+      // W3 deliverable — a real partner session was requested.
+      markMilestone(user, 'office_hours_booked');
       await refreshBookings();
     } catch (e) {
       reportError('spinout-office-hours:book', e);

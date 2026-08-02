@@ -25,6 +25,7 @@ import {
   Trash2, X, FileText, Gauge, Presentation, CreditCard, ClipboardEdit,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
+import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
@@ -72,6 +73,7 @@ export default function SpinoutLabRevenuePage() {
   const [status, setStatus] = useState('loading');
   const [state, setState] = useState(null);
   const [user, setUser] = useState(null);
+  const [summaryCopied, setSummaryCopied] = useState(false);
   const [project, setProject] = useState(null);
   const [snapshots, setSnapshots] = useState(null); // [] | {failed}
   const [filter, setFilter] = useState('all');
@@ -194,6 +196,10 @@ export default function SpinoutLabRevenuePage() {
       };
       await api.updateProject(project.id, body);
       await refreshProject();
+      // W3 deliverable — real traction proof is now on the record.
+      if (body.revenue != null || body.mrr != null || body.paying_customers != null || body.paid_pilot_status || body.growth_signals) {
+        markMilestone(user, 'revenue_proof_added');
+      }
       setModal(null);
     } catch (e) {
       console.error('[spinout-revenue:save-proof]', e);
@@ -210,6 +216,8 @@ export default function SpinoutLabRevenuePage() {
       const res = await api.importMetricsFromStripe(project.id);
       await loadSnapshots(project.id);
       setStripeState({ busy: false, unavailable: false, error: '', done: res || {} });
+      // W3 deliverable — Stripe-synced metrics count as real revenue proof.
+      markMilestone(user, 'revenue_proof_added');
     } catch (e) {
       console.error('[spinout-revenue:stripe]', e);
       if (e?.status === 404) {
@@ -329,6 +337,35 @@ export default function SpinoutLabRevenuePage() {
           <span className="text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Active</span>
         </div>
         <span className="ml-auto text-[11px] font-semibold text-gray-400 dark:text-gray-500">Unlocked · Wk {week}</span>
+        {canEdit && (
+          <button
+            type="button"
+            data-testid="button-copy-revenue-summary"
+            onClick={async () => {
+              const text = [
+                `Revenue summary — ${project.name || 'startup'}`,
+                `Traction: ${line}`,
+                project.revenue != null ? `Revenue to date: ${fmtMoney(project.revenue)}` : null,
+                (latest?.mrr ?? project.mrr) != null ? `MRR: ${fmtMoney(latest?.mrr ?? project.mrr)}` : null,
+                num(project.paying_customers) != null ? `Paying customers: ${num(project.paying_customers)}` : null,
+                project.first_payment_date ? `First payment: ${fmtDate(project.first_payment_date)}` : null,
+                rows.length ? `Metric snapshots: ${rows.length} (${rows.filter((s) => s.source === 'stripe').length} Stripe-synced)` : null,
+                project.growth_signals ? `Growth signals: ${project.growth_signals}` : null,
+              ].filter(Boolean).join('\n');
+              try {
+                await navigator.clipboard.writeText(text);
+                setSummaryCopied(true);
+                setTimeout(() => setSummaryCopied(false), 2000);
+                // W3 deliverable — an investor-ready summary was generated
+                // from the real numbers on record.
+                markMilestone(user, 'revenue_summary_generated');
+              } catch (e) { console.error('[spinout-revenue:summary]', e); }
+            }}
+            className="h-8 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/30 text-xs font-semibold inline-flex items-center gap-1.5"
+          >
+            <FileText size={13} /> {summaryCopied ? 'Copied' : 'Copy investor summary'}
+          </button>
+        )}
       </div>
       <p className="text-[12.5px] text-gray-500 dark:text-gray-400 -mt-2">
         Capture real revenue and build investor-ready proof of traction.

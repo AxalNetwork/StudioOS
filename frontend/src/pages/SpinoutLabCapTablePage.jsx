@@ -29,6 +29,7 @@ import {
   Download, ExternalLink, CheckCircle2, Clock,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
+import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
@@ -196,6 +197,12 @@ export default function SpinoutLabCapTablePage() {
       });
       setScenario(saved);
       setResult(saved.result || null);
+      // W4 deliverables — founder stock is real once founders hold shares in
+      // the saved scenario; the table is "locked" once a round is modeled.
+      if ((snapshot.founders || []).some((f) => (Number(f.shares) || 0) > 0)) {
+        markMilestone(user, 'founder_stock_issued');
+      }
+      if ((snapshot.rounds || []).length > 0) markMilestone(user, 'captable_locked');
       if (inputsRef.current === snapshot) {
         // No edits landed while the request was in flight — adopt the saved copy.
         const norm = normalizeInputs(saved.inputs);

@@ -64,15 +64,59 @@ export const MILESTONES: WeekDef[] = [
   },
 ];
 
-export const VALID_MILESTONE_KEYS = new Set<string>(
-  MILESTONES.flatMap((w) => [...w.requiredAll, ...(w.requiredAny ?? [])]),
-);
+/**
+ * Deliverable-only milestones: recorded per user like gating milestones and
+ * surfaced on the workspace checklist, but NOT part of the week-advance gate
+ * (`weekMet` ignores them). Fired by the owning module on real completion
+ * events. Mirror of OPTIONAL_MILESTONES in backend/app/api/routes/spinout_lab.py.
+ */
+export const OPTIONAL_MILESTONES: Record<number, string[]> = {
+  1: [
+    'customer_interview_logged_4',
+    'customer_interview_logged_5',
+    'market_sizing_completed',
+    'profiling_completed',
+    'icp_defined',
+    'market_research_shared',
+  ],
+  2: [
+    'mvp_scoped',
+    'landing_page_created',
+    'studio_ops_cadence_set',
+    'discovery_followups_mapped',
+  ],
+  3: [
+    'office_hours_booked',
+    'revenue_proof_added',
+    'revenue_summary_generated',
+    'scoring_confidence_70',
+  ],
+  4: [
+    'ein_received',
+    'founder_stock_issued',
+    'section83b_filed',
+    'cofounder_agreement_signed',
+    'fundraise_ask_locked',
+    'use_of_funds_filled',
+    'investor_intros_secured',
+    'captable_locked',
+    'data_room_built',
+  ],
+};
+
+export const VALID_MILESTONE_KEYS = new Set<string>([
+  ...MILESTONES.flatMap((w) => [...w.requiredAll, ...(w.requiredAny ?? [])]),
+  ...Object.values(OPTIONAL_MILESTONES).flat(),
+]);
 
 export function weekForKey(key: string): number | null {
   for (const w of MILESTONES) {
     if (w.requiredAll.includes(key) || (w.requiredAny ?? []).includes(key)) {
       return w.week;
     }
+  }
+  for (const [week, keys] of Object.entries(OPTIONAL_MILESTONES)) {
+    if (keys.includes(key)) return Number(week);
   }
   return null;
 }

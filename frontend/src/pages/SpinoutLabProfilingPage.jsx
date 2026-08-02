@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { api, assessment } from '../lib/api';
 import { spinoutLab } from '../lib/api';
+import { markMilestone } from '../lib/spinoutLabHooks';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import { archetypeMeta } from '../lib/assessmentMeta';
@@ -277,6 +278,15 @@ export default function SpinoutLabProfilingPage() {
     ? Math.round(model.assessedPct * 0.4 + valuesPct * 0.4 + (archConfPct || 0) * 0.2)
     : 0;
   const overallBand = confidenceBand(completion);
+
+  // W1 deliverable — the assessment counts as complete only when all three
+  // real components exist: skills rated, values vector, archetype result.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    const complete = model && model.assessedPct >= 75 && valuesRows?.length > 0 && latestResult;
+    if (complete) markMilestone(user, 'profiling_completed');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, model?.assessedPct, valuesRows?.length, latestResult?.id]);
 
   const evolution = useMemo(
     () =>

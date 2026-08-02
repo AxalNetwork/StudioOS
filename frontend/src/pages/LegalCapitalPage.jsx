@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Scale, Banknote, ClipboardCheck, Plus, Loader2, X, FileText, Sparkles, ShieldCheck, Send, CheckCircle2, AlertTriangle, Rocket } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
+import { markMilestone } from '../lib/spinoutLabHooks';
 import SpinoutWizard from '../components/SpinoutWizard';
 
 const DOC_TYPES = [
@@ -228,7 +230,15 @@ function SpinoutTab({ dealId, canEdit, deal }) {
   const [showWizard, setShowWizard] = useState(false);
   const [form, setForm] = useState({ subsidiary_name: '', jurisdiction: 'Delaware_CCorp', capital_call_amount: 250000, force: false });
 
+  const { user } = useAuth();
   const load = async () => { setLoading(true); try { setSub(await api.subsidiaryFor(dealId)); } finally { setLoading(false); } };
+
+  // W4 lab deliverable — an EIN actually exists on the entity record. This is
+  // the only surface that shows a real EIN (no-op for non-lab users).
+  useEffect(() => {
+    if (sub?.ein) markMilestone(user, 'ein_received');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sub?.ein]);
   useEffect(() => { load(); }, [dealId]);
 
   const launch = async () => {

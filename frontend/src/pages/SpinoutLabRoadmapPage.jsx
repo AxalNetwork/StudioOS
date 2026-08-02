@@ -258,6 +258,13 @@ export default function SpinoutLabRoadmapPage() {
     return { high, medium, low, confidence, timeline };
   }, [features, state]);
 
+  // W2 deliverable — MVP counts as scoped by the page's own definition of a
+  // strong scope: 3+ ranked features including at least one deliberate cut.
+  useEffect(() => {
+    if (derived.confidence.label === 'Strong') markMilestone(user, 'mvp_scoped');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [derived.confidence.label]);
+
   if (status === 'loading') {
     return <div className="flex items-center justify-center py-24" data-testid="roadmap-loading"><Loader2 className="animate-spin text-violet-600 dark:text-violet-400" size={28} /></div>;
   }

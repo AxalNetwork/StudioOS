@@ -86,6 +86,10 @@ export const TOOL_INFO = {
   // readiness). The founder-persona workspace at /raise/capital stays intact.
   capital: { label: 'Capital', to: '/spinout-lab/capital', desc: 'Run your raise & data room', icon: Banknote },
   compliance: { label: 'Compliance', to: '/compliance', desc: 'Filing calendar & obligations', icon: ShieldCheck },
+  // Studio Ops is a studio-wide surface, not a lab-gated feature — `ungated`
+  // keeps its deliverable button visible without touching unlocked_features.
+  // Founders reach it via the command center tab (/studio-ops redirects there).
+  'studio-ops': { label: 'Studio Ops', to: '/build/command-center?tab=studio-ops', desc: 'Studio operating cadence', icon: CalendarCheck, ungated: true },
 };
 
 // Four program weeks. `chips` are the timeline summary chips (done derives
@@ -102,16 +106,17 @@ export const WEEK_DEFS = [
     chips: [
       { label: '1 Startup', keys: ['project_created'] },
       { label: '3 interviews', keys: ['customer_interview_logged_1', 'customer_interview_logged_2', 'customer_interview_logged_3'] },
-      { label: 'TAM sized', keys: [] },
+      { label: 'TAM sized', keys: ['market_sizing_completed'] },
     ],
     features: ['projects', 'customer-discovery', 'market-intelligence', 'profiling'],
     leaveWith: 'Startup record · 3 customer interviews · TAM/SAM sized',
     deliverables: [
-      { label: 'Create your startup record', keys: ['project_created'], tool: 'projects' },
-      { label: 'Log customer interview #1', keys: ['customer_interview_logged_1'], tool: 'customer-discovery' },
-      { label: 'Log customer interview #2', keys: ['customer_interview_logged_2'], tool: 'customer-discovery' },
-      { label: 'Log customer interview #3', keys: ['customer_interview_logged_3'], tool: 'customer-discovery' },
-      { label: 'Size your market (TAM / SAM)', keys: [], tool: 'market-intelligence' },
+      { label: 'Create startup record', keys: ['project_created'], tool: 'projects' },
+      { label: 'Log 5 customer interviews', keys: ['customer_interview_logged_1', 'customer_interview_logged_2', 'customer_interview_logged_3', 'customer_interview_logged_4', 'customer_interview_logged_5'], tool: 'customer-discovery' },
+      { label: 'Size TAM / SAM with citations', keys: ['market_sizing_completed'], tool: 'market-intelligence' },
+      { label: 'Complete skills, values & archetype assessment', keys: ['profiling_completed'], tool: 'profiling' },
+      { label: 'Finalize ICP definition and validation criteria', keys: ['icp_defined'], tool: 'customer-discovery' },
+      { label: 'Export or share initial Market Intel research', keys: ['market_research_shared'], tool: 'market-intelligence' },
     ],
   },
   {
@@ -129,11 +134,13 @@ export const WEEK_DEFS = [
     features: ['roadmap', 'brand-builder', 'pitch-deck'],
     leaveWith: 'MVP scope · 90-day OKRs · Brand v1 · Pitch deck v1',
     deliverables: [
-      { label: 'Scope the MVP', keys: [], tool: 'roadmap' },
+      { label: 'Scope the MVP', keys: ['mvp_scoped'], tool: 'roadmap' },
       { label: 'Set 3+ OKRs (90-day)', keys: ['okrs_created'], tool: 'roadmap' },
-      { label: 'Draft Brand v1', keys: ['brand_basics_filled'], tool: 'brand-builder' },
-      { label: 'Design landing pages', keys: [], tool: 'brand-builder' },
+      { label: 'Design landing pages', keys: ['landing_page_created'], tool: 'brand-builder' },
       { label: 'Draft pitch deck v1', keys: ['pitch_deck_drafted'], tool: 'pitch-deck' },
+      { label: 'Studio Ops cadence set', keys: ['studio_ops_cadence_set'], tool: 'studio-ops' },
+      { label: 'Draft Brand v1 (tagline, value prop, visual direction)', keys: ['brand_basics_filled'], tool: 'brand-builder' },
+      { label: 'Map first 3 customer discovery follow-ups', keys: ['discovery_followups_mapped'], tool: 'customer-discovery' },
     ],
   },
   {
@@ -151,13 +158,16 @@ export const WEEK_DEFS = [
     features: ['scoring', 'advisors', 'office-hours', 'cofounder-match', 'revenue'],
     leaveWith: 'Venture-readiness score · Advisor cadence · Co-founder decision',
     deliverables: [
-      { label: 'Run your venture-readiness score', keys: ['scoring_run_completed'], tool: 'scoring' },
+      { label: 'Run venture-readiness score', keys: ['scoring_run_completed'], tool: 'scoring' },
       // The backend's week-3 gate is scoring PLUS EITHER of these two —
       // `altGroup` makes them count as ONE unit in every progress count,
       // or a validly completed week 3 could never read as fully done.
-      { label: 'Book an advisor session', keys: ['advisor_meeting_booked'], tool: 'advisors', altGroup: 'validate-path' },
-      { label: 'Send a co-founder intro request', keys: ['cofounder_request_sent'], tool: 'cofounder-match', altGroup: 'validate-path' },
-      { label: 'Set your office-hours cadence', keys: [], tool: 'office-hours' },
+      { label: 'Establish advisor cadence', keys: ['advisor_meeting_booked'], tool: 'advisors', altGroup: 'validate-path' },
+      { label: 'Decide co-founder track', keys: ['cofounder_request_sent'], tool: 'cofounder-match', altGroup: 'validate-path' },
+      { label: 'Book a session in Office Hours', keys: ['office_hours_booked'], tool: 'office-hours' },
+      { label: 'Bring revenue proof', keys: ['revenue_proof_added'], tool: 'revenue' },
+      { label: 'Generate investor-ready revenue summary', keys: ['revenue_summary_generated'], tool: 'revenue' },
+      { label: 'Score ≥70% confidence across 5+ dimensions', keys: ['scoring_confidence_70'], tool: 'scoring', optional: true },
     ],
   },
   {
@@ -169,19 +179,24 @@ export const WEEK_DEFS = [
     activeRing: 'border-violet-300 dark:border-violet-700 ring-2 ring-violet-500/20',
     chips: [
       { label: 'C-Corp', keys: ['incorporation_completed'] },
-      { label: 'Cap table', keys: [] },
-      { label: '83(b)', keys: [] },
+      { label: 'Cap table', keys: ['founder_stock_issued'] },
+      { label: '83(b)', keys: ['section83b_filed'] },
     ],
     features: ['incorporate', 'captable', 'section-83b', 'cofounder-agreement', 'capital', 'compliance', 'use-of-funds'],
     leaveWith: 'Delaware C-Corp · Vesting cap table · 83(b) filed · Co-founder agreement',
     deliverables: [
       { label: 'Incorporate the entity', keys: ['incorporation_completed'], tool: 'incorporate' },
-      { label: 'Initialize cap table & founder vesting', keys: [], tool: 'captable' },
-      { label: 'File your 83(b) election', keys: [], tool: 'section-83b' },
-      { label: 'Sign the co-founder agreement', keys: [], tool: 'cofounder-agreement' },
-      // Retargeted from 'capital' (comingSoon, not navigable) to the real
-      // Use of Funds tool page — the deliverable was a dead-end before.
-      { label: 'Plan your use of funds', keys: [], tool: 'use-of-funds' },
+      { label: 'File incorporation docs and receive EIN', keys: ['ein_received'], tool: 'incorporate' },
+      { label: 'Issue founder stock with vesting', keys: ['founder_stock_issued'], tool: 'captable' },
+      { label: 'File 83(b) election', keys: ['section83b_filed'], tool: 'section-83b' },
+      { label: 'Sign co-founder agreement (or solo declaration)', keys: ['cofounder_agreement_signed'], tool: 'cofounder-agreement' },
+      { label: 'Lock the fundraise ask', keys: ['fundraise_ask_locked'], tool: 'capital' },
+      { label: 'Fill in Use of Funds', keys: ['use_of_funds_filled'], tool: 'use-of-funds' },
+      // Warm intros & the data room live on the Capital raise workspace —
+      // there is no founder-facing "Investor Signals" surface.
+      { label: 'Secure ≥3 warm investor intros', keys: ['investor_intros_secured'], tool: 'capital' },
+      { label: 'Lock cap table with dilution modeling', keys: ['captable_locked'], tool: 'captable' },
+      { label: 'Build data room with ≥8 key artifacts', keys: ['data_room_built'], tool: 'capital' },
     ],
   },
 ];
@@ -194,6 +209,7 @@ export function countDeliverables(week, isRowDone) {
   let total = 0;
   let done = 0;
   week.deliverables.forEach((d) => {
+    if (d.optional) return; // bonus rows never gate or count toward progress
     const rowDone = isRowDone(d);
     if (d.altGroup) {
       if (!groupDone.has(d.altGroup)) {
@@ -249,7 +265,8 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
     return previewAllUnlocked ? 'unlocked' : 'locked';
   };
   const weekBrowsable = (num) => weekStatus(num) !== 'locked';
-  const featureUnlocked = (key) => previewAllUnlocked || graduated || unlockedFeatures.has(key);
+  const featureUnlocked = (key) =>
+    previewAllUnlocked || graduated || unlockedFeatures.has(key) || Boolean(TOOL_INFO[key]?.ungated);
   const chipDone = (weekNum, keys) =>
     keys.length > 0 ? keys.every((k) => done.has(k)) : weekStatus(weekNum) === 'done';
 
@@ -545,6 +562,8 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
           <div className="flex flex-col gap-2.5">
             {selectedDef.deliverables.map((d) => {
               const dDone = chipDone(selectedDef.num, d.keys);
+              const keysDone = d.keys.filter((k) => done.has(k)).length;
+              const partial = !dDone && d.keys.length > 1 && keysDone > 0;
               const info = TOOL_INFO[d.tool];
               const unlocked = featureUnlocked(d.tool);
               return (
@@ -572,19 +591,31 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                         className={`text-[10.5px] font-semibold rounded-full px-2 py-0.5 ${
                           dDone
                             ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
-                            : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'
+                            : partial
+                              ? 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300'
+                              : d.optional
+                                ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                                : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'
                         }`}
                       >
-                        {dDone ? 'Done' : 'Not started'}
+                        {dDone ? 'Done' : partial ? 'In Progress' : d.optional ? 'Optional · boosts readiness' : 'Not started'}
                       </span>
                     </div>
+                    {partial && (
+                      <div className="mt-2 h-1.5 w-40 max-w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-violet-600"
+                          style={{ width: `${Math.round((keysDone / d.keys.length) * 100)}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
                   {info && unlocked && !info.comingSoon && (
                     <Link
                       to={info.to}
-                      className="flex-none h-8 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-xs font-semibold inline-flex items-center gap-1"
+                      className="flex-none h-8 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap"
                     >
-                      Open <ArrowRight size={12} />
+                      Open {info.label} <ArrowRight size={12} />
                     </Link>
                   )}
                 </div>

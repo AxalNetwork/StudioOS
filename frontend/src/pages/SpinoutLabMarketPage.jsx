@@ -29,6 +29,7 @@ import {
   X,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
+import { markMilestone } from '../lib/spinoutLabHooks';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import { pickLabProject } from './SpinoutLabStartupPage';
@@ -98,6 +99,30 @@ export default function SpinoutLabMarketPage() {
   const [form, setForm] = useState({ tam: '', sam: '' });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [shared, setShared] = useState(false);
+
+  // W1 deliverable "Export or share initial Market Intel research" — copies a
+  // real research summary; the milestone fires only on this explicit action.
+  const shareResearch = async () => {
+    if (!project) return;
+    const rows = Array.isArray(citations?.items) ? citations.items : Array.isArray(citations) ? citations : [];
+    const lines = [
+      `Market research — ${project.name || 'startup'}${project.sector ? ` (${project.sector})` : ''}`,
+      project.tam != null ? `TAM: ${fmtMoney(project.tam)}` : null,
+      project.sam != null ? `SAM: ${fmtMoney(project.sam)}` : null,
+      project.som != null ? `SOM: ${fmtMoney(project.som)}` : null,
+      rows.length ? `\nSources (${rows.length}):` : null,
+      ...rows.slice(0, 8).map((c) => `- ${c.title || c.source || c.url || 'source'}${c.url ? ` — ${c.url}` : ''}`),
+    ].filter(Boolean);
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setShared(true);
+      setTimeout(() => setShared(false), 2000);
+      await markMilestone(user, 'market_research_shared');
+    } catch (e) {
+      reportError('SpinoutLabMarketPage:share', e);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -164,6 +189,9 @@ export default function SpinoutLabMarketPage() {
     try {
       const updated = await api.updateProject(project.id, { tam, sam, som });
       setProject((prev) => ({ ...prev, ...updated }));
+      // W1 deliverable — sizing counts once both TAM and SAM are on record
+      // (citations aggregate automatically from MI sources for the sector).
+      if (tam != null && sam != null) await markMilestone(user, 'market_sizing_completed');
       setEditOpen(false);
     } catch (e) {
       reportError('SpinoutLabMarketPage:save', e);
@@ -241,9 +269,14 @@ export default function SpinoutLabMarketPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">TAM / SAM research and sizing — your Week 1 market deliverable.</p>
         </div>
         {project && (
-          <button type="button" data-testid="button-edit-sizing" onClick={openEdit} className="h-9 px-4 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold inline-flex items-center gap-1.5">
-            <Pencil size={13} /> Edit sizing
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" data-testid="button-share-research" onClick={shareResearch} className="h-9 px-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-xs font-semibold inline-flex items-center gap-1.5">
+              {shared ? 'Copied' : 'Copy research summary'}
+            </button>
+            <button type="button" data-testid="button-edit-sizing" onClick={openEdit} className="h-9 px-4 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold inline-flex items-center gap-1.5">
+              <Pencil size={13} /> Edit sizing
+            </button>
+          </div>
         )}
       </div>
 

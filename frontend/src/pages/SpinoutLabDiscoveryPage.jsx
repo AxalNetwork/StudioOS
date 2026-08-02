@@ -184,6 +184,16 @@ export default function SpinoutLabDiscoveryPage() {
     };
   }, [interviews, signups, painData]);
 
+  // W1 deliverable — the ICP working definition is real once it is fully
+  // derivable: 3+ interviews with a leading segment and a primary pain.
+  useEffect(() => {
+    if (!state?.active) return;
+    if (derived.ivs?.length >= 3 && derived.topRole && derived.topPain) {
+      markMilestone(user, 'icp_defined');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.active, derived.ivs?.length, derived.topRole, derived.topPain]);
+
   const leadAction = async (signup, kind) => {
     if (!project) return;
     setBusyLead(signup.id);
@@ -197,7 +207,7 @@ export default function SpinoutLabDiscoveryPage() {
         const fresh = await api.listInterviews(project.id).catch(() => []);
         const n = Array.isArray(fresh) ? fresh.length : (fresh?.interviews || []).length;
         const done = new Set((state?.milestones || []).map((m) => m?.key ?? m));
-        for (let k = 1; k <= Math.min(n, MIN_INTERVIEWS); k += 1) {
+        for (let k = 1; k <= Math.min(n, 5); k += 1) {
           const key = `customer_interview_logged_${k}`;
           if (!done.has(key)) await markMilestone(user, key);
         }
@@ -208,6 +218,11 @@ export default function SpinoutLabDiscoveryPage() {
         setLeadMsg({ kind: 'ok', text: `Invitation sent to ${signup.email}.` });
       } else {
         await api.followUpWaitlistCustomer(project.id, signup.id);
+        // W2 deliverable — the 3rd real follow-up marks the map as done.
+        const followed = (signups || []).filter(
+          (s) => s.status === 'followed_up' && s.id !== signup.id,
+        ).length + 1;
+        if (followed >= 3) await markMilestone(user, 'discovery_followups_mapped');
         setLeadMsg({ kind: 'ok', text: `Follow-up sent to ${signup.email}.` });
       }
       await loadProjectData(project.id);

@@ -79,15 +79,57 @@ MILESTONES = [
     },
 ]
 
+# Deliverable-only milestones: recorded per user like gating milestones and
+# surfaced on the workspace checklist, but NOT part of the week-advance gate
+# (_week_met ignores them). Fired by the owning module on real completion
+# events — the checklist is never manually checkable. Mirror of
+# OPTIONAL_MILESTONES in cloudflare-worker/src/services/spinoutLabCatalog.ts.
+OPTIONAL_MILESTONES = {
+    1: [
+        "customer_interview_logged_4",
+        "customer_interview_logged_5",
+        "market_sizing_completed",
+        "profiling_completed",
+        "icp_defined",
+        "market_research_shared",
+    ],
+    2: [
+        "mvp_scoped",
+        "landing_page_created",
+        "studio_ops_cadence_set",
+        "discovery_followups_mapped",
+    ],
+    3: [
+        "office_hours_booked",
+        "revenue_proof_added",
+        "revenue_summary_generated",
+        "scoring_confidence_70",
+    ],
+    4: [
+        "ein_received",
+        "founder_stock_issued",
+        "section83b_filed",
+        "cofounder_agreement_signed",
+        "fundraise_ask_locked",
+        "use_of_funds_filled",
+        "investor_intros_secured",
+        "captable_locked",
+        "data_room_built",
+    ],
+}
+
 VALID_MILESTONE_KEYS = {
     k for w in MILESTONES for k in [*w["required_all"], *w["required_any"]]
-}
+} | {k for keys in OPTIONAL_MILESTONES.values() for k in keys}
 
 
 def _week_for_key(key: str) -> Optional[int]:
     for w in MILESTONES:
         if key in w["required_all"] or key in w["required_any"]:
             return w["week"]
+    for week, keys in OPTIONAL_MILESTONES.items():
+        if key in keys:
+            return week
     return None
 
 

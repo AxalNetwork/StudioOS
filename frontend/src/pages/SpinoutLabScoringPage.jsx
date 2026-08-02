@@ -346,6 +346,15 @@ export default function SpinoutLabScoringPage() {
       if (Array.isArray(scores)) {
         setSnapshots(scores);
         setScoresError(false);
+        // Optional W3 deliverable — ≥70% confidence on 5+ of the 6 real
+        // dimensions in the fresh snapshot.
+        const fresh = scores[0];
+        if (fresh && user?.founder_id && project?.founder_id && user.founder_id === project.founder_id) {
+          const strong = buildDimensions(fresh).filter((d) => d.pct >= 70).length;
+          if (strong >= 5) {
+            try { await spinoutLab.complete('scoring_confidence_70'); } catch (err) { console.warn('[spinout-scoring:milestone70]', err); }
+          }
+        }
       }
       setFormOpen(false);
     } catch (err) {

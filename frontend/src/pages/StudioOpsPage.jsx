@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Briefcase, DollarSign, Users, Scale, ShieldCheck, Plus, Loader2, Brain, X, Sparkles, RefreshCw, Zap, ChevronDown } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
+import { markMilestone } from '../lib/spinoutLabHooks';
 
 const TYPE_META = {
   strategic:   { label: 'Strategic', icon: Briefcase, color: 'violet',  bg: 'bg-violet-50', border: 'border-violet-200', text: 'text-violet-700' },
@@ -324,6 +326,7 @@ function KV({ k, v }) {
 }
 
 function QuickActionsModal({ onClose, onCreated }) {
+  const { user } = useAuth();
   const [templates, setTemplates] = useState([]);
   const [projects, setProjects] = useState([]);
   const [tplKey, setTplKey] = useState('');
@@ -343,7 +346,12 @@ function QuickActionsModal({ onClose, onCreated }) {
   const submit = async () => {
     if (!tplKey) { setErr('Pick a template'); return; }
     setBusy(true); setErr('');
-    try { await api.studioOpsExecuteTemplate({ template_key: tplKey, project_id: projectId || null }); onCreated(); }
+    try {
+      await api.studioOpsExecuteTemplate({ template_key: tplKey, project_id: projectId || null });
+      // W2 lab deliverable — an ops cadence template was actually executed.
+      markMilestone(user, 'studio_ops_cadence_set');
+      onCreated();
+    }
     catch (e) { setErr(e.message); setBusy(false); }
   };
 

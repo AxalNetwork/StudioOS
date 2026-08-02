@@ -30,6 +30,7 @@ import {
   CheckCircle2, ExternalLink, Sparkles, ScrollText, Users,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
+import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
@@ -272,6 +273,15 @@ export default function SpinoutLabCofounderAgreementPage() {
 
   const week = num(user?.spinout_lab_week) || state?.week || 4;
   const latest = docs[0] || null;
+
+  // W4 deliverable — fires only when a cofounder agreement doc is actually
+  // signed (signatures happen in Legal & Capital; this page observes status).
+  useEffect(() => {
+    if (docs.some((d) => String(d.status || '').toLowerCase() === 'signed')) {
+      markMilestone(user, 'cofounder_agreement_signed');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docs, user?.id]);
 
   return (
     <div className="max-w-[1100px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-cofounder">

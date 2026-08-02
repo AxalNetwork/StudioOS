@@ -6,6 +6,8 @@ import {
   Plus, Loader2, ArrowLeft, ShieldAlert, ListChecks, X,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
+import { markMilestone } from '../lib/spinoutLabHooks';
 
 // Task #31 — 83(b) tracker.
 //
@@ -136,6 +138,7 @@ function CreateModal({ open, onClose, projects: parentProjects, onCreated }) {
 }
 
 function TrackerCard({ tracker, onChange }) {
+  const { user } = useAuth();
   const [busy, setBusy] = useState(false);
   const [showSteps, setShowSteps] = useState(false);
   const fileInputId = `file-${tracker.id}`;
@@ -161,6 +164,8 @@ function TrackerCard({ tracker, onChange }) {
         status: 'mailed',
       });
       onChange(r.tracker);
+      // W4 lab deliverable — the 83(b) election was actually mailed.
+      markMilestone(user, 'section83b_filed');
     } catch (e) { alert(e?.message || 'Failed'); } finally { setBusy(false); }
   };
 

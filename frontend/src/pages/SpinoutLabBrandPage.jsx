@@ -26,6 +26,7 @@ import {
   ExternalLink, Copy, Plus, Pencil, Eye, CalendarPlus, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { markMilestone } from '../lib/spinoutLabHooks';
 import { reportError } from '../lib/log';
 import { useAuth } from '../hooks/useAuthSync';
 import { useToast } from '../components/useToast';
@@ -283,6 +284,8 @@ export default function SpinoutLabBrandPage() {
         ...palette,
       });
       await refreshPages();
+      // W2 deliverable — a real landing page now exists for this project.
+      markMilestone(user, 'landing_page_created');
       showToast({ msg: `Created "${tpl.label}" draft — open Edit to finish it.`, kind: 'ok' });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {

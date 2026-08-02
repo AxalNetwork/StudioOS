@@ -27,6 +27,7 @@ import {
   CheckCircle2, MinusCircle, XCircle, HelpCircle, Send, X,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
+import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
@@ -242,6 +243,17 @@ export default function SpinoutLabCapitalPage() {
   const score = readinessScore(dataroom);
   const blocking = dataroom.filter((r) => r.status === 'missing');
 
+  // W4 deliverables, observed from real data:
+  // - intros: 3+ prospects that progressed past cold outreach.
+  // - data room: 8+ artifacts fully ready in the derived readiness check.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    const progressed = prospects.filter((p) => ['intro', 'meeting', 'diligence', 'committed'].includes(p.stage)).length;
+    if (progressed >= 3) markMilestone(user, 'investor_intros_secured');
+    if (dataroom.filter((r) => r.status === 'ready').length >= 8) markMilestone(user, 'data_room_built');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, prospects, dataroom]);
+
   const saveRound = async () => {
     if (roundBusy) return;
     setRoundBusy(true);
@@ -254,6 +266,10 @@ export default function SpinoutLabCapitalPage() {
         close_date: roundForm.close_date || null,
         notes: roundForm.notes || null,
       });
+      // W4 deliverable — the ask is locked once a real target amount is saved.
+      if (roundForm.target_amount !== '' && Number(roundForm.target_amount) > 0) {
+        markMilestone(user, 'fundraise_ask_locked');
+      }
       await loadRaise(project.id);
       setRoundForm(null);
     } catch (e) {

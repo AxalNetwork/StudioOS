@@ -25,6 +25,7 @@ import {
   Presentation, Gauge, Map as MapIcon, Calculator,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
+import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import {
   FUND_SECTIONS, FundAllocator, allocToValues, valuesToUseOfFunds, fundsTotal, fundsValid,
@@ -192,6 +193,8 @@ export default function SpinoutLabUseOfFundsPage() {
       }
       setDirty(false);
       setSavedAt(new Date());
+      // W4 deliverable — a real allocation is saved on the company record.
+      if (body.use_of_funds) markMilestone(user, 'use_of_funds_filled');
     } catch (e) {
       console.error('[spinout-uof:save]', e);
       const detail = e?.data?.detail?.error || e?.data?.error || e?.message || 'Could not save the allocation.';

@@ -27,8 +27,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 /* exact source bytes that ship to Cloudflare.                        */
 /* ------------------------------------------------------------------ */
 async function loadModule() {
+  // The catalog constants were extracted to services/spinoutLabCatalog.ts
+  // (route file re-exports them) — slice from both real sources.
   const srcPath = resolve(__dirname, '../src/routes/spinout_lab.ts');
-  const src = await readFile(srcPath, 'utf8');
+  const catPath = resolve(__dirname, '../src/services/spinoutLabCatalog.ts');
+  const src = `${await readFile(catPath, 'utf8')}\n\n${await readFile(srcPath, 'utf8')}`;
 
   function sliceBlock(anchor) {
     const start = src.indexOf(anchor);
@@ -72,7 +75,15 @@ async function loadModule() {
 
   const pieces = [
     sliceConstArray('export const MILESTONES'),
-    sliceBlock('export const VALID_MILESTONE_KEYS'),
+    sliceBlock('export const OPTIONAL_MILESTONES'),
+    // Set literal has no braces — slice to the closing `]);`.
+    (() => {
+      const start = src.indexOf('export const VALID_MILESTONE_KEYS');
+      assert.notEqual(start, -1, 'export const VALID_MILESTONE_KEYS not found');
+      const end = src.indexOf(']);', start);
+      assert.notEqual(end, -1, 'VALID_MILESTONE_KEYS terminator not found');
+      return src.slice(start, end + 3);
+    })(),
     sliceBlock('function weekForKey('),
     sliceBlock('export function weekMet('),
     sliceBlock('export function unlockedFeaturesThrough('),
@@ -257,7 +268,7 @@ test('unlockedFeaturesThrough is cumulative and stable per week', async () => {
   for (const f of w2) assert.ok(w4.includes(f), `${f} should remain at w4`);
   assert.equal(w1.includes('roadmap'), false);
   assert.equal(w2.includes('roadmap'), true);
-  assert.equal(w4.includes('kyc'), true);
+  assert.equal(w4.includes('compliance'), true);
 });
 
 /* ------------------------------------------------------------------ */
