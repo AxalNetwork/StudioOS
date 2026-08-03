@@ -7,6 +7,20 @@
 import { useEffect, useState } from 'react';
 import { Calendar, Plus, Trash2, CheckCircle, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
+// The production Worker and the dev FastAPI expose different wire shapes for
+// slots and bookings (starts_at vs start_at, ends_at vs duration_min, pending
+// vs requested, meeting_url vs location_uri). These are the same normalizers
+// the founder-facing Office Hours page uses, so this console renders correctly
+// in both environments instead of printing "Invalid Date" against the Worker.
+import { normSlot, normBooking } from './SpinoutLabOfficeHoursPage';
+
+// `new Date(undefined)` is Invalid Date and renders as the literal string
+// "Invalid Date" — guard every timestamp before formatting.
+const fmtDateTime = (iso) => {
+  if (!iso) return 'Time not set';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? 'Time not set' : d.toLocaleString();
+};
 
 function NewSlotForm({ onCreated }) {
   const [draft, setDraft] = useState({
@@ -18,13 +32,24 @@ function NewSlotForm({ onCreated }) {
   async function submit() {
     setErr(null); setBusy(true);
     try {
+      const startMs = new Date(draft.start_at).getTime();
+      if (!Number.isFinite(startMs)) throw new Error('Pick a valid start time.');
+      const minutes = Math.max(10, Number(draft.duration_min) || 30);
+      // Production Worker (POST /partner-office-hours/me/slots) requires
+      // `starts_at` + `ends_at` and reads `meeting_url`; it 400s on the
+      // FastAPI-only `start_at` / `duration_min` shape. Send the Worker shape
+      // and keep the FastAPI keys alongside — extra fields are ignored there.
       const payload = {
         title: draft.title || null,
-        start_at: new Date(draft.start_at).toISOString(),
-        duration_min: Number(draft.duration_min),
-        capacity: Number(draft.capacity),
+        starts_at: new Date(startMs).toISOString(),
+        ends_at: new Date(startMs + minutes * 60000).toISOString(),
+        meeting_url: draft.location_uri || null,
+        // dev FastAPI field names
+        start_at: new Date(startMs).toISOString(),
+        duration_min: minutes,
         location_kind: draft.location_kind,
         location_uri: draft.location_uri || null,
+        capacity: Number(draft.capacity) || 1,
         notes: draft.notes || null,
       };
       await api.createPartnerSlot(payload);
@@ -105,8 +130,11 @@ function toGuidanceDraft(g) {
   };
 }
 
-function GuidanceCard({ draft, setDraft, base, loadFailed, busy, saved, error, onSave }) {
-  const disabled = loadFailed || !draft || busy;
+// `loadState`: 'loading' | 'ok' | 'unsupported' | 'error'. The form is only
+// editable once the server value is known — an empty draft must never be
+// savable over live published copy — and a disabled form always states why.
+function GuidanceCard({ draft, setDraft, base, loadState, busy, saved, error, onSave }) {
+  const disabled = loadState !== 'ok' || !draft || busy;
   const d = draft || EMPTY_GUIDANCE();
   const dirty = !!draft && !!base && JSON.stringify(draft) !== JSON.stringify(base);
   const setField = (k, v) => setDraft({ ...d, [k]: v });
@@ -117,9 +145,18 @@ function GuidanceCard({ draft, setDraft, base, loadFailed, busy, saved, error, o
       <p className="text-sm text-gray-600 mb-3 dark:text-gray-400">
         Founders see this in your profile before they book. Leave a field blank to hide it — nothing is written on your behalf.
       </p>
-      {loadFailed && (
+      {loadState === 'loading' && (
+        <div className="text-sm text-gray-500 mb-3" data-testid="guidance-loading">Loading your booking guidance…</div>
+      )}
+      {loadState === 'unsupported' && (
+        <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm text-amber-900 mb-3 dark:bg-amber-950/30 dark:border-amber-900 dark:text-amber-200" data-testid="guidance-unsupported">
+          Booking guidance isn't available in this environment. It is served by the
+          Cloudflare Worker (production); the Replit dev API has no counterpart route.
+        </div>
+      )}
+      {loadState === 'error' && (
         <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm text-amber-900 mb-3 dark:bg-amber-950/30 dark:border-amber-900 dark:text-amber-200" data-testid="guidance-load-error">
-          Couldn't load your booking guidance.
+          Couldn't load your booking guidance — reload to try again.
         </div>
       )}
       <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3 dark:bg-gray-900 dark:border-gray-800" data-testid="guidance-editor">
@@ -205,11 +242,14 @@ export default function PartnerOfficeHoursPage() {
   // disabled rather than presenting an empty form that could wipe real copy.
   const [gDraft, setGDraft] = useState(null);
   const [gBase, setGBase] = useState(null);
-  const [gLoadFailed, setGLoadFailed] = useState(false);
+  const [gLoadState, setGLoadState] = useState('loading'); // loading|ok|unsupported|error
   const [gBusy, setGBusy] = useState(false);
   const [gErr, setGErr] = useState(null);
   const [gSaved, setGSaved] = useState(false);
 
+  // Self-catching on purpose: this must never be able to abort loadAll(), and
+  // loadAll() must never be able to skip it (a skipped call used to leave the
+  // form permanently disabled with no banner explaining why).
   async function loadGuidance() {
     try {
       const res = await api.partnerPortal.officeHoursGuidance();
@@ -218,9 +258,13 @@ export default function PartnerOfficeHoursPage() {
       // Never clobber unsaved edits — loadAll() re-runs after slot/booking
       // actions and must not discard what the partner is typing.
       setGDraft((prev) => prev || next);
-      setGLoadFailed(false);
-    } catch {
-      setGLoadFailed(true);
+      setGLoadState('ok');
+    } catch (e) {
+      // 404 = the route does not exist on this deployment. The guidance
+      // endpoints live only in the Cloudflare Worker; the Replit dev FastAPI
+      // has no counterpart, so this is an environment limit, not a failure.
+      const msg = (e?.message || '').toLowerCase();
+      setGLoadState(e?.status === 404 || msg === 'not found' ? 'unsupported' : 'error');
     }
   }
 
@@ -250,13 +294,15 @@ export default function PartnerOfficeHoursPage() {
       throw e;
     };
     try {
+      // loadGuidance() rides in the same Promise.all so a rethrown list error
+      // can never skip it — it handles its own failure state.
       const [sd, bd] = await Promise.all([
         api.listMyPartnerSlots(true).catch(quiet404),
         api.listMyPartnerBookings().catch(quiet404),
+        loadGuidance(),
       ]);
-      setSlots(sd.items || []);
-      setBookings(bd.items || []);
-      await loadGuidance();
+      setSlots((sd.items || []).map(normSlot));
+      setBookings((bd.items || []).map(normBooking));
     } catch (e) { setErr(e.message); } finally { setLoading(false); }
   }
   useEffect(() => { loadAll(); }, []);
@@ -288,7 +334,7 @@ export default function PartnerOfficeHoursPage() {
       )}
 
       <GuidanceCard
-        draft={gDraft} setDraft={setGDraft} base={gBase} loadFailed={gLoadFailed}
+        draft={gDraft} setDraft={setGDraft} base={gBase} loadState={gLoadState}
         busy={gBusy} saved={gSaved} error={gErr} onSave={saveGuidance}
       />
 
@@ -311,13 +357,17 @@ export default function PartnerOfficeHoursPage() {
               <div key={s.id} className="bg-white border border-gray-200 rounded p-3 flex items-center justify-between dark:bg-gray-900 dark:border-gray-800">
                 <div className="text-sm">
                   <div className="font-medium text-gray-900 dark:text-gray-100">
-                    {s.title ? `${s.title} · ` : ''}{new Date(s.start_at).toLocaleString()} · {s.duration_min} min
+                    {s.title ? `${s.title} · ` : ''}{fmtDateTime(s.start_at)}
+                    {Number.isFinite(s.duration_min) ? ` · ${s.duration_min} min` : ''}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {s.taken}/{s.capacity} booked · {s.location_kind} · status {s.status}
+                    {Number(s.taken || 0)}/{Number(s.capacity || 0)} booked
+                    {s.location_kind ? ` · ${s.location_kind}` : ''}
+                    {` · ${s.open ? 'open' : 'cancelled'}`}
+                    {` · ${s.meeting_url || s.location_uri ? 'meeting link published' : 'no meeting link'}`}
                   </div>
                 </div>
-                {s.status === 'open' && (
+                {s.open && (
                   <button onClick={async () => {
                     if (!confirm('Cancel this slot? All its bookings will also be cancelled.')) return;
                     try { await api.cancelPartnerSlot(s.id); loadAll(); }
@@ -344,7 +394,7 @@ export default function PartnerOfficeHoursPage() {
                   <div>
                     <div className="font-medium text-gray-900 dark:text-gray-100">{b.topic}</div>
                     <div className="text-xs text-gray-500 mt-0.5">
-                      {new Date(b.scheduled_start).toLocaleString()} · status: <span className="font-medium">{b.status}</span>
+                      {fmtDateTime(b.scheduled_start)} · status: <span className="font-medium">{b.status || 'unknown'}</span>
                     </div>
                     {b.questions && <div className="text-xs text-gray-600 mt-2 whitespace-pre-wrap">{b.questions}</div>}
                   </div>

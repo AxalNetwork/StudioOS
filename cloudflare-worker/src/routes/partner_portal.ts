@@ -185,6 +185,10 @@ portal.patch('/accepting-intros', async (c) => {
 // one partner cannot write another partner's guidance.
 const G_MAX = { when_to_book: 600, stage_fit: 60, session_outcome: 120, bring_item: 120 };
 const G_BRING_MAX = 5;
+// Shown when the guidance columns are genuinely missing (bootstrap failed and
+// migration 160 has not been applied). Generic on purpose — never echo the raw
+// D1 "no such column: …" text back to the client.
+const GUIDANCE_UNAVAILABLE = 'Booking guidance is temporarily unavailable';
 
 function guidanceDto(row: any) {
   let bring: string[] = [];
@@ -202,16 +206,26 @@ function guidanceDto(row: any) {
 }
 
 // Trim → cap → empty means "unpublish this field" (NULL), never '' in the DB.
+//
+// Strings ONLY — never String(v) coercion. This copy is published verbatim as
+// guidance attributed to a real named partner, so a non-string JSON value
+// (object / array / number) must NOT be stringified into `[object Object]`,
+// `a,b` or `42` and shown to founders as that partner's own words. Anything
+// that is not a string is treated as "no value" (see isBadText for the 400).
 function normText(v: unknown, max: number): string | null {
-  if (v === null || v === undefined) return null;
-  const s = String(v).replace(/\r\n/g, '\n').trim().slice(0, max);
+  if (typeof v !== 'string') return null;
+  const s = v.replace(/\r\n/g, '\n').trim().slice(0, max);
   return s ? s : null;
+}
+/** True when a supplied field is present but is not a string (→ 400). */
+function isBadText(v: unknown): boolean {
+  return v !== undefined && v !== null && typeof v !== 'string';
 }
 
 portal.get('/office-hours-guidance', async (c) => {
   try {
     const user = await requireAuth(c);
-    await ensurePartnerGuidanceColumns(c.env);
+    if (!(await ensurePartnerGuidanceColumns(c.env))) return c.json({ detail: GUIDANCE_UNAVAILABLE }, 503);
     const partner = await requirePartnerProfile(c.env, user);
     const row = await c.env.DB.prepare(
       `SELECT id, name, oh_when_to_book, oh_stage_fit, oh_session_outcome,
@@ -230,10 +244,13 @@ portal.get('/office-hours-guidance', async (c) => {
 portal.patch('/office-hours-guidance', async (c) => {
   try {
     const user = await requireAuth(c);
-    await ensurePartnerGuidanceColumns(c.env);
+    if (!(await ensurePartnerGuidanceColumns(c.env))) return c.json({ detail: GUIDANCE_UNAVAILABLE }, 503);
     const partner = await requirePartnerProfile(c.env, user);
     const body = await c.req.json().catch(() => ({} as any));
 
+    for (const k of ['when_to_book', 'stage_fit', 'session_outcome'] as const) {
+      if (isBadText((body as any)[k])) return c.json({ detail: `${k} must be a string` }, 400);
+    }
     const whenToBook = normText(body.when_to_book, G_MAX.when_to_book);
     const stageFit = normText(body.stage_fit, G_MAX.stage_fit);
     const sessionOutcome = normText(body.session_outcome, G_MAX.session_outcome);
@@ -241,7 +258,12 @@ portal.patch('/office-hours-guidance', async (c) => {
     if (body.bring !== undefined && body.bring !== null && !Array.isArray(body.bring)) {
       return c.json({ detail: 'bring must be an array of strings' }, 400);
     }
-    const bring = (Array.isArray(body.bring) ? body.bring : [])
+    // Cap the element count BEFORE normalising: normText allocates per element,
+    // so mapping a client-supplied array of arbitrary length and only then
+    // slicing to 5 would let an authenticated partner force unbounded work.
+    // Slice a little wider than the cap so blank rows can still be dropped.
+    const bringRaw = Array.isArray(body.bring) ? body.bring.slice(0, G_BRING_MAX * 4) : [];
+    const bring = bringRaw
       .map((x: unknown) => normText(x, G_MAX.bring_item))
       .filter((x): x is string => !!x)
       .slice(0, G_BRING_MAX);
