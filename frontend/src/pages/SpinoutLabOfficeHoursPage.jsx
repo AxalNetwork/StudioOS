@@ -319,9 +319,6 @@ export default function SpinoutLabOfficeHoursPage() {
     : filter === 'recommended'
       ? [...dirItems].sort((a, b) => (recommendedRoles.has(b.role) ? 1 : 0) - (recommendedRoles.has(a.role) ? 1 : 0))
       : dirItems.filter((p) => filterRoleOf(p.role) === filter);
-  const dirNote = filter === 'recommended'
-    ? `Matched to your week ${Number(state?.week || 1)} context, scoring gaps, and open blockers.`
-    : DIR_NOTE[filter] || '';
 
   // ---- Pre-session brief (client-assembled from real data, labelled) ----
   const brief = useMemo(() => {
