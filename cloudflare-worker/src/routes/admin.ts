@@ -1081,6 +1081,18 @@ admin.post('/spinout-applications/:app_id/decide', async (c) => {
     return c.json({ error: 'Application was already decided' }, 409);
   }
 
+  // Task #5 — keep the cycle pool (cohort_applicants) in lockstep with the
+  // legacy decision so close/capacity counts and the activation job see the
+  // same truth: accepted → 'approved' (the cron activates the workspace at
+  // the cohort start), refused → 'rejected'. Tables may not exist yet in
+  // older dev DBs — best-effort.
+  try {
+    await c.env.DB.prepare(
+      `UPDATE cohort_applicants SET status = ?, decided_at = datetime('now'), decided_by = ?, decision_reason = 'Legacy admin decision'
+        WHERE application_id = ? AND status NOT IN ('activated', 'rolled_forward')`,
+    ).bind(decision === 'accepted' ? 'approved' : 'rejected', `admin:${adminUser.id}`, appId).run();
+  } catch { /* cohort_applicants not yet migrated */ }
+
   const cohort = cohortOverride || app.cohort || 'Cohort 4';
   const appUrl = (c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
   let emailed = false;

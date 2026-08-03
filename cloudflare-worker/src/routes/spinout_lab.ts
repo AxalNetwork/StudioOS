@@ -301,9 +301,27 @@ spinoutLab.get('/state', async (c) => {
     const { getCohortGate } = await import('../services/cohortTiming');
     cohortTiming = await getCohortGate(c.env, user.id);
   } catch { /* tables not yet migrated */ }
+  // Task #5 — application-window info (wire-layer only, never in
+  // getLabState): which cohort a new application would land in and when
+  // its window closes, so the apply page can show real deadlines.
+  let applicationWindow: Record<string, unknown> | null = null;
+  try {
+    const { resolveApplicationTarget, monthLabel } = await import('../services/cohortApplications');
+    const t = resolveApplicationTarget(Date.now());
+    if (t.ok) {
+      applicationWindow = {
+        year: t.year, month: t.month,
+        label: monthLabel(t.year, t.month),
+        opens_at: new Date(t.window.openMs).toISOString(),
+        closes_at: new Date(t.window.closeMs).toISOString(),
+        starts_at: new Date(t.window.startMs).toISOString(),
+      };
+    }
+  } catch { /* service not available */ }
   const payload: Record<string, unknown> = {
     ...state, admitted, cohort, application,
     cohort_timing: cohortTiming,
+    application_window: applicationWindow,
     server_time: new Date().toISOString(),
   };
   if (cohortTiming) {
@@ -325,6 +343,7 @@ type ApplyBody = {
   stage?: unknown;
   jurisdiction?: unknown;
   cohort?: unknown;
+  target_cycle?: unknown; // Task #5 — optional {year, month} the applicant is targeting
 };
 
 spinoutLab.post('/apply', async (c) => {
@@ -342,7 +361,30 @@ spinoutLab.post('/apply', async (c) => {
   const incorporated = (typeof body.incorporated === 'string' && body.incorporated.toLowerCase() === 'yes') ? 'yes' : 'no';
   const stage = (typeof body.stage === 'string' ? body.stage : '').trim().slice(0, 100) || null;
   const jurisdiction = (typeof body.jurisdiction === 'string' ? body.jurisdiction : '').trim().slice(0, 100) || null;
-  const cohort = ((typeof body.cohort === 'string' && body.cohort.trim()) || 'Cohort 4').slice(0, 50);
+  // Task #5 — hard deadline enforcement at the API. Applications close
+  // 7 days before the 1st at 23:59:59 America/New_York (DST-correct).
+  // A submission targeting a closed cycle is rejected outright; without
+  // an explicit target it lands in the earliest still-open cycle.
+  let targetCycle: { year: number; month: number } | null = null;
+  let targetLabel: string | null = null;
+  try {
+    const { resolveApplicationTarget, monthLabel } = await import('../services/cohortApplications');
+    const raw = body.target_cycle as { year?: unknown; month?: unknown } | undefined;
+    const requested = raw && Number.isFinite(Number(raw.year)) && Number.isFinite(Number(raw.month))
+      ? { year: Number(raw.year), month: Number(raw.month) } : null;
+    const t = resolveApplicationTarget(Date.now(), requested);
+    if (!t.ok) {
+      return c.json({
+        error: `Applications for the ${monthLabel(t.closed.year, t.closed.month)} cohort are closed — you're eligible for the ${monthLabel(t.next.year, t.next.month)} cohort.`,
+        next_cycle: { year: t.next.year, month: t.next.month, label: monthLabel(t.next.year, t.next.month), closes_at: new Date(t.next.window.closeMs).toISOString() },
+      }, 403);
+    }
+    targetCycle = { year: t.year, month: t.month };
+    targetLabel = monthLabel(t.year, t.month);
+  } catch { /* deadline service unavailable — legacy behavior */ }
+
+  const cohort = (targetLabel && `${targetLabel} Cohort`)
+    || ((typeof body.cohort === 'string' && body.cohort.trim()) || 'Cohort 4').slice(0, 50);
 
   await ensureApplicationsTable(c.env);
   try {
@@ -369,6 +411,20 @@ spinoutLab.post('/apply', async (c) => {
   ).bind(user.id, company, idea, incorporated, stage, jurisdiction, cohort, user.id).run();
   if ((ins.meta?.changes ?? 1) === 0) {
     return c.json({ error: 'You already have an application in review' }, 409);
+  }
+
+  // Task #5 — pin the application to its target cycle so the close/
+  // capacity/activation jobs know exactly which pool it belongs to.
+  if (targetCycle) {
+    try {
+      const { ensureCohortAppSchema, ensureCycleWithWindow, assignApplicationToCycle } = await import('../services/cohortApplications');
+      await ensureCohortAppSchema(c.env);
+      const cyc = await ensureCycleWithWindow(c.env, targetCycle.year, targetCycle.month);
+      const appRow = await latestApplication(c.env, user.id);
+      if (cyc && appRow) await assignApplicationToCycle(c.env, Number((appRow as { id: number }).id), user.id, cyc.id);
+    } catch (e) {
+      console.error('[spinout-lab/apply] cycle assignment failed', e);
+    }
   }
 
   let emailed = false;

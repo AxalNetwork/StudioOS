@@ -197,7 +197,7 @@ export async function ensureCohortTimingSchema(env: Env): Promise<void> {
 type CycleRow = { id: number; year: number; month: number; start_at: string; end_at: string; status: string };
 type WindowRow = { id: number; cohort_cycle_id: number; week_number: number; unlock_at: string; deadline_at: string };
 
-async function materializeCycle(env: Env, year: number, month: number): Promise<void> {
+export async function materializeCycle(env: Env, year: number, month: number): Promise<void> {
   const windows = cycleWeekWindows(year, month);
   const startAt = iso(windows[0].unlockMs);
   const endAt = iso(windows[3].deadlineMs);

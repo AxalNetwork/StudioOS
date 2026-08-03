@@ -46,6 +46,10 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
   const [incorporated, setIncorporated] = useState("no");
   const [stage, setStage] = useState(STAGES[0]);
   const [jurisKey, setJurisKey] = useState("de");
+  // Task #5 — real application window from the server (which cohort a new
+  // application lands in + its DST-correct close deadline). Null until the
+  // /state fetch resolves; preview mode keeps the static copy.
+  const [appWindow, setAppWindow] = useState(null);
 
   useEffect(() => {
     if (isPreview) return undefined; // preview renders simulated state only
@@ -56,6 +60,7 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
         if (!alive) return;
         if (s?.admitted) { navigate("/spinout-lab", { replace: true }); return; }
         if (s?.application?.status === "pending") setSubmitted(true);
+        if (s?.application_window) setAppWindow(s.application_window);
       } catch { /* fresh form */ }
       if (alive) setLoading(false);
     })();
@@ -90,7 +95,8 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
         incorporated,
         stage,
         jurisdiction: juris.label,
-        cohort: "Cohort 4",
+        cohort: appWindow?.label ? `${appWindow.label} Cohort` : "Cohort 4",
+        ...(appWindow ? { target_cycle: { year: appWindow.year, month: appWindow.month } } : {}),
       });
       setSubmitted(true);
     } catch (err) {
@@ -122,10 +128,14 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
             <form onSubmit={submit} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[20px] p-8 shadow-sm">
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-[11.5px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400 mb-4">
                 <span className="w-[7px] h-[7px] rounded-full bg-emerald-500"></span>
-                Cohort 4 · Applications Open
+                {appWindow?.label ? `${appWindow.label} Cohort` : "Cohort 4"} · Applications Open
               </span>
-              <h1 className="m-0 text-[26px] font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100">Apply to Cohort 4</h1>
-              <p className="tabular-nums mt-2 mb-5 text-[14px] text-gray-500 dark:text-gray-400">Applications close August 1, 2026. 8 spots available.</p>
+              <h1 className="m-0 text-[26px] font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100">Apply to the {appWindow?.label ? `${appWindow.label} cohort` : "next cohort"}</h1>
+              <p className="tabular-nums mt-2 mb-5 text-[14px] text-gray-500 dark:text-gray-400">
+                {appWindow?.closes_at
+                  ? `Applications close ${new Date(appWindow.closes_at).toLocaleString(undefined, { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}. The cohort starts ${new Date(appWindow.starts_at).toLocaleDateString(undefined, { month: "long", day: "numeric" })}.`
+                  : "Applications close August 1, 2026. 8 spots available."}
+              </p>
 
               {/* Signed-in account */}
               <div className="flex items-center gap-3 bg-violet-50/50 dark:bg-violet-500/5 border border-violet-100 dark:border-violet-500/20 rounded-xl px-3.5 py-3 mb-5">
@@ -224,7 +234,7 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
               </div>
               <h1 className="m-0 text-[24px] font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100">Application received</h1>
               <p className="mt-2.5 mb-[22px] mx-auto text-[14px] text-gray-500 dark:text-gray-400 max-w-[380px] leading-normal">
-                Your Cohort 4 application is in review. A program manager will respond within 5 business days. Selected founders begin with the Validate gate. We've also sent a confirmation to your email.
+                Your {appWindow?.label ? `${appWindow.label} cohort` : "Cohort 4"} application is in review. A program manager will respond within 5 business days. Selected founders begin with the Validate gate. We've also sent a confirmation to your email.
               </p>
               <Link
                 to="/spinout-lab"

@@ -12,6 +12,7 @@ import {
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import AdminCohortTiming from './AdminCohortTiming';
+import AdminCohortApplications from './AdminCohortApplications';
 
 // Presentational labels only — the catalog itself (keys, weeks, unlock
 // lists) always comes from the server so it can never drift from the
@@ -651,12 +652,23 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
         >
           <Calendar size={14} /> Timing
         </button>
+        <button
+          role="tab"
+          aria-selected={section === 'cycles'}
+          onClick={() => setSection('cycles')}
+          data-testid="tab-cycles"
+          className={`px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 ${section === 'cycles' ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+        >
+          <CircleDashed size={14} /> Cycles
+        </button>
       </div>
 
       {section === 'applications' ? (
         <ApplicationsSection apps={apps} loading={loading} onDecided={load} />
       ) : section === 'timing' ? (
         <AdminCohortTiming />
+      ) : section === 'cycles' ? (
+        <AdminCohortApplications />
       ) : (
         <ParticipantsSection
           participants={participants}

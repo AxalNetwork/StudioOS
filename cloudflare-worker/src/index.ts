@@ -1182,6 +1182,18 @@ export default {
         } catch (e) {
           console.error('[cron] cohort timing tick failed', e);
         }
+        // Task #5 — Cohort application lifecycle tick: closes application
+        // windows 7 days before the 1st (23:59:59 ET), sends 3d/24h close
+        // reminders, runs the below-minimum capacity check (postpone +
+        // roll-forward), and activates approved founders at Delaware
+        // midnight on the 1st. Idempotent via scheduled_jobs_audit claims
+        // and the per-user notification ledger.
+        try {
+          const { runCohortApplicationsTick } = await import('./services/cohortApplications');
+          await runCohortApplicationsTick(env, now);
+        } catch (e) {
+          console.error('[cron] cohort applications tick failed', e);
+        }
         // Epic 5: nightly score-integrity audit at 03:30 UTC. Re-verifies the
         // HMAC on every approved official snapshot; mismatches get flagged
         // for admin review and disappear from LP/partner views immediately.

@@ -214,4 +214,193 @@ r.get('/catalog', async (c) => {
   return c.json({ milestones: MILESTONES });
 });
 
+// ---------------------------------------------------------------------------
+// Task #5 — Cohort application lifecycle admin console.
+//   GET  /applications              → cycle overview (counts, thresholds,
+//                                     countdowns) + per-cycle applicant list
+//   POST /applications/settings     → { min_cohort_size?, max_cohort_size? }
+//   POST /applications/:id/decide   → { status: approved|rejected|waitlisted, reason } — reason REQUIRED
+//   POST /applications/cycles/:cycle_id/force-proceed → { reason } — reason REQUIRED
+//   GET  /applications/notifications?cycle_id= → notification ledger
+//   GET  /applications/events?cycle_id=        → cycle lifecycle audit
+// ---------------------------------------------------------------------------
+
+r.get('/applications', async (c) => {
+  await requireAdmin(c);
+  const { ensureCohortAppSchema, getCohortSizeSettings, monthLabel } = await import('../services/cohortApplications');
+  await ensureCohortAppSchema(c.env);
+  const settings = await getCohortSizeSettings(c.env);
+  const cycles = await c.env.DB.prepare(
+    `SELECT * FROM cohort_cycles ORDER BY year DESC, month DESC LIMIT 12`,
+  ).all<Record<string, unknown>>();
+  const out = [];
+  for (const cy of cycles.results || []) {
+    const counts = await c.env.DB.prepare(
+      `SELECT status, COUNT(*) AS n FROM cohort_applicants WHERE cohort_cycle_id = ? GROUP BY status`,
+    ).bind(cy.id).all<{ status: string; n: number }>();
+    const byStatus: Record<string, number> = {};
+    for (const row of counts.results || []) byStatus[row.status] = row.n;
+    const applicants = await c.env.DB.prepare(
+      `SELECT ca.id, ca.application_id, ca.user_id, ca.status, ca.rolled_from_cycle_id,
+              ca.decided_at, ca.decided_by, ca.decision_reason, ca.created_at,
+              u.name, u.email, a.company_name, a.idea, a.stage, a.jurisdiction
+         FROM cohort_applicants ca
+         JOIN users u ON u.id = ca.user_id
+         LEFT JOIN spinout_applications a ON a.id = ca.application_id
+        WHERE ca.cohort_cycle_id = ?
+        ORDER BY CASE WHEN ca.status = 'pending' THEN 0 ELSE 1 END, ca.created_at DESC
+        LIMIT 200`,
+    ).bind(cy.id).all<Record<string, unknown>>();
+    out.push({
+      ...cy,
+      label: monthLabel(Number(cy.year), Number(cy.month)),
+      applicant_counts: byStatus,
+      meets_minimum: ((byStatus['approved'] ?? 0) + (byStatus['activated'] ?? 0)) >= settings.min,
+      applicants: applicants.results || [],
+    });
+  }
+  return c.json({ cycles: out, settings, server_time: new Date().toISOString() });
+});
+
+r.post('/applications/settings', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const { ensureCohortAppSchema, logCycleEvent } = await import('../services/cohortApplications');
+  await ensureCohortAppSchema(c.env);
+  const body = (await c.req.json().catch(() => ({}))) as { min_cohort_size?: unknown; max_cohort_size?: unknown };
+  const updates: Array<[string, number]> = [];
+  for (const [key, raw] of [['min_cohort_size', body.min_cohort_size], ['max_cohort_size', body.max_cohort_size]] as const) {
+    if (raw === undefined || raw === null) continue;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0 || n > 1000) return c.json({ error: `${key} must be an integer between 0 and 1000` }, 400);
+    updates.push([key, n]);
+  }
+  if (updates.length === 0) return c.json({ error: 'Nothing to update' }, 400);
+  for (const [key, n] of updates) {
+    await c.env.DB.prepare(
+      `INSERT INTO cohort_settings (key, value, updated_by) VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now'), updated_by = excluded.updated_by`,
+    ).bind(key, String(n), `admin:${adminUser.id}`).run();
+  }
+  const summary = updates.map(([k, n]) => `${k}=${n}`).join(', ');
+  await logCycleEvent(c.env, null, 'settings_updated', summary, `admin:${adminUser.id}`);
+  await logActivity(c.env, adminUser.email, adminUser.id, 'cohort_settings_updated', `Admin ${adminUser.name} set ${summary}`);
+  return c.json({ ok: true });
+});
+
+r.post('/applications/:applicant_id/decide', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const { ensureCohortAppSchema, logCycleEvent, notifyOnce, monthLabel } = await import('../services/cohortApplications');
+  await ensureCohortAppSchema(c.env);
+  const applicantId = parseInt(c.req.param('applicant_id'));
+  if (!Number.isFinite(applicantId)) return c.json({ error: 'Invalid applicant id' }, 400);
+  const body = (await c.req.json().catch(() => ({}))) as { status?: unknown; reason?: unknown };
+  const status = (typeof body.status === 'string' ? body.status : '').trim().toLowerCase();
+  const reason = (typeof body.reason === 'string' ? body.reason : '').trim().slice(0, 500);
+  if (!['approved', 'rejected', 'waitlisted'].includes(status)) {
+    return c.json({ error: "status must be 'approved', 'rejected' or 'waitlisted'" }, 400);
+  }
+  if (!reason) return c.json({ error: 'A reason is required for every decision' }, 400);
+  const row = await c.env.DB.prepare(
+    `SELECT ca.*, cc.year, cc.month, cc.app_status FROM cohort_applicants ca
+       JOIN cohort_cycles cc ON cc.id = ca.cohort_cycle_id WHERE ca.id = ?`,
+  ).bind(applicantId).first<Record<string, unknown>>();
+  if (!row) return c.json({ error: 'Applicant not found' }, 404);
+  if (['activated', 'rolled_forward'].includes(String(row.status))) {
+    return c.json({ error: `Applicant is already ${row.status}` }, 409);
+  }
+  await c.env.DB.prepare(
+    `UPDATE cohort_applicants SET status = ?, decided_at = datetime('now'), decided_by = ?, decision_reason = ?
+      WHERE id = ? AND status NOT IN ('activated', 'rolled_forward')`,
+  ).bind(status, `admin:${adminUser.id}`, reason, applicantId).run();
+  // Keep the legacy spinout_applications row in lockstep so /apply's
+  // "one pending application" gate and the founder-side UI stay correct:
+  //   rejected  → 'refused' (frees the founder to re-apply)
+  //   approved/waitlisted → back to 'pending' if previously refused
+  //     (still in play; activation flips approved → 'accepted' on the 1st)
+  const appId = Number(row.application_id);
+  if (status === 'rejected') {
+    await c.env.DB.prepare(
+      `UPDATE spinout_applications SET status = 'refused', decided_at = datetime('now') WHERE id = ? AND status = 'pending'`,
+    ).bind(appId).run();
+  } else {
+    await c.env.DB.prepare(
+      `UPDATE spinout_applications SET status = 'pending', decided_at = NULL WHERE id = ? AND status = 'refused'`,
+    ).bind(appId).run();
+  }
+  const label = monthLabel(Number(row.year), Number(row.month));
+  const cycleId = Number(row.cohort_cycle_id);
+  const userId = Number(row.user_id);
+  if (status === 'approved') {
+    await notifyOnce(c.env, {
+      userId, cycleId, notifType: 'decision_approved',
+      title: `You're in — ${label} Spin-Out Lab cohort`,
+      body: `Your application was approved for the ${label} cohort. Your workspace unlocks automatically when the cohort starts on the 1st.`,
+    });
+  } else if (status === 'rejected') {
+    await notifyOnce(c.env, {
+      userId, cycleId, notifType: 'decision_rejected',
+      title: `Spin-Out Lab ${label} cohort decision`,
+      body: `Your application wasn't selected for the ${label} cohort this time. You're welcome to apply again for a future cohort.`,
+      link: '/spinout-lab/apply',
+    });
+  } else {
+    await notifyOnce(c.env, {
+      userId, cycleId, notifType: 'decision_waitlisted',
+      title: `You're waitlisted for the ${label} cohort`,
+      body: `Your application is on the waitlist for the ${label} cohort. If a spot opens — or the cohort rolls forward — you'll be moved automatically.`,
+    });
+  }
+  await logCycleEvent(c.env, cycleId, `applicant_${status}`,
+    `Applicant #${applicantId} (user_id=${userId}) ${status}: ${reason}`, `admin:${adminUser.id}`);
+  await logActivity(c.env, adminUser.email, adminUser.id, `cohort_applicant_${status}`,
+    `Admin ${adminUser.name} marked applicant #${applicantId} ${status} for ${label} (reason: ${reason})`);
+  return c.json({ ok: true, status });
+});
+
+r.post('/applications/cycles/:cycle_id/force-proceed', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const { ensureCohortAppSchema, logCycleEvent, monthLabel } = await import('../services/cohortApplications');
+  await ensureCohortAppSchema(c.env);
+  const cycleId = parseInt(c.req.param('cycle_id'));
+  if (!Number.isFinite(cycleId)) return c.json({ error: 'Invalid cycle id' }, 400);
+  const body = (await c.req.json().catch(() => ({}))) as { reason?: unknown };
+  const reason = (typeof body.reason === 'string' ? body.reason : '').trim().slice(0, 500);
+  if (!reason) return c.json({ error: 'A reason is required to force-proceed' }, 400);
+  const cyc = await c.env.DB.prepare(`SELECT * FROM cohort_cycles WHERE id = ?`).bind(cycleId).first<Record<string, unknown>>();
+  if (!cyc) return c.json({ error: 'Cycle not found' }, 404);
+  if (!['open', 'reviewing'].includes(String(cyc.app_status))) {
+    return c.json({ error: `Cycle is already ${cyc.app_status} — force-proceed only applies before activation` }, 409);
+  }
+  await c.env.DB.prepare(`UPDATE cohort_cycles SET force_proceed = 1 WHERE id = ?`).bind(cycleId).run();
+  const label = monthLabel(Number(cyc.year), Number(cyc.month));
+  await logCycleEvent(c.env, cycleId, 'force_proceed', `Force-proceed set: ${reason}`, `admin:${adminUser.id}`);
+  await logActivity(c.env, adminUser.email, adminUser.id, 'cohort_force_proceed',
+    `Admin ${adminUser.name} set force-proceed on the ${label} cohort (reason: ${reason})`);
+  return c.json({ ok: true });
+});
+
+r.get('/applications/notifications', async (c) => {
+  await requireAdmin(c);
+  const { ensureCohortAppSchema } = await import('../services/cohortApplications');
+  await ensureCohortAppSchema(c.env);
+  const cycleId = parseInt(c.req.query('cycle_id') || '');
+  const base = `SELECT l.id, l.user_id, l.cohort_cycle_id, l.notif_type, l.status, l.sent_at, u.name, u.email
+                  FROM cohort_app_notification_ledger l LEFT JOIN users u ON u.id = l.user_id`;
+  const rs = Number.isFinite(cycleId)
+    ? await c.env.DB.prepare(`${base} WHERE l.cohort_cycle_id = ? ORDER BY l.sent_at DESC LIMIT 300`).bind(cycleId).all()
+    : await c.env.DB.prepare(`${base} ORDER BY l.sent_at DESC LIMIT 300`).all();
+  return c.json({ notifications: rs.results || [] });
+});
+
+r.get('/applications/events', async (c) => {
+  await requireAdmin(c);
+  const { ensureCohortAppSchema } = await import('../services/cohortApplications');
+  await ensureCohortAppSchema(c.env);
+  const cycleId = parseInt(c.req.query('cycle_id') || '');
+  const rs = Number.isFinite(cycleId)
+    ? await c.env.DB.prepare(`SELECT * FROM cohort_cycle_events WHERE cohort_cycle_id = ? ORDER BY created_at DESC LIMIT 300`).bind(cycleId).all()
+    : await c.env.DB.prepare(`SELECT * FROM cohort_cycle_events ORDER BY created_at DESC LIMIT 300`).all();
+  return c.json({ events: rs.results || [] });
+});
+
 export default r;
