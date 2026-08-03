@@ -94,14 +94,8 @@ const DIR_NOTE = {
   all: 'Every partner in the Axal network.',
 };
 
-// Rec-card tint per partner type (design recBg / recBorder L266-267).
-const REC_TINT = {
-  Lawyer: 'border-amber-200 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-950/20',
-  Operator: 'border-teal-200 bg-teal-50/60 dark:border-teal-900/60 dark:bg-teal-950/20',
-  Investor: 'border-sky-200 bg-sky-50/60 dark:border-sky-900/60 dark:bg-sky-950/20',
-};
-
 // Deterministic avatar-tile colour per partner (design assigns one per persona).
+const AVATAR_BGS = ['bg-teal-600', 'bg-sky-600', 'bg-amber-500', 'bg-violet-600', 'bg-emerald-600', 'bg-rose-500'];
 const AVATAR_BGS = ['bg-teal-600', 'bg-sky-600', 'bg-amber-500', 'bg-violet-600', 'bg-emerald-600', 'bg-rose-500'];
 const avatarBgOf = (name) => {
   let h = 0;
