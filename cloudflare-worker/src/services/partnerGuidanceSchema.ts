@@ -44,7 +44,10 @@ export async function ensurePartnerGuidanceColumns(env: Env): Promise<boolean> {
       // failure — not "already applied". It is still swallowed so one bad
       // column cannot abort the others, but readiness is re-verified below.
       try { await env.DB.prepare(`ALTER TABLE partners ADD COLUMN ${col} ${ddl}`).run(); }
-      catch (e) { console.warn(`[partnerGuidanceSchema] ALTER ${col} failed`, e); }
+      // Column name passed as an argument, not interpolated into the format
+      // string — matches the house logging style and keeps the log line a
+      // constant, so no value can ever be read as a format specifier.
+      catch (e) { console.warn('[partnerGuidanceSchema] ALTER failed for column', col, e); }
     }
     // No index is created: nothing filters/joins/sorts on these columns.
     // Re-read the table shape when we actually changed something; cache only
