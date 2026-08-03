@@ -362,6 +362,18 @@ class HypothesisItem(BaseModel):
         return v
 
 
+_VALID_ICP_FIT = {"strong", "partial", "none"}
+
+
+def _norm_icp_fit(raw) -> Optional[str]:
+    """Mirror the Worker's asIcpFit(): unknown values become None ("not yet
+    assessed") rather than being stored verbatim."""
+    if raw is None or raw == "":
+        return None
+    s = str(raw).strip().lower()
+    return s if s in _VALID_ICP_FIT else None
+
+
 class InterviewIn(BaseModel):
     interviewee_name: str
     interviewee_role: Optional[str] = None
@@ -369,6 +381,11 @@ class InterviewIn(BaseModel):
     notes: str = ""
     hypotheses: list[HypothesisItem] = []
     pains: list[str] = []
+    # Assessment fields (Worker parity — D1 migrations 072 / 074 / 161).
+    icp_fit: Optional[str] = None
+    featured: bool = False
+    validation_rating: Optional[int] = None
+    validation_comment: Optional[str] = None
 
 
 def _serialize_interview(i: Interview) -> dict:
@@ -381,6 +398,10 @@ def _serialize_interview(i: Interview) -> dict:
         "notes": i.notes,
         "hypotheses": json.loads(i.hypotheses_json or "[]"),
         "pains": json.loads(i.pains_json or "[]"),
+        "icp_fit": getattr(i, "icp_fit", None),
+        "featured": bool(getattr(i, "featured", False)),
+        "validation_rating": getattr(i, "validation_rating", None),
+        "validation_comment": getattr(i, "validation_comment", None),
         "created_at": i.created_at.isoformat() if i.created_at else None,
         "updated_at": i.updated_at.isoformat() if i.updated_at else None,
     }
@@ -419,6 +440,10 @@ def create_interview(
         notes=body.notes,
         hypotheses_json=json.dumps([h.model_dump() for h in body.hypotheses]),
         pains_json=json.dumps(body.pains),
+        icp_fit=_norm_icp_fit(body.icp_fit),
+        featured=bool(body.featured),
+        validation_rating=body.validation_rating,
+        validation_comment=body.validation_comment,
         created_by=user.id,
     )
     session.add(i)
@@ -447,6 +472,18 @@ def update_interview(
     i.notes = body.notes
     i.hypotheses_json = json.dumps([h.model_dump() for h in body.hypotheses])
     i.pains_json = json.dumps(body.pains)
+    # Preserve-on-omit, mirroring the Worker: these fields have non-None
+    # defaults, so a partial payload that predates them would otherwise clear
+    # a founder's assessment on every re-save.
+    sent = body.model_fields_set
+    if "icp_fit" in sent:
+        i.icp_fit = _norm_icp_fit(body.icp_fit)
+    if "featured" in sent:
+        i.featured = bool(body.featured)
+    if "validation_rating" in sent:
+        i.validation_rating = body.validation_rating
+    if "validation_comment" in sent:
+        i.validation_comment = body.validation_comment
     i.updated_at = datetime.utcnow()
     session.add(i)
     session.commit()

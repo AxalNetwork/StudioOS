@@ -3,11 +3,29 @@
 // spin-out-lab-pipeline/project). Every number renders from live data:
 // interviews (GET /progress/discovery/:pid), the inbound waitlist CRM
 // (GET /progress/discovery/:pid/waitlist) and curated pain groups
-// (GET /progress/pain-groups/:pid). The design's mock content (fake ICP
-// percentages, willingness-to-pay, fabricated leads) is NOT reproduced —
-// sections that have no real data source are derived honestly from the
-// interview log (hypothesis validation, working definition, themes) or show
-// explicit empty states.
+// (GET /progress/pain-groups/:pid). The design's mock content (fabricated
+// leads and interviewees, the hardcoded 30/22/17/11 funnel, the "X of 18"
+// pain-mention scale-up) is NOT reproduced — sections that have no real data
+// source are derived honestly from the interview log (hypothesis validation,
+// working definition, themes) or show explicit empty states.
+//
+// Interviews are now created, edited and deleted in place via
+// components/discovery/LogInterviewModal (api.createInterview /
+// updateInterview / deleteInterview). Those routes always existed; the page
+// just never called them, so "Log interview" bounced out to /build/discovery.
+// That link survives as a secondary "Full tool" affordance.
+//
+// ICP fit is a real stored field (D1 migration 161, dev parity in
+// ensure_interview_assessment_columns). It is NOT derived from
+// validation_rating: that column rates the SOLUTION, not the person's fit,
+// so reusing it would have produced a plausible number meaning something
+// else. A null icp_fit is "not yet assessed" and is excluded from the ICP
+// summary's denominator rather than counted as "not ICP".
+//
+// Still not reproduced, because nothing stores them: per-pain severity
+// (need/good/nice — the API normalises pains to plain strings), interview
+// format/source, willingness-to-pay, must-have/blocker, and follow-up
+// actions. Controls for those would silently discard what the founder typed.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -18,8 +36,12 @@ import {
   FileText,
   Loader2,
   MessagesSquare,
+  Pencil,
+  Plus,
   Quote,
+  Trash2,
 } from 'lucide-react';
+import LogInterviewModal, { ICP_FIT_OPTIONS } from '../components/discovery/LogInterviewModal';
 import { api, spinoutLab } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
@@ -84,6 +106,9 @@ export default function SpinoutLabDiscoveryPage() {
   const [logFilter, setLogFilter] = useState('all');
   const [busyLead, setBusyLead] = useState(null);
   const [leadMsg, setLeadMsg] = useState(null);
+  // null = closed; { interview: null } = create; { interview } = edit.
+  const [logModal, setLogModal] = useState(null);
+  const [rowBusy, setRowBusy] = useState(null);
 
   const loadProjectData = useCallback(async (pid) => {
     const [ivs, wl, pg] = await Promise.all([
@@ -95,6 +120,49 @@ export default function SpinoutLabDiscoveryPage() {
     setSignups(wl?.signups || []);
     setPainData(pg);
   }, []);
+
+  // Mark the ordinal interview milestones from a FRESH server count, skipping
+  // keys already done. Identical rule to the lead-promotion path below — both
+  // create interviews, so both must advance the same W1 deliverables.
+  const markInterviewMilestones = useCallback(async (count) => {
+    const done = new Set((state?.milestones || []).map((m) => m?.key ?? m));
+    for (let k = 1; k <= Math.min(count, 5); k += 1) {
+      const key = `customer_interview_logged_${k}`;
+      if (!done.has(key)) await markMilestone(user, key);
+    }
+    spinoutLab.state().then(setState).catch(() => {});
+  }, [state, user]);
+
+  // Create/update through the real interview routes, then re-read so every
+  // derived block (funnel, pains, hypotheses, ICP split) recomputes from the
+  // server's copy rather than an optimistic guess.
+  const saveInterview = useCallback(async (payload) => {
+    if (!project) throw new Error('No project selected.');
+    const existing = logModal?.interview;
+    if (existing?.id) {
+      await api.updateInterview(existing.id, payload);
+      await loadProjectData(project.id);
+      return;
+    }
+    await api.createInterview(project.id, payload);
+    const fresh = await api.listInterviews(project.id).catch(() => []);
+    const n = Array.isArray(fresh) ? fresh.length : (fresh?.interviews || []).length;
+    await loadProjectData(project.id);
+    await markInterviewMilestones(n);
+  }, [project, logModal, loadProjectData, markInterviewMilestones]);
+
+  const removeInterview = useCallback(async (iv) => {
+    if (!project || !iv?.id) return;
+    setRowBusy(iv.id);
+    try {
+      await api.deleteInterview(iv.id);
+      await loadProjectData(project.id);
+    } catch (e) {
+      reportError('SpinoutLabDiscoveryPage:delete', e);
+    } finally {
+      setRowBusy(null);
+    }
+  }, [project, loadProjectData]);
 
   useEffect(() => {
     let alive = true;
@@ -281,6 +349,29 @@ export default function SpinoutLabDiscoveryPage() {
   const readyCount = readiness.filter((r) => r.ok).length;
   const logTool = project ? `/build/discovery?project_id=${project.id}` : '/build/discovery';
 
+  // ICP fit summary (D1 161). Percentages are over ASSESSED interviews only —
+  // an interview with icp_fit null is "not yet assessed", so counting it in
+  // the denominator would quietly depress every band as unrated rows pile up.
+  const icpSummary = (() => {
+    const assessed = ivs.filter((iv) => ICP_FIT_OPTIONS.some((o) => o.value === iv.icp_fit));
+    const n = assessed.length;
+    const count = (v) => assessed.filter((iv) => iv.icp_fit === v).length;
+    const pct = (v) => (n ? Math.round((count(v) / n) * 100) : 0);
+    return {
+      assessed: n,
+      unassessed: ivs.length - n,
+      // Confidence tracks how much evidence the split rests on, not how
+      // favourable it is. Same 5/3 thresholds the design uses.
+      confidence: n >= 5 ? 'High' : n >= 3 ? 'Medium' : 'Low',
+      bands: [
+        { key: 'strong', label: 'Strong fit', n: count('strong'), pct: pct('strong'), bar: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400' },
+        { key: 'partial', label: 'Partial fit', n: count('partial'), pct: pct('partial'), bar: 'bg-amber-500', text: 'text-amber-600 dark:text-amber-400' },
+        { key: 'none', label: 'Not ICP', n: count('none'), pct: pct('none'), bar: 'bg-gray-400', text: 'text-gray-500 dark:text-gray-400' },
+      ],
+    };
+  })();
+  const icpLabel = (v) => ICP_FIT_OPTIONS.find((o) => o.value === v)?.label || null;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-discovery">
       {/* Header */}
@@ -296,9 +387,23 @@ export default function SpinoutLabDiscoveryPage() {
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Structured interview evidence — pain points, hypotheses, and deck-ready quotes.</p>
         </div>
-        <Link to={logTool} data-testid="link-log-interview" className="h-9 px-4 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold inline-flex items-center gap-1.5">
-          Log interview <ArrowRight size={14} />
-        </Link>
+        <div className="flex items-center gap-2">
+          {/* The full discovery tool stays reachable; this page can now log
+              directly instead of bouncing the founder out to it. */}
+          <Link to={logTool} data-testid="link-log-interview" className="h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-semibold inline-flex items-center gap-1.5">
+            Full tool <ArrowRight size={14} />
+          </Link>
+          <button
+            type="button"
+            onClick={() => setLogModal({ interview: null })}
+            disabled={!project}
+            title={project ? undefined : 'Create a startup record first'}
+            data-testid="button-log-interview"
+            className="h-9 px-4 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold inline-flex items-center gap-1.5"
+          >
+            <Plus size={14} /> Log interview
+          </button>
+        </div>
       </div>
 
       {!project ? (
@@ -488,7 +593,7 @@ export default function SpinoutLabDiscoveryPage() {
                     <table className="w-full min-w-[560px]">
                       <thead>
                         <tr className="text-left">
-                          {['Contact', 'Hypotheses', 'Top pain', 'Source', ''].map((h) => (
+                          {['Contact', 'ICP fit', 'Hypotheses', 'Top pain', 'Source', ''].map((h) => (
                             <th key={h} className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 pb-2 pr-3">{h}</th>
                           ))}
                         </tr>
@@ -512,6 +617,24 @@ export default function SpinoutLabDiscoveryPage() {
                                 </div>
                               </td>
                               <td className="py-2.5 pr-3">
+                                {icpLabel(iv.icp_fit) ? (
+                                  <span
+                                    data-testid={`icp-fit-${iv.id}`}
+                                    className={`text-[10.5px] font-bold rounded-full px-2 py-0.5 ${
+                                      iv.icp_fit === 'strong'
+                                        ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                                        : iv.icp_fit === 'partial'
+                                          ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                                          : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+                                    }`}
+                                  >
+                                    {icpLabel(iv.icp_fit)}
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] text-gray-300 dark:text-gray-600" title="Not yet assessed">—</span>
+                                )}
+                              </td>
+                              <td className="py-2.5 pr-3">
                                 {iv._hyps.length > 0 ? (
                                   <span className={`text-[11px] font-semibold ${v > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>{v} of {iv._hyps.length} validated</span>
                                 ) : <span className="text-[11px] text-gray-300 dark:text-gray-600">—</span>}
@@ -526,6 +649,27 @@ export default function SpinoutLabDiscoveryPage() {
                                 {(iv.notes || '').trim() && !isFromLeads(iv) ? (
                                   <span title={iv.notes}><Quote size={13} className="text-violet-400 dark:text-violet-500 inline" /></span>
                                 ) : null}
+                                <span className="inline-flex items-center gap-1 ml-2 align-middle">
+                                  <button
+                                    type="button"
+                                    onClick={() => setLogModal({ interview: iv })}
+                                    data-testid={`button-edit-interview-${iv.id}`}
+                                    aria-label={`Edit interview with ${iv.interviewee_name}`}
+                                    className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-300"
+                                  >
+                                    <Pencil size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeInterview(iv)}
+                                    disabled={rowBusy === iv.id}
+                                    data-testid={`button-delete-interview-${iv.id}`}
+                                    aria-label={`Delete interview with ${iv.interviewee_name}`}
+                                    className="text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 disabled:opacity-40"
+                                  >
+                                    {rowBusy === iv.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                                  </button>
+                                </span>
                               </td>
                             </tr>
                           );
@@ -539,6 +683,49 @@ export default function SpinoutLabDiscoveryPage() {
 
             {/* RIGHT column */}
             <div className="flex flex-col gap-5 min-w-0">
+              {/* ICP fit summary */}
+              <div className={CARD} data-testid="discovery-icp-summary">
+                <div className="flex items-center justify-between mb-1">
+                  <div className={LBL}>ICP fit summary</div>
+                  {icpSummary.assessed > 0 && (
+                    <span className="text-[10.5px] font-bold text-gray-500 dark:text-gray-400" data-testid="text-icp-confidence">
+                      {icpSummary.confidence} confidence
+                    </span>
+                  )}
+                </div>
+                {icpSummary.assessed === 0 ? (
+                  <p className="text-[12.5px] text-gray-400 dark:text-gray-500 py-3 text-center" data-testid="icp-summary-empty">
+                    {ivs.length === 0
+                      ? 'Log an interview to start tracking ICP fit.'
+                      : `No ICP fit recorded yet on ${ivs.length} interview${ivs.length === 1 ? '' : 's'}. Edit one to set it.`}
+                  </p>
+                ) : (
+                  <>
+                    <div className="text-[11px] text-gray-400 dark:text-gray-500 mb-3">
+                      Across {icpSummary.assessed} assessed interview{icpSummary.assessed === 1 ? '' : 's'}
+                    </div>
+                    <div className="space-y-2.5">
+                      {icpSummary.bands.map((b) => (
+                        <div key={b.key} data-testid={`icp-band-${b.key}`}>
+                          <div className="flex justify-between text-[12px] mb-1">
+                            <span className="text-gray-600 dark:text-gray-300">{b.label}</span>
+                            <span className={`font-bold tabular-nums ${b.text}`}>{b.pct}% <span className="text-gray-400 dark:text-gray-500 font-semibold">({b.n})</span></span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                            <div className={`h-full rounded-full ${b.bar}`} style={{ width: `${b.pct}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {icpSummary.unassessed > 0 && (
+                      <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-3" data-testid="text-icp-unassessed">
+                        {icpSummary.unassessed} interview{icpSummary.unassessed === 1 ? '' : 's'} not yet assessed — excluded from these percentages.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+
               {/* Hypothesis validation */}
               <div className={CARD} data-testid="discovery-hypotheses">
                 <div className={`${LBL} mb-3.5`}>Hypothesis validation</div>
@@ -670,6 +857,13 @@ export default function SpinoutLabDiscoveryPage() {
           </div>
         </>
       )}
+
+      <LogInterviewModal
+        open={Boolean(logModal)}
+        interview={logModal?.interview || null}
+        onClose={() => setLogModal(null)}
+        onSave={saveInterview}
+      />
     </div>
   );
 }
