@@ -6,6 +6,7 @@ import { computeRadar } from '../services/radar';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
 import { filterOptedInUserIds } from '../services/matchingConsent';
 import { logMatchListGeneration } from '../services/matchAudit';
+import { ensurePartnerGuidanceColumns } from '../services/partnerGuidanceSchema';
 
 const partners = new Hono<{ Bindings: Env }>();
 const RADAR_AXIS_SLUGS: readonly string[] = RADAR_AXES.map((a) => a.slug);
@@ -35,8 +36,13 @@ function cosineSimilarity(a: Record<number, number>, b: Record<number, number>):
 // trust-score badge for admin/investor/partner viewers; the trust-score
 // endpoint itself enforces viewer-role access). No other users'
 // account/KYC info is leaked on the non-admin path.
+// Office-hours booking guidance (migration 160) rides along on `SELECT p.*`
+// for every authenticated viewer — it is directory copy the partner authored
+// for founders, so no extra role gating. The bootstrap call keeps the read
+// working on environments where the migration has not been applied yet.
 partners.get('/', async (c) => {
   const me = await requireAuth(c);
+  await ensurePartnerGuidanceColumns(c.env);
   const sql = getSQL(c.env);
   const rows = me.role === 'admin'
     ? await sql`

@@ -96,6 +96,7 @@ async def lifespan(app: FastAPI):
             ensure_marketplace_columns,
             ensure_service_catalogue_columns,
             ensure_partner_directory_columns,
+            ensure_partner_office_hours_guidance_columns,
             ensure_references_table,
             ensure_founder_risk_profiles_table,
             ensure_cap_table_scenarios_table,
@@ -162,6 +163,8 @@ async def lifespan(app: FastAPI):
         # Must run before service-catalogue migrations so `partners.slug`
         # exists when downstream queries join on it.
         ensure_partner_directory_columns()
+        # Office-hours booking guidance (dev parity for D1 migration 160).
+        ensure_partner_office_hours_guidance_columns()
         logger.info("StudioOS migrations: marketplace columns ensured")
         ensure_service_catalogue_columns()
         logger.info("StudioOS migrations: service catalogue + engagement lifecycle ensured")

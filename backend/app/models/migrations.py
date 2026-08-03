@@ -728,6 +728,41 @@ def ensure_marketplace_columns() -> None:
         session.commit()
 
 
+def ensure_partner_office_hours_guidance_columns() -> None:
+    """Partner office-hours booking guidance (Spin-Out Lab / Office Hours).
+
+    Dev parity for D1 migration 160_partner_office_hours_guidance.sql:
+    partner-authored "when to book / best for stage / one session gets you /
+    bring to the session" copy on `partners`. Nothing is backfilled — an
+    unset column means the partner has not published guidance and the UI
+    shows an explicit empty state. Safe to run on every boot.
+    """
+    cols = (
+        ("oh_when_to_book", "TEXT"),
+        ("oh_stage_fit", "VARCHAR"),
+        ("oh_session_outcome", "VARCHAR"),
+        ("oh_bring_json", "TEXT DEFAULT '[]' NOT NULL"),
+        ("oh_guidance_updated_at", "TIMESTAMP"),
+    )
+    indexes = (("ix_partners_oh_guidance", "oh_guidance_updated_at"),)
+    with Session(engine) as session:
+        for col, ddl in cols:
+            try:
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_partner_office_hours_guidance_columns: %s ALTER failed: %s", col, exc)
+        for name, expr in indexes:
+            try:
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(f"CREATE INDEX IF NOT EXISTS {name} ON partners({expr})"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_partner_office_hours_guidance_columns: %s INDEX failed: %s", name, exc)
+        session.commit()
+
+
 def ensure_partner_directory_columns() -> None:
     """Task #53 — Public partner directory + ranking.
 

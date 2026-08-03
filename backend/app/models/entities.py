@@ -458,6 +458,14 @@ class Partner(SQLModel, table=True):
     featured: bool = Field(default=False, index=True)
     featured_until: Optional[datetime] = None
     featured_tier: Optional[str] = None  # platinum | gold | editor | None
+    # Office-hours booking guidance (partner-authored). Mirrors D1 migration
+    # 160_partner_office_hours_guidance.sql. NULL = not published; the UI
+    # renders an explicit empty state and never invents guidance copy.
+    oh_when_to_book: Optional[str] = None
+    oh_stage_fit: Optional[str] = None
+    oh_session_outcome: Optional[str] = None
+    oh_bring_json: str = "[]"
+    oh_guidance_updated_at: Optional[datetime] = None
 
 
 @event.listens_for(Partner, "before_insert")
