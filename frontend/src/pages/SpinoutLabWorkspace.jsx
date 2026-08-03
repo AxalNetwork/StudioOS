@@ -473,8 +473,10 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
 
   // "View week →" opens the dedicated week-overview page (design `openWeek`).
   const viewWeek = (num) => {
-    if (!weekBrowsable(num)) return;
-    setSelected(num);
+    // Locked weeks still open the overview (design: preview cards say
+    // "View week →"); the overview renders the Locked badge and keeps the
+    // week's tools disabled. Only the inline week selection stays gated.
+    if (weekBrowsable(num)) setSelected(num);
     setWeekView(num);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
