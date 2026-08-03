@@ -629,7 +629,7 @@ export default function SpinoutLabUseOfFundsPage() {
 
           {/* Runway */}
           <div className={CARD} data-testid="card-runway">
-            <div className={`${LBL} mb-2`}>Runway</div>
+            <div className={`${LBL} mb-2`}>Runway at current burn</div>
             {months !== null ? (
               <>
                 <div className="flex items-baseline gap-2">
@@ -662,7 +662,7 @@ export default function SpinoutLabUseOfFundsPage() {
 
           {/* Runway timeline + thresholds */}
           <div className={CARD} data-testid="card-timeline">
-            <div className={`${LBL} mb-3`}>Runway timeline</div>
+            <div className={`${LBL} mb-3`}>Runway timeline · alert thresholds</div>
             <div className="relative h-2.5 rounded-full bg-gray-100 dark:bg-gray-800">
               {months !== null && (
                 <div
@@ -697,12 +697,15 @@ export default function SpinoutLabUseOfFundsPage() {
         <div className="space-y-4">
           {/* Milestone → capital mapping */}
           <div className={CARD} data-testid="card-milestone-mapping">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-1">
               <div className={LBL}>Milestone → capital mapping</div>
               <Link to="/spinout-lab/roadmap" className="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-600 hover:underline" data-testid="link-roadmap">
                 <MapIcon size={11} /> Roadmap
               </Link>
             </div>
+            {/* The design's sub-label. Costs are entered here rather than on the
+                objective because Roadmap OKRs carry no cost field. */}
+            <div className="text-[11px] text-gray-400 dark:text-gray-500 mb-3">Cost per milestone · from Roadmap</div>
             {mappedMilestones.length === 0 ? (
               <p className="text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="mapping-empty">
                 No Roadmap milestones yet — add objectives in the{' '}
