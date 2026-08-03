@@ -12,6 +12,43 @@ import type { Env } from '../types';
 
 const READY = new WeakMap<object, boolean>();
 const RATING_READY = new WeakMap<object, boolean>();
+const ICP_READY = new WeakMap<object, boolean>();
+
+/**
+ * Ensure `discovery_interviews.icp_fit` (TEXT, nullable) exists. Canonical
+ * migration is `161_discovery_icp_fit.sql`. Stores the founder's ICP-fit
+ * judgement per interview ('strong' | 'partial' | 'none'); null means "not
+ * yet assessed" and is never counted as "not ICP" by any consumer.
+ *
+ * Unlike the featured/rating helpers this one reports whether the column is
+ * actually usable, so a caller can degrade to "ICP fit unavailable" instead
+ * of emitting SQL that would fail with `no such column`. Readiness is cached
+ * only on success — a failed ALTER must not be remembered as ready.
+ */
+export async function ensureDiscoveryIcpFitColumn(env: Env): Promise<boolean> {
+  const key = env.DB as unknown as object;
+  if (ICP_READY.get(key)) return true;
+  try {
+    const info = await env.DB.prepare(`PRAGMA table_info(discovery_interviews)`).all<{ name: string }>();
+    const have = new Set((info.results || []).map((r) => r.name));
+    if (!have.has('icp_fit')) {
+      try {
+        await env.DB.prepare(`ALTER TABLE discovery_interviews ADD COLUMN icp_fit TEXT`).run();
+      } catch (e) {
+        // Column is KNOWN absent here, so this is a real bootstrap failure,
+        // not an "already applied" race. Swallowed, but not cached as ready.
+        console.warn('[discoveryInterviewSchema] icp_fit ALTER failed', e);
+        const recheck = await env.DB.prepare(`PRAGMA table_info(discovery_interviews)`).all<{ name: string }>();
+        if (!(recheck.results || []).some((r) => r.name === 'icp_fit')) return false;
+      }
+    }
+    ICP_READY.set(key, true);
+    return true;
+  } catch (e) {
+    console.warn('[discoveryInterviewSchema] icp_fit bootstrap failed', e);
+    return false;
+  }
+}
 
 /**
  * Task #14 sibling: ensure `discovery_interviews.validation_rating`

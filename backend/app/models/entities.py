@@ -1318,6 +1318,13 @@ class Interview(SQLModel, table=True):
     notes: str = ""                      # Mom-Test interview notes
     hypotheses_json: str = "[]"          # [{hypothesis, status, evidence}]
     pains_json: str = "[]"               # ["pain text", ...]
+    # Assessment fields — mirror the Worker (D1 migrations 072 / 074 / 161).
+    # icp_fit: 'strong' | 'partial' | 'none'; None = not yet assessed, which
+    # is NOT the same as 'none' and must never be counted as a rejection.
+    icp_fit: Optional[str] = None
+    featured: bool = False               # deck-eligible quote
+    validation_rating: Optional[int] = None   # 0-5, solution-fit (not ICP fit)
+    validation_comment: Optional[str] = None
     created_by: Optional[int] = Field(default=None, foreign_key="users.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

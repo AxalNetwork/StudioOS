@@ -39,6 +39,7 @@ import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '.
 import {
   ensureDiscoveryInterviewFeaturedColumn,
   ensureDiscoveryValidationRatingColumns,
+  ensureDiscoveryIcpFitColumn,
 } from '../services/discoveryInterviewSchema';
 import { ensureWaitlistCrmColumns } from '../services/waitlistCrmSchema';
 import { send, type SendResult } from '../services/email/send';
@@ -154,6 +155,7 @@ type InterviewRow = {
   featured: number | null;
   validation_rating: number | null;
   validation_comment: string | null;
+  icp_fit: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -210,6 +212,8 @@ function serializeInterview(r: InterviewRow) {
     // founder fills them in.
     validation_rating: r.validation_rating == null ? null : Number(r.validation_rating),
     validation_comment: r.validation_comment ?? null,
+    // Migration 161. Null = not yet assessed (NOT "not ICP").
+    icp_fit: r.icp_fit ?? null,
     created_at: r.created_at,
     updated_at: r.updated_at,
   };
@@ -218,9 +222,22 @@ function serializeInterview(r: InterviewRow) {
 const INTERVIEW_SELECT =
   `SELECT id, project_id, interviewee_name, interviewee_role, interview_date,
           notes, hypotheses_json, pains_json, featured,
-          validation_rating, validation_comment,
+          validation_rating, validation_comment, icp_fit,
           created_at, updated_at
      FROM discovery_interviews`;
+
+/**
+ * The founder's ICP-fit judgement for an interviewee (migration 161).
+ * Deliberately distinct from `validation_rating`, which rates the SOLUTION,
+ * not the person's fit. Null means "not yet assessed" — consumers must not
+ * fold null into 'none', or unassessed interviews would read as rejections.
+ */
+const VALID_ICP_FIT = new Set(['strong', 'partial', 'none']);
+function asIcpFit(raw: unknown): string | null {
+  if (raw == null || raw === '') return null;
+  const s = String(raw).trim().toLowerCase();
+  return VALID_ICP_FIT.has(s) ? s : null;
+}
 
 function asFeaturedFlag(raw: unknown): number {
   if (raw === true || raw === 1 || raw === '1') return 1;
@@ -239,6 +256,7 @@ progress.get('/discovery/:projectId', async (c) => {
 
   await ensureDiscoveryInterviewFeaturedColumn(c.env);
   await ensureDiscoveryValidationRatingColumns(c.env);
+  await ensureDiscoveryIcpFitColumn(c.env);
   const { results } = await c.env.DB.prepare(
     `${INTERVIEW_SELECT}
       WHERE project_id = ?
@@ -287,21 +305,23 @@ progress.post('/discovery/:projectId', async (c) => {
   const featured = asFeaturedFlag(body.featured);
   const validationRating = asValidationRating(body.validation_rating);
   const validationComment = asStringOrNull(body.validation_comment);
+  const icpFit = asIcpFit(body.icp_fit);
   const nowIso = new Date().toISOString();
 
   await ensureDiscoveryInterviewFeaturedColumn(c.env);
   await ensureDiscoveryValidationRatingColumns(c.env);
+  await ensureDiscoveryIcpFitColumn(c.env);
   const res = await c.env.DB.prepare(
     `INSERT INTO discovery_interviews
        (project_id, interviewee_name, interviewee_role, interview_date,
         notes, hypotheses_json, pains_json, featured,
-        validation_rating, validation_comment,
+        validation_rating, validation_comment, icp_fit,
         created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     projectId, intervieweeName, intervieweeRole, interviewDate,
     notes, JSON.stringify(hypotheses), JSON.stringify(pains),
-    featured, validationRating, validationComment,
+    featured, validationRating, validationComment, icpFit,
     nowIso, nowIso,
   ).run();
 
@@ -368,19 +388,26 @@ progress.put('/discovery/interview/:id', async (c) => {
   const validationComment = Object.prototype.hasOwnProperty.call(body, 'validation_comment')
     ? asStringOrNull(body.validation_comment)
     : (existing.validation_comment ?? null);
+  // Same preserve-on-omit rule (migration 161): a payload that predates
+  // icp_fit must not clear an assessment the founder already made.
+  const icpFit = Object.prototype.hasOwnProperty.call(body, 'icp_fit')
+    ? asIcpFit(body.icp_fit)
+    : (existing.icp_fit ?? null);
 
   await ensureDiscoveryInterviewFeaturedColumn(c.env);
   await ensureDiscoveryValidationRatingColumns(c.env);
+  await ensureDiscoveryIcpFitColumn(c.env);
   await c.env.DB.prepare(
     `UPDATE discovery_interviews
         SET interviewee_name = ?, interviewee_role = ?, interview_date = ?,
             notes = ?, hypotheses_json = ?, pains_json = ?, featured = ?,
-            validation_rating = ?, validation_comment = ?, updated_at = ?
+            validation_rating = ?, validation_comment = ?, icp_fit = ?,
+            updated_at = ?
       WHERE id = ?`,
   ).bind(
     intervieweeName, intervieweeRole, interviewDate,
     notes, JSON.stringify(hypotheses), JSON.stringify(pains),
-    featured, validationRating, validationComment,
+    featured, validationRating, validationComment, icpFit,
     new Date().toISOString(), id,
   ).run();
 

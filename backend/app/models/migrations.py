@@ -220,6 +220,39 @@ def ensure_project_incorporation_meta_column() -> None:
         session.commit()
 
 
+def ensure_interview_assessment_columns() -> None:
+    """Discovery-interview assessment fields on the dev `interviews` table.
+
+    Brings dev up to the Worker's shape so the Spin-Out Lab Customer Discovery
+    "Log interview" flow round-trips locally instead of silently dropping
+    fields the Worker persists:
+      - icp_fit           — Worker D1 migration 161 ('strong'|'partial'|'none',
+                            NULL = not yet assessed, never "not ICP")
+      - featured          — migration 072 (deck-eligible quote)
+      - validation_rating — migration 074 (0-5, how well the solution
+                            addresses the problem) + its free-text comment
+
+    Idempotent. Dev-only: this backend never deploys (see CLAUDE.md)."""
+    with Session(engine) as session:
+        for col, ddl in (
+            ("icp_fit", "VARCHAR"),
+            ("featured", "BOOLEAN DEFAULT FALSE"),
+            ("validation_rating", "INTEGER"),
+            ("validation_comment", "VARCHAR"),
+        ):
+            try:
+                # Justification: static identifiers from the literal tuple above,
+                # dev-only FastAPI
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                    f"ALTER TABLE interviews ADD COLUMN IF NOT EXISTS {col} {ddl}"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "ensure_interview_assessment_columns: ALTER %s failed: %s", col, exc
+                )
+        session.commit()
+
+
 def ensure_lifecycle_columns() -> None:
     """FOUNDER_UX_AUDIT.md Critical #1 — founder-editable Startup Lifecycle stage
     + manual check-offs on `projects`. Mirrors Worker D1 migration 139 so the dev
