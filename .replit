@@ -16,6 +16,9 @@ name = "Project"
 mode = "parallel"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[workflows.workflow.tasks]]
 task = "workflow.run"
 args = "Backend API"
