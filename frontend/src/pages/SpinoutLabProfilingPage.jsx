@@ -8,10 +8,11 @@
 //     section degrades to an explicit "not available" state rather than fake
 //     bars). Bar = signal strength (|score| / 2); chip = stored confidence.
 //   - Archetype comes from /assessment/results/me (read-only results store)
-//     plus the shared ARCHETYPES display copy. The design's fabricated
-//     secondary/blend, strengths, blind-spot and complement copy has no data
-//     source and is NOT reproduced — implications are derived from the real
-//     lowest-evidenced skill dimensions instead.
+//     plus the shared ARCHETYPES display copy — including its static
+//     per-archetype strengths / blind spots / complements (descriptive
+//     metadata like the tagline, not user data). The design's secondary/blend
+//     tiles have no data source and are NOT reproduced — implications are
+//     derived from the real lowest-evidenced skill dimensions instead.
 //   - "Next best questions" become real gap-driven actions (unrated skill
 //     dimensions, missing values survey, missing archetype) that link to the
 //     real Studio (/studio — the skills + values profile builder).
@@ -22,9 +23,12 @@ import { Link } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
+  Copy,
+  Download,
   Fingerprint,
   Loader2,
   Lock,
+  Share2,
   Sparkles,
 } from 'lucide-react';
 import { api, assessment } from '../lib/api';
@@ -36,6 +40,9 @@ import { archetypeMeta } from '../lib/assessmentMeta';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm';
+// Quick-action ghost buttons (design toolbar): transparent until hover.
+const QA_BTN =
+  'inline-flex items-center gap-1.5 rounded-lg border border-transparent bg-transparent px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 enabled:cursor-pointer enabled:hover:border-gray-200 enabled:hover:bg-white dark:enabled:hover:border-gray-700 dark:enabled:hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed';
 
 // Confidence band from a 0–100 pct. Thresholds match the platform's loose
 // High/Medium/Low language (values confidence is stored 0–1; results 0–1).
@@ -51,6 +58,9 @@ const BAND_TEXT = {
   Low: 'text-gray-400 dark:text-gray-500',
 };
 const BAND_BAR = { High: 'bg-emerald-500', Medium: 'bg-amber-500', Low: 'bg-violet-300 dark:bg-violet-700' };
+// KPI-chip vocabulary — the design words its completion-KPI bands
+// "Reliable" / "Partial"; mapped from the shared confidence bands.
+const KPI_BAND_WORD = { High: 'Reliable', Medium: 'Partial', Low: 'Low' };
 
 // Pure: taxonomy categories + self-ratings → per-dimension model.
 // Category score = mean self_level of its RATED skills, as a 0–100 pct of the
@@ -205,6 +215,7 @@ export default function SpinoutLabProfilingPage() {
   const [values, setValues] = useState(null); // {vector,...} | {unavailable} | {empty}
   const [results, setResults] = useState(null); // [..] | {unavailable}
   const [status, setStatus] = useState('loading');
+  const [copied, setCopied] = useState(false); // transient "Copied ✓" state
 
   useEffect(() => {
     let dead = false;
@@ -314,10 +325,12 @@ export default function SpinoutLabProfilingPage() {
           key: `rate-${d.slug}`,
           label: `Rate your ${d.label} skills (${d.skillCount - d.ratedCount} unrated)`,
           improves: 'Skills graph coverage',
+          // Real remaining count → shown on the CTA ("Answer N →").
+          count: d.skillCount - d.ratedCount,
         }),
       );
       if (!model.ratedSkills)
-        acts.splice(0, acts.length, { key: 'rate-first', label: 'Rate your first skills', improves: 'Skills graph coverage' });
+        acts.splice(0, acts.length, { key: 'rate-first', label: 'Rate your first skills', improves: 'Skills graph coverage', count: model.totalSkills });
     }
     // Only genuinely-empty states become actions — unavailable/error states
     // are explained in their sections and would dead-end in Studio here.
@@ -352,8 +365,22 @@ export default function SpinoutLabProfilingPage() {
 
   const name = user?.name || user?.email || 'Founder';
 
+  // Copy link is the only quick action with no backend dependency.
+  const copyLink = () => {
+    if (!navigator.clipboard?.writeText) return;
+    navigator.clipboard
+      .writeText(window.location.href)
+      .then(() => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1800);
+      })
+      .catch(() => {});
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5" data-testid="page-spinout-profiling">
+      {/* Phase stripe (design: 3px violet bar across the top of the tool) */}
+      <div className="h-[3px] rounded-b-[3px] bg-violet-600 dark:bg-violet-500" aria-hidden="true" />
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
@@ -364,6 +391,12 @@ export default function SpinoutLabProfilingPage() {
           >
             <ArrowLeft className="w-4 h-4" /> Back to Workspace
           </Link>
+          <span
+            className="w-[34px] h-[34px] flex-none rounded-[9px] bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 flex items-center justify-center"
+            data-testid="tool-icon"
+          >
+            <Fingerprint className="w-4 h-4" />
+          </span>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Profiling</h1>
@@ -377,6 +410,33 @@ export default function SpinoutLabProfilingPage() {
         <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border border-violet-100 dark:border-violet-800 rounded-full px-3 py-1.5">
           Foundational · Wk 1
         </span>
+      </div>
+
+      {/* Quick actions (design toolbar). Share + Export need the report-export
+          service, which doesn't exist yet — they render disabled with the
+          reason instead of faking success. Copy link is fully client-side. */}
+      <div className="flex items-center gap-1 flex-wrap" data-testid="quick-actions">
+        <button
+          type="button"
+          disabled
+          title="Requires the report-export service (not yet available)"
+          className={QA_BTN}
+          data-testid="button-share"
+        >
+          <Share2 className="w-3.5 h-3.5" /> Share
+        </button>
+        <button
+          type="button"
+          disabled
+          title="Requires the report-export service (not yet available)"
+          className={QA_BTN}
+          data-testid="button-export-report"
+        >
+          <Download className="w-3.5 h-3.5" /> Export report
+        </button>
+        <button type="button" onClick={copyLink} className={QA_BTN} data-testid="button-copy-link">
+          {copied ? 'Copied ✓' : <><Copy className="w-3.5 h-3.5" /> Copy link</>}
+        </button>
       </div>
 
       {/* Profile summary */}
@@ -425,6 +485,10 @@ export default function SpinoutLabProfilingPage() {
 
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* The design labels this KPI "Questions answered" (54/79); no loaded
+            source exposes an answered-question count (/assessment/results/me
+            carries only vectors + confidence), so the honest skills-rated
+            count keeps its own label. */}
         <div className={CARD} data-testid="kpi-skills-rated">
           <div className="flex items-baseline justify-between">
             <span className="text-xl font-bold text-gray-900 dark:text-gray-50 tabular-nums">{model ? `${model.ratedSkills} / ${model.totalSkills}` : '—'}</span>
@@ -435,7 +499,7 @@ export default function SpinoutLabProfilingPage() {
         <div className={CARD} data-testid="kpi-skills-graph">
           <div className="flex items-baseline justify-between">
             <span className="text-xl font-bold text-gray-900 dark:text-gray-50 tabular-nums">{model ? `${model.assessedPct}%` : '—'}</span>
-            <span className={`text-[10px] font-bold ${BAND_TEXT[confidenceBand(model?.assessedPct || 0)]}`}>{model ? confidenceBand(model.assessedPct) : ''}</span>
+            <span className={`text-[10px] font-bold ${BAND_TEXT[confidenceBand(model?.assessedPct || 0)]}`}>{model ? KPI_BAND_WORD[confidenceBand(model.assessedPct)] : ''}</span>
           </div>
           <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-1">Skills graph assessed</div>
           <div className="mt-2"><Bar pct={model?.assessedPct || 0} band={confidenceBand(model?.assessedPct || 0)} /></div>
@@ -444,7 +508,7 @@ export default function SpinoutLabProfilingPage() {
           <div className="flex items-baseline justify-between">
             <span className="text-xl font-bold text-gray-900 dark:text-gray-50 tabular-nums">{valuesRows?.length ? `${valuesPct}%` : '—'}</span>
             <span className={`text-[10px] font-bold ${valuesRows?.length ? BAND_TEXT[confidenceBand(valuesPct)] : values?.failed ? 'text-rose-500' : 'text-gray-400'}`}>
-              {values?.unavailable ? 'Unavailable' : values?.failed ? 'Load failed' : valuesRows?.length ? confidenceBand(valuesPct) : 'Not taken'}
+              {values?.unavailable ? 'Unavailable' : values?.failed ? 'Load failed' : valuesRows?.length ? KPI_BAND_WORD[confidenceBand(valuesPct)] : 'Not taken'}
             </span>
           </div>
           <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-1">Values graph confidence</div>
@@ -491,7 +555,7 @@ export default function SpinoutLabProfilingPage() {
                   )) : <p className="text-[12px] text-gray-400">No skills rated yet.</p>}
                 </div>
                 <div>
-                  <div className={`${LBL} !text-amber-600 dark:!text-amber-500 mb-2`}>Lowest self-rated</div>
+                  <div className={`${LBL} !text-amber-600 dark:!text-amber-500 mb-2`}>Least evidenced</div>
                   {model.weakest.length ? model.weakest.map((s) => (
                     <div key={s.slug} className="flex justify-between text-[12px] py-0.5" data-testid={`skill-weak-${s.slug}`}>
                       <span className="text-gray-600 dark:text-gray-300">{s.label}</span>
@@ -512,7 +576,7 @@ export default function SpinoutLabProfilingPage() {
           <div className="flex items-center justify-between mb-1">
             <div className={LBL}>Values graph</div>
             {valuesRows?.length > 0 && (
-              <span className="text-[10.5px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 rounded-full px-2 py-0.5">{valuesPct}% confidence</span>
+              <span className="text-[10.5px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 rounded-full px-2 py-0.5">{valuesPct}% assessed</span>
             )}
           </div>
           <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mb-4">Signal strength across your measured working principles.</p>
@@ -556,6 +620,10 @@ export default function SpinoutLabProfilingPage() {
                 <div className="text-[22px] font-extrabold tracking-tight" data-testid="text-archetype-label">{archMeta?.label || latestResult.archetype_label}</div>
                 <div className="text-[12.5px] text-white/80 mt-1.5 leading-relaxed">{archMeta?.description || archMeta?.tagline || ''}</div>
               </div>
+              {/* The design puts Secondary + Blend tiles here — the results
+                  store keeps a single archetype per track with no secondary or
+                  blend ratio, so those tiles are NOT built. Confidence and
+                  Assessed below are live data. */}
               <div className="flex gap-2.5 mt-3">
                 <div className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
                   <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">Confidence</div>
@@ -567,13 +635,56 @@ export default function SpinoutLabProfilingPage() {
                 </div>
               </div>
             </div>
-            <div className="text-[12.5px] text-gray-600 dark:text-gray-300 leading-relaxed">
-              {archMeta?.tagline && <p className="font-semibold mb-2">{archMeta.tagline}</p>}
-              <p>
-                Your archetype comes from your assessment answers. Strength and gap detail lives in the skills and
-                values graphs on this page — the assessment doesn't produce a separate strengths/blind-spot list.
-              </p>
-            </div>
+            {archMeta?.strengths?.length ? (
+              /* Static per-archetype display copy from the shared ARCHETYPES
+                 seed (descriptive metadata, not user data). */
+              <div className="grid grid-cols-2 gap-5">
+                <div data-testid="archetype-strengths">
+                  <div className={`${LBL} !text-emerald-600 dark:!text-emerald-500 mb-2`}>Strengths</div>
+                  <div className="space-y-1.5">
+                    {archMeta.strengths.map((s) => (
+                      <div key={s} className="text-[12.5px] text-gray-600 dark:text-gray-300 flex gap-2">
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">+</span>
+                        <span>{s}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div data-testid="archetype-blindspots">
+                  <div className={`${LBL} !text-amber-600 dark:!text-amber-500 mb-2`}>Likely blind spots</div>
+                  <div className="space-y-1.5">
+                    {(archMeta.blindSpots || []).map((b) => (
+                      <div key={b} className="text-[12.5px] text-gray-600 dark:text-gray-300 flex gap-2">
+                        <span className="font-bold text-amber-600 dark:text-amber-500">!</span>
+                        <span>{b}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="col-span-2 border-t border-gray-100 dark:border-gray-800 pt-4" data-testid="archetype-complements">
+                  <div className={`${LBL} mb-2`}>Compatible complements</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(archMeta.complements || []).map((c) => (
+                      <span
+                        key={c}
+                        className="text-[11.5px] font-semibold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border border-violet-100 dark:border-violet-800 rounded-lg px-2.5 py-1"
+                      >
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Unknown slug → no seeded copy; keep the honest prose state. */
+              <div className="text-[12.5px] text-gray-600 dark:text-gray-300 leading-relaxed">
+                {archMeta?.tagline && <p className="font-semibold mb-2">{archMeta.tagline}</p>}
+                <p>
+                  Your archetype comes from your assessment answers. Strength and gap detail lives in the skills and
+                  values graphs on this page — the assessment doesn't produce a separate strengths/blind-spot list.
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <p
@@ -600,8 +711,13 @@ export default function SpinoutLabProfilingPage() {
                 { cat: 'Skills', pct: model?.assessedPct || 0, na: !model },
                 { cat: 'Values', pct: valuesPct, na: values?.unavailable || !valuesRows?.length, err: values?.failed },
                 { cat: 'Archetype', pct: archConfPct || 0, na: !latestResult, err: results?.failed },
+                // Design categories with no backend source yet — the
+                // assessment doesn't measure these, so they stay in the
+                // no-data state rather than inventing percentages.
+                { cat: 'Leadership style', pct: 0, na: true },
+                { cat: 'Working style', pct: 0, na: true },
               ].map((row) => (
-                <div key={row.cat} data-testid={`progress-row-${row.cat.toLowerCase()}`}>
+                <div key={row.cat} data-testid={`progress-row-${row.cat.toLowerCase().replace(/\s+/g, '-')}`}>
                   <div className="flex justify-between mb-1">
                     <span className="text-[12.5px] font-semibold text-gray-600 dark:text-gray-300">{row.cat}</span>
                     <span className={`text-[11px] font-semibold ${row.err ? 'text-rose-500' : row.na ? 'text-gray-400' : BAND_TEXT[confidenceBand(row.pct)]}`}>
@@ -615,7 +731,7 @@ export default function SpinoutLabProfilingPage() {
           </div>
 
           <div className={CARD} data-testid="card-next-actions">
-            <div className={`${LBL} mb-3`}>Next best steps · answer in Studio</div>
+            <div className={`${LBL} mb-3`}>Next best questions · answer in Studio</div>
             {nextActions.length ? (
               <div className="space-y-2.5">
                 {nextActions.map((a) => (
@@ -631,7 +747,7 @@ export default function SpinoutLabProfilingPage() {
                       to="/studio"
                       className="text-[11.5px] font-semibold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border border-violet-100 dark:border-violet-800 rounded-lg px-3 py-1.5 whitespace-nowrap"
                     >
-                      Answer →
+                      {a.count ? `Answer ${a.count} →` : 'Answer →'}
                     </Link>
                   </div>
                 ))}
@@ -661,13 +777,13 @@ export default function SpinoutLabProfilingPage() {
                 )}
                 {model.unrated.length > 0 && (
                   <div>
-                    <div className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-0.5">Coverage gap</div>
-                    <p>{model.unrated.map((d) => d.label).join(', ')} {model.unrated.length === 1 ? 'is' : 'are'} unrated — implications there are unknown until you rate them.</p>
+                    <div className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-0.5">Operating risk</div>
+                    <p>{model.unrated.map((d) => d.label).join(', ')} {model.unrated.length === 1 ? 'is' : 'are'} unrated — operating risk there is unknown until you rate them.</p>
                   </div>
                 )}
                 <div>
                   <div className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-0.5">Downstream</div>
-                  <p>Feeds co-founder matching and advisor matching across the platform.</p>
+                  <p>Feeds Scoring Engine (Team), Co-founder Match, and Advisors matching.</p>
                 </div>
               </div>
             ) : (
@@ -704,7 +820,7 @@ export default function SpinoutLabProfilingPage() {
                 <Sparkles className="w-4 h-4" />
               </span>
               <div className="flex-1">
-                <div className="text-[13px] font-bold text-gray-900 dark:text-gray-50">Continue your assessment in Studio</div>
+                <div className="text-[13px] font-bold text-gray-900 dark:text-gray-50">Resume assessment in Studio</div>
                 <p className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
                   Skills self-ratings and the values survey both live in Studio — this report updates as you answer.
                 </p>

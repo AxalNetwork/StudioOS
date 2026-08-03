@@ -44,26 +44,42 @@ export const SKILL_AXES_SHORT = {
 export const SKILL_AXIS_ORDER = Object.keys(SKILL_AXES);
 
 // Founder-track archetype copy (mirrors migration 108 seed) keyed by slug.
+// `strengths` / `blindSpots` / `complements` are static per-archetype display
+// copy (Profiling report archetype card) in the design's voice — descriptive
+// metadata like tagline/description, NOT user data. `complements` name
+// compatible archetype labels from the same track.
 export const ARCHETYPES = {
   fo_missionary: {
     label: 'The Missionary', tagline: 'Mission first, built to last.',
     description: 'Anchored to the why. Bias to durable, sustainable building and craft over raw speed.',
     icon: 'compass', accent: '#0ea5e9',
+    strengths: ['Anchors the team to a durable why', 'Earns deep trust from users and hires', 'Persistent through long feedback cycles'],
+    blindSpots: ['May trade speed for conviction', 'Slow to pivot when the mission is challenged', 'Under-weights commercial urgency'],
+    complements: ['The Rocketeer', 'The Maverick'],
   },
   fo_rocketeer: {
     label: 'The Rocketeer', tagline: 'Fast, bold, built to break out.',
     description: 'High speed, high risk, hyper-growth. Comfortable raising big and moving first.',
     icon: 'rocket', accent: '#f97316',
+    strengths: ['Moves before the market does', 'Comfortable with bold, high-stakes bets', 'Magnetic case for capital and talent'],
+    blindSpots: ['May scale before foundations are ready', 'Accumulates quality and process debt', 'Burn discipline under pressure'],
+    complements: ['The Architect', 'The Missionary'],
   },
   fo_architect: {
     label: 'The Architect', tagline: 'Craft, structure, and durable systems.',
     description: 'Quality-first and risk-aware, with a preference for process, structure, and deep technical foundations.',
     icon: 'ruler', accent: '#8b5cf6',
+    strengths: ['Deep technical foundations that scale', 'Designs process the team can trust', 'A quality bar that compounds'],
+    blindSpots: ['May over-engineer before market proof', 'Slower to ship and learn in public', 'Under-weights distribution and hype'],
+    complements: ['The Rocketeer', 'The Maverick'],
   },
   fo_maverick: {
     label: 'The Maverick', tagline: 'Independent, instinctive, unafraid.',
     description: 'High autonomy and risk appetite with a fast, instinct-led style. Thrives without a playbook.',
     icon: 'zap', accent: '#eab308',
+    strengths: ['Thrives where there is no playbook', 'Fast, instinct-led decision making', 'Unafraid of contrarian bets'],
+    blindSpots: ['May resist structure as the team grows', 'Instinct can outrun the evidence', 'Keeping others aligned and informed'],
+    complements: ['The Architect', 'The Missionary'],
   },
 
   // Task #45 — conversational archetypes for the non-founder personas (computed
@@ -73,63 +89,99 @@ export const ARCHETYPES = {
     label: 'Thesis-Driven Backer', tagline: 'Conviction before the crowd.',
     description: 'Invests against a sharp thesis with rigor and patience; leads on conviction.',
     icon: 'target', accent: '#0ea5e9',
+    strengths: ['A sharp, differentiated thesis', 'Conviction to lead before consensus', 'Patient through long holding periods'],
+    blindSpots: ['May dismiss signals outside the thesis', 'Slower on opportunistic deals'],
+    complements: ['Network Amplifier', 'Hands-On Partner'],
   },
   inv_network_amplifier: {
     label: 'Network Amplifier', tagline: 'Opens doors, compounds relationships.',
     description: 'Creates value mostly through people — introductions, reputation, and reach.',
     icon: 'network', accent: '#8b5cf6',
+    strengths: ['Opens doors founders can\'t alone', 'Compounds reputation and reach', 'Reads people and rooms quickly'],
+    blindSpots: ['Lighter on diligence depth', 'Value can stay introductions-deep'],
+    complements: ['Disciplined Allocator', 'Hands-On Partner'],
   },
   inv_hands_on_partner: {
     label: 'Hands-On Partner', tagline: 'Rolls up sleeves beside the founder.',
     description: 'Gets into the work with founders across product, GTM, and operations.',
     icon: 'handshake', accent: '#f97316',
+    strengths: ['Works beside founders on real problems', 'Practical product and GTM instincts', 'Earns trust through delivery'],
+    blindSpots: ['Can crowd a founder\'s autonomy', 'Depth limits portfolio breadth'],
+    complements: ['Thesis-Driven Backer', 'Network Amplifier'],
   },
   inv_disciplined_allocator: {
     label: 'Disciplined Allocator', tagline: 'Rigorous, patient, process-led.',
     description: 'Runs on process and diligence; deploys with discipline over hype.',
     icon: 'clipboard-check', accent: '#10b981',
+    strengths: ['Rigorous, repeatable diligence', 'Steady through hype cycles', 'Discipline on price and pacing'],
+    blindSpots: ['May move too slowly in hot rounds', 'Process can screen out outliers'],
+    complements: ['Network Amplifier', 'Hands-On Partner'],
   },
   // Partner.
   pt_strategic_connector: {
     label: 'Strategic Connector', tagline: 'Aligns the right people to the plan.',
     description: 'Bridges strategy and network to move companies forward.',
     icon: 'network', accent: '#0ea5e9',
+    strengths: ['Maps the right people to the plan', 'Bridges strategy and network', 'Trusted broker across organizations'],
+    blindSpots: ['Lighter on hands-on delivery', 'Impact depends on others executing'],
+    complements: ['Embedded Operator', 'Systems Builder'],
   },
   pt_embedded_operator: {
     label: 'Embedded Operator', tagline: 'In the trenches, delivering.',
     description: 'Hands-on execution support with real operational depth.',
     icon: 'ruler', accent: '#f97316',
+    strengths: ['Delivers outcomes, not just advice', 'Deep functional expertise on tap', 'Credibility earned in the trenches'],
+    blindSpots: ['Can go heads-down on the big picture', 'Scales through hours, not systems'],
+    complements: ['Strategic Connector', 'Growth Catalyst'],
   },
   pt_growth_catalyst: {
     label: 'Growth Catalyst', tagline: 'Turns momentum into scale.',
     description: 'Blends people, building, and vision to accelerate growth.',
     icon: 'trending-up', accent: '#8b5cf6',
+    strengths: ['Turns early traction into momentum', 'Blends people, product, and vision', 'Energizes teams around a goal'],
+    blindSpots: ['May push scale before fit is proven', 'Lighter on durable process'],
+    complements: ['Systems Builder', 'Embedded Operator'],
   },
   pt_systems_builder: {
     label: 'Systems Builder', tagline: 'Puts durable machinery in place.',
     description: 'Installs process and systems that outlast any single engagement.',
     icon: 'ruler', accent: '#10b981',
+    strengths: ['Installs machinery that outlasts the engagement', 'Turns chaos into repeatable process', 'Low-drama, durable execution'],
+    blindSpots: ['Systems can outpace present needs', 'Less energized by improvisation'],
+    complements: ['Growth Catalyst', 'Strategic Connector'],
   },
   // Advisor / coach.
   mt_sage_guide: {
     label: 'Sage Guide', tagline: 'Wisdom and perspective when it counts.',
     description: 'Leads with long-range perspective, judgement, and empathy.',
     icon: 'compass', accent: '#0ea5e9',
+    strengths: ['Long-range perspective under pressure', 'Judgement shaped by real cycles', 'Empathy that earns candor'],
+    blindSpots: ['Advice can stay high-altitude', 'Lighter on week-to-week tactics'],
+    complements: ['Hands-On Coach', 'Accountability Anchor'],
   },
   mt_hands_on_coach: {
     label: 'Hands-On Coach', tagline: 'Beside you, session by session.',
     description: 'Practical, relationship-led coaching with steady cadence.',
     icon: 'users', accent: '#f97316',
+    strengths: ['Practical help, session by session', 'Steady, relationship-led cadence', 'Meets founders where they are'],
+    blindSpots: ['May soften hard truths', 'Depth over breadth of playbooks'],
+    complements: ['Sage Guide', 'Craft Master'],
   },
   mt_accountability_anchor: {
     label: 'Accountability Anchor', tagline: 'Keeps commitments honest.',
     description: 'Structured, dependable, and disciplined about follow-through.',
     icon: 'clipboard-check', accent: '#10b981',
+    strengths: ['Keeps commitments visible and honest', 'Dependable, structured follow-through', 'Turns intentions into cadence'],
+    blindSpots: ['Structure can feel rigid in a crisis', 'Lighter on open-ended exploration'],
+    complements: ['Sage Guide', 'Craft Master'],
   },
   mt_craft_master: {
     label: 'Craft Master', tagline: 'Deep expertise, generously shared.',
     description: 'Teaches from earned, hands-on mastery of the craft.',
     icon: 'star', accent: '#8b5cf6',
+    strengths: ['Deep, earned mastery of the craft', 'Teaches by doing, not telling', 'Raises the team\'s quality bar'],
+    blindSpots: ['Expertise can narrow the lens', 'May default to their own playbook'],
+    complements: ['Sage Guide', 'Accountability Anchor'],
   },
 };
 
