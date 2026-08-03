@@ -56,13 +56,22 @@ const STATUS_BADGE = {
   Blocked: 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300',
 };
 const VALUE_OPTS = ['High', 'Medium', 'Low'];
+// The design mock also offers an "XS" effort, but the backend contract
+// (MVP_EFFORTS in backend/app/api/routes/progress.py + the worker mirror)
+// only accepts S/M/L/XL — an XS pill would be rejected on save, so it is
+// intentionally omitted here.
 const EFFORT_OPTS = ['S', 'M', 'L', 'XL'];
 const STATUS_OPTS = ['Backlog', 'In Progress', 'Review', 'Done', 'Blocked'];
 
+// Rating pill-button groups (the design swaps the value/effort selects for pills).
+const PILL = 'px-[11px] py-1.5 rounded-lg border text-xs font-semibold transition-colors';
+const PILL_ON = 'bg-violet-600 border-violet-600 text-white';
+const PILL_OFF = 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700';
+
 const GROUPS = [
-  { value: 'High', title: 'Must ship now', sub: 'High value → active cycle', note: 'Active cycle' },
-  { value: 'Medium', title: 'Valuable next', sub: 'Medium value → next cycle / backlog', note: 'Next cycle candidate' },
-  { value: 'Low', title: 'Deprioritized', sub: 'Low value → v2 / out of scope', note: 'Deferred from MVP' },
+  { value: 'High', title: 'Must ship now', sub: 'High value → active cycle', note: 'Active cycle', dot: 'bg-emerald-500' },
+  { value: 'Medium', title: 'Valuable next', sub: 'Medium value → next cycle / backlog', note: 'Next cycle candidate', dot: 'bg-amber-600 dark:bg-amber-500' },
+  { value: 'Low', title: 'Deprioritized', sub: 'Low value → v2 / out of scope', note: 'Deferred from MVP', dot: 'bg-gray-400 dark:bg-gray-500' },
 ];
 
 // Program milestone labels + the required keys per week (mirrors the backend
@@ -329,7 +338,7 @@ export default function SpinoutLabRoadmapPage() {
         <>
           {/* 90-day OKRs */}
           <div className="flex items-center justify-between gap-3 mb-2.5">
-            <div className={LBL} data-testid="okr-count">90-day OKRs · {okrs.length} set</div>
+            <div className={LBL} data-testid="okr-count">90-day OKRs · <span className="text-emerald-700 dark:text-emerald-400">{okrs.length} set</span></div>
             <button type="button" data-testid="button-add-okr" onClick={() => { setModalError(''); setOkrModal({ ...EMPTY_OKR, key_results: EMPTY_OKR.key_results.map((k) => ({ ...k })) }); }} className="h-8 px-3.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-[11.5px] font-semibold inline-flex items-center gap-1.5">
               <Plus size={13} /> Add objective
             </button>
@@ -427,7 +436,8 @@ export default function SpinoutLabRoadmapPage() {
                 const rows = features.filter((f) => f.added_value === g.value);
                 return (
                   <div key={g.value} className="mb-1.5" data-testid={`group-${g.value.toLowerCase()}`}>
-                    <div className="flex items-baseline gap-2 border-b border-gray-100 dark:border-gray-800 pb-1.5 mb-1">
+                    <div className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 pb-1.5 mb-1">
+                      <span className={`w-[7px] h-[7px] rounded-full flex-none ${g.dot}`} aria-hidden="true" />
                       <span className="text-[11px] font-bold uppercase tracking-wider text-gray-700 dark:text-gray-200">{g.title}</span>
                       <span className="text-[10px] text-gray-400 dark:text-gray-500">{g.sub}</span>
                     </div>
@@ -451,7 +461,7 @@ export default function SpinoutLabRoadmapPage() {
                           </span>
                         </div>
                         {f.priority_reason && <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-0.5">{f.priority_reason}</div>}
-                        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 text-right">{g.note}</div>
+                        <div className={`text-[10px] mt-0.5 text-right ${g.value === 'High' ? 'text-emerald-700 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`}>{g.note}</div>
                       </button>
                     ))}
                   </div>
@@ -461,7 +471,7 @@ export default function SpinoutLabRoadmapPage() {
           </div>
 
           {/* Feeds active cycle */}
-          <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10 p-5 mb-5" data-testid="feeds-active-cycle">
+          <div className="rounded-2xl border border-violet-100 dark:border-violet-900/50 bg-gradient-to-br from-violet-50 to-white dark:from-violet-950/30 dark:to-gray-900 p-5 mb-5" data-testid="feeds-active-cycle">
             <div className={`${LBL} mb-1`}>Feeds active cycle</div>
             <p className="text-[11.5px] text-gray-500 dark:text-gray-400 mb-3">High-value priorities pulled from the Roadmap into the MVP build loop.</p>
             {high.length === 0 ? (
@@ -487,11 +497,15 @@ export default function SpinoutLabRoadmapPage() {
           {/* Milestones */}
           <div className={CARD} data-testid="roadmap-milestones">
             <div className={`${LBL} mb-3`}>Milestones</div>
-            <div className="flex flex-col gap-2.5">
-              {timeline.map((m) => (
-                <div key={m.key} className="flex items-start gap-2.5" data-testid={`milestone-${m.status}-${m.key}`}>
-                  <span className={`mt-1 w-2 h-2 rounded-full flex-none ${m.status === 'done' ? 'bg-emerald-500' : m.status === 'in_progress' ? 'bg-violet-600' : 'bg-gray-300 dark:bg-gray-600'}`} />
-                  <div>
+            <div className="flex flex-col">
+              {timeline.map((m, i) => (
+                <div key={m.key} className="flex gap-2.5" data-testid={`milestone-${m.status}-${m.key}`}>
+                  <div className="w-2 flex-none flex flex-col items-center">
+                    <span className={`mt-1 w-2 h-2 rounded-full flex-none ${m.status === 'done' ? 'bg-emerald-500' : m.status === 'in_progress' ? 'bg-violet-600' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                    {/* 2px connector between milestone dots, hidden on the last item */}
+                    {i < timeline.length - 1 && <span className="w-0.5 flex-1 mt-1 rounded-full bg-violet-100 dark:bg-violet-900/40" aria-hidden="true" />}
+                  </div>
+                  <div className={i < timeline.length - 1 ? 'pb-3' : ''}>
                     <div className={`text-[12.5px] font-semibold ${m.status === 'upcoming' ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-50'}`}>{m.label}</div>
                     <div className="text-[10.5px] text-gray-400 dark:text-gray-500">
                       {m.status === 'done' ? `${shortDate(m.when)} · Done` : m.status === 'in_progress' ? `Week ${m.week} target · In progress` : `Week ${m.week} target · Upcoming`}
@@ -545,43 +559,49 @@ export default function SpinoutLabRoadmapPage() {
       {featModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" data-testid="modal-feature" onClick={() => !saving && setFeatModal(null)}>
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-bold text-gray-900 dark:text-gray-50">{featModal.id ? 'Edit feature' : 'Add feature'}</h2>
-              <button type="button" data-testid="button-close-feature" onClick={() => setFeatModal(null)} disabled={saving} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><X size={17} /></button>
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <h2 className="text-base font-bold text-gray-900 dark:text-gray-50">{featModal.id ? 'Edit feature' : 'Add feature'}</h2>
+                <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mt-0.5">Rate its value and effort — priority is derived, not chosen</p>
+              </div>
+              <button type="button" data-testid="button-close-feature" onClick={() => setFeatModal(null)} disabled={saving} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 mt-0.5"><X size={17} /></button>
             </div>
             <label className="block mb-3">
               <span className={LBL}>Feature</span>
               <input data-testid="input-feature-title" value={featModal.title} onChange={(e) => setFeatModal((m) => ({ ...m, title: e.target.value }))} className={INPUT} placeholder="e.g. Async task threading" />
             </label>
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              <label className="block">
-                <span className={LBL}>Value</span>
-                <select data-testid="select-feature-value" value={featModal.added_value} onChange={(e) => setFeatModal((m) => ({ ...m, added_value: e.target.value }))} className={INPUT}>
-                  {VALUE_OPTS.map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </label>
-              <label className="block">
-                <span className={LBL}>Effort</span>
-                <select data-testid="select-feature-effort" value={featModal.effort} onChange={(e) => setFeatModal((m) => ({ ...m, effort: e.target.value }))} className={INPUT}>
-                  {EFFORT_OPTS.map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </label>
-              <label className="block">
-                <span className={LBL}>Status</span>
-                <select data-testid="select-feature-status" value={featModal.delivery_status} onChange={(e) => setFeatModal((m) => ({ ...m, delivery_status: e.target.value }))} className={INPUT}>
-                  {STATUS_OPTS.map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </label>
+            <div className="mb-3">
+              <span className={LBL}>Value</span>
+              <div className="flex flex-wrap gap-1.5 mt-1.5" data-testid="select-feature-value">
+                {VALUE_OPTS.map((v) => (
+                  <button key={v} type="button" data-testid={`pill-value-${v.toLowerCase()}`} aria-pressed={featModal.added_value === v} onClick={() => setFeatModal((m) => ({ ...m, added_value: v }))} className={`${PILL} ${featModal.added_value === v ? PILL_ON : PILL_OFF}`}>{v}</button>
+                ))}
+              </div>
+            </div>
+            <div className="mb-3">
+              <span className={LBL}>Effort</span>
+              <div className="flex flex-wrap gap-1.5 mt-1.5" data-testid="select-feature-effort">
+                {EFFORT_OPTS.map((v) => (
+                  <button key={v} type="button" data-testid={`pill-effort-${v.toLowerCase()}`} aria-pressed={featModal.effort === v} onClick={() => setFeatModal((m) => ({ ...m, effort: v }))} className={`${PILL} ${featModal.effort === v ? PILL_ON : PILL_OFF}`}>{v}</button>
+                ))}
+              </div>
             </div>
             <label className="block mb-3">
-              <span className={LBL}>Why this priority?</span>
+              <span className={LBL}>Status</span>
+              <select data-testid="select-feature-status" value={featModal.delivery_status} onChange={(e) => setFeatModal((m) => ({ ...m, delivery_status: e.target.value }))} className={INPUT}>
+                {STATUS_OPTS.map((v) => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </label>
+            <label className="block mb-3">
+              <span className={LBL}>Priority reason</span>
               <textarea data-testid="input-feature-reason" value={featModal.priority_reason} onChange={(e) => setFeatModal((m) => ({ ...m, priority_reason: e.target.value }))} rows={2} className="mt-1 w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-[13px] text-gray-900 dark:text-gray-50" placeholder="Tie it to interview evidence — e.g. the pain 4 of 5 interviews named." />
             </label>
-            <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mb-3">Scope tier and cycle assignment are derived from value: High → Core / active cycle, Medium → v2 / next cycle, Low → out of scope.</p>
+            <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mb-3">High value → active cycle · Medium → next cycle · Low → v2 / out of scope. Applied automatically based on your rating.</p>
             {modalError && <div className="text-[11.5px] text-red-600 dark:text-red-400 mb-3" data-testid="feature-error">{modalError}</div>}
             <div className="flex items-center gap-2">
-              <button type="button" data-testid="button-save-feature" onClick={saveFeature} disabled={saving} className="flex-1 h-10 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-60 inline-flex items-center justify-center gap-2">
-                {saving && <Loader2 size={14} className="animate-spin" />} Save feature
+              <button type="button" data-testid="button-cancel-feature" onClick={() => setFeatModal(null)} disabled={saving} className="h-10 px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800">Cancel</button>
+              <button type="button" data-testid="button-save-feature" onClick={saveFeature} disabled={saving || !featModal.title.trim()} className="flex-1 h-10 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2">
+                {saving && <Loader2 size={14} className="animate-spin" />} {featModal.id ? 'Save feature' : 'Add to priorities'}
               </button>
               {featModal.id && (
                 <button type="button" data-testid="button-delete-feature" onClick={deleteFeature} disabled={saving} className="h-10 px-3.5 rounded-lg border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400" aria-label="Delete feature"><Trash2 size={15} /></button>
