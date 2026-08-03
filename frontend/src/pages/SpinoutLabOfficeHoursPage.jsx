@@ -154,6 +154,9 @@ export default function SpinoutLabOfficeHoursPage() {
 
   const [status, setStatus] = useState('loading'); // loading | ready | error
   const [state, setState] = useState(null);
+  // `user` backs the milestone call on booking success — markMilestone gates
+  // on user.spinout_lab_active, so it needs the real /me payload.
+  const [user, setUser] = useState(null);
   const [project, setProject] = useState(null);
   const [partners, setPartners] = useState(null); // [] | {failed}
   const [bookings, setBookings] = useState(null); // {items} | {failed}
@@ -186,6 +189,7 @@ export default function SpinoutLabOfficeHoursPage() {
         ]);
         if (dead) return;
         setState(st);
+        setUser(me || null);
         setPartners(Array.isArray(dir) ? dir : { failed: true });
         setBookings(mine?.failed ? { failed: true } : { items: (Array.isArray(mine?.items) ? mine.items : []).map(normBooking) });
         const proj = pickLabProject(projects, me);
