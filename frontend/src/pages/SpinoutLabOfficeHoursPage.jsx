@@ -43,8 +43,6 @@ import { initialsOf, buildGaps } from './SpinoutLabAdvisorsPage';
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[10.5px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const BTN = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold transition-colors';
-// Borderless quick-action chrome (design L41-44) — text colour set per button.
-const QA = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent';
 
 // Role tag derived from the partner's real marketplace categories /
 // specialization — the design's LAWYER / OPERATOR / INVESTOR chips.
