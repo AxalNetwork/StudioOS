@@ -43,6 +43,8 @@ import { initialsOf, buildGaps } from './SpinoutLabAdvisorsPage';
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[10.5px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const BTN = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold transition-colors';
+// Borderless quick-action chrome (design L41-44) — text colour set per button.
+const QA = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent';
 
 // Role tag derived from the partner's real marketplace categories /
 // specialization — the design's LAWYER / OPERATOR / INVESTOR chips.
@@ -94,8 +96,14 @@ const DIR_NOTE = {
   all: 'Every partner in the Axal network.',
 };
 
+// Rec-card tint per partner type (design recBg / recBorder L266-267).
+const REC_TINT = {
+  Lawyer: 'border-amber-200 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-950/20',
+  Operator: 'border-teal-200 bg-teal-50/60 dark:border-teal-900/60 dark:bg-teal-950/20',
+  Investor: 'border-sky-200 bg-sky-50/60 dark:border-sky-900/60 dark:bg-sky-950/20',
+};
+
 // Deterministic avatar-tile colour per partner (design assigns one per persona).
-const AVATAR_BGS = ['bg-teal-600', 'bg-sky-600', 'bg-amber-500', 'bg-violet-600', 'bg-emerald-600', 'bg-rose-500'];
 const AVATAR_BGS = ['bg-teal-600', 'bg-sky-600', 'bg-amber-500', 'bg-violet-600', 'bg-emerald-600', 'bg-rose-500'];
 const avatarBgOf = (name) => {
   let h = 0;
@@ -209,7 +217,7 @@ export default function SpinoutLabOfficeHoursPage() {
   const [copiedBrief, setCopiedBrief] = useState(false);
   // Brief editing (B26) — local overrides keyed by section heading. They feed
   // briefText, so an edited brief is what travels with a booking.
-  const [, setEditingBrief] = useState(false);
+  const [editingBrief, setEditingBrief] = useState(false);
   const [briefEdits, setBriefEdits] = useState(null); // { [heading]: text } | null
 
   // Booking drawer state.
@@ -280,6 +288,11 @@ export default function SpinoutLabOfficeHoursPage() {
     .filter((b) => b.status === 'completed' || (b.status !== 'cancelled' && startMs(b) !== null && startMs(b) <= now))
     .sort((a, b) => (startMs(b) ?? 0) - (startMs(a) ?? 0)), [allBookings, now]);
   const completedCount = allBookings.filter((b) => b.status === 'completed').length;
+  // "Follow-ups pending" — sessions that still need something from you: an
+  // upcoming confirmed session to prep for, or a request the partner hasn't
+  // answered yet.
+  const followUpsPending = allBookings.filter((b) => b.status === 'requested'
+    || (b.status === 'confirmed' && (startMs(b) === null || startMs(b) > now))).length;
 
   // ---- Recommended help now (real blockers + real scoring gaps) ----
   const milestoneDone = (key) => (state?.milestones || []).some((m) => (m.key || m.milestone_key) === key);
@@ -314,6 +327,9 @@ export default function SpinoutLabOfficeHoursPage() {
     : filter === 'recommended'
       ? [...dirItems].sort((a, b) => (recommendedRoles.has(b.role) ? 1 : 0) - (recommendedRoles.has(a.role) ? 1 : 0))
       : dirItems.filter((p) => filterRoleOf(p.role) === filter);
+  const dirNote = filter === 'recommended'
+    ? `Matched to your week ${Number(state?.week || 1)} context, scoring gaps, and open blockers.`
+    : DIR_NOTE[filter] || '';
 
   // ---- Pre-session brief (client-assembled from real data, labelled) ----
   const brief = useMemo(() => {
