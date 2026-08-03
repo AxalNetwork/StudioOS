@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Check, Loader2, ArrowLeft } from "lucide-react";
 import { useAuth } from "../hooks/useAuthSync";
 import { spinoutLab } from "../lib/api";
-import { labJurisdiction } from "./SpinoutLabPage";
+import { labJurisdiction, resolveOpenCohort } from "./SpinoutLabPage";
 
 // Apply to Cohort 4 — signed-in application form (reference design:
 // Spin-Out Lab.dc.html APPLY VIEW). No contact fields: the account is the
@@ -51,6 +51,10 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
   // application lands in + its DST-correct close deadline). Null until the
   // /state fetch resolves; preview mode keeps the static copy.
   const [appWindow, setAppWindow] = useState(null);
+  // Client-side fallback when state hasn't loaded yet (mirrors Worker math).
+  const fallbackCohort = useMemo(() => {
+    try { const c = resolveOpenCohort(); return `Cohort ${c.cohortNum}`; } catch { return 'Next Cohort'; }
+  }, []);
 
   useEffect(() => {
     if (isPreview) return undefined; // preview renders simulated state only
@@ -96,7 +100,7 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
         incorporated,
         stage,
         jurisdiction: juris.label,
-        cohort: appWindow?.label ? `${appWindow.label} Cohort` : "Cohort 4",
+        cohort: appWindow?.label ? `${appWindow.label} Cohort` : fallbackCohort,
         ...(appWindow ? { target_cycle: { year: appWindow.year, month: appWindow.month } } : {}),
       });
       setSubmitted(true);
@@ -129,7 +133,7 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
             <form onSubmit={submit} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[20px] p-8 shadow-sm">
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-[11.5px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400 mb-4">
                 <span className="w-[7px] h-[7px] rounded-full bg-emerald-500"></span>
-                {appWindow?.label ? `${appWindow.label} Cohort` : "Cohort 4"} · Applications Open
+                {appWindow?.label ? `${appWindow.label} Cohort` : fallbackCohort} · Applications Open
               </span>
               <h1 className="m-0 text-[26px] font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100">Apply to the {appWindow?.label ? `${appWindow.label} cohort` : "next cohort"}</h1>
               <p className="tabular-nums mt-2 mb-5 text-[14px] text-gray-500 dark:text-gray-400">
@@ -235,7 +239,7 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
               </div>
               <h1 className="m-0 text-[24px] font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100">Application received</h1>
               <p className="mt-2.5 mb-[22px] mx-auto text-[14px] text-gray-500 dark:text-gray-400 max-w-[380px] leading-normal">
-                Your {appWindow?.label ? `${appWindow.label} cohort` : "Cohort 4"} application is in review. A program manager will respond within 5 business days. Selected founders begin with the Validate gate. We've also sent a confirmation to your email.
+                Your {appWindow?.label ? `${appWindow.label} cohort` : fallbackCohort} application is in review. A program manager will respond within 5 business days. Selected founders begin with the Validate gate. We've also sent a confirmation to your email.
               </p>
               <Link
                 to="/spinout-lab"

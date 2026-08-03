@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, BadgeCheck, Check, Circle, FileText, Lock } from 'lucide-react';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
-import { PIPELINE_PHASES, PHASE_THEMES, pipelineItemsFor, deliverablesFor, outcomeBadgesFor, labJurisdiction, JurisdictionBar, HeroStatsPanel, CohortTrackerSection, GraduatesSection, ApplyCtaSection, LAB_APPLY_HREF as APPLY_HREF } from './SpinoutLabPage';
+import { PIPELINE_PHASES, PHASE_THEMES, pipelineItemsFor, deliverablesFor, outcomeBadgesFor, labJurisdiction, JurisdictionBar, HeroStatsPanel, CohortTrackerSection, GraduatesSection, ApplyCtaSection, LAB_APPLY_HREF as APPLY_HREF, resolveOpenCohort } from './SpinoutLabPage';
 
 // Static status snapshot mirroring the design handoff (Spin-Out Lab.dc.html
 // phaseDefs): Validate/Structure complete, Build in flight, Pitch/Fund
@@ -15,6 +15,8 @@ export default function SpinoutLabMarketingPage() {
   // the page (hero chips, pipeline Structure lines, deliverables).
   const [jurisdiction, setJurisdiction] = useState('de');
   const juris = labJurisdiction(jurisdiction);
+  const cohort = useMemo(() => { try { return resolveOpenCohort(); } catch { return null; } }, []);
+  const cohortBadge = cohort ? `Cohort ${cohort.cohortNum} · Applications Open` : 'Applications Open';
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
@@ -29,7 +31,7 @@ export default function SpinoutLabMarketingPage() {
               <h1 className="m-0 text-3xl font-extrabold tracking-tight">Spin-Out Lab</h1>
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                Cohort 4 · Applications Open
+                {cohortBadge}
               </span>
             </div>
             <p className="m-0 text-[15px] text-gray-500 dark:text-gray-400">From idea to incorporated in 30 days.</p>

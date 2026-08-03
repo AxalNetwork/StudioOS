@@ -18,7 +18,6 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
   },
   optimizeDeps: {
-    esbuildOptions: { target: 'es2020' },
     include: [
       'react',
       'react-dom',

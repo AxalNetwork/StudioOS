@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, Loader2, ArrowRight, FlaskConical, Globe, Circle, Lock, Unlock, FileText, BadgeCheck } from "lucide-react";
 import { spinoutLab } from "../lib/api";
@@ -6,6 +6,60 @@ import { useAuth } from "../hooks/useAuthSync";
 import { reportError } from "../lib/log";
 import SpinoutLabMarketingPage from "./SpinoutLabMarketingPage";
 import SpinoutLabWorkspace from "./SpinoutLabWorkspace";
+
+// ---------- Cohort window helpers (client-side, mirrors Worker math) ----------
+// Base anchor: May 2026 = Cohort 1 (Cohort 4 = Aug 2026 confirms the sequence).
+const COHORT_BASE = { year: 2026, month: 5, num: 1 };
+const COHORT_TZ = 'America/New_York'; // Delaware time — DST-correct via Intl
+
+/** UTC ms of a Delaware wall-clock datetime. Two-pass to handle DST correctly. */
+function _wallToUtcMs(year, month, day, h = 0, m = 0, s = 0) {
+  const wallAsUtc = Date.UTC(year, month - 1, day, h, m, s);
+  const _localAt = (utcMs) => {
+    const p = {};
+    for (const part of new Intl.DateTimeFormat('en-US', {
+      timeZone: COHORT_TZ,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    }).formatToParts(new Date(utcMs))) p[part.type] = part.value;
+    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  };
+  const offset1 = _localAt(wallAsUtc) - wallAsUtc;
+  let guess = wallAsUtc - offset1;
+  return wallAsUtc - (_localAt(guess) - guess);
+}
+
+/** Ordinal cohort number for a given year/month. */
+export function cohortNumFor(year, month) {
+  return (year - COHORT_BASE.year) * 12 + (month - COHORT_BASE.month) + COHORT_BASE.num;
+}
+
+/**
+ * Resolve the cohort currently open for applications.
+ * Deadline = 7 days before the 1st of the cohort month at 23:59:59 ET
+ * (day -6 in Date.UTC semantics — mirrors resolveApplicationTarget in
+ * cloudflare-worker/src/services/cohortApplications.ts).
+ * Workspace access is granted automatically at midnight Delaware time on the
+ * 1st of the cohort month by the Worker's cohort-timing cron.
+ */
+export function resolveOpenCohort(nowMs = Date.now()) {
+  const p = {};
+  for (const part of new Intl.DateTimeFormat('en-US', {
+    timeZone: COHORT_TZ, year: 'numeric', month: '2-digit',
+  }).formatToParts(new Date(nowMs))) p[part.type] = part.value;
+  let year = Number(p.year), month = Number(p.month);
+  // Advance until we find a cycle whose application window is still open.
+  for (let i = 0; i < 24; i++) {
+    const closeMs = _wallToUtcMs(year, month, -6, 23, 59, 59); // day -6 = 7 days before 1st
+    if (closeMs > nowMs) break;
+    month += 1;
+    if (month > 12) { month = 1; year += 1; }
+  }
+  const closeMs = _wallToUtcMs(year, month, -6, 23, 59, 59);
+  const startMs = _wallToUtcMs(year, month, 1, 0, 0, 0);
+  return { year, month, cohortNum: cohortNumFor(year, month), closeMs, startMs };
+}
+// ---------------------------------------------------------------------------
 
 // Pipeline cards mirror the "Spin-Out Lab" design handoff
 // (attached_assets/Spin-Out_Lab.dc_*.html): five compact phases with the
@@ -566,10 +620,33 @@ export function CohortTrackerSection() {
 }
 
 export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
+  // Resolve the currently-open cohort client-side (mirrors Worker math).
+  // Deadline = 7 days before the 1st of the cohort month at 23:59:59 ET.
+  // Workspace access is automatically granted at midnight Delaware time on
+  // the 1st by the Worker's cohort-timing cron — no client action needed.
+  const cohort = useMemo(() => {
+    try { return resolveOpenCohort(); } catch { return null; }
+  }, []);
+
+  const headline = cohort
+    ? `Apply to Cohort ${cohort.cohortNum}.`
+    : 'Apply to the next cohort.';
+
+  const deadline = cohort
+    ? new Date(cohort.closeMs).toLocaleDateString('en-US', {
+        month: 'long', day: 'numeric', year: 'numeric',
+        timeZone: COHORT_TZ,
+      })
+    : null;
+
+  const sub = deadline
+    ? `Applications close ${deadline}. 8 spots available.`
+    : 'Applications are now open. 8 spots available.';
+
   return (
     <section className="rounded-[20px] p-10 text-center relative overflow-hidden text-white" style={{ background: 'radial-gradient(900px 300px at 85% 120%,rgba(196,181,253,.35),transparent 60%),linear-gradient(115deg,#5b21b6,#7c3aed)' }}>
-      <h2 className="m-0 text-[32px] font-black tracking-[-.03em]">Apply to Cohort 4.</h2>
-      <p className="tabular-nums my-3 mb-6 text-[15px] text-[#e9d5ff]">Applications close August 1, 2026. 8 spots available.</p>
+      <h2 className="m-0 text-[32px] font-black tracking-[-.03em]">{headline}</h2>
+      <p className="tabular-nums my-3 mb-6 text-[15px] text-[#e9d5ff]">{sub}</p>
       <div className="flex gap-3 justify-center flex-wrap">
         <Link to={applyHref} className="h-11 px-5.5 rounded-[11px] bg-white dark:bg-gray-100 text-[#6d28d9] text-[14px] font-bold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white transition-colors">
           Apply Now <span className="text-[16px]" aria-hidden="true">→</span>
@@ -661,7 +738,7 @@ export function Dashboard({ state, previewAllUnlocked = false }) {
               <h1 className="m-0 text-3xl font-extrabold tracking-tight">Spin-Out Lab</h1>
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" style={{animation: 'wsPulse 2s infinite'}}></span>
-                {state.cohort || 'Cohort 3'} · Applications Open
+                {state.cohort || (() => { try { const c = resolveOpenCohort(); return `Cohort ${c.cohortNum}`; } catch { return 'Next Cohort'; } })()} · Applications Open
               </span>
             </div>
             <p className="mt-2.5 ml-[52px] text-[15px] text-gray-500 dark:text-gray-400">From idea to incorporated in 30 days.</p>

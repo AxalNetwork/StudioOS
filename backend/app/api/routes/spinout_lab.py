@@ -422,12 +422,54 @@ def list_cohort(session: Session = Depends(get_session)):
     return members
 
 
+def _application_window() -> Optional[dict]:
+    """Dev parity with resolveApplicationTarget in cohortApplications.ts.
+    Deadline = 7 days before the 1st of the cohort month at 23:59:59 ET.
+    Uses a fixed UTC-4 (EDT) offset — close enough for the dev preview; the
+    Worker uses DST-correct Intl math in production.
+    """
+    from datetime import timedelta
+    COHORT_BASE_YEAR, COHORT_BASE_MONTH, COHORT_BASE_NUM = 2026, 5, 1
+    ET = timedelta(hours=-4)  # EDT approximation
+    now_utc = datetime.now(timezone.utc)
+    now_et = now_utc + ET
+    year, month = now_et.year, now_et.month
+    for _ in range(24):
+        # Deadline = midnight on 1st - 7 days + 23:59:59 = 23rd at 23:59:59
+        first_of_month_et = datetime(year, month, 1, tzinfo=timezone(ET))
+        close_et = first_of_month_et - timedelta(days=7) + timedelta(hours=23, minutes=59, seconds=59)
+        if close_et > now_et.replace(tzinfo=timezone(ET)):
+            cohort_num = (year - COHORT_BASE_YEAR) * 12 + (month - COHORT_BASE_MONTH) + COHORT_BASE_NUM
+            month_label = datetime(year, month, 1).strftime('%B %Y')
+            prev_month = month - 1 or 12
+            prev_year = year if month > 1 else year - 1
+            return {
+                "year": year,
+                "month": month,
+                "label": month_label,
+                "cohort_num": cohort_num,
+                "opens_at": datetime(prev_year, prev_month, 1, tzinfo=timezone.utc).isoformat(),
+                "closes_at": close_et.isoformat(),
+                "starts_at": datetime(year, month, 1, tzinfo=timezone.utc).isoformat(),
+            }
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+    return None
+
+
 @router.get("/state")
 def get_state(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    return _state(session, user)
+    state = _state(session, user)
+    try:
+        state["application_window"] = _application_window()
+    except Exception:
+        state["application_window"] = None
+    return state
 
 
 @router.post("/start")

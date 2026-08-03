@@ -258,12 +258,19 @@ export default function SpinoutLabCapitalPage() {
     let dead = false;
     (async () => {
       try {
-        const [st, me, projects] = await Promise.all([
-          spinoutLab.state(),
+        // spinoutLab.state() is non-fatal — a 429 rate-limit or transient
+        // error on that endpoint must not blank the whole Capital page.
+        // getMe() and listProjects() are kept fatal/non-fatal as before.
+        const [stResult, me, projects] = await Promise.all([
+          spinoutLab.state().then((v) => ({ ok: true, v })).catch((e) => ({ ok: false, e })),
           api.getMe(),
           api.listProjects().catch(() => []),
         ]);
         if (dead) return;
+        const st = stResult.ok ? stResult.v : null;
+        if (!stResult.ok) {
+          console.warn('[spinout-capital] state unavailable (will degrade gracefully):', stResult.e?.status, stResult.e?.message);
+        }
         setState(st);
         setUser(me);
         const proj = pickLabProject(projects, me);
