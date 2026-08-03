@@ -29,7 +29,7 @@ jobs:
     container:
       image: semgrep/semgrep:latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Run semgrep (public OSS rules)
         # Path exclusions for generated/pasted trees live in the ROOT-ANCHORED
         # .semgrepignore (/docs/, /attached_assets/) which semgrep reads from
@@ -45,7 +45,7 @@ jobs:
             --error
         continue-on-error: true
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
         if: always()
         with:
           sarif_file: semgrep.sarif
