@@ -209,7 +209,7 @@ export default function SpinoutLabOfficeHoursPage() {
   const [copiedBrief, setCopiedBrief] = useState(false);
   // Brief editing (B26) — local overrides keyed by section heading. They feed
   // briefText, so an edited brief is what travels with a booking.
-  const [editingBrief, setEditingBrief] = useState(false);
+  const [, setEditingBrief] = useState(false);
   const [briefEdits, setBriefEdits] = useState(null); // { [heading]: text } | null
 
   // Booking drawer state.
