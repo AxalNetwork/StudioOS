@@ -76,7 +76,7 @@ function RoleTag({ role }) {
 // Design's fixed directory taxonomy (Office Hours.dc.html L283-285). Real
 // roles map into it — Finance and generic Partner behave as service partners
 // under "Operators"; the RoleTag chip still shows the true role.
-const FILTERS = [
+export const FILTERS = [
   ['recommended', 'Recommended'],
   ['Investor', 'Investors'],
   ['Lawyer', 'Lawyers'],
