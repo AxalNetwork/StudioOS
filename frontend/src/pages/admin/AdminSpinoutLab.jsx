@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import AdminCohortTiming from './AdminCohortTiming';
 
 // Presentational labels only — the catalog itself (keys, weeks, unlock
 // lists) always comes from the server so it can never drift from the
@@ -641,10 +642,21 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
             <span className="text-[10px] font-bold bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-full px-1.5 py-0.5">{participants.length}</span>
           )}
         </button>
+        <button
+          role="tab"
+          aria-selected={section === 'timing'}
+          onClick={() => setSection('timing')}
+          data-testid="tab-timing"
+          className={`px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 ${section === 'timing' ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+        >
+          <Calendar size={14} /> Timing
+        </button>
       </div>
 
       {section === 'applications' ? (
         <ApplicationsSection apps={apps} loading={loading} onDecided={load} />
+      ) : section === 'timing' ? (
+        <AdminCohortTiming />
       ) : (
         <ParticipantsSection
           participants={participants}

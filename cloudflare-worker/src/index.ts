@@ -84,6 +84,7 @@ import adminGithub from './routes/admin_github';
 import githubWebhook from './routes/github';
 // Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
 import adminAdvisorAudit from './routes/admin_advisor_audit';
+import adminCohort from './routes/admin_cohort';
 import privateData from './routes/private-data';
 import monitoring from './routes/monitoring';
 import infra from './routes/infra';
@@ -647,6 +648,8 @@ app.route('/api/admin/integration-keys', adminIntegrationKeys);
 app.route('/api/admin/github', adminGithub);
 app.route('/api/github', githubWebhook);
 app.route('/api/admin/advisor-audit', adminAdvisorAudit);
+// Cohort Timing & Gating — timeline, review queue, grace/override, impersonation audit.
+app.route('/api/admin/cohort', adminCohort);
 // Task #10 (LD) — Admin team roster CRUD + photo upload. Mounted BEFORE
 // the generic /api/admin router so the more-specific prefix wins.
 app.route('/api/admin/team', adminTeam);
@@ -1166,6 +1169,18 @@ export default {
         const now = new Date();
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
           await Jobs.cleanup(env);
+        }
+        // Cohort Timing & Gating — every-minute tick: materializes monthly
+        // cycles, unlocks weeks at their Delaware-midnight boundaries,
+        // evaluates pass/fail at each week deadline, finalizes lapsed grace
+        // extensions, and sends 48h/24h/3h reminders. Every job run is
+        // claimed via scheduled_jobs_audit.idempotency_key so re-runs are
+        // no-ops. Cheap on idle ticks (indexed due-window SELECTs).
+        try {
+          const { runCohortTimingTick } = await import('./services/cohortTiming');
+          await runCohortTimingTick(env, now);
+        } catch (e) {
+          console.error('[cron] cohort timing tick failed', e);
         }
         // Epic 5: nightly score-integrity audit at 03:30 UTC. Re-verifies the
         // HMAC on every approved official snapshot; mismatches get flagged

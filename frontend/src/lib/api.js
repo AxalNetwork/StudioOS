@@ -1251,7 +1251,18 @@ export const api = {
   },
   adminVoidContractWithReason: (uid, reason) =>
     request(`/admin/contracts/${uid}/void`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  adminImpersonate: (userId) => request(`/admin/impersonate/${userId}`, { method: 'POST' }),
+  adminImpersonate: async (userId) => {
+    const res = await request(`/admin/impersonate/${userId}`, { method: 'POST' });
+    // Cohort Timing task — session audit trail. Remember the Worker-issued
+    // session id so exitImpersonation can stamp ended_at (best-effort; the
+    // dev backend doesn't return one).
+    try {
+      if (res?.impersonation_session_id) localStorage.setItem('impersonationSessionId', String(res.impersonation_session_id));
+      else localStorage.removeItem('impersonationSessionId');
+    } catch { /* storage unavailable */ }
+    return res;
+  },
+  adminImpersonateEnd: (sessionId) => request(`/admin/impersonate-sessions/${sessionId}/end`, { method: 'POST' }),
   // Task #7 — admin-managed OAuth client credentials per provider.
   adminListIntegrationKeys: () => request('/admin/integration-keys'),
   adminSetIntegrationKeys: (provider, client_id, client_secret) =>
@@ -1445,6 +1456,15 @@ export const api = {
   // Task #102 — admitted / active / graduated founders with milestone rows,
   // derived tool unlocks, and the shared week catalog.
   adminSpinoutParticipants: () => request('/admin/spinout-participants'),
+  // Cohort Timing & Gating — Worker-only endpoints (405/404 in dev backend;
+  // callers show a fallback). Timeline of monthly cycles + week windows,
+  // review queue (failed/grace/at-risk), grace extensions and pass/fail
+  // overrides (reason required, audited), impersonation session audit.
+  adminCohortTimeline: () => request('/admin/cohort/timeline'),
+  adminCohortReview: (cycleId) => request(`/admin/cohort/review${cycleId ? `?cycle_id=${cycleId}` : ''}`),
+  adminCohortGrace: (payload) => request('/admin/cohort/grace', { method: 'POST', body: JSON.stringify(payload) }),
+  adminCohortOverride: (payload) => request('/admin/cohort/override', { method: 'POST', body: JSON.stringify(payload) }),
+  adminCohortImpersonationAudit: () => request('/admin/cohort/impersonation-audit'),
 
   integrationsAvailable: () => request('/integrations/available'),
   // Crunchbase enrichment (Task #3, 2026-05-10) — growth tier, requires

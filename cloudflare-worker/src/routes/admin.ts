@@ -1370,7 +1370,35 @@ admin.post('/impersonate/:userId', async (c) => {
   const impAdminHash = await hashEmail(adminUser.email);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('admin_impersonate', ${`Admin ${adminUser.name} impersonated user ${target.name} (user_id=${target.id})`}, ${impAdminHash}, ${adminUser.id})`;
   await sql.end();
-  return c.json({ token, user: { id: target.id, email: target.email, name: target.name, role: target.role } });
+  // Cohort Timing task — full session audit trail. `context` (optional
+  // query param, e.g. 'cohort_review:week=2') records WHY the session was
+  // opened; the session id is returned so the client can close it via
+  // POST /impersonate-sessions/:id/end when exiting the founder view.
+  let impersonationSessionId: number | null = null;
+  try {
+    const { ensureCohortTimingSchema } = await import('../services/cohortTiming');
+    await ensureCohortTimingSchema(c.env);
+    const ctx = (c.req.query('context') || '').slice(0, 200) || null;
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO impersonation_sessions (admin_user_id, target_user_id, context) VALUES (?, ?, ?)`,
+    ).bind(adminUser.id, target.id, ctx).run();
+    impersonationSessionId = Number(ins.meta?.last_row_id ?? 0) || null;
+  } catch (e) { console.warn('[admin/impersonate] session audit failed', e); }
+  return c.json({ token, user: { id: target.id, email: target.email, name: target.name, role: target.role }, impersonation_session_id: impersonationSessionId });
+});
+
+// Close an impersonation session (audit end timestamp). Fired best-effort
+// by the client when the admin exits the founder view; sessions left open
+// simply show ended_at=null in the audit list.
+admin.post('/impersonate-sessions/:id/end', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const id = parseInt(c.req.param('id')) || 0;
+  try {
+    await c.env.DB.prepare(
+      `UPDATE impersonation_sessions SET ended_at = datetime('now') WHERE id = ? AND admin_user_id = ? AND ended_at IS NULL`,
+    ).bind(id, adminUser.id).run();
+  } catch (e) { console.warn('[admin/impersonate-sessions] end failed', e); }
+  return c.json({ ok: true });
 });
 
 admin.patch('/users/:userId/role', async (c) => {

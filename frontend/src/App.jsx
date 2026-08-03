@@ -1209,6 +1209,16 @@ function AppInner() {
     const origToken = localStorage.getItem('realToken');
     const origUser = safeReadJSON('realUser');
     localStorage.setItem('token', origToken);
+    // Cohort Timing task — close the impersonation audit session
+    // (best-effort, fired AFTER the admin token is restored so the call
+    // authenticates as the admin; dev backend has no session id).
+    try {
+      const impSessionId = localStorage.getItem('impersonationSessionId');
+      if (impSessionId) {
+        localStorage.removeItem('impersonationSessionId');
+        api.adminImpersonateEnd(impSessionId).catch(() => {});
+      }
+    } catch { /* storage unavailable */ }
     localStorage.removeItem('realUser');
     localStorage.removeItem('realToken');
     setUser(origUser);

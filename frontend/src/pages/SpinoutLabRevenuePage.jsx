@@ -614,7 +614,7 @@ export default function SpinoutLabRevenuePage() {
                 <Link
                   to="/build/deck"
                   data-testid="link-open-deck"
-                  className="inline-block text-[11.5px] font-bold bg-white text-teal-800 rounded-lg px-3 py-1.5 hover:bg-teal-50"
+                  className="inline-block text-[11.5px] font-bold bg-white dark:bg-gray-100 text-teal-800 rounded-lg px-3 py-1.5 hover:bg-teal-50"
                 >
                   Open Pitch Deck Builder
                 </Link>

@@ -10,7 +10,7 @@
 //
 // Tools live INSIDE this page (per the design) — the app sidebar stays the
 // user's normal navigation and is never replaced by lab-specific links.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -21,6 +21,7 @@ import {
   Fingerprint,
   ChevronDown,
   ClipboardCheck,
+  Clock,
   Compass,
   DollarSign,
   FileSignature,
@@ -251,6 +252,105 @@ function formatStartDate(iso) {
   return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
+// ---------------------------------------------------------------------------
+// Cohort timing (server-authoritative). The Worker cron decides everything;
+// the UI only renders a countdown against `server_time` so a wrong client
+// clock can't lie about the deadline.
+// ---------------------------------------------------------------------------
+function parseServerUtc(ts) {
+  if (!ts) return null;
+  const ms = Date.parse(ts.includes('T') ? ts : `${ts.replace(' ', 'T')}Z`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function formatCountdown(ms) {
+  if (ms <= 0) return '0h 0m 0s';
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return d > 0 ? `${d}d ${h}h ${m}m` : `${h}h ${m}m ${sec}s`;
+}
+
+function formatLocal(ts) {
+  const ms = parseServerUtc(ts);
+  if (ms === null) return null;
+  return new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+function CohortDeadlineBanner({ timing, serverTime }) {
+  // Offset between the server clock and this device, captured once per
+  // state payload — countdowns tick locally but stay server-anchored.
+  const offsetRef = useRef(0);
+  useEffect(() => {
+    const sMs = parseServerUtc(serverTime || timing?.server_time);
+    if (sMs !== null) offsetRef.current = sMs - Date.now();
+  }, [serverTime, timing?.server_time]);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (!timing || !timing.in_cohort) return null;
+
+  const nowMs = Date.now() + offsetRef.current;
+  const frozen = Boolean(timing.frozen);
+  const graceMs = parseServerUtc(timing.grace_until);
+  const inGrace = graceMs !== null && graceMs > nowMs;
+  const deadlineMs = parseServerUtc(timing.current_deadline_at);
+  const nextLocked = (timing.weeks || []).find((w) => !w.unlocked);
+
+  if (frozen) {
+    return (
+      <div className="mb-6 rounded-2xl border border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-900/20 px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="cohort-frozen-banner">
+        <Lock size={16} className="text-red-600 dark:text-red-400 shrink-0" />
+        <span className="text-sm font-bold text-red-800 dark:text-red-300">
+          Week {timing.frozen_week} deadline passed with incomplete deliverables.
+        </span>
+        <span className="text-xs text-red-700 dark:text-red-400">
+          Your sprint is paused pending admin review — you may be granted a grace extension or advanced manually.
+        </span>
+      </div>
+    );
+  }
+  if (inGrace) {
+    return (
+      <div className="mb-6 rounded-2xl border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="cohort-grace-banner">
+        <Clock size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
+        <span className="text-sm font-bold text-amber-800 dark:text-amber-300">
+          Grace extension active — {formatCountdown(graceMs - nowMs)} left
+        </span>
+        <span className="text-xs text-amber-700 dark:text-amber-400">
+          Finish your remaining Week {timing.current_week} deliverables before the extension ends.
+        </span>
+      </div>
+    );
+  }
+  if (deadlineMs === null) return null;
+  const remaining = deadlineMs - nowMs;
+  const urgent = remaining <= 24 * 3600_000;
+  return (
+    <div
+      className={`mb-6 rounded-2xl border px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1 ${urgent ? 'border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-900/20' : 'border-violet-100 dark:border-violet-800/50 bg-violet-50/70 dark:bg-violet-900/20'}`}
+      data-testid="cohort-countdown-banner"
+    >
+      <Clock size={16} className={`shrink-0 ${urgent ? 'text-amber-600 dark:text-amber-400' : 'text-violet-600 dark:text-violet-300'}`} />
+      <span className={`text-sm font-bold tabular-nums ${urgent ? 'text-amber-800 dark:text-amber-300' : 'text-violet-800 dark:text-violet-300'}`} data-testid="cohort-countdown-value">
+        Week {timing.current_week} deadline in {formatCountdown(remaining)}
+      </span>
+      <span className={`text-xs ${urgent ? 'text-amber-700 dark:text-amber-400' : 'text-violet-600/80 dark:text-violet-400'}`}>
+        Deadlines land at midnight Delaware time · {formatLocal(timing.current_deadline_at)} your time
+      </span>
+      {nextLocked && (
+        <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto" data-testid="cohort-next-unlock">
+          Week {nextLocked.week} unlocks {formatLocal(nextLocked.unlock_at)}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false }) {
   const navigate = useNavigate();
   const graduated = Boolean(state?.is_incorporated);
@@ -413,6 +513,11 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
           })}
         </div>
       </div>
+
+      {/* ---- Cohort deadline banner (server-synced countdown) ---- */}
+      {!graduated && !previewAllUnlocked && (
+        <CohortDeadlineBanner timing={state?.cohort_timing} serverTime={state?.server_time} />
+      )}
 
       {/* ---- Section 1: Program timeline ---- */}
       <section className="mb-9">

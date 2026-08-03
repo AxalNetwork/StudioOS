@@ -291,7 +291,27 @@ spinoutLab.get('/state', async (c) => {
   } catch { /* columns not yet migrated */ }
   await sql.end();
   const application = await latestApplication(c.env, user.id);
-  return c.json({ ...state, admitted, cohort, application });
+  // Cohort timing gate — added at the wire layer (same rule as the
+  // admission fields above: never inside getLabState, so the exact-slice
+  // test harness stays intact). Null for legacy founders whose sprint
+  // predates the calendar system. `unlocked_features` is re-capped by the
+  // gate's max_week so calendar/freeze enforcement is server-side.
+  let cohortTiming: import('../services/cohortTiming').CohortGate | null = null;
+  try {
+    const { getCohortGate } = await import('../services/cohortTiming');
+    cohortTiming = await getCohortGate(c.env, user.id);
+  } catch { /* tables not yet migrated */ }
+  const payload: Record<string, unknown> = {
+    ...state, admitted, cohort, application,
+    cohort_timing: cohortTiming,
+    server_time: new Date().toISOString(),
+  };
+  if (cohortTiming) {
+    const cap = Math.min(state.week, cohortTiming.max_week);
+    payload.week = cap;
+    payload.unlocked_features = unlockedFeaturesThrough(cap);
+  }
+  return c.json(payload);
 });
 
 // POST /apply — submit a cohort application. Signed-in founders only, so no
@@ -382,6 +402,34 @@ spinoutLab.post('/milestone', async (c) => {
   const user = await requireAuth(c);
   const body = (await c.req.json().catch(() => ({}))) as MilestoneBody;
   const key = typeof body.milestone_key === 'string' ? body.milestone_key : '';
+  // Cohort week gating — enforced at the wire layer (keeps the pure
+  // recordMilestone logic sliceable by the test harness). A founder may
+  // only record milestones for weeks at or below their gate's max_week:
+  // calendar-locked future weeks and weeks beyond a failed (frozen) week
+  // are rejected with 423 Locked.
+  try {
+    const { getCohortGate } = await import('../services/cohortTiming');
+    const gate = await getCohortGate(c.env, user.id);
+    if (gate) {
+      // A failed (frozen) founder can record NOTHING — not even the frozen
+      // week — otherwise recordMilestone's auto-advance loop could bump
+      // users.spinout_lab_week and bypass the freeze at the data layer.
+      // Unfreezing requires an admin grace extension or force-pass.
+      if (gate.frozen) {
+        return c.json({
+          error: `Your sprint is paused at Week ${gate.frozen_week} pending admin review — deliverables can't be recorded until an admin grants a grace extension or an override.`,
+          locked: true, max_week: gate.max_week,
+        }, 423);
+      }
+      const keyWeek = weekForKey((key ?? '').trim());
+      if (keyWeek && keyWeek > gate.max_week) {
+        const why = gate.frozen
+          ? `Your sprint is paused at Week ${gate.frozen_week} pending admin review.`
+          : `Week ${keyWeek} unlocks on schedule — it is locked until ${gate.weeks.find((w) => w.week === keyWeek)?.unlock_at ?? 'its unlock time'} UTC.`;
+        return c.json({ error: `Week ${keyWeek} is locked. ${why}`, locked: true, max_week: gate.max_week }, 423);
+      }
+    }
+  } catch { /* gate unavailable (pre-migration) — legacy behavior */ }
   const sql = getSQL(c.env);
   const r = await recordMilestone(sql, user.id, key);
   await sql.end();
