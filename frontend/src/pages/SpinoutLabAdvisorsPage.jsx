@@ -28,7 +28,7 @@ import {
 import { api, spinoutLab, assessment } from '../lib/api';
 import { archetypeMeta } from '../lib/assessmentMeta';
 import { pickLabProject } from './SpinoutLabStartupPage';
-import { buildDimensions } from './SpinoutLabScoringPage';
+import { buildDimensions } from '../lib/scoringViewModel';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
