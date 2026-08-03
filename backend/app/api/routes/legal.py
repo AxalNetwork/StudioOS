@@ -2141,6 +2141,39 @@ def _incorporate_checkout(
     }
 
 
+@router.get("/incorporate/orders")
+def _incorporate_orders(
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Dev parity with the Worker: owner-scoped list of non-pending
+    incorporation orders (used by the Spin-Out Lab Incorporate page to
+    rehydrate paid state)."""
+    rows = session.exec(
+        select(Incorporation)
+        .where(Incorporation.user_id == user.id)
+        .where(Incorporation.status != "pending_payment")
+        .order_by(Incorporation.created_at.desc())
+        .limit(20)
+    ).all()
+    return {
+        "orders": [
+            {
+                "id": r.id,
+                "project_id": r.project_id,
+                "status": r.status,
+                "jurisdiction_id": r.jurisdiction_id,
+                "company_name": r.company_name,
+                "amount_cents": r.amount_cents,
+                "currency": r.currency,
+                "paid_at": r.paid_at.isoformat() if r.paid_at else None,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+    }
+
+
 @router.get("/incorporate/status")
 def _incorporate_status(
     id: int,

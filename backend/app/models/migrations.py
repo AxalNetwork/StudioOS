@@ -189,6 +189,37 @@ def ensure_project_product_demo_columns() -> None:
         session.commit()
 
 
+def ensure_project_uof_meta_column() -> None:
+    """Use of Funds planning metadata — mirrors Worker D1 migration 158 so the
+    dev FastAPI backend persists the same `projects.use_of_funds_meta` JSON
+    blob (alert threshold, milestone costs, sync timestamps). Idempotent."""
+    with Session(engine) as session:
+        try:
+            # Justification: static identifier, dev-only FastAPI
+            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS use_of_funds_meta VARCHAR"
+            ))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_project_uof_meta_column: ALTER failed: %s", exc)
+        session.commit()
+
+
+def ensure_project_incorporation_meta_column() -> None:
+    """Spin-Out Lab Incorporate workspace state — mirrors Worker D1 migration
+    159 so the dev FastAPI backend persists the same
+    `projects.incorporation_meta` JSON blob (entity decision + override,
+    payment, document/filing statuses, uni-IP checklist). Idempotent."""
+    with Session(engine) as session:
+        try:
+            # Justification: static identifier, dev-only FastAPI
+            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS incorporation_meta VARCHAR"
+            ))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_project_incorporation_meta_column: ALTER failed: %s", exc)
+        session.commit()
+
+
 def ensure_lifecycle_columns() -> None:
     """FOUNDER_UX_AUDIT.md Critical #1 — founder-editable Startup Lifecycle stage
     + manual check-offs on `projects`. Mirrors Worker D1 migration 139 so the dev

@@ -124,6 +124,10 @@ class ProjectUpdate(BaseModel):
     cost_to_mvp: Optional[float] = None
     funding_needed: Optional[float] = None
     use_of_funds: Optional[str] = None
+    # Use of Funds planning metadata (JSON) — Worker parity (migration 158).
+    use_of_funds_meta: Optional[str] = None
+    # Spin-Out Lab Incorporate workspace state (JSON) — Worker parity (migration 159).
+    incorporation_meta: Optional[str] = None
     # Task #31 — Product demo source for the Spin-Out Demo Day deck.
     product_demo_video_url: Optional[str] = None
     product_demo_live_url: Optional[str] = None

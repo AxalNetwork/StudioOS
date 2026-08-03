@@ -448,6 +448,10 @@ export const api = {
   //     amount_cents, currency, registered_agent } | { dev:true, status:'paid', … }
   legalIncorporationOrder: (data) =>
     request('/legal/incorporation/order', { method: 'POST', body: JSON.stringify(data) }),
+  // Dev parity: simulate the Stripe webhook marking a checkout-created order
+  // paid (the dev FastAPI has no real Stripe webhook).
+  legalIncorporateDevComplete: (id) =>
+    request(`/legal/incorporate/dev-complete?id=${encodeURIComponent(id)}`, { method: 'POST' }),
   legalIncorporateStatus: (id) =>
     request(`/legal/incorporate/status?id=${encodeURIComponent(id)}`),
   legalIncorporationOrders: () =>

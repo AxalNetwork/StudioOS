@@ -311,7 +311,9 @@ export default function SpinoutLabScoringPage() {
     return () => { dead = true; };
   }, []);
 
-  const unlocked = isAdmin || (state?.unlocked_features || []).includes('scoring');
+  // NOTE: computed before the early-return gates below; must not reference
+  // bindings declared later (a `const isAdmin` further down caused a TDZ crash).
+  const unlocked = user?.role === 'admin' || (state?.unlocked_features || []).includes('scoring');
   const latest = snapshots.length ? snapshots[0] : null; // API returns newest first
   const dims = useMemo(() => buildDimensions(latest), [latest]);
   const trajectory = useMemo(() => buildTrajectory(snapshots), [snapshots]);

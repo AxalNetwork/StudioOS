@@ -720,7 +720,7 @@ legal.get('/incorporate/orders', async (c) => {
   const user = await requireAuth(c);
   await ensureIncorporationsSchema(c.env);
   const rows = await c.env.DB.prepare(
-    `SELECT id, status, jurisdiction_id, company_name, amount_cents, currency, paid_at, created_at
+    `SELECT id, project_id, status, jurisdiction_id, company_name, amount_cents, currency, paid_at, created_at
      FROM incorporations
      WHERE user_id = ? AND status != 'pending_payment'
      ORDER BY created_at DESC

@@ -650,6 +650,40 @@ def update_project(project_id: int, data: ProjectUpdate, session: Session = Depe
         if uof_error:
             raise HTTPException(status_code=400, detail={"error": uof_error, "code": "invalid_use_of_funds"})
         update_data["use_of_funds"] = uof_value
+    # Use of Funds planning metadata (Worker parity — migration 158 there):
+    # must be a JSON object, size-capped; empty/null clears the field.
+    if "use_of_funds_meta" in update_data:
+        raw_meta = update_data["use_of_funds_meta"]
+        if raw_meta in (None, ""):
+            update_data["use_of_funds_meta"] = None
+        else:
+            try:
+                parsed_meta = json.loads(raw_meta) if isinstance(raw_meta, str) else raw_meta
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail={"error": "use_of_funds_meta must be valid JSON", "code": "invalid_use_of_funds_meta"})
+            if not isinstance(parsed_meta, dict):
+                raise HTTPException(status_code=400, detail={"error": "use_of_funds_meta must be a JSON object", "code": "invalid_use_of_funds_meta"})
+            canonical_meta = json.dumps(parsed_meta)
+            if len(canonical_meta) > 8000:
+                raise HTTPException(status_code=400, detail={"error": "use_of_funds_meta too large", "code": "invalid_use_of_funds_meta"})
+            update_data["use_of_funds_meta"] = canonical_meta
+    # Spin-Out Lab Incorporate workspace state (Worker parity — migration 159):
+    # must be a JSON object, size-capped; empty/null clears the field.
+    if "incorporation_meta" in update_data:
+        raw_inc = update_data["incorporation_meta"]
+        if raw_inc in (None, ""):
+            update_data["incorporation_meta"] = None
+        else:
+            try:
+                parsed_inc = json.loads(raw_inc) if isinstance(raw_inc, str) else raw_inc
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail={"error": "incorporation_meta must be valid JSON", "code": "invalid_incorporation_meta"})
+            if not isinstance(parsed_inc, dict):
+                raise HTTPException(status_code=400, detail={"error": "incorporation_meta must be a JSON object", "code": "invalid_incorporation_meta"})
+            canonical_inc = json.dumps(parsed_inc)
+            if len(canonical_inc) > 8000:
+                raise HTTPException(status_code=400, detail={"error": "incorporation_meta too large", "code": "invalid_incorporation_meta"})
+            update_data["incorporation_meta"] = canonical_inc
     # Market-sizing invariants (mirrored in the Worker): TAM/SAM/SOM must be
     # non-negative when supplied, and the funnel must nest — SAM ≤ TAM,
     # SOM ≤ SAM — judged against the effective (incoming or stored) values.

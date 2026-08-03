@@ -97,6 +97,7 @@ const SpinoutLabScoringPage = lazy(() => import('./pages/SpinoutLabScoringPage')
 const SpinoutLabAdvisorsPage = lazy(() => import('./pages/SpinoutLabAdvisorsPage'));
 const SpinoutLabRevenuePage = lazy(() => import('./pages/SpinoutLabRevenuePage'));
 const SpinoutLabUseOfFundsPage = lazy(() => import('./pages/SpinoutLabUseOfFundsPage'));
+const SpinoutLabIncorporatePage = lazy(() => import('./pages/SpinoutLabIncorporatePage'));
 const SpinoutLabCapitalPage = lazy(() => import('./pages/SpinoutLabCapitalPage'));
 const SpinoutLabCapTablePage = lazy(() => import('./pages/SpinoutLabCapTablePage'));
 const SpinoutLabPitchDeckPage = lazy(() => import('./pages/SpinoutLabPitchDeckPage'));
@@ -1353,6 +1354,7 @@ function AppInner() {
       <Route path="/spinout-lab/advisors" element={guard(labRoles(['admin']), <SpinoutLabAdvisorsPage />)} />
       <Route path="/spinout-lab/revenue" element={guard(labRoles(['admin']), <SpinoutLabRevenuePage />)} />
       <Route path="/spinout-lab/use-of-funds" element={guard(labRoles(['admin']), <SpinoutLabUseOfFundsPage />)} />
+      <Route path="/spinout-lab/incorporate" element={guard(labRoles(['admin']), <SpinoutLabIncorporatePage />)} />
       <Route path="/spinout-lab/capital" element={guard(labRoles(['admin']), <SpinoutLabCapitalPage />)} />
       <Route path="/spinout-lab/captable" element={guard(labRoles(['admin']), <SpinoutLabCapTablePage />)} />
       <Route path="/spinout-lab/pitch-deck" element={guard(labRoles(['admin']), <SpinoutLabPitchDeckPage />)} />

@@ -1,0 +1,68 @@
+Now I have the full picture. The current Replit page (`SpinoutLabUseOfFundsPage.jsx`) is a stripped-down rebuild with a completely different, weaker UX — no donut chart, no draggable allocation, no runway summary card, no threshold alerts, no milestone-to-capital mapping table, no scenario comparison cards, no sync targets, no investor preview modal. The original `.dc.html` is a fully-featured, interactive capital planning tool. Here's a Replit prompt to fix it.
+
+## Replit prompt
+
+The **Use of Funds** page (`frontend/src/pages/SpinoutLabUseOfFundsPage.jsx`) is currently a stripped-down rebuild that does not match the original Claude Design UI, and it is not connected to the correct backend fields. Rebuild this page to exactly match the original design spec below, wired to real, persisted backend data.
+
+### Source of truth
+
+The original design lives in the attached `Use-of-Funds.dc.html` file (a Claude Design component). Read it in full — it defines the exact layout, copy, interactions, and data model this page must have. Do not simplify or reinterpret it. Every section below must be present and functional.
+
+### What's currently wrong
+
+The live page only has: a raise target input, five flat percentage sliders with numeric steppers, a "Save allocation" button, a placeholder runway section, a disabled milestone-mapping message ("Roadmap milestones don't carry cost estimates yet"), a static scenario comparison with no live runway numbers, and a "Feeds into" list instead of real sync actions. This is missing the majority of the original design's functionality and visual fidelity.
+
+### Required page structure (rebuild to match exactly)
+
+**1. Header**
+- Back to Workspace link (left), "$" icon badge, "Use of Funds" title with an "Active" status pill (green), subtitle: "Live capital allocation and runway modeling — feeds the Pitch Deck and Axal VC Spin-Out export.", and "Unlocked · Wk 4" badge (right).
+
+**2. Quick actions bar**
+- Share button
+- Export button with dropdown menu: "Pitch Deck format" and "Axal VC Spin-Out format" options
+- Copy link button
+- "Preview as investor" button that opens the investor preview modal (see below)
+
+**3. Burn alert banner** (conditional)
+- Red banner that appears when runway drops below the user-set alert threshold, showing which spend category is the largest burn driver and its monthly cost, with a recommendation to reallocate.
+
+**4. Left column**
+
+- **Allocation · $[raise] raise card**: interactive donut chart (SVG, draggable boundary handles between segments — Engineering/GTM/Operations) with center label showing total raise. Below it: three sliders (Engineering, GTM, Operations) each showing color swatch, name, dollar amount, and percentage — draggable range sliders, not just steppers. A "Synced X min ago" or "Out of sync" pill in the top right of the card.
+- **Runway at current burn card**: large mono-font number (e.g. "12.3") with "months" label, health label ("Healthy — above 12 months" / "Caution" / "Critical"), color-coded (green/amber/red) border matching runway health. Below: three-column stat row — Monthly burn, Largest driver (category name), Cash-out (calculated future date).
+- **Runway timeline · alert thresholds card**: horizontal progress bar (0–36mo scale) with colored threshold markers, labels at 0/12/24/36mo, and clickable "Alert when below" pills (3 months / 6 months / 12 months) to set the alert threshold.
+
+**5. Right column**
+
+- **Milestone → capital mapping card**: for each bucket (Engineering, GTM, Operations), list its milestones pulled from the Roadmap with cost, a check/warning icon per milestone (funded vs. underfunded), and an "unmapped — no milestone assigned (unaccounted spend)" warning row when allocation exceeds mapped milestone costs. Label: "Cost per milestone · from Roadmap".
+- **Scenario comparison card**: a "Custom raise" slider ($250K–$3M) plus three scenario cards (Pre-seed $500K, Seed $1M, Growth $2M) each showing live-computed Runway, Burn/mo, and Milestones coverage (e.g. "6/6") using the *same* allocation split. Clicking a scenario card sets that raise amount as current. Label: "Same [%/%/%] split · live".
+- **Sync targets card**: two rows — "Pitch Deck · Use of Funds slide" with last-synced timestamp and a "Sync" button, and "Axal VC 30-Day Spin-Out export" with export status and an "Export" button. Clicking triggers a real sync/export action (or calls the correct backend endpoint), not a static label.
+
+**6. Investor preview modal**
+- Opens on "Preview as investor" click. Renders a polished pitch-deck-style rendition of the same allocation data: dark card with donut chart, allocation bars, milestone efficiency table, and an Axal VC 30-Day Spin-Out export summary block (raise target, runway, monthly burn). Must be dismissible.
+
+### Backend integration requirements
+
+1. Confirm the `projects`/company record backend schema for Use of Funds. It should support:
+   - `raise_target` (number)
+   - allocation percentages per bucket (e.g. `allocation_engineering_pct`, `allocation_gtm_pct`, `allocation_ops_pct`) that always sum to 100
+   - `monthly_burn` or a computed burn model per bucket (confirm whether burn is computed client-side from allocation, as in the original `.dc.html` burn model, or stored — match the original's approach: burn is a function of allocation intensity per bucket, not a separately entered field)
+   - `alert_threshold_months`
+   - last synced timestamps for Pitch Deck and Axal export targets
+2. Wire the **Milestone → capital mapping** section to real Roadmap milestone data (name + cost) for this company, matching costs against allocation per bucket. If the Roadmap backend doesn't yet store milestone costs, add that field rather than disabling the feature — the original design assumes milestones carry cost estimates.
+3. Wire **Sync** and **Export** actions to actually push the current allocation into the Pitch Deck's Use of Funds slide data and generate/update the Axal VC 30-Day Spin-Out export record, updating "last synced"/"last exported" timestamps on success.
+4. Persist raise target and allocation changes to the backend on change (or on explicit save — match whichever pattern is used elsewhere in the Lab for live-editing tools), and reflect real saved state on reload — no resetting to zero/defaults after refresh.
+5. Ensure the Scoring Engine and Pitch Deck Builder both read this saved allocation data live, per the original design's "Feeds into" relationships.
+
+### Constraints
+
+- Do not simplify the donut chart/draggable handles into a static chart — the drag interaction between segments is core to the original UX.
+- Do not remove the scenario comparison's live runway/burn/milestone-coverage calculations — these must compute from real data, not display placeholder dashes.
+- Do not leave the Milestone mapping section disabled with a "not available" message — either backfill milestone cost data from Roadmap or add the missing field so this section is fully functional.
+- Match the original's visual design closely: donut chart layout, card structure, color-coded runway health states, threshold pills, and the investor preview modal — do not substitute a simplified layout.
+- After implementing, verify the page live: drag the allocation sliders, change the raise target, click each scenario card, click Sync/Export, open the investor preview, and confirm every value updates correctly and persists on reload.
+
+Sources
+[1] Use-of-Funds.dc.html https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/515796799/78ab77f2-b06f-47e2-9d63-eeb25f94a892/Use-of-Funds.dc.html?AWSAccessKeyId=ASIA2F3EMEYEUSJM3OJB&Signature=Zfj0ih9gk5cMYV8pBZf5dKn%2FYIs%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEDEaCXVzLWVhc3QtMSJGMEQCIEQCGvlr6BMSbaTMo6P0vh33UNSeA4Dz%2FeEyFXo11JlvAiAT0vG7ePC1vj677Y2eA5ps83lGdy4o7MiGJ7%2BOOeeAiSr8BAj5%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAEaDDY5OTc1MzMwOTcwNSIMnOxI0QxdNwBwUcTKKtAERXjivBcD9GWosfWRzlha2eaQ7jUjuLrYe%2FsbdaJho6%2FoZk%2F4Nkx6nzd71CuYDjWuotWuis4RRyAKgg0YcnkgjxVeJl8i%2FmTNbP3QpVO8aODykqu0TWHJ6qiP6aaFdRCzcj0MbK3VNbuHEIgHtgjK3zpYNfjzULRCctp8iwEpAgPTRc%2FZLHtQIlGoKcPqzVLnr1aXLITplecuTJkjApZOwAafely7p2IXvf%2FG1BEZJx9cTuGKpf7dUNzDyMPxJC6yjwCnUh1zspoZjIg2dUoEzI3Emdg5qHg3oLb9wKea48yae%2FXtTtVd5pejW3bg%2BgtpTj4UrDBa6ugwcIn1vWVI42TZhe%2FJK8ZTSJQ2a9m6Cx281b1GG4PXOm%2BqJnNANAC6ZPKbDk8ncFXuir%2BOlZ%2BC4XuUz6ZjRtkUFUru81s5AHAIcm0JsEYlVCAgD2eTkkxu%2FA7DsoWbULN5mz67L6%2FpxQ3m3GGHJ3LncdFkJOROLr8nDAdFabVDSbyaKl1xjS4mKvGhuWM%2FYCQcaCSqOk9Ikyx1RydZPIH8rzpZbh5g5vCowRDE61KnGVKGnnxCTqQSkFLm7AoBeyfFJQUK4kyTvmyMGK9eEtwtrKR3g%2FMV6ucsiQ%2FEfLtoq9eorLzNCWP2GyQ1b3i8uP84%2F%2Fg3v2wKC3CwTj9sY94f1rduikpx1uKhUtD%2FuFKalqIl0PI9M2O%2Blb4ZZkP91pR5vldhS%2B%2BIym0ChO0cHg59paE%2BivjjELTnNBLmxQTI2u8tweI0uGk2bm9iA0Siu7TWI7CfIOZ%2F%2FzDd%2BMLTBjqZAbKbHi5rUCjRZqoM13d9GApHEa09gv7%2B2mIEGy8occlRiZZMrmUCipGhnIIVwMDVDnBPXtEKM57rtUHB4Sqr8sRQzcOECO2ExpyWC1JzEJX4qHrOL1YLcaqFLex8L2PJ797hdbH7A9xXs42x%2FZsoDjQ9FFWM45S4snT1I1TfWQ2mhq%2FjpHGi5Bc2131axdT%2Botp%2BadejuI8WzA%3D%3D&Expires=1785775394
+[2] Screenshot-2026-08-03-at-6.29.58-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/e75ba7c3-c2c7-4950-be96-f56885c1a6cd/Screenshot-2026-08-03-at-6.29.58-PM.jpeg
+[3] Screenshot-2026-08-03-at-6.31.47-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/8aa31e78-4528-4dee-8ceb-e9d1e9f1adda/Screenshot-2026-08-03-at-6.31.47-PM.jpeg
