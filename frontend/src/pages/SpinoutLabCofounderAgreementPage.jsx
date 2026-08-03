@@ -171,6 +171,16 @@ export default function SpinoutLabCofounderAgreementPage() {
   const namedFounders = founders.filter((f) => f.name.trim());
   const canGenerate = canEdit && companyName.trim() && namedFounders.length >= 2 && founders.every((f) => f.name.trim()) && totalEquity <= 100.001;
 
+  // W4 deliverable — must be declared here (before any early returns) to
+  // satisfy the Rules of Hooks. Fires whenever a cofounder agreement doc
+  // reaches 'signed' status (signatures happen in Legal & Capital).
+  useEffect(() => {
+    if (docs.some((d) => String(d.status || '').toLowerCase() === 'signed')) {
+      markMilestone(user, 'cofounder_agreement_signed');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docs, user?.id]);
+
   const updateFounder = (i, patch) => setFounders(founders.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
 
   const generate = async () => {
@@ -274,15 +284,6 @@ export default function SpinoutLabCofounderAgreementPage() {
 
   const week = num(user?.spinout_lab_week) || state?.week || 4;
   const latest = docs[0] || null;
-
-  // W4 deliverable — fires only when a cofounder agreement doc is actually
-  // signed (signatures happen in Legal & Capital; this page observes status).
-  useEffect(() => {
-    if (docs.some((d) => String(d.status || '').toLowerCase() === 'signed')) {
-      markMilestone(user, 'cofounder_agreement_signed');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docs, user?.id]);
 
   return (
     <div className="max-w-[1100px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-cofounder">
