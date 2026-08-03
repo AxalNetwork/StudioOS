@@ -284,7 +284,7 @@ spinoutLab.get('/state', async (c) => {
   let cohort: string | null = null;
   try {
     const rows = (await sql`
-      SELECT spinout_lab_admitted, spinout_lab_cohort FROM users WHERE id = ${user.id}
+      SELECT spinout_lab_admitted, spinout_lab_cohort FROM user_spinout_flags WHERE user_id = ${user.id}
     `) as Array<{ spinout_lab_admitted: number | null; spinout_lab_cohort: string | null }>;
     admitted = Number(rows[0]?.spinout_lab_admitted ?? 0) === 1;
     cohort = rows[0]?.spinout_lab_cohort ?? null;
@@ -327,7 +327,7 @@ spinoutLab.post('/apply', async (c) => {
   await ensureApplicationsTable(c.env);
   try {
     const u = await c.env.DB.prepare(
-      `SELECT spinout_lab_admitted FROM users WHERE id = ?`,
+      `SELECT spinout_lab_admitted FROM user_spinout_flags WHERE user_id = ?`,
     ).bind(user.id).first<{ spinout_lab_admitted: number | null }>();
     if (Number(u?.spinout_lab_admitted ?? 0) === 1) {
       return c.json({ error: 'You are already admitted to the Lab' }, 409);
@@ -423,10 +423,11 @@ spinoutLab.get('/graduates', async (c) => {
   let rows: GraduateRow[] = [];
   try {
     const res = await c.env.DB.prepare(
-      `SELECT m.user_id, m.completed_at, u.spinout_lab_cohort AS cohort,
+      `SELECT m.user_id, m.completed_at, usf.spinout_lab_cohort AS cohort,
               p.uid, p.name, p.sector, p.stage, p.status, p.total_funding, p.last_funding_round
        FROM spinout_lab_milestones m
        JOIN users u ON u.id = m.user_id
+       LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
        LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
        WHERE m.milestone_key = 'incorporation_completed'
        ORDER BY m.completed_at DESC, p.id ASC`,
@@ -569,9 +570,10 @@ spinoutLab.get('/cohort', async (c) => {
   try {
     const res = await c.env.DB.prepare(
       `SELECT u.id AS user_id, u.spinout_lab_week AS week,
-              u.spinout_lab_started_at AS started_at, u.spinout_lab_cohort AS cohort,
+              u.spinout_lab_started_at AS started_at, usf.spinout_lab_cohort AS cohort,
               p.name, p.sector
        FROM users u
+       LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
        LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
        WHERE u.spinout_lab_active = 1
        ORDER BY u.spinout_lab_started_at ASC, p.id ASC`,
@@ -603,9 +605,10 @@ spinoutLab.get('/cohort', async (c) => {
   try {
     const res = await c.env.DB.prepare(
       `SELECT m.user_id, m.completed_at, u.spinout_lab_started_at AS started_at,
-              u.spinout_lab_cohort AS cohort, p.name, p.sector
+              usf.spinout_lab_cohort AS cohort, p.name, p.sector
        FROM spinout_lab_milestones m
        JOIN users u ON u.id = m.user_id
+       LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
        LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
        WHERE m.milestone_key = 'incorporation_completed'
          AND datetime(m.completed_at) >= datetime('now', '-45 days')

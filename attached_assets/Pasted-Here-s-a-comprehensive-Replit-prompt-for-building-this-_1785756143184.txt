@@ -1,0 +1,106 @@
+Here's a comprehensive Replit prompt for building this automated cohort timing system for the Spin-Out Lab.
+
+## Replit prompt
+
+Build an automated **Cohort Timing & Gating System** for Axal VC Spin-Out Lab (axal.vc/spinout-lab) that runs on a fixed monthly calendar, automatically unlocks/locks weeks based on deliverable completion, and gives admins full review and impersonation power.
+
+Use the existing stack (reference `auth.py`, `captable.py`, `progress.py`, `projects.py`, `routes/scoring.py`, `spinout_lab.py`, `main.py`, `entities.py`). Implement this as a proper scheduled system, not client-side timers, so it works even if no one has the app open.
+
+### Core program calendar
+
+- **Cohort start:** 1st of every month, 00:00:00 **America/New_York** time (Delaware timezone — handle EST/EDT correctly with a proper timezone library, not a fixed UTC offset).
+- **Cohort length:** 28 days total, split into 4 weeks of exactly 7 days each.
+- **Week boundaries (from 1st of month):**
+  - Week 1: Day 1–7 (1st 00:00 → 8th 00:00 Delaware time)
+  - Week 2: Day 8–14 (8th 00:00 → 15th 00:00)
+  - Week 3: Day 15–21 (15th 00:00 → 22nd 00:00)
+  - Week 4: Day 22–28 (22nd 00:00 → 29th 00:00)
+- Only admitted/approved applicants for that cohort get access at the Week 1 unlock moment.
+- Deadline for each week is **exactly midnight Delaware time** on the 7th day — not "end of day" loosely, but the precise midnight boundary.
+
+### Gating logic (automated, server-side)
+
+1. At each week's start timestamp, run a scheduled job that:
+   - Unlocks Week N tools/features for every company that is eligible (admitted to the cohort, and if N > 1, passed Week N-1).
+   - Locks/hides Week N+1 and beyond for everyone not yet eligible.
+2. At each week's deadline timestamp (midnight ending that week), run a scheduled job that:
+   - Snapshots each company's deliverable completion status for that week.
+   - Marks the company as **"passed"** if all required deliverables for that week are marked complete before the deadline.
+   - Marks the company as **"failed to advance"** / **"did not complete"** if any required deliverable is incomplete.
+   - Companies that failed do **not** get Week N+1 unlocked automatically — they are held at their current stage.
+   - Log this decision as an immutable event in a stage/eligibility history table, with timestamp, week number, and which deliverables were missing.
+3. This must run reliably even if the app has no active users — implement as a real backend scheduled job (cron trigger / scheduled worker / background scheduler), not a JS `setInterval` in the browser.
+4. Idempotency: if the job runs twice or retries, it must not double-process or corrupt state. Use a processed-flag or idempotency key per company per week transition.
+5. Time-zone correctness: store all deadlines in UTC internally, computed from the Delaware wall-clock time and current DST offset, so the "midnight" is always accurate to Delaware local time regardless of daylight saving changes.
+
+### Data model additions
+
+Add/extend tables for:
+
+- `cohort_cycles`: id, cohort_id, month, year, start_at (UTC), end_at (UTC), created_at
+- `week_windows`: id, cohort_cycle_id, week_number (1–4), unlock_at (UTC), deadline_at (UTC)
+- `company_week_status`: id, company_id, cohort_cycle_id, week_number, status (`locked` / `active` / `passed` / `failed` / `grace`), deliverables_completed_count, deliverables_required_count, decided_at, decided_by (`system` or admin user id)
+- `deliverable_snapshots`: id, company_id, week_number, deliverable_key, completed (bool), completed_at, source (`founder` / `admin_override`)
+- `stage_transition_log`: id, company_id, from_week, to_week, result (`advanced` / `held`), reason, triggered_by (`scheduler` / `admin`), created_at
+- `scheduled_jobs_audit`: id, job_type (`week_unlock` / `week_deadline_check`), cohort_cycle_id, week_number, ran_at, status, notes (to prevent duplicate runs and give admins visibility into job history)
+
+### Founder-facing behavior
+
+- Show each founder a **persistent countdown** to the current week's deadline (server-computed remaining time, not just client `Date.now()` math — sync from server time to avoid clock drift/cheating).
+- Show a clear locked state for future weeks with the exact unlock date/time in the founder's local timezone, but always compute the underlying deadline from Delaware time.
+- Once the deadline passes, immediately reflect pass/fail status — no manual refresh needed (poll or use realtime updates via existing Durable Object pipeline room).
+- If a company fails to advance, show a clear "did not complete Week N" state, freeze their board at that week, and do not silently unlock Week N+1 for them client-side under any circumstance — enforce this server-side on every API call that returns tool/feature access.
+
+### Admin-facing behavior
+
+Build/extend the admin console (referencing the existing cohort admin dashboard) with:
+
+1. **Cohort timeline view**
+   - Visual calendar showing the 4-week cycle, unlock dates, and deadlines for the active cohort(s).
+   - Live countdown to next unlock/deadline event.
+   - History of past cohort cycles.
+
+2. **Week review queue**
+   - Before each deadline, show admins a list of companies at risk (incomplete deliverables) so they can intervene, message the founder, or grant a **manual grace period extension** if justified.
+   - After each deadline, show a review queue of companies the system marked passed/failed, so an admin can verify.
+
+3. **Deliverable verification via impersonation**
+   - Admin can click "View as founder" / impersonate a specific company account to see exactly what was submitted for each deliverable (landing page, pitch deck, cap table, etc.) as evidence before confirming pass/fail.
+   - Every impersonation session must be logged in an audit trail: admin id, company id, start time, end time, viewed pages/actions.
+   - Admin can override the automatic system decision (force-pass or force-fail) with a required reason field, and this override is logged in `stage_transition_log` with `triggered_by: admin`.
+
+4. **Manual grace/extension tool**
+   - Admin can grant a specific company additional hours/days before the automated deadline job locks them out, with a reason and audit log entry.
+   - The scheduler must respect any active grace period and skip auto-failing that company until the extended deadline passes.
+
+5. **Notifications**
+   - Automated reminder notifications to founders at fixed intervals before each deadline (e.g., 48 hours, 24 hours, 3 hours) — reuse the existing notification/digest system and queue infrastructure.
+   - Automated notification to admins when a cohort's week deadline has just processed, summarizing pass/fail counts.
+   - Automated notification to founders immediately when their week status changes (passed, failed, granted grace).
+
+### Technical implementation requirements
+
+- Implement the scheduled unlock/deadline checks using the platform's native scheduled/cron job capability (not a naive in-app timer) so it fires reliably regardless of traffic.
+- All deadline math must use a proper timezone-aware datetime library (e.g., handle America/New_York with DST transitions correctly) — never hardcode UTC-4 or UTC-5.
+- Every access-control check for week-gated features must be enforced **server-side** on the actual API/route layer (`spinout_lab.py`, `progress.py`, `projects.py`, etc.), never trusted from the client.
+- Add integration tests for:
+  - Correct unlock timing across a DST transition (e.g., March/November).
+  - A company passing exactly at the deadline second.
+  - A company with one incomplete deliverable correctly failing.
+  - Idempotent job re-runs not double-processing.
+  - Admin override correctly reversing a system decision and logging it.
+
+### Deliverable
+
+Implement this as production code, not a mock:
+- Scheduled job handlers for week unlock and week deadline evaluation.
+- Updated data model/migrations.
+- Server-side access control changes enforcing week gating on every relevant route.
+- Founder-facing countdown and locked/passed/failed UI states.
+- Admin console additions: cohort timeline, review queue, impersonation-based verification flow, override tool, grace period tool.
+- Notification triggers wired into the existing queue system.
+- Audit logging for every automated and manual decision.
+
+Do not build this as a pure frontend countdown — the actual gating, pass/fail decision, and access control must all be enforced and computed on the server on a reliable schedule.
+
+Sources

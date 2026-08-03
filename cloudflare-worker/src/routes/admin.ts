@@ -947,19 +947,21 @@ admin.post('/users/:user_id/notes', async (c) => {
 
 // POST /api/admin/users/:user_id/resend-verification — re-send the email
 // verification link for users who haven't completed verification.
-// Task #7 — Spin-Out Lab cohort admission. Lazy column ensure mirrors
-// ensureProfileColumns above (duplicate-column errors are expected).
+// Task #7 — Spin-Out Lab cohort admission. Uses a sidecar table because
+// users hit D1's 100-column ALTER TABLE limit (migration 154).
 let spinoutAdmissionSchemaMigrated = false;
 async function ensureSpinoutAdmissionColumns(env: Env): Promise<void> {
   if (spinoutAdmissionSchemaMigrated) return;
-  const stmts = [
-    `ALTER TABLE users ADD COLUMN spinout_lab_admitted INTEGER DEFAULT 0`,
-    `ALTER TABLE users ADD COLUMN spinout_lab_cohort TEXT`,
-    `ALTER TABLE users ADD COLUMN registration_product TEXT`,
-  ];
-  for (const s of stmts) {
-    try { await env.DB.prepare(s).run(); } catch {}
-  }
+  try {
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS user_spinout_flags (
+        user_id INTEGER PRIMARY KEY,
+        spinout_lab_admitted INTEGER NOT NULL DEFAULT 0,
+        spinout_lab_cohort TEXT,
+        registration_product TEXT
+      )`
+    ).run();
+  } catch {}
   spinoutAdmissionSchemaMigrated = true;
 }
 
@@ -977,7 +979,8 @@ admin.post('/users/:user_id/spinout-admit', async (c) => {
 
   await ensureSpinoutAdmissionColumns(c.env);
   const target: any = await c.env.DB.prepare(
-    `SELECT id, email, name, role, spinout_lab_admitted, spinout_lab_active, is_incorporated FROM users WHERE id = ?`
+    `SELECT u.id, u.email, u.name, u.role, usf.spinout_lab_admitted, u.spinout_lab_active, u.is_incorporated
+     FROM users u LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id WHERE u.id = ?`
   ).bind(userId).first();
   if (!target) return c.json({ error: 'User not found' }, 404);
   if (target.role === 'admin') return c.json({ error: 'Admins cannot be admitted to the Lab' }, 400);
@@ -987,8 +990,10 @@ admin.post('/users/:user_id/spinout-admit', async (c) => {
 
   const alreadyAdmitted = Number(target.spinout_lab_admitted) === 1;
   await c.env.DB.prepare(
-    `UPDATE users SET spinout_lab_admitted = 1, spinout_lab_cohort = ? WHERE id = ?`
-  ).bind(cohort, userId).run();
+    `INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted, spinout_lab_cohort)
+     VALUES (?, 1, ?)
+     ON CONFLICT(user_id) DO UPDATE SET spinout_lab_admitted = 1, spinout_lab_cohort = excluded.spinout_lab_cohort`
+  ).bind(userId, cohort).run();
 
   let emailed = false;
   if (!alreadyAdmitted) {
@@ -1082,8 +1087,10 @@ admin.post('/spinout-applications/:app_id/decide', async (c) => {
   if (decision === 'accepted') {
     await ensureSpinoutAdmissionColumns(c.env);
     await c.env.DB.prepare(
-      `UPDATE users SET spinout_lab_admitted = 1, spinout_lab_cohort = ? WHERE id = ?`,
-    ).bind(cohort, app.user_id).run();
+      `INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted, spinout_lab_cohort)
+       VALUES (?, 1, ?)
+       ON CONFLICT(user_id) DO UPDATE SET spinout_lab_admitted = 1, spinout_lab_cohort = excluded.spinout_lab_cohort`,
+    ).bind(app.user_id, cohort).run();
     try {
       const { send } = await import('../services/email/send');
       const labUrl = `${appUrl}/spinout-lab`;
@@ -1161,13 +1168,14 @@ admin.get('/spinout-participants', async (c) => {
   try {
     const rs = await c.env.DB.prepare(
       `SELECT u.id, u.uid, u.name, u.email,
-              u.spinout_lab_admitted, u.spinout_lab_cohort,
+              usf.spinout_lab_admitted, usf.spinout_lab_cohort,
               u.spinout_lab_active, u.spinout_lab_week,
               u.spinout_lab_started_at, u.is_incorporated,
               p.name AS project_name, p.sector AS project_sector
        FROM users u
+       LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
        LEFT JOIN projects p ON p.founder_id = u.founder_id
-       WHERE u.spinout_lab_admitted = 1
+       WHERE usf.spinout_lab_admitted = 1
           OR u.spinout_lab_active = 1
           OR u.id IN (SELECT user_id FROM spinout_lab_milestones
                       WHERE milestone_key = 'incorporation_completed')

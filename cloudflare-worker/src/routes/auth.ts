@@ -299,7 +299,7 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
     // 'spinout-lab') so applicants are identifiable in the admin queue.
     // try/caught: column arrives with migration 154.
     if (product === 'spinout-lab') {
-      try { await sql`UPDATE users SET registration_product = ${product} WHERE id = ${user.id}`; } catch {}
+      try { await sql`INSERT INTO user_spinout_flags (user_id, registration_product) VALUES (${user.id}, ${product}) ON CONFLICT(user_id) DO UPDATE SET registration_product = excluded.registration_product`; } catch {}
     }
     try { await upsertSuggestedRole(c.env, user.id, role || null); } catch (e) { console.error('[auth] suggested-role upsert failed', e); }
     await sql.end();
@@ -335,7 +335,7 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   // Task #7 — persist the ?product= registration intent (see the
   // existing-user branch above). try/caught: column arrives with 154.
   if (product === 'spinout-lab') {
-    try { await sql`UPDATE users SET registration_product = ${product} WHERE id = ${user.id}`; } catch {}
+    try { await sql`INSERT INTO user_spinout_flags (user_id, registration_product) VALUES (${user.id}, ${product}) ON CONFLICT(user_id) DO UPDATE SET registration_product = excluded.registration_product`; } catch {}
   }
   try { await upsertSuggestedRole(c.env, user.id, role || null); } catch (e) { console.error('[auth] suggested-role upsert failed', e); }
   // Task #6 (W-1) — investor signups get a 14-day Professional trial.
