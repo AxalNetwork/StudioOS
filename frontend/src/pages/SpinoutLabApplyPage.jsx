@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Check, Loader2, ArrowLeft } from "lucide-react";
 import { useAuth } from "../hooks/useAuthSync";
 import { spinoutLab } from "../lib/api";
+import { labJurisdiction } from "./SpinoutLabPage";
 
 // Apply to Cohort 4 — signed-in application form (reference design:
 // Spin-Out Lab.dc.html APPLY VIEW). No contact fields: the account is the
@@ -72,7 +73,7 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
   const outcomes = [
     `${juris.entity} incorporated`,
     "Vesting cap table on Carta",
-    "83(b) Election handled",
+    `${labJurisdiction(juris.key).filingName} handled`,
     "12-slide venture pitch deck",
   ];
 

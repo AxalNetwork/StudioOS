@@ -68,20 +68,14 @@ export const PIPELINE_PHASES = [
 ];
 
 // Jurisdiction-specific wording for the Structure phase (design handoff:
-// juris.incLine / juris.filingInc). Only selectable jurisdictions need
-// entries; anything else falls back to the Delaware default items.
-const JURISDICTION_PIPELINE_LINES = {
-  de: { incLine: "Delaware C-Corp incorporation", filingLine: "83(b) election filing" },
-  wy: { incLine: "Wyoming C-Corp incorporation", filingLine: "83(b) election filing" },
-};
-
+// juris.incLine / juris.filingInc). Unknown or "Soon" keys fall back to
+// the Delaware record via labJurisdiction().
 export function pipelineItemsFor(phase, jurisdictionKey) {
   if (phase.name !== "Structure") return phase.items;
-  const j = JURISDICTION_PIPELINE_LINES[jurisdictionKey];
-  if (!j) return phase.items;
+  const j = labJurisdiction(jurisdictionKey);
   const items = [...phase.items];
   items[0] = j.incLine;
-  items[2] = j.filingLine;
+  items[2] = j.filingInc;
   return items;
 }
 
@@ -123,10 +117,13 @@ const DIconAdvisor = () => <svg width="20" height="20" viewBox="0 0 24 24" fill=
 const DIconDataroom = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>;
 const DIconBadge = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="9" r="6"/><path d="M9 14.5 8 22l4-2 4 2-1-7.5"/></svg>;
 
+// Rows [0] (entity) and [2] (equity filing) are jurisdiction-derived in the
+// design handoff — render via deliverablesFor(jurisdictionKey); this base
+// array carries the Delaware record's wording.
 export const DELIVERABLES = [
-  { icon: <DIconCorp />, name: "Delaware C-Corp", desc: "Delaware C-Corp formation handled and filed." },
+  { icon: <DIconCorp />, name: "Delaware C-Corp", desc: "Fully incorporated entity with EIN and registered agent." },
   { icon: <DIconCap />, name: "Vesting Cap Table", desc: "Founder equity with 4-year vest, 1-year cliff on Carta." },
-  { icon: <DIconFile83 />, name: "83(b) Election", desc: "Section 83(b) election generated, tracked, and filed." },
+  { icon: <DIconFile83 />, name: "83(b) Election", desc: "Filed within the 30-day IRS window, archived in your data room." },
   { icon: <DIconDeck />, name: "Pitch Deck", desc: "12-slide venture-standard deck, designed and reviewed." },
   { icon: <DIconModel />, name: "Financial Model", desc: "3-year P&L, revenue model, and unit economics." },
   { icon: <DIconIntro />, name: "Warm Introductions", desc: "5–10 curated intros to the Axal VC investor network." },
@@ -192,15 +189,114 @@ function gradCohortLabel(cohort) {
   return /^\d+$/.test(s) ? `Cohort ${s}` : s;
 }
 
+// Full jurisdiction metadata table from the design handoff (Spin-Out
+// Lab.dc.html `jurisdictions`): entity + equity-filing wording that the
+// hero chips, pipeline Structure lines, and deliverables derive from.
 export const LAB_JURISDICTIONS = [
-  { key: 'de', label: 'Delaware, USA' },
-  { key: 'wy', label: 'Wyoming, USA' },
-  { key: 'sg', label: 'Singapore', soon: true },
-  { key: 'uk', label: 'London, UK', soon: true },
-  { key: 'ee', label: 'Estonia', soon: true },
-  { key: 'ae', label: 'Dubai, UAE', soon: true },
-  { key: 'ca', label: 'Alberta, Canada', soon: true },
+  {
+    key: 'de', label: 'Delaware, USA', entity: 'Delaware C-Corp',
+    incLine: 'Delaware C-Corp incorporation', entityDesc: 'Fully incorporated entity with EIN and registered agent.',
+    filingBadge: '83(b) Filed', filingName: '83(b) Election', filingInc: '83(b) election filing',
+    filingDesc: 'Filed within the 30-day IRS window, archived in your data room.',
+  },
+  {
+    key: 'wy', label: 'Wyoming, USA', entity: 'Wyoming C-Corp',
+    incLine: 'Wyoming C-Corp incorporation', entityDesc: 'Fully incorporated Wyoming entity with EIN and registered agent.',
+    filingBadge: '83(b) Filed', filingName: '83(b) Election', filingInc: '83(b) election filing',
+    filingDesc: 'Filed within the 30-day IRS window, archived in your data room.',
+  },
+  {
+    key: 'sg', label: 'Singapore', soon: true, entity: 'Singapore Pte Ltd',
+    incLine: 'Singapore Pte Ltd incorporation', entityDesc: 'Private Limited entity with ACRA registration and a company secretary.',
+    filingBadge: 'ACRA Lodged', filingName: 'ACRA Share Allotment', filingInc: 'ACRA share allotment lodgement',
+    filingDesc: 'Founder shares allotted and lodged with ACRA within the statutory window.',
+  },
+  {
+    key: 'uk', label: 'London, UK', soon: true, entity: 'UK Ltd',
+    incLine: 'UK Ltd incorporation', entityDesc: 'Private Limited company filed with Companies House.',
+    filingBadge: 'EMI Registered', filingName: 'EMI Option Scheme', filingInc: 'EMI option scheme setup',
+    filingDesc: 'HMRC-valued EMI scheme registered for founders and early hires.',
+  },
+  {
+    key: 'ee', label: 'Estonia', soon: true, entity: 'Estonia OÜ',
+    incLine: 'Estonia OÜ incorporation', entityDesc: 'Private Limited (OÜ) via e-Residency with Business Register entry.',
+    filingBadge: 'Registry Filed', filingName: 'e-Residency Registry', filingInc: 'Business Register entry',
+    filingDesc: 'Founder holdings entered in the Estonian Business Register.',
+  },
+  {
+    key: 'ae', label: 'Dubai, UAE', soon: true, entity: 'ADGM entity',
+    incLine: 'ADGM incorporation', entityDesc: 'ADGM company with registered agent.',
+    filingBadge: 'ADGM Filed', filingName: 'ADGM Share Filing', filingInc: 'ADGM share filing',
+    filingDesc: 'Founder shares filed with the ADGM registrar.',
+  },
+  {
+    key: 'ca', label: 'Alberta, Canada', soon: true, entity: 'Alberta Corp',
+    incLine: 'Alberta Corp incorporation', entityDesc: 'Canadian corporation with registered agent.',
+    filingBadge: 'CRA Filed', filingName: 'Section 7 Filing', filingInc: 'Section 7 equity filing',
+    filingDesc: 'Founder equity documented under CRA rules.',
+  },
 ];
+
+// Design fallback: an unknown key — or a "Soon" jurisdiction that can't be
+// selected yet — resolves to the Delaware record.
+export function labJurisdiction(key) {
+  const j = LAB_JURISDICTIONS.find((x) => x.key === key);
+  return !j || j.soon ? LAB_JURISDICTIONS[0] : j;
+}
+
+// Hero outcome chips (design: outcomeBadges) — 4 chips, two of them
+// jurisdiction-derived.
+export function outcomeBadgesFor(jurisdictionKey) {
+  const j = labJurisdiction(jurisdictionKey);
+  return [j.entity, 'Vesting Cap Table', j.filingBadge, 'Pitch Deck Ready'];
+}
+
+// DELIVERABLES with rows [0] (entity) and [2] (equity filing) swapped in
+// from the selected jurisdiction's record (design: deliverables).
+export function deliverablesFor(jurisdictionKey) {
+  const j = labJurisdiction(jurisdictionKey);
+  const rows = [...DELIVERABLES];
+  rows[0] = { ...rows[0], name: j.entity, desc: j.entityDesc };
+  rows[2] = { ...rows[2], name: j.filingName, desc: j.filingDesc };
+  return rows;
+}
+
+// Jurisdiction selector bar (design: "Incorporation jurisdiction" chips).
+// Client-state only — the selection restyles copy across the program view.
+// Shared by the signed-in Dashboard and the logged-out marketing page.
+export function JurisdictionBar({ value, onChange }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-3 px-4 mb-8 shadow-sm">
+      <div className="flex items-center gap-2">
+        <Globe className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+        <span className="text-[13px] font-bold text-gray-900 dark:text-gray-100">Incorporation jurisdiction</span>
+      </div>
+      <div className="flex gap-1.5 flex-wrap">
+        {LAB_JURISDICTIONS.map((j) => (
+          j.soon ? (
+            <button key={j.key} disabled className="h-[34px] px-3 rounded-lg bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800 text-[13px] font-semibold opacity-60 cursor-not-allowed flex items-center gap-1.5">
+              {j.label} <span className="text-[9px] font-bold uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded px-1.5 py-0.5">Soon</span>
+            </button>
+          ) : (
+            <button
+              key={j.key}
+              type="button"
+              onClick={() => onChange(j.key)}
+              className={`h-[34px] px-3 rounded-lg text-[13px] font-semibold transition-colors border ${
+                value === j.key
+                  ? 'bg-violet-600 text-white border-violet-600'
+                  : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800'
+              }`}
+            >
+              {j.label}
+            </button>
+          )
+        ))}
+      </div>
+      <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto hidden md:inline">Entity & equity filing update across the program →</span>
+    </div>
+  );
+}
 
 export function GraduatesSection() {
   // null = loading, 'error' = fetch failed, [] = no graduates yet
@@ -545,12 +641,11 @@ export function Dashboard({ state, previewAllUnlocked = false }) {
   const week = Math.max(1, Math.min(4, state.week || 1));
   const completedKeys = new Set((state.milestones || []).map((m) => m.key));
   const isIncorporated = completedKeys.has("incorporation_completed");
-  
-  const startedAt = state.started_at;
-  const startedAtStr = startedAt ? new Date(startedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "Recently";
+
   // Reference design: Delaware + Wyoming selectable, the rest "Soon".
   // Client-side selection only — incorporation itself is Delaware-first.
   const [jurisdiction, setJurisdiction] = useState('de');
+  const juris = labJurisdiction(jurisdiction);
 
   return (
     <div className="min-h-[100dvh] bg-[#F8F8FA] dark:bg-gray-950 font-sans text-gray-900 dark:text-gray-100 flex flex-col">
@@ -566,10 +661,10 @@ export function Dashboard({ state, previewAllUnlocked = false }) {
               <h1 className="m-0 text-3xl font-extrabold tracking-tight">Spin-Out Lab</h1>
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" style={{animation: 'wsPulse 2s infinite'}}></span>
-                {state.cohort || 'Cohort 3'} · Active
+                {state.cohort || 'Cohort 3'} · Applications Open
               </span>
             </div>
-            <p className="mt-2.5 ml-[52px] text-[15px] text-gray-500 dark:text-gray-400">From idea to incorporated in 30 days. Started {startedAtStr}.</p>
+            <p className="mt-2.5 ml-[52px] text-[15px] text-gray-500 dark:text-gray-400">From idea to incorporated in 30 days.</p>
           </div>
           <div className="flex gap-2.5 items-center flex-wrap">
             {previewAllUnlocked && (
@@ -593,46 +688,18 @@ export function Dashboard({ state, previewAllUnlocked = false }) {
         </div>
 
         {/* JURISDICTION SELECTOR */}
-        <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-3 px-4 mb-8 shadow-sm">
-          <div className="flex items-center gap-2">
-            <Globe className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-            <span className="text-[13px] font-bold text-gray-900 dark:text-gray-100">Incorporation jurisdiction</span>
-          </div>
-          <div className="flex gap-1.5 flex-wrap">
-            {LAB_JURISDICTIONS.map((j) => (
-              j.soon ? (
-                <button key={j.key} disabled className="h-[34px] px-3 rounded-lg bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800 text-[13px] font-semibold opacity-60 flex items-center gap-1.5">
-                  {j.label} <span className="text-[9px] font-bold uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded px-1.5 py-0.5">Soon</span>
-                </button>
-              ) : (
-                <button
-                  key={j.key}
-                  type="button"
-                  onClick={() => setJurisdiction(j.key)}
-                  className={`h-[34px] px-3 rounded-lg text-[13px] font-semibold transition-colors border ${
-                    jurisdiction === j.key
-                      ? 'bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-500/30'
-                      : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800'
-                  }`}
-                >
-                  {j.label}
-                </button>
-              )
-            ))}
-          </div>
-          <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto hidden md:inline">Entity & equity filing update across the program →</span>
-        </div>
+        <JurisdictionBar value={jurisdiction} onChange={setJurisdiction} />
 
         {/* HERO SECTION */}
         <section className="rounded-[20px] p-[38px] md:p-[40px] mb-10 overflow-hidden relative text-white" style={{ background: 'radial-gradient(1200px 400px at 12% -20%,rgba(139,92,246,.5),transparent 60%),linear-gradient(115deg,#1e1b3a 0%,#2a1d54 55%,#3b1d6e 100%)' }}>
           <div className="flex flex-wrap gap-10 justify-between items-center relative z-10">
             <div className="min-w-[300px] flex-1">
               <div className="tabular-nums text-[76px] leading-[0.9] font-black tracking-[-0.04em] text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(90deg,#fff,#c4b5fd)', WebkitBackgroundClip: 'text' }}>30 days</div>
-              <p className="my-3.5 mb-5 text-[16px] text-[#cbc4e8] font-medium">Idea <span className="text-[#8b5cf6]">→</span> Delaware C-Corp <span className="text-[#8b5cf6]">→</span> Funded</p>
+              <p className="my-3.5 mb-5 text-[16px] text-[#cbc4e8] font-medium">Idea <span className="text-[#8b5cf6]">→</span> {juris.entity} <span className="text-[#8b5cf6]">→</span> Funded</p>
               <div className="flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 border border-white/20 text-[12.5px] font-semibold text-[#ede9fe]">3 warm introductions</span>
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 border border-white/20 text-[12.5px] font-semibold text-[#ede9fe]">Pitch deck</span>
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 border border-white/20 text-[12.5px] font-semibold text-[#ede9fe]">Vesting cap table</span>
+                {outcomeBadgesFor(jurisdiction).map((b) => (
+                  <span key={b} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 border border-white/20 text-[12.5px] font-semibold text-[#ede9fe]">{b}</span>
+                ))}
               </div>
             </div>
             <HeroStatsPanel />
@@ -702,7 +769,7 @@ export function Dashboard({ state, previewAllUnlocked = false }) {
         <section className="mb-12">
           <h2 className="m-0 mb-5 text-[20px] font-extrabold tracking-[-.02em]">What you leave with.</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
-            {DELIVERABLES.map((d, i) => (
+            {deliverablesFor(jurisdiction).map((d, i) => (
               <div key={i} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-5 shadow-sm">
                 <div className="w-10 h-10 rounded-[11px] bg-violet-50 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 flex items-center justify-center mb-3.5">
                   {d.icon}
