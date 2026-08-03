@@ -62,10 +62,10 @@ export const TOOL_INFO = {
   // the scorecard's per-week tool totals (the design's own scorecard excludes
   // it — Week 3 reads "5 of 5"), and `unlockWeek` gates it to Week 3 since it
   // has no standalone backend feature flag.
-  misignals: { label: 'MI — Investor Signals', to: '/spinout-lab/market', desc: 'Scored investor-fit signals from your profiling', icon: Radar, uncounted: true, unlockWeek: 3 },
+  misignals: { label: 'MI — Investor Signals', to: '/spinout-lab/market', desc: 'Full investor intelligence', icon: Radar, uncounted: true, unlockWeek: 3 },
   // Lab-facing founder profiling report (design: workspace tool pages);
   // reads the Studio-built skills/values/archetype profile.
-  profiling: { label: 'Profiling', to: '/spinout-lab/profiling', desc: 'Skills, values, and archetype report', icon: Fingerprint },
+  profiling: { label: 'Profiling', to: '/spinout-lab/profiling', desc: 'Skills, values, archetypes, and assessment progress', icon: Fingerprint },
   // Lab-facing roadmap page (design: workspace tool pages); the raw kanban
   // stays reachable at /build/roadmap via the page's "Kanban view" button.
   roadmap: { label: 'Roadmap', to: '/spinout-lab/roadmap', desc: 'OKRs, milestones, and MVP scope', icon: MapIcon },
@@ -77,28 +77,28 @@ export const TOOL_INFO = {
   // Lab-facing matching + booking page; the full directory stays at /advisors.
   advisors: { label: 'Advisors', to: '/spinout-lab/advisors', desc: 'Matched advisor network', icon: Users },
   // Revenue capture + traction proof (metrics snapshots + project proof fields).
-  revenue: { label: 'Revenue', to: '/spinout-lab/revenue', desc: 'Capture revenue & traction proof', icon: DollarSign },
+  revenue: { label: 'Revenue', to: '/spinout-lab/revenue', desc: 'Real revenue & investor-ready proof', icon: DollarSign },
   // Capital allocation + runway modeling; edits the SAME canonical
   // use_of_funds/funding_needed fields THE ASK deck slide reads.
-  'use-of-funds': { label: 'Use of Funds', to: '/spinout-lab/use-of-funds', desc: 'Capital allocation & runway modeling', icon: PieChart },
+  'use-of-funds': { label: 'Use of Funds', to: '/spinout-lab/use-of-funds', desc: 'Allocation & budget plan', icon: PieChart },
   // Lab-facing partner session booking (design: Office Hours tool page);
   // /office-hours stays the advisor-side ops console.
   'office-hours': { label: 'Office Hours', to: '/spinout-lab/office-hours', desc: 'Book partner sessions', icon: CalendarCheck },
   'cofounder-match': { label: 'Co-founder Match', to: '/cofounder', desc: 'Co-founder sourcing', icon: Users },
   incorporate: { label: 'Incorporate', to: '/incorporate', desc: 'Entity formation', icon: Landmark },
-  captable: { label: 'Cap Table', to: '/spinout-lab/captable', desc: 'Ownership ledger & dilution modeling', icon: PieChart },
+  captable: { label: 'Cap Table', to: '/spinout-lab/captable', desc: 'Founder stock & vesting', icon: PieChart },
   'section-83b': { label: '83(b) Election', to: '/incorporate/83b', desc: 'File within 30 days of your stock grant', icon: FileText },
-  'cofounder-agreement': { label: 'Co-founder Agreement', to: '/spinout-lab/cofounder-agreement', desc: 'Founding team terms', icon: FileSignature },
+  'cofounder-agreement': { label: 'Co-founder Agreement', to: '/spinout-lab/cofounder-agreement', desc: 'Signed founder terms', icon: FileSignature },
   // No founder-facing capital surface exists yet (/capital is the investor
   // console) — card shows as coming soon until the lab version ships.
   // Lab-facing raise workspace (round + investor pipeline + data-room
   // readiness). The founder-persona workspace at /raise/capital stays intact.
-  capital: { label: 'Capital', to: '/spinout-lab/capital', desc: 'Run your raise & data room', icon: Banknote },
+  capital: { label: 'Capital', to: '/spinout-lab/capital', desc: 'Fundraise & introductions', icon: Banknote },
   compliance: { label: 'Compliance', to: '/compliance', desc: 'Filing calendar & obligations', icon: ShieldCheck },
   // Studio Ops is a studio-wide surface, not a lab-gated feature — `ungated`
   // keeps its deliverable button visible without touching unlocked_features.
   // Founders reach it via the command center tab (/studio-ops redirects there).
-  'studio-ops': { label: 'Studio Ops', to: '/build/command-center?tab=studio-ops', desc: 'Studio operating cadence', icon: CalendarCheck, ungated: true },
+  'studio-ops': { label: 'Studio Ops', to: '/build/command-center?tab=studio-ops', desc: 'Weekly cadence and accountability', icon: CalendarCheck, ungated: true },
 };
 
 // Four program weeks. `chips` are the timeline summary chips (done derives
@@ -118,6 +118,13 @@ export const WEEK_DEFS = [
       { label: 'TAM sized', keys: ['market_sizing_completed'] },
     ],
     features: ['projects', 'customer-discovery', 'market-intelligence', 'profiling'],
+    // Week-overview page panels (design: weekPanels — "What you do" / "What
+    // unlocks"; the Deliverables panel reuses `deliverables[].label` so it
+    // stays in sync with the live checklist).
+    panels: {
+      doYou: ['Define the problem and ICP', 'Run market sizing seed research', 'Talk to ≥5 customers and log every interview'],
+      unlocks: ['Startups', 'Customer Discovery', 'Market Intelligence (read-only)', 'Profiling'],
+    },
     leaveWith: 'Startup record · 3 customer interviews · TAM/SAM sized',
     deliverables: [
       { label: 'Create startup record', keys: ['project_created'], tool: 'projects' },
@@ -141,6 +148,10 @@ export const WEEK_DEFS = [
       { label: 'Pitch deck v1', keys: ['pitch_deck_drafted'] },
     ],
     features: ['roadmap', 'brand-builder', 'pitch-deck', 'studio-ops'],
+    panels: {
+      doYou: ['Scope the MVP', 'Set 90-day OKRs', 'Draft brand v1', 'Draft pitch deck v1'],
+      unlocks: ['Roadmap', 'Brand & Landing Pages', 'Pitch Deck Builder', 'Studio Ops cadence'],
+    },
     leaveWith: 'MVP scope · 90-day OKRs · Brand v1 · Pitch deck v1',
     deliverables: [
       { label: 'Scope the MVP', keys: ['mvp_scoped'], tool: 'roadmap' },
@@ -165,6 +176,13 @@ export const WEEK_DEFS = [
       { label: 'Co-founder', keys: ['cofounder_request_sent'] },
     ],
     features: ['scoring', 'advisors', 'office-hours', 'cofounder-match', 'misignals', 'revenue'],
+    panels: {
+      doYou: ['Run your first venture-readiness score', 'Match with advisors', 'Decide co-founder track', 'Pressure-test scoring weak points'],
+      unlocks: ['Diligence & Scoring Engine', 'Advisors', 'Office Hours', 'Co-founder Match', 'MI — Investor Signals'],
+    },
+    // Locked-week preview card pills (design curates these; falls back to
+    // the feature labels when absent).
+    previewPills: ['Scoring Engine', 'Advisors', 'Office Hours', 'Co-founder Match', 'MI Investor Signals'],
     leaveWith: 'Venture-readiness score · Advisor cadence · Co-founder decision',
     deliverables: [
       { label: 'Run venture-readiness score', keys: ['scoring_run_completed'], tool: 'scoring' },
@@ -192,6 +210,11 @@ export const WEEK_DEFS = [
       { label: '83(b)', keys: ['section83b_filed'] },
     ],
     features: ['incorporate', 'captable', 'section-83b', 'cofounder-agreement', 'capital', 'compliance', 'use-of-funds'],
+    panels: {
+      doYou: ['Incorporate the entity', 'Issue founder stock with vesting', 'File 83(b)', 'Sign co-founder agreement', 'Lock the fundraise ask'],
+      unlocks: ['Incorporate', 'Cap Table', 'Co-founder Agreement', 'Capital', 'Use of Funds'],
+    },
+    previewPills: ['Incorporate', 'Cap Table', '83(b)', 'Co-founder Agreement', 'Capital', 'KYC'],
     leaveWith: 'Delaware C-Corp · Vesting cap table · 83(b) filed · Co-founder agreement',
     deliverables: [
       { label: 'Incorporate the entity', keys: ['incorporation_completed'], tool: 'incorporate' },
@@ -366,6 +389,32 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
   const [selected, setSelected] = useState(currentWeek);
   // Which completed-week summary panel is expanded (week num or null).
   const [openSummary, setOpenSummary] = useState(null);
+  // Week-overview page (design: `view: 'week-N'`) — non-null renders the
+  // dedicated week view in place of the workspace sections.
+  const [weekView, setWeekView] = useState(null);
+
+  // Milestone completion timestamps (when the state payload carries object
+  // rows) — used for the design's "Completed <date>" summary meta.
+  const milestoneDates = useMemo(() => {
+    const m = new Map();
+    (state?.milestones || []).forEach((x) => {
+      if (x && typeof x === 'object' && (x.key || x.milestone_key) && x.completed_at) {
+        m.set(x.key || x.milestone_key, x.completed_at);
+      }
+    });
+    return m;
+  }, [state?.milestones]);
+  const weekCompletedLabel = (week) => {
+    let latest = null;
+    week.deliverables.forEach((d) => d.keys.forEach((k) => {
+      const ts = milestoneDates.get(k);
+      if (ts && (!latest || ts > latest)) latest = ts;
+    }));
+    if (!latest) return null;
+    const d = new Date(latest.includes('T') ? latest : `${latest.replace(' ', 'T')}Z`);
+    if (Number.isNaN(d.getTime())) return null;
+    return `Completed ${d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}`;
+  };
 
   const weekStatus = (num) => {
     if (graduated || num < currentWeek) return 'done';
@@ -385,7 +434,8 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
   const selectedStatus = weekStatus(selectedDef.num);
   const selectedCounts = countDeliverables(selectedDef, (d) => chipDone(selectedDef.num, d.keys));
   const deliverablesDone = selectedCounts.done;
-  const progressPct = graduated ? 100 : Math.min(100, Math.round((dayNum / SPRINT_DAYS) * 100));
+  // Preview mode mirrors the design's "All weeks unlocked" ring at 100%.
+  const progressPct = graduated || previewAllUnlocked ? 100 : Math.min(100, Math.round((dayNum / SPRINT_DAYS) * 100));
 
   const openTool = (key) => {
     const tool = TOOL_INFO[key];
@@ -421,10 +471,18 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
       ? `Week ${upcomingNums[0]}`
       : `Weeks ${upcomingNums.slice(0, -1).join(', ')} & ${upcomingNums[upcomingNums.length - 1]}`;
 
+  // "View week →" opens the dedicated week-overview page (design `openWeek`).
   const viewWeek = (num) => {
+    if (!weekBrowsable(num)) return;
     setSelected(num);
+    setWeekView(num);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+  const closeWeekView = () => {
+    setWeekView(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  const overviewDef = weekView != null ? WEEK_DEFS.find((w) => w.num === weekView) : null;
 
   const STATUS_BADGE = {
     done: { label: 'Completed', cls: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' },
@@ -434,9 +492,9 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-24" data-testid="spinout-workspace">
-      {/* ---- Program header ---- */}
-      <div className="border-b border-gray-200 dark:border-gray-800 pb-4 mb-8">
+    <div className="px-4 sm:px-6 py-6 pb-24" data-testid="spinout-workspace">
+      {/* ---- Program header (sticky, like the design's page header) ---- */}
+      <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 bg-gray-50/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-200 dark:border-gray-800 pb-4 mb-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2.5">
@@ -493,19 +551,21 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
             </div>
           </div>
         </div>
-        {/* Segmented week progress bar */}
+        {/* Segmented week progress bar — the design renders this all-violet
+            (track #ede9fe, fill #7c3aed) with a pulse dot on the active label */}
         <div className="flex gap-1.5 pt-4">
           {WEEK_DEFS.map((w) => {
             const st = weekStatus(w.num);
             return (
               <div key={w.num} className="flex-1 flex flex-col gap-1">
-                <div className="h-1.5 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-800">
+                <div className="h-1.5 rounded-full overflow-hidden bg-violet-100 dark:bg-violet-900/40">
                   <div
-                    className={`h-full rounded-full ${st === 'done' ? 'bg-emerald-500 w-full' : st === 'active' ? `${w.accentBar} animate-pulse` : 'w-0'}`}
+                    className={`h-full rounded-full ${st === 'done' ? 'bg-violet-600 w-full' : st === 'active' ? 'bg-violet-600 animate-pulse' : 'w-0'}`}
                     style={st === 'active' ? { width: `${Math.min(100, Math.round((((dayNum - 1) % 7) + 1) / 7 * 100))}%` } : undefined}
                   />
                 </div>
-                <span className={`text-[11px] font-semibold ${st === 'active' ? w.accentText : st === 'done' ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${st === 'locked' ? 'text-gray-400 dark:text-gray-500' : 'text-violet-700 dark:text-violet-300'}`}>
+                  {st === 'active' && <span className="w-[5px] h-[5px] rounded-full bg-violet-600 dark:bg-violet-400 animate-pulse" />}
                   Week {w.num}
                 </span>
               </div>
@@ -519,6 +579,86 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
         <CohortDeadlineBanner timing={state?.cohort_timing} serverTime={state?.server_time} />
       )}
 
+      {/* ---- Week overview page (design: `isWeekView`) ---- */}
+      {overviewDef ? (
+        <div data-testid={`workspace-week-view-${overviewDef.num}`}>
+          <button
+            type="button"
+            onClick={closeWeekView}
+            data-testid="workspace-week-view-back"
+            className="inline-flex items-center gap-1.5 h-[34px] px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-[13px] font-semibold mb-5 hover:bg-gray-50 dark:hover:bg-gray-800"
+          >
+            <span className="text-[15px]">←</span> Back to Workspace
+          </button>
+          <div className="flex flex-wrap gap-3.5 items-center mb-2">
+            <div className={`text-xs font-bold uppercase tracking-wide ${overviewDef.accentText}`}>Week {overviewDef.num}</div>
+            <span className={`inline-flex items-center gap-1 text-[10.5px] font-bold rounded-full px-2 py-0.5 ${STATUS_BADGE[weekStatus(overviewDef.num)].cls}`}>
+              {weekStatus(overviewDef.num) === 'active'
+                ? <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                : weekStatus(overviewDef.num) === 'locked' ? <Lock size={10} /> : <Check size={11} />}
+              {STATUS_BADGE[weekStatus(overviewDef.num)].label}
+            </span>
+          </div>
+          <h2 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50 mb-5">{overviewDef.name}</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-7">
+            {[
+              { title: 'What you do', items: overviewDef.panels?.doYou || [] },
+              { title: 'What unlocks', items: overviewDef.panels?.unlocks || [] },
+              { title: 'Deliverables', items: overviewDef.deliverables.map((d) => d.label) },
+            ].map((p) => (
+              <div key={p.title} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">{p.title}</div>
+                <div className="flex flex-col gap-2">
+                  {p.items.map((it) => (
+                    <div key={it} className="flex gap-2 text-[13px] text-gray-700 dark:text-gray-200 leading-snug">
+                      <span className={`flex-none font-bold ${overviewDef.accentText}`}>·</span>
+                      <span>{it}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">Tools in this week</div>
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
+            {overviewDef.features.map((key) => {
+              const info = TOOL_INFO[key];
+              if (!info) return null;
+              const unlocked = featureUnlocked(key);
+              const clickable = unlocked && !info.comingSoon;
+              const Icon = info.icon;
+              return (
+                <div
+                  key={key}
+                  data-testid={`workspace-week-view-tool-${key}`}
+                  onClick={() => openTool(key)}
+                  role={clickable ? 'link' : undefined}
+                  tabIndex={clickable ? 0 : undefined}
+                  onKeyDown={(e) => { if (clickable && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openTool(key); } }}
+                  className={`rounded-xl p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex flex-col ${
+                    clickable ? 'cursor-pointer hover:shadow-md transition-shadow' : 'opacity-60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="w-[34px] h-[34px] rounded-lg bg-violet-50 dark:bg-violet-900/40 text-violet-600 dark:text-violet-300 flex items-center justify-center">
+                      <Icon size={16} />
+                    </div>
+                    {!unlocked && <Lock size={13} className="text-gray-400 dark:text-gray-500" />}
+                  </div>
+                  <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-50">{info.label}</div>
+                  <div className="text-[11.5px] leading-snug text-gray-400 dark:text-gray-500 mt-0.5 flex-1">{info.desc}</div>
+                  {clickable && (
+                    <div className="mt-3 text-[11px] font-semibold text-violet-700 dark:text-violet-300 inline-flex items-center gap-1">
+                      Open <ArrowRight size={11} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+      <>
       {/* ---- Section 1: Program timeline ---- */}
       <section className="mb-9">
         <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">Program timeline</div>
@@ -534,9 +674,10 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                 data-testid={`workspace-week-card-${w.num}`}
                 onClick={() => clickable && setSelected(w.num)}
                 disabled={!clickable}
+                title={w.summary}
                 className={`text-left rounded-2xl bg-white dark:bg-gray-900 border p-4 flex flex-col transition-shadow ${
                   isSelected ? w.activeRing : 'border-gray-200 dark:border-gray-800'
-                } ${clickable ? 'cursor-pointer hover:shadow-md' : 'opacity-60 cursor-not-allowed'}`}
+                } ${st === 'active' ? 'ws-glow' : ''} ${clickable ? 'cursor-pointer hover:shadow-md' : 'opacity-60 cursor-not-allowed'}`}
               >
                 <div className="flex items-start justify-between gap-2 mb-2.5">
                   <div>
@@ -611,7 +752,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
 
       {/* ---- Section 2A: selected week header ---- */}
       <section className="mb-5">
-        <div className="relative overflow-hidden rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6">
+        <div className={`relative overflow-hidden rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 ${selectedStatus === 'active' ? 'ws-glow' : ''}`}>
           <div className={`absolute top-0 left-0 bottom-0 w-1 ${selectedDef.accentBar}`} />
           <div className="flex flex-wrap gap-5 justify-between items-start">
             <div className="min-w-[260px]">
@@ -625,10 +766,10 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                 }`}>
                   {selectedStatus === 'active' && <span className="w-1.5 h-1.5 rounded-full bg-violet-600 dark:bg-violet-400 animate-pulse" />}
                   {selectedStatus === 'active'
-                    ? 'Active this week — complete all modules to advance'
+                    ? 'Active week'
                     : selectedStatus === 'done'
-                      ? 'Week complete'
-                      : 'Browsing ahead'}
+                      ? 'Completed'
+                      : 'Preview'}
                 </span>
               </div>
               <h2 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50" data-testid="workspace-active-week-title">
@@ -672,8 +813,8 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
         </div>
       </section>
 
-      {/* ---- Section 2B + 2C: deliverables & tools ---- */}
-      <section className="grid grid-cols-1 lg:grid-cols-[2fr,3fr] gap-5 items-start">
+      {/* ---- Section 2B + 2C: deliverables & tools (design ratio 1fr / 2fr) ---- */}
+      <section className="grid grid-cols-1 lg:grid-cols-[1fr,2fr] gap-5 items-start">
         <div>
           <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
             Week {selectedDef.num} deliverables
@@ -729,14 +870,22 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                       </div>
                     )}
                   </div>
-                  {info && unlocked && !info.comingSoon && (
+                  {info && unlocked && !info.comingSoon ? (
                     <Link
                       to={info.to}
                       className="flex-none h-8 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap"
                     >
                       Open {info.label} <ArrowRight size={12} />
                     </Link>
-                  )}
+                  ) : info ? (
+                    /* Design always renders the action — locked tools show it disabled */
+                    <span
+                      aria-disabled="true"
+                      className="flex-none h-8 px-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60 text-gray-400 dark:text-gray-500 text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap select-none"
+                    >
+                      Open {info.label} <ArrowRight size={12} />
+                    </span>
+                  ) : null}
                 </div>
               );
             })}
@@ -758,7 +907,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
             return (
               <div key={w.num} className="mb-4">
                 <div className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 mb-2">{heading}</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
                   {w.features.map((key) => {
                     const info = TOOL_INFO[key];
                     if (!info) return null;
@@ -796,9 +945,13 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                             {unlocked ? (w.num <= currentWeek || graduated ? 'Active' : `Unlocked · Wk ${w.num}`) : `Unlocks Wk ${w.num}`}
                           </span>
                           {clickable && (
-                            <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 inline-flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); openTool(key); }}
+                              className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 inline-flex items-center gap-0.5 h-[26px] px-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-violet-50 dark:hover:bg-violet-900/30"
+                            >
                               Open <ArrowRight size={11} />
-                            </span>
+                            </button>
                           )}
                           {unlocked && info.comingSoon && (
                             <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500">Coming soon</span>
@@ -931,7 +1084,9 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                         <Check size={13} />
                       </span>
                       <span className="text-[14.5px] font-bold text-gray-900 dark:text-gray-50">Week {s.def.num} Summary</span>
-                      <span className="text-xs text-gray-400 dark:text-gray-500">Completed · {s.dDone} of {s.dTotal} deliverables</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {weekCompletedLabel(s.def) || `Completed · ${s.dDone} of ${s.dTotal} deliverables`}
+                      </span>
                     </span>
                     <ChevronDown size={18} className={`text-gray-400 dark:text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
                   </button>
@@ -1005,17 +1160,14 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                 <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Week {s.def.num}</div>
                 <div className="text-base font-bold text-gray-900 dark:text-gray-50 mb-3">{s.def.name}</div>
                 <div className="flex flex-wrap gap-1.5 mb-3.5">
-                  {s.def.features.map((k) => {
-                    const info = TOOL_INFO[k];
-                    return info ? (
-                      <span
-                        key={k}
-                        className="text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 rounded-md px-2 py-0.5"
-                      >
-                        {info.label}
-                      </span>
-                    ) : null;
-                  })}
+                  {(s.def.previewPills || s.def.features.map((k) => TOOL_INFO[k]?.label).filter(Boolean)).map((label) => (
+                    <span
+                      key={label}
+                      className="text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 rounded-md px-2 py-0.5"
+                    >
+                      {label}
+                    </span>
+                  ))}
                 </div>
                 <div className="text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
                   <span className="font-semibold text-gray-500 dark:text-gray-400">You leave with:</span> {s.def.leaveWith}
@@ -1025,6 +1177,8 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
             ))}
           </div>
         </section>
+      )}
+      </>
       )}
     </div>
   );

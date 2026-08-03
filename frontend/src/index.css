@@ -4,6 +4,8 @@
 @keyframes wsPulse{0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,.45)}50%{box-shadow:0 0 0 5px rgba(124,58,237,0)}}
 @keyframes wsGlow{0%,100%{box-shadow:0 0 0 1px rgba(124,58,237,.35),0 1px 2px rgba(24,24,27,.04)}50%{box-shadow:0 0 0 3px rgba(124,58,237,.18),0 1px 2px rgba(24,24,27,.04)}}
 @keyframes wsFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+/* Design-system utility: the workspace's active-week card glow (wsGlow above). */
+.ws-glow{animation:wsGlow 3s infinite}
 
 /* Tailwind 4 — opt the .dark class on <html> in as the activator for the
    `dark:` variant. SettingsContext flips this class based on the user's
