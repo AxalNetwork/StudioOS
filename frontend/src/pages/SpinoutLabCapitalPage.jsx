@@ -15,16 +15,22 @@
 //     milestone, use-of-funds fields, cap-table scenario, scoring snapshots,
 //     discovery interviews, OKRs, revenue proof, incorporation state) — no
 //     stored "readiness" exists, so the score is derived and says so.
+//   - Client-side-only surfaces from the design: Export (serializes the
+//     already-loaded prospects/data-room rows), investor preview (read-only
+//     render of loaded data), next-best-actions + weighted pipeline (derived
+//     from real rows and labeled as derived).
 //   - Omitted (no backend): warm-intro probabilities, conviction scores,
-//     next-best-action suggestions, SAFE generator, pitch-feedback objection
-//     counts, instrument/valuation-cap/discount/MFN round terms,
-//     share/export/copy-link, investor preview, weighted forecasts.
+//     per-prospect next steps/statuses, SAFE generator, pitch-feedback
+//     objection counts, instrument/valuation-cap/discount/MFN round terms
+//     (rendered as honest "Not set" tiles), share/copy-link, projected-close
+//     pacing and meetings-this-week (no stage-transition/meeting timestamps).
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Banknote, Loader2, Lock, AlertTriangle, FileText, Plus,
   CheckCircle2, MinusCircle, XCircle, HelpCircle, Send, X,
+  Download, ChevronDown, Eye,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
@@ -33,6 +39,8 @@ import { pickLabProject } from './SpinoutLabStartupPage';
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const INPUT = 'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-[13px] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500/40';
+// Quick-action chrome (design .cp-qa: transparent border → bordered on hover).
+const QA_BTN = 'inline-flex items-center gap-1.5 rounded-lg border border-transparent bg-transparent px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 enabled:cursor-pointer enabled:hover:border-gray-200 enabled:hover:bg-white dark:enabled:hover:border-gray-700 dark:enabled:hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed';
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 
@@ -48,6 +56,12 @@ const fmtDate = (iso) => {
   if (!iso) return '—';
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const daysSince = (iso) => {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  return Number.isNaN(t) ? null : Math.floor((Date.now() - t) / 86_400_000);
 };
 
 export const STAGE_LABELS = {
@@ -67,6 +81,26 @@ const STAGE_BADGE = {
   passed: 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300',
 };
 
+// A33 — stage → close-probability map used ONLY for the weighted-pipeline
+// stat. No per-investor conviction is stored anywhere, so the weighting is a
+// fixed, documented assumption (not data) and the stat's caption says how it
+// is computed: to_contact 5% · contacted 10% · meeting 25% · diligence 50% ·
+// committed 100% · passed 0%.
+const STAGE_PROBABILITY = { to_contact: 0.05, contacted: 0.1, meeting: 0.25, diligence: 0.5, committed: 1, passed: 0 };
+
+// A14 — shared sync-provenance vocabulary for round fields, applied
+// truthfully:
+//   synced  — the value is read live from another tool's real data
+//   manual  — the founder typed it into this tool (round editor)
+//   default — reserved: nothing on this page applies a default today
+//   unset   — the field has no value anywhere ("Not set")
+const PROVENANCE = {
+  synced: (tool) => ({ cls: 'text-emerald-600 dark:text-emerald-400', text: `Synced · ${tool}` }),
+  manual: () => ({ cls: 'text-amber-600 dark:text-amber-400', text: 'Manual' }),
+  default: () => ({ cls: 'text-emerald-600 dark:text-emerald-400', text: 'Default' }),
+  unset: () => ({ cls: 'text-gray-400 dark:text-gray-500', text: 'Not set' }),
+};
+
 // Data-room readiness statuses. 'unknown' (the check itself failed) is shown
 // honestly and excluded from the score rather than counted as missing.
 const STATUS_META = {
@@ -83,6 +117,23 @@ export function readinessScore(rows) {
   return Math.round((pts / scored.length) * 100);
 }
 
+// A6 — client-side file download; both exports serialize data already loaded
+// on this page, nothing round-trips a server.
+const downloadFile = (filename, mime, text) => {
+  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+const csvCell = (v) => {
+  const s = v == null ? '' : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
 export default function SpinoutLabCapitalPage() {
   const navigate = useNavigate();
   const [status, setStatus] = useState('loading');
@@ -96,6 +147,12 @@ export default function SpinoutLabCapitalPage() {
   const [stages, setStages] = useState(Object.keys(STAGE_LABELS));
   const [updates, setUpdates] = useState([]);
   const [dataroom, setDataroom] = useState([]);
+  // Pipeline view (A16): priority | kanban | table over the same prospects.
+  const [view, setView] = useState('priority');
+  // Quick actions (A6/A8)
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   // Round editor
   const [roundForm, setRoundForm] = useState(null); // null = closed
   const [roundBusy, setRoundBusy] = useState(false);
@@ -223,6 +280,16 @@ export default function SpinoutLabCapitalPage() {
     return () => { dead = true; };
   }, []);
 
+  // A6 — the export menu closes on any click outside it.
+  useEffect(() => {
+    if (!exportOpen) return undefined;
+    const onDocClick = (e) => {
+      if (exportRef.current && !exportRef.current.contains(e.target)) setExportOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [exportOpen]);
+
   const raiseAvailable = raise && raise !== 'unavailable' && !raise.failed;
   const round = raiseAvailable ? raise.round : null;
   const committed = raiseAvailable ? num(raise.raised) || 0 : 0;
@@ -242,6 +309,83 @@ export default function SpinoutLabCapitalPage() {
   }, [prospects]);
   const score = readinessScore(dataroom);
   const blocking = dataroom.filter((r) => r.status === 'missing');
+
+  // A33 — tracker stats derivable from real rows. Committed/passed
+  // conversations are settled either way, so neither counts as "active".
+  const activeConversations = prospects.filter((p) => p.stage !== 'committed' && p.stage !== 'passed').length;
+  const weightedPipeline = prospects.reduce((a, p) => a + (num(p.amount) || 0) * (STAGE_PROBABILITY[p.stage] ?? 0), 0);
+
+  // A25 — next best actions derived ONLY from real conditions (no scoring or
+  // intent data exists): empty pipeline, prospects with no pipeline update in
+  // >10 days, missing data-room sections. Capped at 3, like the design.
+  const nextActions = useMemo(() => {
+    const acts = [];
+    if (raiseAvailable && prospects.length === 0) {
+      acts.push('Add your first investor prospects — the pipeline is empty.');
+    }
+    if (raiseAvailable) {
+      const stale = prospects
+        .filter((p) => p.stage !== 'committed' && p.stage !== 'passed')
+        .map((p) => ({ p, days: daysSince(p.updated_at) }))
+        .filter((x) => x.days !== null && x.days > 10)
+        .sort((a, b) => b.days - a.days)
+        .slice(0, 2);
+      for (const { p, days } of stale) {
+        acts.push(`Follow up with ${p.name || p.firm || 'an unnamed prospect'} — no pipeline update in ${days} days.`);
+      }
+    }
+    const missing = dataroom.filter((r) => r.status === 'missing');
+    if (missing.length) {
+      const names = missing.slice(0, 2).map((r) => r.name).join(', ');
+      acts.push(`Close the data-room gaps: ${names}${missing.length > 2 ? ` and ${missing.length - 2} more` : ''}.`);
+    }
+    return acts.slice(0, 3);
+  }, [raiseAvailable, prospects, dataroom]);
+
+  // A13 — the design's 8-field round control center. Only Target close and
+  // Min/Ideal/Max have real backing data (raise_rounds.close_date and the
+  // Use-of-Funds raise target). The other six terms aren't tracked anywhere,
+  // so they keep the design's presence as honest "— / Not set" tiles instead
+  // of fabricated values.
+  const overviewTiles = useMemo(() => {
+    const unset = (key, label) => ({ key, label, value: '—', prov: 'unset' });
+    const ideal = num(project?.funding_needed);
+    return [
+      unset('instrument', 'Instrument'),
+      unset('valuation-cap', 'Valuation cap'),
+      unset('discount', 'Discount'),
+      unset('pro-rata', 'Pro-rata rights'),
+      unset('mfn', 'MFN'),
+      unset('lead-profile', 'Lead profile'),
+      round?.close_date
+        ? { key: 'target-close', label: 'Target close', value: fmtDate(round.close_date), prov: 'manual' }
+        : unset('target-close', 'Target close'),
+      // Only the ideal figure (the saved raise target) exists — min and max
+      // are not modeled anywhere, so they stay em-dashes inside the format.
+      ideal > 0
+        ? { key: 'min-ideal-max', label: 'Min / Ideal / Max', value: `— / ${fmtAmt(ideal)} / —`, prov: 'synced', tool: 'Use of Funds' }
+        : unset('min-ideal-max', 'Min / Ideal / Max'),
+    ];
+  }, [round, project]);
+
+  // A6 — both exports serialize state already on the page.
+  const exportPipelineCsv = () => {
+    const header = ['name', 'email', 'firm', 'stage', 'amount_usd', 'updated_at'];
+    const lines = [header.join(',')].concat(
+      prospects.map((p) => [p.name, p.email, p.firm, p.stage, num(p.amount) ?? '', p.updated_at].map(csvCell).join(',')),
+    );
+    downloadFile('investor-pipeline.csv', 'text/csv', lines.join('\n'));
+    setExportOpen(false);
+  };
+  const exportDataroomSummary = () => {
+    downloadFile('data-room-readiness.json', 'application/json', JSON.stringify({
+      generated_at: new Date().toISOString(),
+      project: project?.name || null,
+      readiness_score: score,
+      sections: dataroom.map((r) => ({ key: r.key, name: r.name, source: r.source, status: r.status, note: r.hint || null })),
+    }, null, 2));
+    setExportOpen(false);
+  };
 
   // W4 deliverables, observed from real data:
   // - intros: 3+ prospects that progressed past cold outreach.
@@ -389,6 +533,9 @@ export default function SpinoutLabCapitalPage() {
 
   return (
     <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-capital">
+      {/* A1 — design's 3px violet topline above the tool chrome */}
+      <div className="h-[3px] rounded-b-[3px] bg-violet-600 dark:bg-violet-500" aria-hidden="true" />
+
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3">
         <button
@@ -399,31 +546,70 @@ export default function SpinoutLabCapitalPage() {
         >
           <ArrowLeft size={14} /> Back to Workspace
         </button>
+        {/* A2 — divider + 34px violet icon tile */}
+        <span className="w-px h-5 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+        <span className="w-[34px] h-[34px] flex-none rounded-[9px] bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 flex items-center justify-center" data-testid="tool-icon">
+          <Banknote size={16} />
+        </span>
         <div className="flex items-center gap-2">
-          <Banknote size={16} className="text-violet-500" />
           <h1 className="text-[17px] font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Capital</h1>
           <span className="text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Active</span>
         </div>
-        <span className="ml-auto text-[11px] font-semibold text-gray-400 dark:text-gray-500">Unlocked · Wk {week}</span>
+        {/* A3 — bordered violet week pill */}
+        <span className="ml-auto text-[11px] font-semibold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border border-violet-100 dark:border-violet-800 rounded-full px-3 py-1">
+          Unlocked · Wk {week}
+        </span>
       </div>
       <p className="text-[12.5px] text-gray-500 dark:text-gray-400 -mt-2">
-        Run your fundraise from first signal to first close — round, investor pipeline, and data room in one place.
+        Run the round — targeting, warm intros, data room, pipeline, instruments, and pitch feedback in one workspace.
       </p>
 
-      {/* Raise unavailable / failed */}
-      {raise === 'unavailable' && (
-        <div className={`${CARD} !p-4`} data-testid="raise-unavailable">
-          <p className="text-[12px] text-gray-500 dark:text-gray-400">
-            <span className="font-bold text-gray-700 dark:text-gray-200">Round &amp; investor pipeline are unavailable in this environment.</span>{' '}
-            They run on the deployed backend — open the published app to manage your raise. The data-room readiness below is live.
-          </p>
+      {/* Quick actions (design row A5-A9). Only the two client-side-honest
+          actions ship here: Export serializes loaded data, the investor
+          preview renders loaded data read-only. Share / Copy link: not in
+          scope for this pass. */}
+      <div className="flex flex-wrap items-center gap-1 -mt-1" data-testid="quick-actions">
+        <div className="relative" ref={exportRef}>
+          <button
+            type="button"
+            onClick={() => setExportOpen((o) => !o)}
+            className={QA_BTN}
+            data-testid="button-export-menu"
+          >
+            <Download className="w-3.5 h-3.5 text-gray-400" /> Export <ChevronDown className="w-3 h-3 text-gray-400" />
+          </button>
+          {exportOpen && (
+            <div className="absolute top-9 left-0 z-40 w-52 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl p-1.5" data-testid="export-menu">
+              <button
+                type="button"
+                onClick={exportDataroomSummary}
+                data-testid="button-export-dataroom"
+                className="block w-full text-left text-[12px] font-medium text-gray-700 dark:text-gray-200 rounded-lg px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                Data room export
+              </button>
+              <button
+                type="button"
+                onClick={exportPipelineCsv}
+                disabled={!raiseAvailable}
+                title={raiseAvailable ? undefined : 'Pipeline data is unavailable in this environment'}
+                data-testid="button-export-csv"
+                className="block w-full text-left text-[12px] font-medium text-gray-700 dark:text-gray-200 rounded-lg px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Pipeline CSV
+              </button>
+            </div>
+          )}
         </div>
-      )}
-      {raise?.failed && (
-        <div className={`${CARD} !p-4`} data-testid="raise-failed">
-          <p className="text-[12px] text-amber-600 dark:text-amber-400">Couldn't load your raise pipeline right now — reload to retry. Data-room readiness below is unaffected.</p>
-        </div>
-      )}
+        <button
+          type="button"
+          onClick={() => setPreviewOpen(true)}
+          data-testid="button-investor-preview"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-transparent px-3 py-1.5 text-xs font-semibold text-violet-600 dark:text-violet-300 hover:border-gray-200 hover:bg-white dark:hover:border-gray-700 dark:hover:bg-gray-900"
+        >
+          <Eye className="w-3.5 h-3.5" /> Preview as investor
+        </button>
+      </div>
 
       {/* Stats bar */}
       {raiseAvailable && (
@@ -454,12 +640,23 @@ export default function SpinoutLabCapitalPage() {
               </div>
               {target > 0 && (
                 <div className="relative h-2 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden" data-testid="raise-progress">
-                  <div className="absolute inset-y-0 left-0 bg-amber-300 dark:bg-amber-500/60" style={{ width: `${Math.min(100, ((committed + softCircled) / target) * 100)}%` }} />
-                  <div className="absolute inset-y-0 left-0 bg-violet-600" style={{ width: `${Math.min(100, (committed / target) * 100)}%` }} />
+                  {/* A11 — design encoding: solid committed fill + a 2px
+                      vertical marker at committed + soft-circled. The marker
+                      only renders when a soft-circled figure actually exists. */}
+                  <div className="absolute inset-y-0 left-0 rounded-full bg-violet-600" style={{ width: `${Math.min(100, (committed / target) * 100)}%` }} />
+                  {softCircled > 0 && (
+                    <div
+                      className="absolute inset-y-0 w-0.5 bg-gray-900 dark:bg-gray-100"
+                      style={{ left: `calc(${Math.min(100, ((committed + softCircled) / target) * 100)}% - 1px)` }}
+                      data-testid="soft-circled-marker"
+                    />
+                  )}
                 </div>
               )}
               <div className="flex items-center justify-between mt-2">
-                <div className="text-[10px] text-gray-400">Committed (solid) · soft-circled (light) · target {fmtAmt(target)}</div>
+                <div className="text-[10px] text-gray-400">
+                  Committed (solid){softCircled > 0 ? ' · soft-circled (marker)' : ''} · target {fmtAmt(target)}
+                </div>
                 {canEdit && (
                   <button
                     type="button"
@@ -498,59 +695,185 @@ export default function SpinoutLabCapitalPage() {
               )}
             </div>
           )}
-          <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-2">
-            Instrument terms (SAFE cap, discount, pro-rata) aren't tracked here — model the raise in{' '}
+        </div>
+      )}
+
+      {/* A13/A14 — fundraise overview · round control center. Presence per
+          design, honesty preserved: fields with no backing data render "—"
+          with a "Not set" provenance line, never invented values. */}
+      {raiseAvailable && (
+        <div className={CARD} data-testid="card-fundraise-overview">
+          <div className={`${LBL} mb-3`}>Fundraise overview · round control center</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {overviewTiles.map((t) => {
+              const prov = PROVENANCE[t.prov](t.tool);
+              return (
+                <div key={t.key} className="rounded-xl border border-gray-100 dark:border-gray-800 px-3 py-2.5" data-testid={`overview-${t.key}`}>
+                  <div className={LBL}>{t.label}</div>
+                  <div className="text-[13px] font-extrabold text-gray-900 dark:text-gray-50 tabular-nums mt-0.5">{t.value}</div>
+                  <div className={`text-[10px] font-semibold mt-1 ${prov.cls}`}>{prov.text}</div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-3">
+            Instrument terms (SAFE cap, discount, pro-rata) aren't tracked here yet — model the raise in{' '}
             <Link to="/spinout-lab/use-of-funds" className="text-violet-600 hover:underline">Use of Funds</Link>{' '}
             and your <Link to="/spinout-lab/captable" className="text-violet-600 hover:underline">Cap Table</Link>.
           </p>
         </div>
       )}
 
+      {/* A36 — 1fr / 320px split: pipeline left, intelligence rail right. The
+          data room moved out of this split to a full-width section below. */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5 items-start">
-        {/* Left: pipeline + data room */}
+        {/* Left: pipeline (or the honest unavailable/failed state) */}
         <div className="space-y-4">
+          {raise === 'unavailable' && (
+            <div className={`${CARD} !p-4`} data-testid="raise-unavailable">
+              <p className="text-[12px] text-gray-500 dark:text-gray-400">
+                <span className="font-bold text-gray-700 dark:text-gray-200">Round &amp; investor pipeline are unavailable in this environment.</span>{' '}
+                They run on the deployed backend — open the published app to manage your raise. The data-room readiness below is live.
+              </p>
+            </div>
+          )}
+          {raise?.failed && (
+            <div className={`${CARD} !p-4`} data-testid="raise-failed">
+              <p className="text-[12px] text-amber-600 dark:text-amber-400">Couldn't load your raise pipeline right now — reload to retry. Data-room readiness below is unaffected.</p>
+            </div>
+          )}
+
           {raiseAvailable && (
             <div className={CARD} data-testid="card-pipeline">
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 <div>
                   <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-50">Investor pipeline</div>
+                  {/* A15 — the design subtitle claims "ranked by fit +
+                      warm-intro probability"; no ranking data exists, so the
+                      honest prospect count stays. */}
                   <div className="text-[11px] text-gray-400 dark:text-gray-500">{prospects.length} prospect{prospects.length === 1 ? '' : 's'} · committed total comes from this pipeline</div>
                 </div>
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => { setAddForm({ name: '', email: '', firm: '', amount: '' }); setAddError(''); }}
-                    data-testid="button-add-prospect"
-                    className="ml-auto text-[11.5px] font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-lg px-3 py-1.5 inline-flex items-center gap-1"
-                  >
-                    <Plus size={12} /> Add prospect
-                  </button>
-                )}
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  {/* A16 — Priority / Kanban / Table segmented switcher; all
+                      three render the same prospects array. */}
+                  <div className="flex gap-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 p-0.5" data-testid="pipeline-view-switcher">
+                    {['priority', 'kanban', 'table'].map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setView(v)}
+                        data-testid={`view-${v}`}
+                        className={`text-[11px] font-semibold rounded-md px-2.5 py-1 capitalize ${view === v
+                          ? 'bg-white dark:bg-gray-900 text-violet-600 dark:text-violet-300 shadow-sm'
+                          : 'text-gray-500 dark:text-gray-400'}`}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => { setAddForm({ name: '', email: '', firm: '', amount: '' }); setAddError(''); }}
+                      data-testid="button-add-prospect"
+                      className="text-[11.5px] font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-lg px-3 py-1.5 inline-flex items-center gap-1"
+                    >
+                      <Plus size={12} /> Add prospect
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-1 mb-3">
-                <button
-                  type="button" onClick={() => setStageFilter('all')} data-testid="filter-all"
-                  className={`text-[11px] font-semibold rounded-full px-2.5 py-1 ${stageFilter === 'all' ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}
-                >
-                  All {prospects.length}
-                </button>
-                {stages.map((s) => (
+              {/* Stage filter chips apply to the Priority list only. */}
+              {view === 'priority' && (
+                <div className="flex flex-wrap gap-1 mb-3">
                   <button
-                    key={s} type="button" onClick={() => setStageFilter(s)} data-testid={`filter-${s}`}
-                    className={`text-[11px] font-semibold rounded-full px-2.5 py-1 ${stageFilter === s ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}
+                    type="button" onClick={() => setStageFilter('all')} data-testid="filter-all"
+                    className={`text-[11px] font-semibold rounded-full px-2.5 py-1 ${stageFilter === 'all' ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}
                   >
-                    {STAGE_LABELS[s] || s} {stageCounts[s] || 0}
+                    All {prospects.length}
                   </button>
-                ))}
-              </div>
-              {visibleProspects.length === 0 ? (
+                  {stages.map((s) => (
+                    <button
+                      key={s} type="button" onClick={() => setStageFilter(s)} data-testid={`filter-${s}`}
+                      className={`text-[11px] font-semibold rounded-full px-2.5 py-1 ${stageFilter === s ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}
+                    >
+                      {STAGE_LABELS[s] || s} {stageCounts[s] || 0}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {prospects.length > 0 && view === 'kanban' ? (
+                /* A17 — kanban over the existing stage enum, per-column count
+                   in the header, cards = name + check size. */
+                <div className="overflow-x-auto pb-1" data-testid="pipeline-kanban">
+                  <div className="flex gap-3 min-w-[840px]">
+                    {stages.map((s) => {
+                      // A prospect whose stage falls outside the enum still
+                      // renders — bucketed into the first column, not dropped.
+                      const cards = prospects.filter((p) => (stages.includes(p.stage) ? p.stage : stages[0]) === s);
+                      return (
+                        <div key={s} className="flex-1 min-w-[132px]" data-testid={`kanban-col-${s}`}>
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                            {STAGE_LABELS[s] || s} <span className="text-gray-300 dark:text-gray-600 tabular-nums">{cards.length}</span>
+                          </div>
+                          <div className="space-y-2">
+                            {cards.map((p) => (
+                              <div key={p.id} className="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60 px-2.5 py-2" data-testid={`kanban-card-${p.id}`}>
+                                <div className="text-[11.5px] font-bold text-gray-900 dark:text-gray-50 truncate">{p.name || p.firm || '—'}</div>
+                                <div className="text-[10px] text-gray-400 tabular-nums mt-0.5">{num(p.amount) ? fmtAmt(p.amount) : '—'}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : prospects.length > 0 && view === 'table' ? (
+                /* A18 — table view. The design's last column is "Next step";
+                   no next_step field exists on raise_prospects, so the real
+                   updated_at renders under "Updated" instead. */
+                <div className="overflow-x-auto" data-testid="pipeline-table">
+                  <table className="w-full text-left min-w-[560px]">
+                    <thead>
+                      <tr className={LBL}>
+                        <th className="py-1.5 pr-3 font-bold">Investor</th>
+                        <th className="py-1.5 pr-3 font-bold">Stage</th>
+                        <th className="py-1.5 pr-3 font-bold">Status</th>
+                        <th className="py-1.5 pr-3 font-bold text-right">Check size</th>
+                        <th className="py-1.5 font-bold text-right">Updated</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {prospects.map((p) => (
+                        <tr key={p.id} className="border-t border-gray-100 dark:border-gray-800" data-testid={`table-row-${p.id}`}>
+                          <td className="py-2 pr-3 text-[12px] font-semibold text-gray-900 dark:text-gray-50">
+                            {p.name || '—'}{p.firm ? <span className="text-gray-400 font-normal"> · {p.firm}</span> : null}
+                          </td>
+                          <td className="py-2 pr-3">
+                            <span className={`text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 ${STAGE_BADGE[p.stage] || STAGE_BADGE.to_contact}`}>
+                              {STAGE_LABELS[p.stage] || p.stage}
+                            </span>
+                          </td>
+                          {/* A18/A23 — no per-prospect status distinct from
+                              stage exists; the column keeps design parity and
+                              renders an honest em-dash, never a made-up state. */}
+                          <td className="py-2 pr-3 text-[11.5px] text-gray-400">—</td>
+                          <td className="py-2 pr-3 text-right text-[12px] text-gray-700 dark:text-gray-200 tabular-nums">{num(p.amount) ? fmtAmt(p.amount) : '—'}</td>
+                          <td className="py-2 text-right text-[11px] text-gray-400">{fmtDate(p.updated_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : visibleProspects.length === 0 ? (
                 <div className="text-center py-8" data-testid="pipeline-empty">
                   <Banknote className="w-7 h-7 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
                   <div className="text-[13px] font-bold text-gray-900 dark:text-gray-50 mb-1">
-                    {stageFilter === 'all' ? 'No investor prospects yet' : 'No prospects at this stage'}
+                    {prospects.length === 0 ? 'No investor prospects yet' : 'No prospects at this stage'}
                   </div>
                   <p className="text-[11.5px] text-gray-500 dark:text-gray-400">
-                    {stageFilter === 'all' ? 'Add the investors you plan to approach — real names only.' : 'Try another stage filter.'}
+                    {prospects.length === 0 ? 'Add the investors you plan to approach — real names only.' : 'Try another stage filter.'}
                   </p>
                 </div>
               ) : (
@@ -568,6 +891,9 @@ export default function SpinoutLabCapitalPage() {
                           {num(p.amount) ? `${fmtAmt(p.amount)} check · ` : ''}updated {fmtDate(p.updated_at)}
                         </div>
                       </div>
+                      {/* A23 — the design shows stage + status as two pills;
+                          only `stage` exists on raise_prospects, so a single
+                          pill renders rather than a fabricated second one. */}
                       <span className={`text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 ${STAGE_BADGE[p.stage] || STAGE_BADGE.to_contact}`}>
                         {STAGE_LABELS[p.stage] || p.stage}
                       </span>
@@ -588,64 +914,52 @@ export default function SpinoutLabCapitalPage() {
               )}
             </div>
           )}
+        </div>
 
-          {/* Data room — works in every environment */}
-          <div className={CARD} data-testid="card-dataroom">
-            <div className="flex items-center justify-between mb-1">
-              <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-50">Data room · investor-ready diligence</div>
-              {score !== null && (
-                <div className="text-[13px] font-extrabold tabular-nums" data-testid="text-readiness-score">
-                  <span className={score >= 70 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>{score}</span>
-                  <span className="text-gray-400 font-semibold text-[11px]"> / 100 readiness</span>
-                </div>
-              )}
-            </div>
-            <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mb-3">
-              Derived live from what actually exists in each tool — nothing is uploaded here.
-            </p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className={LBL}>
-                    <th className="py-1.5 pr-3 font-bold">Section</th>
-                    <th className="py-1.5 pr-3 font-bold">Source</th>
-                    <th className="py-1.5 font-bold">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dataroom.map((r) => {
-                    const meta = STATUS_META[r.status];
-                    return (
-                      <tr key={r.key} className="border-t border-gray-100 dark:border-gray-800" data-testid={`dataroom-${r.key}`}>
-                        <td className="py-2 pr-3">
-                          <Link to={r.to} className="text-[12px] font-semibold text-gray-900 dark:text-gray-50 hover:text-violet-600">{r.name}</Link>
-                          {r.hint && <div className="text-[10px] text-gray-400">{r.hint}</div>}
-                        </td>
-                        <td className="py-2 pr-3 text-[11.5px] text-gray-500 dark:text-gray-400">{r.source}</td>
-                        <td className="py-2">
-                          <span className={`inline-flex items-center gap-1 text-[11px] font-bold ${meta.cls}`}>
-                            <meta.Icon size={12} /> {meta.label}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {blocking.length > 0 && (
-              <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40 px-3 py-2.5 mt-3" data-testid="dataroom-blocking">
-                <p className="text-[11.5px] text-amber-800 dark:text-amber-300">
-                  <span className="font-bold">Blocking investor readiness:</span>{' '}
-                  {blocking.map((r) => r.name).join(', ')} — open each section above to fill the gap.
-                </p>
+        {/* Right rail (A25/A27) — derived intelligence + existing cards.
+            A26 "Warm intro opportunities" is intentionally skipped: raise
+            prospects carry no intro_source / warmth fields, and inventing
+            intro paths would fabricate data. */}
+        <div className="space-y-4">
+          <div className={CARD} data-testid="card-next-actions">
+            <div className={`${LBL} mb-3`}>Next best actions</div>
+            {nextActions.length === 0 ? (
+              <p className="text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="next-actions-empty">
+                Nothing urgent detected — pipeline and data room look current.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {nextActions.map((text, i) => (
+                  <div key={text} className="flex items-start gap-2 rounded-lg bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800 px-2.5 py-2" data-testid={`next-action-${i + 1}`}>
+                    <span className="w-5 h-5 shrink-0 rounded-md bg-teal-50 dark:bg-teal-900/40 text-teal-600 dark:text-teal-300 text-[10px] font-bold flex items-center justify-center">{i + 1}</span>
+                    <p className="text-[11.5px] text-gray-600 dark:text-gray-300 leading-snug">{text}</p>
+                  </div>
+                ))}
               </div>
             )}
           </div>
-        </div>
 
-        {/* Right: investor updates */}
-        <div className="space-y-4">
+          <div className={CARD} data-testid="card-missing-diligence">
+            <div className={`${LBL} mb-3`}>Missing diligence items</div>
+            {blocking.length === 0 ? (
+              <p className="inline-flex items-center gap-1.5 text-[11.5px] text-emerald-600 dark:text-emerald-400" data-testid="missing-diligence-empty">
+                <CheckCircle2 size={13} /> No missing sections detected right now.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {blocking.map((r) => (
+                  <Link
+                    key={r.key} to={r.to} data-testid={`missing-item-${r.key}`}
+                    className="flex items-start gap-2 text-[11.5px] text-amber-700 dark:text-amber-400 hover:underline"
+                  >
+                    <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                    <span>{r.name} <span className="text-gray-400">· {r.source}</span></span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
           {raiseAvailable && (
             <div className={CARD} data-testid="card-updates">
               <div className="flex items-center justify-between mb-1">
@@ -698,6 +1012,92 @@ export default function SpinoutLabCapitalPage() {
           </div>
         </div>
       </div>
+
+      {/* Data room — full-width section below the split (A36); works in every
+          environment. */}
+      <div className={CARD} data-testid="card-dataroom">
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-50">Data room · investor-ready diligence</div>
+          {score !== null && (
+            <div className="text-[13px] font-extrabold tabular-nums" data-testid="text-readiness-score">
+              <span className={score >= 70 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>{score}</span>
+              <span className="text-gray-400 font-semibold text-[11px]"> / 100 readiness</span>
+            </div>
+          )}
+        </div>
+        <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mb-3">
+          Derived live from what actually exists in each tool — nothing is uploaded here.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className={LBL}>
+                <th className="py-1.5 pr-3 font-bold">Section</th>
+                <th className="py-1.5 pr-3 font-bold">Source</th>
+                <th className="py-1.5 font-bold">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dataroom.map((r) => {
+                const meta = STATUS_META[r.status];
+                return (
+                  <tr key={r.key} className="border-t border-gray-100 dark:border-gray-800" data-testid={`dataroom-${r.key}`}>
+                    <td className="py-2 pr-3">
+                      <Link to={r.to} className="text-[12px] font-semibold text-gray-900 dark:text-gray-50 hover:text-violet-600">{r.name}</Link>
+                      {r.hint && <div className="text-[10px] text-gray-400">{r.hint}</div>}
+                    </td>
+                    <td className="py-2 pr-3 text-[11.5px] text-gray-500 dark:text-gray-400">{r.source}</td>
+                    <td className="py-2">
+                      <span className={`inline-flex items-center gap-1 text-[11px] font-bold ${meta.cls}`}>
+                        <meta.Icon size={12} /> {meta.label}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {blocking.length > 0 && (
+          <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40 px-3 py-2.5 mt-3" data-testid="dataroom-blocking">
+            <p className="text-[11.5px] text-amber-800 dark:text-amber-300">
+              <span className="font-bold">Blocking investor readiness:</span>{' '}
+              {blocking.map((r) => r.name).join(', ')} — open each section above to fill the gap.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* A33 — round tracker · weighted forecast. The design leads with "At
+          current pace, projected first close on {date}" and a "Meetings this
+          week" stat; neither is derivable (stage transitions aren't
+          timestamped, and updated_at records row edits, not meetings), so
+          both are omitted rather than faked. */}
+      {raiseAvailable && (
+        <div className={CARD} data-testid="card-round-tracker">
+          <div className={`${LBL} mb-1`}>Round tracker · weighted forecast</div>
+          <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mb-3">
+            Derived live from the pipeline and data room. No projected close date is shown — stage history isn't tracked yet, so a pace can't be computed honestly.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div data-testid="tracker-active">
+              <div className={LBL}>Active conversations</div>
+              <div className="text-[17px] font-extrabold text-gray-900 dark:text-gray-50 tabular-nums">{activeConversations}</div>
+              <div className="text-[10px] text-gray-400">not yet committed or passed</div>
+            </div>
+            <div data-testid="tracker-diligence">
+              <div className={LBL}>Diligence outstanding</div>
+              <div className="text-[17px] font-extrabold text-gray-900 dark:text-gray-50 tabular-nums">{blocking.length}</div>
+              <div className="text-[10px] text-gray-400">missing data-room section{blocking.length === 1 ? '' : 's'}</div>
+            </div>
+            <div data-testid="tracker-weighted">
+              <div className={LBL}>Weighted pipeline</div>
+              <div className="text-[17px] font-extrabold text-gray-900 dark:text-gray-50 tabular-nums">{weightedPipeline > 0 ? fmtAmt(weightedPipeline) : '$0'}</div>
+              <div className="text-[10px] text-gray-400">Σ check × stage probability</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       {(roundForm || addForm || composeForm) && (
@@ -785,6 +1185,86 @@ export default function SpinoutLabCapitalPage() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* A8 — investor preview: read-only render of data already loaded on
+          this page (round summary + data-room status), blurred scrim,
+          backdrop click closes. */}
+      {previewOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-gray-950/45 backdrop-blur-[2px] flex items-start justify-center overflow-y-auto p-6"
+          onClick={() => setPreviewOpen(false)}
+          data-testid="modal-investor-preview"
+        >
+          <div
+            className="w-full max-w-[640px] my-4 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+              <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-50">Investor preview · Capital &amp; data room</div>
+              <button type="button" onClick={() => setPreviewOpen(false)} data-testid="button-close-preview" className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              <p className="text-[11px] text-gray-400 dark:text-gray-500">
+                Read-only view assembled from the live workspace — exactly what exists today, nothing staged.
+              </p>
+              <div>
+                <div className={`${LBL} mb-2`}>Round summary</div>
+                {raiseAvailable && round ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Round</div>
+                      <div className="text-[12.5px] font-bold text-gray-900 dark:text-gray-50">{round.name || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Target</div>
+                      <div className="text-[12.5px] font-bold text-gray-900 dark:text-gray-50 tabular-nums">{fmtAmt(target)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Committed</div>
+                      <div className="text-[12.5px] font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{committed > 0 ? fmtAmt(committed) : '$0'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Target close</div>
+                      <div className="text-[12.5px] font-bold text-gray-900 dark:text-gray-50">{fmtDate(round.close_date)}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11.5px] text-gray-500 dark:text-gray-400">
+                    {raise === 'unavailable'
+                      ? 'Round data is unavailable in this environment.'
+                      : raise?.failed
+                        ? "The round couldn't be loaded right now."
+                        : 'No active round on record yet.'}
+                  </p>
+                )}
+              </div>
+              <div>
+                <div className={`${LBL} mb-2`}>Data room status</div>
+                <div className="space-y-1.5">
+                  {dataroom.map((r) => {
+                    const meta = STATUS_META[r.status];
+                    return (
+                      <div key={r.key} className="flex items-center justify-between gap-3" data-testid={`preview-dataroom-${r.key}`}>
+                        <div className="text-[12px] font-medium text-gray-700 dark:text-gray-200 min-w-0 truncate">
+                          {r.name} <span className="text-gray-400 font-normal">· {r.source}</span>
+                        </div>
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-bold shrink-0 ${meta.cls}`}>
+                          <meta.Icon size={12} /> {meta.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {score !== null && (
+                  <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-2">{score} / 100 readiness — derived live from the tools above.</p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

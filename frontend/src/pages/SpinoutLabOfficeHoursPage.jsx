@@ -17,19 +17,21 @@
 //     pending lab milestones (e.g. incorporation) + weakest dimensions from
 //     the latest Scoring Engine snapshot (shared buildGaps).
 //   - Pre-session brief: client-assembled from real project + lab state +
-//     scoring data, clearly labelled auto-generated; it can be attached to
+//     scoring data, clearly labelled auto-generated; it can be edited in
+//     place (local overrides — "Reset to generated" restores), attached to
 //     a booking (goes into the booking's real `questions` field) or copied.
 //   - Action items · execution handoff: the current week's real milestone
 //     checklist (read-only — items complete by doing the work in the linked
 //     tool, not by ticking a box here).
 //   - Omitted (no backend): partner ratings, "Resend to partner",
-//     share/export/preview-as-investor, rescheduling.
+//     rescheduling. Share / Export / Preview-as-investor render as disabled
+//     quick actions with the reason in their tooltip.
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Loader2, Lock, Calendar, CalendarCheck, Copy, Check, X,
-  AlertTriangle, ExternalLink, Search, ChevronRight,
+  AlertTriangle, ExternalLink, Search, ChevronRight, Share2, Download, Eye,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
@@ -41,6 +43,8 @@ import { initialsOf, buildGaps } from './SpinoutLabAdvisorsPage';
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[10.5px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const BTN = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold transition-colors';
+// Borderless quick-action chrome (design L41-44) — text colour set per button.
+const QA = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent';
 
 // Role tag derived from the partner's real marketplace categories /
 // specialization — the design's LAWYER / OPERATOR / INVESTOR chips.
@@ -71,7 +75,44 @@ function RoleTag({ role }) {
   );
 }
 
-const OBJECTIVES = ['Fundraising', 'Incorporation', 'GTM & pricing', 'Hiring & org', 'Product', 'Other'];
+// Design's fixed directory taxonomy (Office Hours.dc.html L283-285). Real
+// roles map into it — Finance and generic Partner behave as service partners
+// under "Operators"; the RoleTag chip still shows the true role.
+const FILTERS = [
+  ['recommended', 'Recommended'],
+  ['Investor', 'Investors'],
+  ['Lawyer', 'Lawyers'],
+  ['Operator', 'Operators'],
+  ['all', 'All'],
+];
+const filterRoleOf = (role) => (role === 'Lawyer' || role === 'Investor' ? role : 'Operator');
+// Per-filter directory note (design L286). The recommended note is dynamic
+// (needs the current week) and built at render; the Operators wording is
+// widened because the app folds finance partners into that bucket.
+const DIR_NOTE = {
+  Investor: 'Pre-seed and seed investors — book before and during your raise.',
+  Lawyer: 'Formation and financing counsel — book before you sign.',
+  Operator: 'Service partners for tactical execution — GTM, hiring, ops, product, and finance.',
+  all: 'Every partner in the Axal network.',
+};
+
+// Rec-card tint per partner type (design recBg / recBorder L266-267).
+const REC_TINT = {
+  Lawyer: 'border-amber-200 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-950/20',
+  Operator: 'border-teal-200 bg-teal-50/60 dark:border-teal-900/60 dark:bg-teal-950/20',
+  Investor: 'border-sky-200 bg-sky-50/60 dark:border-sky-900/60 dark:bg-sky-950/20',
+};
+
+// Deterministic avatar-tile colour per partner (design assigns one per persona).
+const AVATAR_BGS = ['bg-teal-600', 'bg-sky-600', 'bg-amber-500', 'bg-violet-600', 'bg-emerald-600', 'bg-rose-500'];
+const avatarBgOf = (name) => {
+  let h = 0;
+  for (const ch of String(name || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return AVATAR_BGS[h % AVATAR_BGS.length];
+};
+
+// Design objective list (L328) + the page's Product / Other additions.
+const OBJECTIVES = ['Fundraising', 'Incorporation', 'Customer validation', 'GTM & pricing', 'Hiring & org', 'Deck feedback', 'Product', 'Other'];
 
 const fmtWhen = (iso) => {
   const d = new Date(iso);
@@ -103,11 +144,20 @@ export function normSlot(s) {
   };
 }
 export function normBooking(b) {
+  const start = b.scheduled_start ?? b.starts_at ?? null;
+  const end = b.scheduled_end ?? b.ends_at ?? null;
+  let duration = b.duration_min;
+  if (!Number.isFinite(duration) && start && end) {
+    const ms = new Date(end) - new Date(start);
+    if (Number.isFinite(ms) && ms > 0) duration = Math.round(ms / 60000);
+  }
   return {
     ...b,
     status: b.status === 'pending' ? 'requested' : b.status,
     questions: b.questions ?? b.notes ?? null,
-    scheduled_start: b.scheduled_start ?? b.starts_at ?? null,
+    scheduled_start: start,
+    // Worker DTO carries no times — stays null and the row simply omits it.
+    duration_min: Number.isFinite(duration) ? duration : null,
     meeting_uri: b.meeting_uri ?? b.meeting_url ?? null,
   };
 }
@@ -165,6 +215,10 @@ export default function SpinoutLabOfficeHoursPage() {
   const [filter, setFilter] = useState('recommended');
   const [historyQ, setHistoryQ] = useState('');
   const [copiedBrief, setCopiedBrief] = useState(false);
+  // Brief editing (B26) — local overrides keyed by section heading. They feed
+  // briefText, so an edited brief is what travels with a booking.
+  const [editingBrief, setEditingBrief] = useState(false);
+  const [briefEdits, setBriefEdits] = useState(null); // { [heading]: text } | null
 
   // Booking drawer state.
   const [drawerFor, setDrawerFor] = useState(null); // partner dto
@@ -234,7 +288,11 @@ export default function SpinoutLabOfficeHoursPage() {
     .filter((b) => b.status === 'completed' || (b.status !== 'cancelled' && startMs(b) !== null && startMs(b) <= now))
     .sort((a, b) => (startMs(b) ?? 0) - (startMs(a) ?? 0)), [allBookings, now]);
   const completedCount = allBookings.filter((b) => b.status === 'completed').length;
-  const awaitingConfirm = allBookings.filter((b) => b.status === 'requested').length;
+  // "Follow-ups pending" — sessions that still need something from you: an
+  // upcoming confirmed session to prep for, or a request the partner hasn't
+  // answered yet.
+  const followUpsPending = allBookings.filter((b) => b.status === 'requested'
+    || (b.status === 'confirmed' && (startMs(b) === null || startMs(b) > now))).length;
 
   // ---- Recommended help now (real blockers + real scoring gaps) ----
   const milestoneDone = (key) => (state?.milestones || []).some((m) => (m.key || m.milestone_key) === key);
@@ -264,15 +322,14 @@ export default function SpinoutLabOfficeHoursPage() {
   const dirItems = useMemo(() => (Array.isArray(partners) ? partners : [])
     .filter((p) => p.status !== 'inactive')
     .map((p) => ({ ...p, role: roleOfPartner(p) })), [partners]);
-  const rolesPresent = useMemo(
-    () => [...new Set(dirItems.map((p) => p.role))].sort(),
-    [dirItems],
-  );
   const recommendedRoles = useMemo(() => new Set(helpCards.map((c) => c.role)), [helpCards]);
   const visiblePartners = filter === 'all' ? dirItems
     : filter === 'recommended'
       ? [...dirItems].sort((a, b) => (recommendedRoles.has(b.role) ? 1 : 0) - (recommendedRoles.has(a.role) ? 1 : 0))
-      : dirItems.filter((p) => p.role === filter);
+      : dirItems.filter((p) => filterRoleOf(p.role) === filter);
+  const dirNote = filter === 'recommended'
+    ? `Matched to your week ${Number(state?.week || 1)} context, scoring gaps, and open blockers.`
+    : DIR_NOTE[filter] || '';
 
   // ---- Pre-session brief (client-assembled from real data, labelled) ----
   const brief = useMemo(() => {
