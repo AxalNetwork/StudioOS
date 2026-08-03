@@ -1,0 +1,59 @@
+The Advisors page HTML you attached is a fully self-contained static prototype — the `DCLogic` component only has hardcoded local `state` (drawerOpen, selKey, introOpen, filter, added, reqGap, etc.) and a hardcoded `advisors` array baked directly into the class. There is **no `isAdmin` variable anywhere in this file**, no Supabase/API calls, and no auth logic at all — confirming your suspicion: this was a Claude-Design mockup that was never backend-connected.[1]
+
+That means the crash — `Cannot access 'isAdmin' before initialization` — is happening in the **Studio page/route wrapper** that was built around this component (likely during integration), not inside the design file itself. This is a classic JavaScript **temporal dead zone (TDZ)** bug: something in the page (a hook, a memo, a JSX conditional, or a permissions check gating "Add advisor" / "Approve" actions) references `isAdmin` before the `const isAdmin = ...` declaration line executes.[1]
+
+Here's a Replit prompt to fix it and finish the integration properly.
+
+## Replit prompt
+
+Fix a runtime crash on the **Advisors** page inside the Spin-Out Lab app: `Cannot access 'isAdmin' before initialization`.
+
+### Root cause to investigate
+
+This is a JavaScript **temporal dead zone (TDZ)** error. It means somewhere in the Advisors page's route/component tree, a variable named `isAdmin` is being **read or referenced before its `const`/`let` declaration is evaluated** in the same scope. Common causes to check, in order:
+
+1. `isAdmin` is used inside a function, `useMemo`, `useEffect`, `useCallback`, or JSX expression that is defined **above** the line where `const isAdmin = ...` is declared in the same component file.
+2. `isAdmin` is derived from a hook (e.g. `useAuth()`, `useUser()`, `useSession()`, or a role-check hook) and that hook call was **moved below** other code that already depends on `isAdmin` during a refactor/paste.
+3. `isAdmin` is destructured conditionally (inside an `if` block or after an early `return`) but referenced outside that block — this also throws a TDZ error in strict mode.
+4. A prop or context value called `isAdmin` is passed to a child component, but the parent component's own local `const isAdmin` shadows it and is declared later in the file than a closure that captured it.
+5. Two files both declare `isAdmin` (e.g. a shared permissions util and a local page-level override) and there's a circular import or evaluation-order issue between them.
+
+**Action:** Locate the actual Advisors page file in the app (likely something like `app/(dashboard)/advisors/page.tsx`, `pages/advisors.tsx`, or a component like `AdvisorsPage.tsx` / `Advisors.tsx`). Search the whole file and its imports for every occurrence of `isAdmin`. Reorder so that:
+- All `const isAdmin = ...` (or equivalent hook calls) happen **at the top of the component body**, before any function, memo, effect, or JSX that references it.
+- No `isAdmin` reference happens above its declaration in the same closure.
+
+Do the same TDZ audit for any other role-based variables on this page (`isOperator`, `canApprove`, `canEdit`, etc.) since they often get introduced together.
+
+### Second issue: the page was never backend-integrated
+
+The original design file (`Advisors.dc.html`, attached) is a **static Claude-Design mockup** with zero backend wiring:
+- All advisor data (Sofia Menendez, Raj Patel, Dr. Lena Fischer, Marcus Webb) is a **hardcoded array inside the component's local class**, not fetched from any API or database.
+- "Add advisor," "Generate intro," "Request another match," bench state, drawer state, and filters are all **local component state only** — nothing persists, nothing calls a server action, nothing checks user roles.
+- There is no `isAdmin`, no auth check, no permissions logic anywhere in the original file.
+
+This means whoever integrated this into the live Studio app **added the `isAdmin` permission check and any backend calls themselves**, and that integration has a bug. Please do the following:
+
+1. **Fix the immediate crash first** using the TDZ fix above so the page renders again with the current mock/static data intact — do not break the existing visual design, layout, colors, or interactions from the attached HTML file.
+2. **Then complete the backend integration properly:**
+   - Replace the hardcoded `advisors` array with a real data fetch (from Supabase or whatever the app's data layer is) scoped to the current company/team, matching the shape used in the mockup: `key, name, initials, avatarBg, expertise, location, score, valuesFit, tags, rationale, contribution, risk, bio, roles, engagement, engagementNote, equity, equityNote, value90, breakdown, complementNote, coverage, heat`.
+   - Wire "Add advisor" to actually persist to a table (e.g. `company_advisor_bench`) instead of only updating local `added` state.
+   - Wire "Generate intro" to either call a real AI endpoint or keep the current template-based generator, but make it clear which one is intended — do not leave it half-wired.
+   - Wire the "Team profile" panel (skill coverage, archetypes, values profile) to real team/company data instead of the hardcoded `teamSkills`/`teamArchetypes`/`teamValues` constants.
+   - Gate admin-only actions (e.g. approving an advisor match, editing team profile weights) behind the now-fixed `isAdmin` check, but make sure regular founders can still view the page and use "View profile" / "Generate intro" / "Add advisor" as before.
+   - Confirm the "Unlocked · Wk 3" badge and "Advisor matching engine" description reflect the real unlock state for that company's cohort week, not a hardcoded string.
+3. **Preserve the exact visual design** from the attached HTML: the gap-map cards (Missing skill, Missing archetype, Scoring weak point, Values risk), the ranked matches list with match score circles, tag chips, risk callouts, the right-rail team profile card, advisor bench card, the slide-in advisor detail drawer with score breakdown bars and skill heatmap, the intro-email modal, and the "Request another match" modal.
+4. Add proper **loading, empty, and error states** for the now-live data (e.g. no advisors matched yet, fetch failed, team profile not yet computed) instead of assuming data is always present like the static mock does.
+5. Test as both an admin user and a non-admin user to confirm the `isAdmin` fix doesn't crash either path, and test with a company that has zero bench advisors (the mock already has an empty-state string: "No advisors added yet. Add a match to build your bench.").
+
+### Acceptance criteria
+
+- Advisors page loads without the `isAdmin` TDZ error for both admin and non-admin accounts.
+- Visual design matches the attached HTML file exactly (spacing, colors, typography, card layout, drawer, modals).
+- Advisor list, team profile, and bench are read from real backend data, not the hardcoded array.
+- "Add advisor" persists and survives a page refresh.
+- Role-gated actions are actually gated by the corrected `isAdmin` value.
+
+Sources
+[1] Advisors.dc.html https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/515796799/9194bb29-625d-44ef-bcc1-34d0cc3546ed/Advisors.dc.html?AWSAccessKeyId=ASIA2F3EMEYETY4TOY7B&Signature=vNUvEfaIj7X%2FD3P2wR0vu%2B6egPg%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEDIaCXVzLWVhc3QtMSJHMEUCIEYJp2MV%2BTgiu0I5ZdeBOl9WooW6tISTbb2DmxEHM6lGAiEApx3K1ZMC1X%2FAu8G44c4z8iNulyZ7i%2BPVF0MGqn9cefcq%2FAQI%2Bv%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDFdl0b8QHAvZh4LaICrQBKQVhVvConcvdqg8GnivkYNV57%2BPpWB3PU%2F%2FqeCEZYm3LuCJqN%2FO3nlW2YolxTxTuHuWenI2HsHL2cvkJjy2fN%2Fmz3XHzjRbk7N1i3Ufdo9%2BIJktaMcw4q%2F9gxQntr9fxYNSWqSDxZQHwam4AQALmtlk4Uscf98JTrsQjEoebJ2E9%2FhaAI7JLkyPTElS8K01z5pJCBLfJjpzSwXZUpkIfYdpk4ool6uiqt1JC7Y4I%2Fg%2Fwliq%2BHwHoRAUGCi2ynpMUcQG%2Bc%2FhqxzDHNH%2BTEc%2B8tTN3lBmCcn1FbapqI%2BWEMc%2BV32wPdRVbq9iq0eOJuFGD20%2FFkYwQ1D2VbBGSj%2FTN6uVlX6MzkkRSwq%2FucAI%2Bt%2BddsRghiFSE2bIAzX2u36F1pFZdW9XQDXeyVqrTL1FqV17R7xE%2Fsxf24aJFt%2BYc3tqq6CHXn6BQXfdwjQ%2FHiIX42fSEyAV2zmDiUbVp%2Fh7fga1Thc9cM2hRiluMjjdOkSHmZL9DFs9l%2B2QeZ%2FlT37KWF542s6scgN8ECzFRilvqbMAcsbptrWANojiajcNcQMj%2FRXCOS9ak%2BUDkLl6ObgwvkAKoYMk0jippfTtAoFjkyWxk8iSTg2kbLHAOFGFaVISyRYbRIqS1NbqUMkbU3cOC24loqCUjx%2BEFJsUYoMwuVVH2nlcwpk77nIzsJBWZk0z3OlM0OW%2FldwNxaRyZ48LZP%2BDNR6XCOR7RZPMH%2BQQdB0ol4PJAZ47gExPQNTbHUJee3%2FeEzjwbsCSgnXjCpq01OxZrJ%2FlPwAQ3QCdkZ202P4w%2BJjD0wY6mAFr83dM3YQqtW75E%2BtTx6iv7UTwL7tPAA5XTooiHmof80nxfk4HwWcMf%2FfgBWGzoEAAiCgDEvearVcpPocq%2Fk3b6q8g6wFeT39IKpvcrgLlQTIF%2BthRQ3uhCAouO0IyMjCJ3zI2KOnAQA%2Fa0oIqb%2BcckBgFwqqb%2FoYH%2BUMJG08dpSaeuLbYr7dDWLbZ9cweULgxeP9Nj8Q73g%3D%3D&Expires=1785778498
+[2] Screenshot-2026-08-03-at-7.21.33-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/e2a88abb-8a2b-43a4-a0e1-9d3d065ff25a/Screenshot-2026-08-03-at-7.21.33-PM.jpeg
+[3] Screenshot-2026-08-03-at-7.21.09-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/8b200cf6-ba65-4316-88de-13e27958a560/Screenshot-2026-08-03-at-7.21.09-PM.jpeg

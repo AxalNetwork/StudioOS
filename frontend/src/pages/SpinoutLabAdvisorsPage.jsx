@@ -245,6 +245,10 @@ export default function SpinoutLabAdvisorsPage() {
     return () => { dead = true; };
   }, []);
 
+  // NOTE: declared before first use — referencing it below a later `const`
+  // declaration threw a TDZ crash ("Cannot access 'isAdmin' before
+  // initialization") that took down the whole page.
+  const isAdmin = user?.role === 'admin';
   const unlocked = isAdmin || (state?.unlocked_features || []).includes('advisors');
   const items = useMemo(() => {
     const list = Array.isArray(matches?.items) ? [...matches.items] : [];
@@ -349,7 +353,6 @@ export default function SpinoutLabAdvisorsPage() {
       </div>
     );
   }
-  const isAdmin = user?.role === 'admin';
   if (!state?.active && !isAdmin) {
     return (
       <div className="max-w-xl mx-auto mt-16 text-center" data-testid="advisors-inactive">
