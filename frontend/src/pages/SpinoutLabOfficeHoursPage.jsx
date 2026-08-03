@@ -280,11 +280,6 @@ export default function SpinoutLabOfficeHoursPage() {
     .filter((b) => b.status === 'completed' || (b.status !== 'cancelled' && startMs(b) !== null && startMs(b) <= now))
     .sort((a, b) => (startMs(b) ?? 0) - (startMs(a) ?? 0)), [allBookings, now]);
   const completedCount = allBookings.filter((b) => b.status === 'completed').length;
-  // "Follow-ups pending" — sessions that still need something from you: an
-  // upcoming confirmed session to prep for, or a request the partner hasn't
-  // answered yet.
-  const followUpsPending = allBookings.filter((b) => b.status === 'requested'
-    || (b.status === 'confirmed' && (startMs(b) === null || startMs(b) > now))).length;
 
   // ---- Recommended help now (real blockers + real scoring gaps) ----
   const milestoneDone = (key) => (state?.milestones || []).some((m) => (m.key || m.milestone_key) === key);
