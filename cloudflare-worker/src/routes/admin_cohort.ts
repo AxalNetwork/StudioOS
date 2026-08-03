@@ -301,8 +301,9 @@ r.post('/applications/:applicant_id/decide', async (c) => {
   }
   if (!reason) return c.json({ error: 'A reason is required for every decision' }, 400);
   const row = await c.env.DB.prepare(
-    `SELECT ca.*, cc.year, cc.month, cc.app_status FROM cohort_applicants ca
-       JOIN cohort_cycles cc ON cc.id = ca.cohort_cycle_id WHERE ca.id = ?`,
+    `SELECT ca.*, cc.year, cc.month, cc.app_status, sa.company_name FROM cohort_applicants ca
+       JOIN cohort_cycles cc ON cc.id = ca.cohort_cycle_id
+       LEFT JOIN spinout_applications sa ON sa.id = ca.application_id WHERE ca.id = ?`,
   ).bind(applicantId).first<Record<string, unknown>>();
   if (!row) return c.json({ error: 'Applicant not found' }, 404);
   if (['activated', 'rolled_forward'].includes(String(row.status))) {
@@ -330,11 +331,62 @@ r.post('/applications/:applicant_id/decide', async (c) => {
   const label = monthLabel(Number(row.year), Number(row.month));
   const cycleId = Number(row.cohort_cycle_id);
   const userId = Number(row.user_id);
+  // Templated admission-decision email (accepted → welcome link, refused →
+  // re-apply link). The in-app notification below stays, but with email: false
+  // for approved/rejected so candidates don't get two emails for one decision.
+  let emailed = false;
+  // True once the templated decision email is accounted for — either sent by
+  // this call, or already claimed earlier (re-decide, retry, or the legacy
+  // admin decide route which claims the same ledger key). notifyOnce below
+  // must not email in either case, only when no decision email ever went out.
+  let emailHandled = false;
+  if (status === 'approved' || status === 'rejected') {
+    try {
+      // Idempotency: at most ONE decision email per (user, cycle, decision).
+      const { claimDecisionEmail } = await import('../services/cohortApplications');
+      const alreadyClaimed = !(await claimDecisionEmail(c.env, userId, cycleId, status));
+      if (alreadyClaimed) emailHandled = true;
+      const target = alreadyClaimed
+        ? null
+        : await c.env.DB.prepare(`SELECT email, name FROM users WHERE id = ?`)
+            .bind(userId).first<{ email: string; name: string | null }>();
+      if (target?.email) {
+        const { send } = await import('../services/email/send');
+        const appUrl = (c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+        if (status === 'approved') {
+          const labUrl = `${appUrl}/spinout-lab`;
+          const r = await send(c.env, 'spinout_admitted', target.email, {
+            name: target.name || 'there',
+            cohort_label: label,
+            lab_url: labUrl,
+          }, { userId, ctaUrl: labUrl });
+          emailed = !!r?.ok;
+          if (emailed) emailHandled = true;
+        } else {
+          const y = Number(row.year); const m = Number(row.month);
+          const nextLabel = monthLabel(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1);
+          const applyUrl = `${appUrl}/spinout-lab/apply`;
+          const r = await send(c.env, 'spinout_refused', target.email, {
+            name: target.name || 'there',
+            company_name: String(row.company_name || 'your startup'),
+            cohort_label: label,
+            next_cohort_label: nextLabel,
+            apply_url: applyUrl,
+          }, { userId, ctaUrl: applyUrl });
+          emailed = !!r?.ok;
+          if (emailed) emailHandled = true;
+        }
+      }
+    } catch (e) {
+      console.error('[admin-cohort/decide] decision email failed', e);
+    }
+  }
   if (status === 'approved') {
     await notifyOnce(c.env, {
       userId, cycleId, notifType: 'decision_approved',
       title: `You're in — ${label} Spin-Out Lab cohort`,
       body: `Your application was approved for the ${label} cohort. Your workspace unlocks automatically when the cohort starts on the 1st.`,
+      email: !emailHandled,
     });
   } else if (status === 'rejected') {
     await notifyOnce(c.env, {
@@ -342,6 +394,7 @@ r.post('/applications/:applicant_id/decide', async (c) => {
       title: `Spin-Out Lab ${label} cohort decision`,
       body: `Your application wasn't selected for the ${label} cohort this time. You're welcome to apply again for a future cohort.`,
       link: '/spinout-lab/apply',
+      email: !emailHandled,
     });
   } else {
     await notifyOnce(c.env, {
@@ -354,7 +407,7 @@ r.post('/applications/:applicant_id/decide', async (c) => {
     `Applicant #${applicantId} (user_id=${userId}) ${status}: ${reason}`, `admin:${adminUser.id}`);
   await logActivity(c.env, adminUser.email, adminUser.id, `cohort_applicant_${status}`,
     `Admin ${adminUser.name} marked applicant #${applicantId} ${status} for ${label} (reason: ${reason})`);
-  return c.json({ ok: true, status });
+  return c.json({ ok: true, status, emailed });
 });
 
 r.post('/applications/cycles/:cycle_id/force-proceed', async (c) => {

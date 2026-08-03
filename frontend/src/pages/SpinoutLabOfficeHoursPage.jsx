@@ -266,7 +266,8 @@ export default function SpinoutLabOfficeHoursPage() {
     if (mine && Array.isArray(mine.items)) setBookings({ items: mine.items.map(normBooking) });
   };
 
-  const unlocked = (state?.unlocked_features || []).includes('office-hours');
+  const isAdmin = user?.role === 'admin';
+  const unlocked = isAdmin || (state?.unlocked_features || []).includes('office-hours');
   const partnerById = useMemo(() => {
     const m = new Map();
     for (const p of Array.isArray(partners) ? partners : []) m.set(p.id, p);

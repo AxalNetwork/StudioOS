@@ -385,7 +385,9 @@ export default function SpinoutLabScoringPage() {
     return () => { dead = true; };
   }, []);
 
-  const unlocked = (state?.unlocked_features || []).includes('scoring');
+  // NOTE: computed before the early-return gates below; must not reference
+  // bindings declared later (a `const isAdmin` further down caused a TDZ crash).
+  const unlocked = user?.role === 'admin' || (state?.unlocked_features || []).includes('scoring');
   const latest = snapshots.length ? snapshots[0] : null; // API returns newest first
   const dims = useMemo(() => buildDimensions(latest), [latest]);
   const trajectory = useMemo(() => buildTrajectory(snapshots), [snapshots]);
@@ -536,7 +538,8 @@ export default function SpinoutLabScoringPage() {
       </div>
     );
   }
-  if (!state?.active) {
+  const isAdmin = user?.role === 'admin';
+  if (!state?.active && !isAdmin) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 text-center" data-testid="scoring-inactive">
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">The Scoring Engine is part of the Spin-Out Lab sprint.</p>
@@ -544,7 +547,7 @@ export default function SpinoutLabScoringPage() {
       </div>
     );
   }
-  if (!unlocked) {
+  if (!isAdmin && !unlocked) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 text-center" data-testid="scoring-locked">
         <span className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-400 mb-4"><Lock size={20} /></span>

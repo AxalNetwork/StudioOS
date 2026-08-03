@@ -353,7 +353,8 @@ export default function SpinoutLabProfilingPage() {
         <p className="text-sm text-gray-500 dark:text-gray-400">Couldn't load your profiling report. Please retry.</p>
       </div>
     );
-  if (!state?.active)
+  const isAdmin = user?.role === 'admin';
+  if (!state?.active && !isAdmin)
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 text-center" data-testid="profiling-inactive">
         <Lock className="w-8 h-8 mx-auto text-gray-300 dark:text-gray-600 mb-3" />

@@ -207,6 +207,23 @@ export async function notifyOnce(
   return true;
 }
 
+/**
+ * Claim the right to send THE one admission-decision email for
+ * (user, cycle, decision). Both admin decide surfaces (the cohort route and
+ * the legacy spinout-applications route) must call this before sending
+ * spinout_admitted / spinout_refused, so a candidate never receives the same
+ * decision email twice regardless of which surface — or how many times — the
+ * decision is made. Returns true iff this caller won the claim and should send.
+ */
+export async function claimDecisionEmail(
+  env: Env, userId: number, cycleId: number, decision: 'approved' | 'rejected',
+): Promise<boolean> {
+  const claim = await env.DB.prepare(
+    `INSERT OR IGNORE INTO cohort_app_notification_ledger (user_id, cohort_cycle_id, notif_type) VALUES (?, ?, ?)`,
+  ).bind(userId, cycleId, `decision_email_${decision}`).run();
+  return (claim.meta?.changes ?? 0) > 0;
+}
+
 async function notifyAdminsOnce(
   env: Env, cycleId: number, notifType: string, title: string, body: string,
 ): Promise<void> {

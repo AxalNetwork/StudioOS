@@ -1095,6 +1095,23 @@ admin.post('/spinout-applications/:app_id/decide', async (c) => {
 
   const cohort = cohortOverride || app.cohort || 'Cohort 4';
   const appUrl = (c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+  // Idempotency shared with the cohort decide route: claim the same
+  // decision-email ledger key so the two admin surfaces can't each send the
+  // candidate the same decision email. Ledger tables may not exist in older
+  // dev DBs — treat a failed claim probe as "not yet sent" (best-effort).
+  let emailClaimed = true;
+  try {
+    const caRow = await c.env.DB.prepare(
+      `SELECT cohort_cycle_id FROM cohort_applicants WHERE application_id = ? ORDER BY id DESC LIMIT 1`,
+    ).bind(appId).first<{ cohort_cycle_id: number }>();
+    if (caRow) {
+      const { claimDecisionEmail } = await import('../services/cohortApplications');
+      emailClaimed = await claimDecisionEmail(
+        c.env, app.user_id, Number(caRow.cohort_cycle_id),
+        decision === 'accepted' ? 'approved' : 'rejected',
+      );
+    }
+  } catch { /* ledger not yet migrated — proceed with send */ }
   let emailed = false;
   if (decision === 'accepted') {
     await ensureSpinoutAdmissionColumns(c.env);
@@ -1103,7 +1120,7 @@ admin.post('/spinout-applications/:app_id/decide', async (c) => {
        VALUES (?, 1, ?)
        ON CONFLICT(user_id) DO UPDATE SET spinout_lab_admitted = 1, spinout_lab_cohort = excluded.spinout_lab_cohort`,
     ).bind(app.user_id, cohort).run();
-    try {
+    if (emailClaimed) try {
       const { send } = await import('../services/email/send');
       const labUrl = `${appUrl}/spinout-lab`;
       const r = await send(c.env, 'spinout_admitted', app.email, {
@@ -1119,7 +1136,7 @@ admin.post('/spinout-applications/:app_id/decide', async (c) => {
     // Next cohort label: "Cohort 4" → "Cohort 5"; fall back gracefully.
     const m = /^Cohort (\d+)$/.exec(cohort);
     const nextCohort = m ? `Cohort ${Number(m[1]) + 1}` : 'the next cohort';
-    try {
+    if (emailClaimed) try {
       const { send } = await import('../services/email/send');
       const applyUrl = `${appUrl}/spinout-lab/apply`;
       const r = await send(c.env, 'spinout_refused', app.email, {

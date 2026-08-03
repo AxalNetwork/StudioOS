@@ -27,6 +27,7 @@ import {
   nextYearMonth,
   monthLabel,
   notifyOnce,
+  claimDecisionEmail,
 } from '../src/services/cohortApplications.ts';
 
 const HOUR = 3600_000;
@@ -197,4 +198,36 @@ test('notifyOnce sends exactly once per (user, cycle, type) — re-runs are no-o
   assert.equal(second, false); // idempotent re-run
   assert.equal(otherType, true);
   assert.equal(otherUser, true);
+});
+
+// ---------------------------------------------------------------------------
+// Admission decision email dedupe — both admin decide surfaces (the cohort
+// route and the legacy spinout-applications route) call claimDecisionEmail
+// before sending spinout_admitted/spinout_refused; only the first claim per
+// (user, cycle, decision) may send, regardless of which surface goes first.
+// ---------------------------------------------------------------------------
+
+test('claimDecisionEmail: cohort route decides, then legacy route — one email', async () => {
+  const { env } = fakeEnv();
+  const cohortRoute = await claimDecisionEmail(env, 7, 3, 'approved');
+  const legacyRoute = await claimDecisionEmail(env, 7, 3, 'approved');
+  assert.equal(cohortRoute, true);  // sends
+  assert.equal(legacyRoute, false); // suppressed
+});
+
+test('claimDecisionEmail: legacy route decides, then cohort route — one email', async () => {
+  const { env } = fakeEnv();
+  const legacyRoute = await claimDecisionEmail(env, 7, 3, 'rejected');
+  const cohortRoute = await claimDecisionEmail(env, 7, 3, 'rejected');
+  assert.equal(legacyRoute, true);
+  assert.equal(cohortRoute, false);
+});
+
+test('claimDecisionEmail: distinct decision/cycle/user keys claim independently', async () => {
+  const { env } = fakeEnv();
+  assert.equal(await claimDecisionEmail(env, 7, 3, 'approved'), true);
+  assert.equal(await claimDecisionEmail(env, 7, 3, 'rejected'), true);  // different decision
+  assert.equal(await claimDecisionEmail(env, 7, 4, 'approved'), true);  // different cycle
+  assert.equal(await claimDecisionEmail(env, 8, 3, 'approved'), true);  // different user
+  assert.equal(await claimDecisionEmail(env, 7, 3, 'approved'), false); // exact repeat
 });

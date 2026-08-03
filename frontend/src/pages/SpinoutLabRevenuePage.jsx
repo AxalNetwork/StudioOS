@@ -270,7 +270,8 @@ export default function SpinoutLabRevenuePage() {
       </div>
     );
   }
-  if (!state?.active) {
+  const isAdmin = user?.role === 'admin';
+  if (!state?.active && !isAdmin) {
     return (
       <div className="max-w-xl mx-auto mt-16 text-center" data-testid="revenue-inactive">
         <Lock className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
@@ -282,7 +283,7 @@ export default function SpinoutLabRevenuePage() {
       </div>
     );
   }
-  if (!(state?.unlocked_features || []).includes('revenue')) {
+  if (!isAdmin && !(state?.unlocked_features || []).includes('revenue')) {
     return (
       <div className="max-w-xl mx-auto mt-16 text-center" data-testid="revenue-locked">
         <Lock className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-3" />

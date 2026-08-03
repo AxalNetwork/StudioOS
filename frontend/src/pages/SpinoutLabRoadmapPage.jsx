@@ -285,7 +285,8 @@ export default function SpinoutLabRoadmapPage() {
       </div>
     );
   }
-  if (!state.active && !state.is_incorporated) {
+  const isAdmin = user?.role === 'admin';
+  if (!state.active && !state.is_incorporated && !isAdmin) {
     return (
       <div className="max-w-lg mx-auto text-center py-24 px-6" data-testid="roadmap-inactive">
         <div className="text-lg font-bold text-gray-900 dark:text-gray-50 mb-2">Spin-Out Lab isn&rsquo;t active on this account</div>
@@ -293,7 +294,7 @@ export default function SpinoutLabRoadmapPage() {
       </div>
     );
   }
-  if (!(state.unlocked_features || []).includes('roadmap')) {
+  if (!isAdmin && !(state.unlocked_features || []).includes('roadmap')) {
     return (
       <div className="max-w-lg mx-auto text-center py-24 px-6" data-testid="roadmap-locked">
         <Lock size={22} className="mx-auto text-gray-400 mb-3" />

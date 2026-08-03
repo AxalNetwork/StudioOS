@@ -263,6 +263,13 @@ class Project(SQLModel, table=True):
     cost_to_mvp: Optional[float] = None
     funding_needed: Optional[float] = None
     use_of_funds: Optional[str] = None
+    # Use of Funds planning metadata (JSON): alert threshold, milestone→capital
+    # cost mapping, deck/Axal sync timestamps. Mirrors Worker D1 migration 158.
+    use_of_funds_meta: Optional[str] = None
+    # Spin-Out Lab Incorporate workspace state (JSON): entity decision +
+    # override, payment, document/filing statuses, uni-IP checklist.
+    # Mirrors Worker D1 migration 159.
+    incorporation_meta: Optional[str] = None
     # Task #31 — Product demo source surfaced on the Spin-Out Demo Day deck's
     # "Product demo" slide (slot 6). Editable on the project detail page.
     product_demo_video_url: Optional[str] = None

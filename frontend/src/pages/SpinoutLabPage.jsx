@@ -869,10 +869,21 @@ export default function SpinoutLabPage() {
     );
   }
 
+  const isAdmin = user?.role === 'admin';
+
   // Active (or graduated) founders get the real workspace: week timeline,
   // deliverables checklist, and the unlocked-tools grid, all at /spinout-lab.
+  // Admins always get previewAllUnlocked so every week and tool is accessible
+  // for product review, regardless of milestone progress.
   if (state && (state.active || state.is_incorporated)) {
-    return <SpinoutLabWorkspace state={state} />;
+    return <SpinoutLabWorkspace state={state} previewAllUnlocked={isAdmin} />;
+  }
+
+  // Admins without an active enrollment still need to review the workspace.
+  // Synthesise a minimal Week 1 state so the workspace renders fully unlocked.
+  if (isAdmin) {
+    const adminPreviewState = { active: true, week: 1, days_remaining: 28, milestones: [], unlocked_features: [] };
+    return <SpinoutLabWorkspace state={adminPreviewState} previewAllUnlocked />;
   }
 
   // If we couldn't load state at all, don't guess — the program overview

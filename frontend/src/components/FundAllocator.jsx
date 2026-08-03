@@ -67,15 +67,8 @@ export function fundsValid(values) {
  * Structured Use-of-Funds allocator. Five fixed sections, each a slider + a
  * numeric input (0–100). Saving is allowed only when the total is exactly 100%
  * or all sections are 0 (no allocation). Stateless — the parent owns `values`.
- *
- * `onSliderChange` (optional) lets a consumer give range-slider drags
- * different semantics — e.g. the Spin-Out Lab page auto-rebalances the other
- * buckets so the total always stays 100. Numeric (typed) inputs always go
- * through `onChange`. Defaults to `onChange`, so existing consumers
- * (FounderPortal, UseOfFundsEditor) are unchanged.
  */
-export function FundAllocator({ values, total, valid, onChange, onSliderChange }) {
-  const onSlide = onSliderChange || onChange;
+export function FundAllocator({ values, total, valid, onChange }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
@@ -86,7 +79,7 @@ export function FundAllocator({ values, total, valid, onChange, onSliderChange }
         {FUND_SECTIONS.map((label, i) => (
           <div key={label} className="flex items-center gap-3">
             <span className="flex-1 min-w-0 text-sm text-gray-700 dark:text-gray-300">{label}</span>
-            <input type="range" min={0} max={100} step={1} value={values[i]} onChange={e => onSlide(i, e.target.value)} className="w-28 sm:w-40 accent-violet-500" />
+            <input type="range" min={0} max={100} step={1} value={values[i]} onChange={e => onChange(i, e.target.value)} className="w-28 sm:w-40 accent-violet-500" />
             <input type="number" min={0} max={100} value={values[i]} onChange={e => onChange(i, e.target.value)} className="w-16 bg-gray-50 border border-gray-700 rounded-lg px-2 py-1 text-gray-900 text-sm dark:text-gray-100" aria-label={`${label} percentage`} />
           </div>
         ))}

@@ -83,6 +83,65 @@ export async function ensureProjectProductDemoColumns(env: Env): Promise<void> {
   _productDemoReady.set(db, true);
 }
 
+// Use of Funds planning metadata (JSON) — lazy bootstrap for
+// `projects.use_of_funds_meta`. Migration 158 is the canonical apply path;
+// this keeps a cold D1 isolate (or dev SQLite) working before it runs.
+// Additive + idempotent; same WeakMap pattern as the helpers above.
+const _uofMetaReady = new WeakMap<object, true>();
+export async function ensureProjectUofMetaColumn(env: Env): Promise<void> {
+  const db = env.DB as unknown as object;
+  if (_uofMetaReady.has(db)) return;
+  try { await env.DB.exec(`ALTER TABLE projects ADD COLUMN use_of_funds_meta TEXT`); } catch (_e) { /* duplicate column on re-run is fine */ }
+  _uofMetaReady.set(db, true);
+}
+
+// Validate + canonicalize the Use of Funds planning metadata blob. Accepts an
+// object or a JSON string; must parse to a plain object; size-capped so it
+// can't be abused as arbitrary storage. Returns { value } (canonical JSON
+// string or null to clear) or { error }.
+export function normalizeUofMeta(raw: unknown): { value?: string | null; error?: string } {
+  if (raw === null || raw === undefined || raw === '') return { value: null };
+  let obj: unknown = raw;
+  if (typeof raw === 'string') {
+    if (raw.length > 8000) return { error: 'use_of_funds_meta too large' };
+    try { obj = JSON.parse(raw); } catch { return { error: 'use_of_funds_meta must be valid JSON' }; }
+  }
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+    return { error: 'use_of_funds_meta must be a JSON object' };
+  }
+  const out = JSON.stringify(obj);
+  if (out.length > 8000) return { error: 'use_of_funds_meta too large' };
+  return { value: out };
+}
+
+// Spin-Out Lab Incorporate workspace state (JSON) — lazy bootstrap for
+// `projects.incorporation_meta`. Migration 159 is the canonical apply path;
+// same WeakMap pattern as ensureProjectUofMetaColumn above.
+const _incMetaReady = new WeakMap<object, true>();
+export async function ensureProjectIncMetaColumn(env: Env): Promise<void> {
+  const db = env.DB as unknown as object;
+  if (_incMetaReady.has(db)) return;
+  try { await env.DB.exec(`ALTER TABLE projects ADD COLUMN incorporation_meta TEXT`); } catch (_e) { /* duplicate column on re-run is fine */ }
+  _incMetaReady.set(db, true);
+}
+
+// Validate + canonicalize the Incorporate workspace state blob. Same contract
+// as normalizeUofMeta: object or JSON string, plain object only, size-capped.
+export function normalizeIncMeta(raw: unknown): { value?: string | null; error?: string } {
+  if (raw === null || raw === undefined || raw === '') return { value: null };
+  let obj: unknown = raw;
+  if (typeof raw === 'string') {
+    if (raw.length > 8000) return { error: 'incorporation_meta too large' };
+    try { obj = JSON.parse(raw); } catch { return { error: 'incorporation_meta must be valid JSON' }; }
+  }
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+    return { error: 'incorporation_meta must be a JSON object' };
+  }
+  const out = JSON.stringify(obj);
+  if (out.length > 8000) return { error: 'incorporation_meta too large' };
+  return { value: out };
+}
+
 // Task #1 — lazy bootstrap for the founder's editable company / affiliation,
 // surfaced on the Spin-Out Demo Day's merged Team & network slide. Additive
 // + idempotent; same WeakMap pattern as above. The `founders` table is not
@@ -538,6 +597,22 @@ projects.put('/:id', async (c) => {
     if (uof.error) { await sql.end(); return c.json({ error: uof.error, code: 'invalid_use_of_funds' }, 400); }
     data.use_of_funds = uof.value;
   }
+  // Use of Funds planning metadata (alert threshold, milestone costs, sync
+  // timestamps) — owner-editable JSON blob next to the canonical allocation.
+  if (data.use_of_funds_meta !== undefined) {
+    await ensureProjectUofMetaColumn(c.env);
+    const meta = normalizeUofMeta(data.use_of_funds_meta);
+    if (meta.error) { await sql.end(); return c.json({ error: meta.error, code: 'invalid_use_of_funds_meta' }, 400); }
+    data.use_of_funds_meta = meta.value;
+  }
+  // Spin-Out Lab Incorporate workspace state — owner-editable JSON blob
+  // (entity decision/override, payment, docs, filing, uni-IP checklist).
+  if (data.incorporation_meta !== undefined) {
+    await ensureProjectIncMetaColumn(c.env);
+    const meta = normalizeIncMeta(data.incorporation_meta);
+    if (meta.error) { await sql.end(); return c.json({ error: meta.error, code: 'invalid_incorporation_meta' }, 400); }
+    data.incorporation_meta = meta.value;
+  }
   // Task #31 — Product demo source columns are owner-editable (founders
   // manage their own demo media on the project detail page). Trim URLs/text;
   // explicit '' / null clears the column.
@@ -569,7 +644,7 @@ projects.put('/:id', async (c) => {
       return c.json({ error: 'invalid_market_sizing', detail: 'SOM cannot exceed SAM' }, 400);
     }
   }
-  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
+  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'use_of_funds_meta', 'incorporation_meta', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
   // Normalise: coerce boolean → 0/1 for the NDA flag, trim URL, allow
   // explicit null to clear either field.
   if (data.data_room_nda_required !== undefined) {
