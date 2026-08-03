@@ -256,7 +256,8 @@ export default function SpinoutLabStartupPage() {
     );
   }
 
-  if (!state.active && !graduated) {
+  const isAdmin = user?.role === 'admin';
+  if (!state.active && !graduated && !isAdmin) {
     return (
       <div className="max-w-lg mx-auto text-center py-24 px-6" data-testid="startup-inactive">
         <div className="text-lg font-bold text-gray-900 dark:text-gray-50 mb-2">Spin-Out Lab isn&rsquo;t active on this account</div>
