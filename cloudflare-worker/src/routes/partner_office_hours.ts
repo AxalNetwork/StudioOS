@@ -35,7 +35,15 @@ function slotDto(s: SlotRow, taken = 0): any {
     is_cancelled: !!s.is_cancelled, created_at: s.created_at,
   };
 }
-function bookingDto(b: BookingRow): any {
+// The booking row itself carries no times: `starts_at` / `ends_at` /
+// `meeting_url` live on `partner_office_hour_slots`. List endpoints LEFT JOIN
+// the slot and pass those three through so the founder-facing page can render
+// the session time, the countdown and the Join link. Detail/transition paths
+// still pass a bare BookingRow — the fields are optional and simply absent.
+type BookingWithSlotRow = BookingRow & {
+  starts_at?: string | null; ends_at?: string | null; meeting_url?: string | null;
+};
+function bookingDto(b: BookingWithSlotRow): any {
   return { ...b, is_cancelled: undefined };
 }
 
@@ -225,11 +233,19 @@ r.get('/me/bookings', async (c) => {
     const partner = await requirePartnerProfile(c.env, user);
     const status = c.req.query('status');
     const sql = status
-      ? 'SELECT * FROM partner_bookings WHERE partner_id = ? AND status = ? ORDER BY created_at DESC LIMIT 200'
-      : 'SELECT * FROM partner_bookings WHERE partner_id = ? ORDER BY created_at DESC LIMIT 200';
+      ? `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url
+           FROM partner_bookings b
+           LEFT JOIN partner_office_hour_slots s ON s.id = b.slot_id
+          WHERE b.partner_id = ? AND b.status = ?
+          ORDER BY b.created_at DESC LIMIT 200`
+      : `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url
+           FROM partner_bookings b
+           LEFT JOIN partner_office_hour_slots s ON s.id = b.slot_id
+          WHERE b.partner_id = ?
+          ORDER BY b.created_at DESC LIMIT 200`;
     const rows = status
-      ? await c.env.DB.prepare(sql).bind(partner.id, status).all<BookingRow>()
-      : await c.env.DB.prepare(sql).bind(partner.id).all<BookingRow>();
+      ? await c.env.DB.prepare(sql).bind(partner.id, status).all<BookingWithSlotRow>()
+      : await c.env.DB.prepare(sql).bind(partner.id).all<BookingWithSlotRow>();
     return c.json({ items: (rows.results || []).map(bookingDto) });
   } catch (e) { return mapError(c, e); }
 });
@@ -239,11 +255,19 @@ r.get('/bookings/me', async (c) => {
     const user = await requireAuth(c);
     const status = c.req.query('status');
     const sql = status
-      ? 'SELECT * FROM partner_bookings WHERE founder_user_id = ? AND status = ? ORDER BY created_at DESC LIMIT 200'
-      : 'SELECT * FROM partner_bookings WHERE founder_user_id = ? ORDER BY created_at DESC LIMIT 200';
+      ? `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url
+           FROM partner_bookings b
+           LEFT JOIN partner_office_hour_slots s ON s.id = b.slot_id
+          WHERE b.founder_user_id = ? AND b.status = ?
+          ORDER BY b.created_at DESC LIMIT 200`
+      : `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url
+           FROM partner_bookings b
+           LEFT JOIN partner_office_hour_slots s ON s.id = b.slot_id
+          WHERE b.founder_user_id = ?
+          ORDER BY b.created_at DESC LIMIT 200`;
     const rows = status
-      ? await c.env.DB.prepare(sql).bind(user.id, status).all<BookingRow>()
-      : await c.env.DB.prepare(sql).bind(user.id).all<BookingRow>();
+      ? await c.env.DB.prepare(sql).bind(user.id, status).all<BookingWithSlotRow>()
+      : await c.env.DB.prepare(sql).bind(user.id).all<BookingWithSlotRow>();
     return c.json({ items: (rows.results || []).map(bookingDto) });
   } catch (e) { return mapError(c, e); }
 });

@@ -626,6 +626,23 @@ export const api = {
   partnerPortal: {
     myDeal: () => request('/partner-portal/my-deal'),
     setAcceptingIntros: (value) => request('/partner-portal/accepting-intros', { method: 'PATCH', body: JSON.stringify({ accepting_intros: value }) }),
+    // Office-hours booking guidance the partner authors about themselves.
+    // Worker: cloudflare-worker/src/routes/partner_portal.ts (D1 migration
+    // 160_partner_office_hours_guidance.sql). Founders read it via the
+    // oh_* columns that ride along on GET /partners.
+    officeHoursGuidance: () => request('/partner-portal/office-hours-guidance'),
+    // Full replace, not a per-field merge: always send all four fields; a
+    // blank/omitted field is stored as NULL (i.e. unpublished).
+    updateOfficeHoursGuidance: ({ when_to_book, stage_fit, session_outcome, bring }) =>
+      request('/partner-portal/office-hours-guidance', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          when_to_book: when_to_book || null,
+          stage_fit: stage_fit || null,
+          session_outcome: session_outcome || null,
+          bring: Array.isArray(bring) ? bring : [],
+        }),
+      }),
   },
 
   // Task #10 (AC-1) — Personal advisor (dashboard chatbot + write-router).

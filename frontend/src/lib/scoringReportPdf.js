@@ -20,7 +20,9 @@ const VIOLET_WASH = [237, 233, 254];
 const TRACK = [240, 240, 243];
 
 // Same Low/Medium/High ramp the page paints (rose/amber/emerald — 500s for
-// bars, 600s for text). Keep in sync with LEVEL_* in SpinoutLabScoringPage.
+// bars, 600s for text). jsPDF needs numeric triples, not Tailwind classes, so
+// these are hand-maintained: keep in sync with LEVEL_TEXT / LEVEL_BG /
+// LEVEL_BAR (and levelFor's ≥70 / ≥50 bands) in lib/scoringViewModel.js.
 const LEVEL_RGB = {
   Low: { bar: [244, 63, 94], text: [225, 29, 72] },
   Medium: { bar: [245, 158, 11], text: [217, 119, 6] },
@@ -46,7 +48,8 @@ export function scoringReportFilename(projectName, today = new Date()) {
 // restores the canonical engine order for the radar; `tiers` is
 // TIER_THRESHOLDS (ascending).
 export async function exportScoringReportPdf({
-  projectName, isSandbox, lastRunLabel, composite, delta, tierLabel, dims, radarKeys, tiers,
+  projectName, isSandbox, lastRunLabel, composite, delta, deltaIsPractice,
+  aiAdjustment, dimensionsTotal, tierLabel, dims, radarKeys, tiers,
 }) {
   const jspdfMod = await import('jspdf');
   const JsPDF = jspdfMod.jsPDF || jspdfMod.default;
@@ -103,12 +106,29 @@ export async function exportScoringReportPdf({
   doc.setFontSize(9.5);
   doc.setTextColor(INK[0], INK[1], INK[2]);
   doc.text(String(tierLabel || ''), margin, blockTop + 74, { maxWidth: 220 });
+  let metaY = blockTop + 92;
   if (delta != null && delta !== 0) {
     const up = delta > 0;
     const c = up ? LEVEL_RGB.High.text : LEVEL_RGB.Low.text;
     doc.setFontSize(9);
     doc.setTextColor(c[0], c[1], c[2]);
-    doc.text(`${up ? '+' : ''}${delta} since previous run`, margin, blockTop + 92);
+    doc.text(
+      `${up ? '+' : ''}${delta} since previous run${deltaIsPractice ? ' (practice)' : ''}`,
+      margin, metaY,
+    );
+    metaY += 12;
+  }
+  // The engine clamps `dimension totals + ai_adjustment` into the composite, so
+  // without this line the per-dimension bars below can visibly fail to sum to
+  // the number above them.
+  if (Number.isFinite(Number(aiAdjustment)) && Number(aiAdjustment) !== 0) {
+    const adj = Number(aiAdjustment);
+    doc.setFontSize(8.5);
+    doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
+    doc.text(
+      `Dimensions ${Number(dimensionsTotal) || 0} · AI adjustment ${adj > 0 ? '+' : ''}${adj} · Composite ${composite}`,
+      margin, metaY, { maxWidth: 220 },
+    );
   }
 
   // Radar — canonical engine order, each axis = % of the dimension's max.

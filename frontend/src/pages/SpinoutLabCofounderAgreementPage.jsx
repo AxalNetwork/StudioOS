@@ -1,92 +1,77 @@
 // Spin-Out Lab — Co-founder Agreement (Week 4 tool page).
 //
-// Design handoff: attached_assets/Co-founder_Agreement.dc_*.html (same file in
-// the StudioOS repo under spin-out-lab-pipeline/project). Mapping to REAL
-// surfaces only:
-//   - Clause-by-clause builder: every editable clause is a real input of the
-//     dev generator POST /legal/cofounder-agreement (equity, vesting +
-//     acceleration, IP exclusions, roles/decisions, commitment,
-//     confidentiality years, unanimous matters, governing law, dispute
-//     resolution). Template-fixed clauses (departure & repurchase, 83(b)
-//     section) are shown read-only and labeled "template default".
-//   - "From Cap Table" prefill is real: founder names + relative split come
-//     from the project's saved cap-table scenario.
-//   - Existing agreements: GET /legal/documents (parity in both runtimes,
-//     template_name === 'cofounder_agreement') with their REAL status
-//     (generated/signed). Execution happens in Legal & Capital — linked, not
-//     faked here.
-//   - Omitted (no backend): share/export/copy-link/investor-preview,
-//     plain-English toggle, accept/needs-review clause workflow states,
-//     signature gating console, solo-founder declaration (the generator
-//     requires 2+ founders — the page says so honestly).
-//   - The generator is dev-only (no Worker route). The page catches the
-//     404/405 at generate time and shows an environment banner; detection of
-//     existing documents works everywhere.
+// Design handoff: spin-out-lab-pipeline/project/Co-founder Agreement.dc.html.
+// The design's layout ships in full; the design's DATA does not. Its entire
+// status layer (Accepted / signedCount-of-2 / v1.3 / "4 of 6 modules" / a
+// 9-row RACI matrix / "Guillaume L. & Maya R." / 52.9-47.1 / "Fully executed")
+// is hardcoded literals in the prototype's renderVals() with zero backing
+// fields. On a legal-document tool a fabricated clause status, signature
+// state, or equity number is the worst possible failure, so every one of them
+// is replaced by a named, checkable derivation in
+// lib/cofounderAgreementViewModel.js — or omitted with the reason shown.
+//
+// What is real here:
+//   - Every editable clause is a real input of POST /legal/cofounder-agreement.
+//     The request body has the same 16 keys it always had.
+//   - WYSIWYG generation: the Generate button is gated on there being NO
+//     `blocked` clause, and generate() sends the parsed values or refuses. It
+//     never substitutes a fallback for an empty field — a document whose
+//     vesting/confidentiality/jurisdiction terms differ from the ones on
+//     screen is the worst failure this page can produce.
+//   - An untouched builder default is labelled "Default — not reviewed", not
+//     "Draft input": a value the builder supplied for you is not a term you
+//     chose, and no pill asserts authorship the user does not have.
+//   - Equity prefill comes from the project's saved cap-table scenario.
+//   - Documents + their status come from GET /legal/documents
+//     (template_name === 'cofounder_agreement').
+//   - Clause statuses are derived from cap table, project members, formation
+//     orders, 83(b) trackers, and the builder inputs — see STATUS/CLAUSE_SPEC.
+//
+// What is deliberately disabled or omitted (no backend exists):
+//   - "Accept term" / "Needs alignment" clause workflow — there is no
+//     clause-state store; a clause reading "Accepted" when nothing recorded an
+//     acceptance is a fabricated legal fact.
+//   - Per-signer signature pills — the schema has one signed_by per DOCUMENT.
+//   - "Send for signature" / "Fully executed" — api.js has no method to sign a
+//     documents row. The finalize control is disabled with the reason in title.
+//   - Solo-founder declaration — no template exists in either runtime.
+//   - Share and Preview-as-investor — disabled with reasons.
+//   - The generator is dev-only (no Worker route); the 404/405 at generate time
+//     raises an environment banner. Existing documents are unaffected.
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, FileSignature, Loader2, Lock, AlertTriangle, FileText, Plus, X,
-  CheckCircle2, ExternalLink, Sparkles, ScrollText, Users,
+  ArrowLeft, FileSignature, Loader2, Lock, AlertTriangle, FileText, Users,
+  CheckCircle2, ExternalLink, Sparkles, Share2, Download, Copy, Eye, Check,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
+import {
+  buildCofounderAgreementViewModel, capTableSplit as capTableSplitFn, newDraft,
+} from '../lib/cofounderAgreementViewModel';
+import StatusPill from '../components/cofounder/StatusPill';
+import ClauseRow from '../components/cofounder/ClauseRow';
+import { EDITORS, ReadOnlyClause } from '../components/cofounder/ClauseEditors';
+import CriticalTermsSnapshot from '../components/cofounder/CriticalTermsSnapshot';
+import RolesAndReservedMatters from '../components/cofounder/RolesAndReservedMatters';
+import IpRider from '../components/cofounder/IpRider';
+import DisputeCard from '../components/cofounder/DisputeCard';
+import ExecutionConsole from '../components/cofounder/ExecutionConsole';
+import SoloDeclaration from '../components/cofounder/SoloDeclaration';
+
+// Kept as a named export for unit-testability (moved to the view model).
+export { capTableSplit } from '../lib/cofounderAgreementViewModel';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
-const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
-const INPUT = 'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 py-1.5 text-[12.5px] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500/40';
-const CRIT = <span className="text-[9px] font-extrabold uppercase tracking-wider text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/40 rounded px-1.5 py-0.5">Critical</span>;
 
-const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
-const fmtDate = (iso) => {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+/** Read-only prose for the three template-fixed clauses (no generator input). */
+const READONLY_PROSE = {
+  departure: 'Standard leaver mechanics (§7): a departing founder forfeits all unvested equity; termination for cause lets the Company repurchase vested shares on the template’s buyout terms; a Change of Control accelerates per the vesting clause; and founders may not transfer shares to third parties without first offering them to the Company. Review the exact language in the generated document.',
+  covenants: 'Fixed template language (§8.2): for 12 months after involvement ends, no founder may solicit the Company’s employees or customers. This template contains no non-compete — non-competes are unenforceable in several states.',
+  s83b: 'The template (§9) obligates each founder to file their 83(b) election within 30 days of stock purchase. The deadline is statutory and cannot be extended.',
 };
-
-const DEFAULT_UNANIMOUS = [
-  'Sale or merger of the Company',
-  'Issuance of new equity above 10% dilution',
-  'Removal of a founder',
-  'Material change to this Agreement',
-];
-
-const ACCELERATION = [
-  { v: 'none', label: 'None', desc: 'No acceleration on a change of control.' },
-  { v: 'single_trigger', label: 'Single-trigger', desc: '100% vests on a change of control.' },
-  { v: 'double_trigger', label: 'Double-trigger', desc: 'Vests only if terminated without cause within 12 months of a change of control.' },
-];
-
-const DISPUTE = [
-  { v: 'Mediation followed by binding arbitration.', label: 'Mediation first', desc: 'Founders must attempt non-binding mediation before arbitration — preserves the relationship and is faster to invoke.' },
-  { v: 'Binding arbitration.', label: 'Binding arbitration', desc: 'Disputes go straight to binding arbitration at the venue below.' },
-];
-
-/** Relative founder split from a cap-table scenario's founder shares. */
-export function capTableSplit(scenarioInputs) {
-  const founders = Array.isArray(scenarioInputs?.founders) ? scenarioInputs.founders.filter((f) => f?.name && num(f.shares) > 0) : [];
-  const total = founders.reduce((a, f) => a + Number(f.shares), 0);
-  if (!founders.length || total <= 0) return [];
-  return founders.map((f) => ({ name: String(f.name), equity_pct: Math.round((Number(f.shares) / total) * 10000) / 100 }));
-}
-
-function SourceTag({ children }) {
-  return <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{children}</span>;
-}
-
-function Clause({ title, critical, source, children, testid }) {
-  return (
-    <div className="border-t border-gray-100 dark:border-gray-800 py-4 first:border-t-0 first:pt-0" data-testid={testid}>
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-[12.5px] font-bold text-gray-900 dark:text-gray-50">{title}</span>
-        {critical && CRIT}
-        {source && <SourceTag>{source}</SourceTag>}
-      </div>
-      {children}
-    </div>
-  );
-}
 
 export default function SpinoutLabCofounderAgreementPage() {
   const navigate = useNavigate();
@@ -94,32 +79,34 @@ export default function SpinoutLabCofounderAgreementPage() {
   const [state, setState] = useState(null);
   const [user, setUser] = useState(null);
   const [project, setProject] = useState(null);
-  const [docs, setDocs] = useState([]); // existing cofounder_agreement documents
-  const [fromCapTable, setFromCapTable] = useState(false);
+  const [docs, setDocs] = useState([]);            // cofounder_agreement documents
+  const [capSplit, setCapSplit] = useState([]);    // relative split from Cap Table
+  const [members, setMembers] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [trackers, setTrackers] = useState([]);
+  const [connections, setConnections] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [envUnavailable, setEnvUnavailable] = useState(false);
-  const [generated, setGenerated] = useState(null); // last generation result
+  const [generated, setGenerated] = useState(null);
   const [showBuilder, setShowBuilder] = useState(false);
 
-  // Builder state — mirrors the generator's request model.
-  const [companyName, setCompanyName] = useState('');
-  const [founders, setFounders] = useState([]);
-  const [vestingYears, setVestingYears] = useState(4);
-  const [cliffMonths, setCliffMonths] = useState(12);
-  const [cliffPct, setCliffPct] = useState(25);
-  const [acceleration, setAcceleration] = useState('single_trigger');
-  const [ipExclusions, setIpExclusions] = useState('');
-  const [decisionDayToDay, setDecisionDayToDay] = useState('the CEO');
-  const [decisionThreshold, setDecisionThreshold] = useState('majority');
-  const [unanimousMatters, setUnanimousMatters] = useState([...DEFAULT_UNANIMOUS]);
-  const [deadlock, setDeadlock] = useState(DISPUTE[0].v);
-  const [commitment, setCommitment] = useState('full-time');
-  const [confidentialityYears, setConfidentialityYears] = useState(3);
-  const [governingLaw, setGoverningLaw] = useState('Delaware, USA');
-  const [arbitrationVenue, setArbitrationVenue] = useState('Wilmington, Delaware');
+  // UI-only state (no backend, nothing implied to be saved).
+  const [path, setPath] = useState('multi');
+  const [showExplain, setShowExplain] = useState(false);
+  const [openKeys, setOpenKeys] = useState(() => new Set());
+  const [copied, setCopied] = useState(false);
+  const autoExpanded = useRef(false);
+  // Affirmative confirmation required only when an admin/partner is editing a
+  // startup that is not their own (see vm.permission.actingForOther).
+  const [confirmedOther, setConfirmedOther] = useState(false);
 
-  const canEdit = !!(user && project && Number(user.founder_id) === Number(project.founder_id));
+  // Builder state — mirrors the generator's request model exactly. Seeded from
+  // the view model's DEFAULT_DRAFT so the same literals define BOTH the
+  // starting values and the baseline that tells an untouched default apart
+  // from a term the founder actually chose. Do not re-declare them here.
+  const [draft, setDraft] = useState(newDraft);
+  const setD = useCallback((patch) => setDraft((prev) => ({ ...prev, ...patch })), []);
 
   useEffect(() => {
     let dead = false;
@@ -136,27 +123,53 @@ export default function SpinoutLabCofounderAgreementPage() {
         const proj = pickLabProject(projects, me);
         setProject(proj || null);
         if (proj) {
-          setCompanyName(proj.name || '');
-          const [docRes, capRes] = await Promise.allSettled([
+          // Every one of these degrades to [] on failure — a missing upstream
+          // downgrades a clause status, it never crashes the page.
+          const [docRes, capRes, memRes, ordRes, trkRes, connRes] = await Promise.allSettled([
             api.listDocuments(proj.id),
             api.getCapTableByProject(proj.id),
+            api.listProjectMembers(proj.id),
+            api.legalIncorporationOrders(),
+            api.legal83bList(proj.id),
+            api.cofounderListConnections(),
           ]);
           if (dead) return;
-          const all = docRes.status === 'fulfilled' ? (Array.isArray(docRes.value) ? docRes.value : []) : [];
+
+          const all = docRes.status === 'fulfilled' && Array.isArray(docRes.value) ? docRes.value : [];
           const mine = all.filter((d) => d.template_name === 'cofounder_agreement');
           setDocs(mine);
           setShowBuilder(mine.length === 0);
+
+          const memVal = memRes.status === 'fulfilled' ? memRes.value : null;
+          setMembers(Array.isArray(memVal?.members) ? memVal.members : (Array.isArray(memVal) ? memVal : []));
+
+          const ordVal = ordRes.status === 'fulfilled' ? ordRes.value : null;
+          setOrders(Array.isArray(ordVal?.orders) ? ordVal.orders : (Array.isArray(ordVal) ? ordVal : []));
+
+          const trkVal = trkRes.status === 'fulfilled' ? trkRes.value : null;
+          setTrackers(Array.isArray(trkVal?.trackers) ? trkVal.trackers : (Array.isArray(trkVal) ? trkVal : []));
+
+          const connVal = connRes.status === 'fulfilled' ? connRes.value : null;
+          setConnections(Array.isArray(connVal?.items) ? connVal.items : (Array.isArray(connVal) ? connVal : []));
+
           // Real prefill: relative founder split from the saved cap table.
-          const split = capRes.status === 'fulfilled' ? capTableSplit(capRes.value?.scenario?.inputs) : [];
-          if (split.length) {
-            setFounders(split.map((f, i) => ({ name: f.name, email: '', role: i === 0 ? 'CEO' : i === 1 ? 'CTO' : '', equity_pct: f.equity_pct, start_date: '' })));
-            setFromCapTable(true);
-          } else {
-            setFounders([
-              { name: '', email: '', role: 'CEO', equity_pct: 50, start_date: '' },
-              { name: '', email: '', role: 'CTO', equity_pct: 50, start_date: '' },
-            ]);
-          }
+          const split = capRes.status === 'fulfilled' ? capTableSplitFn(capRes.value?.scenario?.inputs) : [];
+          setCapSplit(split);
+          setDraft((prev) => ({
+            ...prev,
+            companyName: proj.name || '',
+            // Names and percentages are REAL cap-table data. Titles are not:
+            // cap-table row order carries no officer semantics, so assigning
+            // CEO/CTO by position would pair real people with invented officer
+            // titles that generate verbatim into §5. Left blank — the backend
+            // renders an empty role as "TBD".
+            founders: split.length
+              ? split.map((f) => ({ name: f.name, email: '', role: '', equity_pct: f.equity_pct, start_date: '' }))
+              : [
+                { name: '', email: '', role: '', equity_pct: 50, start_date: '' },
+                { name: '', email: '', role: '', equity_pct: 50, start_date: '' },
+              ],
+          }));
         }
         if (!dead) setStatus('ready');
       } catch (e) {
@@ -167,13 +180,25 @@ export default function SpinoutLabCofounderAgreementPage() {
     return () => { dead = true; };
   }, []);
 
-  const totalEquity = useMemo(() => founders.reduce((a, f) => a + (Number(f.equity_pct) || 0), 0), [founders]);
-  const namedFounders = founders.filter((f) => f.name.trim());
-  const canGenerate = canEdit && companyName.trim() && namedFounders.length >= 2 && founders.every((f) => f.name.trim()) && totalEquity <= 100.001;
+  const vm = useMemo(() => buildCofounderAgreementViewModel({
+    user, project, labState: state, docs, capSplit, members, orders, trackers,
+    connections, draft, path, envUnavailable,
+  }), [user, project, state, docs, capSplit, members, orders, trackers, connections, draft, path, envUnavailable]);
 
-  // W4 deliverable — must be declared here (before any early returns) to
-  // satisfy the Rules of Hooks. Fires whenever a cofounder agreement doc
-  // reaches 'signed' status (signatures happen in Legal & Capital).
+  const canEdit = vm.permission.canEdit;
+  const canGenerate = vm.permission.canGenerate;
+  // An admin/partner on somebody else's startup must tick the confirmation
+  // before the generator writes a real legal document onto that project.
+  const needsOtherConfirm = vm.permission.actingForOther && !confirmedOther;
+  const canSubmit = canGenerate && !needsOtherConfirm;
+  const submitBlockedReason = needsOtherConfirm
+    ? 'Confirm you mean to generate on this founder’s startup first.'
+    : vm.permission.blockedReason;
+
+  // W4 deliverable — declared before every early return (Rules of Hooks).
+  // Fires only from real document status; never from a UI toggle, a clause
+  // status, a path switch, or generation success. SpinoutLabIncorporatePage
+  // reads this milestone back to gate a downstream row.
   useEffect(() => {
     if (docs.some((d) => String(d.status || '').toLowerCase() === 'signed')) {
       markMilestone(user, 'cofounder_agreement_signed');
@@ -181,36 +206,117 @@ export default function SpinoutLabCofounderAgreementPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docs, user?.id]);
 
-  const updateFounder = (i, patch) => setFounders(founders.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
+  // Auto-expand blocked clauses once, on the first ready render.
+  useEffect(() => {
+    if (status !== 'ready' || autoExpanded.current) return;
+    autoExpanded.current = true;
+    const blocking = vm.clauses.filter((c) => c.blocking).map((c) => c.key);
+    if (blocking.length) setOpenKeys(new Set(blocking));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
+  const toggleClause = useCallback((key) => {
+    setOpenKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const allOpen = vm.clauses.length > 0 && openKeys.size >= vm.clauses.length;
+  const toggleAll = () => setOpenKeys(allOpen ? new Set() : new Set(vm.clauses.map((c) => c.key)));
+
+  const scrollToExec = () => {
+    const el = document.getElementById('exec-console');
+    if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 20, behavior: 'smooth' });
+  };
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard blocked */ }
+  };
+
+  // Client-side only. Carries provenance and per-clause status; deliberately
+  // contains no signature field of any kind.
+  const exportSummary = () => {
+    const payload = {
+      provenance: 'Draft input — not stored in Axal until the agreement is generated',
+      exported_at: new Date().toISOString(),
+      startup: project?.name || null,
+      path,
+      company_name: draft.companyName || null,
+      founders: vm.founders.map((f) => ({ name: f.name, role: f.role, equity_pct: f.equityPct, start_date: f.startDate })),
+      clauses: vm.clauses.map((c) => ({
+        key: c.key, label: c.label, section: c.section, value: c.value,
+        status: c.statusLabel, source: c.source, note: c.note,
+      })),
+      readiness: vm.moduleProgress.label,
+      needs_attention: vm.unresolvedCount,
+      generated_drafts: vm.execution.draftCount,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    // Firefox needs the anchor in the document, and revoking in the same tick
+    // as click() can cancel the download — defer the revoke by a macrotask.
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(project?.name || 'startup').toLowerCase().replace(/\W+/g, '-')}-cofounder-agreement-draft.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
 
   const generate = async () => {
-    if (busy || !canGenerate) return;
+    if (busy || !canSubmit) return;
     setBusy(true);
     setError('');
     try {
+      // NO silent coercion. `Number(x) || 4` turned a user-visible 0-year vest
+      // into a contractual 4-year vest, and an empty governing law was sent
+      // verbatim into "§10.1 Governing Law: ." — a document whose terms the
+      // founder never chose. canGenerate already blocks on every invalid
+      // clause; this is the belt-and-braces check that the values leaving the
+      // page are exactly the ones the page displayed.
+      const numeric = {
+        vesting_years: Number(draft.vestingYears),
+        cliff_months: Number(draft.cliffMonths),
+        cliff_pct: Number(draft.cliffPct),
+        confidentiality_years: Number(draft.confidentialityYears),
+      };
+      const badField = Object.keys(numeric).find((k) => !Number.isFinite(numeric[k]));
+      const law = String(draft.governingLaw || '').trim();
+      const venue = String(draft.arbitrationVenue || '').trim();
+      if (badField || !law || !venue) {
+        setError('Some clause values are empty or invalid. Fix the blocked clauses above — the agreement is not generated with substituted values.');
+        return; // `finally` clears busy
+      }
       const r = await api.legalCofounderAgreement({
         project_id: project.id,
-        company_name: companyName.trim(),
-        founders: founders.map((f) => ({
+        company_name: draft.companyName.trim(),
+        founders: draft.founders.map((f) => ({
           name: f.name.trim(),
           email: f.email.trim() || null,
           role: f.role.trim() || null,
           equity_pct: Number(f.equity_pct) || 0,
           start_date: f.start_date || null,
         })),
-        vesting_years: Number(vestingYears) || 4,
-        cliff_months: Number(cliffMonths) || 0,
-        cliff_pct: Number(cliffPct) || 0,
-        acceleration,
-        ip_exclusions: ipExclusions.trim() || null,
-        decision_day_to_day: decisionDayToDay,
-        decision_threshold: decisionThreshold,
-        unanimous_matters: unanimousMatters.filter((m) => m.trim()),
-        deadlock_clause: deadlock,
-        commitment_level: commitment,
-        confidentiality_years: Number(confidentialityYears) || 3,
-        governing_law: governingLaw,
-        arbitration_venue: arbitrationVenue,
+        vesting_years: numeric.vesting_years,
+        cliff_months: numeric.cliff_months,
+        cliff_pct: numeric.cliff_pct,
+        acceleration: draft.acceleration,
+        ip_exclusions: draft.ipExclusions.trim() || null,
+        decision_day_to_day: draft.decisionDayToDay,
+        decision_threshold: draft.decisionThreshold,
+        unanimous_matters: draft.unanimousMatters.filter((m) => m.trim()),
+        deadlock_clause: draft.deadlock,
+        commitment_level: draft.commitment,
+        confidentiality_years: numeric.confidentiality_years,
+        governing_law: law,
+        arbitration_venue: venue,
       });
       setGenerated(r?.document || r);
       setShowBuilder(false);
@@ -227,6 +333,7 @@ export default function SpinoutLabCofounderAgreementPage() {
     }
   };
 
+  /* ---------------------------- gates ---------------------------------- */
   if (status === 'loading') {
     return (
       <div className="flex items-center justify-center min-h-[60vh]" data-testid="cofounder-loading">
@@ -282,12 +389,16 @@ export default function SpinoutLabCofounderAgreementPage() {
     );
   }
 
-  const week = num(user?.spinout_lab_week) || state?.week || 4;
-  const latest = docs[0] || null;
+  const qa = (key) => vm.quickActions.find((a) => a.key === key) || { label: '', enabled: false, disabledReason: '', testid: `qa-${key}` };
+  const qaShare = qa('share');
+  const qaExport = qa('export');
+  const qaCopy = qa('copy');
+  const qaInvestor = qa('investor');
+  const QA_BTN = 'inline-flex items-center gap-1.5 text-[11.5px] font-semibold rounded-lg px-2.5 py-1.5 transition';
 
   return (
     <div className="max-w-[1100px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-cofounder">
-      {/* Header */}
+      {/* Header — the app shell's own treatment, not the prototype's top bar. */}
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -298,26 +409,137 @@ export default function SpinoutLabCofounderAgreementPage() {
           <ArrowLeft size={14} /> Back to Workspace
         </button>
         <div className="flex items-center gap-2">
-          <FileSignature size={16} className="text-violet-500" />
+          <span className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300 inline-flex items-center justify-center shrink-0">
+            <FileSignature size={15} />
+          </span>
           <h1 className="text-[17px] font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Co-founder Agreement</h1>
-          <span className="text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Active</span>
+          <StatusPill
+            tone={vm.activePill.tone}
+            label={vm.activePill.label}
+            size="xs"
+            icon={vm.activePill.tone === 'emerald' ? <Check size={9} strokeWidth={3} /> : null}
+          />
         </div>
-        <span className="ml-auto text-[11px] font-semibold text-gray-400 dark:text-gray-500">Unlocked · Wk {week}</span>
+        <div className="ml-auto flex items-center gap-3">
+          <div className="text-right">
+            <div
+              className="text-[11px] font-bold text-violet-600 dark:text-violet-400 tabular-nums"
+              title={vm.moduleProgress.title}
+              data-testid="text-module-progress"
+            >
+              {vm.moduleProgress.label}
+            </div>
+            <div className="w-[130px] h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 mt-1 overflow-hidden">
+              <div className="h-full bg-violet-600 rounded-full" style={{ width: `${vm.moduleProgress.pct}%` }} />
+            </div>
+          </div>
+          {/* States a fact about the MODULE (it unlocks in Week 4 — the same
+              number the lock screen shows), not about the viewer's week. */}
+          <span
+            title={vm.unlockPill.title}
+            data-testid="pill-unlock"
+            className={`text-[11px] font-semibold rounded-full px-2.5 py-1 border whitespace-nowrap ${
+              vm.unlockPill.tone === 'violet'
+                ? 'text-violet-600 bg-violet-50 border-violet-200 dark:text-violet-300 dark:bg-violet-900/30 dark:border-violet-800'
+                : 'text-gray-500 bg-gray-50 border-gray-200 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-700'
+            }`}
+          >
+            {vm.unlockPill.label}
+          </span>
+        </div>
       </div>
       <p className="text-[12.5px] text-gray-500 dark:text-gray-400 -mt-2">
         Draft and generate the founding team agreement — equity, vesting, IP, roles, and departure — as a real legal document on your startup.
+      </p>
+
+      {/* Quick actions + path toggle */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button" disabled title={qaShare.disabledReason} data-testid={qaShare.testid}
+          className={`${QA_BTN} text-gray-400 dark:text-gray-600 cursor-not-allowed`}
+        >
+          <Share2 size={13} /> {qaShare.label}
+        </button>
+        <button
+          type="button" onClick={exportSummary} data-testid={qaExport.testid}
+          className={`${QA_BTN} text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800`}
+        >
+          <Download size={13} /> {qaExport.label}
+        </button>
+        <button
+          type="button" onClick={copyLink} data-testid={qaCopy.testid}
+          className={`${QA_BTN} text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800`}
+        >
+          {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />} {copied ? 'Copied' : qaCopy.label}
+        </button>
+        <button
+          type="button" disabled title={qaInvestor.disabledReason} data-testid={qaInvestor.testid}
+          className={`${QA_BTN} text-gray-400 dark:text-gray-600 cursor-not-allowed`}
+        >
+          <Eye size={13} /> {qaInvestor.label}
+        </button>
+
+        <div className="ml-auto flex gap-1 rounded-xl bg-gray-100 dark:bg-gray-800 p-1">
+          {[
+            { v: 'multi', label: 'Multi-founder agreement', testid: 'tab-multi' },
+            { v: 'solo', label: 'Solo-founder path', testid: 'tab-solo' },
+          ].map((t) => (
+            <button
+              key={t.v} type="button" onClick={() => setPath(t.v)} data-testid={t.testid}
+              className={`text-[11.5px] font-bold rounded-lg px-3 py-1.5 transition ${path === t.v ? 'bg-white dark:bg-gray-900 text-violet-600 dark:text-violet-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="text-[10.5px] text-gray-400 dark:text-gray-500 -mt-3">
+        The path above is a view toggle only — Axal does not store an agreement-path choice.
       </p>
 
       {envUnavailable && (
         <div className={`${CARD} !p-3 flex items-center gap-3`} data-testid="banner-env-unavailable">
           <AlertTriangle size={14} className="text-amber-500 shrink-0" />
           <p className="text-[12px] text-gray-600 dark:text-gray-300">
-            Agreement generation isn't available in this environment. Your existing documents above are unaffected.
+            Agreement generation isn't available in this environment. Your existing documents are unaffected.
           </p>
         </div>
       )}
 
-      {/* Generated success */}
+      {!canEdit && (
+        <div className={`${CARD} !p-3 flex items-center gap-3`} data-testid="banner-readonly">
+          <Lock size={14} className="text-gray-400 dark:text-gray-500 shrink-0" />
+          <p className="text-[12px] text-gray-600 dark:text-gray-300">{vm.permission.reason}</p>
+        </div>
+      )}
+
+      {/* Write access granted by ROLE, not ownership. The startup shown was
+          selected automatically, so say whose it is and require a deliberate
+          confirmation before a document is written onto their project. */}
+      {vm.permission.actingForOther && (
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/20 p-4" data-testid="banner-acting-for-other">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-500" />
+            <div className="min-w-0">
+              <div className="text-[12.5px] font-bold text-amber-800 dark:text-amber-200">Not your startup record</div>
+              <p className="text-[12px] text-amber-700 dark:text-amber-300 leading-snug mt-0.5">{vm.permission.actingForOtherText}</p>
+              <label className="mt-2.5 flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={confirmedOther}
+                  onChange={(e) => setConfirmedOther(e.target.checked)}
+                  data-testid="checkbox-confirm-other"
+                  className="w-3.5 h-3.5 accent-violet-600"
+                />
+                <span className="text-[11.5px] font-semibold text-amber-800 dark:text-amber-200">
+                  I mean to draft and generate on this startup.
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+
       {generated && (
         <div className={`${CARD} flex items-center gap-3`} data-testid="card-generated">
           <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
@@ -325,84 +547,88 @@ export default function SpinoutLabCofounderAgreementPage() {
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-bold text-gray-900 dark:text-gray-50">{generated.title || 'Agreement generated'}</div>
-            <div className="text-[11px] text-gray-400">Stored in your startup's legal documents — signatures happen there.</div>
+            <div className="text-[11px] text-gray-400 dark:text-gray-500">
+              Stored in your startup's legal documents. Axal has no in-app signing flow for this document — the generated copy carries wet-ink signature blocks.
+            </div>
           </div>
-          <Link to="/legal-capital" className="text-[11.5px] font-bold text-violet-600 hover:underline shrink-0 inline-flex items-center gap-1">
-            Open in Legal & Capital <ExternalLink size={10} />
+          <Link to="/legal-capital" className="text-[11.5px] font-bold text-violet-600 dark:text-violet-400 hover:underline shrink-0 inline-flex items-center gap-1">
+            Open Legal &amp; Capital <ExternalLink size={10} />
           </Link>
         </div>
       )}
 
-      {/* Existing agreements — real documents with real status */}
-      {docs.length > 0 && (
-        <div className={CARD} data-testid="card-existing">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-50">Execution status</div>
-              <div className="text-[11px] text-gray-400 dark:text-gray-500">Generated versions of this agreement and where they stand</div>
-            </div>
-            <Link to="/legal-capital" className="text-[11.5px] font-bold text-violet-600 hover:underline inline-flex items-center gap-1">
-              Sign in Legal & Capital <ExternalLink size={10} />
-            </Link>
-          </div>
-          <div className="space-y-2">
-            {docs.map((d, i) => {
-              const signed = String(d.status || '').toLowerCase() === 'signed';
-              return (
-                <div key={d.id || i} className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-100 dark:border-gray-800 px-3 py-2.5" data-testid={`doc-${i}`}>
-                  <ScrollText size={14} className="text-gray-400 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[12.5px] font-bold text-gray-900 dark:text-gray-50 truncate">{d.title}</div>
-                    <div className="text-[10.5px] text-gray-400">
-                      {fmtDate(d.created_at)}
-                      {signed && d.signed_by ? ` · signed by ${d.signed_by}` : ''}
-                    </div>
-                  </div>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 ${signed ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`} data-testid={`doc-status-${i}`}>
-                    {signed ? 'Signed' : 'Awaiting signature'}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          {!showBuilder && canEdit && (
-            <button type="button" onClick={() => setShowBuilder(true)} data-testid="button-new-version" className="mt-3 text-[11.5px] font-bold text-violet-600 hover:underline inline-flex items-center gap-1">
-              <Plus size={11} /> Draft a new version
-            </button>
-          )}
+      {path === 'solo' ? (
+        <div className={CARD}>
+          <SoloDeclaration solo={vm.solo} />
         </div>
-      )}
-
-      {/* Builder */}
-      {showBuilder && (
+      ) : (
         <>
-          {/* Critical terms snapshot — live from the builder inputs */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="snapshot">
-            <div className={`${CARD} !p-3.5`}>
-              <div className={LBL}>Equity split</div>
-              <div className="text-[14px] font-extrabold tabular-nums text-gray-900 dark:text-gray-50 mt-0.5" data-testid="snap-equity">
-                {namedFounders.length >= 2 ? namedFounders.map((f) => Number(f.equity_pct).toLocaleString(undefined, { maximumFractionDigits: 1 })).join(' / ') : '—'}
+          {/* Summary banner */}
+          <div className={CARD} data-testid="card-summary">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="w-10 h-10 rounded-xl bg-violet-600 text-white flex items-center justify-center shrink-0">
+                  <FileSignature size={18} />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-[10.5px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                    Agreement path · Multi-founder
+                  </div>
+                  <div className="text-[14.5px] font-bold text-gray-900 dark:text-gray-50 mt-0.5 break-words">
+                    {vm.foundersLabel} · {vm.statusLabel}
+                  </div>
+                  {vm.founders.length > 0 && (
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
+                      {vm.founders.map((f, i) => (
+                        <span key={i} className="text-[10.5px] text-gray-400 dark:text-gray-500" data-testid={`founder-chip-${i}`}>
+                          {f.name} · {f.equityLabel} · starts {f.startDate}
+                          {f.matchedMember ? ' · on team record' : ''}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="text-[10px] text-gray-400">{fromCapTable ? 'from Cap Table' : 'manual'}</div>
+              <div className="flex items-center gap-5">
+                <div className="text-center">
+                  <div
+                    className={`text-[20px] font-bold tabular-nums ${vm.unresolvedTone === 'rose' ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`}
+                    data-testid="text-unresolved"
+                  >
+                    {vm.unresolvedCount}
+                  </div>
+                  <div className="text-[9.5px] uppercase tracking-wide text-gray-400 dark:text-gray-500">{vm.unresolvedLabel}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[20px] font-bold tabular-nums text-emerald-600 dark:text-emerald-400" data-testid="text-signed">
+                    {vm.signedLabel}
+                  </div>
+                  <div className="text-[9.5px] uppercase tracking-wide text-gray-400 dark:text-gray-500">{vm.signedSub}</div>
+                </div>
+                <button
+                  type="button" onClick={scrollToExec} data-testid="button-open-exec"
+                  className="text-[12px] font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-lg px-3.5 py-2.5 whitespace-nowrap"
+                >
+                  Open execution console
+                </button>
+              </div>
             </div>
-            <div className={`${CARD} !p-3.5`}>
-              <div className={LBL}>Vesting</div>
-              <div className="text-[14px] font-extrabold tabular-nums text-gray-900 dark:text-gray-50 mt-0.5" data-testid="snap-vesting">{vestingYears}yr / {cliffMonths}mo cliff</div>
-              <div className="text-[10px] text-gray-400">{ACCELERATION.find((a) => a.v === acceleration)?.label} acceleration</div>
-            </div>
-            <div className={`${CARD} !p-3.5`}>
-              <div className={LBL}>Governing law</div>
-              <div className="text-[14px] font-extrabold text-gray-900 dark:text-gray-50 mt-0.5 truncate" data-testid="snap-law">{governingLaw || '—'}</div>
-              <div className="text-[10px] text-gray-400">arbitration: {arbitrationVenue || '—'}</div>
-            </div>
-            <div className={`${CARD} !p-3.5`}>
-              <div className={LBL}>Founders</div>
-              <div className="text-[14px] font-extrabold tabular-nums text-gray-900 dark:text-gray-50 mt-0.5" data-testid="snap-founders">{namedFounders.length}</div>
-              <div className="text-[10px] text-gray-400">{namedFounders.length < 2 ? 'agreement needs 2+' : `equity total ${totalEquity.toFixed(1)}%`}</div>
-            </div>
+            {vm.blockerText && (
+              <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-start gap-2" data-testid="text-blocker">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" />
+                <p className="text-[12px] text-amber-700 dark:text-amber-300 leading-snug">
+                  <span className="font-bold">Blocker: </span>{vm.blockerText}
+                </p>
+              </div>
+            )}
           </div>
 
-          {namedFounders.length < 2 && (
+          {/* Critical terms snapshot */}
+          <div className={CARD}>
+            <CriticalTermsSnapshot tiles={vm.snapshot} />
+          </div>
+
+          {vm.founders.length < 2 && (
             <div className={`${CARD} !p-3 flex items-center gap-3`} data-testid="banner-solo">
               <Users size={14} className="text-violet-500 shrink-0" />
               <p className="text-[12px] text-gray-600 dark:text-gray-300 flex-1">
@@ -412,198 +638,133 @@ export default function SpinoutLabCofounderAgreementPage() {
             </div>
           )}
 
+          {/* Clause-by-clause builder */}
           <div className={CARD} data-testid="card-builder">
-            <div className="mb-4">
-              <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-50">Clause-by-clause builder</div>
-              <div className="text-[11px] text-gray-400 dark:text-gray-500">
-                Prefilled from your Cap Table where possible — every clause below is written into the generated document.
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Clause-by-clause agreement builder</div>
+                <div className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">
+                  Every clause below is written into the generated document. Each status names what it is derived from — nothing here records an approval.
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button" onClick={() => setShowExplain((v) => !v)} data-testid="button-explain-toggle"
+                  className="text-[11.5px] font-bold text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 border border-violet-100 dark:border-violet-900/50 rounded-lg px-2.5 py-1.5"
+                >
+                  {showExplain ? 'Hide plain-English' : 'Show plain-English'}
+                </button>
+                <button
+                  type="button" onClick={toggleAll} data-testid="button-expand-all"
+                  className="text-[11.5px] font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg px-2.5 py-1.5"
+                >
+                  {allOpen ? 'Collapse all' : 'Expand all'}
+                </button>
               </div>
             </div>
 
-            <Clause title="Company" testid="clause-company">
-              <input type="text" className={`${INPUT} max-w-sm`} value={companyName} onChange={(e) => setCompanyName(e.target.value)} disabled={!canEdit} placeholder="e.g. NovaCraft AI, Inc." data-testid="input-company" />
-            </Clause>
-
-            <Clause title="Equity split" critical source={fromCapTable ? 'from Cap Table' : 'manual entry'} testid="clause-equity">
-              <div className="space-y-2">
-                {founders.map((f, i) => (
-                  <div key={i} className="grid grid-cols-2 md:grid-cols-12 gap-2 items-center" data-testid={`founder-row-${i}`}>
-                    <input type="text" className={`${INPUT} col-span-2 md:col-span-3`} value={f.name} onChange={(e) => updateFounder(i, { name: e.target.value })} disabled={!canEdit} placeholder="Full name" data-testid={`input-founder-name-${i}`} />
-                    <input type="email" className={`${INPUT} col-span-2 md:col-span-3`} value={f.email} onChange={(e) => updateFounder(i, { email: e.target.value })} disabled={!canEdit} placeholder="Email (optional)" />
-                    <input type="text" className={`${INPUT} col-span-1 md:col-span-2`} value={f.role} onChange={(e) => updateFounder(i, { role: e.target.value })} disabled={!canEdit} placeholder="Role" data-testid={`input-founder-role-${i}`} />
-                    <div className="col-span-1 md:col-span-2 flex items-center gap-1">
-                      <input type="number" min="0" max="100" step="0.1" className={`${INPUT} text-right`} value={f.equity_pct} onChange={(e) => updateFounder(i, { equity_pct: e.target.value })} disabled={!canEdit} data-testid={`input-founder-equity-${i}`} />
-                      <span className="text-[11px] text-gray-400">%</span>
-                    </div>
-                    <div className="col-span-2 md:col-span-2 flex items-center gap-2">
-                      <input type="date" className={`${INPUT} !text-[11px]`} value={f.start_date} onChange={(e) => updateFounder(i, { start_date: e.target.value })} disabled={!canEdit} />
-                      {canEdit && founders.length > 1 && (
-                        <button type="button" onClick={() => setFounders(founders.filter((_, fi) => fi !== i))} className="text-gray-300 hover:text-rose-500 shrink-0" aria-label="Remove founder" data-testid={`button-remove-founder-${i}`}>
-                          <X size={13} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="flex items-center gap-3 mt-2">
+            {/* A generated document exists, so the builder is locked: without
+                this the whole form stayed enabled while the Generate footer
+                was hidden — every input typeable with no way to submit. */}
+            {!showBuilder && (
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-3 py-2.5 mb-2" data-testid="banner-builder-locked">
+                <Lock size={13} className="text-gray-400 dark:text-gray-500 shrink-0" />
+                <p className="text-[11.5px] text-gray-600 dark:text-gray-300 flex-1 min-w-[200px]">
+                  An agreement has already been generated, so these clauses are read-only. Start a new draft to change them — it does not alter the existing document.
+                </p>
                 {canEdit && (
-                  <button type="button" onClick={() => setFounders([...founders, { name: '', email: '', role: '', equity_pct: 0, start_date: '' }])} data-testid="button-add-founder" className="text-[11.5px] font-bold text-violet-600 hover:underline inline-flex items-center gap-1">
-                    <Plus size={11} /> Add founder
+                  <button
+                    type="button"
+                    onClick={() => setShowBuilder(true)}
+                    data-testid="button-new-version-inline"
+                    className="text-[11.5px] font-bold text-violet-600 dark:text-violet-400 hover:underline inline-flex items-center gap-1 shrink-0"
+                  >
+                    Draft a new version
                   </button>
                 )}
-                <span className={`text-[11px] font-semibold ${totalEquity > 100.001 ? 'text-rose-600' : 'text-gray-400'}`} data-testid="text-equity-total">
-                  Total {totalEquity.toFixed(2)}%{totalEquity > 100.001 ? ' — must be ≤ 100%' : ''}
-                </span>
               </div>
-            </Clause>
+            )}
 
-            <Clause title="Vesting schedule" critical source="written into §2" testid="clause-vesting">
-              <div className="flex flex-wrap items-end gap-4">
-                {[
-                  { label: 'Years', val: vestingYears, set: setVestingYears, min: 1, max: 10 },
-                  { label: 'Cliff (months)', val: cliffMonths, set: setCliffMonths, min: 0, max: 48 },
-                  { label: 'Cliff vest %', val: cliffPct, set: setCliffPct, min: 0, max: 100 },
-                ].map((f) => (
-                  <label key={f.label} className="block">
-                    <span className={LBL}>{f.label}</span>
-                    <input type="number" min={f.min} max={f.max} className={`${INPUT} !w-24 text-right`} value={f.val} onChange={(e) => f.set(e.target.value)} disabled={!canEdit} data-testid={`input-${f.label.replace(/[^a-z]/gi, '').toLowerCase()}`} />
-                  </label>
-                ))}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-3">
-                {ACCELERATION.map((o) => (
-                  <button key={o.v} type="button" onClick={() => canEdit && setAcceleration(o.v)} data-testid={`accel-${o.v}`}
-                    className={`text-left p-2.5 rounded-xl border-2 transition ${acceleration === o.v ? 'border-violet-500 bg-violet-50 dark:bg-violet-900/20' : 'border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700'}`}>
-                    <div className="text-[12px] font-bold text-gray-900 dark:text-gray-50">{o.label}</div>
-                    <div className="text-[10.5px] text-gray-500 dark:text-gray-400 mt-0.5">{o.desc}</div>
-                  </button>
-                ))}
-              </div>
-            </Clause>
-
-            <Clause title="IP assignment" critical source="written into §3" testid="clause-ip">
-              <p className="text-[11.5px] text-gray-500 dark:text-gray-400 mb-2">
-                All prior and future IP related to the business is assigned to the entity; each founder signs a standard PIIA. List exclusions below.
-              </p>
-              <textarea rows={2} className={INPUT} value={ipExclusions} onChange={(e) => setIpExclusions(e.target.value)} disabled={!canEdit} placeholder="Pre-existing IP to exclude (optional) — e.g. a patent held by a founder, unrelated to the Company." data-testid="input-ip-exclusions" />
-            </Clause>
-
-            <Clause title="Founder roles & authority" source="written into §§4–5" testid="clause-roles">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <label className="block">
-                  <span className={LBL}>Day-to-day decisions by</span>
-                  <input type="text" className={INPUT} value={decisionDayToDay} onChange={(e) => setDecisionDayToDay(e.target.value)} disabled={!canEdit} data-testid="input-daytoday" />
-                </label>
-                <label className="block">
-                  <span className={LBL}>Strategic decision threshold</span>
-                  <select className={INPUT} value={decisionThreshold} onChange={(e) => setDecisionThreshold(e.target.value)} disabled={!canEdit} data-testid="select-threshold">
-                    <option value="majority">Majority</option>
-                    <option value="supermajority">Supermajority (66%)</option>
-                    <option value="unanimous">Unanimous</option>
-                  </select>
-                </label>
-              </div>
-              <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-2">Per-founder titles come from the equity table above.</p>
-            </Clause>
-
-            <Clause title="Commitment & compensation" source="written into §6" testid="clause-commitment">
-              <div className="flex items-center gap-2">
-                {['full-time', 'part-time'].map((v) => (
-                  <button key={v} type="button" onClick={() => canEdit && setCommitment(v)} data-testid={`commit-${v}`}
-                    className={`text-[11.5px] font-bold rounded-full px-3 py-1.5 ${commitment === v ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}>
-                    {v === 'full-time' ? 'Full-time' : 'Part-time'}
-                  </button>
-                ))}
-              </div>
-              <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-2">Cash compensation terms aren't part of this template — add them by amendment once you have payroll.</p>
-            </Clause>
-
-            <Clause title="Departure & repurchase" critical source="template default" testid="clause-departure">
-              <p className="text-[11.5px] text-gray-500 dark:text-gray-400">
-                Standard clause (§7): unvested shares return on departure; the Company may repurchase vested shares per the template's buyout terms. Review the exact language in the generated document.
-              </p>
-            </Clause>
-
-            <Clause title="Confidentiality & non-compete" source="written into §8" testid="clause-confidentiality">
-              <div className="flex items-center gap-2">
-                <input type="number" min="1" max="10" className={`${INPUT} !w-20 text-right`} value={confidentialityYears} onChange={(e) => setConfidentialityYears(e.target.value)} disabled={!canEdit} data-testid="input-confidentiality-years" />
-                <span className="text-[12px] text-gray-500 dark:text-gray-400">years of confidentiality, surviving termination</span>
-              </div>
-            </Clause>
-
-            <Clause title="Section 83(b)" source="template default" testid="clause-83b">
-              <p className="text-[11.5px] text-gray-500 dark:text-gray-400">
-                The template (§9) obligates each founder to file their 83(b) election within 30 days of stock purchase — track filings on the{' '}
-                <Link to="/spinout-lab/captable" className="text-violet-600 hover:underline">Cap Table</Link>.
-              </p>
-            </Clause>
-
-            <Clause title="Amendment mechanics" source="written into §4" testid="clause-amendment">
-              <p className="text-[11.5px] text-gray-500 dark:text-gray-400 mb-2">Matters requiring unanimous founder consent:</p>
-              <div className="space-y-1.5">
-                {unanimousMatters.map((m, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <input type="text" className={INPUT} value={m} onChange={(e) => setUnanimousMatters(unanimousMatters.map((x, xi) => (xi === i ? e.target.value : x)))} disabled={!canEdit} data-testid={`input-unanimous-${i}`} />
-                    {canEdit && (
-                      <button type="button" onClick={() => setUnanimousMatters(unanimousMatters.filter((_, xi) => xi !== i))} className="text-gray-300 hover:text-rose-500 shrink-0" aria-label="Remove matter">
-                        <X size={13} />
-                      </button>
+            <div>
+              {vm.clauses.map((c) => {
+                const Editor = c.editor ? EDITORS[c.editor] : null;
+                return (
+                  <ClauseRow
+                    key={c.key}
+                    clause={c}
+                    open={openKeys.has(c.key)}
+                    onToggle={() => toggleClause(c.key)}
+                    showExplain={showExplain}
+                  >
+                    {Editor ? (
+                      <Editor
+                        draft={draft}
+                        set={setD}
+                        canEdit={canEdit && showBuilder}
+                        {...(c.key === 'dispute' ? { explain: vm.dispute.explain, clauseSentence: vm.dispute.clauseSentence } : {})}
+                      />
+                    ) : (
+                      <ReadOnlyClause>{READONLY_PROSE[c.key] || c.value}</ReadOnlyClause>
                     )}
-                  </div>
-                ))}
-              </div>
-              {canEdit && (
-                <button type="button" onClick={() => setUnanimousMatters([...unanimousMatters, ''])} data-testid="button-add-matter" className="mt-2 text-[11.5px] font-bold text-violet-600 hover:underline inline-flex items-center gap-1">
-                  <Plus size={11} /> Add matter
-                </button>
-              )}
-            </Clause>
-
-            <Clause title="Dispute resolution" source="written into §10" testid="clause-dispute">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {DISPUTE.map((o) => (
-                  <button key={o.v} type="button" onClick={() => canEdit && setDeadlock(o.v)} data-testid={`dispute-${o.label.toLowerCase().replace(/\s/g, '-')}`}
-                    className={`text-left p-2.5 rounded-xl border-2 transition ${deadlock === o.v ? 'border-violet-500 bg-violet-50 dark:bg-violet-900/20' : 'border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700'}`}>
-                    <div className="text-[12px] font-bold text-gray-900 dark:text-gray-50">{o.label}</div>
-                    <div className="text-[10.5px] text-gray-500 dark:text-gray-400 mt-0.5">{o.desc}</div>
-                  </button>
-                ))}
-              </div>
-            </Clause>
-
-            <Clause title="Governing law & execution" critical source="written into §10" testid="clause-law">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <label className="block">
-                  <span className={LBL}>Governing law</span>
-                  <input type="text" className={INPUT} value={governingLaw} onChange={(e) => setGoverningLaw(e.target.value)} disabled={!canEdit} data-testid="input-law" />
-                </label>
-                <label className="block">
-                  <span className={LBL}>Arbitration venue</span>
-                  <input type="text" className={INPUT} value={arbitrationVenue} onChange={(e) => setArbitrationVenue(e.target.value)} disabled={!canEdit} data-testid="input-venue" />
-                </label>
-              </div>
-              <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-2">
-                The document generates with wet-ink signature blocks; e-signature happens in Legal & Capital, not here.
-              </p>
-            </Clause>
+                  </ClauseRow>
+                );
+              })}
+            </div>
 
             {error && <div className="text-[12px] text-rose-600 dark:text-rose-400 mt-3" data-testid="text-error">{String(error)}</div>}
 
-            <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-              <p className="text-[10.5px] text-gray-400 dark:text-gray-500">
-                Generates a real document on your startup — nothing here is stored until then.
-              </p>
-              <button
-                type="button"
-                onClick={generate}
-                disabled={!canGenerate || busy}
-                data-testid="button-generate"
-                className="text-[12px] font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-lg px-4 py-2 disabled:opacity-40 inline-flex items-center gap-1.5"
-              >
-                {busy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Generate agreement
-              </button>
+            {showBuilder && (
+              <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                <p className="text-[10.5px] text-gray-400 dark:text-gray-500 max-w-md">
+                  Generates a real document on your startup — nothing above is stored until then, and the clause values shown above are exactly the ones sent.
+                  {!canSubmit && submitBlockedReason && (
+                    <span className="block text-rose-600 dark:text-rose-400 font-semibold mt-1" data-testid="text-generate-blocked">
+                      {submitBlockedReason}
+                    </span>
+                  )}
+                </p>
+                <button
+                  type="button"
+                  onClick={generate}
+                  disabled={!canSubmit || busy}
+                  data-testid="button-generate"
+                  title={canSubmit ? undefined : (submitBlockedReason || 'Fill in the blocked clauses above first.')}
+                  className="text-[12px] font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-lg px-4 py-2 disabled:opacity-40 inline-flex items-center gap-1.5"
+                >
+                  {busy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Generate agreement
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Roles + IP rider + dispute resolution (the design's 3 cards) */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-5">
+            <div className={CARD}>
+              <RolesAndReservedMatters roles={vm.roles} reason={vm.raciReason} />
             </div>
+            <div className="flex flex-col gap-5">
+              <div className={CARD}>
+                <IpRider items={vm.ipItems} note={vm.ipNote} />
+              </div>
+              <div className={CARD}>
+                <DisputeCard
+                  dispute={vm.dispute}
+                  canEdit={canEdit && showBuilder}
+                  disabledReason={canEdit ? 'An agreement has already been generated — start a new draft to change this.' : vm.permission.reason}
+                  onSelect={(v) => setD({ deadlock: v })}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Execution console */}
+          <div className={CARD}>
+            <ExecutionConsole
+              execution={vm.execution}
+              canEdit={canEdit}
+              showBuilder={showBuilder}
+              onNewVersion={() => setShowBuilder(true)}
+            />
           </div>
         </>
       )}

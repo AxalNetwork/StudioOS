@@ -816,7 +816,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
       </section>
 
       {/* ---- Section 2B + 2C: deliverables & tools (design ratio 1fr / 2fr) ---- */}
-      <section className="grid grid-cols-1 lg:grid-cols-[1fr,2fr] gap-5 items-start">
+      <section className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-5 items-start">
         <div>
           <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
             Week {selectedDef.num} deliverables

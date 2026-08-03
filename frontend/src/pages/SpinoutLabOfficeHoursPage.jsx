@@ -23,6 +23,15 @@
 //   - Action items · execution handoff: the current week's real milestone
 //     checklist (read-only — items complete by doing the work in the linked
 //     tool, not by ticking a box here).
+//   - Partner booking guidance ("When to book X", "Best for stage", "One
+//     session gets you", "Bring to the session"): REAL partner-authored
+//     content only. It lives in the `oh_*` columns on `partners` (D1
+//     migration 160_partner_office_hours_guidance.sql), is written by the
+//     partner themselves at /partner/office-hours, and rides along on
+//     GET /partners. When a partner has not published it, the drawer says
+//     so plainly — this page NEVER synthesises guidance prose, defaults or
+//     role-derived guesses about a real named person, and none of the
+//     design's invented persona copy is reproduced.
 //   - Omitted (no backend): partner ratings, "Resend to partner",
 //     rescheduling. Share / Export / Preview-as-investor render as disabled
 //     quick actions with the reason in their tooltip.
@@ -87,12 +96,18 @@ export const FILTERS = [
 ];
 const filterRoleOf = (role) => (role === 'Lawyer' || role === 'Investor' ? role : 'Operator');
 // Per-filter directory note (design L286). The recommended note is dynamic
-// (needs the current week) and built at render; the Operators wording is
-// widened because the app folds finance partners into that bucket.
+// (needs the current week) and built at render.
+//
+// These notes describe the FILTER, not the people in it. The design's wording
+// ("pre-seed and seed investors", "formation and financing counsel") asserts a
+// stage and a practice area, but the buckets are assigned by a coarse regex
+// over each partner's own categories/specialization (roleOfPartner) which
+// carries neither — so a growth-stage fund or an IP attorney would be
+// described inaccurately. Nothing here claims anything about a real person.
 const DIR_NOTE = {
-  Investor: 'Pre-seed and seed investors — book before and during your raise.',
-  Lawyer: 'Formation and financing counsel — book before you sign.',
-  Operator: 'Service partners for tactical execution — GTM, hiring, ops, product, and finance.',
+  Investor: 'Investors in the Axal network.',
+  Lawyer: 'Legal partners in the Axal network.',
+  Operator: 'Service partners in the Axal network — GTM, hiring, ops, product, and finance.',
   all: 'Every partner in the Axal network.',
 };
 
@@ -114,15 +129,41 @@ const avatarBgOf = (name) => {
 // Design objective list (L328) + the page's Product / Other additions.
 const OBJECTIVES = ['Fundraising', 'Incorporation', 'Customer validation', 'GTM & pricing', 'Hiring & org', 'Deck feedback', 'Product', 'Other'];
 
+// `new Date(null)` is epoch 0, not Invalid Date — without the falsy guard a
+// booking with no scheduled time renders as "Thu, Jan 1" (1970). Guard first.
 const fmtWhen = (iso) => {
+  if (!iso) return '—';
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '—'
     : d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 };
 const fmtDay = (iso) => {
+  if (!iso) return '—';
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
+
+// Partner-authored office-hours guidance (D1 migration 160). NULL/blank means
+// the partner has not published that field — the drawer says so plainly. This
+// page NEVER synthesises guidance prose about a real named partner: there are
+// deliberately no defaults, no placeholders and no role-derived guesses here.
+export function normGuidance(p) {
+  const s = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  let bring = [];
+  try {
+    const raw = JSON.parse(p?.oh_bring_json || '[]');
+    if (Array.isArray(raw)) bring = raw.map((x) => String(x ?? '').trim()).filter(Boolean).slice(0, 5);
+  } catch { bring = []; }
+  const g = {
+    whenToBook: s(p?.oh_when_to_book, 600),
+    stageFit: s(p?.oh_stage_fit, 60),
+    outcome: s(p?.oh_session_outcome, 120),
+    bring,
+  };
+  g.any = !!(g.whenToBook || g.stageFit || g.outcome || g.bring.length);
+  return g;
+}
+export const firstNameOf = (name) => (String(name || '').trim().split(/\s+/)[0] || 'This partner');
 // The dev FastAPI and the production Worker expose different wire shapes for
 // slots and bookings (start_at vs starts_at, questions vs notes, remaining vs
 // available, requested vs pending, meeting_uri vs meeting_url). Normalize both
@@ -156,7 +197,9 @@ export function normBooking(b) {
     status: b.status === 'pending' ? 'requested' : b.status,
     questions: b.questions ?? b.notes ?? null,
     scheduled_start: start,
-    // Worker DTO carries no times — stays null and the row simply omits it.
+    // The worker's booking DTO now LEFT JOINs the slot for starts_at/ends_at/
+    // meeting_url; older deployments send neither, so this stays null and the
+    // row simply omits the time rather than inventing one.
     duration_min: Number.isFinite(duration) ? duration : null,
     meeting_uri: b.meeting_uri ?? b.meeting_url ?? null,
   };
@@ -170,6 +213,20 @@ const countdown = (iso) => {
   if (h < 48) return `${Math.round(h)}h`;
   return `${Math.round(h / 24)}d`;
 };
+
+// Session-history outcome label. The archive must NEVER assert that a session
+// with a real named partner took place: `completed` is the only partner-
+// confirmed outcome. A booking that merely has a start time in the past —
+// including one the partner never confirmed, and one explicitly marked
+// no_show — is reported by its true status instead of a blanket "Held".
+const HISTORY_STATUS = {
+  completed: 'Completed',
+  no_show: 'Recorded as a no-show',
+  cancelled: 'Cancelled',
+  confirmed: 'Confirmed — not marked complete',
+  requested: 'Never confirmed by the partner',
+};
+export const historyStatusOf = (b) => HISTORY_STATUS[b?.status] || 'Status unknown';
 
 // Milestone → the lab tool where it actually gets done (design's "→ links").
 const MILESTONE_TOOLS = {
@@ -289,11 +346,12 @@ export default function SpinoutLabOfficeHoursPage() {
     .filter((b) => b.status === 'completed' || (b.status !== 'cancelled' && startMs(b) !== null && startMs(b) <= now))
     .sort((a, b) => (startMs(b) ?? 0) - (startMs(a) ?? 0)), [allBookings, now]);
   const completedCount = allBookings.filter((b) => b.status === 'completed').length;
-  // "Follow-ups pending" — sessions that still need something from you: an
-  // upcoming confirmed session to prep for, or a request the partner hasn't
-  // answered yet.
-  const followUpsPending = allBookings.filter((b) => b.status === 'requested'
-    || (b.status === 'confirmed' && (startMs(b) === null || startMs(b) > now))).length;
+  // Counts ONLY requests the partner hasn't answered yet. It deliberately does
+  // not include confirmed future sessions — those are already counted by the
+  // "Upcoming sessions" tile next to it, and counting them twice implied twice
+  // as many obligations. (It is also not a "follow-up": nothing here is a
+  // post-session commitment, so the label says what it actually measures.)
+  const awaitingReply = allBookings.filter((b) => b.status === 'requested').length;
 
   // ---- Recommended help now (real blockers + real scoring gaps) ----
   const milestoneDone = (key) => (state?.milestones || []).some((m) => (m.key || m.milestone_key) === key);
@@ -324,6 +382,19 @@ export default function SpinoutLabOfficeHoursPage() {
     .filter((p) => p.status !== 'inactive')
     .map((p) => ({ ...p, role: roleOfPartner(p) })), [partners]);
   const recommendedRoles = useMemo(() => new Set(helpCards.map((c) => c.role)), [helpCards]);
+  // Exact role first, then the directory's folded bucket (Finance/Partner sit
+  // under Operator) — so "Book now" resolves to a real partner or to null,
+  // never to an unrelated first-in-list fallback.
+  const matchForRole = (role) => dirItems.find((p) => p.role === role)
+    || dirItems.find((p) => filterRoleOf(p.role) === filterRoleOf(role))
+    || null;
+  // The recommendation reason is derived from the founder's OWN milestones and
+  // scoring gaps (helpCards), never from anything claimed about the partner.
+  const recTitleByRole = useMemo(() => {
+    const m = new Map();
+    for (const c of helpCards) if (!m.has(c.role)) m.set(c.role, c.title);
+    return m;
+  }, [helpCards]);
   const visiblePartners = filter === 'all' ? dirItems
     : filter === 'recommended'
       ? [...dirItems].sort((a, b) => (recommendedRoles.has(b.role) ? 1 : 0) - (recommendedRoles.has(a.role) ? 1 : 0))
@@ -426,7 +497,11 @@ export default function SpinoutLabOfficeHoursPage() {
         project_id: project?.id ?? null,
       });
       setDrawerFor(null);
-      showToast('Session requested — the partner will confirm and your brief travels with the booking.');
+      // Only claim the brief travelled when it actually did (the checkbox is
+      // opt-out and the brief can be empty).
+      showToast(attachBrief && briefText
+        ? 'Session requested — the partner will confirm and your brief travels with the booking.'
+        : 'Session requested — the partner will confirm.');
       // W3 deliverable — a real partner session was requested.
       markMilestone(user, 'office_hours_booked');
       await refreshBookings();
@@ -437,10 +512,28 @@ export default function SpinoutLabOfficeHoursPage() {
   };
 
   const bookTopMatch = (role) => {
-    const target = dirItems.find((p) => p.role === role) || dirItems[0];
+    const target = matchForRole(role);
     if (target) openDrawer(target);
-    else showToast('No partners available for this yet.', 'error');
+    else showToast('No partner in the network matches this yet.', 'error');
   };
+
+  // Partner-authored guidance for the partner whose drawer is open (if any).
+  const guidance = drawerFor ? normGuidance(drawerFor) : null;
+  // Inline editing of guidance is deliberately OUT OF SCOPE in this drawer:
+  // this page is the founder-facing booking tool, so a partner-only write form
+  // here would need role branching inside the drawer, a second dirty-state
+  // machine alongside the brief editor, and would hide a write control behind a
+  // modal a founder opens. The editor lives on the partner's own console
+  // (/partner/office-hours#guidance); we only deep-link to it.
+  //
+  // Reach: this route is guard(labRoles(['admin'])) (App.jsx), so the link only
+  // ever renders for an admin or for a partner who is ALSO an active Spin-Out
+  // Lab member. That is fine — it is a convenience, not the entry point: every
+  // partner reaches the editor from the "My Office Hours" sidebar item, and
+  // GuidanceCard is the first section on that page. (The `#guidance` fragment
+  // is likewise decorative — ScrollToTop resets scroll on navigation — but the
+  // card sits at the top, so top-of-page lands on it anyway.)
+  const viewerIsThisPartner = !!(drawerFor && user?.partner_id && user.partner_id === drawerFor.id);
 
   const filteredHistory = past.filter((b) => {
     if (!historyQ.trim()) return true;
@@ -511,9 +604,11 @@ export default function SpinoutLabOfficeHoursPage() {
           </button>
         </div>
       </div>
-      <p className="text-[12.5px] text-gray-500 dark:text-gray-400 mb-5">
+      <p className="text-[12.5px] text-gray-500 dark:text-gray-400 mb-3">
         Live sessions with partners — investors, lawyers, and operators — turned into tracked execution.
       </p>
+      {/* Design's 3px teal accent rule under the header (Office Hours.dc.html L30). */}
+      <div className="h-[3px] bg-teal-600 rounded-full mb-5" aria-hidden="true" />
 
       {!unlocked && (
         <div className={`${CARD} p-4 mb-5 flex items-center gap-3`} data-testid="banner-locked">
@@ -529,8 +624,9 @@ export default function SpinoutLabOfficeHoursPage() {
         {[
           { v: upcoming.length, l: 'Upcoming sessions', tid: 'stat-upcoming' },
           { v: completedCount, l: 'Sessions completed', tid: 'stat-completed' },
-          { v: followUpsPending, l: 'Follow-ups pending', tid: 'stat-awaiting' },
-          { v: dirItems.length, l: 'Partners available', tid: 'stat-partners' },
+          { v: awaitingReply, l: 'Awaiting partner reply', tid: 'stat-awaiting' },
+          // Counts active partners — network membership, not availability.
+          { v: dirItems.length, l: 'Partners in network', tid: 'stat-partners' },
         ].map((s) => (
           <div key={s.tid} className={`${CARD} px-4 py-3`} data-testid={s.tid}>
             <div className="text-2xl font-extrabold font-mono text-gray-900 dark:text-gray-100">{s.v}</div>
@@ -547,27 +643,47 @@ export default function SpinoutLabOfficeHoursPage() {
             <div className="text-[11px] text-gray-400">From your week {Number(state?.week || 1)} context, scoring gaps, and open blockers</div>
           </div>
           <div className="grid md:grid-cols-3 gap-3">
-            {helpCards.map((c) => (
-              <div key={c.id} className={`rounded-xl border p-3.5 flex flex-col ${REC_TINT[c.role] || 'border-gray-200 dark:border-gray-700'}`} data-testid={`help-card-${c.id}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <RoleTag role={c.role} />
-                  <span className={`text-[10.5px] font-bold ${c.urgency === 'Urgent' ? 'text-red-600' : c.urgency === 'This week' ? 'text-amber-600' : 'text-sky-600'}`}>{c.urgency}</span>
+            {helpCards.map((c) => {
+              // The partner this card would actually open — null means the
+              // network has nobody for it, so "Book now" is disabled with the
+              // reason in its tooltip rather than erroring into a toast.
+              const match = matchForRole(c.role);
+              return (
+                <div key={c.id} className={`rounded-xl border p-3.5 flex flex-col ${REC_TINT[c.role] || 'border-gray-200 dark:border-gray-700'}`} data-testid={`help-card-${c.id}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <RoleTag role={c.role} />
+                    <span className={`text-[10.5px] font-bold ${c.urgency === 'Urgent' ? 'text-red-600' : c.urgency === 'This week' ? 'text-amber-600' : 'text-sky-600'}`}>{c.urgency}</span>
+                  </div>
+                  <div className="text-[13px] font-bold text-gray-900 dark:text-gray-100 mb-1">{c.title}</div>
+                  <div className="text-[12px] text-gray-500 dark:text-gray-400 flex-1">{c.body}</div>
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    {/* Design L63 attributes the card to a partner. `match` is
+                        resolved by role tag and list order (GET /partners is
+                        ORDER BY created_at DESC) — it is NOT a ranked or vetted
+                        recommendation of that individual, so the label says
+                        which partner the button opens rather than presenting a
+                        real named person as the curated pick. */}
+                    <span
+                      className="text-[11px] text-gray-500 dark:text-gray-400 truncate"
+                      title={match ? `Opens the newest ${c.role}-tagged partner in the network — not a ranked match` : undefined}
+                      data-testid={`help-match-${c.id}`}
+                    >
+                      {match ? `Opens ${match.name}` : ''}
+                    </span>
+                    <button
+                      type="button"
+                      className={`${BTN} bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50 shrink-0`}
+                      disabled={!unlocked || !match}
+                      title={!unlocked ? 'Office Hours unlocks in Week 3' : !match ? 'No partner in the network matches this yet' : undefined}
+                      onClick={() => bookTopMatch(c.role)}
+                      data-testid={`button-book-help-${c.id}`}
+                    >
+                      Book now
+                    </button>
+                  </div>
                 </div>
-                <div className="text-[13px] font-bold text-gray-900 dark:text-gray-100 mb-1">{c.title}</div>
-                <div className="text-[12px] text-gray-500 dark:text-gray-400 flex-1">{c.body}</div>
-                <div className="mt-3 flex justify-end">
-                  <button
-                    type="button"
-                    className={`${BTN} bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50`}
-                    disabled={!unlocked}
-                    onClick={() => bookTopMatch(c.role)}
-                    data-testid={`button-book-help-${c.id}`}
-                  >
-                    Book now
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -601,12 +717,20 @@ export default function SpinoutLabOfficeHoursPage() {
               </div>
               <div className="text-right shrink-0">
                 <div className="text-[11px] text-gray-400 mb-1">{b.scheduled_start ? countdown(b.scheduled_start) : '—'}</div>
-                {b.meeting_uri ? (
+                {/* The meeting link is the PARTNER'S slot URL: it is set when the
+                    slot is published and the worker's booking list LEFT JOINs it
+                    onto every row regardless of booking status. Confirming does
+                    NOT mint one (transition() writes only `status`). So Join is
+                    gated on a real confirmation, and the fallback never promises
+                    a link the backend will not produce. */}
+                {b.status === 'confirmed' && b.meeting_uri ? (
                   <a href={b.meeting_uri} target="_blank" rel="noopener noreferrer" className={`${BTN} bg-teal-600 hover:bg-teal-700 text-white`} data-testid={`button-join-${b.id}`}>
                     Join <ExternalLink className="w-3 h-3" />
                   </a>
                 ) : (
-                  <span className="text-[11px] text-gray-400">link at confirm</span>
+                  <span className="text-[11px] text-gray-400" data-testid={`join-note-${b.id}`}>
+                    {b.meeting_uri ? 'link on confirmation' : 'no link published'}
+                  </span>
                 )}
               </div>
             </div>
@@ -623,7 +747,7 @@ export default function SpinoutLabOfficeHoursPage() {
               {FILTERS.map(([key, label]) => (
                 <button
                   key={key} type="button" onClick={() => setFilter(key)}
-                  className={`px-2.5 h-7 rounded-full text-[11.5px] font-semibold border ${filter === key ? 'bg-gray-900 text-white border-gray-900 dark:bg-gray-100 dark:text-gray-900 dark:border-gray-100' : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'}`}
+                  className={`px-2.5 h-7 rounded-full text-[11.5px] font-semibold border ${filter === key ? 'bg-teal-600 text-white border-teal-600 dark:bg-teal-600 dark:text-white dark:border-teal-600' : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'}`}
                   data-testid={`filter-${key.toLowerCase()}`}
                 >
                   {label}
@@ -642,12 +766,30 @@ export default function SpinoutLabOfficeHoursPage() {
                 const recommended = recommendedRoles.has(p.role);
                 let tags = [];
                 try { tags = JSON.parse(p.categories_json || '[]'); } catch { tags = []; }
+                // No `capacity_status` here: it is a dev-FastAPI-only column,
+                // NOT NULL DEFAULT 'available', that nothing in the codebase
+                // ever sets — so it would stamp an unearned "Available" on
+                // every real partner in dev and is undefined against D1.
+                //
+                // `accepting_intros` IS a real D1 column, but migration 095
+                // scopes it to founder intent-MATCHING, not office hours: the
+                // worker's POST /slots/:id/book never reads it. It is therefore
+                // shown as information and NEVER disables Book — a partner can
+                // publish open slots while opting out of intro matching, and
+                // disabling here would be a dead control the API would accept.
+                // The drawer's live slot list stays the ground truth.
+                const capLabel = p.accepting_intros === 0 ? 'Not taking intros' : '';
                 return (
                   <div key={p.id} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3.5 flex flex-col" data-testid={`partner-card-${p.id}`}>
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="text-[13px] font-bold text-gray-900 dark:text-gray-100">{p.name}</div>
-                        <div className="text-[11.5px] text-gray-500">{p.headline || p.specialization || p.company || '—'}</div>
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <div className={`w-9 h-9 rounded-xl ${avatarBgOf(p.name)} text-white grid place-items-center text-[12px] font-bold shrink-0`} aria-hidden="true">
+                          {initialsOf(p.name || '?')}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[13px] font-bold text-gray-900 dark:text-gray-100 truncate">{p.name}</div>
+                          <div className="text-[11.5px] text-gray-500">{p.headline || p.specialization || p.company || '—'}</div>
+                        </div>
                       </div>
                       <RoleTag role={p.role} />
                     </div>
@@ -660,16 +802,28 @@ export default function SpinoutLabOfficeHoursPage() {
                     )}
                     {p.bio && <div className="text-[12px] text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">{p.bio}</div>}
                     {recommended && (
-                      <div className="text-[11.5px] text-emerald-700 dark:text-emerald-400 font-semibold mt-2">
-                        ✓ Recommended — matches an open gap or blocker this week.
+                      // States the inference, not a conclusion. The badge fires
+                      // for EVERY partner in a matching role bucket, and the
+                      // only evidence is a regex over their self-declared
+                      // categories — so it must not read as an Axal endorsement
+                      // of this named individual for this topic. The topic
+                      // itself comes from the founder's OWN gaps/blockers.
+                      <div className="rounded-lg border border-teal-200 dark:border-teal-900/60 bg-teal-50/60 dark:bg-teal-950/20 px-2 py-1.5 mt-2" data-testid={`partner-match-${p.id}`}>
+                        <div className="text-[11.5px] font-semibold text-teal-800 dark:text-teal-300">
+                          Matches your open item: {recTitleByRole.get(p.role) || 'a gap or blocker this week'}
+                        </div>
+                        <div className="text-[10.5px] text-teal-700/70 dark:text-teal-300/60 mt-0.5">
+                          Matched on their {p.role} tag — every {p.role.toLowerCase()} in the network is shown here.
+                        </div>
                       </div>
                     )}
                     <div className="mt-3 flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">{p.capacity_status === 'available' ? 'Available' : p.capacity_status === 'limited' ? 'Limited availability' : 'Unavailable'}</span>
+                      {capLabel ? <span className="text-[11px] text-gray-400">{capLabel}</span> : <span />}
                       <button
                         type="button"
                         className={`${BTN} border border-teal-600 text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/30 disabled:opacity-50`}
-                        disabled={!unlocked || p.capacity_status === 'unavailable'}
+                        disabled={!unlocked}
+                        title={!unlocked ? 'Office Hours unlocks in Week 3' : undefined}
                         onClick={() => openDrawer(p)}
                         data-testid={`button-book-${p.id}`}
                       >
@@ -756,12 +910,20 @@ export default function SpinoutLabOfficeHoursPage() {
             ))}
           </div>
 
+          {/* Navigation only. The design's "Feeds into" copy described data
+              flows that do not exist — booking a session does not push operator
+              matches, investor intros or a formation plan into these tools. The
+              one real downstream effect is the milestone write on success, so
+              that is the only claim made here. */}
           <div className={`${CARD} p-5`} data-testid="feeds-into">
-            <div className={`${LBL} mb-2`}>Feeds into</div>
+            <div className={`${LBL} mb-1`}>Related tools</div>
+            <div className="text-[11px] text-gray-400 mb-2">
+              Booking a session completes your Week 3 office-hours milestone.
+            </div>
             {[
-              { dot: 'bg-sky-500', label: 'Advisors', desc: 'operator matches & value-add', to: '/spinout-lab/advisors' },
-              { dot: 'bg-amber-500', label: 'Capital', desc: 'investor intros & narrative', to: '/spinout-lab/capital' },
-              { dot: 'bg-emerald-500', label: 'Incorporate', desc: 'legal formation plan', to: '/incorporate' },
+              { dot: 'bg-sky-500', label: 'Advisors', desc: 'find and book an advisor', to: '/spinout-lab/advisors' },
+              { dot: 'bg-amber-500', label: 'Capital', desc: 'plan and track your raise', to: '/spinout-lab/capital' },
+              { dot: 'bg-emerald-500', label: 'Incorporate', desc: 'form the entity', to: '/incorporate' },
             ].map((r) => (
               <Link key={r.label} to={r.to} className="flex items-center gap-2 py-1.5 group" data-testid={`feeds-${r.label.toLowerCase()}`}>
                 <span className={`w-2 h-2 rounded-full ${r.dot}`} />
@@ -803,7 +965,7 @@ export default function SpinoutLabOfficeHoursPage() {
               </div>
               <div className="text-[12.5px] text-gray-700 dark:text-gray-300 mt-0.5 font-semibold">{b.topic}</div>
               {b.questions && <div className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2 whitespace-pre-line">{b.questions}</div>}
-              <div className="text-[11px] text-gray-400 mt-1">{b.status === 'completed' ? 'Completed' : 'Held'}</div>
+              <div className="text-[11px] text-gray-400 mt-1">{historyStatusOf(b)}</div>
             </div>
           );
         })}
@@ -815,16 +977,86 @@ export default function SpinoutLabOfficeHoursPage() {
           <button type="button" aria-label="Close" className="absolute inset-0 bg-black/40" onClick={() => setDrawerFor(null)} />
           <div className="relative w-full max-w-[480px] h-full bg-white dark:bg-gray-900 shadow-2xl overflow-y-auto p-6">
             <div className="flex items-start justify-between mb-4">
-              <div>
-                <div className="text-[15px] font-extrabold text-gray-900 dark:text-gray-100">{drawerFor.name}</div>
-                <div className="text-[12px] text-gray-500">{drawerFor.headline || drawerFor.specialization || drawerFor.company || ''}</div>
-                <div className="mt-1"><RoleTag role={roleOfPartner(drawerFor)} /></div>
+              <div className="flex items-start gap-3 min-w-0">
+                <div className={`w-[46px] h-[46px] rounded-xl ${avatarBgOf(drawerFor.name)} text-white grid place-items-center text-[15px] font-bold shrink-0`} aria-hidden="true">
+                  {initialsOf(drawerFor.name || '?')}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[15px] font-extrabold text-gray-900 dark:text-gray-100">{drawerFor.name}</div>
+                  <div className="text-[12px] text-gray-500">{drawerFor.headline || drawerFor.specialization || drawerFor.company || ''}</div>
+                  <div className="mt-1"><RoleTag role={roleOfPartner(drawerFor)} /></div>
+                </div>
               </div>
               <button type="button" onClick={() => setDrawerFor(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" data-testid="button-close-drawer">
                 <X className="w-4 h-4 text-gray-500" />
               </button>
             </div>
             {drawerFor.bio && <p className="text-[12.5px] text-gray-600 dark:text-gray-300 mb-4">{drawerFor.bio}</p>}
+
+            {/* Partner-authored booking guidance (design L191-196). Rendered
+                ONLY from real partner-supplied content — see normGuidance().
+                Each sub-block appears only when its own field is non-empty;
+                there are no placeholders, defaults or filler. */}
+            {guidance?.any ? (
+              <div className="space-y-4 mb-5" data-testid="partner-guidance">
+                {guidance.whenToBook && (
+                  <div>
+                    <div className={`${LBL} mb-1.5`}>When to book {firstNameOf(drawerFor.name)}</div>
+                    <p className="text-[12.5px] leading-relaxed text-gray-700 dark:text-gray-300 whitespace-pre-line" data-testid="guidance-when">
+                      {guidance.whenToBook}
+                    </p>
+                  </div>
+                )}
+                {(guidance.stageFit || guidance.outcome) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {guidance.stageFit && (
+                      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-3" data-testid="guidance-stage">
+                        <div className={`${LBL} mb-1`}>Best for stage</div>
+                        <div className="text-[12.5px] font-semibold text-gray-800 dark:text-gray-200">{guidance.stageFit}</div>
+                      </div>
+                    )}
+                    {guidance.outcome && (
+                      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-3" data-testid="guidance-outcome">
+                        <div className={`${LBL} mb-1`}>One session gets you</div>
+                        <div className="text-[12.5px] font-semibold text-gray-800 dark:text-gray-200">{guidance.outcome}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {guidance.bring.length > 0 && (
+                  <div>
+                    <div className={`${LBL} mb-1.5`}>Bring to the session</div>
+                    <ul className="space-y-1.5" data-testid="guidance-bring">
+                      {guidance.bring.map((b, i) => (
+                        <li key={`${i}-${b}`} className="flex gap-2 text-[12.5px] text-gray-700 dark:text-gray-300">
+                          <span aria-hidden="true" className="text-teal-600 dark:text-teal-400">›</span>
+                          <span>{b}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-3.5 mb-5" data-testid="guidance-empty">
+                <div className="text-[12.5px] text-gray-600 dark:text-gray-300">
+                  {firstNameOf(drawerFor.name)} hasn't published booking guidance yet.
+                </div>
+                <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-1">
+                  Set your objective and desired outcome below so they can prep for the session.
+                </div>
+              </div>
+            )}
+
+            {viewerIsThisPartner && (
+              <Link to="/partner/office-hours#guidance" className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-teal-700 dark:text-teal-300 mb-5" data-testid="link-edit-guidance">
+                {guidance?.any ? 'Edit your booking guidance' : 'Add your booking guidance'} <ChevronRight className="w-3 h-3" />
+              </Link>
+            )}
+
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <div className="text-[13px] font-bold text-gray-900 dark:text-gray-100 mb-3">Book a session</div>
+            </div>
 
             <div className={`${LBL} mb-1.5`}>Objective</div>
             <div className="flex flex-wrap gap-1.5 mb-4" data-testid="objective-pills">
@@ -868,7 +1100,9 @@ export default function SpinoutLabOfficeHoursPage() {
                     <span className="text-[12.5px] font-semibold text-gray-800 dark:text-gray-200 inline-flex items-center gap-2">
                       <Calendar className="w-3.5 h-3.5 text-teal-600" /> {fmtWhen(s.start_at)}
                     </span>
-                    <span className="text-[11.5px] text-gray-400">{s.duration_min} min{s.title ? ` · ${s.title}` : ''}</span>
+                    <span className="text-[11.5px] text-gray-400">
+                      {Number.isFinite(s.duration_min) ? `${s.duration_min} min` : 'Duration TBC'}{s.title ? ` · ${s.title}` : ''}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -879,11 +1113,27 @@ export default function SpinoutLabOfficeHoursPage() {
               <span className="text-[12.5px] text-gray-700 dark:text-gray-300">Attach my pre-session brief to the request</span>
             </label>
 
-            {(!objective || !slotId) && (slots?.items || []).length > 0 && (
-              <div className="text-[11.5px] text-amber-700 dark:text-amber-400 mb-3" data-testid="readiness-hint">
-                Pick an objective and a slot — sessions with a clear goal get confirmed faster.
-              </div>
-            )}
+            {/* A blank desired outcome also trips the hint — the partner preps
+                from these fields, so a thin brief wastes the session. Outcome
+                stays advisory: the confirm button does not require it. */}
+            {(() => {
+              // Name only what is ACTUALLY missing — listing all three next to
+              // an enabled "Request session" button told founders they were
+              // three steps away when they were one.
+              const missing = [
+                !objective && 'an objective',
+                !outcome.trim() && 'a desired outcome',
+                !slotId && 'a slot',
+              ].filter(Boolean);
+              if (missing.length === 0 || (slots?.items || []).length === 0) return null;
+              const list = missing.length === 1 ? missing[0]
+                : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`;
+              return (
+                <div className="text-[11.5px] text-amber-700 dark:text-amber-400 mb-3" data-testid="readiness-hint">
+                  Add {list} — the partner preps from these.
+                </div>
+              );
+            })()}
             {bookError && <div className="text-[12px] text-red-600 mb-3" data-testid="book-error">{bookError}</div>}
 
             <button

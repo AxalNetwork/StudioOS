@@ -8,6 +8,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { requirePartnerProfile, mapError } from './_t13t14t15_helpers';
+import { ensurePartnerGuidanceColumns } from '../services/partnerGuidanceSchema';
 
 const portal = new Hono<{ Bindings: Env }>();
 
@@ -169,6 +171,117 @@ portal.patch('/accepting-intros', async (c) => {
   ).bind(value, user.id).first();
   if (!row) return c.json({ error: 'Partner not found' }, 404);
   return c.json({ partner_id: row.id, accepting_intros: row.accepting_intros });
+});
+
+// ---- Office-hours booking guidance (partner-authored) --------------------
+// Columns live on `partners` (D1 migration 160_partner_office_hours_guidance).
+// The founder-facing Office Hours drawer renders these verbatim; when a field
+// is NULL the UI shows an explicit "not published yet" state. Nothing here is
+// ever generated on the partner's behalf.
+//
+// Ownership: the target row is ALWAYS resolved from the authenticated user via
+// requirePartnerProfile() (role gate `partner`/`admin`, then users.partner_id,
+// then partners.email). No partner_id is accepted from the body or the URL, so
+// one partner cannot write another partner's guidance.
+const G_MAX = { when_to_book: 600, stage_fit: 60, session_outcome: 120, bring_item: 120 };
+const G_BRING_MAX = 5;
+// Shown when the guidance columns are genuinely missing (bootstrap failed and
+// migration 160 has not been applied). Generic on purpose — never echo the raw
+// D1 "no such column: …" text back to the client.
+const GUIDANCE_UNAVAILABLE = 'Booking guidance is temporarily unavailable';
+
+function guidanceDto(row: any) {
+  let bring: string[] = [];
+  try {
+    const raw = JSON.parse(row?.oh_bring_json || '[]');
+    if (Array.isArray(raw)) bring = raw.map((x) => String(x ?? '').trim()).filter(Boolean).slice(0, G_BRING_MAX);
+  } catch { bring = []; }
+  return {
+    when_to_book: row?.oh_when_to_book || null,
+    stage_fit: row?.oh_stage_fit || null,
+    session_outcome: row?.oh_session_outcome || null,
+    bring: bring,
+    updated_at: row?.oh_guidance_updated_at || null,
+  };
+}
+
+// Trim → cap → empty means "unpublish this field" (NULL), never '' in the DB.
+//
+// Strings ONLY — never String(v) coercion. This copy is published verbatim as
+// guidance attributed to a real named partner, so a non-string JSON value
+// (object / array / number) must NOT be stringified into `[object Object]`,
+// `a,b` or `42` and shown to founders as that partner's own words. Anything
+// that is not a string is treated as "no value" (see isBadText for the 400).
+function normText(v: unknown, max: number): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.replace(/\r\n/g, '\n').trim().slice(0, max);
+  return s ? s : null;
+}
+/** True when a supplied field is present but is not a string (→ 400). */
+function isBadText(v: unknown): boolean {
+  return v !== undefined && v !== null && typeof v !== 'string';
+}
+
+portal.get('/office-hours-guidance', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!(await ensurePartnerGuidanceColumns(c.env))) return c.json({ detail: GUIDANCE_UNAVAILABLE }, 503);
+    const partner = await requirePartnerProfile(c.env, user);
+    const row = await c.env.DB.prepare(
+      `SELECT id, name, oh_when_to_book, oh_stage_fit, oh_session_outcome,
+              oh_bring_json, oh_guidance_updated_at
+         FROM partners WHERE id = ?`,
+    ).bind(partner.id).first<any>();
+    if (!row) return c.json({ detail: 'Partner not found' }, 404);
+    return c.json({ partner_id: row.id, guidance: guidanceDto(row) });
+  } catch (e) { return mapError(c, e); }
+});
+
+// PATCH is a FULL REPLACE of the guidance set, not a per-field merge: the
+// editor is a single form that always posts all four fields, and clearing a
+// field unpublishes it. Over-length input is truncated (same behaviour as the
+// office-hours notes cap); only a non-array `bring` is rejected with 400.
+portal.patch('/office-hours-guidance', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!(await ensurePartnerGuidanceColumns(c.env))) return c.json({ detail: GUIDANCE_UNAVAILABLE }, 503);
+    const partner = await requirePartnerProfile(c.env, user);
+    const body = await c.req.json().catch(() => ({} as any));
+
+    for (const k of ['when_to_book', 'stage_fit', 'session_outcome'] as const) {
+      if (isBadText((body as any)[k])) return c.json({ detail: `${k} must be a string` }, 400);
+    }
+    const whenToBook = normText(body.when_to_book, G_MAX.when_to_book);
+    const stageFit = normText(body.stage_fit, G_MAX.stage_fit);
+    const sessionOutcome = normText(body.session_outcome, G_MAX.session_outcome);
+
+    if (body.bring !== undefined && body.bring !== null && !Array.isArray(body.bring)) {
+      return c.json({ detail: 'bring must be an array of strings' }, 400);
+    }
+    // Cap the element count BEFORE normalising: normText allocates per element,
+    // so mapping a client-supplied array of arbitrary length and only then
+    // slicing to 5 would let an authenticated partner force unbounded work.
+    // Slice a little wider than the cap so blank rows can still be dropped.
+    const bringRaw = Array.isArray(body.bring) ? body.bring.slice(0, G_BRING_MAX * 4) : [];
+    const bring = bringRaw
+      .map((x: unknown) => normText(x, G_MAX.bring_item))
+      .filter((x): x is string => !!x)
+      .slice(0, G_BRING_MAX);
+
+    const anyContent = !!(whenToBook || stageFit || sessionOutcome || bring.length);
+    const updatedAt = anyContent ? new Date().toISOString() : null;
+
+    const row = await c.env.DB.prepare(
+      `UPDATE partners
+          SET oh_when_to_book = ?, oh_stage_fit = ?, oh_session_outcome = ?,
+              oh_bring_json = ?, oh_guidance_updated_at = ?
+        WHERE id = ?
+      RETURNING id, oh_when_to_book, oh_stage_fit, oh_session_outcome,
+                oh_bring_json, oh_guidance_updated_at`,
+    ).bind(whenToBook, stageFit, sessionOutcome, JSON.stringify(bring), updatedAt, partner.id).first<any>();
+    if (!row) return c.json({ detail: 'Partner not found' }, 404);
+    return c.json({ partner_id: row.id, guidance: guidanceDto(row) });
+  } catch (e) { return mapError(c, e); }
 });
 
 export default portal;
