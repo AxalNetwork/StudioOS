@@ -17,19 +17,21 @@
 //     pending lab milestones (e.g. incorporation) + weakest dimensions from
 //     the latest Scoring Engine snapshot (shared buildGaps).
 //   - Pre-session brief: client-assembled from real project + lab state +
-//     scoring data, clearly labelled auto-generated; it can be attached to
+//     scoring data, clearly labelled auto-generated; it can be edited in
+//     place (local overrides — "Reset to generated" restores), attached to
 //     a booking (goes into the booking's real `questions` field) or copied.
 //   - Action items · execution handoff: the current week's real milestone
 //     checklist (read-only — items complete by doing the work in the linked
 //     tool, not by ticking a box here).
 //   - Omitted (no backend): partner ratings, "Resend to partner",
-//     share/export/preview-as-investor, rescheduling.
+//     rescheduling. Share / Export / Preview-as-investor render as disabled
+//     quick actions with the reason in their tooltip.
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Loader2, Lock, Calendar, CalendarCheck, Copy, Check, X,
-  AlertTriangle, ExternalLink, Search, ChevronRight,
+  AlertTriangle, ExternalLink, Search, ChevronRight, Share2, Download, Eye,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
@@ -41,6 +43,8 @@ import { initialsOf, buildGaps } from './SpinoutLabAdvisorsPage';
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[10.5px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const BTN = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold transition-colors';
+// Borderless quick-action chrome (design L41-44) — text colour set per button.
+const QA = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent';
 
 // Role tag derived from the partner's real marketplace categories /
 // specialization — the design's LAWYER / OPERATOR / INVESTOR chips.
@@ -71,7 +75,44 @@ function RoleTag({ role }) {
   );
 }
 
-const OBJECTIVES = ['Fundraising', 'Incorporation', 'GTM & pricing', 'Hiring & org', 'Product', 'Other'];
+// Design's fixed directory taxonomy (Office Hours.dc.html L283-285). Real
+// roles map into it — Finance and generic Partner behave as service partners
+// under "Operators"; the RoleTag chip still shows the true role.
+export const FILTERS = [
+  ['recommended', 'Recommended'],
+  ['Investor', 'Investors'],
+  ['Lawyer', 'Lawyers'],
+  ['Operator', 'Operators'],
+  ['all', 'All'],
+];
+const filterRoleOf = (role) => (role === 'Lawyer' || role === 'Investor' ? role : 'Operator');
+// Per-filter directory note (design L286). The recommended note is dynamic
+// (needs the current week) and built at render; the Operators wording is
+// widened because the app folds finance partners into that bucket.
+const DIR_NOTE = {
+  Investor: 'Pre-seed and seed investors — book before and during your raise.',
+  Lawyer: 'Formation and financing counsel — book before you sign.',
+  Operator: 'Service partners for tactical execution — GTM, hiring, ops, product, and finance.',
+  all: 'Every partner in the Axal network.',
+};
+
+// Rec-card tint per partner type (design recBg / recBorder L266-267).
+const REC_TINT = {
+  Lawyer: 'border-amber-200 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-950/20',
+  Operator: 'border-teal-200 bg-teal-50/60 dark:border-teal-900/60 dark:bg-teal-950/20',
+  Investor: 'border-sky-200 bg-sky-50/60 dark:border-sky-900/60 dark:bg-sky-950/20',
+};
+
+// Deterministic avatar-tile colour per partner (design assigns one per persona).
+const AVATAR_BGS = ['bg-teal-600', 'bg-sky-600', 'bg-amber-500', 'bg-violet-600', 'bg-emerald-600', 'bg-rose-500'];
+const avatarBgOf = (name) => {
+  let h = 0;
+  for (const ch of String(name || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return AVATAR_BGS[h % AVATAR_BGS.length];
+};
+
+// Design objective list (L328) + the page's Product / Other additions.
+const OBJECTIVES = ['Fundraising', 'Incorporation', 'Customer validation', 'GTM & pricing', 'Hiring & org', 'Deck feedback', 'Product', 'Other'];
 
 const fmtWhen = (iso) => {
   const d = new Date(iso);
@@ -103,11 +144,20 @@ export function normSlot(s) {
   };
 }
 export function normBooking(b) {
+  const start = b.scheduled_start ?? b.starts_at ?? null;
+  const end = b.scheduled_end ?? b.ends_at ?? null;
+  let duration = b.duration_min;
+  if (!Number.isFinite(duration) && start && end) {
+    const ms = new Date(end) - new Date(start);
+    if (Number.isFinite(ms) && ms > 0) duration = Math.round(ms / 60000);
+  }
   return {
     ...b,
     status: b.status === 'pending' ? 'requested' : b.status,
     questions: b.questions ?? b.notes ?? null,
-    scheduled_start: b.scheduled_start ?? b.starts_at ?? null,
+    scheduled_start: start,
+    // Worker DTO carries no times — stays null and the row simply omits it.
+    duration_min: Number.isFinite(duration) ? duration : null,
     meeting_uri: b.meeting_uri ?? b.meeting_url ?? null,
   };
 }
@@ -165,6 +215,10 @@ export default function SpinoutLabOfficeHoursPage() {
   const [filter, setFilter] = useState('recommended');
   const [historyQ, setHistoryQ] = useState('');
   const [copiedBrief, setCopiedBrief] = useState(false);
+  // Brief editing (B26) — local overrides keyed by section heading. They feed
+  // briefText, so an edited brief is what travels with a booking.
+  const [editingBrief, setEditingBrief] = useState(false);
+  const [briefEdits, setBriefEdits] = useState(null); // { [heading]: text } | null
 
   // Booking drawer state.
   const [drawerFor, setDrawerFor] = useState(null); // partner dto
@@ -235,7 +289,11 @@ export default function SpinoutLabOfficeHoursPage() {
     .filter((b) => b.status === 'completed' || (b.status !== 'cancelled' && startMs(b) !== null && startMs(b) <= now))
     .sort((a, b) => (startMs(b) ?? 0) - (startMs(a) ?? 0)), [allBookings, now]);
   const completedCount = allBookings.filter((b) => b.status === 'completed').length;
-  const awaitingConfirm = allBookings.filter((b) => b.status === 'requested').length;
+  // "Follow-ups pending" — sessions that still need something from you: an
+  // upcoming confirmed session to prep for, or a request the partner hasn't
+  // answered yet.
+  const followUpsPending = allBookings.filter((b) => b.status === 'requested'
+    || (b.status === 'confirmed' && (startMs(b) === null || startMs(b) > now))).length;
 
   // ---- Recommended help now (real blockers + real scoring gaps) ----
   const milestoneDone = (key) => (state?.milestones || []).some((m) => (m.key || m.milestone_key) === key);
@@ -265,15 +323,14 @@ export default function SpinoutLabOfficeHoursPage() {
   const dirItems = useMemo(() => (Array.isArray(partners) ? partners : [])
     .filter((p) => p.status !== 'inactive')
     .map((p) => ({ ...p, role: roleOfPartner(p) })), [partners]);
-  const rolesPresent = useMemo(
-    () => [...new Set(dirItems.map((p) => p.role))].sort(),
-    [dirItems],
-  );
   const recommendedRoles = useMemo(() => new Set(helpCards.map((c) => c.role)), [helpCards]);
   const visiblePartners = filter === 'all' ? dirItems
     : filter === 'recommended'
       ? [...dirItems].sort((a, b) => (recommendedRoles.has(b.role) ? 1 : 0) - (recommendedRoles.has(a.role) ? 1 : 0))
-      : dirItems.filter((p) => p.role === filter);
+      : dirItems.filter((p) => filterRoleOf(p.role) === filter);
+  const dirNote = filter === 'recommended'
+    ? `Matched to your week ${Number(state?.week || 1)} context, scoring gaps, and open blockers.`
+    : DIR_NOTE[filter] || '';
 
   // ---- Pre-session brief (client-assembled from real data, labelled) ----
   const brief = useMemo(() => {
@@ -301,9 +358,16 @@ export default function SpinoutLabOfficeHoursPage() {
     return sections;
   }, [project, state, snapshot, gaps]);
 
+  // Founder overrides win over the generated text, so an edited brief is what
+  // gets copied and what travels with a booking.
+  const briefSections = useMemo(
+    () => (brief || []).map((s) => ({ ...s, v: briefEdits?.[s.h] ?? s.v })),
+    [brief, briefEdits],
+  );
+
   const briefText = useMemo(
-    () => (brief ? brief.map((s) => `${s.h.toUpperCase()}\n${s.v}`).join('\n\n') : ''),
-    [brief],
+    () => briefSections.map((s) => `${s.h.toUpperCase()}\n${s.v}`).join('\n\n'),
+    [briefSections],
   );
 
   const copyBrief = async () => {
@@ -424,14 +488,28 @@ export default function SpinoutLabOfficeHoursPage() {
         ) : (
           <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 inline-flex items-center gap-1"><Lock className="w-3 h-3" /> Unlocks in Week 3</span>
         )}
-        <button
-          type="button"
-          className={`${BTN} ml-auto border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800`}
-          onClick={async () => { try { await navigator.clipboard.writeText(window.location.href); showToast('Link copied.'); } catch { showToast('Could not copy link.', 'error'); } }}
-          data-testid="button-copy-link"
-        >
-          <Copy className="w-3.5 h-3.5" /> Copy link
-        </button>
+        {/* Quick actions (design L41-44). Share / Export / Preview have no
+            backend on this surface, so they render disabled with the reason
+            in their tooltip rather than as dead-end buttons. */}
+        <div className="ml-auto flex items-center gap-1">
+          <button type="button" className={`${QA} text-gray-500 dark:text-gray-400`} disabled title="Sharing office-hours sessions isn't supported yet." data-testid="qa-share">
+            <Share2 className="w-3.5 h-3.5" /> Share
+          </button>
+          <button type="button" className={`${QA} text-gray-500 dark:text-gray-400`} disabled title="Session export isn't supported yet." data-testid="qa-export">
+            <Download className="w-3.5 h-3.5" /> Export
+          </button>
+          <button type="button" className={`${QA} text-gray-500 dark:text-gray-400`} disabled title="Office Hours has no investor-facing view." data-testid="qa-preview">
+            <Eye className="w-3.5 h-3.5" /> Preview as investor
+          </button>
+          <button
+            type="button"
+            className={`${QA} text-gray-600 dark:text-gray-300`}
+            onClick={async () => { try { await navigator.clipboard.writeText(window.location.href); showToast('Link copied.'); } catch { showToast('Could not copy link.', 'error'); } }}
+            data-testid="button-copy-link"
+          >
+            <Copy className="w-3.5 h-3.5" /> Copy link
+          </button>
+        </div>
       </div>
       <p className="text-[12.5px] text-gray-500 dark:text-gray-400 mb-5">
         Live sessions with partners — investors, lawyers, and operators — turned into tracked execution.
@@ -451,7 +529,7 @@ export default function SpinoutLabOfficeHoursPage() {
         {[
           { v: upcoming.length, l: 'Upcoming sessions', tid: 'stat-upcoming' },
           { v: completedCount, l: 'Sessions completed', tid: 'stat-completed' },
-          { v: awaitingConfirm, l: 'Awaiting confirmation', tid: 'stat-awaiting' },
+          { v: followUpsPending, l: 'Follow-ups pending', tid: 'stat-awaiting' },
           { v: dirItems.length, l: 'Partners available', tid: 'stat-partners' },
         ].map((s) => (
           <div key={s.tid} className={`${CARD} px-4 py-3`} data-testid={s.tid}>
@@ -470,7 +548,7 @@ export default function SpinoutLabOfficeHoursPage() {
           </div>
           <div className="grid md:grid-cols-3 gap-3">
             {helpCards.map((c) => (
-              <div key={c.id} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3.5 flex flex-col" data-testid={`help-card-${c.id}`}>
+              <div key={c.id} className={`rounded-xl border p-3.5 flex flex-col ${REC_TINT[c.role] || 'border-gray-200 dark:border-gray-700'}`} data-testid={`help-card-${c.id}`}>
                 <div className="flex items-center justify-between mb-2">
                   <RoleTag role={c.role} />
                   <span className={`text-[10.5px] font-bold ${c.urgency === 'Urgent' ? 'text-red-600' : c.urgency === 'This week' ? 'text-amber-600' : 'text-sky-600'}`}>{c.urgency}</span>
@@ -506,7 +584,7 @@ export default function SpinoutLabOfficeHoursPage() {
           const chip = bookingChip(b);
           return (
             <div key={b.id} className="flex items-center gap-3 py-2.5 border-b last:border-0 border-gray-100 dark:border-gray-800" data-testid={`upcoming-${b.id}`}>
-              <div className="w-9 h-9 rounded-full bg-teal-100 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 grid place-items-center text-[12px] font-bold shrink-0">
+              <div className={`w-9 h-9 rounded-full ${avatarBgOf(p?.name)} text-white grid place-items-center text-[12px] font-bold shrink-0`}>
                 {initialsOf(p?.name || '?')}
               </div>
               <div className="min-w-0 flex-1">
@@ -542,18 +620,18 @@ export default function SpinoutLabOfficeHoursPage() {
           <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
             <div className={LBL}>Partner directory · Book a session</div>
             <div className="flex gap-1.5 flex-wrap" data-testid="directory-filters">
-              {['recommended', ...rolesPresent, 'all'].map((f) => (
+              {FILTERS.map(([key, label]) => (
                 <button
-                  key={f} type="button" onClick={() => setFilter(f)}
-                  className={`px-2.5 h-7 rounded-full text-[11.5px] font-semibold border ${filter === f ? 'bg-gray-900 text-white border-gray-900 dark:bg-gray-100 dark:text-gray-900 dark:border-gray-100' : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'}`}
-                  data-testid={`filter-${f.toLowerCase()}`}
+                  key={key} type="button" onClick={() => setFilter(key)}
+                  className={`px-2.5 h-7 rounded-full text-[11.5px] font-semibold border ${filter === key ? 'bg-gray-900 text-white border-gray-900 dark:bg-gray-100 dark:text-gray-900 dark:border-gray-100' : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'}`}
+                  data-testid={`filter-${key.toLowerCase()}`}
                 >
-                  {f === 'recommended' ? 'Recommended' : f === 'all' ? 'All' : `${f}s`}
+                  {label}
                 </button>
               ))}
             </div>
           </div>
-          <div className="text-[11.5px] text-gray-400 mb-3">Matched to your week {Number(state?.week || 1)} context, scoring gaps, and open blockers.</div>
+          <div className="text-[11.5px] text-gray-400 mb-3">{dirNote}</div>
           {partners?.failed ? (
             <div className="text-[12.5px] text-gray-500">Couldn't load the partner network.</div>
           ) : dirItems.length === 0 ? (
@@ -610,17 +688,52 @@ export default function SpinoutLabOfficeHoursPage() {
           <div className={`${CARD} p-5`} data-testid="brief-panel">
             <div className="flex items-center justify-between mb-1">
               <div className={LBL}>Pre-session brief</div>
-              <button type="button" onClick={copyBrief} className="text-[11.5px] font-semibold text-teal-700 dark:text-teal-300 inline-flex items-center gap-1" data-testid="button-copy-brief">
-                {copiedBrief ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />} {copiedBrief ? 'Copied' : 'Copy'}
-              </button>
+              <div className="flex items-center gap-2">
+                {brief && brief.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingBrief((v) => !v)}
+                    className="text-[11.5px] font-semibold text-gray-500 dark:text-gray-400"
+                    data-testid="button-edit-brief"
+                  >
+                    {editingBrief ? 'Done' : 'Edit'}
+                  </button>
+                )}
+                {briefEdits && (
+                  <button
+                    type="button"
+                    onClick={() => { setBriefEdits(null); showToast('Brief reset to the generated version.'); }}
+                    className="text-[11.5px] font-semibold text-gray-500 dark:text-gray-400"
+                    data-testid="button-reset-brief"
+                  >
+                    Reset to generated
+                  </button>
+                )}
+                <button type="button" onClick={copyBrief} className="text-[11.5px] font-semibold text-teal-700 dark:text-teal-300 inline-flex items-center gap-1" data-testid="button-copy-brief">
+                  {copiedBrief ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />} {copiedBrief ? 'Copied' : 'Copy'}
+                </button>
+              </div>
             </div>
-            <div className="text-[11px] text-gray-400 mb-3">Auto-generated from your startup data — attach it when you book and it travels with the request.</div>
+            <div className="text-[11px] text-gray-400 mb-3">
+              Auto-generated from your startup data — attach it when you book and it travels with the request.
+              {briefEdits ? ' Edited by you.' : ''}
+            </div>
             {!brief ? (
               <div className="text-[12.5px] text-gray-500">Set up your startup profile to generate a brief.</div>
-            ) : brief.map((s) => (
+            ) : briefSections.map((s) => (
               <div key={s.h} className="mb-3 last:mb-0">
                 <div className="text-[10.5px] font-bold uppercase tracking-wider text-gray-400">{s.h}</div>
-                <div className="text-[12px] text-gray-700 dark:text-gray-300 whitespace-pre-line">{s.v}</div>
+                {editingBrief ? (
+                  <textarea
+                    value={s.v}
+                    onChange={(e) => { const v = e.target.value; setBriefEdits((prev) => ({ ...(prev || {}), [s.h]: v })); }}
+                    rows={3}
+                    className="w-full mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1.5 text-[12px] text-gray-700 dark:text-gray-300"
+                    data-testid={`brief-edit-${s.h.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                  />
+                ) : (
+                  <div className="text-[12px] text-gray-700 dark:text-gray-300 whitespace-pre-line">{s.v}</div>
+                )}
               </div>
             ))}
           </div>

@@ -95,7 +95,10 @@ export const TOOL_INFO = {
   // readiness). The founder-persona workspace at /raise/capital stays intact.
   capital: { label: 'Capital', to: '/spinout-lab/capital', desc: 'Fundraise & introductions', icon: Banknote },
   compliance: { label: 'Compliance', to: '/compliance', desc: 'Filing calendar & obligations', icon: ShieldCheck },
-  'studio-ops': { label: 'Studio Ops', to: '/build/command-center?tab=studio-ops', desc: 'Weekly cadence and accountability', icon: CalendarCheck },
+  // Studio Ops is a studio-wide surface, not a lab-gated feature — `ungated`
+  // keeps its deliverable button visible without touching unlocked_features.
+  // Founders reach it via the command center tab (/studio-ops redirects there).
+  'studio-ops': { label: 'Studio Ops', to: '/build/command-center?tab=studio-ops', desc: 'Weekly cadence and accountability', icon: CalendarCheck, ungated: true },
 };
 
 // Four program weeks. `chips` are the timeline summary chips (done derives
