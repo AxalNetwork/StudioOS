@@ -5,6 +5,10 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Transpile dev-served source AND pre-bundled deps down to es2020 so older
+  // Safari doesn't hit a silent parse error (blank white page). Dev-only
+  // concern: prod builds already target lower via build defaults.
+  esbuild: { target: 'es2020' },
   resolve: {
     alias: {
       '@assets': path.resolve(__dirname, '../attached_assets'),
@@ -14,6 +18,7 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
   },
   optimizeDeps: {
+    esbuildOptions: { target: 'es2020' },
     include: [
       'react',
       'react-dom',
