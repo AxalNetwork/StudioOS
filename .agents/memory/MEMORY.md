@@ -8,3 +8,4 @@
 - [Owner work style](owner-work-style.md) — cancels queued follow-up tasks; wants direct in-session fixes, propose sparingly.
 - [Dev/Worker API parity](dev-worker-api-parity.md) — apply-method & server deck export are Worker-only (405 in dev); pages need explicit client fallbacks.
 - [D1 users column limit](d1-users-column-limit.md) — never ALTER users (at the 100-column cap); per-user state goes in sidecar tables joined by user_id.
+- [Font LFS attribute quirk](font-lfs-attribute-quirk.md) — Space Grotesk is stored as a full blob despite *.woff2 LFS attributes; use a local .git/info override before pulling.
