@@ -574,6 +574,7 @@ export default function SpinoutLabOfficeHoursPage() {
       <LabPageHeader
         className="mb-5"
         ruleClassName="bg-teal-600 dark:bg-teal-500"
+        icon={Calendar}
         title="Office Hours"
         subtitle="Live sessions with partners — investors, lawyers, and operators — turned into tracked execution."
         status={unlocked ? 'Active' : undefined}
