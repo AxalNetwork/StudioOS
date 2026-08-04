@@ -462,6 +462,25 @@ export const api = {
   // Task #31 — Co-founder agreement + 83(b) tracker
   legalCofounderAgreement: (data) =>
     request('/legal/cofounder-agreement', { method: 'POST', body: JSON.stringify(data) }),
+  // Spin-Out Lab graduation-certificate registry. Scopes are enforced in the
+  // worker (routes/spinout_certificates.ts), not here: admin issues/revokes,
+  // the holder reads only their own row, and the public verifier is separate
+  // and unauthenticated.
+  spinoutCertificateMine: () => request('/spinout-lab/certificates/mine'),
+  spinoutCertificateSharing: (enabled) =>
+    request('/spinout-lab/certificates/mine/sharing', {
+      method: 'POST', body: JSON.stringify({ public_share_enabled: !!enabled }),
+    }),
+  spinoutCertificateList: () => request('/spinout-lab/certificates'),
+  spinoutCertificateIssue: (data) =>
+    request('/spinout-lab/certificates', { method: 'POST', body: JSON.stringify(data) }),
+  spinoutCertificateRevoke: (id, reason) =>
+    request(`/spinout-lab/certificates/${id}/revoke`, {
+      method: 'POST', body: JSON.stringify({ reason: reason || null }),
+    }),
+  // Public, unauthenticated: returns only the public_* snapshot.
+  publicVerifyCertificate: (token) =>
+    request(`/public/verify/${encodeURIComponent(token)}`),
   legal83bList: (projectId) =>
     request(`/legal/83b/trackers${projectId ? `?project_id=${projectId}` : ''}`),
   legal83bCreate: (data) =>
