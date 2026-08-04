@@ -82,12 +82,18 @@ export default function PublicCertificateVerifyPage() {
                     verified ? 'text-emerald-800 dark:text-emerald-300' : 'text-rose-800 dark:text-rose-300'
                   }`}
                   >
-                    {verified ? 'Verified credential' : 'Credential revoked'}
+                    {/* Only claim REVOCATION when the record actually says
+                        revoked. Any other non-verified state is reported as
+                        not-valid rather than asserting a withdrawal that did
+                        not happen. */}
+                    {verified ? 'Verified credential' : revoked ? 'Credential revoked' : 'Credential not valid'}
                   </div>
                   <div className="text-[12px] text-gray-600 dark:text-gray-400 mt-0.5">
                     {verified
                       ? 'Issued by Axal VC and valid at the time of this check.'
-                      : `Withdrawn${d.revoked_at ? ` on ${fmt(d.revoked_at)}` : ''}. It should no longer be relied on.`}
+                      : revoked
+                        ? `Withdrawn${d.revoked_at ? ` on ${fmt(d.revoked_at)}` : ''}. It should no longer be relied on.`
+                        : 'This credential is not in a valid state and should not be relied on.'}
                   </div>
                 </div>
               </div>
