@@ -79,6 +79,33 @@ jobs:
         run: node scripts/check-api-drift.mjs
 
   # -------------------------------------------------------------------------
+  # Open Graph / social-preview gate.
+  #
+  # Guards the "every axal.vc link previews with the same wrong image" class of
+  # regression. Validates the committed docs/ build — the bytes a crawler
+  # actually receives — so it catches a route that stopped being prerendered, an
+  # og:image pointing at a file that does not exist, a relative image URL, or a
+  # card that is not 1200x630.
+  # -------------------------------------------------------------------------
+  og-tags:
+    name: open graph metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+      - name: Prerendered routes are current
+        run: node scripts/prerender-og.mjs --check
+      - name: Card images are current
+        # ubuntu-latest ships Google Chrome; the script skips loudly (and says
+        # what is no longer covered) if no browser is present.
+        run: node scripts/generate-og-images.mjs --check
+      - name: Validate tags in built output
+        run: node scripts/validate-og-tags.mjs
+
+  # -------------------------------------------------------------------------
   # LFS size gate — only fires on files added / modified in the PR.
   # Uses --against so grandfathered pre-audit blobs do NOT block CI.
   # -------------------------------------------------------------------------

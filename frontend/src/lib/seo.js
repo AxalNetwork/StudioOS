@@ -13,10 +13,9 @@
  * render. No third-party trackers, no cookies, no PII.
  */
 import { useEffect } from 'react';
+import { ogTagsFor, SITE_NAME, SITE_URL } from './ogRegistry';
 
-const SITE_NAME = 'Axal VC StudioOS';
-const SITE_URL = 'https://axal.vc';
-const DEFAULT_OG_IMAGE = `${SITE_URL}/og-default.png`;
+export { SITE_NAME, SITE_URL };
 
 function setMeta(selector, attr, value) {
   if (typeof document === 'undefined') return null;
@@ -58,27 +57,48 @@ function fireAnalytics(path) {
   }
 }
 
-export function usePageMeta({ title, description, path, image }) {
+/**
+ * Apply a route's metadata to document.head.
+ *
+ * IMPORTANT — this is a progressive enhancement, NOT the fix for link previews.
+ * Crawlers (WhatsApp, iMessage, Facebook, LinkedIn, Slack) do not execute
+ * JavaScript, so nothing this hook does is ever visible to them. What they read
+ * is the prerendered `<head>` that `scripts/prerender-og.mjs` bakes into each
+ * route at build time.
+ *
+ * The hook still matters for humans: it keeps the browser tab title and the
+ * in-app history correct during client-side navigation, where no new document
+ * is fetched. It resolves through the same `ogTagsFor()` the prerender uses, so
+ * a client-side visit and a cold load advertise identical values.
+ *
+ * All arguments are optional overrides; anything omitted comes from the route's
+ * registry entry.
+ */
+export function usePageMeta({ title, description, path, image, type } = {}) {
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
     const prevTitle = document.title;
-    const fullTitle = title ? `${title} — ${SITE_NAME}` : SITE_NAME;
-    const url = `${SITE_URL}${path || (typeof window !== 'undefined' ? window.location.pathname : '/')}`;
-    const ogImage = image || DEFAULT_OG_IMAGE;
+
+    const pathname =
+      path || (typeof window !== 'undefined' ? window.location.pathname : '/');
+    const tags = ogTagsFor(pathname, { title, description, image, type });
+    const { title: fullTitle, description: desc, url, image: ogImage } = tags;
 
     document.title = fullTitle;
     const refs = [
-      setMeta('meta[name="description"]', 'content', description || ''),
+      setMeta('meta[name="description"]', 'content', desc),
       setMeta('meta[property="og:title"]', 'content', fullTitle),
-      setMeta('meta[property="og:description"]', 'content', description || ''),
-      setMeta('meta[property="og:type"]', 'content', 'website'),
+      setMeta('meta[property="og:description"]', 'content', desc),
+      setMeta('meta[property="og:type"]', 'content', tags.type),
       setMeta('meta[property="og:url"]', 'content', url),
       setMeta('meta[property="og:image"]', 'content', ogImage),
-      setMeta('meta[property="og:site_name"]', 'content', SITE_NAME),
-      setMeta('meta[name="twitter:card"]', 'content', 'summary_large_image'),
+      setMeta('meta[property="og:image:alt"]', 'content', tags.imageAlt),
+      setMeta('meta[property="og:site_name"]', 'content', tags.siteName),
+      setMeta('meta[name="twitter:card"]', 'content', tags.card),
       setMeta('meta[name="twitter:title"]', 'content', fullTitle),
-      setMeta('meta[name="twitter:description"]', 'content', description || ''),
+      setMeta('meta[name="twitter:description"]', 'content', desc),
       setMeta('meta[name="twitter:image"]', 'content', ogImage),
+      setMeta('meta[name="twitter:image:alt"]', 'content', tags.imageAlt),
     ].filter(Boolean);
 
     // Fire pageview beacon once per mount.
@@ -93,7 +113,7 @@ export function usePageMeta({ title, description, path, image }) {
         else r.el.setAttribute('content', r.prev);
       });
     };
-  }, [title, description, path, image]);
+  }, [title, description, path, image, type]);
 }
 
 export function injectJsonLd(id, payload) {

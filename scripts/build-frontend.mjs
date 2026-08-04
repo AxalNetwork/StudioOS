@@ -107,6 +107,15 @@ if (plan.missing.length > 0) {
 fs.writeFileSync(ledgerPath, `${JSON.stringify(plan.nextLedger, null, 2)}\n`);
 fs.rmSync(backupDir, { recursive: true, force: true });
 
+// 5. Bake per-route Open Graph metadata into the build.
+//
+// This MUST run after vite, because vite empties docs/ — anything written
+// before this point is deleted. Without it every route ships the same shell
+// `<head>`, so every shared link previews identically on WhatsApp, iMessage,
+// LinkedIn and Slack (crawlers do not execute the client-side usePageMeta).
+console.log('[build] prerendering per-route Open Graph metadata …');
+execSync('node scripts/prerender-og.mjs', { cwd: root, stdio: 'inherit' });
+
 console.log(
   `[build] done — ${newFiles.length} fresh asset(s); ${restored} prior hash(es) ` +
     `retained (window: ${RETAIN_BUILDS} build(s), ${plan.keep.length} total kept).`,
