@@ -163,6 +163,7 @@ import skillsRoutes from './routes/skills';
 import valuesRoutes from './routes/values';
 import radarRoutes from './routes/radar';
 import spinoutLabRoutes from './routes/spinout_lab';
+import spinoutCertificateRoutes, { publicCertificateRoutes } from './routes/spinout_certificates';
 // T13/T14/T15 — port of FastAPI mentors/partner_office_hours/watchlist/journal/
 // portfolio_health/references/comarketing/company/needs/insights routers.
 import advisorsRoutes from './routes/advisors';
@@ -841,6 +842,8 @@ app.route('/api/values', valuesRoutes);
 app.route('/api/radar', radarRoutes);
 // Spin-Out Lab — guided 4-week sprint for pre-incorporation founders.
 app.route('/api/spinout-lab', spinoutLabRoutes);
+// Graduation-certificate registry (admin issue/revoke + owner read).
+app.route('/api/spinout-lab', spinoutCertificateRoutes);
 // T13 — Advisors (formerly Mentors) + Partner Office Hours.
 // `/api/mentors` is kept as a permanent alias so old clients/bookmarks keep working.
 app.route('/api/advisors', advisorsRoutes);
@@ -872,6 +875,9 @@ app.route('/api/public', jobsPublicRoutes);
 // Task #9 — Communities & Circles public feed. Mount BEFORE the generic
 // publicRoutes so /api/public/circles resolves to the circles feed.
 app.route('/api/public', circlesPublicRoutes);
+// Mounted BEFORE publicRoutes so /api/public/verify/:token resolves to the
+// certificate verifier rather than falling through.
+app.route('/api/public', publicCertificateRoutes);
 app.route('/api/public', publicRoutes);
 // Task #10 (LD) — Public team roster. Mounted under /api/public so it
 // sits OUTSIDE auth + the /api/admin/* CF Access perimeter; the Jekyll

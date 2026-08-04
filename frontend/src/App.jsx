@@ -174,6 +174,7 @@ const DemoPage = lazy(() => import('./pages/DemoPage'));
 const StatusPage = lazy(() => import('./pages/StatusPage'));
 const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
 const PublicRoadmapPage = lazy(() => import('./pages/PublicRoadmapPage'));
+const PublicCertificateVerifyPage = lazy(() => import('./pages/PublicCertificateVerifyPage'));
 const MonitoringPage = lazy(() => import('./pages/MonitoringPage'));
 const LiquidityPage = lazy(() => import('./pages/LiquidityPage'));
 const FundOpsWorkspace = lazy(() => import('./pages/FundOpsWorkspace'));
@@ -1539,8 +1540,8 @@ function AppInner() {
       <Route path="/incorporate" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <IncorporatePage />)} />
       <Route path="/incorporate/success" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <IncorporateSuccessPage />)} />
       <Route path="/incorporate/cofounder-agreement" element={guard(labRoles(['admin', 'founder', 'partner']), <CofounderAgreementPage />)} />
-      <Route path="/spinout-lab/83b" element={guard(labRoles(['admin', 'founder', 'partner']), <SpinoutLab83bPage />)} />
-      <Route path="/spinout-lab/compliance" element={guard(labRoles(['admin', 'founder', 'partner']), <SpinoutLabCompliancePage />)} />
+      <Route path="/spinout-lab/83b" element={guard(labRoles(['admin']), <SpinoutLab83bPage />)} />
+      <Route path="/spinout-lab/compliance" element={guard(labRoles(['admin']), <SpinoutLabCompliancePage />)} />
       {/* 83(b) moved into the Lab (Week 4 deliverable). Old Incorporate
           path kept as a redirect so existing links and bookmarks survive. */}
       <Route path="/incorporate/83b" element={<Navigate to="/spinout-lab/83b" replace />} />
@@ -1765,6 +1766,8 @@ function AppInner() {
       <Route path="/demo" element={<DemoPage />} />
       <Route path="/status" element={<StatusPage />} />
       <Route path="/changelog" element={<ChangelogPage />} />
+      {/* Public credential verification — unauthenticated by design. */}
+      <Route path="/verify/:token" element={<PublicCertificateVerifyPage />} />
       <Route path="/roadmap" element={<PublicRoadmapPage />} />
       <Route path="/academy/:slug" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
       <Route path="/academy" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
