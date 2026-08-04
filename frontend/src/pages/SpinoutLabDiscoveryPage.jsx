@@ -383,11 +383,6 @@ export default function SpinoutLabDiscoveryPage() {
         status="Active"
         actions={(
           <>
-            {/* The full discovery tool stays reachable; this page can now log
-                directly instead of bouncing the founder out to it. */}
-            <Link to={logTool} data-testid="link-log-interview" className={labBtn('secondary')}>
-              Full tool <ArrowRight size={LAB_ICON_SIZE} />
-            </Link>
             <button
               type="button"
               onClick={() => setLogModal({ interview: null })}
