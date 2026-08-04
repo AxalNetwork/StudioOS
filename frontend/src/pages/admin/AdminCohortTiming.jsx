@@ -5,7 +5,7 @@
 // Worker-only endpoints (dev backend answers 404/405) — the load error path
 // shows an explanatory fallback instead of a broken page, matching the
 // existing dev/Worker parity convention.
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   RefreshCw, Clock, CalendarRange, AlertTriangle, ShieldCheck, ShieldX,
   Hourglass, Eye, CheckCircle2, XCircle,
