@@ -29,10 +29,26 @@ const BUCKETS: Bucket[] = [
     name: 'ai',
     limit: 10,
     windowSec: 60,
+    // NICE-ADV-06 — burst guard for the Workers-AI advisor.
+    //
+    // `/api/advisor` and `/api/advisory` are DIFFERENT routers (index.ts
+    // mounts both). This bucket named only `/api/advisory/`, so the LLM route
+    // — POST /api/advisor/explain, the one call that actually spends Workers
+    // AI per request — matched no AI bucket and fell through to the generic
+    // `user` bucket: 60/min, and fail-OPEN, so a KV outage removed even that.
+    //
+    // aiClient.ts's daily cap (WORKERS_AI_ADVISOR_BUDGET_USD_DAY, default 100
+    // turns/user/day) bounds total spend, but at 60/min a full day's budget is
+    // exhaustible in under two minutes. This is the missing per-window guard.
+    //
+    // Scoped to /explain deliberately: /answer, /skip, /next-question and
+    // /progress advance the state machine without calling the model, and
+    // capping them at 10/min would throttle a founder answering quickly.
     test: (p) =>
       p.startsWith('/api/scoring/') ||
       p.startsWith('/api/matches/') ||
       p.startsWith('/api/advisory/') ||
+      p === '/api/advisor/explain' ||
       p.startsWith('/api/monitoring/anomalies'),
     scope: 'user',
     failClosed: true,
