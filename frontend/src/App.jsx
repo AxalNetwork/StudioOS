@@ -1582,7 +1582,7 @@ function AppInner() {
           role but redirect a founder into the matching tab so old deep links
           keep resolving. */}
       <Route path="/build/team" element={guard(['admin', 'founder'], <TeamBuildingPage />)} />
-      <Route path="/build/command-center" element={guard(['admin', 'founder'], <CommandCenterPage />)} />
+      <Route path="/build/command-center" element={guard(labRoles(['admin', 'founder']), <CommandCenterPage />)} />
       {/* Task #74 — back-compat redirect from the pre-rename /mentors path. */}
       <Route path="/mentors" element={<Navigate to="/advisors" replace />} />
       <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?tab=advisor" replace /> : <AdvisorsPage />)} />
