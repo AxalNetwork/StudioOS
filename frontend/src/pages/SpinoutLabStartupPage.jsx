@@ -9,19 +9,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
   ArrowRight,
   Building2,
   Check,
   ChevronRight,
+  Copy,
+  ExternalLink,
   FileText,
   Loader2,
   Lock,
+  Share2,
   X,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
+import LabBackLink from '../components/spinout/LabBackLink';
 import { TOOL_INFO, WEEK_DEFS, countDeliverables, milestoneKeySet } from './SpinoutLabWorkspace';
 
 // Past-tense titles for the activity timeline; falls back to the raw key.
@@ -97,6 +100,15 @@ export default function SpinoutLabStartupPage() {
   const [project, setProject] = useState(null);
   const [status, setStatus] = useState('loading'); // loading | ready | error
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  // Edit happens in a lightbox ON this page. It used to be a <Link> out to
+  // /projects/:id, which drops the founder out of the Lab shell entirely and
+  // loses their place in the week flow.
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const dataRoomRef = useRef(null);
 
   useEffect(() => {
@@ -276,6 +288,70 @@ export default function SpinoutLabStartupPage() {
   const founderName = user?.name || 'Founder';
   const hq = app.jurisdiction ? (app.jurisdiction.split('—').pop() || '').trim() || app.jurisdiction : 'Remote-first';
   const cofounderUnlocked = currentWeek >= 3;
+  // ---- Share -------------------------------------------------------------
+  // The public profile resolves by project uid (worker public.ts
+  // GET /startup/:handle, matched on lower(uid)) and 404s for archived,
+  // rejected and intake projects — so a link is only offered when it will
+  // actually load for whoever receives it.
+  const shareStatus = String(project?.status || '').toLowerCase();
+  const shareable = Boolean(project?.uid) && !['archived', 'rejected', 'intake'].includes(shareStatus);
+  const shareUrl = shareable
+    ? `${typeof window !== 'undefined' ? window.location.origin : 'https://axal.vc'}/startups/${String(project.uid).toLowerCase()}`
+    : '';
+
+  const copyShare = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch (e) {
+      reportError(e, { where: 'SpinoutLabStartupPage.copyShare' });
+    }
+  };
+
+  // ---- Edit record (in-page lightbox) ------------------------------------
+  // Founder-editable fields only. stage/status/playbook_week are
+  // admin/partner-only server-side (projects.ts PUT /:id), so offering them
+  // here would just hand most founders a 403 on save.
+  const openEdit = () => {
+    if (!project) return;
+    setSaveError('');
+    setEditForm({
+      name: project.name || '',
+      description: project.description || '',
+      sector: project.sector || '',
+      hq: project.hq || '',
+      website: project.website || '',
+      problem_statement: project.problem_statement || '',
+      solution: project.solution || '',
+    });
+    setEditOpen(true);
+  };
+
+  const saveEdit = async (e) => {
+    e?.preventDefault?.();
+    if (!project || !editForm) return;
+    if (!editForm.name.trim()) { setSaveError('Company name is required.'); return; }
+    setSaving(true);
+    setSaveError('');
+    try {
+      const updated = await api.updateProject(project.id, {
+        ...editForm,
+        name: editForm.name.trim(),
+      });
+      // Merge rather than replace: the PUT response carries the project row,
+      // but the page also relies on fields the list query joins in.
+      setProject((p) => ({ ...p, ...(updated && typeof updated === 'object' ? updated : editForm) }));
+      setEditOpen(false);
+    } catch (err) {
+      reportError(err, { where: 'SpinoutLabStartupPage.saveEdit' });
+      setSaveError(err?.message || 'Could not save. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const facts = [
     { k: 'Founded', v: monthYear(project?.created_at) || monthYear(state.started_at) || '—' },
     { k: 'Stage', v: stageChip },
@@ -287,23 +363,20 @@ export default function SpinoutLabStartupPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-startup">
-      {/* Header */}
+      {/* Header — back control sits INLINE with the title (design handoff),
+          and every action stays inside the Lab rather than navigating out. */}
       <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
-        <div>
-          <Link
-            to="/spinout-lab"
-            data-testid="link-back-to-workspace"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-violet-700 dark:hover:text-violet-300 mb-2"
-          >
-            <ArrowLeft size={14} /> Back to Workspace
-          </Link>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Startups</h1>
-            <span className="text-[10.5px] font-bold rounded-full px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
-              {graduated ? 'Graduated' : 'Active'}
-            </span>
+        <div className="flex items-center gap-3">
+          <LabBackLink />
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Startups</h1>
+              <span className="text-[10.5px] font-bold rounded-full px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
+                {graduated ? 'Graduated' : 'Active'}
+              </span>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Your company record and founding team</p>
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Your company record and founding team</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <button
@@ -315,13 +388,24 @@ export default function SpinoutLabStartupPage() {
           >
             Preview as investor
           </button>
-          <Link
-            to={project ? `/projects/${project.id}` : '/projects'}
-            data-testid="link-edit-record"
-            className="h-9 px-3.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-xs font-semibold inline-flex items-center"
+          <button
+            type="button"
+            data-testid="button-share-startup"
+            onClick={() => setShareOpen(true)}
+            disabled={!project}
+            className="h-9 px-3.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Share2 size={13} aria-hidden="true" /> Share
+          </button>
+          <button
+            type="button"
+            data-testid="button-edit-record"
+            onClick={() => openEdit()}
+            disabled={!project}
+            className="h-9 px-3.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-xs font-semibold inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Edit record
-          </Link>
+          </button>
         </div>
       </div>
 
@@ -601,6 +685,179 @@ export default function SpinoutLabStartupPage() {
       </div>
 
       {/* Investor preview modal */}
+      {/* Share lightbox — the public profile link, copyable, without leaving
+          the Lab. */}
+      {shareOpen && project && (
+        <div
+          className="fixed inset-0 z-[70] bg-gray-900/50 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-6 sm:p-10"
+          onClick={() => setShareOpen(false)}
+          data-testid="modal-share-startup"
+        >
+          <div
+            className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-2.5">
+                <Share2 size={15} className="text-violet-600 dark:text-violet-400" aria-hidden="true" />
+                <span className="text-sm font-bold text-gray-900 dark:text-gray-50">Share {name}</span>
+              </div>
+              <button
+                type="button"
+                data-testid="button-close-share"
+                onClick={() => setShareOpen(false)}
+                className="w-8 h-8 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div className="p-5">
+              {shareable ? (
+                <>
+                  <div className={`${LBL} mb-1.5`}>Public company profile</div>
+                  <p className="text-[12.5px] text-gray-500 dark:text-gray-400 mb-3">
+                    Anyone with this link can see your public profile — no sign-in needed. Private
+                    Lab data, your data room and investor notes are never included.
+                  </p>
+                  <div className="flex items-center gap-2 mb-3">
+                    <input
+                      type="text"
+                      readOnly
+                      value={shareUrl}
+                      data-testid="input-share-url"
+                      onFocus={(e) => e.target.select()}
+                      className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-[12.5px] text-gray-700 dark:text-gray-200"
+                    />
+                    <button
+                      type="button"
+                      onClick={copyShare}
+                      data-testid="button-copy-share"
+                      className="h-9 px-3 flex-none rounded-lg bg-violet-600 text-white text-xs font-semibold inline-flex items-center gap-1.5"
+                    >
+                      {copied ? <Check size={13} /> : <Copy size={13} />}
+                      {copied ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                  <a
+                    href={shareUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-violet-700 dark:text-violet-300"
+                  >
+                    Open public profile <ExternalLink size={12} />
+                  </a>
+                </>
+              ) : (
+                <>
+                  <div className={`${LBL} mb-1.5`}>Not shareable yet</div>
+                  <p className="text-[12.5px] text-gray-500 dark:text-gray-400">
+                    {project?.uid
+                      ? 'Your company profile goes public once the record leaves intake and is active in the Lab.'
+                      : 'This record has no public handle yet — it is created with your company record during incorporation.'}
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit-record lightbox — replaces the old navigation out to
+          /projects/:id so the founder keeps their place in the Lab. */}
+      {editOpen && project && editForm && (
+        <div
+          className="fixed inset-0 z-[70] bg-gray-900/50 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-6 sm:p-10"
+          onClick={() => (saving ? null : setEditOpen(false))}
+          data-testid="modal-edit-record"
+        >
+          <form
+            onSubmit={saveEdit}
+            className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+              <span className="text-sm font-bold text-gray-900 dark:text-gray-50">Edit company record</span>
+              <button
+                type="button"
+                data-testid="button-close-edit"
+                onClick={() => setEditOpen(false)}
+                disabled={saving}
+                className="w-8 h-8 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-50"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div className="p-5 grid gap-3.5">
+              {[
+                { k: 'name', label: 'Company name', required: true },
+                { k: 'description', label: 'One-line description' },
+                { k: 'sector', label: 'Sector' },
+                { k: 'hq', label: 'Headquarters' },
+                { k: 'website', label: 'Website', type: 'url', placeholder: 'https://' },
+              ].map((f) => (
+                <div key={f.k}>
+                  <label htmlFor={`edit-${f.k}`} className={`${LBL} block mb-1`}>
+                    {f.label}{f.required && <span className="text-rose-500"> *</span>}
+                  </label>
+                  <input
+                    id={`edit-${f.k}`}
+                    type={f.type || 'text'}
+                    value={editForm[f.k]}
+                    placeholder={f.placeholder}
+                    data-testid={`input-edit-${f.k}`}
+                    onChange={(e) => setEditForm((s) => ({ ...s, [f.k]: e.target.value }))}
+                    className="w-full h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-[13px] text-gray-800 dark:text-gray-100"
+                  />
+                </div>
+              ))}
+              {[
+                { k: 'problem_statement', label: 'Problem' },
+                { k: 'solution', label: 'Solution' },
+              ].map((f) => (
+                <div key={f.k}>
+                  <label htmlFor={`edit-${f.k}`} className={`${LBL} block mb-1`}>{f.label}</label>
+                  <textarea
+                    id={`edit-${f.k}`}
+                    rows={3}
+                    value={editForm[f.k]}
+                    data-testid={`input-edit-${f.k}`}
+                    onChange={(e) => setEditForm((s) => ({ ...s, [f.k]: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-[13px] text-gray-800 dark:text-gray-100 resize-y"
+                  />
+                </div>
+              ))}
+              <p className="text-[11.5px] text-gray-400 dark:text-gray-500">
+                Stage and status are set by your Axal VC partner and are not editable here.
+              </p>
+              {saveError && (
+                <p role="alert" data-testid="text-edit-error" className="text-[12px] font-semibold text-rose-600 dark:text-rose-400">
+                  {saveError}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setEditOpen(false)}
+                disabled={saving}
+                className="h-9 px-3.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-semibold disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                data-testid="button-save-edit"
+                className="h-9 px-4 rounded-lg bg-violet-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-60"
+              >
+                {saving && <Loader2 size={13} className="animate-spin" />}
+                {saving ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {previewOpen && project && (
         <div
           className="fixed inset-0 z-[70] bg-gray-900/50 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-6 sm:p-10"
