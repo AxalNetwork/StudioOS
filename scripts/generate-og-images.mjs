@@ -65,7 +65,7 @@ const HEIGHT = 630;
  */
 const SECTION_CARDS = {
   [DEFAULT_OG_KEY]: {
-    eyebrow: 'Axal Ventures',
+    eyebrow: 'Axal VC',
     title: 'Axal VC StudioOS',
     description: 'One network connecting partners, capital, and founders.',
   },
@@ -82,7 +82,7 @@ const SECTION_CARDS = {
     description: 'Long-form thinking from founders, investors, partners, and the studio.',
   },
   company: {
-    eyebrow: 'Axal Ventures',
+    eyebrow: 'Axal VC',
     title: 'Axal VC',
     description: 'A venture studio that builds companies alongside the founders it backs.',
   },
@@ -90,11 +90,11 @@ const SECTION_CARDS = {
 
 /** Human label for the eyebrow chip, by section. */
 const SECTION_EYEBROW = {
-  home: 'Axal Ventures',
+  home: 'Axal VC',
   'spinout-lab': 'Spin-Out Lab',
   product: 'Products',
   content: 'Insights',
-  company: 'Axal Ventures',
+  company: 'Axal VC',
 };
 
 function findChrome() {
@@ -269,7 +269,7 @@ function cardHtml({ eyebrow, title, description }, assets) {
   <div class="frame">
     <div class="top">
       <div class="badge"><img src="${assets.mark}" alt="" /></div>
-      <div class="wordmark">AXAL <span>Ventures</span></div>
+      <div class="wordmark">AXAL <span>VC</span></div>
     </div>
     <div class="body">
       ${eyebrow ? `<div class="eyebrow">${esc(eyebrow)}</div>` : ''}
@@ -290,7 +290,7 @@ function buildCards() {
   for (const r of OG_ROUTES) {
     if (r.key && !byKey.has(r.key)) {
       byKey.set(r.key, {
-        eyebrow: SECTION_EYEBROW[r.section] || 'Axal Ventures',
+        eyebrow: SECTION_EYEBROW[r.section] || 'Axal VC',
         title: r.title,
         description: r.description,
       });
@@ -307,7 +307,7 @@ function buildCards() {
     // label so a new section still renders something sane rather than nothing.
     const section = Object.entries(SECTION_OG_KEYS).find(([, v]) => v === key)?.[0];
     byKey.set(key, {
-      eyebrow: SECTION_EYEBROW[section] || 'Axal Ventures',
+      eyebrow: SECTION_EYEBROW[section] || 'Axal VC',
       title: SECTION_CARDS[DEFAULT_OG_KEY].title,
       description: SECTION_CARDS[DEFAULT_OG_KEY].description,
     });
@@ -330,25 +330,28 @@ const BASE_FLAGS = [
  * loses the bottom ~87px of the card (the footer row) and pads it with black.
  *
  * The offset is not a documented constant and varies by platform and Chromium
- * build, so measure it once per run instead of hardcoding it: render a page
- * that reports its own innerHeight, then inflate the window by the difference.
+ * build, so measure it once per run instead of hardcoding it: screenshot a
+ * blank page and compare the result to the window size we asked for.
+ *
+ * We measure the screenshot rather than asking the page to report its own
+ * innerHeight, because the screenshot is the thing we actually care about —
+ * and it keeps this script free of any inline <script>, which static analysis
+ * flags on sight even when the markup is a hardcoded literal.
  */
 function measureChromeOffset(chrome, workDir) {
   const probeFile = path.join(workDir, 'probe.html');
-  fs.writeFileSync(
-    probeFile,
-    '<html><body><script>document.title=innerWidth+"x"+innerHeight;</script></body></html>',
-  );
+  const probeShot = path.join(workDir, 'probe.png');
+  fs.writeFileSync(probeFile, '<html><body></body></html>');
   try {
-    const dom = execFileSync(
+    execFileSync(
       chrome,
       [...BASE_FLAGS, `--window-size=${WIDTH},${HEIGHT}`, '--virtual-time-budget=800',
-       '--dump-dom', `file://${probeFile}`],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+       `--screenshot=${probeShot}`, `file://${probeFile}`],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
     );
-    const m = dom.match(/<title>(\d+)x(\d+)<\/title>/);
-    if (!m) return { dx: 0, dy: 0 };
-    return { dx: WIDTH - Number(m[1]), dy: HEIGHT - Number(m[2]) };
+    const got = pngSize(probeShot);
+    if (!got) return { dx: 0, dy: 0 };
+    return { dx: WIDTH - got.width, dy: HEIGHT - got.height };
   } catch {
     // Probe failed — fall back to no correction and let the size assertion
     // in renderCard() surface the problem rather than shipping a bad card.

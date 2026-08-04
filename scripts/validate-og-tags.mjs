@@ -60,19 +60,27 @@ function decodeEntities(s) {
 }
 
 /**
- * Pull a meta tag's content out of raw HTML (property= or name=).
+ * Every `<meta property|name=… content=…>` in the document, in source order.
  *
- * The attribute value is matched with a backreference to its opening quote
- * rather than a `[^"']*` class: descriptions legitimately contain apostrophes
- * ("What's new…"), and a naive class truncates the value at the first one.
+ * Both attribute values are matched with a backreference to their own opening
+ * quote rather than a `[^"']*` class: descriptions legitimately contain
+ * apostrophes ("What's new…"), and a naive class truncates at the first one.
+ *
+ * One literal pattern for the whole document, rather than building a regex per
+ * lookup key — a hardcoded regex cannot be a ReDoS vector, and it drops the
+ * metacharacter-escaping dance the per-key version needed.
  */
+const META_RE =
+  /<meta\s+(?:property|name)=(["'])((?:(?!\1)[\s\S])*)\1\s+content=(["'])((?:(?!\3)[\s\S])*)\3/gi;
+
+function metaTags(html) {
+  return [...html.matchAll(META_RE)].map((m) => ({ key: m[2], content: m[4] }));
+}
+
+/** Pull a meta tag's content out of raw HTML (property= or name=). */
 function meta(html, key) {
-  const re = new RegExp(
-    `<meta\\s+(?:property|name)=["']${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']\\s+content=(["'])((?:(?!\\1)[\\s\\S])*)\\1`,
-    'i',
-  );
-  const m = html.match(re);
-  return m ? decodeEntities(m[2]) : null;
+  const hit = metaTags(html).find((t) => t.key.toLowerCase() === key.toLowerCase());
+  return hit ? decodeEntities(hit.content) : null;
 }
 
 function titleOf(html) {
@@ -82,11 +90,7 @@ function titleOf(html) {
 
 /** Count occurrences so we catch duplicated tags (crawlers pick unpredictably). */
 function countTag(html, key) {
-  const re = new RegExp(
-    `<meta\\s+(?:property|name)=["']${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']`,
-    'gi',
-  );
-  return (html.match(re) || []).length;
+  return metaTags(html).filter((t) => t.key.toLowerCase() === key.toLowerCase()).length;
 }
 
 function pngSize(file) {
