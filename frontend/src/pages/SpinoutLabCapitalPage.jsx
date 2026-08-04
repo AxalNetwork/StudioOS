@@ -544,7 +544,7 @@ export default function SpinoutLabCapitalPage() {
       {/* Header — shared LabPageHeader. The design anchors carry over as props:
             A1 — the 3px violet topline  → topRule (on by default)
             A2 — 34px violet icon tile   → icon (the old divider is dropped;
-                 LabBackLink's own border is the separator now)
+                 the back control's own border is the separator now)
             A3 — bordered violet week pill → weekChip (A3 *is* the canonical
                  week tone in labStyles.js)
             A5-A9 — the quick-action row → children */}

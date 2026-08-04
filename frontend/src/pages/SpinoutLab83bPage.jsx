@@ -3,7 +3,7 @@
 // Replaces the old /incorporate/83b tracker index. 83(b) is a Week 4
 // ("Incorporate & Capital") deliverable and was the ONLY tool in TOOL_INFO
 // pointing outside /spinout-lab/*, so the page now lives with its siblings
-// and uses the Lab shell (LabBackLink → workspace, not "Back to Incorporate").
+// and uses the shared Lab header (back to WORKSPACE, not "Back to Incorporate").
 //
 // Data is the real tracker from GET /legal/83b/trackers (worker
 // services/section83b.ts). That DTO supplies grant_date, deadline_date,
