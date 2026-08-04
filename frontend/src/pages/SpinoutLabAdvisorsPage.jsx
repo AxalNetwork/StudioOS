@@ -8,6 +8,19 @@
 //     engine: domain overlap 40 / values alignment 30 / skill complement 30).
 //     ONLY a 404 means "engine not in this environment" — then we fall back
 //     to the advisor directory's server-computed relevance ranking and say so.
+//   - Score breakdown: the engine's three real components with their real
+//     maximums. The design shows six invented dimensions (Archetype fit,
+//     Sector relevance, Stage relevance…) with per-advisor numbers nothing
+//     computes; we render only what actually produced the total.
+//   - Likely contribution: the advisor's declared expertise intersected with
+//     the founder's weakest scored dimensions. Omitted when either side is
+//     unknown, rather than inventing the design's per-advisor prose.
+//   - "Request another match" re-runs the SAME engine with narrowing filters
+//     (?gap= radar axis, ?focus= specialist|generalist). Both filter the
+//     scored set server-side, so a refined shortlist is always a subset and
+//     the scores keep their meaning. The active refinement and the
+//     before/after count are shown, so a short list is never mistaken for an
+//     empty network. Hidden on the directory fallback, which cannot filter.
 //   - Gap diagnosis: weakest dimensions from the user's latest real Scoring
 //     Engine snapshot (shared buildDimensions from the scoring page).
 //   - Team profile: readiness coverage from the same snapshot; values +
@@ -23,10 +36,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Users, Loader2, Lock, Star, Calendar, Copy, Check,
-  AlertTriangle, ExternalLink, X, ChevronDown, ChevronUp,
+  AlertTriangle, ExternalLink, X, ChevronDown, ChevronUp, RefreshCw,
 } from 'lucide-react';
 import { api, spinoutLab, assessment } from '../lib/api';
-import { archetypeMeta } from '../lib/assessmentMeta';
+import { archetypeMeta, SKILL_AXES } from '../lib/assessmentMeta';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { buildDimensions } from '../lib/scoringViewModel';
 
@@ -78,6 +91,65 @@ export function normalizeMatch(item, source) {
     reasons: Array.isArray(a.match_reasons) ? a.match_reasons : [],
     watchOuts: [],
   };
+}
+
+// The engine's three scoring components and their real maximums, straight from
+// cloudflare-worker/src/routes/advisors.ts. The design shows six invented
+// dimensions (Archetype fit, Sector relevance, Stage relevance…) with
+// per-advisor numbers that nothing computes — we render the three that are
+// actually scored, with the weights that actually produced the total.
+export const BREAKDOWN_PARTS = [
+  { key: 'domain_overlap', label: 'Domain overlap', max: 40, bar: 'bg-violet-500' },
+  { key: 'values_alignment', label: 'Values alignment', max: 30, bar: 'bg-sky-500' },
+  { key: 'skill_complementarity', label: 'Skill complementarity', max: 30, bar: 'bg-emerald-500' },
+];
+
+export function breakdownRows(breakdown) {
+  if (!breakdown || typeof breakdown !== 'object') return [];
+  return BREAKDOWN_PARTS.map((p) => {
+    const raw = Number(breakdown[p.key]);
+    const v = Number.isFinite(raw) ? Math.max(0, Math.min(p.max, raw)) : null;
+    return { ...p, value: v, pct: v == null ? 0 : Math.round((v / p.max) * 100) };
+  }).filter((r) => r.value != null);
+}
+
+/**
+ * "Likely contribution" — the advisor's own declared expertise, narrowed to
+ * the areas the founder is actually weak in. Returns [] when either side is
+ * unknown, so the card is omitted rather than guessing: the design's version
+ * ("Enterprise GTM, first sales hires, pricing") is per-advisor prose that
+ * nothing generates.
+ */
+// Advisor expertise and scoring-dimension labels are different vocabularies
+// ("gtm" vs "Go-to-market"), so a raw substring test misses real overlaps.
+// This is the client-side echo of EXPERTISE_AXIS in the worker's matcher —
+// same intent, but expanding to words that appear in dimension TITLES rather
+// than to radar-axis slugs.
+const CONTRIBUTION_SYNONYMS = {
+  gtm: 'go-to-market', sales: 'go-to-market', growth: 'go-to-market',
+  marketing: 'go-to-market', 'go to market': 'go-to-market',
+  fundraising: 'capital', capital: 'capital', investor: 'capital',
+  ops: 'operations', operating: 'operations',
+  hiring: 'team', recruiting: 'team', people: 'team', talent: 'team',
+  eng: 'product', engineering: 'product', technical: 'product',
+};
+function contributionTerms(s) {
+  const t = String(s || '').toLowerCase().trim();
+  const syn = CONTRIBUTION_SYNONYMS[t];
+  return syn && syn !== t ? [t, syn] : [t];
+}
+
+export function likelyContribution(specialties, gapLabels) {
+  const gaps = (gapLabels || []).map((g) => String(g).toLowerCase()).filter(Boolean);
+  if (!gaps.length) return [];
+  return (specialties || [])
+    .filter((s) => {
+      const terms = contributionTerms(s).filter(Boolean);
+      // Guard against the empty string, which is a substring of everything and
+      // would make every advisor look like a match.
+      return terms.some((t) => t && gaps.some((g) => g.includes(t) || t.includes(g)));
+    })
+    .slice(0, 3);
 }
 
 // Values-fit label from the REAL engine breakdown (values_alignment is out of
@@ -155,7 +227,13 @@ export default function SpinoutLabAdvisorsPage() {
   const [project, setProject] = useState(null);
   const [snapshot, setSnapshot] = useState(null); // latest score snapshot | null
   const [snapshotError, setSnapshotError] = useState(false);
-  const [matches, setMatches] = useState(null); // {source, items} | {failed} | null
+  const [matches, setMatches] = useState(null); // {source, items, filters} | {failed} | null
+  // "Request another match" — re-runs the real engine with narrowing filters.
+  const [refineOpen, setRefineOpen] = useState(false);
+  const [refineGap, setRefineGap] = useState('');
+  const [refineFocus, setRefineFocus] = useState('');
+  const [refining, setRefining] = useState(false);
+  const [refineError, setRefineError] = useState(null);
   const [bookings, setBookings] = useState(null); // {items} | {failed} | null
   const [values, setValues] = useState(null); // dto | {unavailable} | {failed}
   const [results, setResults] = useState(null); // [] | {unavailable} | {failed}
@@ -214,6 +292,10 @@ export default function SpinoutLabAdvisorsPage() {
           setMatches({
             source: 'engine',
             items: (Array.isArray(engine?.items) ? engine.items : []).map((it) => normalizeMatch(it, 'engine')),
+            filters: engine?.filters || null,
+            totalBeforeFilters: Number.isFinite(Number(engine?.total_before_filters))
+              ? Number(engine.total_before_filters)
+              : null,
           });
         }
 
@@ -282,6 +364,37 @@ export default function SpinoutLabAdvisorsPage() {
     for (const m of items) if (m.advisorId != null) map.set(m.advisorId, m.name);
     return map;
   }, [items]);
+
+  // Re-run the real engine with narrowing filters. Only reachable when the
+  // engine itself answered — the directory fallback has no filter support, so
+  // the control is hidden rather than silently doing nothing.
+  // `override` lets a caller pass the filters explicitly. The Clear button
+  // needs it: setState is async, so calling this straight after setRefineGap('')
+  // would re-query with the OLD filter values still in scope.
+  const runRefine = async (e, override) => {
+    e?.preventDefault?.();
+    const gap = override ? override.gap : refineGap;
+    const focus = override ? override.focus : refineFocus;
+    setRefining(true);
+    setRefineError(null);
+    try {
+      const res = await api.advisorsMatch({ gap: gap || undefined, focus: focus || undefined });
+      setMatches({
+        source: 'engine',
+        items: (Array.isArray(res?.items) ? res.items : []).map((it) => normalizeMatch(it, 'engine')),
+        filters: res?.filters || null,
+        totalBeforeFilters: Number.isFinite(Number(res?.total_before_filters))
+          ? Number(res.total_before_filters)
+          : null,
+      });
+      setFilter('all'); // a stale specialty chip could hide the new shortlist
+      setRefineOpen(false);
+    } catch (err) {
+      setRefineError(err?.message || 'Could not regenerate the shortlist.');
+    } finally {
+      setRefining(false);
+    }
+  };
 
   const openSlots = async (uid) => {
     if (slotsFor === uid) { setSlotsFor(null); setSlots(null); setBookError(''); return; }
@@ -461,6 +574,16 @@ export default function SpinoutLabAdvisorsPage() {
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <div className={LBL}>Ranked matches · best complement first</div>
+            {matches?.source === 'engine' && (
+              <button
+                type="button"
+                onClick={() => { setRefineError(null); setRefineOpen(true); }}
+                data-testid="button-request-another-match"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-700 dark:text-violet-300 hover:underline"
+              >
+                <RefreshCw size={11} /> Request another match
+              </button>
+            )}
             <div className="ml-auto flex flex-wrap gap-1">
               <button
                 type="button"
@@ -483,6 +606,29 @@ export default function SpinoutLabAdvisorsPage() {
               ))}
             </div>
           </div>
+
+          {/* Active refinement — stated explicitly so a short shortlist never
+              reads as "the network is empty". */}
+          {(matches?.filters?.gap || matches?.filters?.focus) && (
+            <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="active-refinement">
+              <span>
+                Refined to
+                {matches.filters.gap ? ` ${SKILL_AXES[matches.filters.gap] || matches.filters.gap}` : ''}
+                {matches.filters.focus ? ` ${matches.filters.focus}s` : ''}
+                {matches.totalBeforeFilters != null
+                  ? ` — ${items.length} of ${matches.totalBeforeFilters} ranked advisors`
+                  : ''}.
+              </span>
+              <button
+                type="button"
+                onClick={() => { setRefineGap(''); setRefineFocus(''); runRefine(null, { gap: '', focus: '' }); }}
+                data-testid="button-clear-refinement"
+                className="font-semibold text-violet-700 dark:text-violet-300 hover:underline"
+              >
+                Clear
+              </button>
+            </div>
+          )}
 
           {matches?.failed ? (
             <div className={`${CARD} text-center py-10`} data-testid="matches-error">
@@ -530,6 +676,20 @@ export default function SpinoutLabAdvisorsPage() {
                         ))}
                       </div>
                       {m.bio && <p className="text-[12px] text-gray-600 dark:text-gray-300 mt-2 line-clamp-2">{m.bio}</p>}
+                      {(() => {
+                        const contribution = likelyContribution(m.specialties, gaps.map((g) => g.title));
+                        return contribution.length > 0 ? (
+                          <div className="mt-2" data-testid={`contribution-${m.uid}`}>
+                            <div className={`${LBL} mb-0.5`}>Likely contribution</div>
+                            <p className="text-[11.5px] text-gray-600 dark:text-gray-300 capitalize">
+                              {contribution.join(' · ')}
+                            </p>
+                            <p className="text-[10.5px] text-gray-400 dark:text-gray-500">
+                              Their declared expertise, matched to your weakest dimensions.
+                            </p>
+                          </div>
+                        ) : null;
+                      })()}
                       {m.reasons.length > 0 && (
                         <div className="mt-2">
                           <div className={`${LBL} mb-0.5`}>Why this match</div>
@@ -538,6 +698,29 @@ export default function SpinoutLabAdvisorsPage() {
                           </ul>
                         </div>
                       )}
+                      {(() => {
+                        const rows = breakdownRows(m.breakdown);
+                        return rows.length > 0 ? (
+                          <div className="mt-2.5" data-testid={`breakdown-${m.uid}`}>
+                            <div className={`${LBL} mb-1.5`}>Score breakdown</div>
+                            <div className="space-y-1.5">
+                              {rows.map((r) => (
+                                <div key={r.key}>
+                                  <div className="flex justify-between text-[11px] mb-0.5">
+                                    <span className="text-gray-600 dark:text-gray-300">{r.label}</span>
+                                    <span className="tabular-nums font-semibold text-gray-700 dark:text-gray-200">
+                                      {r.value} <span className="text-gray-400 dark:text-gray-500 font-normal">/ {r.max}</span>
+                                    </span>
+                                  </div>
+                                  <div className="h-1 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                                    <div className={`h-full rounded-full ${r.bar}`} style={{ width: `${r.pct}%` }} />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
                       {m.watchOuts.length > 0 && (
                         <div className="mt-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900 px-2.5 py-1.5 text-[11px] text-amber-700 dark:text-amber-300" data-testid={`watchout-${m.uid}`}>
                           ⚠ {m.watchOuts[0]}
@@ -719,6 +902,82 @@ export default function SpinoutLabAdvisorsPage() {
           </div>
         </div>
       </div>
+
+      {/* Request another match — re-runs the real engine with filters */}
+      {refineOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          onClick={() => setRefineOpen(false)}
+          data-testid="refine-modal"
+        >
+          <form className={`${CARD} w-full max-w-md`} onClick={(e) => e.stopPropagation()} onSubmit={runRefine}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-base font-extrabold text-gray-900 dark:text-gray-50">Request another match</h3>
+              <button type="button" onClick={() => setRefineOpen(false)} data-testid="button-close-refine" className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-[11.5px] text-gray-500 dark:text-gray-400 mb-4">
+              Refine the criteria — we regenerate a ranked shortlist from the same engine.
+            </p>
+
+            <label className={`${LBL} block mb-1.5`} htmlFor="refine-gap">What gap is still unresolved?</label>
+            <select
+              id="refine-gap"
+              value={refineGap}
+              onChange={(e) => setRefineGap(e.target.value)}
+              data-testid="select-refine-gap"
+              className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-[13px] text-gray-900 dark:text-gray-50 mb-3.5"
+            >
+              <option value="">Any — rank on overall complement</option>
+              {Object.entries(SKILL_AXES).map(([slug, label]) => (
+                <option key={slug} value={slug}>{label}</option>
+              ))}
+            </select>
+
+            <span className={`${LBL} block mb-1.5`}>Specialist or generalist?</span>
+            <div className="flex gap-1.5 mb-2">
+              {[['', 'Either'], ['specialist', 'Specialist'], ['generalist', 'Generalist']].map(([v, label]) => (
+                <button
+                  key={v || 'either'}
+                  type="button"
+                  onClick={() => setRefineFocus(v)}
+                  aria-pressed={refineFocus === v}
+                  data-testid={`chip-focus-${v || 'either'}`}
+                  className={`text-[11.5px] font-semibold px-3 py-1.5 rounded-full border ${
+                    refineFocus === v
+                      ? 'bg-violet-600 border-violet-600 text-white'
+                      : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mb-4">
+              Based on how many areas an advisor's declared expertise spans — one or two reads as a
+              specialist, three or more as a generalist. Advisors who haven't listed expertise are
+              excluded from both.
+            </p>
+
+            {refineError && (
+              <p className="text-[12px] text-rose-600 dark:text-rose-400 mb-3" data-testid="refine-error">{refineError}</p>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setRefineOpen(false)}
+                className="h-9 px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-[13px] font-semibold text-gray-600 dark:text-gray-300">
+                Cancel
+              </button>
+              <button type="submit" disabled={refining} data-testid="button-generate-shortlist"
+                className="h-9 px-4 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white text-[13px] font-bold inline-flex items-center gap-1.5">
+                {refining && <Loader2 size={14} className="animate-spin" />}
+                Generate new shortlist →
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Intro draft modal */}
       {introFor && (

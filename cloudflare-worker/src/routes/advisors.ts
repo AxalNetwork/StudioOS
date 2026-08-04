@@ -23,6 +23,25 @@ import {
 
 const advisors = new Hono<{ Bindings: Env }>();
 
+/**
+ * Normalises an advisor's free-text expertise onto the canonical radar-axis
+ * slugs (services/skillsTaxonomySchema.ts::RADAR_AXES), so matching and the
+ * /match `gap` / `focus` filters agree on what an expertise string means.
+ * Anything unmapped falls through as its own lowercased value.
+ *
+ * Module scope on purpose: it used to be rebuilt inside the per-advisor scoring
+ * loop, and the refinement filters below need the identical mapping — two
+ * copies would drift.
+ */
+const EXPERTISE_AXIS: Record<string, string> = {
+  product: 'product', engineering: 'engineering', design: 'design',
+  sales: 'gtm_sales', marketing: 'marketing_brand', 'go-to-market': 'gtm_sales',
+  gtm: 'gtm_sales', finance: 'finance_ops', ops: 'finance_ops', operations: 'finance_ops',
+  legal: 'legal_compliance', compliance: 'legal_compliance', capital: 'capital_network',
+  fundraising: 'capital_network', networking: 'capital_network', 'data science': 'engineering',
+  ai_ml: 'engineering', 'ai / ml': 'engineering', growth: 'gtm_sales',
+};
+
 type AdvisorRow = {
   id: number; uid: string; user_id: number | null;
   display_name: string; email: string | null; bio: string | null;
@@ -240,16 +259,7 @@ advisors.get('/match', async (c) => {
       const advisorExpertise = jload(m.expertise_json, [] as string[]);
       const founderAxes = Object.keys(callerVectors.skills);
       const gaps = founderAxes.filter((ax) => (callerVectors.skills[ax] || 0) < 2.5);
-      // Normalise advisor free-text expertise to axis slugs
-      const EXPERTISE_MAP: Record<string, string> = {
-        product: 'product', engineering: 'engineering', design: 'design',
-        sales: 'gtm_sales', marketing: 'marketing_brand', 'go-to-market': 'gtm_sales',
-        gtm: 'gtm_sales', finance: 'finance_ops', ops: 'finance_ops', operations: 'finance_ops',
-        legal: 'legal_compliance', compliance: 'legal_compliance', capital: 'capital_network',
-        fundraising: 'capital_network', networking: 'capital_network', 'data science': 'engineering',
-        ai_ml: 'engineering', 'ai / ml': 'engineering', growth: 'gtm_sales',
-      };
-      const mappedExpertise = advisorExpertise.map((ex) => EXPERTISE_MAP[ex.toLowerCase()] || ex.toLowerCase());
+      const mappedExpertise = advisorExpertise.map((ex) => EXPERTISE_AXIS[ex.toLowerCase()] || ex.toLowerCase());
       const domainOverlap = mappedExpertise.filter((ex) => gaps.includes(ex));
       const domainScore = Math.min(40, domainOverlap.length * 10);
 
@@ -281,7 +291,46 @@ advisors.get('/match', async (c) => {
     });
 
     scored.sort((a, b) => b.match_score - a.match_score);
-    return c.json({ items: scored.slice(0, 20) });
+
+    // Optional refinement (the design's "Request another match"). Both filters
+    // narrow the SAME scored set — the ranking rule is unchanged, so a refined
+    // shortlist is always a subset of the unrefined one and the scores mean the
+    // same thing. An unknown value is ignored rather than returning nothing.
+    //
+    // `gap`   — a radar-axis slug the founder still wants covered; keeps
+    //           advisors whose (mapped) expertise includes it.
+    // `focus` — 'specialist' | 'generalist', from how many distinct axes the
+    //           advisor's own expertise spans. This is the advisor's declared
+    //           expertise breadth, not a judgement about their seniority.
+    const gapParam = String(c.req.query('gap') || '').trim().toLowerCase();
+    const focusParam = String(c.req.query('focus') || '').trim().toLowerCase();
+    let refined = scored;
+    if (gapParam) {
+      refined = refined.filter((s) => {
+        const ex = (s.advisor.expertise || []) as string[];
+        return ex.some((e) => (EXPERTISE_AXIS[e.toLowerCase()] || e.toLowerCase()) === gapParam);
+      });
+    }
+    if (focusParam === 'specialist' || focusParam === 'generalist') {
+      refined = refined.filter((s) => {
+        const axes = new Set(
+          ((s.advisor.expertise || []) as string[])
+            .map((e) => EXPERTISE_AXIS[e.toLowerCase()] || e.toLowerCase()),
+        );
+        // 1-2 axes reads as a specialist; 3+ as a generalist. Advisors who
+        // declared no expertise are excluded from both — we have no signal.
+        if (axes.size === 0) return false;
+        return focusParam === 'specialist' ? axes.size <= 2 : axes.size >= 3;
+      });
+    }
+
+    return c.json({
+      items: refined.slice(0, 20),
+      // Stated so the client never has to guess whether a short list means
+      // "no good matches" or "your filter excluded them".
+      filters: { gap: gapParam || null, focus: focusParam || null },
+      total_before_filters: scored.length,
+    });
   } catch (e) { return mapError(c, e); }
 });
 
