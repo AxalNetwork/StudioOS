@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import LogInterviewModal, { ICP_FIT_OPTIONS } from '../components/discovery/LogInterviewModal';
 import LabBackLink from '../components/spinout/LabBackLink';
+import LabPageIcon from '../components/spinout/LabPageIcon';
 import { api, spinoutLab } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
@@ -378,9 +379,10 @@ export default function SpinoutLabDiscoveryPage() {
       <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
         <div className="flex items-center gap-3">
           <LabBackLink />
+          <LabPageIcon icon={MessagesSquare} />
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
-              <MessagesSquare size={18} className="text-violet-600 dark:text-violet-400" />
+              
               <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Customer Discovery</h1>
               <span className="text-[10.5px] font-bold rounded-full px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">Active</span>
             </div>

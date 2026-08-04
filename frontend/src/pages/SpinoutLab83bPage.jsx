@@ -48,6 +48,7 @@ import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import LabBackLink from '../components/spinout/LabBackLink';
+import LabPageIcon from '../components/spinout/LabPageIcon';
 import { pickLabProject } from './SpinoutLabStartupPage';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -285,9 +286,10 @@ export default function SpinoutLab83bPage() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           <LabBackLink />
+          <LabPageIcon icon={FileText} />
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
-              <FileText size={18} className="text-violet-600 dark:text-violet-400" />
+              
               <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">83(b) Election Tracker</h1>
               <span className="text-[10.5px] font-bold rounded-full px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
                 {tracker ? 'Active' : 'Not started'}
