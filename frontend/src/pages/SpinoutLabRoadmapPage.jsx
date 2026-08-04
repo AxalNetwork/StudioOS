@@ -155,7 +155,10 @@ export default function SpinoutLabRoadmapPage() {
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      const [s, projects] = await Promise.all([spinoutLab.state(), api.listProjects().catch(() => [])]);
+      // state is soft-failed so a transient 429 rate-limit never blocks the
+      // OKR / feature data from loading (state is only needed for the
+      // milestone timeline and the week-gate checks).
+      const [s, projects] = await Promise.all([spinoutLab.state().catch(() => null), api.listProjects().catch(() => [])]);
       setState(s);
       const p = pickLabProject(projects, user);
       setProject(p);
@@ -277,7 +280,7 @@ export default function SpinoutLabRoadmapPage() {
   if (status === 'loading') {
     return <div className="flex items-center justify-center py-24" data-testid="roadmap-loading"><Loader2 className="animate-spin text-violet-600 dark:text-violet-400" size={28} /></div>;
   }
-  if (status === 'error' || !state) {
+  if (status === 'error') {
     return (
       <div className="max-w-lg mx-auto text-center py-24 px-6" data-testid="roadmap-error">
         <div className="text-lg font-bold text-gray-900 dark:text-gray-50 mb-2">Couldn&rsquo;t load the Roadmap</div>
@@ -286,7 +289,7 @@ export default function SpinoutLabRoadmapPage() {
     );
   }
   const isAdmin = user?.role === 'admin';
-  if (!state.active && !state.is_incorporated && !isAdmin) {
+  if (state && !state.active && !state.is_incorporated && !isAdmin) {
     return (
       <div className="max-w-lg mx-auto text-center py-24 px-6" data-testid="roadmap-inactive">
         <div className="text-lg font-bold text-gray-900 dark:text-gray-50 mb-2">Spin-Out Lab isn&rsquo;t active on this account</div>
@@ -294,7 +297,7 @@ export default function SpinoutLabRoadmapPage() {
       </div>
     );
   }
-  if (!isAdmin && !(state.unlocked_features || []).includes('roadmap')) {
+  if (state && !isAdmin && !(state.unlocked_features || []).includes('roadmap')) {
     return (
       <div className="max-w-lg mx-auto text-center py-24 px-6" data-testid="roadmap-locked">
         <Lock size={22} className="mx-auto text-gray-400 mb-3" />
