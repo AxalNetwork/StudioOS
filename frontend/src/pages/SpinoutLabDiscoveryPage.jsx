@@ -29,7 +29,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowLeft,
   ArrowRight,
   Check,
   Circle,
@@ -42,6 +41,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import LogInterviewModal, { ICP_FIT_OPTIONS } from '../components/discovery/LogInterviewModal';
+import LabBackLink from '../components/spinout/LabBackLink';
 import { api, spinoutLab } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
@@ -376,16 +376,16 @@ export default function SpinoutLabDiscoveryPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-discovery">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
-        <div>
-          <Link to="/spinout-lab" data-testid="link-back-to-workspace" className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-violet-700 dark:hover:text-violet-300 mb-2">
-            <ArrowLeft size={14} /> Back to Workspace
-          </Link>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <MessagesSquare size={18} className="text-violet-600 dark:text-violet-400" />
-            <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Customer Discovery</h1>
-            <span className="text-[10.5px] font-bold rounded-full px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">Active</span>
+        <div className="flex items-center gap-3">
+          <LabBackLink />
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <MessagesSquare size={18} className="text-violet-600 dark:text-violet-400" />
+              <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Customer Discovery</h1>
+              <span className="text-[10.5px] font-bold rounded-full px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">Active</span>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Structured interview evidence — pain points, hypotheses, and deck-ready quotes.</p>
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Structured interview evidence — pain points, hypotheses, and deck-ready quotes.</p>
         </div>
         <div className="flex items-center gap-2">
           {/* The full discovery tool stays reachable; this page can now log
