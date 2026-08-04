@@ -217,6 +217,7 @@ export default function SpinoutLabCofounderMatchPage() {
       {/* Header */}
       <LabPageHeader
         className="mb-5"
+        icon={Users}
         title="Co-founder Match"
         subtitle="Founder match brief, ranked candidates, and the track decision — advance, keep searching, or go solo."
         status="Active"
