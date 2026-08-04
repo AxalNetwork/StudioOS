@@ -4,7 +4,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Check, Loader2, Rocket, Sparkles, ArrowRight, BookOpen, Lock, FlaskConical, Bell, ChevronDown, CheckCircle2, Circle } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
 import { deckReadinessState } from '../lib/deckReadiness';
-import { useAuth } from '../hooks/useAuthSync';
 import SpinoutLabMarketingPage from './SpinoutLabMarketingPage';
 
 const EXPLAINER_CARDS = [
