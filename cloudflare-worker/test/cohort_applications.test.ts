@@ -30,8 +30,6 @@ import {
   claimDecisionEmail,
 } from '../src/services/cohortApplications.ts';
 
-const HOUR = 3600_000;
-
 // ---------------------------------------------------------------------------
 // Deadline math — 7 days before the 1st, 23:59:59 ET, DST-correct
 // ---------------------------------------------------------------------------

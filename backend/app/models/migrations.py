@@ -2790,9 +2790,7 @@ def ensure_deal_flow_tables() -> None:
             try:
                 # Justification: static DDL literals from a local tuple, no
                 # user input; dev-only FastAPI backend.
-                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-                    f"ALTER TABLE deals ADD COLUMN IF NOT EXISTS {col}"
-                ))
+                session.exec(text(f"ALTER TABLE deals ADD COLUMN IF NOT EXISTS {col}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                 session.commit()
             except Exception as exc:  # noqa: BLE001
                 session.rollback()

@@ -530,7 +530,7 @@ export async function runCohortTimingTick(env: Env, now: Date): Promise<void> {
         if (r === 'passed') passed++;
         else if (r === 'failed') failed++;
         else if (r === 'grace') grace++;
-      } catch (e) { console.error(`[cohort] decide failed user=${p.id} week=${w.week_number}`, e); }
+      } catch (e) { console.error('[cohort] decide failed', { user: p.id, week: w.week_number }, e); }
     }
     console.info(`[cron] cohort week_deadline cycle=${cycle.id} week=${w.week_number} passed=${passed} failed=${failed} grace=${grace}`);
     if (parts.length > 0) {

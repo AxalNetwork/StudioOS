@@ -7,8 +7,8 @@
 // existing dev/Worker parity convention.
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  RefreshCw, Clock, CalendarRange, AlertTriangle, ShieldCheck, ShieldX,
-  Hourglass, Eye, CheckCircle2, XCircle,
+  RefreshCw, Clock, CalendarRange, AlertTriangle,
+  Hourglass, CheckCircle2, XCircle,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
