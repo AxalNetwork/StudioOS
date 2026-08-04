@@ -86,6 +86,7 @@ async def lifespan(app: FastAPI):
             ensure_project_product_demo_columns,
             ensure_project_incorporation_meta_column,
             ensure_project_uof_meta_column,
+            ensure_project_cofounder_decision_column,
             ensure_interview_assessment_columns,
             ensure_project_market_sizing_columns,
             ensure_lifecycle_columns,
@@ -140,6 +141,8 @@ async def lifespan(app: FastAPI):
         logger.info("StudioOS migrations: project use-of-funds meta column ensured")
         ensure_interview_assessment_columns()
         logger.info("StudioOS migrations: interview assessment columns ensured")
+        ensure_project_cofounder_decision_column()
+        logger.info("StudioOS migrations: cofounder decision meta column ensured")
         ensure_project_market_sizing_columns()
         logger.info("StudioOS migrations: project market-sizing (som) column ensured")
         ensure_lifecycle_columns()

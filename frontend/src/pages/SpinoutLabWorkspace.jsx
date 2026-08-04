@@ -84,7 +84,7 @@ export const TOOL_INFO = {
   // Lab-facing partner session booking (design: Office Hours tool page);
   // /office-hours stays the advisor-side ops console.
   'office-hours': { label: 'Office Hours', to: '/spinout-lab/office-hours', desc: 'Book partner sessions', icon: CalendarCheck },
-  'cofounder-match': { label: 'Co-founder Match', to: '/cofounder', desc: 'Co-founder sourcing', icon: Users },
+  'cofounder-match': { label: 'Co-founder Match', to: '/spinout-lab/cofounder-match', desc: 'Co-founder sourcing', icon: Users },
   incorporate: { label: 'Incorporate', to: '/spinout-lab/incorporate', desc: 'Entity formation', icon: Landmark },
   captable: { label: 'Cap Table', to: '/spinout-lab/captable', desc: 'Founder stock & vesting', icon: PieChart },
   'section-83b': { label: '83(b) Election', to: '/incorporate/83b', desc: 'File within 30 days of your stock grant', icon: FileText },

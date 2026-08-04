@@ -104,6 +104,7 @@ const SpinoutLabPitchDeckPage = lazy(() => import('./pages/SpinoutLabPitchDeckPa
 const SpinoutLabBrandPage = lazy(() => import('./pages/SpinoutLabBrandPage'));
 const SpinoutLabOfficeHoursPage = lazy(() => import('./pages/SpinoutLabOfficeHoursPage'));
 const SpinoutLabCofounderAgreementPage = lazy(() => import('./pages/SpinoutLabCofounderAgreementPage'));
+const SpinoutLabCofounderMatchPage = lazy(() => import('./pages/SpinoutLabCofounderMatchPage'));
 const SpinoutLabApplyPage = lazy(() => import('./pages/SpinoutLabApplyPage'));
 const SpinoutLabBriefPage = lazy(() => import('./pages/SpinoutLabBriefPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
@@ -1363,6 +1364,10 @@ function AppInner() {
           same roles as the old route (any founder, plus active lab members). */}
       <Route path="/spinout-lab/brand" element={guard(labRoles(['admin', 'founder']), <SpinoutLabBrandPage />)} />
       <Route path="/spinout-lab/cofounder-agreement" element={guard(labRoles(['admin']), <SpinoutLabCofounderAgreementPage />)} />
+      {/* Co-founder Match tool page (design: Co-founder Match.dc) — the Lab
+          decision console; /cofounder stays the full browse/connections/NDA
+          surface and is linked from the page header. */}
+      <Route path="/spinout-lab/cofounder-match" element={guard(labRoles(['admin', 'founder']), <SpinoutLabCofounderMatchPage />)} />
       {/* Office Hours tool page (design: Office Hours.dc) — founder-side
           partner session booking; /office-hours stays the advisor console. */}
       <Route path="/spinout-lab/office-hours" element={guard(labRoles(['admin']), <SpinoutLabOfficeHoursPage />)} />

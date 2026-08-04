@@ -26,7 +26,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, PieChart, Loader2, Lock, AlertTriangle, FileText, Plus, X,
-  Download, ExternalLink, CheckCircle2, Clock,
+  Download, ExternalLink, CheckCircle2, Clock, Eye,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
@@ -124,6 +124,7 @@ export default function SpinoutLabCapTablePage() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
   const [addModal, setAddModal] = useState(null); // {kind:'founder'|'safe'|'round', form:{}}
+  const [investorPreview, setInvestorPreview] = useState(false); // client-side read-only view
 
   const canEdit = !!(user && project && Number(user.founder_id) === Number(project.founder_id));
 
@@ -373,6 +374,18 @@ export default function SpinoutLabCapTablePage() {
           )}
         </div>
         <div className="ml-auto flex items-center gap-3">
+          {/* Design A-row "Preview as investor": pure client-side view over the
+              SAME saved scenario result — no backend, nothing fabricated. */}
+          {composition.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setInvestorPreview(true)}
+              data-testid="button-investor-preview"
+              className="inline-flex items-center gap-1 text-[11.5px] font-bold text-gray-600 dark:text-gray-300 hover:text-violet-600"
+            >
+              <Eye size={12} /> Preview as investor
+            </button>
+          )}
           {scenario && (
             <button
               type="button"
@@ -676,7 +689,9 @@ export default function SpinoutLabCapTablePage() {
           <div className={CARD} data-testid="card-composition">
             <div className={`${LBL} mb-3`}>Fully diluted</div>
             {composition.length === 0 ? (
-              <p className="text-[11.5px] text-gray-500 dark:text-gray-400">Nothing on the ledger yet.</p>
+              <p className="text-[11.5px] text-gray-500 dark:text-gray-400">
+                Nothing on the ledger yet. Enter equity manually — no Carta connection needed.
+              </p>
             ) : (
               <>
                 <div className="flex h-3 rounded-full overflow-hidden mb-3" data-testid="composition-bar">
@@ -841,6 +856,51 @@ export default function SpinoutLabCapTablePage() {
                 {addModal.kind === 'founder' ? 'Add to cap table' : addModal.kind === 'safe' ? 'Add SAFE' : 'Add round'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Investor preview — the design's "Investor preview · Cap Table &
+          Ownership slide" as a read-only dark modal over the SAME saved
+          composition/ledger the page already renders. Same client-side
+          pattern as the Use of Funds investor preview: no backend, no
+          fabricated values, closes on scrim click. */}
+      {investorPreview && composition.length > 0 && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          onClick={() => setInvestorPreview(false)}
+          data-testid="modal-investor-preview"
+        >
+          <div className="w-full max-w-2xl rounded-2xl bg-gray-950 border border-gray-800 p-6 text-gray-100" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-violet-400">Investor preview · Cap Table &amp; Ownership</div>
+                <h3 className="text-lg font-extrabold">{project?.name || 'Your company'} — fully diluted</h3>
+              </div>
+              <button type="button" onClick={() => setInvestorPreview(false)} data-testid="button-close-investor-preview" className="text-gray-400 hover:text-white"><X size={18} /></button>
+            </div>
+            <div className="flex h-3 rounded-full overflow-hidden mb-4">
+              {composition.map((c) => (
+                <div key={c.group} style={{ width: `${Math.max(1, c.pct)}%`, background: c.dot }} title={`${c.group} ${fmtPct(c.pct)}`} />
+              ))}
+            </div>
+            <div className="space-y-2 mb-4">
+              {composition.map((c) => (
+                <div key={c.group} className="flex items-center gap-2.5 text-[12.5px]">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.dot }} />
+                  <span className="text-gray-300 flex-1">{c.group}</span>
+                  <span className="font-bold tabular-nums">{fmtPct(c.pct)}</span>
+                </div>
+              ))}
+            </div>
+            {safesTotal > 0 && (
+              <p className="text-[11.5px] text-gray-400 mb-2" data-testid="preview-safes-note">
+                {fmtMoney(safesTotal)} in SAFEs outstanding — off-ledger until the first priced round, exactly as the engine models them.
+              </p>
+            )}
+            <p className="text-[10.5px] text-gray-500">
+              Rendered from your saved cap-table scenario — the same numbers as the ledger above, nothing restated.
+            </p>
           </div>
         </div>
       )}
