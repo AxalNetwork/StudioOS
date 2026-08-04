@@ -185,6 +185,12 @@ npm run deploy
 - `wrangler secret put STRIPE_SECRET_KEY --env production` (paste sk_test_… back).
 - Admin Console → Payments → paste `pk_test_…` → Save. Mode badge returns to Test immediately; no redeploy required.
 
+### Static analysis / code scanning
+- **`# nosemgrep` works, but the SARIF still ships the finding.** Semgrep's console output drops suppressed results (`Ran 517 rules on 1656 files: 44 findings`) while its `--sarif` output *keeps* them, tagged `"suppressions": [{"kind": "inSource"}]`. GitHub code scanning opens an alert for those anyway, so every deliberately-annotated line came back as an open "Error" alert — e.g. alert #4581 on `backend/app/models/migrations.py:2793`, whose reported snippet visibly ends in the very `# nosemgrep:` comment meant to silence it. `.github/workflows/semgrep.yml` therefore runs `scripts/strip-suppressed-sarif.py` between the scan and the upload so the payload matches the count semgrep reported. **Don't remove that step to "see everything"** — you'll re-open ~119 alerts that each already carry a written justification in the source. Note the SARIF spec subtlety the script encodes: an *empty* `suppressions: []` array means "known NOT suppressed" and must be kept; only a non-empty array is a real suppression.
+- **The scanner and its rules are both unpinned.** The workflow runs `semgrep/semgrep:latest` and fetches `p/default` / `p/security-audit` / `p/secrets` from `semgrep.dev` at run time, so finding counts move without any repo change — twice diagnosed as ruleset drift after identical code passed and then failed. Pinning the image alone does **not** fix this (the packs are still fetched live); a real pin needs an image digest *and* versioned rule packs.
+- **The job is green even when findings exist.** The scan step is `continue-on-error: true`, so `--error`'s exit 1 never fails the job — a green Semgrep check means "the scan ran", not "nothing was found". Read the step log line (`Ran N rules on M files: K findings`) or the Security tab for the real answer.
+- **Semgrep can't be reproduced from this container.** `semgrep.dev:443` is a policy denial through the agent proxy (`CONNECT tunnel failed, response 403`), so the registry packs can't be fetched locally. Locally-authored rule files still work for testing suppression behaviour; matching the exact upstream findings requires CI.
+
 ### Ops items still owned by user (not in code)
 - **(a)** Disable R2 public access + add 90-day Standard-IA lifecycle rule.
 - **(b)** Verify search/backfill cron in prod.

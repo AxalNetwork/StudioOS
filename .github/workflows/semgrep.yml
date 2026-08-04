@@ -44,6 +44,25 @@ jobs:
             --sarif --output semgrep.sarif \
             --error
         continue-on-error: true
+      # Semgrep's console output and its SARIF output disagree about inline
+      # suppressions. The run above prints e.g. "44 findings" (suppressed ones
+      # dropped), but the SARIF it wrote still contains every `# nosemgrep:`
+      # finding, tagged `"suppressions": [{"kind": "inSource"}]`. GitHub code
+      # scanning opens an alert for those anyway — which is why annotated lines
+      # like backend/app/models/migrations.py:2793 came back as open "Error"
+      # alerts with the silencing comment visible in the reported snippet.
+      #
+      # Strip them so the upload matches the finding count semgrep reported.
+      # Runs on `always()` because the scan step exits 1 whenever `--error`
+      # fires, which is exactly when there is a SARIF worth filtering.
+      - name: Drop nosemgrep-suppressed results from SARIF
+        if: always()
+        run: |
+          # `semgrep` is itself a Python console script, so this image ships an
+          # interpreter. Resolve it rather than hardcoding `python3`, since the
+          # image tag is `latest` and its layout is not ours to depend on.
+          PY="$(command -v python3 || command -v python)"
+          "$PY" scripts/strip-suppressed-sarif.py semgrep.sarif
       - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
         if: always()
