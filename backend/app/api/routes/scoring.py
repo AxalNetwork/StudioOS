@@ -392,7 +392,6 @@ def get_project_scores(
 
     role_val = getattr(user.role, "value", user.role)
     is_admin = role_val == "admin"
-    is_founder = role_val == "founder"
 
     stmt = (
         select(ScoreSnapshot)
