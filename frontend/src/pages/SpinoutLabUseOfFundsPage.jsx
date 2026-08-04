@@ -261,7 +261,7 @@ export default function SpinoutLabUseOfFundsPage() {
   const [pcts, setPcts] = useState([40, 35, 25]);
   const [raise, setRaise] = useState(1_000_000);
   const [meta, setMeta] = useState({});
-  const [hasAlloc, setHasAlloc] = useState(false);
+  const [, setHasAlloc] = useState(false);
 
   const [saveState, setSaveState] = useState('idle'); // idle | saving | saved | error
   const [saveError, setSaveError] = useState('');
