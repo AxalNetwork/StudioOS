@@ -138,7 +138,7 @@ def _next_reply(answers: List[str]) -> str:
         if n == 1:
             return (
                 "Great — as a Founder, are you (A) starting a NEW venture you want to "
-                "spin out in 30 days, or (B) scaling an EXISTING company looking for "
+                "spin out in 28 days, or (B) scaling an EXISTING company looking for "
                 "capital, AI integration, distribution, or M&A support?"
             )
         track, track_idx = _resolve_founder_track(answers)

@@ -29,7 +29,7 @@ export type DeckMethodId =
   | 'one_pager_teaser'
   | 'investor_appendix'
   | 'narrative_brand'
-  // Task #15 — Axal 30-day Spin-Out Lab demo day deck. 14 fixed slides,
+  // Task #15 — Axal 28-day Spin-Out Lab demo day deck. 14 fixed slides,
   // 4 visual variants. Autofill is special-cased in routes/decks.ts
   // (apply-method short-circuits to services/decks/axalSpinoutDemoDay.ts)
   // because the data shape — interview lists, milestone weeks, lab
@@ -786,7 +786,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
       teamSlide, businessModelSlide, gtmSlide, roadmapSlide, askSlide, closingSlide,
     ],
   },
-  // Task #15 — Axal 30-day Spin-Out Lab demo day.
+  // Task #15 — Axal 28-day Spin-Out Lab demo day.
   //
   // The slide list below is informational only — the picker uses it for
   // count + appendix flags, but routes/decks.ts `/apply-method`
@@ -798,7 +798,7 @@ export const DECK_METHODS: DeckMethodSpec[] = [
   {
     id: 'axal_spinout_demoday', key: 'axal_spinout_demoday',
     label: 'Axal VC Spin-Out',
-    prompt_hint: 'Demo Day deck for pre-incorporation founders graduating the 30-day Spin-Out Lab.',
+    prompt_hint: 'Demo Day deck for pre-incorporation founders graduating the 28-day Spin-Out Lab.',
     best_for: 'Founders in or graduating the Axal Spin-Out Lab. Audience: Axal-network investors and partners.',
     slide_count: 11,
     premium: true,

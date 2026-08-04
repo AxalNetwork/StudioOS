@@ -20,11 +20,11 @@ import { DISPLAY_FONT, BTN } from '../../templates/brandKit';
 const EVENT = {
   name: 'Axal VC Spin-Out Demo Day',
   edition: 'Cohort 2025',
-  tagline: 'See what 30 days of focused, structured building really produces.',
+  tagline: 'See what 28 days of focused, structured building really produces.',
 };
 
 const PROOF_BAR = [
-  { value: '30 Days', label: 'Sprint Duration' },
+  { value: '28 Days', label: 'Sprint Duration' },
   { value: '4', label: 'Milestones' },
   { value: '5 to 12', label: 'Companies per Cohort' },
   { value: 'Free', label: 'To Attend' },
@@ -39,7 +39,7 @@ const WHY_ATTEND = [
   {
     icon: Lightbulb,
     title: 'Understand the Process',
-    desc: 'Get a clear picture of all 30 days before you commit to a cohort. Ask the founders directly what week one really felt like.',
+    desc: 'Get a clear picture of all 28 days before you commit to a cohort. Ask the founders directly what week one really felt like.',
     highlight: true,
   },
   {
@@ -143,7 +143,7 @@ const WHO_SHOULD_ATTEND = [
   {
     icon: TrendingUp,
     title: 'Operator-Turned-Founders',
-    desc: "You're considering leaving your current role to start something. This is where you see what starting something actually looks like in 30 days.",
+    desc: "You're considering leaving your current role to start something. This is where you see what starting something actually looks like in 28 days.",
   },
   {
     icon: BarChart2,
@@ -158,7 +158,7 @@ const WHO_SHOULD_ATTEND = [
 ];
 
 const WHAT_FOUNDERS_GET = [
-  { icon: Eye, title: 'Real Process Insight', desc: 'See all 30 days unpack in 5 minutes per company. Founders tell you what actually happened — not a filtered pitch.' },
+  { icon: Eye, title: 'Real Process Insight', desc: 'See all 28 days unpack in 5 minutes per company. Founders tell you what actually happened — not a filtered pitch.' },
   { icon: Rocket, title: 'Cohort Fast-Track', desc: 'RSVP equals fast-track application for the next cohort. Skip the initial screening and go straight to founder review.' },
   { icon: Users, title: 'Network Access', desc: 'Meet potential co-founders, advisors, and investors in a curated, focused environment.' },
   { icon: Lightbulb, title: 'Early Resources', desc: 'Access Spin-Out Lab templates, discovery tools, and brand builder before the next cohort starts.' },
@@ -178,7 +178,7 @@ const TESTIMONIALS = [
     company: 'Frontier Tech LP',
   },
   {
-    quote: "The 30-day timeline seemed impossible. Then I watched seven companies present real traction, real customers, and real incorporation docs. I applied the next morning.",
+    quote: "The 28-day timeline seemed impossible. Then I watched seven companies present real traction, real customers, and real incorporation docs. I applied the next morning.",
     name: 'Yasmin T.',
     role: 'Founder, Cohort 3',
     company: 'Spin-Out Lab Graduate',
@@ -200,7 +200,7 @@ const FAQS = [
   },
   {
     q: 'How many companies present at Demo Day?',
-    a: 'Each cohort typically has between 5 and 12 companies. All who complete the 30-day program present at Demo Day. There are no selective cuts after the cohort begins.',
+    a: 'Each cohort typically has between 5 and 12 companies. All who complete the 28-day program present at Demo Day. There are no selective cuts after the cohort begins.',
   },
   {
     q: 'Can investors see companies before Demo Day?',
@@ -263,7 +263,7 @@ export default function SpinoutDemoDayPage() {
         <div className="max-w-4xl mx-auto">
           <SectionHeader
             eyebrow="What Is the Spin-Out Lab"
-            headline="A 30-day venture sprint for founders who are ready to build."
+            headline="A 28-day venture sprint for founders who are ready to build."
             sub="Not an accelerator. Not a course. A structured, advisor-guided program that takes you from idea to incorporated company in four weeks."
           />
           <div className="rounded-3xl border-2 border-[#6D5BFF]/20 bg-white p-10 text-center">
@@ -299,7 +299,7 @@ export default function SpinoutDemoDayPage() {
       />
 
       <Timeline
-        eyebrow="The 30-Day Journey"
+        eyebrow="The 28-Day Journey"
         headline="Four weeks. Four milestones. Zero shortcuts."
         sub="This is the exact process every cohort company goes through before Demo Day. No week is skipped. No milestone is optional."
         steps={THIRTY_DAY_PROCESS}
@@ -367,7 +367,7 @@ export default function SpinoutDemoDayPage() {
             Don't miss the next Demo Day.
           </h2>
           <p className="text-gray-300 max-w-2xl mx-auto mb-8 leading-relaxed">
-            See what 30 days of disciplined, evidence-based building actually produces. Reserve your spot now and get fast-track access to the next cohort application.
+            See what 28 days of disciplined, evidence-based building actually produces. Reserve your spot now and get fast-track access to the next cohort application.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link to="/register?lane=founder" className={BTN.white}>

@@ -17,7 +17,7 @@ import { Deck_partnership_bd } from './partnership_bd';
 import { Deck_one_pager_teaser } from './one_pager_teaser';
 import { Deck_investor_appendix } from './investor_appendix';
 import { Deck_narrative_brand } from './narrative_brand';
-// Task #15 — Axal 30-day Spin-Out Lab Demo Day deck (10 slides · editorial).
+// Task #15 — Axal 28-day Spin-Out Lab Demo Day deck (10 slides · editorial).
 import { Deck_axal_spinout_demoday } from './axal_spinout_demoday_app';
 
 export type TemplateCategory = 'commercial' | 'fundraising';

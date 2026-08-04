@@ -8,7 +8,7 @@ import { PIPELINE_PHASES, PHASE_THEMES, pipelineItemsFor, deliverablesFor, outco
 // Static status snapshot mirroring the design handoff (Spin-Out Lab.dc.html
 // phaseDefs): Validate/Structure complete, Build in flight, Pitch/Fund
 // still gated. Presentational only — the logged-out page has no cohort.
-const PHASE_STATUS = ['done', 'done', 'active', 'future', 'future'];
+const PHASE_STATUS = ['done', 'active', 'future', 'future'];
 
 export default function SpinoutLabMarketingPage() {
   // Client-state only — the selection restyles entity/filing copy across
@@ -34,7 +34,7 @@ export default function SpinoutLabMarketingPage() {
                 {cohortBadge}
               </span>
             </div>
-            <p className="m-0 text-[15px] text-gray-500 dark:text-gray-400">From idea to incorporated in 30 days.</p>
+            <p className="m-0 text-[15px] text-gray-500 dark:text-gray-400">From idea to incorporated in 28 days.</p>
           </div>
           <div className="flex gap-2.5 items-center">
             <Link to="/spinout-lab/brief" className="h-10 px-4 rounded-[10px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 text-[13.5px] font-semibold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
@@ -53,7 +53,7 @@ export default function SpinoutLabMarketingPage() {
         <section className="rounded-[20px] p-[38px] md:p-[40px] mb-12 overflow-hidden relative text-white" style={{ background: 'radial-gradient(1200px 400px at 12% -20%,rgba(139,92,246,.5),transparent 60%),linear-gradient(115deg,#1e1b3a 0%,#2a1d54 55%,#3b1d6e 100%)' }}>
           <div className="flex flex-wrap gap-10 justify-between items-center relative z-10">
             <div className="min-w-[300px] flex-1">
-              <div className="tabular-nums text-[76px] leading-[0.9] font-black tracking-[-0.04em] text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(90deg,#fff,#c4b5fd)', WebkitBackgroundClip: 'text' }}>30 days</div>
+              <div className="tabular-nums text-[76px] leading-[0.9] font-black tracking-[-0.04em] text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(90deg,#fff,#c4b5fd)', WebkitBackgroundClip: 'text' }}>28 days</div>
               <p className="my-3.5 mb-5 text-[16px] text-[#cbc4e8] font-medium">Idea <span className="text-[#8b5cf6]">→</span> {juris.entity} <span className="text-[#8b5cf6]">→</span> Funded</p>
               <div className="flex flex-wrap gap-2">
                 {outcomeBadgesFor(jurisdiction).map((b) => (
@@ -65,11 +65,11 @@ export default function SpinoutLabMarketingPage() {
           </div>
         </section>
 
-        {/* 30-DAY PIPELINE */}
+        {/* 28-DAY PIPELINE */}
         <section className="mb-12">
           <div className="flex items-baseline justify-between mb-1.5">
-            <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em]">The 30-day pipeline</h2>
-            <span className="text-[12.5px] text-gray-400">5 phases · sequential gates</span>
+            <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em]">The 28-day pipeline</h2>
+            <span className="text-[12.5px] text-gray-400">4 phases · sequential gates</span>
           </div>
           <p className="m-0 mb-5 text-[13.5px] text-gray-500">Each phase ends at a gate. Companies advance only on completion.</p>
 

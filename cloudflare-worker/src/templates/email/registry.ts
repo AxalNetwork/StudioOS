@@ -383,11 +383,11 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
     key: 'spinout_admitted', category: 'spinout', severity: 'info',
     replyTo: 'support@axal.vc',
     subject: "You're in — welcome to the Spin-Out Lab ({{cohort_label}})",
-    text: `Hi {{name}},\n\nCongratulations — you've been admitted to the Spin-Out Lab ({{cohort_label}}).\n\nOver the next 30 days you'll go from idea to incorporated: customer discovery, MVP scope, venture-readiness scoring, and Delaware C-Corp formation — with advisors and warm investor introductions along the way.\n\nStart Week 1 here:\n{{lab_url}}\n\nSee you inside,\nThe Axal team`,
+    text: `Hi {{name}},\n\nCongratulations — you've been admitted to the Spin-Out Lab ({{cohort_label}}).\n\nOver the next 28 days you'll go from idea to incorporated: customer discovery, MVP scope, venture-readiness scoring, and Delaware C-Corp formation — with advisors and warm investor introductions along the way.\n\nStart Week 1 here:\n{{lab_url}}\n\nSee you inside,\nThe Axal team`,
     html: `<h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;letter-spacing:-0.02em;">You're in 🎉</h1>
 <p style="font-size:14px;color:#6b7280;margin:0 0 20px;line-height:1.6;">Hi {{name}}, congratulations — you've been admitted to the <strong style="color:#111827;">Spin-Out Lab</strong> ({{cohort_label}}).</p>
 <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:14px;padding:18px 20px;margin:0 0 24px;">
-  <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#7c3aed;font-weight:600;margin:0 0 6px;">The next 30 days</div>
+  <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#7c3aed;font-weight:600;margin:0 0 6px;">The next 28 days</div>
   <div style="font-size:14px;color:#111827;line-height:1.6;">Idea → customer discovery → MVP scope → venture-readiness score → Delaware C-Corp → warm investor introductions.</div>
 </div>
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:0 0 24px;">

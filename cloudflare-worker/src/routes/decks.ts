@@ -14,7 +14,7 @@ import {
 } from '../services/decks/methods';
 import { autofillDeck, toEditorSlides } from '../services/decks/autofill';
 import { formatUseOfFundsText } from '../util/useOfFunds';
-// Task #15 — Axal 30-day Spin-Out Lab demo day deck. Custom autofill
+// Task #15 — Axal 28-day Spin-Out Lab demo day deck. Custom autofill
 // path that bypasses the generic field-source vocabulary in autofill.ts
 // because the deck binds to Lab tables (interviews, milestones, OKRs)
 // that don't fit the project/financials/captable source shape.

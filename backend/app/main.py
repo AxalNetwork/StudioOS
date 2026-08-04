@@ -324,7 +324,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Axal StudioOS",
-    description="The 30-Day Spin-Out Engine API",
+    description="The 28-Day Spin-Out Engine API",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -753,7 +753,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 # ---------------------------------------------------------------------------
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "app": "StudioOS v1.0", "tagline": "The 30-Day Spin-Out Engine"}
+    return {"status": "ok", "app": "StudioOS v1.0", "tagline": "The 28-Day Spin-Out Engine"}
 
 
 @app.get("/api/dashboard")

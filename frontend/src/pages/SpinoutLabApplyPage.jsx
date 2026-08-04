@@ -254,7 +254,7 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
         {/* SIDE PANEL */}
         <div className="flex-[1_1_300px] min-w-[280px] flex flex-col gap-4">
           <div className="rounded-[18px] p-6 text-white" style={{ background: "linear-gradient(140deg,#241f45,#3b1d6e)" }}>
-            <div className="tabular-nums text-[40px] font-black tracking-[-.03em] text-transparent bg-clip-text" style={{ backgroundImage: "linear-gradient(90deg,#fff,#c4b5fd)", WebkitBackgroundClip: "text" }}>30 days</div>
+            <div className="tabular-nums text-[40px] font-black tracking-[-.03em] text-transparent bg-clip-text" style={{ backgroundImage: "linear-gradient(90deg,#fff,#c4b5fd)", WebkitBackgroundClip: "text" }}>28 days</div>
             <p className="mt-1.5 mb-[18px] text-[13.5px] text-[#cbc4e8]">Idea to {juris.entity}, funded and venture-ready.</p>
             <div className="flex flex-col gap-2.5">
               {outcomes.map((o) => (

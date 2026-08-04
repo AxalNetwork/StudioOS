@@ -30,7 +30,7 @@ export default {
       id: 'choosing-path',
       title: 'Choosing your path: Spin-Out Lab vs. Existing Company',
       overview:
-        "If you're starting from a hypothesis or a partner-supplied idea, the 30-day Spin-Out Lab walks you through validation, design, and incorporation in four guided weeks. If you already have a company and just want to use the tooling (cap table, fundraising, partner network, advisors), pick the Existing Company path instead.",
+        "If you're starting from a hypothesis or a partner-supplied idea, the 28-day Spin-Out Lab walks you through validation, design, and incorporation in four guided weeks. If you already have a company and just want to use the tooling (cap table, fundraising, partner network, advisors), pick the Existing Company path instead.",
       howto: [
         'On first sign-in, the Onboarding wizard asks where you are in your journey.',
         'Pick "Spin-Out Lab" to enter the 4-week sprint with a locked, week-by-week feature tree.',

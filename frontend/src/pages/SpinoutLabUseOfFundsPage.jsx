@@ -548,7 +548,7 @@ export default function SpinoutLabUseOfFundsPage() {
                   Pitch Deck format <span className="block text-[10px] font-normal text-gray-400">Syncs THE ASK slide data</span>
                 </button>
                 <button type="button" disabled={!canEdit} onClick={() => { setExportOpen(false); exportAxal(); }} data-testid="export-axal" className="w-full text-left text-[12px] font-semibold text-gray-700 dark:text-gray-200 rounded-lg px-3 py-2 hover:bg-violet-50 dark:hover:bg-violet-900/20 disabled:opacity-40">
-                  Axal VC Spin-Out format <span className="block text-[10px] font-normal text-gray-400">30-day program export</span>
+                  Axal VC Spin-Out format <span className="block text-[10px] font-normal text-gray-400">28-day program export</span>
                 </button>
               </div>
             )}
@@ -839,7 +839,7 @@ export default function SpinoutLabUseOfFundsPage() {
               <div className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2.5" data-testid="sync-axal">
                 <FileText size={15} className="text-teal-500 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Axal VC · 30-day Spin-Out export</div>
+                  <div className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Axal VC · 28-day Spin-Out export</div>
                   <div className="text-[10.5px] text-gray-400">{meta.axal_exported_at ? `Last exported ${agoLabel(meta.axal_exported_at)}` : 'Not exported yet'}</div>
                 </div>
                 <button type="button" disabled={!canEdit || saveState === 'saving'} onClick={exportAxal} data-testid="button-export-axal" className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg px-2.5 py-1.5 disabled:opacity-40">

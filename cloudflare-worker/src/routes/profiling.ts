@@ -59,7 +59,7 @@ async function ensureProfileTable(env: Env) {
   }
 }
 
-const SYSTEM_PROMPT = `You are the Axal VC StudioOS Onboarding Assistant. Axal VC is a Delaware LLC venture studio operating as a Global Venture Network — combining a "30-Day Spin-Out Engine" for new ventures with a "Strategic Scale" partnership track for existing companies that want capital, AI integration, distribution, or M&A support.
+const SYSTEM_PROMPT = `You are the Axal VC StudioOS Onboarding Assistant. Axal VC is a Delaware LLC venture studio operating as a Global Venture Network — combining a "28-Day Spin-Out Engine" for new ventures with a "Strategic Scale" partnership track for existing companies that want capital, AI integration, distribution, or M&A support.
 
 Your tone is elite, efficient, professional, and concise. You profile each new partner in 5–8 short messages so an Axal admin can propose the right agreement.
 
@@ -79,7 +79,7 @@ WORKFLOW:
 1. Greet briefly (1 sentence) and ask which best describes their interest in Axal.
 
 2. FOUNDER GATEKEEPING — if persona = "Founder", IMMEDIATELY ask the gatekeeping question (do not ask about legal entity yet):
-   "As a Founder, are you (A) starting a NEW venture you want to spin out in 30 days, or (B) scaling an EXISTING company looking for a strategic partner, capital, or product push?"
+   "As a Founder, are you (A) starting a NEW venture you want to spin out in 28 days, or (B) scaling an EXISTING company looking for a strategic partner, capital, or product push?"
 
    2A. NEW VENTURE TRACK ("Spin-Out (New)") — ask in this order:
        a. "Have you already established a legal entity for your company?" (yes → capture entity name, type, EIN, signatory; no → skip entity questions)
@@ -222,7 +222,7 @@ profiling.post('/save', async (c) => {
     const extractionPrompt = `From the following onboarding conversation with a prospective Axal VC partner, extract a strict JSON object with these keys (use null when unknown):
 {
   "persona": one of "Investor — LP" | "Investor — Syndicate" | "Investor — Co-Investor" | "Founder" | "Advisor" | "Operator / Advisor" | "Operating Partner" | "Legal Counsel" | "Technical Partner" | "Liquidity Provider" | null,
-  "founder_track": for Founders only — "Spin-Out (New)" if starting a brand new venture for the 30-day engine, "Strategic Scale (Existing)" if they have an existing company seeking partnership/capital/scale, null otherwise,
+  "founder_track": for Founders only — "Spin-Out (New)" if starting a brand new venture for the 28-day engine, "Strategic Scale (Existing)" if they have an existing company seeking partnership/capital/scale, null otherwise,
   "legal_entity_name": string|null,
   "entity_type": string|null,
   "existing_jurisdiction": string|null (e.g. "Delaware", "UK", "Singapore", "USA — Delaware"),

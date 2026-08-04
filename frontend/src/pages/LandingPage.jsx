@@ -17,7 +17,7 @@ const LANES = [
     id: 'founder',
     title: 'For Founders',
     bullets: [
-      'Idea to incorporated company in the 30-day Spin-Out Lab',
+      'Idea to incorporated company in the 28-day Spin-Out Lab',
       'Pitch deck → cap table → fundraise for existing companies',
       'Personal Advisor, advisor track, and investor exposure',
     ],
@@ -91,7 +91,7 @@ const HOW_IT_WORKS = [
 // Top of the platform, curated. Every link points at a public page or the
 // join flow — no card lands a logged-out visitor on a login wall.
 const PLATFORM_FEATURES = [
-  { icon: Rocket, title: 'Spin-Out Lab', desc: 'A 30-day venture sprint — go from idea to funded company in four weeks.', to: '/spinout-lab' },
+  { icon: Rocket, title: 'Spin-Out Lab', desc: 'A 28-day venture sprint — go from idea to funded company in four weeks.', to: '/spinout-lab' },
   { icon: Globe, title: 'Public Directory', desc: 'Browse founders, partners, and investors already building in the network.', to: '/directory' },
   { icon: Calendar, title: 'Programs & Events', desc: 'Office Hours, demo days, and workshops — open across the network.', to: '/events' },
   { icon: Sparkles, title: 'Personal AI Advisor', desc: 'An always-on advisor with full founder context for strategy, GTM, and fundraising.', to: '/register?lane=founder' },
@@ -430,7 +430,7 @@ export default function LandingPage() {
                   Flagship product
                 </span>
                 <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mt-4 mb-4 dark:text-gray-100">
-                  Spin-Out Lab — 30-day venture sprint.
+                  Spin-Out Lab — 28-day venture sprint.
                 </h2>
                 <p className="text-base text-gray-700 leading-relaxed dark:text-gray-300">
                   For founders with an idea and no incorporated company yet. Four weeks. Four

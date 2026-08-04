@@ -332,7 +332,7 @@ export default function SpinoutLabStartupPage() {
       >
         <div className="min-w-[190px]">
           <div className="text-[11px] font-bold uppercase tracking-wider text-violet-400 dark:text-violet-500">
-            30-day program · {pct}% complete
+            28-day program · {pct}% complete
           </div>
           <div className="text-[15px] font-extrabold text-gray-900 dark:text-gray-50 mt-0.5">
             Week {currentWeek} — {weekDef.name}

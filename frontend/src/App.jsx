@@ -1023,7 +1023,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   // /onboarding/partner "Your firm" form. The chatbot saves the persona
   // into partner_profiles for admin review, which is everything the form
   // used to collect plus more. Founders and investors keep their existing
-  // wizards (founders' 30-day Spin-Out Lab is gated separately via
+  // wizards (founders' 28-day Spin-Out Lab is gated separately via
   // users.spinout_lab_active and is unaffected by this map).
   const wizardForRole = { founder: '/onboarding/founder', investor: '/onboarding/investor' };
   const myWizard = wizardForRole[user.role];

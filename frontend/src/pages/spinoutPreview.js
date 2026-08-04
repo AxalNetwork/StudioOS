@@ -30,7 +30,7 @@ export function spinoutPreviewMeta({ activeIdx, activeSlide, fields }) {
   if (activeIdx === 0) {
     return {
       label: 'Cover preview — live validation signal',
-      caption: 'Cumulative discovery interviews logged across your 30-day sprint — updates as you log more. Empty until your first interview.',
+      caption: 'Cumulative discovery interviews logged across your 28-day sprint — updates as you log more. Empty until your first interview.',
     };
   }
   if (activeIdx === 1) {
