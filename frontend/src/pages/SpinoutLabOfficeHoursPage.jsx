@@ -39,7 +39,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowLeft, Loader2, Lock, Calendar, CalendarCheck, Copy, Check, X,
+  Loader2, Lock, Calendar, CalendarCheck, Copy, Check, X,
   AlertTriangle, ExternalLink, Search, ChevronRight, Share2, Download, Eye,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
@@ -48,12 +48,11 @@ import { reportError } from '../lib/log';
 import { useToast } from '../components/useToast';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { initialsOf, buildGaps } from './SpinoutLabAdvisorsPage';
+import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[10.5px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const BTN = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold transition-colors';
-// Borderless quick-action chrome (design L41-44) — text colour set per button.
-const QA = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent';
 
 // Role tag derived from the partner's real marketplace categories /
 // specialization — the design's LAWYER / OPERATOR / INVESTOR chips.
@@ -570,45 +569,42 @@ export default function SpinoutLabOfficeHoursPage() {
 
   return (
     <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6" data-testid="spinout-office-hours-page">
-      {/* Header */}
-      <div className="flex flex-wrap items-center gap-3 mb-1.5">
-        <Link to="/spinout-lab" className={`${BTN} border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800`} data-testid="link-back-workspace">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Workspace
-        </Link>
-        <h1 className="text-lg font-extrabold text-gray-900 dark:text-gray-100">Office Hours</h1>
-        {unlocked ? (
-          <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">Active</span>
-        ) : (
-          <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 inline-flex items-center gap-1"><Lock className="w-3 h-3" /> Unlocks in Week 3</span>
+      {/* Header. The design's 3px teal accent rule (Office Hours.dc.html L30)
+          survives as the shared header's top rule, recoloured teal. */}
+      <LabPageHeader
+        className="mb-5"
+        ruleClassName="bg-teal-600 dark:bg-teal-500"
+        title="Office Hours"
+        subtitle="Live sessions with partners — investors, lawyers, and operators — turned into tracked execution."
+        status={unlocked ? 'Active' : undefined}
+        weekChip={unlocked ? undefined : (
+          <LabChip tone="muted"><Lock className="w-3 h-3" /> Unlocks in Week 3</LabChip>
         )}
-        {/* Quick actions (design L41-44). Share / Export / Preview have no
-            backend on this surface, so they render disabled with the reason
-            in their tooltip rather than as dead-end buttons. */}
-        <div className="ml-auto flex items-center gap-1">
-          <button type="button" className={`${QA} text-gray-500 dark:text-gray-400`} disabled title="Sharing office-hours sessions isn't supported yet." data-testid="qa-share">
-            <Share2 className="w-3.5 h-3.5" /> Share
-          </button>
-          <button type="button" className={`${QA} text-gray-500 dark:text-gray-400`} disabled title="Session export isn't supported yet." data-testid="qa-export">
-            <Download className="w-3.5 h-3.5" /> Export
-          </button>
-          <button type="button" className={`${QA} text-gray-500 dark:text-gray-400`} disabled title="Office Hours has no investor-facing view." data-testid="qa-preview">
-            <Eye className="w-3.5 h-3.5" /> Preview as investor
-          </button>
-          <button
-            type="button"
-            className={`${QA} text-gray-600 dark:text-gray-300`}
-            onClick={async () => { try { await navigator.clipboard.writeText(window.location.href); showToast('Link copied.'); } catch { showToast('Could not copy link.', 'error'); } }}
-            data-testid="button-copy-link"
-          >
-            <Copy className="w-3.5 h-3.5" /> Copy link
-          </button>
-        </div>
-      </div>
-      <p className="text-[12.5px] text-gray-500 dark:text-gray-400 mb-3">
-        Live sessions with partners — investors, lawyers, and operators — turned into tracked execution.
-      </p>
-      {/* Design's 3px teal accent rule under the header (Office Hours.dc.html L30). */}
-      <div className="h-[3px] bg-teal-600 rounded-full mb-5" aria-hidden="true" />
+        actions={(
+          <>
+            {/* Quick actions (design L41-44). Share / Export / Preview have no
+                backend on this surface, so they render disabled with the reason
+                in their tooltip rather than as dead-end buttons. */}
+            <button type="button" className={labBtn('ghost')} disabled title="Sharing office-hours sessions isn't supported yet." data-testid="qa-share">
+              <Share2 size={LAB_ICON_SIZE} /> Share
+            </button>
+            <button type="button" className={labBtn('ghost')} disabled title="Session export isn't supported yet." data-testid="qa-export">
+              <Download size={LAB_ICON_SIZE} /> Export
+            </button>
+            <button type="button" className={labBtn('ghost')} disabled title="Office Hours has no investor-facing view." data-testid="qa-preview">
+              <Eye size={LAB_ICON_SIZE} /> Preview as investor
+            </button>
+            <button
+              type="button"
+              className={labBtn('ghost')}
+              onClick={async () => { try { await navigator.clipboard.writeText(window.location.href); showToast('Link copied.'); } catch { showToast('Could not copy link.', 'error'); } }}
+              data-testid="button-copy-link"
+            >
+              <Copy size={LAB_ICON_SIZE} /> Copy link
+            </button>
+          </>
+        )}
+      />
 
       {!unlocked && (
         <div className={`${CARD} p-4 mb-5 flex items-center gap-3`} data-testid="banner-locked">

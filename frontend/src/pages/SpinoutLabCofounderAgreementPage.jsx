@@ -40,9 +40,9 @@
 //     raises an environment banner. Existing documents are unaffected.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
-  ArrowLeft, FileSignature, Loader2, Lock, AlertTriangle, FileText, Users,
+  FileSignature, Loader2, Lock, AlertTriangle, FileText, Users,
   CheckCircle2, ExternalLink, Sparkles, Share2, Download, Copy, Eye, Check,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
@@ -60,6 +60,7 @@ import IpRider from '../components/cofounder/IpRider';
 import DisputeCard from '../components/cofounder/DisputeCard';
 import ExecutionConsole from '../components/cofounder/ExecutionConsole';
 import SoloDeclaration from '../components/cofounder/SoloDeclaration';
+import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 
 // Kept as a named export for unit-testability (moved to the view model).
 export { capTableSplit } from '../lib/cofounderAgreementViewModel';
@@ -74,7 +75,6 @@ const READONLY_PROSE = {
 };
 
 export default function SpinoutLabCofounderAgreementPage() {
-  const navigate = useNavigate();
   const [status, setStatus] = useState('loading');
   const [state, setState] = useState(null);
   const [user, setUser] = useState(null);
@@ -394,108 +394,105 @@ export default function SpinoutLabCofounderAgreementPage() {
   const qaExport = qa('export');
   const qaCopy = qa('copy');
   const qaInvestor = qa('investor');
-  const QA_BTN = 'inline-flex items-center gap-1.5 text-[11.5px] font-semibold rounded-lg px-2.5 py-1.5 transition';
+
+  // Header — the app shell's own treatment, not the prototype's top bar, now
+  // via the shared LabPageHeader. Three of its slots carry page-specific
+  // nodes rather than strings, so they are built here for readability:
+  //   status   — the real <StatusPill/>, rendered verbatim.
+  //   weekChip — the unlock pill. It states a fact about the MODULE (it
+  //              unlocks in Week 4 — the same number the lock screen shows),
+  //              NOT about the viewer's week. vm.unlockPill.tone stays the
+  //              source of truth for violet-vs-muted.
+  //   actions  — the module-progress readout + its bar.
+  const headerStatus = (
+    <StatusPill
+      tone={vm.activePill.tone}
+      label={vm.activePill.label}
+      size="xs"
+      icon={vm.activePill.tone === 'emerald' ? <Check size={9} strokeWidth={3} /> : null}
+    />
+  );
+  const headerUnlockPill = (
+    <LabChip
+      tone={vm.unlockPill.tone === 'violet' ? 'unlocked' : 'muted'}
+      title={vm.unlockPill.title}
+      data-testid="pill-unlock"
+    >
+      {vm.unlockPill.label}
+    </LabChip>
+  );
+  const headerProgress = (
+    <div className="text-right">
+      <div
+        className="text-[11px] font-bold text-violet-600 dark:text-violet-400 tabular-nums"
+        title={vm.moduleProgress.title}
+        data-testid="text-module-progress"
+      >
+        {vm.moduleProgress.label}
+      </div>
+      <div className="w-[130px] h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 mt-1 overflow-hidden">
+        <div className="h-full bg-violet-600 rounded-full" style={{ width: `${vm.moduleProgress.pct}%` }} />
+      </div>
+    </div>
+  );
 
   return (
     <div className="max-w-[1100px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-cofounder">
-      {/* Header — the app shell's own treatment, not the prototype's top bar. */}
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigate('/spinout-lab')}
-          data-testid="button-back-workspace"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
-        >
-          <ArrowLeft size={14} /> Back to Workspace
-        </button>
-        <div className="flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300 inline-flex items-center justify-center shrink-0">
-            <FileSignature size={15} />
-          </span>
-          <h1 className="text-[17px] font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Co-founder Agreement</h1>
-          <StatusPill
-            tone={vm.activePill.tone}
-            label={vm.activePill.label}
-            size="xs"
-            icon={vm.activePill.tone === 'emerald' ? <Check size={9} strokeWidth={3} /> : null}
-          />
-        </div>
-        <div className="ml-auto flex items-center gap-3">
-          <div className="text-right">
-            <div
-              className="text-[11px] font-bold text-violet-600 dark:text-violet-400 tabular-nums"
-              title={vm.moduleProgress.title}
-              data-testid="text-module-progress"
-            >
-              {vm.moduleProgress.label}
-            </div>
-            <div className="w-[130px] h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 mt-1 overflow-hidden">
-              <div className="h-full bg-violet-600 rounded-full" style={{ width: `${vm.moduleProgress.pct}%` }} />
-            </div>
-          </div>
-          {/* States a fact about the MODULE (it unlocks in Week 4 — the same
-              number the lock screen shows), not about the viewer's week. */}
-          <span
-            title={vm.unlockPill.title}
-            data-testid="pill-unlock"
-            className={`text-[11px] font-semibold rounded-full px-2.5 py-1 border whitespace-nowrap ${
-              vm.unlockPill.tone === 'violet'
-                ? 'text-violet-600 bg-violet-50 border-violet-200 dark:text-violet-300 dark:bg-violet-900/30 dark:border-violet-800'
-                : 'text-gray-500 bg-gray-50 border-gray-200 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-700'
-            }`}
+      <LabPageHeader
+        icon={FileSignature}
+        title="Co-founder Agreement"
+        subtitle="Draft and generate the founding team agreement — equity, vesting, IP, roles, and departure — as a real legal document on your startup."
+        status={headerStatus}
+        weekChip={headerUnlockPill}
+        actions={headerProgress}
+      >
+        {/* Quick actions + path toggle */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button" disabled title={qaShare.disabledReason} data-testid={qaShare.testid}
+            className={labBtn('ghost')}
           >
-            {vm.unlockPill.label}
-          </span>
-        </div>
-      </div>
-      <p className="text-[12.5px] text-gray-500 dark:text-gray-400 -mt-2">
-        Draft and generate the founding team agreement — equity, vesting, IP, roles, and departure — as a real legal document on your startup.
-      </p>
+            <Share2 size={LAB_ICON_SIZE} /> {qaShare.label}
+          </button>
+          <button
+            type="button" onClick={exportSummary} data-testid={qaExport.testid}
+            className={labBtn('ghost')}
+          >
+            <Download size={LAB_ICON_SIZE} /> {qaExport.label}
+          </button>
+          <button
+            type="button" onClick={copyLink} data-testid={qaCopy.testid}
+            className={labBtn('ghost')}
+          >
+            {copied ? <Check size={LAB_ICON_SIZE} className="text-emerald-500" /> : <Copy size={LAB_ICON_SIZE} />} {copied ? 'Copied' : qaCopy.label}
+          </button>
+          <button
+            type="button" disabled title={qaInvestor.disabledReason} data-testid={qaInvestor.testid}
+            className={labBtn('ghost')}
+          >
+            <Eye size={LAB_ICON_SIZE} /> {qaInvestor.label}
+          </button>
 
-      {/* Quick actions + path toggle */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <button
-          type="button" disabled title={qaShare.disabledReason} data-testid={qaShare.testid}
-          className={`${QA_BTN} text-gray-400 dark:text-gray-600 cursor-not-allowed`}
-        >
-          <Share2 size={13} /> {qaShare.label}
-        </button>
-        <button
-          type="button" onClick={exportSummary} data-testid={qaExport.testid}
-          className={`${QA_BTN} text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800`}
-        >
-          <Download size={13} /> {qaExport.label}
-        </button>
-        <button
-          type="button" onClick={copyLink} data-testid={qaCopy.testid}
-          className={`${QA_BTN} text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800`}
-        >
-          {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />} {copied ? 'Copied' : qaCopy.label}
-        </button>
-        <button
-          type="button" disabled title={qaInvestor.disabledReason} data-testid={qaInvestor.testid}
-          className={`${QA_BTN} text-gray-400 dark:text-gray-600 cursor-not-allowed`}
-        >
-          <Eye size={13} /> {qaInvestor.label}
-        </button>
-
-        <div className="ml-auto flex gap-1 rounded-xl bg-gray-100 dark:bg-gray-800 p-1">
-          {[
-            { v: 'multi', label: 'Multi-founder agreement', testid: 'tab-multi' },
-            { v: 'solo', label: 'Solo-founder path', testid: 'tab-solo' },
-          ].map((t) => (
-            <button
-              key={t.v} type="button" onClick={() => setPath(t.v)} data-testid={t.testid}
-              className={`text-[11.5px] font-bold rounded-lg px-3 py-1.5 transition ${path === t.v ? 'bg-white dark:bg-gray-900 text-violet-600 dark:text-violet-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
-            >
-              {t.label}
-            </button>
-          ))}
+          <div className="ml-auto flex gap-1 rounded-xl bg-gray-100 dark:bg-gray-800 p-1">
+            {[
+              { v: 'multi', label: 'Multi-founder agreement', testid: 'tab-multi' },
+              { v: 'solo', label: 'Solo-founder path', testid: 'tab-solo' },
+            ].map((t) => (
+              <button
+                key={t.v} type="button" onClick={() => setPath(t.v)} data-testid={t.testid}
+                className={`text-[11.5px] font-bold rounded-lg px-3 py-1.5 transition ${path === t.v ? 'bg-white dark:bg-gray-900 text-violet-600 dark:text-violet-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-      <p className="text-[10.5px] text-gray-400 dark:text-gray-500 -mt-3">
-        The path above is a view toggle only — Axal does not store an agreement-path choice.
-      </p>
+        {/* Was -mt-3 against the page's space-y-5; inside the header's own
+            children row the same 8px gap is a positive margin. */}
+        <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-2">
+          The path above is a view toggle only — Axal does not store an agreement-path choice.
+        </p>
+      </LabPageHeader>
 
       {envUnavailable && (
         <div className={`${CARD} !p-3 flex items-center gap-3`} data-testid="banner-env-unavailable">

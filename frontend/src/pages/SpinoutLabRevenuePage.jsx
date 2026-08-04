@@ -19,14 +19,15 @@
 //     shown only when real numbers exist.
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
-  ArrowLeft, DollarSign, Loader2, Lock, AlertTriangle, Plus, RefreshCw,
+  DollarSign, Loader2, Lock, AlertTriangle, Plus, RefreshCw,
   Trash2, X, FileText, Gauge, Presentation, CreditCard, ClipboardEdit,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
+import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -69,7 +70,6 @@ export function tractionLine(project, latestMrr) {
 }
 
 export default function SpinoutLabRevenuePage() {
-  const navigate = useNavigate();
   const [status, setStatus] = useState('loading');
   const [state, setState] = useState(null);
   const [user, setUser] = useState(null);
@@ -322,23 +322,15 @@ export default function SpinoutLabRevenuePage() {
 
   return (
     <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-revenue">
-      {/* Header */}
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigate('/spinout-lab')}
-          data-testid="button-back-workspace"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
-        >
-          <ArrowLeft size={14} /> Back to Workspace
-        </button>
-        <div className="flex items-center gap-2">
-          <DollarSign size={16} className="text-teal-500" />
-          <h1 className="text-[17px] font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Revenue</h1>
-          <span className="text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Active</span>
-        </div>
-        <span className="ml-auto text-[11px] font-semibold text-gray-400 dark:text-gray-500">Unlocked · Wk {week}</span>
-        {canEdit && (
+      {/* Header — shared Lab header (LabPageHeader owns the rule, back link,
+          icon tile, title/status/week chips and the action cluster). */}
+      <LabPageHeader
+        icon={DollarSign}
+        title="Revenue"
+        subtitle="Capture real revenue and build investor-ready proof of traction."
+        status="Active"
+        weekChip={`Unlocked · Wk ${week}`}
+        actions={canEdit && (
           <button
             type="button"
             data-testid="button-copy-revenue-summary"
@@ -362,15 +354,12 @@ export default function SpinoutLabRevenuePage() {
                 markMilestone(user, 'revenue_summary_generated');
               } catch (e) { console.error('[spinout-revenue:summary]', e); }
             }}
-            className="h-8 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/30 text-xs font-semibold inline-flex items-center gap-1.5"
+            className={labBtn('accent')}
           >
-            <FileText size={13} /> {summaryCopied ? 'Copied' : 'Copy investor summary'}
+            <FileText size={LAB_ICON_SIZE} /> {summaryCopied ? 'Copied' : 'Copy investor summary'}
           </button>
         )}
-      </div>
-      <p className="text-[12.5px] text-gray-500 dark:text-gray-400 -mt-2">
-        Capture real revenue and build investor-ready proof of traction.
-      </p>
+      />
 
       {/* KPI row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

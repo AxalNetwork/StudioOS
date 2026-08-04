@@ -33,11 +33,12 @@
 // and match fields, clearly labelled as a draft for the user to edit.
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
-  ArrowLeft, Users, Loader2, Lock, Star, Calendar, Copy, Check,
+  Users, Loader2, Lock, Star, Calendar, Copy, Check,
   AlertTriangle, ExternalLink, X, ChevronDown, ChevronUp, RefreshCw,
 } from 'lucide-react';
+import LabPageHeader from '../components/spinout/LabPageHeader';
 import { api, spinoutLab, assessment } from '../lib/api';
 import { archetypeMeta, SKILL_AXES } from '../lib/assessmentMeta';
 import { pickLabProject } from './SpinoutLabStartupPage';
@@ -220,7 +221,6 @@ const STATUS_STYLE = {
 };
 
 export default function SpinoutLabAdvisorsPage() {
-  const navigate = useNavigate();
   const [status, setStatus] = useState('loading'); // loading | ready | error
   const [state, setState] = useState(null);
   const [user, setUser] = useState(null);
@@ -495,26 +495,15 @@ export default function SpinoutLabAdvisorsPage() {
 
   return (
     <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-advisors">
-      {/* Header */}
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigate('/spinout-lab')}
-          data-testid="button-back-workspace"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
-        >
-          <ArrowLeft size={14} /> Back to Workspace
-        </button>
-        <div className="flex items-center gap-2">
-          <Users size={16} className="text-violet-500" />
-          <h1 className="text-[17px] font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Advisors</h1>
-          <span className="text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Active</span>
-        </div>
-        <span className="ml-auto text-[11px] font-semibold text-gray-400 dark:text-gray-500">Unlocked · Wk {week}</span>
-      </div>
-      <p className="text-[12.5px] text-gray-500 dark:text-gray-400 -mt-2">
-        Advisor matching — ranked by how well each candidate complements your founding team.
-      </p>
+      {/* Header — canonical Lab header (LabPageHeader owns the back link, the
+          icon tile, the title/status row and the week pill). */}
+      <LabPageHeader
+        icon={Users}
+        title="Advisors"
+        subtitle="Advisor matching — ranked by how well each candidate complements your founding team."
+        status="Active"
+        weekChip={`Unlocked · Wk ${week}`}
+      />
 
       {/* Gap diagnosis strip — from the latest real scoring run */}
       <div className={CARD} data-testid="card-gaps">

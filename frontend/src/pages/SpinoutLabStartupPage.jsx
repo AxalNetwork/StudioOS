@@ -24,7 +24,7 @@ import {
 import { api, spinoutLab } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
-import LabBackLink from '../components/spinout/LabBackLink';
+import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import { TOOL_INFO, WEEK_DEFS, countDeliverables, milestoneKeySet } from './SpinoutLabWorkspace';
 
 // Past-tense titles for the activity timeline; falls back to the raw key.
@@ -364,50 +364,46 @@ export default function SpinoutLabStartupPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-startup">
       {/* Header — back control sits INLINE with the title (design handoff),
-          and every action stays inside the Lab rather than navigating out. */}
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
-        <div className="flex items-center gap-3">
-          <LabBackLink />
-          <div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Startups</h1>
-              <span className="text-[10.5px] font-bold rounded-full px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
-                {graduated ? 'Graduated' : 'Active'}
-              </span>
-            </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Your company record and founding team</p>
-          </div>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <button
-            type="button"
-            data-testid="button-investor-preview"
-            onClick={() => setPreviewOpen(true)}
-            disabled={!project}
-            className="h-9 px-3.5 rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Preview as investor
-          </button>
-          <button
-            type="button"
-            data-testid="button-share-startup"
-            onClick={() => setShareOpen(true)}
-            disabled={!project}
-            className="h-9 px-3.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Share2 size={13} aria-hidden="true" /> Share
-          </button>
-          <button
-            type="button"
-            data-testid="button-edit-record"
-            onClick={() => openEdit()}
-            disabled={!project}
-            className="h-9 px-3.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-xs font-semibold inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Edit record
-          </button>
-        </div>
-      </div>
+          and every action stays inside the Lab rather than navigating out.
+          No icon tile: Startups has no assigned tool glyph (see MIGRATION
+          SPEC R3 — `icon` omitted deliberately, pending a design decision). */}
+      <LabPageHeader
+        className="mb-5"
+        title="Startups"
+        subtitle="Your company record and founding team"
+        status={graduated ? 'Graduated' : 'Active'}
+        actions={(
+          <>
+            <button
+              type="button"
+              data-testid="button-investor-preview"
+              onClick={() => setPreviewOpen(true)}
+              disabled={!project}
+              className={labBtn('accent')}
+            >
+              Preview as investor
+            </button>
+            <button
+              type="button"
+              data-testid="button-share-startup"
+              onClick={() => setShareOpen(true)}
+              disabled={!project}
+              className={labBtn('secondary')}
+            >
+              <Share2 size={LAB_ICON_SIZE} aria-hidden="true" /> Share
+            </button>
+            <button
+              type="button"
+              data-testid="button-edit-record"
+              onClick={() => openEdit()}
+              disabled={!project}
+              className={labBtn('secondary')}
+            >
+              Edit record
+            </button>
+          </>
+        )}
+      />
 
       {/* Program bar */}
       <div

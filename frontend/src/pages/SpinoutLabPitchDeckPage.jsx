@@ -36,6 +36,7 @@ import { useSpinoutDeckFields } from '../hooks/useSpinoutDeckFields';
 import SpinoutSlideEditor from '../components/SpinoutSlideEditor';
 import { PitchDeckExportModal, PitchDeckShareModal } from '../components/PitchDeckModals';
 import PitchDeckSlideCard from '../components/PitchDeckSlideCard';
+import LabPageHeader from '../components/spinout/LabPageHeader';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { TEMPLATES } from '../decks/templates';
 import {
@@ -251,18 +252,13 @@ export default function SpinoutLabPitchDeckPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-6" data-testid="spinout-pitch-deck-page">
       {/* ---- page header (app shell chrome, not the design's own sidebar) ---- */}
-      <div className="flex items-center gap-3 mb-1.5">
-        <Link to="/spinout-lab" className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200" data-testid="link-back-workspace">
-          <ArrowLeft size={14} /> Back to Workspace
-        </Link>
-        <div className="h-4 w-px bg-gray-200 dark:bg-gray-700" />
-        <div className="flex items-center gap-2 min-w-0">
-          <Presentation size={16} className="text-violet-600 dark:text-violet-400 flex-none" />
-          <span className="text-[15px] font-extrabold text-gray-900 dark:text-gray-100 truncate">Pitch Deck Builder</span>
-          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Active</span>
-        </div>
-      </div>
-      <p className="mb-5 text-[13px] text-gray-500 dark:text-gray-400">Auto-assemble your venture pitch deck</p>
+      <LabPageHeader
+        icon={Presentation}
+        title="Pitch Deck Builder"
+        subtitle="Auto-assemble your venture pitch deck"
+        status="Active"
+        className="mb-5"
+      />
 
       {error && (
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 px-3.5 py-2.5 text-[12.5px] text-red-700 dark:text-red-300" data-testid="deck-error">
@@ -277,7 +273,9 @@ export default function SpinoutLabPitchDeckPage() {
           <div className={`${CARD} p-6 mb-7 shadow-sm`}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-[280px] flex-1">
-                <h1 className="text-[20px] font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Your Pitch Deck</h1>
+                {/* Demoted from <h1> when the header migrated to LabPageHeader:
+                    the header's title is now this page's only <h1>. */}
+                <h2 className="text-[20px] font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Your Pitch Deck</h2>
                 <p className="mt-1.5 mb-4 text-[14px] text-gray-500 dark:text-gray-400">
                   Auto-assembled from your Spin-Out Lab work. Edit any slide, then export or share.
                 </p>

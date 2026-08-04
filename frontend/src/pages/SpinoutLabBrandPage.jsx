@@ -31,6 +31,7 @@ import {
   ExternalLink, Copy, Plus, Pencil, Eye, CalendarPlus, ChevronDown, ChevronRight,
   Monitor, Smartphone,
 } from 'lucide-react';
+import LabPageHeader from '../components/spinout/LabPageHeader';
 import { api } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { reportError } from '../lib/log';
@@ -640,18 +641,18 @@ export default function SpinoutLabBrandPage() {
       )}
 
       {/* ---- page header ---- */}
-      <div className="flex items-center gap-3 mb-1.5">
-        <Link to="/spinout-lab" className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200" data-testid="link-back-workspace">
-          <ArrowLeft size={14} /> Back to Workspace
-        </Link>
-        <div className="h-4 w-px bg-gray-200 dark:bg-gray-700" />
-        <div className="flex items-center gap-2 min-w-0">
-          <Palette size={16} className="text-violet-600 dark:text-violet-400 flex-none" />
-          <span className="text-[15px] font-extrabold text-gray-900 dark:text-gray-100 truncate">Brand & Landing Pages</span>
-          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Active</span>
-        </div>
-      </div>
-      <p className="mb-5 text-[13px] text-gray-500 dark:text-gray-400">Create landing pages for your audience</p>
+      {/* Canonical Lab header. The page root has no space-y-*, so the header
+          carries its own mb-5 (the old mb-1.5 row + mb-5 description are gone).
+          The title promotes from <span> to the component's <h1>; the only other
+          <h1> in this file lives in the mutually-exclusive `!projectId` early
+          return, so the page still renders exactly one. */}
+      <LabPageHeader
+        className="mb-5"
+        icon={Palette}
+        title="Brand & Landing Pages"
+        subtitle="Create landing pages for your audience"
+        status="Active"
+      />
 
       {error && (
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 px-3.5 py-2.5 text-[12.5px] text-red-700 dark:text-red-300">

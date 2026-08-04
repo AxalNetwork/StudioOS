@@ -36,8 +36,7 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react';
-import LabBackLink from '../components/spinout/LabBackLink';
-import LabPageIcon from '../components/spinout/LabPageIcon';
+import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { useAuth } from '../hooks/useAuthSync';
@@ -584,76 +583,67 @@ export default function SpinoutLabMarketPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-market">
-      {/* Brand rule above the header, as on Capital and Profiling. */}
-      <div className="h-[3px] rounded-b-[3px] bg-violet-600 dark:bg-violet-500 mb-4" aria-hidden="true" />
-
-      {/* Header — back control is a BUTTON sitting inline with the title, and
-          the tool icon sits in its violet tile (design handoff). */}
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
-        <div className="flex items-center gap-3">
-          <LabBackLink />
-          <LabPageIcon icon={Compass} />
-          <div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Market Intel</h1>
-            <span className="text-[10.5px] font-bold rounded-full px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">Active</span>
-            {project && (
-              <span className="relative">
-                <button
-                  type="button"
-                  data-testid="market-readiness-pill"
-                  onClick={() => setChecklistOpen((v) => !v)}
-                  className={`text-[10.5px] font-bold rounded-full px-2.5 py-1 ${readinessCls}`}
-                >
-                  Market Intel {readinessPct}% complete
+      {/* Header — brand rule, back control inline with the title, and the tool
+          icon in its violet tile (design handoff). */}
+      <LabPageHeader
+        className="mb-5"
+        icon={Compass}
+        title="Market Intel"
+        subtitle="TAM / SAM research and sizing — your Week 1 market deliverable."
+        status="Active"
+        titleExtra={project ? (
+          <span className="relative">
+            <button
+              type="button"
+              data-testid="market-readiness-pill"
+              onClick={() => setChecklistOpen((v) => !v)}
+              className={`text-[10.5px] font-bold rounded-full px-2.5 py-1 ${readinessCls}`}
+            >
+              Market Intel {readinessPct}% complete
+            </button>
+            {checklistOpen && (
+              <div
+                data-testid="market-checklist-popover"
+                onClick={(e) => e.stopPropagation()}
+                className="absolute top-[26px] left-0 z-40 w-[280px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] shadow-[0_20px_50px_-12px_rgba(24,24,27,.3)] p-4 text-left"
+              >
+                <div className="text-[13px] font-extrabold text-gray-900 dark:text-gray-50 mb-2.5">Market Intel Checklist</div>
+                <div className="flex flex-col gap-[7px] mb-3">
+                  {checklist.map((c) => (
+                    <div key={c.label} className="flex items-center gap-2">
+                      {c.done ? (
+                        <span className="w-3.5 h-3.5 flex-none rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                          <Check size={9} strokeWidth={3} />
+                        </span>
+                      ) : (
+                        <span className="w-3.5 h-3.5 flex-none rounded-full border-[1.5px] border-gray-200 dark:border-gray-700" />
+                      )}
+                      <span className="text-[11.5px] text-gray-700 dark:text-gray-300">{c.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden mb-2">
+                  <div className="h-full rounded-full bg-violet-600" style={{ width: `${readinessPct}%` }} />
+                </div>
+                <div className="text-[10.5px] text-gray-400 dark:text-gray-500 mb-2.5">Investor-ready threshold: 70%. You need {readinessRemaining} more item(s).</div>
+                <button type="button" onClick={() => setChecklistOpen(false)} className="w-full h-8 rounded-[9px] bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold">
+                  Continue →
                 </button>
-                {checklistOpen && (
-                  <div
-                    data-testid="market-checklist-popover"
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute top-[26px] left-0 z-40 w-[280px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] shadow-[0_20px_50px_-12px_rgba(24,24,27,.3)] p-4 text-left"
-                  >
-                    <div className="text-[13px] font-extrabold text-gray-900 dark:text-gray-50 mb-2.5">Market Intel Checklist</div>
-                    <div className="flex flex-col gap-[7px] mb-3">
-                      {checklist.map((c) => (
-                        <div key={c.label} className="flex items-center gap-2">
-                          {c.done ? (
-                            <span className="w-3.5 h-3.5 flex-none rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                              <Check size={9} strokeWidth={3} />
-                            </span>
-                          ) : (
-                            <span className="w-3.5 h-3.5 flex-none rounded-full border-[1.5px] border-gray-200 dark:border-gray-700" />
-                          )}
-                          <span className="text-[11.5px] text-gray-700 dark:text-gray-300">{c.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden mb-2">
-                      <div className="h-full rounded-full bg-violet-600" style={{ width: `${readinessPct}%` }} />
-                    </div>
-                    <div className="text-[10.5px] text-gray-400 dark:text-gray-500 mb-2.5">Investor-ready threshold: 70%. You need {readinessRemaining} more item(s).</div>
-                    <button type="button" onClick={() => setChecklistOpen(false)} className="w-full h-8 rounded-[9px] bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold">
-                      Continue →
-                    </button>
-                  </div>
-                )}
-              </span>
+              </div>
             )}
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">TAM / SAM research and sizing — your Week 1 market deliverable.</p>
-          </div>
-        </div>
-        {project && (
-          <div className="flex items-center gap-2">
-            <button type="button" data-testid="button-share-research" onClick={shareResearch} className="h-9 px-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-xs font-semibold inline-flex items-center gap-1.5">
+          </span>
+        ) : null}
+        actions={project ? (
+          <>
+            <button type="button" data-testid="button-share-research" onClick={shareResearch} className={labBtn('accent')}>
               {shared ? 'Copied' : 'Copy research summary'}
             </button>
-            <button type="button" data-testid="button-edit-sizing" onClick={openEdit} className="h-9 px-4 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold inline-flex items-center gap-1.5">
-              <Pencil size={13} /> Edit Market Data
+            <button type="button" data-testid="button-edit-sizing" onClick={openEdit} className={labBtn('primary')}>
+              <Pencil size={LAB_ICON_SIZE} /> Edit Market Data
             </button>
-          </div>
-        )}
-      </div>
+          </>
+        ) : null}
+      />
 
       {/* Design's Week-2 notice (611-614) — informational only: StudioOS
           deliberately keeps this page editable in Week 2 (founders iterate

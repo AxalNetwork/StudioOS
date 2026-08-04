@@ -23,11 +23,12 @@
 // this page does nothing special for it. Dev has no tier gate.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
-  ArrowLeft, PieChart, Loader2, Lock, AlertTriangle, FileText, Plus, X,
+  PieChart, Loader2, Lock, AlertTriangle, FileText, Plus, X,
   Download, ExternalLink, CheckCircle2, Clock, Eye,
 } from 'lucide-react';
+import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
@@ -107,7 +108,6 @@ async function downloadCsv(uid, name) {
 }
 
 export default function SpinoutLabCapTablePage() {
-  const navigate = useNavigate();
   const [status, setStatus] = useState('loading');
   const [state, setState] = useState(null);
   const [user, setUser] = useState(null);
@@ -353,55 +353,47 @@ export default function SpinoutLabCapTablePage() {
 
   return (
     <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-captable">
-      {/* Header */}
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigate('/spinout-lab')}
-          data-testid="button-back-workspace"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
-        >
-          <ArrowLeft size={14} /> Back to Workspace
-        </button>
-        <div className="flex items-center gap-2">
-          <PieChart size={16} className="text-violet-500" />
-          <h1 className="text-[17px] font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Cap Table</h1>
-          <span className="text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Active</span>
-          {carta && (
-            <span className="text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400" data-testid="chip-carta">
-              {carta.connected ? `Carta synced ${carta.last_synced_at ? fmtDate(carta.last_synced_at) : ''}` : 'Carta not connected'}
-            </span>
-          )}
-        </div>
-        <div className="ml-auto flex items-center gap-3">
-          {/* Design A-row "Preview as investor": pure client-side view over the
-              SAME saved scenario result — no backend, nothing fabricated. */}
-          {composition.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setInvestorPreview(true)}
-              data-testid="button-investor-preview"
-              className="inline-flex items-center gap-1 text-[11.5px] font-bold text-gray-600 dark:text-gray-300 hover:text-violet-600"
-            >
-              <Eye size={12} /> Preview as investor
-            </button>
-          )}
-          {scenario && (
-            <button
-              type="button"
-              onClick={() => downloadCsv(scenario.uid, scenario.name)}
-              data-testid="button-export-csv"
-              className="inline-flex items-center gap-1 text-[11.5px] font-bold text-gray-600 dark:text-gray-300 hover:text-violet-600"
-            >
-              <Download size={12} /> Export CSV
-            </button>
-          )}
-          <span className="text-[11px] font-semibold text-gray-400 dark:text-gray-500">Unlocked · Wk {week}</span>
-        </div>
-      </div>
-      <p className="text-[12.5px] text-gray-500 dark:text-gray-400 -mt-2">
-        Ownership ledger, SAFEs, option pool, and dilution modeling — computed by the cap-table engine, saved to your startup.
-      </p>
+      {/* Header — canonical Lab header. The Carta chip rides in `titleExtra`
+          (inert, still only rendered from a real /captable/live response); the
+          two A-row actions ride in `actions`, ahead of the week pill. */}
+      <LabPageHeader
+        icon={PieChart}
+        title="Cap Table"
+        subtitle="Ownership ledger, SAFEs, option pool, and dilution modeling — computed by the cap-table engine, saved to your startup."
+        status="Active"
+        titleExtra={carta ? (
+          <LabChip tone="muted" data-testid="chip-carta">
+            {carta.connected ? `Carta synced ${carta.last_synced_at ? fmtDate(carta.last_synced_at) : ''}` : 'Carta not connected'}
+          </LabChip>
+        ) : null}
+        weekChip={`Unlocked · Wk ${week}`}
+        actions={(
+          <>
+            {/* Design A-row "Preview as investor": pure client-side view over the
+                SAME saved scenario result — no backend, nothing fabricated. */}
+            {composition.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setInvestorPreview(true)}
+                data-testid="button-investor-preview"
+                className={labBtn('ghost')}
+              >
+                <Eye size={LAB_ICON_SIZE} /> Preview as investor
+              </button>
+            )}
+            {scenario && (
+              <button
+                type="button"
+                onClick={() => downloadCsv(scenario.uid, scenario.name)}
+                data-testid="button-export-csv"
+                className={labBtn('ghost')}
+              >
+                <Download size={LAB_ICON_SIZE} /> Export CSV
+              </button>
+            )}
+          </>
+        )}
+      />
 
       {/* Dirty / preview banner */}
       {(dirty || previewing) && (

@@ -3,7 +3,7 @@
 // Replaces the old /incorporate/83b tracker index. 83(b) is a Week 4
 // ("Incorporate & Capital") deliverable and was the ONLY tool in TOOL_INFO
 // pointing outside /spinout-lab/*, so the page now lives with its siblings
-// and uses the Lab shell (LabBackLink → workspace, not "Back to Incorporate").
+// and uses the shared Lab header (back to WORKSPACE, not "Back to Incorporate").
 //
 // Data is the real tracker from GET /legal/83b/trackers (worker
 // services/section83b.ts). That DTO supplies grant_date, deadline_date,
@@ -47,8 +47,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import { markMilestone } from '../lib/spinoutLabHooks';
-import LabBackLink from '../components/spinout/LabBackLink';
-import LabPageIcon from '../components/spinout/LabPageIcon';
+import LabPageHeader from '../components/spinout/LabPageHeader';
 import { pickLabProject } from './SpinoutLabStartupPage';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -283,24 +282,12 @@ export default function SpinoutLab83bPage() {
   return (
     <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-83b">
       {/* Header — Lab shell, back to WORKSPACE (not Incorporate). */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <LabBackLink />
-          <LabPageIcon icon={FileText} />
-          <div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              
-              <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">83(b) Election Tracker</h1>
-              <span className="text-[10.5px] font-bold rounded-full px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
-                {tracker ? 'Active' : 'Not started'}
-              </span>
-            </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              Track your 83(b) filing deadline, documents, and proof of submission.
-            </p>
-          </div>
-        </div>
-      </div>
+      <LabPageHeader
+        icon={FileText}
+        title="83(b) Election Tracker"
+        subtitle="Track your 83(b) filing deadline, documents, and proof of submission."
+        status={tracker ? 'Active' : 'Not started'}
+      />
 
       {/* State band. The design ships these as a clickable scenario switcher;
           here the live state is derived and the others are inert, because

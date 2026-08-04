@@ -42,9 +42,9 @@
 //     spinout for 85.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
-  AlertTriangle, ArrowLeft, Check, Copy, Download, Eye, EyeOff, Gauge,
+  AlertTriangle, Check, Copy, Download, Eye, EyeOff, Gauge,
   Loader2, Lock, Minus, Play, Share2, TrendingDown, TrendingUp,
 } from 'lucide-react';
 import { api, spinoutLab, assessment } from '../lib/api';
@@ -63,6 +63,7 @@ import WeakPointList from '../components/scoring/WeakPointList';
 import BenchmarkBars from '../components/scoring/BenchmarkBars';
 import DimensionDrawer from '../components/scoring/DimensionDrawer';
 import ExportReportModal from '../components/scoring/ExportReportModal';
+import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 
 // Worker-only endpoints: ONLY a 404 means "not in this environment" (the dev
 // FastAPI lacks /api/radar and /api/assessment). Same convention as
@@ -77,8 +78,8 @@ export {
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
-const QA_BTN = 'inline-flex items-center gap-1.5 text-[12px] font-medium rounded-lg border px-3 py-1.5';
-const QA_GHOST = 'text-gray-500 dark:text-gray-400 border-transparent hover:border-gray-200 dark:hover:border-gray-700 hover:bg-white dark:hover:bg-gray-900';
+// Quick-action chrome now comes from labBtn('ghost') — the page-local QA_BTN /
+// QA_GHOST constants were the exact drift LabPageHeader exists to end.
 
 // ---- Practice-run form: the engine's real INPUT wire contract for
 // POST /scoring/score (different key names from the snapshot columns). ----
@@ -130,7 +131,6 @@ const FORM_DEFAULTS = Object.fromEntries(
 );
 
 export default function SpinoutLabScoringPage() {
-  const navigate = useNavigate();
   const [status, setStatus] = useState('loading'); // loading | ready | error
   const [state, setState] = useState(null);
   const [project, setProject] = useState(null);
@@ -341,79 +341,72 @@ export default function SpinoutLabScoringPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-4" data-testid="page-spinout-scoring">
-      {/* Teal diligence-phase stripe (design L34) */}
-      <div aria-hidden="true" className="-mx-4 -mt-6 h-[3px] rounded-b-[3px] bg-teal-600" />
-
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={() => navigate('/spinout-lab')} data-testid="button-back-workspace"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
-          <ArrowLeft size={14} /> Back to Workspace
-        </button>
-        <span aria-hidden="true" className="w-px h-5 bg-gray-200 dark:bg-gray-700" />
-        <span className="w-[34px] h-[34px] flex-none rounded-[9px] bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 flex items-center justify-center">
-          <Gauge size={16} />
-        </span>
-        <div className="flex items-center gap-2 flex-wrap">
-          <h1 className="text-lg font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Scoring Engine</h1>
-          {/* The numbers on this page belong to a specific venture — for an
-              admin pickLabProject() may resolve someone else's project, so it
-              is always named. */}
-          {project?.name && (
-            <span className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 truncate max-w-[240px]" data-testid="text-scoring-project">
-              · {project.name}
-            </span>
-          )}
-          {/* "Unlocks in Week 3" is a fact about the tool; the viewer's own
-              week comes from state.week, never a hardcoded 3. */}
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/40 rounded-full px-2 py-0.5" data-testid="chip-unlocked">
+      {/* Canonical Lab header. The teal diligence-phase stripe (design L34) is
+          kept via ruleClassName; its -mx-4 -mt-6 bleed is dropped because the
+          rule now sits inside the header block.
+          `titleExtra` — the numbers on this page belong to a specific venture:
+          for an admin pickLabProject() may resolve someone else's project, so
+          it is always named.
+          `status` — "Unlocks in Week 3" is a fact about the tool; the viewer's
+          own week comes from state.week, never a hardcoded 3. */}
+      <LabPageHeader
+        ruleClassName="bg-teal-600 dark:bg-teal-500"
+        icon={Gauge}
+        title="Scoring Engine"
+        titleExtra={project?.name && (
+          <LabChip tone="muted" className="truncate max-w-[240px]" data-testid="text-scoring-project">
+            · {project.name}
+          </LabChip>
+        )}
+        status={(
+          <LabChip tone="active" data-testid="chip-unlocked">
             <Check size={10} /> Unlocked{state?.week ? ` · you're in Wk ${state.week}` : ''}
-          </span>
-        </div>
-        <span className="ml-auto text-[10.5px] font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/40 rounded-full px-2.5 py-1">Diligence · unlocks Wk 3</span>
-      </div>
-      <p className="text-[12.5px] text-gray-500 dark:text-gray-400 -mt-2">
-        Structured scoring of venture readiness across the engine&apos;s {DIMENSIONS.length} weighted dimensions before investor outreach.
-      </p>
-      {isAdmin && project && (
-        <p className="text-[11.5px] text-amber-600 dark:text-amber-400 -mt-2" data-testid="text-admin-project-note">
-          Admin view — showing the earliest Spin-Out Lab project ({project.name || `#${project.id}`}), which may belong to another founder.
-        </p>
-      )}
-      {!project && (
-        <p className="text-[11.5px] text-amber-600 dark:text-amber-400 -mt-2" data-testid="text-no-project-note">
-          No Spin-Out Lab project is linked to this account, so there is nothing to score.{' '}
-          <Link to="/spinout-lab/startup" className="font-semibold underline">Create one in Startups</Link>.
-        </p>
-      )}
+          </LabChip>
+        )}
+        weekChip="Diligence · unlocks Wk 3"
+        subtitle={<>Structured scoring of venture readiness across the engine&apos;s {DIMENSIONS.length} weighted dimensions before investor outreach.</>}
+      >
+        <div className="space-y-2">
+          {isAdmin && project && (
+            <p className="text-[11.5px] text-amber-600 dark:text-amber-400" data-testid="text-admin-project-note">
+              Admin view — showing the earliest Spin-Out Lab project ({project.name || `#${project.id}`}), which may belong to another founder.
+            </p>
+          )}
+          {!project && (
+            <p className="text-[11.5px] text-amber-600 dark:text-amber-400" data-testid="text-no-project-note">
+              No Spin-Out Lab project is linked to this account, so there is nothing to score.{' '}
+              <Link to="/spinout-lab/startup" className="font-semibold underline">Create one in Startups</Link>.
+            </p>
+          )}
 
-      {/* Quick actions. Share needs a backend share token, so it stays
-          honestly disabled with the reason; the other three are real. */}
-      <div className="-mt-1 flex flex-wrap items-center gap-1" data-testid="scoring-quick-actions">
-        {/* The reason is in the visible label, not only in `title` — a
-            keyboard or touch user never sees a tooltip. */}
-        <button type="button" disabled title="Sharing needs a backend share link — not available yet" data-testid="button-qa-share"
-          className={`${QA_BTN} ${QA_GHOST} opacity-50 cursor-not-allowed`}>
-          <Share2 size={13} className="text-gray-400 dark:text-gray-500" /> Share — needs a share link
-        </button>
-        <button type="button" onClick={() => { setExportError(''); setExportOpen(true); }} disabled={!vm.hasData}
-          title={vm.hasData ? undefined : 'Run a scoring run first'} data-testid="button-qa-export"
-          className={`${QA_BTN} ${QA_GHOST} disabled:opacity-50 disabled:cursor-not-allowed`}>
-          <Download size={13} className="text-gray-400 dark:text-gray-500" /> Export report
-        </button>
-        <button type="button" onClick={copyLink} data-testid="button-qa-copy-link" className={`${QA_BTN} ${QA_GHOST}`}>
-          {copied === 'ok'
-            ? <Check size={13} className="text-emerald-500" />
-            : <Copy size={13} className="text-gray-400 dark:text-gray-500" />}
-          {copied === 'ok' ? 'Copied ✓' : copied === 'fail' ? 'Copy failed' : 'Copy link'}
-        </button>
-        <button type="button" onClick={toggleInvestorView} aria-pressed={investorView} data-testid="button-qa-investor-view"
-          className={`${QA_BTN} ${investorView
-            ? 'text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border-violet-200 dark:border-violet-800'
-            : QA_GHOST}`}>
-          {investorView ? <EyeOff size={13} /> : <Eye size={13} className="text-gray-400 dark:text-gray-500" />}
-          {investorView ? 'Exit investor view' : 'Investor view'}
-        </button>
-      </div>
+          {/* Quick actions. Share needs a backend share token, so it stays
+              honestly disabled with the reason; the other three are real. */}
+          <div className="flex flex-wrap items-center gap-1" data-testid="scoring-quick-actions">
+            {/* The reason is in the visible label, not only in `title` — a
+                keyboard or touch user never sees a tooltip. */}
+            <button type="button" disabled title="Sharing needs a backend share link — not available yet" data-testid="button-qa-share"
+              className={labBtn('ghost')}>
+              <Share2 size={LAB_ICON_SIZE} className="text-gray-400 dark:text-gray-500" /> Share — needs a share link
+            </button>
+            <button type="button" onClick={() => { setExportError(''); setExportOpen(true); }} disabled={!vm.hasData}
+              title={vm.hasData ? undefined : 'Run a scoring run first'} data-testid="button-qa-export"
+              className={labBtn('ghost')}>
+              <Download size={LAB_ICON_SIZE} className="text-gray-400 dark:text-gray-500" /> Export report
+            </button>
+            <button type="button" onClick={copyLink} data-testid="button-qa-copy-link" className={labBtn('ghost')}>
+              {copied === 'ok'
+                ? <Check size={LAB_ICON_SIZE} className="text-emerald-500" />
+                : <Copy size={LAB_ICON_SIZE} className="text-gray-400 dark:text-gray-500" />}
+              {copied === 'ok' ? 'Copied ✓' : copied === 'fail' ? 'Copy failed' : 'Copy link'}
+            </button>
+            <button type="button" onClick={toggleInvestorView} aria-pressed={investorView} data-testid="button-qa-investor-view"
+              className={labBtn(investorView ? 'accent' : 'ghost')}>
+              {investorView ? <EyeOff size={LAB_ICON_SIZE} /> : <Eye size={LAB_ICON_SIZE} className="text-gray-400 dark:text-gray-500" />}
+              {investorView ? 'Exit investor view' : 'Investor view'}
+            </button>
+          </div>
+        </div>
+      </LabPageHeader>
 
       {investorView && (
         <div className="rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-100 dark:border-violet-800 px-3.5 py-2.5 flex flex-wrap items-center gap-2" data-testid="investor-view-banner">
