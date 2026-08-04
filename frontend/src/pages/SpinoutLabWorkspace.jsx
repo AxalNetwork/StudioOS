@@ -88,7 +88,7 @@ export const TOOL_INFO = {
   'cofounder-match': { label: 'Co-founder Match', to: '/spinout-lab/cofounder-match', desc: 'Co-founder sourcing', icon: Users },
   incorporate: { label: 'Incorporate', to: '/spinout-lab/incorporate', desc: 'Entity formation', icon: Landmark },
   captable: { label: 'Cap Table', to: '/spinout-lab/captable', desc: 'Founder stock & vesting', icon: PieChart },
-  'section-83b': { label: '83(b) Election', to: '/incorporate/83b', desc: 'File within 30 days of your stock grant', icon: FileText },
+  'section-83b': { label: '83(b) Election', to: '/spinout-lab/83b', desc: 'File within 30 days of your stock grant', icon: FileText },
   'cofounder-agreement': { label: 'Co-founder Agreement', to: '/spinout-lab/cofounder-agreement', desc: 'Signed founder terms', icon: FileSignature },
   // The credential itself, not a deliverable: it is CONFERRED by finishing
   // incorporation rather than being another box to tick, so `uncounted`
@@ -99,7 +99,10 @@ export const TOOL_INFO = {
   // Lab-facing raise workspace (round + investor pipeline + data-room
   // readiness). The founder-persona workspace at /raise/capital stays intact.
   capital: { label: 'Capital', to: '/spinout-lab/capital', desc: 'Fundraise & introductions', icon: Banknote },
-  compliance: { label: 'Compliance', to: '/compliance', desc: 'Filing calendar & obligations', icon: ShieldCheck },
+  // Lab-facing compliance dashboard (Week 4 readiness). The platform-wide
+  // Compliance CALENDAR — recurring filings, reminder pings, advisor
+  // deep-links — stays at /compliance. Same split as Market Intel.
+  compliance: { label: 'Compliance', to: '/spinout-lab/compliance', desc: 'Week 4 readiness & obligations', icon: ShieldCheck },
   // Studio Ops is a studio-wide surface, not a lab-gated feature — `ungated`
   // keeps its deliverable button visible without touching unlocked_features.
   // Founders reach it via the command center tab (/studio-ops redirects there).

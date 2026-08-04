@@ -235,7 +235,7 @@ export default function SpinoutLabStartupPage() {
     }
     if (!nextAction) {
       nextAction = graduated
-        ? { title: 'You\u2019re incorporated — stay compliant', cta: 'Open Compliance', to: '/compliance' }
+        ? { title: 'You\u2019re incorporated — stay compliant', cta: 'Open Compliance', to: '/spinout-lab/compliance' }
         : { title: `Week ${currentWeek} complete — keep going in the workspace`, cta: 'Back to Workspace', to: '/spinout-lab' };
     }
     activity.push({ title: nextAction.title, time: 'Upcoming', done: false });

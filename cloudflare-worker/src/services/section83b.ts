@@ -7,7 +7,7 @@ import type { Env } from '../types';
  * their 83(b) election to the IRS. Missing it converts the grant to ordinary
  * income at vest — a common, avoidable, and permanent tax mistake. The dev
  * FastAPI backend (backend/app/api/routes/legal.py) is the authoritative
- * contract; this mirrors it on the production Worker so /incorporate/83b is
+ * contract; this mirrors it on the production Worker so /spinout-lab/83b is
  * functional in prod. The DTO shape here MUST stay in lockstep with
  * `_tracker_dto` in the FastAPI backend (the frontend consumes both).
  */

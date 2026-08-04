@@ -36,7 +36,8 @@ const LegalPage = lazy(() => import('./pages/LegalPage'));
 const IncorporatePage = lazy(() => import('./pages/IncorporatePage'));
 const IncorporateSuccessPage = lazy(() => import('./pages/IncorporateSuccessPage'));
 const CofounderAgreementPage = lazy(() => import('./pages/CofounderAgreementPage'));
-const Section83bPage = lazy(() => import('./pages/Section83bPage'));
+const SpinoutLab83bPage = lazy(() => import('./pages/SpinoutLab83bPage'));
+const SpinoutLabCompliancePage = lazy(() => import('./pages/SpinoutLabCompliancePage'));
 const CompliancePage = lazy(() => import('./pages/CompliancePage'));
 const WellbeingPage = lazy(() => import('./pages/WellbeingPage'));
 const ExpertProfilePage = lazy(() => import('./pages/ExpertProfilePage'));
@@ -1538,7 +1539,11 @@ function AppInner() {
       <Route path="/incorporate" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <IncorporatePage />)} />
       <Route path="/incorporate/success" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <IncorporateSuccessPage />)} />
       <Route path="/incorporate/cofounder-agreement" element={guard(labRoles(['admin', 'founder', 'partner']), <CofounderAgreementPage />)} />
-      <Route path="/incorporate/83b" element={guard(labRoles(['admin', 'founder', 'partner']), <Section83bPage />)} />
+      <Route path="/spinout-lab/83b" element={guard(labRoles(['admin', 'founder', 'partner']), <SpinoutLab83bPage />)} />
+      <Route path="/spinout-lab/compliance" element={guard(labRoles(['admin', 'founder', 'partner']), <SpinoutLabCompliancePage />)} />
+      {/* 83(b) moved into the Lab (Week 4 deliverable). Old Incorporate
+          path kept as a redirect so existing links and bookmarks survive. */}
+      <Route path="/incorporate/83b" element={<Navigate to="/spinout-lab/83b" replace />} />
       <Route path="/compliance" element={guard(labRoles(['admin', 'founder', 'partner']), <CompliancePage />)} />
       <Route path="/wellbeing" element={guard(['admin', 'founder'], <WellbeingPage />)} />
       <Route path="/wellbeing/expert-dashboard" element={guard(['admin', 'founder', 'partner', 'advisor'], <ExpertEditorPage />)} />

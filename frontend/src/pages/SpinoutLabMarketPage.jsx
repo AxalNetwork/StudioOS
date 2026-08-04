@@ -24,7 +24,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowLeft,
   ArrowRight,
   Check,
   ChevronDown,
@@ -37,6 +36,8 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react';
+import LabBackLink from '../components/spinout/LabBackLink';
+import LabPageIcon from '../components/spinout/LabPageIcon';
 import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { useAuth } from '../hooks/useAuthSync';
@@ -583,14 +584,17 @@ export default function SpinoutLabMarketPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-market">
-      {/* Header */}
+      {/* Brand rule above the header, as on Capital and Profiling. */}
+      <div className="h-[3px] rounded-b-[3px] bg-violet-600 dark:bg-violet-500 mb-4" aria-hidden="true" />
+
+      {/* Header — back control is a BUTTON sitting inline with the title, and
+          the tool icon sits in its violet tile (design handoff). */}
       <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
-        <div>
-          <Link to="/spinout-lab" data-testid="link-back-to-workspace" className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-violet-700 dark:hover:text-violet-300 mb-2">
-            <ArrowLeft size={14} /> Back to Workspace
-          </Link>
+        <div className="flex items-center gap-3">
+          <LabBackLink />
+          <LabPageIcon icon={Compass} />
+          <div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <Compass size={18} className="text-violet-600 dark:text-violet-400" />
             <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Market Intel</h1>
             <span className="text-[10.5px] font-bold rounded-full px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">Active</span>
             {project && (
@@ -637,6 +641,7 @@ export default function SpinoutLabMarketPage() {
             )}
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">TAM / SAM research and sizing — your Week 1 market deliverable.</p>
+          </div>
         </div>
         {project && (
           <div className="flex items-center gap-2">
