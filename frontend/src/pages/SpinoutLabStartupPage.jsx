@@ -364,11 +364,10 @@ export default function SpinoutLabStartupPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-startup">
       {/* Header — back control sits INLINE with the title (design handoff),
-          and every action stays inside the Lab rather than navigating out.
-          No icon tile: Startups has no assigned tool glyph (see MIGRATION
-          SPEC R3 — `icon` omitted deliberately, pending a design decision). */}
+          and every action stays inside the Lab rather than navigating out. */}
       <LabPageHeader
         className="mb-5"
+        icon={Building2}
         title="Startups"
         subtitle="Your company record and founding team"
         status={graduated ? 'Graduated' : 'Active'}
