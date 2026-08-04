@@ -41,8 +41,8 @@ import { labChip, labBtn, LAB_ICON_SIZE } from './labStyles';
  * Straight from the Claude Design handoff in attached_assets (the exports that
  * LabBackLink and LabPageIcon were already built against):
  *
- *   top rule      3px tall · bottom radius 3px · #7c3aed (dark #8b5cf6)
- *                 sits ABOVE the header, 16px clear of it
+ *   top spacing   19px clear space above the header (the former brand rule's
+ *                 3px height plus its 16px bottom gap)
  *   back control  34px tall · padding 0 12px 0 9px · radius 9px
  *                 1px #e4e4e7 border · #fff bg · 13px/600
  *                 → owned by LabBackLink, not restated here
@@ -85,7 +85,7 @@ import { labChip, labBtn, LAB_ICON_SIZE } from './labStyles';
  *                                     with labBtn(); do not hand-roll classes.
  * @param {string}   props.backTo      back target. Default '/spinout-lab'.
  * @param {string}   props.backLabel   back label. Default 'Back to Workspace'.
- * @param {boolean}  props.topRule     render the 3px brand rule. Default true.
+ * @param {boolean}  props.topRule     legacy opt-in for the brand rule. Default false.
  * @param {string}   props.ruleClassName  escape hatch for the rule's colour. Only
  *                                     Office Hours and Scoring ship a teal rule;
  *                                     if that stays, it passes the teal here
@@ -109,7 +109,7 @@ export default function LabPageHeader({
   actions,
   backTo = '/spinout-lab',
   backLabel = 'Back to Workspace',
-  topRule = true,
+  topRule = false,
   ruleClassName = 'bg-violet-600 dark:bg-violet-500',
   className = '',
   testId = 'lab-page-header',
@@ -130,7 +130,7 @@ export default function LabPageHeader({
   const hasRight = Boolean(weekNode || actions);
 
   return (
-    <div className={className} data-testid={testId}>
+    <div className={`${!topRule ? 'pt-[19px] ' : ''}${className}`} data-testid={testId}>
       {topRule && (
         <div
           className={`h-[3px] rounded-b-[3px] mb-4 ${ruleClassName}`}
