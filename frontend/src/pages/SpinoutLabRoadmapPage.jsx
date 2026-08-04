@@ -16,7 +16,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowLeft,
   ArrowRight,
   Columns3,
   Loader2,
@@ -32,6 +31,7 @@ import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { reportError } from '../lib/log';
 import { pickLabProject } from './SpinoutLabStartupPage';
+import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm';
@@ -309,25 +309,21 @@ export default function SpinoutLabRoadmapPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-roadmap">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
-        <div>
-          <Link to="/spinout-lab" data-testid="link-back-to-workspace" className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-violet-700 dark:hover:text-violet-300 mb-2">
-            <ArrowLeft size={14} /> Back to Workspace
-          </Link>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <MapIcon size={18} className="text-violet-600 dark:text-violet-400" />
-            <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Roadmap</h1>
-            <span className="text-[10.5px] font-bold rounded-full px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">Active</span>
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">OKRs, milestones, and MVP scope.</p>
-        </div>
-        {project && (
-          <Link to={`/build/roadmap?project_id=${project.id}`} data-testid="link-kanban-view" className="h-9 px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold inline-flex items-center gap-1.5">
-            <Columns3 size={13} /> Kanban view
+      {/* Header — canonical Lab header (LabPageHeader owns the back link, the
+          icon tile, the status chip and the action cluster). The page root has
+          no space-y-*, so the header carries its own bottom margin. */}
+      <LabPageHeader
+        className="mb-5"
+        icon={MapIcon}
+        title="Roadmap"
+        status="Active"
+        subtitle="OKRs, milestones, and MVP scope."
+        actions={project && (
+          <Link to={`/build/roadmap?project_id=${project.id}`} data-testid="link-kanban-view" className={labBtn('secondary')}>
+            <Columns3 size={LAB_ICON_SIZE} /> Kanban view
           </Link>
         )}
-      </div>
+      />
 
       {!project ? (
         <div className={`${CARD} text-center py-10`} data-testid="roadmap-no-project">

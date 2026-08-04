@@ -16,13 +16,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowLeft, ArrowRight, Users, Loader2, Lock, AlertTriangle, X, Check,
+  ArrowRight, Users, Loader2, Lock, AlertTriangle, X, Check,
   Compass, Search, Scale, UserCheck,
 } from 'lucide-react';
 import { api, spinoutLab, assessment } from '../lib/api';
 import { archetypeMeta } from '../lib/assessmentMeta';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
+import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import {
   buildMatchBrief, buildEvidenceModules, buildDecisionModel, serializeDecision,
   fitRows, DECISION_OUTCOMES, CAPABILITY_GAP_THRESHOLD,
@@ -214,22 +215,18 @@ export default function SpinoutLabCofounderMatchPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-cofounder-match">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
-        <div>
-          <Link to="/spinout-lab" data-testid="link-back-to-workspace" className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-violet-700 dark:hover:text-violet-300 mb-2">
-            <ArrowLeft size={14} /> Back to Workspace
+      <LabPageHeader
+        className="mb-5"
+        title="Co-founder Match"
+        subtitle="Founder match brief, ranked candidates, and the track decision — advance, keep searching, or go solo."
+        status="Active"
+        weekChip="Unlocked · Wk 3"
+        actions={(
+          <Link to="/cofounder" data-testid="link-full-browse" className={labBtn('secondary')}>
+            Full browse & connections <ArrowRight size={LAB_ICON_SIZE} />
           </Link>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Co-founder Match</h1>
-            <span className="text-[10.5px] font-bold rounded-full px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">Active</span>
-            <span className="text-[10.5px] font-bold rounded-full px-2.5 py-0.5 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">Unlocked · Wk 3</span>
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Founder match brief, ranked candidates, and the track decision — advance, keep searching, or go solo.</p>
-        </div>
-        <Link to="/cofounder" data-testid="link-full-browse" className="h-9 px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-semibold inline-flex items-center gap-1.5">
-          Full browse & connections <ArrowRight size={14} />
-        </Link>
-      </div>
+        )}
+      />
 
       {/* Decision readiness — evidence modules */}
       <div className={`${CARD} mb-5`} data-testid="card-evidence">

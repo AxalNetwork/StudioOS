@@ -64,7 +64,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowLeft,
   ArrowRight,
   Compass,
   Copy,
@@ -83,12 +82,10 @@ import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import { archetypeMeta } from '../lib/assessmentMeta';
 import { FOUNDER_DIMENSIONS, buildFounderSkillsModel } from '../lib/founderDimensions';
+import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm';
-// Quick-action ghost buttons (design toolbar): transparent until hover.
-const QA_BTN =
-  'inline-flex items-center gap-1.5 rounded-lg border border-transparent bg-transparent px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 enabled:cursor-pointer enabled:hover:border-gray-200 enabled:hover:bg-white dark:enabled:hover:border-gray-700 dark:enabled:hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed';
 
 // Confidence band from a 0–100 pct. Thresholds match the platform's loose
 // High/Medium/Low language (values confidence is stored 0–1; results 0–1) and
@@ -527,65 +524,42 @@ export default function SpinoutLabProfilingPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5" data-testid="page-spinout-profiling">
-      {/* Phase stripe (design: 3px violet bar across the top of the tool) */}
-      <div className="h-[3px] rounded-b-[3px] bg-violet-600 dark:bg-violet-500" aria-hidden="true" />
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <Link
-            to="/spinout-lab"
-            data-testid="link-back-workspace"
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-[13px] font-semibold text-gray-600 dark:text-gray-300"
+      {/* Header — shared Lab header. The phase stripe (design: 3px violet bar
+          across the top of the tool) is LabPageHeader's `topRule`. */}
+      <LabPageHeader
+        icon={Fingerprint}
+        title="Profiling"
+        subtitle="Founder profiling report — skills, values, archetypes, and assessment progress."
+        status="Active"
+        weekChip="Foundational · Wk 1"
+      >
+        {/* Quick actions (design toolbar). Share + Export need the report-export
+            service, which doesn't exist yet — they render disabled with the
+            reason instead of faking success. Copy link is fully client-side. */}
+        <div className="flex items-center gap-1 flex-wrap" data-testid="quick-actions">
+          <button
+            type="button"
+            disabled
+            title="Requires the report-export service (not yet available)"
+            className={labBtn('ghost')}
+            data-testid="button-share"
           >
-            <ArrowLeft className="w-4 h-4" /> Back to Workspace
-          </Link>
-          <span
-            className="w-[34px] h-[34px] flex-none rounded-[9px] bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 flex items-center justify-center"
-            data-testid="tool-icon"
+            <Share2 size={LAB_ICON_SIZE} /> Share
+          </button>
+          <button
+            type="button"
+            disabled
+            title="Requires the report-export service (not yet available)"
+            className={labBtn('ghost')}
+            data-testid="button-export-report"
           >
-            <Fingerprint className="w-4 h-4" />
-          </span>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Profiling</h1>
-              <span className="text-[10.5px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40 rounded-full px-2.5 py-0.5">Active</span>
-            </div>
-            <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">
-              Founder profiling report — skills, values, archetypes, and assessment progress.
-            </p>
-          </div>
+            <Download size={LAB_ICON_SIZE} /> Export report
+          </button>
+          <button type="button" onClick={copyLink} className={labBtn('ghost')} data-testid="button-copy-link">
+            {copied ? 'Copied ✓' : <><Copy size={LAB_ICON_SIZE} /> Copy link</>}
+          </button>
         </div>
-        <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border border-violet-100 dark:border-violet-800 rounded-full px-3 py-1.5">
-          Foundational · Wk 1
-        </span>
-      </div>
-
-      {/* Quick actions (design toolbar). Share + Export need the report-export
-          service, which doesn't exist yet — they render disabled with the
-          reason instead of faking success. Copy link is fully client-side. */}
-      <div className="flex items-center gap-1 flex-wrap" data-testid="quick-actions">
-        <button
-          type="button"
-          disabled
-          title="Requires the report-export service (not yet available)"
-          className={QA_BTN}
-          data-testid="button-share"
-        >
-          <Share2 className="w-3.5 h-3.5" /> Share
-        </button>
-        <button
-          type="button"
-          disabled
-          title="Requires the report-export service (not yet available)"
-          className={QA_BTN}
-          data-testid="button-export-report"
-        >
-          <Download className="w-3.5 h-3.5" /> Export report
-        </button>
-        <button type="button" onClick={copyLink} className={QA_BTN} data-testid="button-copy-link">
-          {copied ? 'Copied ✓' : <><Copy className="w-3.5 h-3.5" /> Copy link</>}
-        </button>
-      </div>
+      </LabPageHeader>
 
       {/* Profile summary */}
       <div className={`${CARD} flex items-center gap-6 flex-wrap`} data-testid="profile-summary">

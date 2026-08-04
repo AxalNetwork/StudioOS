@@ -15,13 +15,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowLeft, Award, Loader2, Lock, AlertTriangle, Download, ShieldCheck,
+  Award, Loader2, Lock, AlertTriangle, Download, ShieldCheck,
   Mail, X, Check,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { buildCertificateViewModel, certificateFilename } from '../lib/graduationCertificate';
 import { exportCertificatePdf } from '../lib/graduationCertificatePdf';
+import LabPageHeader from '../components/spinout/LabPageHeader';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -128,20 +129,16 @@ export default function SpinoutLabCertificatePage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-certificate">
-      {/* Header */}
-      <div className="mb-5">
-        <Link to="/spinout-lab" data-testid="link-back-to-workspace" className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-violet-700 dark:hover:text-violet-300 mb-2">
-          <ArrowLeft size={14} /> Back to Workspace
-        </Link>
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <Award size={17} className="text-violet-500" />
-          <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Graduation Certificate</h1>
-          <span className="text-[10.5px] font-bold rounded-full px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">Unlocked · Wk 4</span>
-        </div>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 max-w-3xl">
-          Cohort credential, generated from your platform records and downloadable as a PDF.
-        </p>
-      </div>
+      {/* Header — the shared Lab header. The single merged "Unlocked · Wk 4"
+          chip is the week chip (there is no separate status chip on this
+          page), and Wk 4 stays the literal it has always been. */}
+      <LabPageHeader
+        className="mb-5"
+        icon={Award}
+        title="Graduation Certificate"
+        subtitle="Cohort credential, generated from your platform records and downloadable as a PDF."
+        weekChip="Unlocked · Wk 4"
+      />
 
       {!vm.eligible ? (
         <div className={`${CARD} text-center py-12`} data-testid="cert-not-yet">

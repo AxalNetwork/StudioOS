@@ -23,9 +23,9 @@
 // in meta. Any allocation/raise change marks the deck sync stale.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
-  ArrowLeft, DollarSign, Loader2, Lock, AlertTriangle, FileText,
+  DollarSign, Loader2, Lock, AlertTriangle, FileText,
   Presentation, Map as MapIcon, Calculator, Share2, Download, Link2, Eye,
   Check, ChevronDown, X, RefreshCw,
 } from 'lucide-react';
@@ -33,6 +33,7 @@ import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { FUND_SECTIONS } from '../components/FundAllocator';
+import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -251,7 +252,6 @@ const SCENARIOS = [
 // ---------------------------------------------------------------------------
 
 export default function SpinoutLabUseOfFundsPage() {
-  const navigate = useNavigate();
   const [status, setStatus] = useState('loading');
   const [state, setState] = useState(null);
   const [user, setUser] = useState(null);
@@ -514,53 +514,45 @@ export default function SpinoutLabUseOfFundsPage() {
 
   return (
     <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-uof">
-      {/* Header */}
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button" onClick={() => navigate('/spinout-lab')} data-testid="button-back-workspace"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
-        >
-          <ArrowLeft size={14} /> Back to Workspace
-        </button>
-        <div className="flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg bg-violet-600 text-white inline-flex items-center justify-center"><DollarSign size={14} /></span>
-          <h1 className="text-[17px] font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Use of Funds</h1>
-          <span className="text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Active</span>
-        </div>
-        <span className="ml-auto text-[11px] font-semibold text-gray-400 dark:text-gray-500">Unlocked · Wk {week}</span>
-      </div>
-      <div className="flex flex-wrap items-center gap-2 -mt-2">
-        <p className="text-[12.5px] text-gray-500 dark:text-gray-400 flex-1 min-w-[200px]">
-          Allocate your raise, model runway, and map capital to milestones. Your pitch deck's ASK slide reads this allocation live.
-        </p>
-        {/* Quick actions */}
-        <div className="flex items-center gap-1.5 relative">
-          <button type="button" onClick={copyLink} data-testid="button-share" className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-gray-600 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-gray-700 px-2.5 py-1.5 hover:border-violet-400">
-            <Share2 size={12} /> Share
-          </button>
-          <div className="relative">
-            <button type="button" onClick={() => setExportOpen((v) => !v)} data-testid="button-export" className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-gray-600 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-gray-700 px-2.5 py-1.5 hover:border-violet-400">
-              <Download size={12} /> Export <ChevronDown size={11} />
+      {/* Header — canonical Lab header. The old second row (description +
+          four quick actions) collapses into `subtitle` + `actions`. */}
+      <LabPageHeader
+        icon={DollarSign}
+        title="Use of Funds"
+        status="Active"
+        weekChip={`Unlocked · Wk ${week}`}
+        subtitle="Allocate your raise, model runway, and map capital to milestones. Your pitch deck's ASK slide reads this allocation live."
+        actions={(
+          <>
+            <button type="button" onClick={copyLink} data-testid="button-share" className={labBtn('secondary')}>
+              <Share2 size={LAB_ICON_SIZE} /> Share
             </button>
-            {exportOpen && (
-              <div className="absolute right-0 top-full mt-1 z-20 w-56 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-lg p-1" data-testid="export-menu">
-                <button type="button" disabled={!canEdit} onClick={() => { setExportOpen(false); syncDeck(); }} data-testid="export-deck" className="w-full text-left text-[12px] font-semibold text-gray-700 dark:text-gray-200 rounded-lg px-3 py-2 hover:bg-violet-50 dark:hover:bg-violet-900/20 disabled:opacity-40">
-                  Pitch Deck format <span className="block text-[10px] font-normal text-gray-400">Syncs THE ASK slide data</span>
-                </button>
-                <button type="button" disabled={!canEdit} onClick={() => { setExportOpen(false); exportAxal(); }} data-testid="export-axal" className="w-full text-left text-[12px] font-semibold text-gray-700 dark:text-gray-200 rounded-lg px-3 py-2 hover:bg-violet-50 dark:hover:bg-violet-900/20 disabled:opacity-40">
-                  Axal VC Spin-Out format <span className="block text-[10px] font-normal text-gray-400">28-day program export</span>
-                </button>
-              </div>
-            )}
-          </div>
-          <button type="button" onClick={copyLink} data-testid="button-copy-link" className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-gray-600 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-gray-700 px-2.5 py-1.5 hover:border-violet-400">
-            {copied ? <Check size={12} className="text-emerald-500" /> : <Link2 size={12} />} {copied ? 'Copied' : 'Copy link'}
-          </button>
-          <button type="button" onClick={() => setPreviewOpen(true)} data-testid="button-investor-preview" className="inline-flex items-center gap-1 text-[11.5px] font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-lg px-2.5 py-1.5">
-            <Eye size={12} /> Preview as investor
-          </button>
-        </div>
-      </div>
+            {/* `relative` stays on this wrapper — it is the anchor the export
+                menu positions against. */}
+            <div className="relative">
+              <button type="button" onClick={() => setExportOpen((v) => !v)} data-testid="button-export" className={labBtn('secondary')}>
+                <Download size={LAB_ICON_SIZE} /> Export <ChevronDown size={LAB_ICON_SIZE} />
+              </button>
+              {exportOpen && (
+                <div className="absolute right-0 top-full mt-1 z-20 w-56 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-lg p-1" data-testid="export-menu">
+                  <button type="button" disabled={!canEdit} onClick={() => { setExportOpen(false); syncDeck(); }} data-testid="export-deck" className="w-full text-left text-[12px] font-semibold text-gray-700 dark:text-gray-200 rounded-lg px-3 py-2 hover:bg-violet-50 dark:hover:bg-violet-900/20 disabled:opacity-40">
+                    Pitch Deck format <span className="block text-[10px] font-normal text-gray-400">Syncs THE ASK slide data</span>
+                  </button>
+                  <button type="button" disabled={!canEdit} onClick={() => { setExportOpen(false); exportAxal(); }} data-testid="export-axal" className="w-full text-left text-[12px] font-semibold text-gray-700 dark:text-gray-200 rounded-lg px-3 py-2 hover:bg-violet-50 dark:hover:bg-violet-900/20 disabled:opacity-40">
+                    Axal VC Spin-Out format <span className="block text-[10px] font-normal text-gray-400">28-day program export</span>
+                  </button>
+                </div>
+              )}
+            </div>
+            <button type="button" onClick={copyLink} data-testid="button-copy-link" className={labBtn('secondary')}>
+              {copied ? <Check size={LAB_ICON_SIZE} className="text-emerald-500" /> : <Link2 size={LAB_ICON_SIZE} />} {copied ? 'Copied' : 'Copy link'}
+            </button>
+            <button type="button" onClick={() => setPreviewOpen(true)} data-testid="button-investor-preview" className={labBtn('primary')}>
+              <Eye size={LAB_ICON_SIZE} /> Preview as investor
+            </button>
+          </>
+        )}
+      />
 
       {/* Burn alert banner */}
       {belowAlert && (

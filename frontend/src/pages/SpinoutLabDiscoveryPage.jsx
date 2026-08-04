@@ -41,8 +41,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import LogInterviewModal, { ICP_FIT_OPTIONS } from '../components/discovery/LogInterviewModal';
-import LabBackLink from '../components/spinout/LabBackLink';
-import LabPageIcon from '../components/spinout/LabPageIcon';
+import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import { api, spinoutLab } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
@@ -376,37 +375,32 @@ export default function SpinoutLabDiscoveryPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-discovery">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
-        <div className="flex items-center gap-3">
-          <LabBackLink />
-          <LabPageIcon icon={MessagesSquare} />
-          <div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              
-              <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Customer Discovery</h1>
-              <span className="text-[10.5px] font-bold rounded-full px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">Active</span>
-            </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Structured interview evidence — pain points, hypotheses, and deck-ready quotes.</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* The full discovery tool stays reachable; this page can now log
-              directly instead of bouncing the founder out to it. */}
-          <Link to={logTool} data-testid="link-log-interview" className="h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-semibold inline-flex items-center gap-1.5">
-            Full tool <ArrowRight size={14} />
-          </Link>
-          <button
-            type="button"
-            onClick={() => setLogModal({ interview: null })}
-            disabled={!project}
-            title={project ? undefined : 'Create a startup record first'}
-            data-testid="button-log-interview"
-            className="h-9 px-4 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold inline-flex items-center gap-1.5"
-          >
-            <Plus size={14} /> Log interview
-          </button>
-        </div>
-      </div>
+      <LabPageHeader
+        className="mb-5"
+        icon={MessagesSquare}
+        title="Customer Discovery"
+        subtitle="Structured interview evidence — pain points, hypotheses, and deck-ready quotes."
+        status="Active"
+        actions={(
+          <>
+            {/* The full discovery tool stays reachable; this page can now log
+                directly instead of bouncing the founder out to it. */}
+            <Link to={logTool} data-testid="link-log-interview" className={labBtn('secondary')}>
+              Full tool <ArrowRight size={LAB_ICON_SIZE} />
+            </Link>
+            <button
+              type="button"
+              onClick={() => setLogModal({ interview: null })}
+              disabled={!project}
+              title={project ? undefined : 'Create a startup record first'}
+              data-testid="button-log-interview"
+              className={labBtn('primary')}
+            >
+              <Plus size={LAB_ICON_SIZE} /> Log interview
+            </button>
+          </>
+        )}
+      />
 
       {!project ? (
         <div className={`${CARD} text-center py-10`} data-testid="discovery-no-project">

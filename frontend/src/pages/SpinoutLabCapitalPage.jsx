@@ -26,21 +26,22 @@
 //     pacing and meetings-this-week (no stage-transition/meeting timestamps).
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
-  ArrowLeft, Banknote, Loader2, Lock, AlertTriangle, FileText, Plus,
+  Banknote, Loader2, Lock, AlertTriangle, FileText, Plus,
   CheckCircle2, MinusCircle, XCircle, HelpCircle, Send, X,
   Download, ChevronDown, Eye,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
+import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const INPUT = 'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-[13px] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500/40';
-// Quick-action chrome (design .cp-qa: transparent border → bordered on hover).
-const QA_BTN = 'inline-flex items-center gap-1.5 rounded-lg border border-transparent bg-transparent px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 enabled:cursor-pointer enabled:hover:border-gray-200 enabled:hover:bg-white dark:enabled:hover:border-gray-700 dark:enabled:hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed';
+// Quick-action chrome (design .cp-qa: transparent border → bordered on hover)
+// now lives in labStyles.js as labBtn('ghost') — the page-local QA_BTN is gone.
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 
@@ -135,7 +136,6 @@ const csvCell = (v) => {
 };
 
 export default function SpinoutLabCapitalPage() {
-  const navigate = useNavigate();
   const [status, setStatus] = useState('loading');
   const [state, setState] = useState(null);
   const [user, setUser] = useState(null);
@@ -541,83 +541,67 @@ export default function SpinoutLabCapitalPage() {
 
   return (
     <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-capital">
-      {/* A1 — design's 3px violet topline above the tool chrome */}
-      <div className="h-[3px] rounded-b-[3px] bg-violet-600 dark:bg-violet-500" aria-hidden="true" />
-
-      {/* Header */}
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigate('/spinout-lab')}
-          data-testid="button-back-workspace"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
-        >
-          <ArrowLeft size={14} /> Back to Workspace
-        </button>
-        {/* A2 — divider + 34px violet icon tile */}
-        <span className="w-px h-5 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
-        <span className="w-[34px] h-[34px] flex-none rounded-[9px] bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 flex items-center justify-center" data-testid="tool-icon">
-          <Banknote size={16} />
-        </span>
-        <div className="flex items-center gap-2">
-          <h1 className="text-[17px] font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Capital</h1>
-          <span className="text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Active</span>
-        </div>
-        {/* A3 — bordered violet week pill */}
-        <span className="ml-auto text-[11px] font-semibold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border border-violet-100 dark:border-violet-800 rounded-full px-3 py-1">
-          Unlocked · Wk {week}
-        </span>
-      </div>
-      <p className="text-[12.5px] text-gray-500 dark:text-gray-400 -mt-2">
-        Run the round — targeting, warm intros, data room, pipeline, instruments, and pitch feedback in one workspace.
-      </p>
-
-      {/* Quick actions (design row A5-A9). Only the two client-side-honest
-          actions ship here: Export serializes loaded data, the investor
-          preview renders loaded data read-only. Share / Copy link: not in
-          scope for this pass. */}
-      <div className="flex flex-wrap items-center gap-1 -mt-1" data-testid="quick-actions">
-        <div className="relative" ref={exportRef}>
+      {/* Header — shared LabPageHeader. The design anchors carry over as props:
+            A1 — the 3px violet topline  → topRule (on by default)
+            A2 — 34px violet icon tile   → icon (the old divider is dropped;
+                 LabBackLink's own border is the separator now)
+            A3 — bordered violet week pill → weekChip (A3 *is* the canonical
+                 week tone in labStyles.js)
+            A5-A9 — the quick-action row → children */}
+      <LabPageHeader
+        icon={Banknote}
+        title="Capital"
+        subtitle="Run the round — targeting, warm intros, data room, pipeline, instruments, and pitch feedback in one workspace."
+        status="Active"
+        weekChip={`Unlocked · Wk ${week}`}
+      >
+        {/* Quick actions (design row A5-A9). Only the two client-side-honest
+            actions ship here: Export serializes loaded data, the investor
+            preview renders loaded data read-only. Share / Copy link: not in
+            scope for this pass. */}
+        <div className="flex flex-wrap items-center gap-1" data-testid="quick-actions">
+          <div className="relative" ref={exportRef}>
+            <button
+              type="button"
+              onClick={() => setExportOpen((o) => !o)}
+              className={labBtn('ghost')}
+              data-testid="button-export-menu"
+            >
+              <Download size={LAB_ICON_SIZE} /> Export <ChevronDown size={LAB_ICON_SIZE} />
+            </button>
+            {exportOpen && (
+              <div className="absolute top-9 left-0 z-40 w-52 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl p-1.5" data-testid="export-menu">
+                <button
+                  type="button"
+                  onClick={exportDataroomSummary}
+                  data-testid="button-export-dataroom"
+                  className="block w-full text-left text-[12px] font-medium text-gray-700 dark:text-gray-200 rounded-lg px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  Data room export
+                </button>
+                <button
+                  type="button"
+                  onClick={exportPipelineCsv}
+                  disabled={!raiseAvailable}
+                  title={raiseAvailable ? undefined : 'Pipeline data is unavailable in this environment'}
+                  data-testid="button-export-csv"
+                  className="block w-full text-left text-[12px] font-medium text-gray-700 dark:text-gray-200 rounded-lg px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Pipeline CSV
+                </button>
+              </div>
+            )}
+          </div>
           <button
             type="button"
-            onClick={() => setExportOpen((o) => !o)}
-            className={QA_BTN}
-            data-testid="button-export-menu"
+            onClick={() => setPreviewOpen(true)}
+            data-testid="button-investor-preview"
+            className={labBtn('ghost')}
           >
-            <Download className="w-3.5 h-3.5 text-gray-400" /> Export <ChevronDown className="w-3 h-3 text-gray-400" />
+            <Eye size={LAB_ICON_SIZE} /> Preview as investor
           </button>
-          {exportOpen && (
-            <div className="absolute top-9 left-0 z-40 w-52 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl p-1.5" data-testid="export-menu">
-              <button
-                type="button"
-                onClick={exportDataroomSummary}
-                data-testid="button-export-dataroom"
-                className="block w-full text-left text-[12px] font-medium text-gray-700 dark:text-gray-200 rounded-lg px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800"
-              >
-                Data room export
-              </button>
-              <button
-                type="button"
-                onClick={exportPipelineCsv}
-                disabled={!raiseAvailable}
-                title={raiseAvailable ? undefined : 'Pipeline data is unavailable in this environment'}
-                data-testid="button-export-csv"
-                className="block w-full text-left text-[12px] font-medium text-gray-700 dark:text-gray-200 rounded-lg px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Pipeline CSV
-              </button>
-            </div>
-          )}
         </div>
-        <button
-          type="button"
-          onClick={() => setPreviewOpen(true)}
-          data-testid="button-investor-preview"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-transparent px-3 py-1.5 text-xs font-semibold text-violet-600 dark:text-violet-300 hover:border-gray-200 hover:bg-white dark:hover:border-gray-700 dark:hover:bg-gray-900"
-        >
-          <Eye className="w-3.5 h-3.5" /> Preview as investor
-        </button>
-      </div>
+      </LabPageHeader>
 
       {/* Stats bar */}
       {raiseAvailable && (
