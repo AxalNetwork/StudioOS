@@ -1496,6 +1496,13 @@ export const api = {
   // Task #102 — admitted / active / graduated founders with milestone rows,
   // derived tool unlocks, and the shared week catalog.
   adminSpinoutParticipants: () => request('/admin/spinout-participants'),
+  // Lab participant moderation. Ejecting closes the LAB workspace
+  // (spinout_lab_active = 0); it never deactivates the platform account the
+  // way adminToggleActive does. Reason code is mandatory on every action,
+  // reinstatement included.
+  adminSpinoutModeration: (userId) => request(`/admin/spinout-moderation/${userId}`),
+  adminSpinoutModerate: (userId, data) =>
+    request(`/admin/spinout-moderation/${userId}`, { method: 'POST', body: JSON.stringify(data) }),
   // Cohort Timing & Gating — Worker-only endpoints (405/404 in dev backend;
   // callers show a fallback). Timeline of monthly cycles + week windows,
   // review queue (failed/grace/at-risk), grace extensions and pass/fail
