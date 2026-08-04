@@ -65,7 +65,7 @@ const daysSince = (iso) => {
   return Number.isNaN(t) ? null : Math.floor((Date.now() - t) / 86_400_000);
 };
 
-export const STAGE_LABELS = {
+const STAGE_LABELS = {
   to_contact: 'To contact',
   contacted: 'Contacted',
   meeting: 'Meeting',

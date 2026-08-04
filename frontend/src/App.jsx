@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
 import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
+// ViewModeContext lives in its own module so App.jsx exports only React
+// components — mixing component + hook exports breaks Vite Fast Refresh.
+import ViewModeContext from './contexts/ViewModeContext';
 const SpinoutLabListener = lazy(() => import('./components/SpinoutLabListener'));
 import SafeMount from './components/SafeMount';
 import CookieConsent from './components/CookieConsent';
@@ -307,8 +310,6 @@ function IntegrationsRedirect() {
   return <Navigate to={{ pathname: '/settings/integrations', search: loc.search }} replace />;
 }
 
-const ViewModeContext = createContext(null);
-export const useViewMode = () => useContext(ViewModeContext);
 
 function getSidebarGroups(role, primaryPersonaId, user) {
   const base = SIDEBAR_GROUPS[role] || SIDEBAR_GROUPS.founder;
