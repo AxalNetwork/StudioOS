@@ -86,7 +86,7 @@ const ROUTES = [
     path: '/',
     title: 'From idea to funded company',
     description:
-      'One network connecting partners, capital, and founders. Spin-Out Lab takes companies from idea to funded in 30 days.',
+      'One network connecting partners, capital, and founders. Spin-Out Lab takes companies from idea to funded in 28 days.',
     key: 'home',
     type: 'website',
     section: 'home',

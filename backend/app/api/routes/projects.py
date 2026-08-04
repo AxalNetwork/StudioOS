@@ -77,7 +77,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
             "company": upper,
             "eyebrowRight": f"DEMO DAY · {lab_status}",
             "thesis": thesis,
-            "signalLabel": "VALIDATION SIGNAL · 30-DAY SPRINT",
+            "signalLabel": "VALIDATION SIGNAL · 28-DAY SPRINT",
             "signalCaption": "Cumulative discovery interviews",
             "signalX": ["D0", "D5", "D10", "D15", "D20", "D25", "D30"],
             "signalY": [4, 9, 14, 18, 22, 25, 28],
@@ -150,7 +150,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
         },
         "roadmap": {
             "eyebrow": "Roadmap", "idx": "07",
-            "title": "Now, next, later \u2014 on a 30-day operating clock.",
+            "title": "Now, next, later \u2014 on a 28-day operating clock.",
             "days": ["Day 0", "Day 30", "Day 60", "Day 90"],
             "currentDay": 1,
             "phases": [
@@ -247,7 +247,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
         "validation": "VALIDATION. Message: measurable signal from the sprint.\nAUTO: scorecard values, funnel stage counts, conversion rate.\nMANUAL: confirm funnel stages (outreach / LOIs) where not tracked.",
         "market": "MARKET. Message: credible bottom-up serviceable market.\nAUTO: TAM/SAM/SOM figures, why-now lines.\nMANUAL: sizing assumptions + citation basis.",
         "solution": "SOLUTION. Message: data \u2192 live score, four steps.\nAUTO: step copy from capabilities.\nMANUAL: confirm target outcome metrics vs. latest pilot.",
-        "roadmap": "ROADMAP. Message: operating plan on the 30-day cadence.\nAUTO: Now/Next/Later from OKRs + status flags.\nMANUAL: none if tracker is current.",
+        "roadmap": "ROADMAP. Message: operating plan on the 28-day cadence.\nAUTO: Now/Next/Later from OKRs + status flags.\nMANUAL: none if tracker is current.",
         "team": "TEAM & NETWORK. Message: founder inside a structured operating network.\nAUTO: founder profile, advisor roster, network nodes.\nMANUAL: advisor consent; swap initials for headshots.",
         "captable": "CAP TABLE & INCORPORATION. Message: legal + equity setup is investor-ready.\nAUTO: readiness checklist statuses, cap-table splits.\nMANUAL: none if module current.",
         "ask": "THE ASK. Message: specific raise tied to a milestone.\nAUTO: raise, runway, allocations, milestone.\nMANUAL: confirm instrument/cap + close with counsel.",

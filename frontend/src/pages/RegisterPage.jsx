@@ -336,7 +336,7 @@ export default function RegisterPage() {
 
               {productIntent === 'spinout-lab' && (
                 <div className="bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 mb-4 text-xs text-amber-800">
-                  You're applying for <b>Spin-Out Lab</b> — our 30-day cohort.
+                  You're applying for <b>Spin-Out Lab</b> — our 28-day cohort.
                 </div>
               )}
 

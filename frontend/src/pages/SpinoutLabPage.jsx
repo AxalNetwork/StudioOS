@@ -62,14 +62,24 @@ export function resolveOpenCohort(nowMs = Date.now()) {
 // ---------------------------------------------------------------------------
 
 // Pipeline cards mirror the "Spin-Out Lab" design handoff
-// (attached_assets/Spin-Out_Lab.dc_*.html): five compact phases with the
-// program's descriptive items. Milestones auto-complete from real product
-// actions (lib/spinoutLabHooks.js) — there is no manual checklist on this
-// page. Items default to Delaware wording; pipelineItemsFor() swaps the
-// jurisdiction-specific lines.
+// (attached_assets/Spin-Out_Lab.dc_*.html), with one correction: the handoff
+// drew FIVE phases over 30 days, but the program the product actually runs is
+// FOUR weeks / 28 days (PROGRAM_DAYS in lib/scoringViewModel.js and in the
+// worker's spinoutDeckData.ts). Each phase now maps 1:1 onto a real backend
+// week, so `backendWeek` is unique per phase — previously Pitch and Fund both
+// claimed week 4, which lit two cards as "active" at once for any founder in
+// their final week.
+//
+// The handoff's separate "Structure" phase is folded into Fund: incorporation,
+// 83(b) and the cap table happen in Week 4 ("Incorporate & Capital"), the same
+// week as the raise — not in a week of their own.
+//
+// Milestones auto-complete from real product actions (lib/spinoutLabHooks.js)
+// — there is no manual checklist on this page. Items default to Delaware
+// wording; pipelineItemsFor() swaps the jurisdiction-specific lines.
 export const PIPELINE_PHASES = [
   {
-    name: "Validate", days: "Days 1–5",
+    name: "Validate", days: "Days 1–7",
     backendWeek: 1, color: "violet",
     items: [
       "Problem/solution definition workshop",
@@ -79,57 +89,52 @@ export const PIPELINE_PHASES = [
     ],
   },
   {
-    name: "Structure", days: "Days 6–12",
-    backendWeek: 2, color: "blue",
-    // items[0] and items[2] are jurisdiction-specific — see pipelineItemsFor().
-    items: [
-      "Delaware C-Corp incorporation",
-      "Co-founder equity split and vesting schedule",
-      "83(b) election filing",
-      "IP assignment agreements",
-    ],
-  },
-  {
-    name: "Build", days: "Days 13–19",
-    backendWeek: 3, color: "teal",
+    name: "Build", days: "Days 8–14",
+    backendWeek: 2, color: "teal",
     items: [
       "MVP scope definition",
+      "90-day OKRs and product roadmap",
       "Prototype or landing page live",
-      "First design sprint (3 days)",
-      "Advisor onboarding (1–2 advisors)",
+      "Brand v1 and pitch deck v1 drafted",
     ],
   },
   {
-    name: "Pitch", days: "Days 20–25",
-    backendWeek: 4, color: "amber",
+    name: "Pitch", days: "Days 15–21",
+    backendWeek: 3, color: "amber",
     items: [
-      "Pitch deck (12 slides, venture-standard)",
-      "Financial model (3-year projection)",
-      "Cap table modeling",
+      "First venture-readiness score",
+      "Advisor matching and office-hours cadence",
+      "Co-founder match",
       "Warm intro prep with partner network",
     ],
   },
   {
-    name: "Fund", days: "Days 26–30",
+    name: "Fund", days: "Days 22–28",
     backendWeek: 4, color: "pink",
+    // items[0] and items[1] are jurisdiction-specific — see pipelineItemsFor().
     items: [
-      "Partner pitch sessions (3–5 investors)",
-      "Term sheet review support",
-      "First close or bridge round",
+      "Delaware C-Corp incorporation",
+      "83(b) election filing",
+      "Cap table, founder vesting and IP assignment",
+      "Partner pitch sessions and term sheet review",
       "Graduate: venture-ready company",
     ],
   },
 ];
 
-// Jurisdiction-specific wording for the Structure phase (design handoff:
+// Jurisdiction-specific wording for the incorporation lines (design handoff:
 // juris.incLine / juris.filingInc). Unknown or "Soon" keys fall back to
 // the Delaware record via labJurisdiction().
+//
+// These live on Fund rather than a separate "Structure" phase because
+// incorporation and capital happen in the SAME program week — Week 4
+// ("Incorporate & Capital"). See PIPELINE_PHASES above.
 export function pipelineItemsFor(phase, jurisdictionKey) {
-  if (phase.name !== "Structure") return phase.items;
+  if (phase.name !== "Fund") return phase.items;
   const j = labJurisdiction(jurisdictionKey);
   const items = [...phase.items];
   items[0] = j.incLine;
-  items[2] = j.filingInc;
+  items[1] = j.filingInc;
   return items;
 }
 
@@ -454,7 +459,7 @@ export function GraduatesSection() {
 
 // Hero stats panel — LIVE data from GET /spinout-lab/stats (public; the
 // hero also renders on the logged-out marketing page). Companies built and
-// total raised are real; the "30 days" row is the program's promise, not a
+// total raised are real; the "28 days" row is the program's promise, not a
 // measurement. The raised row always shows: "$0" when there is no funding
 // recorded yet (dev has no funding columns; production sums
 // projects.total_funding).
@@ -495,7 +500,7 @@ export function HeroStatsPanel() {
         <div className="text-[12.5px] text-[#a89fce]">Total capital raised by graduates</div>
       </div>
       <div className="p-4 px-5 flex flex-col gap-0.5 border-t border-white/10">
-        <div className="tabular-nums text-[26px] font-extrabold tracking-tight">30 days</div>
+        <div className="tabular-nums text-[26px] font-extrabold tracking-tight">28 days</div>
         <div className="text-[12.5px] text-[#a89fce]">Average time to incorporation</div>
       </div>
     </div>
@@ -680,7 +685,7 @@ export function CongratulationsScreen({ cohort, onStart, starting, startError })
               Congratulations — you're in.
             </h1>
             <p className="mt-4 mb-8 text-[16px] text-[#cbc4e8] font-medium leading-relaxed">
-              You've been admitted to the Spin-Out Lab. Over the next 30 days you'll go
+              You've been admitted to the Spin-Out Lab. Over the next 28 days you'll go
               from idea to incorporated — customer discovery, MVP scope,
               venture-readiness scoring, and Delaware C-Corp formation.
             </p>
@@ -741,7 +746,7 @@ export function Dashboard({ state, previewAllUnlocked = false }) {
                 {state.cohort || (() => { try { const c = resolveOpenCohort(); return `Cohort ${c.cohortNum}`; } catch { return 'Next Cohort'; } })()} · Applications Open
               </span>
             </div>
-            <p className="mt-2.5 ml-[52px] text-[15px] text-gray-500 dark:text-gray-400">From idea to incorporated in 30 days.</p>
+            <p className="mt-2.5 ml-[52px] text-[15px] text-gray-500 dark:text-gray-400">From idea to incorporated in 28 days.</p>
           </div>
           <div className="flex gap-2.5 items-center flex-wrap">
             {previewAllUnlocked && (
@@ -771,7 +776,7 @@ export function Dashboard({ state, previewAllUnlocked = false }) {
         <section className="rounded-[20px] p-[38px] md:p-[40px] mb-10 overflow-hidden relative text-white" style={{ background: 'radial-gradient(1200px 400px at 12% -20%,rgba(139,92,246,.5),transparent 60%),linear-gradient(115deg,#1e1b3a 0%,#2a1d54 55%,#3b1d6e 100%)' }}>
           <div className="flex flex-wrap gap-10 justify-between items-center relative z-10">
             <div className="min-w-[300px] flex-1">
-              <div className="tabular-nums text-[76px] leading-[0.9] font-black tracking-[-0.04em] text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(90deg,#fff,#c4b5fd)', WebkitBackgroundClip: 'text' }}>30 days</div>
+              <div className="tabular-nums text-[76px] leading-[0.9] font-black tracking-[-0.04em] text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(90deg,#fff,#c4b5fd)', WebkitBackgroundClip: 'text' }}>28 days</div>
               <p className="my-3.5 mb-5 text-[16px] text-[#cbc4e8] font-medium">Idea <span className="text-[#8b5cf6]">→</span> {juris.entity} <span className="text-[#8b5cf6]">→</span> Funded</p>
               <div className="flex flex-wrap gap-2">
                 {outcomeBadgesFor(jurisdiction).map((b) => (
@@ -783,11 +788,11 @@ export function Dashboard({ state, previewAllUnlocked = false }) {
           </div>
         </section>
 
-        {/* 30-DAY PIPELINE */}
+        {/* 28-DAY PIPELINE */}
         <section className="mb-12">
           <div className="flex items-baseline justify-between mb-1.5">
-            <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em]">The 30-day pipeline</h2>
-            <span className="text-[12.5px] text-gray-400">5 phases · sequential gates</span>
+            <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em]">The 28-day pipeline</h2>
+            <span className="text-[12.5px] text-gray-400">4 phases · sequential gates</span>
           </div>
           <p className="m-0 mb-5 text-[13.5px] text-gray-500">Each phase ends at a gate. Companies advance only on completion.</p>
 

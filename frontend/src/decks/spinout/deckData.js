@@ -92,7 +92,7 @@ export const SAMPLE_DATA = {
     company: 'BASEPOINT',
     eyebrowRight: 'DEMO DAY · DAY 30 / 30',
     thesis: 'Private-market lenders still price risk on weeks-old data. Basepoint scores it in real time.',
-    signalLabel: 'VALIDATION SIGNAL · 30-DAY SPRINT',
+    signalLabel: 'VALIDATION SIGNAL · 28-DAY SPRINT',
     signalCaption: 'Cumulative discovery interviews',
     signalX: ['D0', 'D5', 'D10', 'D15', 'D20', 'D25', 'D30'],
     signalY: [6, 14, 22, 29, 35, 39, 42],
@@ -121,7 +121,7 @@ export const SAMPLE_DATA = {
 
   validation: {
     eyebrow: 'Validation', idx: '03',
-    title: 'Empirical signal from a 30-day discovery sprint.',
+    title: 'Empirical signal from a 28-day discovery sprint.',
     cards: [
       ['42', 'Interviews completed'],
       ['31', 'Distinct pains captured'],
@@ -191,7 +191,7 @@ export const SAMPLE_DATA = {
 
   roadmap: {
     eyebrow: 'Roadmap', idx: '07',
-    title: 'Now, next, later \u2014 on a 30-day operating clock.',
+    title: 'Now, next, later \u2014 on a 28-day operating clock.',
     days: ['Day 0', 'Day 30', 'Day 60', 'Day 90'],
     currentDay: 1, // index into days marked as "today"
     phases: [
@@ -330,7 +330,7 @@ export const SAMPLE_NOTES = {
   market: 'MARKET. Message: credible bottom-up serviceable market.\nAUTO: TAM/SAM/SOM figures, ACV + lender-count assumptions.\nMANUAL: the three why-now lines.',
   solution: 'SOLUTION. Message: data \u2192 live score, four steps.\nAUTO: step copy, outcome metrics.\nMANUAL: confirm outcome numbers vs. latest pilot.',
   productDemo: 'PRODUCT DEMO. Message: show the product, do not just describe it.\nAUTO: walkthrough copy.\nMANUAL: paste a live demo URL + short loop video link or screenshot from the project.',
-  roadmap: 'ROADMAP. Message: operating plan on the 30-day cadence.\nAUTO: milestones + status flags (milestone tracker).\nMANUAL: none if tracker is current.',
+  roadmap: 'ROADMAP. Message: operating plan on the 28-day cadence.\nAUTO: milestones + status flags (milestone tracker).\nMANUAL: none if tracker is current.',
   team: 'TEAM & NETWORK. Message: founder inside a structured operating network.\nAUTO: profiles, network node labels (people graph).\nMANUAL: advisor consent; swap initials for headshots.',
   captable: 'CAP TABLE & INCORPORATION. Message: legal + equity setup is investor-ready.\nAUTO: checklist statuses, cap-table splits (data-room module).\nMANUAL: none if module current.',
   ask: 'THE ASK. Message: specific raise tied to a milestone.\nAUTO: raise, instrument/cap, runway, close, allocations.\nMANUAL: confirm cap + close with counsel.',

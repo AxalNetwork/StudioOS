@@ -32,7 +32,7 @@ const DELIVERABLE_ICONS = [Building2, PieChart, FileCheck2, Presentation, LineCh
 const STATS = [
   { value: "12 companies", label: "Built to date" },
   { value: "$2.4M", label: "Total capital raised by graduates" },
-  { value: "30 days", label: "Average time to incorporation" },
+  { value: "28 days", label: "Average time to incorporation" },
 ];
 
 export default function SpinoutLabBriefPage() {
@@ -82,7 +82,7 @@ export default function SpinoutLabBriefPage() {
             <h1 className="m-0 text-[44px] sm:text-[64px] leading-[.95] font-black tracking-[-.04em] text-transparent bg-clip-text" style={{ backgroundImage: "linear-gradient(90deg,#fff,#c4b5fd)", WebkitBackgroundClip: "text" }}>
               Program Brief
             </h1>
-            <p className="mt-3.5 mb-0 text-[18px] text-[#cbc4e8] font-medium">From idea to {juris.entity}, funded in 30 days.</p>
+            <p className="mt-3.5 mb-0 text-[18px] text-[#cbc4e8] font-medium">From idea to {juris.entity}, funded in 28 days.</p>
             <div className="mt-auto flex flex-wrap gap-2">
               {outcomeBadgesFor(juris.key).map((c) => (
                 <span key={c} className="px-3 py-1.5 rounded-full bg-white/10 border border-white/15 text-[12px] font-semibold text-[#ede9fe]">{c}</span>
@@ -93,8 +93,8 @@ export default function SpinoutLabBriefPage() {
           {/* SLIDE 2 — THE PROGRAM */}
           <section data-brief-slide className="bg-white dark:bg-gray-900 print:bg-white border border-gray-200 dark:border-gray-800 print:border-gray-200 rounded-[16px] p-6 sm:p-9">
             <div className="text-[11px] font-bold uppercase tracking-[.06em] text-gray-400 mb-1.5">The program</div>
-            <h2 className="m-0 mb-5 text-[26px] font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100 print:text-gray-900">The 30-day pipeline</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 print:grid-cols-5 gap-3">
+            <h2 className="m-0 mb-5 text-[26px] font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100 print:text-gray-900">The 28-day pipeline</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 print:grid-cols-4 gap-3">
               {PIPELINE_PHASES.map((p, i) => {
                 const a = PHASE_ACCENTS[p.color];
                 return (

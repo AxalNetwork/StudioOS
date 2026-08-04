@@ -224,7 +224,7 @@ const NOTES: SpinoutDeckNotes = {
   market: 'MARKET. Message: credible bottom-up serviceable market.\nAUTO: TAM/SAM/SOM figures, why-now lines.\nMANUAL: sizing assumptions + citation basis.',
   solution: 'SOLUTION. Message: data \u2192 live score, four steps.\nAUTO: step copy from capabilities.\nMANUAL: confirm target outcome metrics vs. latest pilot.',
   productDemo: 'PRODUCT DEMO. Message: show the product, don\u2019t just describe it.\nAUTO: walkthrough copy.\nMANUAL: paste a live demo URL + short loop video link or screenshot from the project.',
-  roadmap: 'ROADMAP. Message: operating plan on the 30-day cadence.\nAUTO: Now/Next/Later from OKRs + status flags.\nMANUAL: none if tracker is current.',
+  roadmap: 'ROADMAP. Message: operating plan on the 28-day cadence.\nAUTO: Now/Next/Later from OKRs + status flags.\nMANUAL: none if tracker is current.',
   team: 'TEAM & NETWORK. Message: founder inside a structured operating network.\nAUTO: founder profile, advisor roster, network nodes.\nMANUAL: advisor consent; swap initials for headshots.',
   captable: 'CAP TABLE & INCORPORATION. Message: legal + equity setup is investor-ready.\nAUTO: readiness checklist statuses, cap-table splits.\nMANUAL: none if module current.',
   ask: 'THE ASK. Message: specific raise tied to a milestone.\nAUTO: raise, runway, allocations, milestone.\nMANUAL: confirm instrument/cap + close with counsel.',
@@ -265,7 +265,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   if (sig) { signalX = sig.x; signalY = sig.y; }
   else {
     // Task #65 — honest zero-state. With no logged discovery interviews the
-    // cover chart must read as a flat baseline at 0 across the 30-day sprint
+    // cover chart must read as a flat baseline at 0 across the 28-day sprint
     // axis with a 0 total — never a fabricated rising curve. Always paired
     // with a gap + DRAFT watermark. Keeping it at the source means every
     // surface (builder preview, PPTX/PDF export, print/share) stays truthful
@@ -279,7 +279,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     company: projectName.toUpperCase(),
     eyebrowRight: `DEMO DAY · ${labStatus}`,
     thesis,
-    signalLabel: 'VALIDATION SIGNAL · 30-DAY SPRINT',
+    signalLabel: 'VALIDATION SIGNAL · 28-DAY SPRINT',
     signalCaption: 'Cumulative discovery interviews',
     signalX, signalY,
     meta: [
@@ -466,7 +466,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
 
   const roadmap: SpinoutDeckData['roadmap'] = {
     eyebrow: 'Roadmap', idx: '07',
-    title: has(rm.headline) ? rm.headline : 'Now, next, later \u2014 on a 30-day operating clock.',
+    title: has(rm.headline) ? rm.headline : 'Now, next, later \u2014 on a 28-day operating clock.',
     days: ['Day 0', 'Day 30', 'Day 60', 'Day 90'],
     currentDay: programDay >= 15 ? 1 : 0,
     phases,

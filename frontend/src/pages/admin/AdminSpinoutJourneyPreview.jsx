@@ -121,7 +121,7 @@ function AdmissionEmailCards() {
               Hi Alex, congratulations — you've been admitted to the <strong className="text-gray-900 dark:text-gray-100">Spin-Out Lab</strong> (Cohort 4).
             </p>
             <div className="rounded-[14px] border border-[#e9d5ff] dark:border-violet-800/50 bg-[#faf5ff] dark:bg-violet-950/30 px-5 py-4 mb-6">
-              <div className="text-[11px] uppercase tracking-[0.06em] text-[#7c3aed] dark:text-violet-300 font-semibold mb-1.5">The next 30 days</div>
+              <div className="text-[11px] uppercase tracking-[0.06em] text-[#7c3aed] dark:text-violet-300 font-semibold mb-1.5">The next 28 days</div>
               <div className="text-[14px] leading-relaxed text-gray-900 dark:text-gray-100">
                 Idea → customer discovery → MVP scope → venture-readiness score → Delaware C-Corp → warm investor introductions.
               </div>

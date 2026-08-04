@@ -155,7 +155,7 @@ const FAQS = [
   },
   {
     q: 'Is this an accelerator?',
-    a: 'No. Axal VC is a venture studio and operating platform. The Spin-Out Lab is a structured 30-day sprint with dedicated advisors, advisors, and capital access — not a cohort-based accelerator with demo days and mass batches.',
+    a: 'No. Axal VC is a venture studio and operating platform. The Spin-Out Lab is a structured 28-day sprint with dedicated advisors, advisors, and capital access — not a cohort-based accelerator with demo days and mass batches.',
   },
   {
     q: 'What does it cost?',
@@ -190,7 +190,7 @@ export default function FounderHomePage() {
             <span className="text-[#6D5BFF]">Worth Funding.</span>
           </>
         }
-        sub="From idea to investor-ready in 30 days. One platform covering everything — legal, product, team, and capital."
+        sub="From idea to investor-ready in 28 days. One platform covering everything — legal, product, team, and capital."
         ctaPrimary={{ label: 'Submit Your Pitch', href: '/register?lane=founder' }}
         ctaSecondary={{ label: 'See the Spin-Out Lab', href: '/spinout-lab' }}
         pills={['AI', 'Blockchain', 'Quantum', 'Frontier Software', 'Web3']}

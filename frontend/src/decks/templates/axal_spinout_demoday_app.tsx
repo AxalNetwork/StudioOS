@@ -1,5 +1,5 @@
 /**
- * axal_spinout_demoday_app.tsx — Axal VC 30-day Spin-Out Lab · Demo Day deck.
+ * axal_spinout_demoday_app.tsx — Axal VC 28-day Spin-Out Lab · Demo Day deck.
  *
  * In-app React renderer for the registry key `axal_spinout_demoday`. Renders
  * the 10-slide BASEPOINT editorial design (restrained white/ink + a single

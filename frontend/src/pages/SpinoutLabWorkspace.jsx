@@ -451,7 +451,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
     .filter((k) => featureUnlocked(k) && !TOOL_INFO[k]?.comingSoon)
     .slice(0, 2);
 
-  // ---- 30-day scorecard (design section 3) — all derived from live state ----
+  // ---- 28-day scorecard (design section 3) — all derived from live state ----
   const weekStats = WEEK_DEFS.map((w) => {
     const status = weekStatus(w.num);
     const { done: dDone, total: dTotal } = countDeliverables(w, (d) => chipDone(w.num, d.keys));
@@ -974,10 +974,10 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
         </div>
       </section>
 
-      {/* ---- Section 3: 30-day scorecard ---- */}
+      {/* ---- Section 3: 28-day scorecard ---- */}
       <section className="mt-10" data-testid="workspace-scorecard">
         <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
-          30-day scorecard
+          28-day scorecard
         </div>
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">

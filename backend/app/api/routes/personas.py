@@ -123,7 +123,7 @@ PERSONAS: list[dict[str, Any]] = [
     {
         "id": "founder_new",
         "label": "Founder — New Venture",
-        "short_description": "Founder spinning out a brand-new venture through the 30-day engine.",
+        "short_description": "Founder spinning out a brand-new venture through the 28-day engine.",
         "role_alignment": "founder",
         "email_domain_hints": [],
         "follow_up_questions": [
@@ -295,7 +295,7 @@ def _classify_heuristic(email: str, first_message: str) -> dict[str, Any]:
         "corporate_vc": ["corporate venture", "cvc", "strategic investor"],
         "sovereign_family_office": ["family office", "sovereign", "multi-family"],
         "academic": ["lab", "tech transfer", "research", "professor", "phd"],
-        "founder_new": ["spin out", "spinout", "new venture", "30-day", "incorporate"],
+        "founder_new": ["spin out", "spinout", "new venture", "28-day", "30-day", "incorporate"],
         "founder_existing": ["existing company", "scaling", "series a", "series b"],
         "operator_advisor": ["operator", "advisor", "fractional", "sweat equity"],
         "service_provider": ["law firm", "counsel", "accounting", "legal services"],

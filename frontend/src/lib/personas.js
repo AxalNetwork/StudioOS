@@ -99,7 +99,7 @@ export const PERSONAS = [
   {
     id: 'founder_new',
     label: 'Founder — New Venture',
-    short_description: 'Founder spinning out a brand-new venture through the 30-day engine.',
+    short_description: 'Founder spinning out a brand-new venture through the 28-day engine.',
     role_alignment: 'founder',
     nav_extras: [],
     follow_up_questions: [

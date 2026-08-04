@@ -70,7 +70,7 @@ const CONFIG = {
       { label: 'Description', src: 'project', get: (f, p) => orDash(p?.description) },
       { label: 'Sector', src: 'project', get: (f, p) => orDash(p?.sector || metaVal(f, 'SECTOR')) },
       {
-        label: 'Validation signal · 30-day sprint',
+        label: 'Validation signal · 28-day sprint',
         src: 'discovery',
         get: (f) => orDash([f['cover.signalLabel'], f['cover.signalCaption']].filter(Boolean).join(' — ')),
       },

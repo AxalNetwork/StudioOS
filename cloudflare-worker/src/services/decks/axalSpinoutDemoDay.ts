@@ -1,7 +1,7 @@
 /**
  * axalSpinoutDemoDay.ts — Task #15
  *
- * Builds the Axal 30-day Spin-Out Lab "Demo Day" deck payload from
+ * Builds the Axal 28-day Spin-Out Lab "Demo Day" deck payload from
  * canonical Lab data. 14 fixed sections in the spec-required order:
  *
  *   cover · problem · validation · market · solution · roadmap ·
@@ -1099,11 +1099,11 @@ export async function fillAxalSpinoutDemoDay(
     },
 
     cover: {
-      eyebrow: 'Axal VC · 30-Day Spin-Out Lab · Demo Day',
+      eyebrow: 'Axal VC · 28-Day Spin-Out Lab · Demo Day',
       headline: orDash(p.tagline) !== DASH ? String(p.tagline) : `${projectName} — Demo Day`,
       sub: orDash(p.vision) !== DASH
         ? String(p.vision)
-        : 'A pre-incorporation thesis, sharpened across 30 days of Discovery, OKRs, Scoring and Cap-Table prep.',
+        : 'A pre-incorporation thesis, sharpened across 28 days of Discovery, OKRs, Scoring and Cap-Table prep.',
       location: `Presented ${presentedOn} · Axal Network`,
       activity_log: activityLog,
     },
@@ -1252,7 +1252,7 @@ export async function fillAxalSpinoutDemoDay(
       eyebrow: '12 · Axal signal',
       headline: labActive
         ? `Week ${week} of 4 — ${remaining} days remaining.`
-        : 'Built across 30 days of Lab work.',
+        : 'Built across 28 days of Lab work.',
       body: orDash(score?.ai_notes),
       lab_weeks: labWeeks,
     },

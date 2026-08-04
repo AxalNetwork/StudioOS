@@ -178,7 +178,7 @@ interface FeatureEntry { keywords: string[]; url: string; label: string; roles: 
 const FEATURE_CATALOG: FeatureEntry[] = [
   { keywords: ['cofounder agreement', 'co-founder agreement', 'cofounder', 'co-founder'],
     url: '/legal/cofounder-agreement', label: 'Co-Founder Agreement', roles: ['founder', 'admin'] },
-  { keywords: ['spinout lab', 'spin-out lab', 'spinout', '30-day spin-out'],
+  { keywords: ['spinout lab', 'spin-out lab', 'spinout', '28-day spin-out'],
     url: '/spinout-lab', label: 'Spin-Out Lab', roles: ['founder', 'admin'] },
   { keywords: ['cap table', 'captable', 'cap-table'],
     url: '/legal-capital', label: 'Cap-Table Simulator', roles: ['founder', 'admin', 'investor'] },
