@@ -2394,7 +2394,15 @@ export const api = {
   // Worker-only matching engine (founder/explorer vectors vs advisor pool);
   // the dev API has no /advisors/match — callers treat a 404 as "engine
   // unavailable in this environment" and fall back to the directory ranking.
-  advisorsMatch: () => request('/advisors/match'),
+  // Optional refinement: { gap, focus }. Both narrow the same scored set on
+  // the Worker, so a refined shortlist is a subset of the unrefined one.
+  advisorsMatch: (params) => {
+    const q = new URLSearchParams();
+    if (params?.gap) q.set('gap', params.gap);
+    if (params?.focus) q.set('focus', params.focus);
+    const s = q.toString();
+    return request(`/advisors/match${s ? `?${s}` : ''}`);
+  },
   getAdvisor: (uid) => request(`/advisors/${uid}`),
   upsertMyAdvisor: (data) => request('/advisors/me', { method: 'POST', body: JSON.stringify(data) }),
   getMyAdvisor: () => request('/advisors/me'),
