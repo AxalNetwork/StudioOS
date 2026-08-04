@@ -2658,7 +2658,7 @@ def create_83b_tracker(
                 f"You have 30 days from {grant.isoformat()} to mail your 83(b) election to the IRS. "
                 f"Use USPS Certified Mail with Return Receipt Requested and upload the PS Form 3800 receipt."
             ),
-            link="/incorporate/83b",
+            link="/spinout-lab/83b",
             payload={
                 "tracker_id": tracker.id,
                 "project_id": project.id,

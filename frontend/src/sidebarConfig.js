@@ -145,7 +145,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'more', label: 'More', items: [
       { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
-      { to: '/incorporate/83b', icon: Calendar, label: '83(b) Tracker' },
+      { to: '/spinout-lab/83b', icon: Calendar, label: '83(b) Tracker' },
       { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
       { to: '/founder', icon: Rocket, label: 'Founder Portal' },
       { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },

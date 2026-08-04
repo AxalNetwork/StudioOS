@@ -17,7 +17,7 @@ import Section83bPage from './Section83bPage';
 // A dashboard-style page that collapses the former standalone founder nav items
 // "Incorporate" (/incorporate), "Co-Founder Agreement"
 // (/incorporate/cofounder-agreement), "Compliance Calendar" (/compliance) and
-// "83(b) Tracker" (/incorporate/83b) into a single hub. The dashboard shows four
+// "83(b) Tracker" (/spinout-lab/83b) into a single hub. The dashboard shows four
 // cards; selecting one deep-links to a sub-route that renders the existing
 // detail page in `embedded` mode below the cards (master-detail). The standalone
 // routes stay intact for the personas that share them.

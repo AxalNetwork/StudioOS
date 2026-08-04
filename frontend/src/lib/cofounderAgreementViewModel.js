@@ -570,7 +570,7 @@ export function buildCofounderAgreementViewModel(input) {
         status: 'review',
         value: `${trk.total} tracker(s) · ${trk.confirmed} confirmed`,
         note: `${trk.overdue} 83(b) filing deadline(s) are past due.`,
-        source: 'from 83(b) tracker', sourceTo: '/incorporate/83b',
+        source: 'from 83(b) tracker', sourceTo: '/spinout-lab/83b',
       };
     }
     if (trk.total > 0) {
@@ -578,7 +578,7 @@ export function buildCofounderAgreementViewModel(input) {
         status: 'sourced',
         value: `${trk.total} tracker(s) · ${trk.confirmed} confirmed`,
         note: null,
-        source: 'from 83(b) tracker', sourceTo: '/incorporate/83b',
+        source: 'from 83(b) tracker', sourceTo: '/spinout-lab/83b',
       };
     }
     return {

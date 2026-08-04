@@ -65,7 +65,7 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     { key: 'ef.plaid',      label: 'Connect Plaid (verify cash)',        route: '/settings/integrations',      autoDetect: true },
     { key: 'ef.captable',   label: 'Connect or upload cap table',        route: '/build/captable',             autoDetect: true },
     { key: 'ef.financials', label: 'Populate financial model',           route: '/build/financials',           autoDetect: true },
-    { key: 'ef.83b',        label: 'Confirm 83(b) status',               route: '/incorporate/83b',            autoDetect: true },
+    { key: 'ef.83b',        label: 'Confirm 83(b) status',               route: '/spinout-lab/83b',            autoDetect: true },
     { key: 'ef.ip',         label: 'Confirm IP assignments signed',      route: '/compliance',                 autoDetect: true },
     { key: 'ef.okrs',       label: 'Add 3 quarterly OKRs',               route: '/build/roadmap',              autoDetect: true },
     { key: 'ef.scoring',    label: 'Run scoring with verified evidence', route: '/projects',                   autoDetect: true },

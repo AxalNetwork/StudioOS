@@ -261,7 +261,7 @@ _CHECKLIST_CATALOG: Dict[str, list] = {
         {"key": "ef.plaid", "label": "Connect Plaid (verify cash)", "route": "/settings/integrations"},
         {"key": "ef.captable", "label": "Connect or upload cap table", "route": "/build/captable"},
         {"key": "ef.financials", "label": "Populate financial model", "route": "/build/financials"},
-        {"key": "ef.83b", "label": "Confirm 83(b) status", "route": "/incorporate/83b"},
+        {"key": "ef.83b", "label": "Confirm 83(b) status", "route": "/spinout-lab/83b"},
         {"key": "ef.ip", "label": "Confirm IP assignments signed", "route": "/compliance"},
         {"key": "ef.okrs", "label": "Add 3 quarterly OKRs", "route": "/build/roadmap"},
         {"key": "ef.scoring", "label": "Run scoring with verified evidence", "route": "/projects"},
