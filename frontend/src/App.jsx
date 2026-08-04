@@ -1329,10 +1329,20 @@ function AppInner() {
   // role they held before admission (e.g. 'exploring' users accepted into a
   // cohort). The workspace UI still week-gates the tool cards; this only
   // stops RoleGuard from bouncing an active lab member off a lab tool route.
-  const labRoles = (roles) =>
-    user && user.spinout_lab_active === 1 && !roles.includes(user.role)
-      ? [...roles, user.role]
-      : roles;
+  //
+  // Admin users browsing via the "View as" switcher (not impersonation) have
+  // effectiveRole = viewMode, not 'admin'. We add viewMode to the list so
+  // RoleGuard doesn't redirect them while they're previewing another role.
+  const labRoles = (roles) => {
+    const result = [...roles];
+    if (user && user.spinout_lab_active === 1 && !result.includes(user.role)) {
+      result.push(user.role);
+    }
+    if (user?.role === 'admin' && !isImpersonating && viewMode && !result.includes(viewMode)) {
+      result.push(viewMode);
+    }
+    return result;
+  };
 
   // Task #9 — authoring is open to any authenticated user (no role gate).
   const authOnly = (component) => <RequireAuth {...authProps}>{component}</RequireAuth>;
