@@ -99,7 +99,10 @@ export const TOOL_INFO = {
   // Lab-facing raise workspace (round + investor pipeline + data-room
   // readiness). The founder-persona workspace at /raise/capital stays intact.
   capital: { label: 'Capital', to: '/spinout-lab/capital', desc: 'Fundraise & introductions', icon: Banknote },
-  compliance: { label: 'Compliance', to: '/compliance', desc: 'Filing calendar & obligations', icon: ShieldCheck },
+  // Lab-facing compliance dashboard (Week 4 readiness). The platform-wide
+  // Compliance CALENDAR — recurring filings, reminder pings, advisor
+  // deep-links — stays at /compliance. Same split as Market Intel.
+  compliance: { label: 'Compliance', to: '/spinout-lab/compliance', desc: 'Week 4 readiness & obligations', icon: ShieldCheck },
   // Studio Ops is a studio-wide surface, not a lab-gated feature — `ungated`
   // keeps its deliverable button visible without touching unlocked_features.
   // Founders reach it via the command center tab (/studio-ops redirects there).
