@@ -164,6 +164,7 @@ import valuesRoutes from './routes/values';
 import radarRoutes from './routes/radar';
 import spinoutLabRoutes from './routes/spinout_lab';
 import spinoutCertificateRoutes, { publicCertificateRoutes } from './routes/spinout_certificates';
+import spinoutModerationRoutes from './routes/spinout_moderation';
 // T13/T14/T15 — port of FastAPI mentors/partner_office_hours/watchlist/journal/
 // portfolio_health/references/comarketing/company/needs/insights routers.
 import advisorsRoutes from './routes/advisors';
@@ -844,6 +845,9 @@ app.route('/api/radar', radarRoutes);
 app.route('/api/spinout-lab', spinoutLabRoutes);
 // Graduation-certificate registry (admin issue/revoke + owner read).
 app.route('/api/spinout-lab', spinoutCertificateRoutes);
+// Lab participant moderation (admin only). Moves spinout_lab_active,
+// never users.is_active — see the route file header.
+app.route('/api/admin/spinout-moderation', spinoutModerationRoutes);
 // T13 — Advisors (formerly Mentors) + Partner Office Hours.
 // `/api/mentors` is kept as a permanent alias so old clients/bookmarks keep working.
 app.route('/api/advisors', advisorsRoutes);
