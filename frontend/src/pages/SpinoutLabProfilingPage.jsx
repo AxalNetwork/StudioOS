@@ -326,7 +326,7 @@ export default function SpinoutLabProfilingPage() {
         // error and must not be presented as unavailable.
         const wkOnly = (e) => (e?.status === 404 ? { unavailable: true } : { failed: true });
         const [st, tax, mine, vals, res] = await Promise.all([
-          spinoutLab.state(),
+          spinoutLab.state().catch(() => null),
           api.skills.getTaxonomy().catch(() => null),
           api.skills.getMySkills().catch(() => null),
           api.values.getMe().catch(wkOnly),

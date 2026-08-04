@@ -167,7 +167,7 @@ export default function SpinoutLabDiscoveryPage() {
   useEffect(() => {
     let alive = true;
     setStatus('loading');
-    Promise.all([spinoutLab.state(), api.listProjects().catch(() => [])])
+    Promise.all([spinoutLab.state().catch(() => null), api.listProjects().catch(() => [])])
       .then(async ([s, projects]) => {
         if (!alive) return;
         setState(s);

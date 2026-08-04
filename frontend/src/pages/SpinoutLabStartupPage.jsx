@@ -103,7 +103,7 @@ export default function SpinoutLabStartupPage() {
     let alive = true;
     setStatus('loading');
     Promise.all([
-      spinoutLab.state(),
+      spinoutLab.state().catch(() => null),
       api.listProjects().catch(() => []),
     ])
       .then(([s, projects]) => {

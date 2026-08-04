@@ -132,7 +132,7 @@ export default function SpinoutLabCapTablePage() {
     (async () => {
       try {
         const [st, me, projects] = await Promise.all([
-          spinoutLab.state(),
+          spinoutLab.state().catch(() => null),
           api.getMe(),
           api.listProjects().catch(() => []),
         ]);

@@ -105,7 +105,7 @@ export default function SpinoutLabRevenuePage() {
     (async () => {
       try {
         const [st, me, projects] = await Promise.all([
-          spinoutLab.state(),
+          spinoutLab.state().catch(() => null),
           api.getMe(),
           api.listProjects().catch(() => []),
         ]);

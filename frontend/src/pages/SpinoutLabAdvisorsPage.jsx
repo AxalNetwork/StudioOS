@@ -255,7 +255,7 @@ export default function SpinoutLabAdvisorsPage() {
         // Worker-only endpoints: ONLY 404 = "not in this environment".
         const wkOnly = (e) => (e?.status === 404 ? { unavailable: true } : { failed: true });
         const [st, me, projects, vals, res, myBookings] = await Promise.all([
-          spinoutLab.state(),
+          spinoutLab.state().catch(() => null),
           api.getMe(),
           api.listProjects().catch(() => []),
           api.values.getMe().catch(wkOnly),

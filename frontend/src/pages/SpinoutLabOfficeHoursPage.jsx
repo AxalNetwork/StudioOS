@@ -292,7 +292,7 @@ export default function SpinoutLabOfficeHoursPage() {
     (async () => {
       try {
         const [st, me, projects, dir, mine] = await Promise.all([
-          spinoutLab.state(),
+          spinoutLab.state().catch(() => null),
           api.getMe(),
           api.listProjects().catch(() => []),
           api.listPartners().catch(() => ({ failed: true })),
