@@ -1,1 +1,0 @@
-import"./rolldown-runtime-aKtaBQYM.js";import{g as e,n as t}from"./react-vendor-DWi_c0gu.js";import{t as n}from"./CompetitorAnalysis-DjEkqwo9.js";e();var r=t();function i(){return(0,r.jsx)(n,{})}export{i as default};
