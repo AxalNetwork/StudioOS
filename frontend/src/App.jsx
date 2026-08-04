@@ -105,6 +105,7 @@ const SpinoutLabBrandPage = lazy(() => import('./pages/SpinoutLabBrandPage'));
 const SpinoutLabOfficeHoursPage = lazy(() => import('./pages/SpinoutLabOfficeHoursPage'));
 const SpinoutLabCofounderAgreementPage = lazy(() => import('./pages/SpinoutLabCofounderAgreementPage'));
 const SpinoutLabCofounderMatchPage = lazy(() => import('./pages/SpinoutLabCofounderMatchPage'));
+const SpinoutLabCertificatePage = lazy(() => import('./pages/SpinoutLabCertificatePage'));
 const SpinoutLabApplyPage = lazy(() => import('./pages/SpinoutLabApplyPage'));
 const SpinoutLabBriefPage = lazy(() => import('./pages/SpinoutLabBriefPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
@@ -1368,6 +1369,10 @@ function AppInner() {
           decision console; /cofounder stays the full browse/connections/NDA
           surface and is linked from the page header. */}
       <Route path="/spinout-lab/cofounder-match" element={guard(labRoles(['admin', 'founder']), <SpinoutLabCofounderMatchPage />)} />
+      {/* Graduation Certificate (design: Graduation Certificate.dc) — the
+          Week-4 credential, conferred on the incorporation_completed
+          milestone and downloadable as a vector A4-landscape PDF. */}
+      <Route path="/spinout-lab/certificate" element={guard(labRoles(['admin', 'founder']), <SpinoutLabCertificatePage />)} />
       {/* Office Hours tool page (design: Office Hours.dc) — founder-side
           partner session booking; /office-hours stays the advisor console. */}
       <Route path="/spinout-lab/office-hours" element={guard(labRoles(['admin']), <SpinoutLabOfficeHoursPage />)} />

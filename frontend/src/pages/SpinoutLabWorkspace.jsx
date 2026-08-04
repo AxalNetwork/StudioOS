@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
+  Award,
   Banknote,
   Building2,
   CalendarCheck,
@@ -89,6 +90,10 @@ export const TOOL_INFO = {
   captable: { label: 'Cap Table', to: '/spinout-lab/captable', desc: 'Founder stock & vesting', icon: PieChart },
   'section-83b': { label: '83(b) Election', to: '/incorporate/83b', desc: 'File within 30 days of your stock grant', icon: FileText },
   'cofounder-agreement': { label: 'Co-founder Agreement', to: '/spinout-lab/cofounder-agreement', desc: 'Signed founder terms', icon: FileSignature },
+  // The credential itself, not a deliverable: it is CONFERRED by finishing
+  // incorporation rather than being another box to tick, so `uncounted`
+  // keeps it off the week's scorecard denominator (same rule as misignals).
+  certificate: { label: 'Graduation Certificate', to: '/spinout-lab/certificate', desc: 'Your cohort credential', icon: Award, uncounted: true, unlockWeek: 4 },
   // No founder-facing capital surface exists yet (/capital is the investor
   // console) — card shows as coming soon until the lab version ships.
   // Lab-facing raise workspace (round + investor pipeline + data-room
@@ -209,7 +214,7 @@ export const WEEK_DEFS = [
       { label: 'Cap table', keys: ['founder_stock_issued'] },
       { label: '83(b)', keys: ['section83b_filed'] },
     ],
-    features: ['incorporate', 'captable', 'section-83b', 'cofounder-agreement', 'capital', 'compliance', 'use-of-funds'],
+    features: ['incorporate', 'captable', 'section-83b', 'cofounder-agreement', 'capital', 'compliance', 'use-of-funds', 'certificate'],
     panels: {
       doYou: ['Incorporate the entity', 'Issue founder stock with vesting', 'File 83(b)', 'Sign co-founder agreement', 'Lock the fundraise ask'],
       unlocks: ['Incorporate', 'Cap Table', 'Co-founder Agreement', 'Capital', 'Use of Funds'],
