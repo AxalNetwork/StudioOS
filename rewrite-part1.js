@@ -5,7 +5,6 @@ import { Check, Loader2, Rocket, Sparkles, ArrowRight, BookOpen, Lock, FlaskConi
 import { api, spinoutLab } from '../lib/api';
 import { deckReadinessState } from '../lib/deckReadiness';
 import { useAuth } from '../hooks/useAuthSync';
-import { reportError } from '../lib/log';
 import SpinoutLabMarketingPage from './SpinoutLabMarketingPage';
 
 const EXPLAINER_CARDS = [
