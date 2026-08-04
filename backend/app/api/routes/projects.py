@@ -684,6 +684,23 @@ def update_project(project_id: int, data: ProjectUpdate, session: Session = Depe
             if len(canonical_inc) > 8000:
                 raise HTTPException(status_code=400, detail={"error": "incorporation_meta too large", "code": "invalid_incorporation_meta"})
             update_data["incorporation_meta"] = canonical_inc
+    # Spin-Out Lab Co-founder Match decision (Worker parity — migration 162):
+    # same JSON-object contract as the two metas above.
+    if "cofounder_decision_meta" in update_data:
+        raw_cfd = update_data["cofounder_decision_meta"]
+        if raw_cfd in (None, ""):
+            update_data["cofounder_decision_meta"] = None
+        else:
+            try:
+                parsed_cfd = json.loads(raw_cfd) if isinstance(raw_cfd, str) else raw_cfd
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail={"error": "cofounder_decision_meta must be valid JSON", "code": "invalid_cofounder_decision_meta"})
+            if not isinstance(parsed_cfd, dict):
+                raise HTTPException(status_code=400, detail={"error": "cofounder_decision_meta must be a JSON object", "code": "invalid_cofounder_decision_meta"})
+            canonical_cfd = json.dumps(parsed_cfd)
+            if len(canonical_cfd) > 8000:
+                raise HTTPException(status_code=400, detail={"error": "cofounder_decision_meta too large", "code": "invalid_cofounder_decision_meta"})
+            update_data["cofounder_decision_meta"] = canonical_cfd
     # Market-sizing invariants (mirrored in the Worker): TAM/SAM/SOM must be
     # non-negative when supplied, and the funnel must nest — SAM ≤ TAM,
     # SOM ≤ SAM — judged against the effective (incoming or stored) values.

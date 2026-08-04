@@ -220,6 +220,22 @@ def ensure_project_incorporation_meta_column() -> None:
         session.commit()
 
 
+def ensure_project_cofounder_decision_column() -> None:
+    """Spin-Out Lab Co-founder Match decision — mirrors Worker D1 migration
+    162 so the dev FastAPI backend persists the same
+    `projects.cofounder_decision_meta` JSON blob (outcome, candidate uid,
+    note, follow-ups). Idempotent."""
+    with Session(engine) as session:
+        try:
+            # Justification: static identifier, dev-only FastAPI
+            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS cofounder_decision_meta VARCHAR"
+            ))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_project_cofounder_decision_column: ALTER failed: %s", exc)
+        session.commit()
+
+
 def ensure_interview_assessment_columns() -> None:
     """Discovery-interview assessment fields on the dev `interviews` table.
 

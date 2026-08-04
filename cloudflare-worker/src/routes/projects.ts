@@ -142,6 +142,34 @@ export function normalizeIncMeta(raw: unknown): { value?: string | null; error?:
   return { value: out };
 }
 
+// Spin-Out Lab Co-founder Match decision (JSON) — lazy bootstrap for
+// `projects.cofounder_decision_meta`. Migration 162 is the canonical apply
+// path; same WeakMap pattern as ensureProjectUofMetaColumn above.
+const _cfDecisionReady = new WeakMap<object, true>();
+export async function ensureProjectCofounderDecisionColumn(env: Env): Promise<void> {
+  const db = env.DB as unknown as object;
+  if (_cfDecisionReady.has(db)) return;
+  try { await env.DB.exec(`ALTER TABLE projects ADD COLUMN cofounder_decision_meta TEXT`); } catch (_e) { /* duplicate column on re-run is fine */ }
+  _cfDecisionReady.set(db, true);
+}
+
+// Validate + canonicalize the co-founder decision blob. Same contract as
+// normalizeUofMeta: object or JSON string, plain object only, size-capped.
+export function normalizeCofounderDecisionMeta(raw: unknown): { value?: string | null; error?: string } {
+  if (raw === null || raw === undefined || raw === '') return { value: null };
+  let obj: unknown = raw;
+  if (typeof raw === 'string') {
+    if (raw.length > 8000) return { error: 'cofounder_decision_meta too large' };
+    try { obj = JSON.parse(raw); } catch { return { error: 'cofounder_decision_meta must be valid JSON' }; }
+  }
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+    return { error: 'cofounder_decision_meta must be a JSON object' };
+  }
+  const out = JSON.stringify(obj);
+  if (out.length > 8000) return { error: 'cofounder_decision_meta too large' };
+  return { value: out };
+}
+
 // Task #1 — lazy bootstrap for the founder's editable company / affiliation,
 // surfaced on the Spin-Out Demo Day's merged Team & network slide. Additive
 // + idempotent; same WeakMap pattern as above. The `founders` table is not
@@ -613,6 +641,14 @@ projects.put('/:id', async (c) => {
     if (meta.error) { await sql.end(); return c.json({ error: meta.error, code: 'invalid_incorporation_meta' }, 400); }
     data.incorporation_meta = meta.value;
   }
+  // Spin-Out Lab Co-founder Match decision — owner-editable JSON blob
+  // (outcome advance/searching/solo, optional candidate uid, note, followups).
+  if (data.cofounder_decision_meta !== undefined) {
+    await ensureProjectCofounderDecisionColumn(c.env);
+    const meta = normalizeCofounderDecisionMeta(data.cofounder_decision_meta);
+    if (meta.error) { await sql.end(); return c.json({ error: meta.error, code: 'invalid_cofounder_decision_meta' }, 400); }
+    data.cofounder_decision_meta = meta.value;
+  }
   // Task #31 — Product demo source columns are owner-editable (founders
   // manage their own demo media on the project detail page). Trim URLs/text;
   // explicit '' / null clears the column.
@@ -644,7 +680,7 @@ projects.put('/:id', async (c) => {
       return c.json({ error: 'invalid_market_sizing', detail: 'SOM cannot exceed SAM' }, 400);
     }
   }
-  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'use_of_funds_meta', 'incorporation_meta', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
+  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'use_of_funds_meta', 'incorporation_meta', 'cofounder_decision_meta', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
   // Normalise: coerce boolean → 0/1 for the NDA flag, trim URL, allow
   // explicit null to clear either field.
   if (data.data_room_nda_required !== undefined) {

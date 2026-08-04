@@ -270,6 +270,10 @@ class Project(SQLModel, table=True):
     # override, payment, document/filing statuses, uni-IP checklist.
     # Mirrors Worker D1 migration 159.
     incorporation_meta: Optional[str] = None
+    # Spin-Out Lab Co-founder Match decision (JSON): outcome
+    # advance/searching/solo, optional candidate uid, note, follow-ups.
+    # Mirrors Worker D1 migration 162.
+    cofounder_decision_meta: Optional[str] = None
     # Task #31 — Product demo source surfaced on the Spin-Out Demo Day deck's
     # "Product demo" slide (slot 6). Editable on the project detail page.
     product_demo_video_url: Optional[str] = None
