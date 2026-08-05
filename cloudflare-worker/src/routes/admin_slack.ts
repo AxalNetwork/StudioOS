@@ -89,6 +89,10 @@ adminSlack.post('/test/:channel', async (c) => {
       ok: false,
       reason: result.reason,
       slack_error: result.slack_error,
+      // `error` is what the SPA's request() helper turns into the thrown
+      // message; without it an admin sees a bare "Request failed" instead of
+      // the Slack API's own reason for refusing the post.
+      error: `Slack rejected the message: ${result.slack_error || result.reason || 'unknown error'}`,
     }, 502);
   }
   return c.json({ ok: true, ts: result.ts, channel: result.channel });

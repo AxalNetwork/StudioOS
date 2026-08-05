@@ -16,6 +16,13 @@ import {
 import { runFullScore } from '../services/scoring';
 import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
 import { assembleSpinoutDeckData } from '../services/decks/spinoutDeckData';
+import {
+  SPINOUT_OVERRIDABLE_KEYS,
+  applySpinoutOverrides,
+  loadSpinoutDeckOverrides,
+  sanitizeSpinoutOverrides,
+  saveSpinoutDeckOverrides,
+} from '../services/decks/spinoutDeckOverrides';
 import { ensureMethodAllowed } from '../services/decks/branding';
 import { PREMIUM_METHOD_IDS } from '../services/decks/methods';
 import { normalizeUseOfFunds, formatUseOfFundsText } from '../util/useOfFunds';
@@ -818,20 +825,28 @@ projects.post('/:id/advance-week', async (c) => {
 // check as POST /api/decks/apply-method — a founder who can apply the
 // axal_spinout_demoday template can always generate its deck — then the same
 // owner RBAC as PUT /:id below.
-projects.post('/:projectId/spinout-deck', async (c) => {
-  const user = await requireAuth(c);
-  const projectId = parseInt(c.req.param('projectId'));
-  if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid project id' }, 400);
-
+// Paywall + RBAC + data-source resolution for every Spin-Out deck surface
+// (generate, and the manual-override read/write below). Shared so the override
+// routes cannot drift into a laxer rule than the generator they edit: an
+// override IS deck content, and anyone who can rewrite the thesis on a deck can
+// read the deck.
+//
+// Returns either the userId whose Lab data the deck sources from, or the exact
+// error Response to send. Callers do `if ('error' in access) return access.error`.
+async function resolveSpinoutDeckAccess(
+  c: any,
+  projectId: number,
+  user: any,
+): Promise<{ sourceUserId: number } | { error: any }> {
   // Premium gate — mirrors /api/decks/apply-method's 402 upgrade payload.
   try {
     ensureMethodAllowed(user, 'axal_spinout_demoday', PREMIUM_METHOD_IDS);
   } catch (_e) {
-    return c.json({
+    return { error: c.json({
       error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD',
       method_id: 'axal_spinout_demoday', required_tier: 'growth',
       message: 'The Spin-Out deck is part of the Growth plan. Upgrade to unlock.',
-    }, 402);
+    }, 402) };
   }
 
   // Ownership + data-source resolution. The deck is sourced from the PROJECT
@@ -853,7 +868,7 @@ projects.post('/:projectId/spinout-deck', async (c) => {
   let ownerUserId: number | null = null;
   try {
     const rows = await sql`SELECT id, founder_id FROM projects WHERE id = ${projectId}`;
-    if (rows.length === 0) return c.json({ error: 'Project not found' }, 404);
+    if (rows.length === 0) return { error: c.json({ error: 'Project not found' }, 404) };
     project = rows[0];
     if (project.founder_id != null) {
       const owners = await sql`SELECT id FROM users WHERE founder_id = ${project.founder_id} ORDER BY id ASC LIMIT 1`;
@@ -873,16 +888,32 @@ projects.post('/:projectId/spinout-deck', async (c) => {
     isCofounderMember = memberRole === 'cofounder' || memberRole === 'owner';
   }
   if (!isStaff && !isOwner && !isCofounderMember) {
-    return c.json({ detail: "Forbidden: you cannot generate this project's deck" }, 403);
+    return { error: c.json({ detail: "Forbidden: you cannot generate this project's deck" }, 403) };
   }
   // Founder generating their own deck sources from themselves (the verified
   // happy path); staff / co-founder generate sources from the resolved owner.
   const sourceUserId = isOwner ? Number(user.id) : ownerUserId;
   if (sourceUserId == null) {
-    return c.json({ error: 'This project has no founder account to source deck data from' }, 409);
+    return { error: c.json({ error: 'This project has no founder account to source deck data from' }, 409) };
   }
+  return { sourceUserId };
+}
 
-  const bundle = await assembleSpinoutDeckData(c.env, sourceUserId, projectId);
+projects.post('/:projectId/spinout-deck', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = parseInt(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid project id' }, 400);
+
+  const access = await resolveSpinoutDeckAccess(c, projectId, user);
+  if ('error' in access) return access.error;
+
+  // Manual overrides sit ON TOP of the live assembly — precedence is
+  // override > canonical module data > derived placeholder — so a deck edit
+  // never has to rewrite the founder's Solution/Problem module to change a
+  // sentence. With no stored overrides this is an identity transform.
+  const base = await assembleSpinoutDeckData(c.env, access.sourceUserId, projectId);
+  const stored = await loadSpinoutDeckOverrides(c.env, projectId);
+  const bundle = applySpinoutOverrides(base, stored);
   // Pre-flight preview (?preview=1): the deck page shows the live gaps
   // checklist + draft/ready status BEFORE the founder exports, so missing
   // sections (interviews, market sizing, cap table, …) can be filled in
@@ -893,6 +924,7 @@ projects.post('/:projectId/spinout-deck', async (c) => {
       gaps: bundle.gaps,
       draft: bundle.draft,
       program_day: bundle.programDay,
+      overridden_keys: bundle.overriddenKeys,
     });
   }
   return c.json({
@@ -902,7 +934,59 @@ projects.post('/:projectId/spinout-deck', async (c) => {
     draft: bundle.draft,
     program_day: bundle.programDay,
     fields: bundle.fields,
+    overrides: bundle.overrides,
+    overridden_keys: bundle.overriddenKeys,
   });
+});
+
+// Manual deck overrides — read.
+//
+// Returns the stored overrides plus the allowlist, so the editor can render a
+// "Manual"/"Auto" state per field without hard-coding which fields are
+// overridable in the frontend.
+projects.get('/:projectId/spinout-deck/overrides', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = parseInt(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid project id' }, 400);
+
+  const access = await resolveSpinoutDeckAccess(c, projectId, user);
+  if ('error' in access) return access.error;
+
+  const overrides = await loadSpinoutDeckOverrides(c.env, projectId);
+  return c.json({ overrides, overridable_keys: SPINOUT_OVERRIDABLE_KEYS });
+});
+
+// Manual deck overrides — write.
+//
+// Body: { overrides: { 'cover.thesis': '…' } }. A key sent with an empty string
+// (or listed in `remove`) is DELETED — that is the "revert to my module data"
+// path, and it is why the editor's revert button does not need a second route.
+// Unknown keys are rejected with a 400 naming them rather than being dropped
+// silently: a typo'd field would otherwise look like a save that did nothing.
+projects.put('/:projectId/spinout-deck/overrides', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = parseInt(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid project id' }, 400);
+
+  const access = await resolveSpinoutDeckAccess(c, projectId, user);
+  if ('error' in access) return access.error;
+
+  let body: any = {};
+  try { body = await c.req.json(); } catch { body = {}; }
+  const raw = body?.overrides ?? body ?? {};
+  const remove = Array.isArray(body?.remove) ? body.remove.map((k: unknown) => String(k)) : [];
+
+  const { rejected } = sanitizeSpinoutOverrides(raw);
+  if (rejected.length) {
+    return c.json({
+      error: 'Unknown or non-overridable deck fields',
+      rejected,
+      overridable_keys: SPINOUT_OVERRIDABLE_KEYS,
+    }, 400);
+  }
+
+  const overrides = await saveSpinoutDeckOverrides(c.env, projectId, Number(user.id), raw, remove);
+  return c.json({ overrides, overridable_keys: SPINOUT_OVERRIDABLE_KEYS });
 });
 
 // ===========================================================================

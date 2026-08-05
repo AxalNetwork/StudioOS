@@ -847,6 +847,7 @@ export default function SpinoutLabBrandPage() {
               {/* Deliberately a standalone light artboard (no dark: pairs
                   inside): it previews the public landing page document, not
                   the app UI. */}
+              {/* dark-mode-exempt: the artboard IS the light public page. */}
               <div
                 className="bg-white rounded-xl shadow-xl overflow-hidden transition-all flex-none"
                 style={{ width: editorDevice === 'mobile' ? 390 : '100%', maxWidth: '100%' }}
@@ -863,6 +864,7 @@ export default function SpinoutLabBrandPage() {
                     <div className="text-[13px] text-gray-600 leading-relaxed mb-6 whitespace-pre-line">{editorBlocks.body}</div>
                   )}
                   <div className={`border-t border-gray-100 pt-5 gap-2 ${editorDevice === 'mobile' ? 'flex flex-col' : 'flex flex-wrap items-center'}`}>
+                    {/* dark-mode-exempt: form mock inside the light artboard above. */}
                     {(AUDIENCE_FORM_FIELDS[editorAud] || ['Email']).map((f) => (
                       <div key={f} className="h-10 flex-1 min-w-[110px] rounded-lg border border-gray-200 bg-gray-50 px-3 flex items-center text-[12px] text-gray-400">{f}</div>
                     ))}
@@ -1215,7 +1217,8 @@ export default function SpinoutLabBrandPage() {
               </div>
               <div className="max-h-[60vh] overflow-y-auto">
                 {/* Standalone light artboard on purpose — it mocks the public
-                    page, not the app UI. Copy seeds from the identity draft. */}
+                    page, not the app UI. Copy seeds from the identity draft.
+                    dark-mode-exempt (whole artboard, through its form mock). */}
                 <div className="bg-white p-6">
                   <div className="h-2 w-14 rounded-full mb-4" style={{ background: accent }} />
                   <div className="text-[26px] font-extrabold text-gray-900 leading-tight mb-2">{draft.name || 'Your brand'}</div>
@@ -1232,6 +1235,7 @@ export default function SpinoutLabBrandPage() {
                     </div>
                   )}
                   <div className="flex gap-2 border-t border-gray-100 pt-4">
+                    {/* dark-mode-exempt: still inside the light artboard. */}
                     <div className="flex-1 h-10 rounded-lg border border-gray-200 bg-gray-50 px-3 flex items-center text-[12px] text-gray-400">Email address</div>
                     <div className="h-10 px-4 rounded-lg flex-none flex items-center text-[12.5px] font-bold text-white whitespace-nowrap" style={{ background: accent }}>{previewTpl.defaultCtaLabel}</div>
                   </div>

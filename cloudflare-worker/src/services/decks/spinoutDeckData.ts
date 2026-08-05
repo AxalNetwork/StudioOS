@@ -109,6 +109,15 @@ export interface SpinoutDeckBundle {
   data: SpinoutDeckData;
   notes: SpinoutDeckNotes;
   gaps: string[];
+  /**
+   * Index-aligned with `gaps`: the dotted `SpinoutDeckData` field each gap is
+   * about, or null for gaps that no single field can answer (a missing chart
+   * series, an empty roster). The manual-override layer
+   * (`services/decks/spinoutDeckOverrides.ts`) uses this to drop a gap once its
+   * field has been overridden — "add a one-line thesis" is a false alarm the
+   * moment a thesis exists, whatever wrote it.
+   */
+  gapFields?: Array<string | null>;
   draft: boolean;
   programDay: number;
   /** Task #55 — flat dotted-key field map for the editor's hydrate() contract. */
@@ -236,7 +245,11 @@ const NOTES: SpinoutDeckNotes = {
  * ========================================================================== */
 export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle {
   const gaps: string[] = [];
-  const gap = (s: string) => { gaps.push(s); };
+  // Second arg tags the gap with the dotted field it is about, so a manual
+  // override of that field can retire it. Omit it for gaps no single scalar
+  // can answer (missing chart data, an empty advisor roster).
+  const gapFields: Array<string | null> = [];
+  const gap = (s: string, field: string | null = null) => { gaps.push(s); gapFields.push(field); };
 
   const m = src.meta;
   const remaining = clamp(Number(m.days_remaining ?? PROGRAM_DAYS), 0, PROGRAM_DAYS);
@@ -255,10 +268,15 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   };
 
   /* ---- cover ---- */
-  const thesisSrc = [src.brand?.tagline, src.cover?.sub, src.problem?.headline].find(has);
+  // Founder-AUTHORED sources only: the tagline (projects.tagline) and the
+  // vision (projects.vision, via cover.sub — now empty when unwritten).
+  // `problem.headline` was in this chain and is an unconditional display
+  // literal in the producer ("Why this is broken today."), so it made the
+  // fallback below unreachable. A slide heading is not a thesis.
+  const thesisSrc = [src.brand?.tagline, src.cover?.sub].find(has);
   let thesis: string;
   if (thesisSrc) thesis = String(thesisSrc);
-  else { thesis = '[draft — add a one-line thesis in the Brand module]'; gap('Cover: add a one-line thesis in the Brand module.'); }
+  else { thesis = '[draft — add a one-line thesis in the Brand module]'; gap('Cover: add a one-line thesis in the Brand module.', 'cover.thesis'); }
 
   const sig = buildSignalSeries(src.cover?.activity_log);
   let signalX: string[]; let signalY: number[];
@@ -317,7 +335,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   } else {
     quote = '[draft — feature a discovery quote from the Customer Discovery module]';
     quoteAttr = 'Customer Discovery';
-    gap('Problem: feature a customer quote in the Customer Discovery module.');
+    gap('Problem: feature a customer quote in the Customer Discovery module.', 'problem.quote');
   }
 
   const framing = has(src.problem?.body)
@@ -351,11 +369,17 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
       ? [`${Math.round((fitN / ratedN) * 100)}%`, 'rated solution-fit \u2265 4 / 5']
       : [DASH, 'solution-fit not yet rated'];
   } else {
-    stages = FALLBACK.stages.length && Math.max(...FALLBACK.stages.map((s) => s[1])) > 0
-      ? FALLBACK.stages
-      : [['Interviewed', 1]];
-    // guarantee a positive max so the funnel renderer never divides by zero
-    if (Math.max(...stages.map((s) => s[1])) <= 0) stages = [['Interviewed', 1]];
+    // No interviews logged: render an EMPTY funnel, not a fabricated one.
+    //
+    // This previously resolved to [['Interviewed', 1]] — FALLBACK.stages is all
+    // zeros, so the `> 0` test never passed and the literal always won. A
+    // founder who had logged nothing shipped a deck asserting one interview to
+    // investors. The stated reason was "guarantee a positive max so the funnel
+    // renderer never divides by zero", but both renderers already cope with an
+    // empty list: the React slide guards with `stages.length ? … : 1`
+    // (axal_spinout_demoday_app.tsx:452) and buildDeck.js does the same since
+    // this change. An empty chart plus the gap below is the honest state.
+    stages = [];
     conversion = [DASH, 'log discovery interviews to compute'];
     gap('Validation: log discovery interviews and ratings in the Customer Discovery module.');
   }
@@ -644,7 +668,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
 
   const draft = programDay < PROGRAM_DAYS || gaps.length > 0;
   const fields = flattenSpinoutDeckData(data);
-  return { data, notes: NOTES, gaps, draft, programDay, fields };
+  return { data, notes: NOTES, gaps, gapFields, draft, programDay, fields };
 }
 
 /* ============================================================================

@@ -264,8 +264,18 @@ test('partial project => still structurally renderable (no NaN/empty charts)', (
   assert.equal(data.market.rings.length, 3, 'market still has 3 rings');
   assert.equal(data.solution.steps.length, 4, 'solution still has 4 steps');
 
-  const funnelMax = Math.max(...data.validation.stages.map((s) => s[1]));
-  assert.ok(funnelMax > 0, 'partial funnel max must still be > 0 (no divide-by-zero)');
+  // A project with no logged interviews renders an EMPTY funnel. This used to
+  // assert a positive max, which the mapper satisfied by emitting a literal
+  // [['Interviewed', 1]] — so a founder who had logged nothing shipped a deck
+  // claiming one interview. Divide-by-zero is the renderers' problem to hold,
+  // and both do: axal_spinout_demoday_app.tsx guards with `stages.length ? … : 1`
+  // and buildDeck.js does the same. What matters here is that the slide never
+  // asserts activity that did not happen.
+  assert.deepEqual(data.validation.stages, [], 'no interviews => no funnel bars, not a fabricated one');
+  assert.ok(
+    data.validation.stages.every((s) => Number.isFinite(s[1])),
+    'any stage that IS emitted must carry a finite count',
+  );
 
   assert.ok(data.cover.signalY.length > 0, 'cover signalY non-empty even when empty');
   assert.ok(data.cover.signalY.every((n) => Number.isFinite(n)), 'cover signalY all finite even when empty');

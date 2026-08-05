@@ -62,6 +62,38 @@ jobs:
         run: npx --no-install tsc --noEmit
 
   # -------------------------------------------------------------------------
+  # The full gate: every frontend + worker test, then the static guards and the
+  # worker typecheck. `npm run test:drift` globs its test files rather than
+  # naming them, so a new test file is covered the moment it lands — 29 of 89
+  # worker test files used to be omitted from the hand-maintained list, and one
+  # of them had been failing unnoticed.
+  #
+  # This job is why the suite exists. Without it the gate only ran on whichever
+  # developer remembered, which is how a ReferenceError that `test:drift` catches
+  # in seconds reached main (PR #218).
+  # -------------------------------------------------------------------------
+  gate:
+    name: test:drift (full suite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+      # The suite imports React deck templates and the worker's TypeScript, so
+      # it needs both workspaces' dependencies installed.
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install worker deps
+        working-directory: cloudflare-worker
+        run: npm ci
+      - name: Install root deps
+        run: npm ci || npm install --no-audit --no-fund
+      - run: npm run test:drift
+
+  # -------------------------------------------------------------------------
   # API ↔ Worker drift smoke test (T1). Static analysis: every /api/* path
   # called from frontend/src/lib/api.js MUST be mounted on the production
   # worker, OR be allowlisted with a tracking task id.
@@ -96,6 +128,13 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: '22'
+      # The three checks below all read the COMMITTED docs/ bytes — "what a
+      # crawler actually receives". If docs/ is behind frontend/src they are
+      # validating an old build and passing, so assert freshness first. Strict
+      # here (unlike the local warning) because this job can rebuild from the
+      # lockfile if it needs to.
+      - name: Committed docs/ build is current
+        run: node scripts/check-docs-fresh.mjs --strict
       - name: Prerendered routes are current
         run: node scripts/prerender-og.mjs --check
       - name: Card images are current

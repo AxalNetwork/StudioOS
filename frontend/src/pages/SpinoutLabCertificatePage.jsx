@@ -201,7 +201,8 @@ export default function SpinoutLabCertificatePage() {
               </div>
               {/* Fixed 1.414 artboard, scaled to the container — the design's
                   own container-query approach, done with aspect-ratio. Always
-                  light: it is a print artifact, not app chrome. */}
+                  light: it is a print artifact, not app chrome.
+                  dark-mode-exempt. */}
               <div className="w-full max-w-[840px] mx-auto aspect-[840/594] relative rounded-lg overflow-hidden border border-gray-200 bg-[#fdfdfd] shadow-sm" data-testid="certificate-artboard">
                 <div className="absolute inset-0 bg-gradient-to-r from-violet-600 via-violet-700 to-teal-600 h-[5px]" />
                 <div className="absolute inset-[3.5%] border border-[#e0dcea] pointer-events-none" />

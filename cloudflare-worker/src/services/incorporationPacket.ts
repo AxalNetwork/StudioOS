@@ -101,11 +101,34 @@ function formFooter(page: PDFPage, f: Fonts, note: string) {
   rightText(page, note, PAGE_W - MX, 30, 7.5, f.italic, MUTED);
 }
 
+/**
+ * Fixed document timestamp.
+ *
+ * pdf-lib stamps CreationDate/ModDate with `new Date()` at save time, at
+ * one-second resolution. `bodyHash` is hashed over those saved bytes and sold
+ * as TAMPER-EVIDENT — but with a wall-clock timestamp inside, re-assembling the
+ * identical packet a second later yields a different hash, so the hash proves
+ * only when the PDF was rendered, not that its contents are unchanged. (It also
+ * made `tamper-evident hash is deterministic for identical inputs` a flaky test:
+ * it passed unless the two renders straddled a second boundary.)
+ *
+ * Pinning both dates makes the bytes a pure function of the inputs, which is
+ * what the hash is supposed to attest. The real "when" is already recorded in
+ * the audit-trail page, which is inside the hashed body.
+ */
+const DETERMINISTIC_PDF_DATE = new Date(0);
+
+function stampDeterministicDates(doc: PDFDocument): void {
+  doc.setCreationDate(DETERMINISTIC_PDF_DATE);
+  doc.setModificationDate(DETERMINISTIC_PDF_DATE);
+}
+
 async function newDoc(): Promise<{ doc: PDFDocument; f: Fonts }> {
   const doc = await PDFDocument.create();
   doc.setAuthor('Axal VC');
   doc.setProducer('Axal StudioOS Incorporation');
   doc.setCreator('Axal StudioOS');
+  stampDeterministicDates(doc);
   const f: Fonts = {
     font: await doc.embedFont(StandardFonts.Helvetica),
     bold: await doc.embedFont(StandardFonts.HelveticaBold),
@@ -395,6 +418,7 @@ export async function assembleIncorporationPacket(
   bodyDoc.setAuthor('Axal VC');
   bodyDoc.setProducer('Axal StudioOS Incorporation');
   bodyDoc.setCreator('Axal StudioOS');
+  stampDeterministicDates(bodyDoc);
 
   const certBytes = await renderCertificateOfFormationPdf({
     jurisdictionId: inputs.jurisdictionId,
@@ -456,6 +480,9 @@ export async function assembleIncorporationPacket(
 
   // Step 3 — build the final PDF with audit trail
   const finalDoc = await PDFDocument.load(bodyPdfBytes);
+  // load() preserves the body's pinned dates, but save() refreshes ModDate —
+  // re-pin so the delivered packet is byte-identical for identical inputs too.
+  stampDeterministicDates(finalDoc);
   const auditBytes = await renderAuditTrailPagePdf(
     inputs.auditEvents ?? [],
     bodyHash,

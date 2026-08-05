@@ -35,6 +35,26 @@ const CLASSNAME_RE = /className\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*"([^"]*)"\s*\}
 
 const violations = [];
 
+/**
+ * Line-level opt-out: `dark-mode-exempt` in a comment on the offending line or
+ * within the four lines above it.
+ *
+ * Some surfaces are light ON PURPOSE and the "fix" would break them: the brand
+ * landing-page artboards mock a public page rather than app chrome, the
+ * certificate is a print artifact, and the share modal's `bg-white` is the
+ * quiet zone behind a QR code — paint that dark and the code stops scanning.
+ * A whole-file ALLOWLIST entry would also silence the genuine violations
+ * elsewhere in those same files, so the exemption is per-site and has to be
+ * written next to the reason.
+ */
+const EXEMPT_RE = /dark-mode-exempt/;
+function isExempt(lines, line1) {
+  for (let i = Math.max(0, line1 - 5); i < line1; i++) {
+    if (EXEMPT_RE.test(lines[i] || '')) return true;
+  }
+  return false;
+}
+
 function audit(rel, src) {
   const lines = src.split('\n');
   // Compute byte→line offsets so we can report a line number for each match.
@@ -58,6 +78,7 @@ function audit(rel, src) {
     for (const p of PAIRINGS) {
       if (!tokSet.has(p.light)) continue;
       const paired = [...tokSet].some(t => t === p.dark || t.startsWith(p.darkPrefix));
+      if (!paired && isExempt(lines, lineOf(m.index))) continue;
       if (!paired) {
         violations.push({
           file: rel,
@@ -68,7 +89,6 @@ function audit(rel, src) {
       }
     }
   }
-  void lines; // (lines kept for future per-line messages)
 }
 
 function walk(dir) {

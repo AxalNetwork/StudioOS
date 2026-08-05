@@ -67,7 +67,11 @@ test('runFreeConnectors is exported and wired into the cron', async () => {
   );
   assert.match(aggregator, /export\s+async\s+function\s+runFreeConnectors\b/,
     'runFreeConnectors export missing from aggregator');
-  assert.match(aggregator, /\.filter\([^)]*\.cadence\s*===\s*cadence\s*&&\s*!s\.paid\)/,
+  // Tolerate either arrow-parameter style: `[^)]*` could not cross the closing
+  // paren of a parenthesised `(s) =>`, so this assertion started failing the
+  // moment the source was formatted that way — while the paid-source filter it
+  // guards was present and correct the whole time. Match the predicate itself.
+  assert.match(aggregator, /\.filter\(\s*\(?\s*s\s*\)?\s*=>\s*s\.cadence\s*===\s*cadence\s*&&\s*!s\.paid\s*\)/,
     'runFreeConnectors must skip paid sources');
 
   const indexSrc = await readFile(

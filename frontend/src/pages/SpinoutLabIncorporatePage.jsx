@@ -653,6 +653,8 @@ export default function SpinoutLabIncorporatePage() {
           {filingSteps.map((f, i) => (
             <div key={f.title} className="grid grid-cols-[26px_1fr_auto] gap-3.5 items-start pb-4">
               <div className="flex flex-col items-center">
+                {/* dark-mode-exempt: the bg-white below is a white pip drawn on
+                    a violet dot, not a surface. */}
                 <span className={`w-6 h-6 rounded-full inline-flex items-center justify-center ${f.done || f.current ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-400 dark:bg-gray-800'}`} data-testid={`filing-dot-${i}`}>
                   {f.done ? <Check size={12} /> : f.current ? <span className="w-2 h-2 rounded-full bg-white" /> : null}
                 </span>

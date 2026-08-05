@@ -221,7 +221,12 @@ async function loadGetByIdHandler() {
   const body = src.slice(bodyOpen + 1, close); // contains TS annotations → must transpile
   const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js'))).default;
   const wrapped = `const __run = async (c, __deps) => {
-    const { requireAuth, getSQL, ensureProjectDataRoomColumns, ensureProjectRevenueProofColumns, ensureFounderCompanyColumn, canAccessFounderResource } = __deps;
+    // Every helper the handler source calls must be destructured here: the
+    // handler is string-extracted and Function-evaluated, so anything missing
+    // is a ReferenceError at call time rather than a compile error. When the
+    // route gains a call, add it here AND to the PROJECT_DEPS object below.
+    // (No backticks in this comment — it lives inside a template literal.)
+    const { requireAuth, getSQL, ensureProjectDataRoomColumns, ensureProjectRevenueProofColumns, ensureProjectProductDemoColumns, ensureFounderCompanyColumn, canAccessFounderResource, canAccessProject } = __deps;
     ${body}
   };`;
   const { outputText } = ts.transpileModule(wrapped, {
@@ -239,8 +244,10 @@ function makeStubSql(rows) {
 const PROJECT_DEPS = {
   ensureProjectDataRoomColumns: async () => {},
   ensureProjectRevenueProofColumns: async () => {},
+  ensureProjectProductDemoColumns: async () => {},
   ensureFounderCompanyColumn: async () => {},
   canAccessFounderResource: () => true,
+  canAccessProject: async () => true,
 };
 
 test('GET /:id: missing project → 404 (not 500) under auth', async () => {
@@ -290,11 +297,10 @@ test('GET /:id: existing project → 200 (404 is missing-only, not blanket)', as
 /* founder's deck. We slice the real handler from source and inject   */
 /* stubbed deps, then assert WHICH userId reaches the assembler.      */
 /* ------------------------------------------------------------------ */
-async function loadSpinoutDeckHandler() {
-  const src = await readFile(resolve(__dirname, '../src/routes/projects.ts'), 'utf8');
-  const marker = "projects.post('/:projectId/spinout-deck', async (c) => {";
+/** Slice `marker`'s brace-balanced body out of `src`. */
+function sliceBody(src, marker, label) {
   const i = src.indexOf(marker);
-  assert.notEqual(i, -1, "projects.post('/:projectId/spinout-deck', …) not found");
+  assert.notEqual(i, -1, `${label} not found`);
   const bodyOpen = i + marker.length - 1; // index of the body-opening '{'
   let depth = 0, close = -1;
   for (let j = bodyOpen; j < src.length; j++) {
@@ -302,11 +308,36 @@ async function loadSpinoutDeckHandler() {
     if (ch === '{') depth++;
     else if (ch === '}') { depth--; if (depth === 0) { close = j; break; } }
   }
-  assert.notEqual(close, -1, 'failed to balance spinout-deck handler braces');
-  const body = src.slice(bodyOpen + 1, close);
+  assert.notEqual(close, -1, `failed to balance ${label} braces`);
+  return src.slice(bodyOpen + 1, close);
+}
+
+async function loadSpinoutDeckHandler() {
+  const src = await readFile(resolve(__dirname, '../src/routes/projects.ts'), 'utf8');
+  // The paywall + RBAC + owner-resolution logic these tests exist to pin now
+  // lives in a shared helper (the override routes reuse it, and must not be
+  // allowed to drift into a laxer rule). So slice the HELPER too and rebuild it
+  // for real inside the sandbox, rather than stubbing it — a stubbed helper
+  // would turn every 402/403/404/409 assertion below into a test of the stub.
+  const helperBody = sliceBody(
+    src,
+    'async function resolveSpinoutDeckAccess(\n  c: any,\n  projectId: number,\n  user: any,\n): Promise<{ sourceUserId: number } | { error: any }> {',
+    'resolveSpinoutDeckAccess',
+  );
+  const body = sliceBody(
+    src,
+    "projects.post('/:projectId/spinout-deck', async (c) => {",
+    "projects.post('/:projectId/spinout-deck', …)",
+  );
   const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js'))).default;
   const wrapped = `const __run = async (c, __deps) => {
-    const { requireAuth, getSQL, ensureMethodAllowed, PREMIUM_METHOD_IDS, assembleSpinoutDeckData } = __deps;
+    // See the note on the /:id harness above — keep this list in step with the
+    // handler's call sites, or the test dies with a ReferenceError instead of
+    // exercising the authorization it exists to guard.
+    const { requireAuth, getSQL, ensureMethodAllowed, PREMIUM_METHOD_IDS, assembleSpinoutDeckData, getProjectMembershipRole, loadSpinoutDeckOverrides, applySpinoutOverrides } = __deps;
+    async function resolveSpinoutDeckAccess(c, projectId, user) {
+      ${helperBody}
+    }
     ${body}
   };`;
   const { outputText } = ts.transpileModule(wrapped, {
@@ -339,11 +370,19 @@ function runSpinoutDeck({ user, projectRows, ownerRows, methodThrows = false, qu
       { test: PROJECT_RE, rows: projectRows },
       { test: OWNER_RE, rows: ownerRows },
     ]),
+    // Returns null = "not a project member". The non-owner-founder case under
+    // test must be rejected by the founder_id/staff checks alone, so a stub
+    // that never grants membership keeps the assertion honest.
+    getProjectMembershipRole: async () => null,
     assembleSpinoutDeckData: async (_env, userId, projectId) => {
       calls.assembleUserId = userId;
       calls.assembleProjectId = projectId;
       return { data: { ok: true }, notes: { cover: 'n' }, gaps: ['g1'], draft: true, programDay: 16 };
     },
+    // The manual-override layer has its own unit tests; here it only has to be
+    // an identity pass-through so the RBAC assertions stay the subject.
+    loadSpinoutDeckOverrides: async () => ({}),
+    applySpinoutOverrides: (bundle) => ({ ...bundle, overrides: {}, overriddenKeys: [] }),
   };
   let captured;
   const c = {
